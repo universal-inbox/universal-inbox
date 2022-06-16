@@ -1,0 +1,2 @@
+[application]
+log_directive = "debug"
