@@ -1,0 +1,4 @@
+/target
+api/config/local.*
+web/dist
+.local_envrc

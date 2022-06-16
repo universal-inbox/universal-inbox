@@ -1,0 +1,12 @@
+extend = "../Makefile.toml"
+
+[tasks.build-release]
+install_crate = { crate_name = "trunk", binary = "trunk" }
+command = "trunk"
+args = ["build", "--release"]
+
+[tasks.run]
+clear = true
+install_crate = { crate_name = "trunk", binary = "trunk" }
+command = "trunk"
+args = ["serve"]
