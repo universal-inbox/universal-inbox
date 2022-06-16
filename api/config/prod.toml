@@ -1,0 +1,4 @@
+[application]
+static_dir = "."
+api_path = "/api"
+static_path = ""

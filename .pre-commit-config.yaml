@@ -1,0 +1,28 @@
+repos:
+  - repo: local
+    hooks:
+      - id: format
+        name: format
+        language: system
+        pass_filenames: false
+        entry: cargo make format-flow
+      - id: format-toml
+        name: format-toml
+        language: system
+        pass_filenames: false
+        entry: cargo make format-toml-flow
+      - id: check
+        name: check
+        language: system
+        pass_filenames: false
+        entry: cargo make check-tests
+      - id: clippy
+        name: clippy
+        language: system
+        pass_filenames: false
+        entry: cargo make clippy-flow
+      - id: todo
+        name: todo
+        language: system
+        pass_filenames: false
+        entry: bash -c 'rg TODO && false || true'
