@@ -1,0 +1,7 @@
+.git
+.github
+target/
+tests/
+Dockerfile
+web/dist
+api/config/local.*

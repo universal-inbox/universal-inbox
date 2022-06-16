@@ -1,0 +1,131 @@
+{
+  "db": "PostgreSQL",
+  "514c64519e1053d4cc4e6e4291337afe5e018a781bb40e4434f9ee964dab5740": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": [
+          "Uuid",
+          "Text",
+          "Text",
+          "Text",
+          "Json",
+          "Timestamp",
+          "Timestamp"
+        ]
+      }
+    },
+    "query": "\n          INSERT INTO notification\n            (id, title, kind, status, metadata, updated_at, last_read_at)\n          VALUES\n            ($1, $2, $3, $4, $5, $6, $7)\n        "
+  },
+  "7bd7dc9724659b3edf35d01702010cbf35524d5c101e36fa3c1d697e6ca6527f": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "title",
+          "ordinal": 1,
+          "type_info": "Text"
+        },
+        {
+          "name": "kind",
+          "ordinal": 2,
+          "type_info": "Text"
+        },
+        {
+          "name": "status",
+          "ordinal": 3,
+          "type_info": "Text"
+        },
+        {
+          "name": "metadata: Json<GithubNotification>",
+          "ordinal": 4,
+          "type_info": "Json"
+        },
+        {
+          "name": "updated_at",
+          "ordinal": 5,
+          "type_info": "Timestamp"
+        },
+        {
+          "name": "last_read_at",
+          "ordinal": 6,
+          "type_info": "Timestamp"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true
+      ],
+      "parameters": {
+        "Left": [
+          "Uuid"
+        ]
+      }
+    },
+    "query": "SELECT id, title, kind, status, metadata as \"metadata: Json<GithubNotification>\", updated_at, last_read_at FROM notification WHERE id = $1"
+  },
+  "c9c9b928b98f4633eaa03d4e3d573776faf7536db434ba3d1829be6d27284630": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "title",
+          "ordinal": 1,
+          "type_info": "Text"
+        },
+        {
+          "name": "kind",
+          "ordinal": 2,
+          "type_info": "Text"
+        },
+        {
+          "name": "status",
+          "ordinal": 3,
+          "type_info": "Text"
+        },
+        {
+          "name": "metadata: Json<GithubNotification>",
+          "ordinal": 4,
+          "type_info": "Json"
+        },
+        {
+          "name": "updated_at",
+          "ordinal": 5,
+          "type_info": "Timestamp"
+        },
+        {
+          "name": "last_read_at",
+          "ordinal": 6,
+          "type_info": "Timestamp"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true
+      ],
+      "parameters": {
+        "Left": []
+      }
+    },
+    "query": "SELECT id, title, kind, status, metadata as \"metadata: Json<GithubNotification>\", updated_at, last_read_at FROM notification"
+  }
+}
