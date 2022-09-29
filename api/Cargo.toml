@@ -6,10 +6,13 @@ authors = ["David Rousselie <david@universal-inbox.com>"]
 
 [lib]
 path = "src/lib.rs"
+test = false
+doctest = false
 
 [[bin]]
 path = "src/main.rs"
 name = "universal-inbox-api"
+test = false
 
 [dependencies]
 universal-inbox = { path = ".." }
@@ -51,9 +54,14 @@ sqlx = { version = "0.5.0", default-features = false, features = [
 ] }
 async-trait = "0.1.0"
 enum_derive = "0.1.0"
+macro-attr = "0.2.0"
 log = "0.4.0"
+clap = { version = "3.2.0", features = ["derive"] }
+reqwest = { version = "0.11.0", features = ["json", "tokio-rustls", "gzip"] }
+format_serde_error = "0.3.0"
+futures = "0.3.0"
 
 [dev-dependencies]
 proptest = "1.0.0"
-reqwest = { version = "0.11.0", features = ["json"] }
 rstest = "0.13.0"
+httpmock = "0.6.0"

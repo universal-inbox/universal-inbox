@@ -1,16 +1,25 @@
 use async_trait::async_trait;
-use universal_inbox::Notification;
+use universal_inbox::{Notification, NotificationStatus};
 use uuid::Uuid;
 
-pub mod notification_service;
+use crate::repository::database::TransactionalRepository;
+
+pub mod notification;
 
 #[async_trait]
-pub trait NotificationRepository: Send + Sync {
+pub trait NotificationRepository: Send + Sync + TransactionalRepository {
     async fn get_one(&self, id: uuid::Uuid) -> Result<Option<Notification>, UniversalInboxError>;
     async fn fetch_all(&self) -> Result<Vec<Notification>, UniversalInboxError>;
-    async fn create(
+    async fn create(&self, notification: Notification)
+        -> Result<Notification, UniversalInboxError>;
+    async fn update_stale_notifications_status_from_source_ids(
         &self,
-        notification: &Notification,
+        active_source_notification_ids: Vec<String>,
+        status: NotificationStatus,
+    ) -> Result<Vec<Notification>, UniversalInboxError>;
+    async fn create_or_update(
+        &self,
+        notification: Notification,
     ) -> Result<Notification, UniversalInboxError>;
 }
 

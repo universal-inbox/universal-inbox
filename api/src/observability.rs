@@ -18,7 +18,10 @@ pub fn get_subscriber(env_filter_str: &str) -> impl Subscriber + Send + Sync {
         .with(formatting_layer)
 }
 
-pub fn init_subscriber(subscriber: impl Subscriber + Send + Sync) {
-    LogTracer::init_with_filter(log::LevelFilter::Error).expect("Failed to set logger");
+pub fn init_subscriber(
+    subscriber: impl Subscriber + Send + Sync,
+    log_level_filter: log::LevelFilter,
+) {
+    LogTracer::init_with_filter(log_level_filter).expect("Failed to set logger");
     set_global_default(subscriber).expect("Failed to set subscriber");
 }
