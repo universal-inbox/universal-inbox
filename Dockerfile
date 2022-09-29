@@ -28,4 +28,4 @@ COPY --from=release-builder /app/api/config/default.toml config/default.toml
 COPY --from=release-builder /app/web/dist/ .
 ENV UNIVERSAL_INBOX_APPLICATION.API_PATH /api
 ENV UNIVERSAL_INBOX_APPLICATION.STATIC_PATH /
-CMD ["/app/universal-inbox"]
+CMD ["/app/universal-inbox", "serve"]

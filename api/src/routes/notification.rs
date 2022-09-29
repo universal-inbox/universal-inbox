@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use crate::universal_inbox::{
-    self, notification_service::NotificationService, UniversalInboxError,
+    self,
+    notification::{service::NotificationService, source::NotificationSource},
+    UniversalInboxError,
 };
 use ::universal_inbox::Notification;
 use actix_http::{body::BoxBody, header::TryIntoHeaderValue};
@@ -13,6 +15,7 @@ use actix_web::{
     web, HttpResponse, ResponseError,
 };
 use anyhow::Context;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
 
@@ -77,6 +80,33 @@ pub async fn create_notification(
     Ok(HttpResponse::Ok().content_type("application/json").body(
         serde_json::to_string(&created_notification).context("Cannot serialize notification")?,
     ))
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SyncNotificationsParameters {
+    source: NotificationSource,
+}
+
+#[tracing::instrument(level = "debug", skip(service))]
+pub async fn sync_notifications(
+    params: web::Json<SyncNotificationsParameters>,
+    service: web::Data<Arc<NotificationService>>,
+) -> Result<HttpResponse, universal_inbox::UniversalInboxError> {
+    let transaction = service.repository.begin().await.context(format!(
+        "Failed to create new transaction while syncing {:?}",
+        &params.source
+    ))?;
+
+    let notifications: Vec<Notification> = service.sync_notifications(&Some(params.source)).await?;
+
+    transaction.commit().await.context(format!(
+        "Failed to commit while syncing {:?}",
+        &params.source
+    ))?;
+
+    Ok(HttpResponse::Ok()
+        .content_type("application/json")
+        .body(serde_json::to_string(&notifications).context("Cannot serialize notifications")?))
 }
 
 #[tracing::instrument(level = "debug")]

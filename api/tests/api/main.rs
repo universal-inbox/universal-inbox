@@ -1,3 +1,4 @@
-mod health_check;
 mod helpers;
-mod notification;
+mod test_health_check;
+mod test_notifications;
+mod test_sync_notifications;
