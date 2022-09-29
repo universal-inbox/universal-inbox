@@ -6,12 +6,14 @@ use std::env;
 pub struct Settings {
     pub application: ApplicationSettings,
     pub database: DatabaseSettings,
+    pub integrations: IntegrationsSettings,
 }
 
 #[derive(Deserialize)]
 pub struct ApplicationSettings {
     pub port: u16,
     pub log_directive: String,
+    pub dependencies_log_directive: String,
     pub front_base_url: String,
     pub api_path: String,
     pub static_path: Option<String>,
@@ -25,6 +27,17 @@ pub struct DatabaseSettings {
     pub port: u16,
     pub host: String,
     pub database_name: String,
+}
+
+#[derive(Deserialize)]
+pub struct IntegrationsSettings {
+    pub github: GithubIntegrationSettings,
+}
+
+#[derive(Deserialize)]
+pub struct GithubIntegrationSettings {
+    pub page_size: usize,
+    pub api_token: String, // Temporary until oauth is implemented
 }
 
 impl DatabaseSettings {

@@ -1,24 +1,32 @@
+#[macro_use]
+extern crate macro_attr;
+
+#[macro_use]
+extern crate enum_derive;
+
+use crate::universal_inbox::{notification::service::NotificationService, UniversalInboxError};
 use actix_files as fs;
 use actix_web::{dev::Server, http, middleware, web, App, HttpServer};
+use anyhow::Context;
 use configuration::Settings;
 use core::time::Duration;
 use std::{net::TcpListener, sync::Arc};
 use tracing::info;
 use tracing_actix_web::TracingLogger;
 
-use crate::universal_inbox::notification_service::NotificationService;
-
+pub mod commands;
 pub mod configuration;
+pub mod integrations;
 pub mod observability;
 pub mod repository;
 pub mod routes;
 pub mod universal_inbox;
 
-pub fn run(
+pub async fn run(
     listener: TcpListener,
     settings: &Settings,
     service: Arc<NotificationService>,
-) -> Result<Server, std::io::Error> {
+) -> Result<Server, UniversalInboxError> {
     let api_path = settings.application.api_path.clone();
     let front_base_url = settings.application.front_base_url.clone();
     let static_path = settings.application.static_path.clone();
@@ -27,8 +35,9 @@ pub fn run(
         .static_dir
         .clone()
         .unwrap_or_else(|| ".".to_string());
+    let listen_address = listener.local_addr().unwrap();
 
-    info!("Listening on {}", listener.local_addr().unwrap());
+    info!("Listening on {}", listen_address);
 
     let server = HttpServer::new(move || {
         info!(
@@ -46,6 +55,10 @@ pub fn run(
                     .add(("Access-Control-Allow-Headers", "content-type".as_bytes())),
             )
             .route("/notifications", web::get().to(routes::list_notifications))
+            .route(
+                "/notifications/sync",
+                web::post().to(routes::sync_notifications),
+            )
             .route(
                 "/notifications/{notification_id}",
                 web::get().to(routes::get_notification),
@@ -79,7 +92,8 @@ pub fn run(
     })
     .keep_alive(http::KeepAlive::Timeout(Duration::from_secs(60)))
     .shutdown_timeout(60)
-    .listen(listener)?;
+    .listen(listener)
+    .context(format!("Failed to listen on {}", listen_address))?;
 
     Ok(server.run())
 }

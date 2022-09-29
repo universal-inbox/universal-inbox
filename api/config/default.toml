@@ -2,6 +2,7 @@
 port = 8000
 # See https://docs.rs/tracing-subscriber/latest/tracing_subscriber/struct.EnvFilter.html
 log_directive = "info"
+dependencies_log_directive = "error"
 api_path = ""
 front_base_url = "http://localhost:8080"
 
@@ -11,3 +12,6 @@ port = 5432
 username = "postgres"
 password = "password"
 database_name = "universal-inbox"
+
+[integrations.github]
+page_size = 50

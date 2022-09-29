@@ -1,24 +1,6 @@
 {
   "db": "PostgreSQL",
-  "514c64519e1053d4cc4e6e4291337afe5e018a781bb40e4434f9ee964dab5740": {
-    "describe": {
-      "columns": [],
-      "nullable": [],
-      "parameters": {
-        "Left": [
-          "Uuid",
-          "Text",
-          "Text",
-          "Text",
-          "Json",
-          "Timestamp",
-          "Timestamp"
-        ]
-      }
-    },
-    "query": "\n          INSERT INTO notification\n            (id, title, kind, status, metadata, updated_at, last_read_at)\n          VALUES\n            ($1, $2, $3, $4, $5, $6, $7)\n        "
-  },
-  "7bd7dc9724659b3edf35d01702010cbf35524d5c101e36fa3c1d697e6ca6527f": {
+  "119cbdee56006b9cad1de497b810447a05aa7f7f69f685b6e681388320d21505": {
     "describe": {
       "columns": [
         {
@@ -42,22 +24,137 @@
           "type_info": "Text"
         },
         {
-          "name": "metadata: Json<GithubNotification>",
+          "name": "source_id",
           "ordinal": 4,
+          "type_info": "Text"
+        },
+        {
+          "name": "metadata: Json<GithubNotification>",
+          "ordinal": 5,
           "type_info": "Json"
         },
         {
           "name": "updated_at",
-          "ordinal": 5,
+          "ordinal": 6,
           "type_info": "Timestamp"
         },
         {
           "name": "last_read_at",
-          "ordinal": 6,
+          "ordinal": 7,
           "type_info": "Timestamp"
         }
       ],
       "nullable": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true
+      ],
+      "parameters": {
+        "Left": [
+          "Text",
+          "TextArray"
+        ]
+      }
+    },
+    "query": "UPDATE\n                 notification\n               SET\n                 status = $1\n               WHERE\n                 NOT source_id = ANY($2)\n                 AND (status = 'Read' OR status = 'Unread')\n               RETURNING\n                 id,\n                 title,\n                 kind,\n                 status,\n                 source_id,\n                 metadata as \"metadata: Json<GithubNotification>\",\n                 updated_at,\n                 last_read_at\n            "
+  },
+  "30b90d11d290029f0f53355b764fe1a1d1b6c541e44b2faca91303d3f41ed832": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": [
+          "Uuid",
+          "Text",
+          "Text",
+          "Text",
+          "Text",
+          "Json",
+          "Timestamp",
+          "Timestamp"
+        ]
+      }
+    },
+    "query": "\n          INSERT INTO notification\n            (id, title, kind, status, source_id, metadata, updated_at, last_read_at)\n          VALUES\n            ($1, $2, $3, $4, $5, $6, $7, $8)\n        "
+  },
+  "535272cb961b9d23b12c81ef8cbd5cb2f923f5cec25ac7c6c4c1f44fe9fee4c2": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        }
+      ],
+      "nullable": [
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Uuid",
+          "Text",
+          "Text",
+          "Text",
+          "Text",
+          "Json",
+          "Timestamp",
+          "Timestamp"
+        ]
+      }
+    },
+    "query": "\n          INSERT INTO notification\n            (id, title, kind, status, source_id, metadata, updated_at, last_read_at)\n          VALUES\n            ($1, $2, $3, $4, $5, $6, $7, $8)\n          ON CONFLICT (source_id) DO UPDATE\n          SET\n            title = $2,\n            kind = $3,\n            status = $4,\n            metadata = $6,\n            updated_at = $7,\n            last_read_at = $8\n          RETURNING\n            id\n        "
+  },
+  "594d8f69de74f3c64464193afbbe7dc47661a9bf301d42024a3d49c8150372b6": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "title",
+          "ordinal": 1,
+          "type_info": "Text"
+        },
+        {
+          "name": "kind",
+          "ordinal": 2,
+          "type_info": "Text"
+        },
+        {
+          "name": "status",
+          "ordinal": 3,
+          "type_info": "Text"
+        },
+        {
+          "name": "source_id",
+          "ordinal": 4,
+          "type_info": "Text"
+        },
+        {
+          "name": "metadata: Json<GithubNotification>",
+          "ordinal": 5,
+          "type_info": "Json"
+        },
+        {
+          "name": "updated_at",
+          "ordinal": 6,
+          "type_info": "Timestamp"
+        },
+        {
+          "name": "last_read_at",
+          "ordinal": 7,
+          "type_info": "Timestamp"
+        }
+      ],
+      "nullable": [
+        false,
         false,
         false,
         false,
@@ -72,9 +169,9 @@
         ]
       }
     },
-    "query": "SELECT id, title, kind, status, metadata as \"metadata: Json<GithubNotification>\", updated_at, last_read_at FROM notification WHERE id = $1"
+    "query": "SELECT\n                 id,\n                 title,\n                 kind,\n                 status,\n                 source_id,\n                 metadata as \"metadata: Json<GithubNotification>\",\n                 updated_at,\n                 last_read_at\n               FROM notification\n               WHERE id = $1"
   },
-  "c9c9b928b98f4633eaa03d4e3d573776faf7536db434ba3d1829be6d27284630": {
+  "64981fc355c46a21e8b079a0eaa8521dca96a0453db52fecc404d6516d085c2c": {
     "describe": {
       "columns": [
         {
@@ -98,22 +195,28 @@
           "type_info": "Text"
         },
         {
-          "name": "metadata: Json<GithubNotification>",
+          "name": "source_id",
           "ordinal": 4,
+          "type_info": "Text"
+        },
+        {
+          "name": "metadata: Json<GithubNotification>",
+          "ordinal": 5,
           "type_info": "Json"
         },
         {
           "name": "updated_at",
-          "ordinal": 5,
+          "ordinal": 6,
           "type_info": "Timestamp"
         },
         {
           "name": "last_read_at",
-          "ordinal": 6,
+          "ordinal": 7,
           "type_info": "Timestamp"
         }
       ],
       "nullable": [
+        false,
         false,
         false,
         false,
@@ -126,6 +229,6 @@
         "Left": []
       }
     },
-    "query": "SELECT id, title, kind, status, metadata as \"metadata: Json<GithubNotification>\", updated_at, last_read_at FROM notification"
+    "query": "SELECT\n                 id,\n                 title,\n                 kind,\n                 status,\n                 source_id,\n                 metadata as \"metadata: Json<GithubNotification>\",\n                 updated_at,\n                 last_read_at\n               FROM\n                 notification\n             "
   }
 }
