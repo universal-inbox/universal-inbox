@@ -8,17 +8,16 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
-pub struct GithubNotification {
-    pub test: String,
-    pub num: u32,
-}
+use integrations::github::GithubNotification;
+
+pub mod integrations;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
 pub struct Notification {
     pub id: Uuid,
     pub title: String,
     pub kind: NotificationKind,
+    pub source_id: String,
     pub status: NotificationStatus,
     pub metadata: GithubNotification,
     pub updated_at: DateTime<Utc>,
@@ -37,5 +36,7 @@ macro_attr! {
     pub enum NotificationStatus {
         Unread,
         Read,
+        Done,
+        Unsubscribed,
     }
 }

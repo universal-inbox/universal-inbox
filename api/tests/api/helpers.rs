@@ -1,22 +1,31 @@
 #![allow(clippy::useless_conversion)]
 
+use httpmock::prelude::*;
+use reqwest::Response;
 use rstest::*;
 use sqlx::{Connection, Executor, PgConnection, PgPool};
 use std::net::TcpListener;
 use std::sync::Arc;
 use tracing::info;
+use universal_inbox::Notification;
 use universal_inbox_api::configuration::Settings;
+use universal_inbox_api::integrations::github::GithubService;
 use universal_inbox_api::observability::{get_subscriber, init_subscriber};
-use universal_inbox_api::repository::notification::PgRepository;
-use universal_inbox_api::universal_inbox::notification_service::NotificationService;
+use universal_inbox_api::repository::database::PgRepository;
+use universal_inbox_api::universal_inbox::notification::service::NotificationService;
 use uuid::Uuid;
+
+pub struct TestedApp {
+    pub app_address: String,
+    pub github_mock_server: MockServer,
+}
 
 #[fixture]
 #[once]
 fn tracing_setup(settings: Settings) {
     info!("Setting up tracing");
     let subscriber = get_subscriber(&settings.application.log_directive);
-    init_subscriber(subscriber);
+    init_subscriber(subscriber, log::LevelFilter::Error);
 }
 
 #[fixture]
@@ -53,20 +62,97 @@ pub fn settings() -> Settings {
 }
 
 #[fixture]
-pub async fn app_address(
+pub async fn tested_app(
     settings: Settings,
     #[allow(unused)] tracing_setup: (),
     #[future] db_connection: PgPool,
-) -> String {
+) -> TestedApp {
     info!("Setting up server");
     let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
     let port = listener.local_addr().unwrap().port();
     let repository = Box::new(PgRepository::new(db_connection.await.into())); // useless_conversion disabled here
-    let service = Arc::new(NotificationService::new(repository));
-    let server =
-        universal_inbox_api::run(listener, &settings, service).expect("Failed to bind address");
+
+    let mock_server = MockServer::start();
+    let mock_server_uri = &mock_server.base_url();
+    let service = Arc::new(
+        NotificationService::new(
+            repository,
+            GithubService::new("test_token", Some(mock_server_uri.to_string())).unwrap_or_else(
+                |_| {
+                    panic!(
+                        "Failed to setup Github service with mock server at {}",
+                        mock_server_uri
+                    )
+                },
+            ),
+            2,
+        )
+        .expect("Failed to setup notification service"),
+    );
+
+    let server = universal_inbox_api::run(listener, &settings, service)
+        .await
+        .expect("Failed to bind address");
 
     let _ = tokio::spawn(server);
 
-    format!("http://127.0.0.1:{}", port)
+    TestedApp {
+        app_address: format!("http://127.0.0.1:{}", port),
+        github_mock_server: mock_server,
+    }
+}
+
+pub async fn create_notification_response(
+    app_address: &str,
+    notification: &Notification,
+) -> Response {
+    reqwest::Client::new()
+        .post(&format!("{}/notifications", &app_address))
+        .json(notification)
+        .send()
+        .await
+        .expect("Failed to execute request")
+}
+
+pub async fn create_notification(
+    app_address: &str,
+    notification: &Notification,
+) -> Box<Notification> {
+    create_notification_response(app_address, notification)
+        .await
+        .json()
+        .await
+        .expect("Cannot parse JSON result")
+}
+
+pub async fn list_notifications_response(app_address: &str) -> Response {
+    reqwest::Client::new()
+        .get(&format!("{}/notifications", &app_address))
+        .send()
+        .await
+        .expect("Failed to execute request")
+}
+
+pub async fn list_notifications(app_address: &str) -> Box<Vec<Notification>> {
+    list_notifications_response(app_address)
+        .await
+        .json()
+        .await
+        .expect("Cannot parse JSON result")
+}
+
+pub async fn get_notification_response(app_address: &str, id: uuid::Uuid) -> Response {
+    reqwest::Client::new()
+        .get(&format!("{}/notifications/{}", &app_address, id))
+        .send()
+        .await
+        .expect("Failed to execute request")
+}
+
+pub async fn get_notification(app_address: &str, id: uuid::Uuid) -> Box<Notification> {
+    get_notification_response(app_address, id)
+        .await
+        .json()
+        .await
+        .expect("Cannot parse JSON result")
 }
