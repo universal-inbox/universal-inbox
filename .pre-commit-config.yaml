@@ -1,3 +1,4 @@
+fail_fast: true
 repos:
   - repo: local
     hooks:
@@ -6,23 +7,26 @@ repos:
         language: system
         pass_filenames: false
         entry: cargo make format-flow
+        stages: [commit]
       - id: format-toml
         name: format-toml
         language: system
         pass_filenames: false
         entry: cargo make format-toml-flow
-      - id: check
-        name: check
-        language: system
-        pass_filenames: false
-        entry: cargo make check-tests
+        stages: [commit]
       - id: clippy
         name: clippy
         language: system
         pass_filenames: false
         entry: cargo make clippy-flow
+        stages: [commit]
       - id: todo
         name: todo
         language: system
         pass_filenames: false
         entry: bash -c 'rg TODO && false || true'
+        stages: [commit]
+  - repo: https://github.com/crate-ci/committed
+    rev: v1.0.5
+    hooks:
+      - id: committed
