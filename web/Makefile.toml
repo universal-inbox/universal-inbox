@@ -1,12 +1,18 @@
 extend = "../Makefile.toml"
 
 [tasks.build-release]
-install_crate = { crate_name = "trunk", binary = "trunk" }
+install_script = '''
+which trunk > /dev/null || cargo install trunk
+npm install --dev
+'''
 command = "trunk"
 args = ["build", "--release"]
 
 [tasks.run]
 clear = true
-install_crate = { crate_name = "trunk", binary = "trunk" }
+install_script = '''
+which trunk > /dev/null || cargo install trunk
+npm install --dev
+'''
 command = "trunk"
 args = ["serve"]
