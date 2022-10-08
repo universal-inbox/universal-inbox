@@ -20,4 +20,4 @@ enum_derive = "0.1.0"
 macro-attr = "0.2.0"
 serde_with = "1.14.0"
 http = "0.2.0"
-git-url-parse = { git = "https://github.com/dax/git-url-parse-rs", rev = "5561f3c4e044207d6be0fdb03aa0f6b75f5bc9c8" }
+git-url-parse = { git = "https://github.com/dax/git-url-parse-rs", rev = "0b21fc5701ebe6b8c60f6795ba21119eb8128f9b" }
