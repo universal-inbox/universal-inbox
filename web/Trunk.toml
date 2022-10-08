@@ -1,0 +1,7 @@
+[[hooks]]
+stage = "build"
+command = "sh"
+command_arguments = [
+  "-c",
+  "npx tailwindcss -i ./css/universal-inbox.css -o $TRUNK_STAGING_DIR/css/universal-inbox.min.css --minify",
+]
