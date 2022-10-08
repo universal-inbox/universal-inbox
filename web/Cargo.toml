@@ -13,9 +13,36 @@ name = "universal-inbox-web"
 
 [dependencies]
 universal-inbox = { path = ".." }
-yew = "0.19"
-reqwasm = "0.5"
+js-sys = "0.3"
 serde = { version = "1.0", features = ["derive"] }
 wasm-bindgen-futures = "0.4"
-uikit-rs = { git = "https://github.com/dax/uikit-rs.git" }
-wasm-bindgen = "0.2.79"
+wasm-bindgen = { version = "0.2" }
+dioxus = { version = "0.2", features = ["web", "router", "fermi"] }
+uuid = { version = "1.1", features = ["v4", "js"] }
+console_error_panic_hook = "0.1"
+console_log = { version = "0.2", features = ["color"], optional = true }
+log = "0.4"
+cfg-if = "1.0"
+futures-util = "0.3"
+serde-wasm-bindgen = "0.4"
+dioxus-free-icons = { version = "0.5.0", features = ["bootstrap"] }
+
+[dependencies.web-sys]
+version = "0.3"
+features = [
+  'DomTokenList',
+  'Element',
+  'EventListener',
+  'EventTarget',
+  'Headers',
+  'MediaQueryList',
+  'Request',
+  'RequestInit',
+  'RequestMode',
+  'Response',
+  'Storage',
+  'Window',
+]
+
+[features]
+default = ["console_log"]
