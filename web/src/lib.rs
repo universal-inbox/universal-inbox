@@ -39,7 +39,7 @@ pub fn app(cx: Scope) -> Element {
     cx.render(rsx!(
         // Router + Route == 300KB (release) !!!
         div {
-            class: "bg-light-200 dark:bg-dark-900 text-black dark:text-white h-fit",
+            class: "bg-light-200 dark:bg-dark-900 text-black dark:text-white min-h-screen",
 
             Router {
                 self::nav_bar {}
