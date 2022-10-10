@@ -1,4 +1,5 @@
 use ::universal_inbox::Notification;
+use dioxus::core::to_owned;
 use dioxus::fermi::UseAtomRef;
 use dioxus::prelude::*;
 use dioxus_free_icons::icons::bs_icons::{
@@ -19,6 +20,7 @@ pub fn notifications_list<'a>(
             rsx!{
                 li {
                     key: "{notif.id}",
+
                     self::notification {
                         notif: notif,
                         selected: i == *(selected_notification_index.read())
@@ -31,15 +33,26 @@ pub fn notifications_list<'a>(
 
 #[inline_props]
 fn notification<'a>(cx: Scope, notif: &'a Notification, selected: bool) -> Element {
-    let style = if *selected {
-        "dark:bg-dark-200 bg-light-200 border-solid border shadow-lg"
-    } else {
-        "dark:bg-dark-500 bg-light-0 hover:border-solid hover:border"
-    };
+    let is_hovered = use_state(&cx, || false);
+    let style = use_state(&cx, || "");
+
+    use_effect(&cx, (selected,), |(selected,)| {
+        to_owned![style];
+        async move {
+            style.set(if selected {
+                "dark:bg-dark-200 bg-light-200 border-solid border shadow-lg"
+            } else {
+                "dark:bg-dark-500 bg-light-0 hover:border-solid hover:border"
+            });
+        }
+    });
 
     cx.render(rsx!(
         div {
             class: "flex gap-2 rounded-lg h-14 items-center p-3 dark:border-white border-black {style}",
+            onmouseenter: |_| { is_hovered.set(true); },
+            onmouseleave: |_| { is_hovered.set(false); },
+
             div {
                 class: "flex flex-none h-6 items-center",
                 Icon { class: "w-5 h-5" icon: BsGithub }
@@ -48,7 +61,7 @@ fn notification<'a>(cx: Scope, notif: &'a Notification, selected: bool) -> Eleme
                 class: "flex grow text-sm justify-left",
                 "{notif.title}"
             },
-            (*selected).then(|| rsx!(
+            (*selected || *is_hovered.get()).then(|| rsx!(
                 self::notification_button { Icon { class: "w-5 h-5" icon: BsCheck2 } },
                 self::notification_button { Icon { class: "w-5 h-5" icon: BsBellSlash } },
                 self::notification_button { Icon { class: "w-5 h-5" icon: BsClockHistory } },
