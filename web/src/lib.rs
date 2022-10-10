@@ -9,6 +9,7 @@ use log::debug;
 use pages::notifications_page::notifications_page;
 use pages::page_not_found::page_not_found;
 use pages::settings_page::settings_page;
+use universal_inbox::Notification;
 use wasm_bindgen::prelude::Closure;
 use wasm_bindgen::JsCast;
 use web_sys::KeyboardEvent;
@@ -28,8 +29,9 @@ pub fn app(cx: Scope) -> Element {
 
     use_future(&cx, (), |()| {
         to_owned![selected_notification_index];
+        to_owned![notifications];
         async move {
-            setup_key_bindings(selected_notification_index);
+            setup_key_bindings(selected_notification_index, notifications);
         }
     });
 
@@ -51,14 +53,18 @@ pub fn app(cx: Scope) -> Element {
     ))
 }
 
-fn setup_key_bindings(selected_notification_index: UseAtomRef<usize>) -> Option<()> {
+fn setup_key_bindings(
+    selected_notification_index: UseAtomRef<usize>,
+    notifications: UseAtomRef<Vec<Notification>>,
+) -> Option<()> {
     let window = web_sys::window()?;
     let document = window.document()?;
 
     let handler = Closure::wrap(Box::new(move |evt: KeyboardEvent| {
         evt.prevent_default();
         let mut index = selected_notification_index.write();
-        if evt.key() == *"ArrowDown" {
+        let list_length = notifications.read().len();
+        if evt.key() == *"ArrowDown" && *index < (list_length - 1) {
             *index += 1;
         } else if evt.key() == *"ArrowUp" && *index > 0 {
             *index -= 1;
