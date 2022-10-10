@@ -2,23 +2,27 @@ fail_fast: true
 repos:
   - repo: local
     hooks:
-      - id: format
-        name: format
+      - id: fmt
+        name: fmt
+        description: Format files with cargo fmt
+        entry: cargo fmt --
         language: system
-        pass_filenames: false
-        entry: cargo make format-flow
+        files: \.rs$
+        args: []
         stages: [commit]
       - id: format-toml
         name: format-toml
         language: system
         pass_filenames: false
         entry: cargo make format-toml-flow
+        files: \.toml$
         stages: [commit]
       - id: clippy
         name: clippy
         language: system
         pass_filenames: false
         entry: cargo make clippy-flow
+        files: \.rs$
         stages: [commit]
       - id: todo
         name: todo
