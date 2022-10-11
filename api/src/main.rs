@@ -38,6 +38,8 @@ enum Commands {
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
+    color_backtrace::install();
+
     let cli = Cli::parse();
 
     let settings = Settings::new().expect("Cannot load Universal Inbox configuration");
