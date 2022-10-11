@@ -24,6 +24,8 @@ pub struct TestedApp {
 #[once]
 fn tracing_setup(settings: Settings) {
     info!("Setting up tracing");
+    color_backtrace::install();
+
     let subscriber = get_subscriber(&settings.application.log_directive);
     init_subscriber(subscriber, log::LevelFilter::Error);
 }
