@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use universal_inbox::{Notification, NotificationStatus};
+use universal_inbox::{Notification, NotificationPatch, NotificationStatus};
 use uuid::Uuid;
 
 use crate::repository::database::TransactionalRepository;
@@ -21,6 +21,11 @@ pub trait NotificationRepository: Send + Sync + TransactionalRepository {
         &self,
         notification: Notification,
     ) -> Result<Notification, UniversalInboxError>;
+    async fn update<'a>(
+        &self,
+        notification_id: Uuid,
+        notification_update: &'a NotificationPatch,
+    ) -> Result<UpdateStatus<Box<Notification>>, UniversalInboxError>;
 }
 
 fn error_chain_fmt(
@@ -50,6 +55,8 @@ pub enum UniversalInboxError {
         source: enum_derive::ParseEnumError,
         output: String,
     },
+    #[error("Missing input data: {0}")]
+    MissingInputData(String),
     #[error("The entity {id} already exists")]
     AlreadyExists {
         #[source]
@@ -58,4 +65,10 @@ pub enum UniversalInboxError {
     },
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
+}
+
+#[derive(Debug)]
+pub struct UpdateStatus<T> {
+    pub updated: bool,
+    pub result: Option<T>,
 }

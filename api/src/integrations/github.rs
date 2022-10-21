@@ -1,4 +1,4 @@
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use format_serde_error::SerdeError;
 use http::{HeaderMap, HeaderValue};
 
@@ -66,5 +66,29 @@ impl GithubService {
             .context("Failed to parse response")?;
 
         Ok(notifications)
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    pub async fn mark_thread_as_read(&self, thread_id: &str) -> Result<(), UniversalInboxError> {
+        let response = self
+            .client
+            .patch(&format!(
+                "{}/notifications/threads/{thread_id}",
+                self.github_base_url
+            ))
+            .send()
+            .await
+            .with_context(|| format!("Failed to mark Github notification `{thread_id}` as read"))?;
+
+        match response.error_for_status() {
+            Ok(_) => Ok(()),
+            Err(err) if err.status() == Some(reqwest::StatusCode::NOT_FOUND) => Ok(()),
+            Err(error) => {
+                tracing::error!("An error occurred when trying to mark Github notification `{thread_id}` as read: {}", error);
+                Err(UniversalInboxError::Unexpected(anyhow!(
+                    "Failed to mark Github notification `{thread_id}` as read"
+                )))
+            }
+        }
     }
 }
