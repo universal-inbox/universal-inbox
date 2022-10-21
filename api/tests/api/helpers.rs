@@ -7,7 +7,7 @@ use sqlx::{Connection, Executor, PgConnection, PgPool};
 use std::net::TcpListener;
 use std::sync::Arc;
 use tracing::info;
-use universal_inbox::Notification;
+use universal_inbox::{Notification, NotificationPatch};
 use universal_inbox_api::configuration::Settings;
 use universal_inbox_api::integrations::github::GithubService;
 use universal_inbox_api::observability::{get_subscriber, init_subscriber};
@@ -121,6 +121,34 @@ pub async fn create_notification(
     notification: &Notification,
 ) -> Box<Notification> {
     create_notification_response(app_address, notification)
+        .await
+        .json()
+        .await
+        .expect("Cannot parse JSON result")
+}
+
+pub async fn patch_notification_response(
+    app_address: &str,
+    notification_id: Uuid,
+    patch: &NotificationPatch,
+) -> Response {
+    reqwest::Client::new()
+        .patch(&format!(
+            "{}/notifications/{}",
+            &app_address, notification_id
+        ))
+        .json(patch)
+        .send()
+        .await
+        .expect("Failed to execute request")
+}
+
+pub async fn patch_notification(
+    app_address: &str,
+    notification_id: Uuid,
+    patch: &NotificationPatch,
+) -> Box<Notification> {
+    patch_notification_response(app_address, notification_id, patch)
         .await
         .json()
         .await

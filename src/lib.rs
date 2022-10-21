@@ -40,3 +40,8 @@ macro_attr! {
         Unsubscribed,
     }
 }
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct NotificationPatch {
+    pub status: Option<NotificationStatus>,
+}

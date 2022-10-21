@@ -2,10 +2,11 @@ use super::{
     super::{NotificationRepository, UniversalInboxError},
     source::NotificationSource,
 };
-use crate::integrations::github::GithubService;
+use crate::{integrations::github::GithubService, universal_inbox::UpdateStatus};
 use futures::stream::{self, StreamExt, TryStreamExt};
 use universal_inbox::{
-    integrations::github::GithubNotification, Notification, NotificationKind, NotificationStatus,
+    integrations::github::GithubNotification, Notification, NotificationKind, NotificationPatch,
+    NotificationStatus,
 };
 use uuid::Uuid;
 
@@ -36,9 +37,9 @@ impl NotificationService {
     #[tracing::instrument(level = "debug", skip(self))]
     pub async fn get_notification(
         &self,
-        id: Uuid,
+        notification_id: Uuid,
     ) -> Result<Option<Notification>, UniversalInboxError> {
-        self.repository.get_one(id).await
+        self.repository.get_one(notification_id).await
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
@@ -112,5 +113,28 @@ impl NotificationService {
             .await?;
 
         Ok(notifications)
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    pub async fn patch_notification(
+        &self,
+        notification_id: Uuid,
+        patch: &NotificationPatch,
+    ) -> Result<UpdateStatus<Box<Notification>>, UniversalInboxError> {
+        let updated_notification = self.repository.update(notification_id, patch).await?;
+
+        if let UpdateStatus {
+            updated: true,
+            result: Some(ref notification),
+        } = updated_notification
+        {
+            if patch.status == Some(NotificationStatus::Done) {
+                self.github_service
+                    .mark_thread_as_read(&notification.source_id)
+                    .await?;
+            }
+        }
+
+        Ok(updated_notification)
     }
 }
