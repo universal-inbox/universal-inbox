@@ -12,6 +12,7 @@ use ::universal_inbox::{
 use chrono::{TimeZone, Utc};
 use format_serde_error::SerdeError;
 use http::StatusCode;
+use httpmock::Method::PATCH;
 use rstest::*;
 use serde_json::json;
 
@@ -150,5 +151,271 @@ mod create_notification {
             json!({ "message": format!("The entity {} already exists", created_notification.id) })
                 .to_string()
         );
+    }
+}
+mod get_notification {
+    use uuid::Uuid;
+
+    use crate::helpers::{get_notification, get_notification_response};
+
+    use super::*;
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_get_existing_notification(
+        #[future] tested_app: TestedApp,
+        github_notification: Box<GithubNotification>,
+    ) {
+        let address: String = tested_app.await.app_address.into();
+        let expected_notification = Box::new(Notification {
+            id: uuid::Uuid::new_v4(),
+            title: "notif1".to_string(),
+            kind: NotificationKind::Github,
+            status: NotificationStatus::Unread,
+            source_id: "1234".to_string(),
+            metadata: *github_notification,
+            updated_at: Utc.ymd(2022, 1, 1).and_hms(0, 0, 0),
+            last_read_at: None,
+        });
+        let created_notification = create_notification(&address, &expected_notification).await;
+
+        assert_eq!(created_notification, expected_notification);
+
+        let notification = get_notification(&address, created_notification.id).await;
+
+        assert_eq!(notification, created_notification);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_get_unknown_notification(#[future] tested_app: TestedApp) {
+        let address: String = tested_app.await.app_address.into();
+        let unknown_notification_id = Uuid::new_v4();
+
+        let response = get_notification_response(&address, unknown_notification_id).await;
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body = response.text().await.expect("Cannot get response body");
+        assert_eq!(
+            body,
+            json!({ "message": format!("Cannot find notification {}", unknown_notification_id) })
+                .to_string()
+        );
+    }
+}
+
+mod patch_notification {
+    use universal_inbox::NotificationPatch;
+    use uuid::Uuid;
+
+    use crate::helpers::{patch_notification, patch_notification_response};
+
+    use super::*;
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_patch_notification_status(
+        #[future] tested_app: TestedApp,
+        github_notification: Box<GithubNotification>,
+        #[values(205, 304, 404)] github_status_code: u16,
+    ) {
+        let app = tested_app.await;
+        let github_mark_thread_as_read_mock = app.github_mock_server.mock(|when, then| {
+            when.method(PATCH)
+                .path("/notifications/threads/1234")
+                .header("accept", "application/vnd.github.v3+json");
+            then.status(github_status_code);
+        });
+        let address: String = app.app_address.into();
+        let expected_notification = Box::new(Notification {
+            id: uuid::Uuid::new_v4(),
+            title: "notif1".to_string(),
+            kind: NotificationKind::Github,
+            status: NotificationStatus::Unread,
+            source_id: "1234".to_string(),
+            metadata: *github_notification,
+            updated_at: Utc.ymd(2022, 1, 1).and_hms(0, 0, 0),
+            last_read_at: None,
+        });
+        let created_notification = create_notification(&address, &expected_notification).await;
+
+        assert_eq!(created_notification, expected_notification);
+
+        let patched_notification = patch_notification(
+            &address,
+            created_notification.id,
+            &NotificationPatch {
+                status: Some(NotificationStatus::Done),
+            },
+        )
+        .await;
+
+        assert_eq!(
+            patched_notification,
+            Box::new(Notification {
+                status: NotificationStatus::Done,
+                ..*created_notification
+            })
+        );
+        github_mark_thread_as_read_mock.assert();
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_patch_notification_status_with_github_api_error(
+        #[future] tested_app: TestedApp,
+        github_notification: Box<GithubNotification>,
+    ) {
+        let app = tested_app.await;
+        let github_mark_thread_as_read_mock = app.github_mock_server.mock(|when, then| {
+            when.method(PATCH)
+                .path("/notifications/threads/1234")
+                .header("accept", "application/vnd.github.v3+json");
+            then.status(403);
+        });
+        let address: String = app.app_address.into();
+        let expected_notification = Box::new(Notification {
+            id: uuid::Uuid::new_v4(),
+            title: "notif1".to_string(),
+            kind: NotificationKind::Github,
+            status: NotificationStatus::Unread,
+            source_id: "1234".to_string(),
+            metadata: *github_notification,
+            updated_at: Utc.ymd(2022, 1, 1).and_hms(0, 0, 0),
+            last_read_at: None,
+        });
+        let created_notification = create_notification(&address, &expected_notification).await;
+
+        assert_eq!(created_notification, expected_notification);
+
+        let response = patch_notification_response(
+            &address,
+            created_notification.id,
+            &NotificationPatch {
+                status: Some(NotificationStatus::Done),
+            },
+        )
+        .await;
+        assert_eq!(response.status(), 500);
+
+        let body = response.text().await.expect("Cannot get response body");
+        assert_eq!(
+            body,
+            json!({ "message": format!("Failed to mark Github notification `1234` as read") })
+                .to_string()
+        );
+        github_mark_thread_as_read_mock.assert();
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_patch_notification_status_without_modification(
+        #[future] tested_app: TestedApp,
+        github_notification: Box<GithubNotification>,
+    ) {
+        let app = tested_app.await;
+        let github_api_mock = app.github_mock_server.mock(|when, then| {
+            when.any_request();
+            then.status(200);
+        });
+        let address: String = app.app_address.into();
+        let expected_notification = Box::new(Notification {
+            id: uuid::Uuid::new_v4(),
+            title: "notif1".to_string(),
+            kind: NotificationKind::Github,
+            status: NotificationStatus::Unread,
+            source_id: "1234".to_string(),
+            metadata: *github_notification,
+            updated_at: Utc.ymd(2022, 1, 1).and_hms(0, 0, 0),
+            last_read_at: None,
+        });
+        let created_notification = create_notification(&address, &expected_notification).await;
+
+        assert_eq!(created_notification, expected_notification);
+
+        let response = patch_notification_response(
+            &address,
+            created_notification.id,
+            &NotificationPatch {
+                status: Some(created_notification.status),
+            },
+        )
+        .await;
+
+        assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
+        github_api_mock.assert_hits(0);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_patch_notification_status_without_value(
+        #[future] tested_app: TestedApp,
+        github_notification: Box<GithubNotification>,
+    ) {
+        let app = tested_app.await;
+        let github_api_mock = app.github_mock_server.mock(|when, then| {
+            when.any_request();
+            then.status(200);
+        });
+        let address: String = app.app_address.into();
+        let expected_notification = Box::new(Notification {
+            id: uuid::Uuid::new_v4(),
+            title: "notif1".to_string(),
+            kind: NotificationKind::Github,
+            status: NotificationStatus::Unread,
+            source_id: "1234".to_string(),
+            metadata: *github_notification,
+            updated_at: Utc.ymd(2022, 1, 1).and_hms(0, 0, 0),
+            last_read_at: None,
+        });
+        let created_notification = create_notification(&address, &expected_notification).await;
+
+        assert_eq!(created_notification, expected_notification);
+
+        let response = patch_notification_response(
+            &address,
+            created_notification.id,
+            &NotificationPatch { status: None },
+        )
+        .await;
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        github_api_mock.assert_hits(0);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_patch_unknown_notification(#[future] tested_app: TestedApp) {
+        let app = tested_app.await;
+        let github_api_mock = app.github_mock_server.mock(|when, then| {
+            when.any_request();
+            then.status(200);
+        });
+        let address: String = app.app_address.into();
+        let unknown_notification_id = Uuid::new_v4();
+
+        let response = patch_notification_response(
+            &address,
+            unknown_notification_id,
+            &NotificationPatch {
+                status: Some(NotificationStatus::Done),
+            },
+        )
+        .await;
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body = response.text().await.expect("Cannot get response body");
+        assert_eq!(
+            body,
+            json!({
+                "message":
+                    format!(
+                        "Cannot update unknown notification {}",
+                        unknown_notification_id
+                    )
+            })
+            .to_string()
+        );
+        github_api_mock.assert_hits(0);
     }
 }

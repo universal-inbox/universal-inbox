@@ -50,7 +50,7 @@ pub async fn run(
                     .add(("Access-Control-Allow-Origin", front_base_url.as_bytes()))
                     .add((
                         "Access-Control-Allow-Methods",
-                        "POST, GET, OPTIONS".as_bytes(),
+                        "POST, GET, OPTIONS, PATCH".as_bytes(),
                     ))
                     .add(("Access-Control-Allow-Headers", "content-type".as_bytes())),
             )
@@ -62,6 +62,14 @@ pub async fn run(
             .route(
                 "/notifications/{notification_id}",
                 web::get().to(routes::get_notification),
+            )
+            .route(
+                "/notifications/{notification_id}",
+                web::patch().to(routes::patch_notification),
+            )
+            .route(
+                "/notifications/{notification_id}",
+                web::method(http::Method::OPTIONS).to(routes::option_wildcard),
             )
             .route(
                 "/notifications",

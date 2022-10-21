@@ -1,14 +1,16 @@
-use crate::universal_inbox::{NotificationRepository, UniversalInboxError};
+use crate::universal_inbox::{NotificationRepository, UniversalInboxError, UpdateStatus};
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use sqlx::types::Json;
-use universal_inbox::{integrations::github::GithubNotification, Notification, NotificationStatus};
+use universal_inbox::{
+    integrations::github::GithubNotification, Notification, NotificationPatch, NotificationStatus,
+};
 use uuid::Uuid;
 
 use super::database::PgRepository;
 
-#[derive(Debug)]
+#[derive(Debug, sqlx::FromRow)]
 struct NotificationRow {
     id: Uuid,
     title: String,
@@ -18,6 +20,13 @@ struct NotificationRow {
     metadata: Json<GithubNotification>,
     updated_at: NaiveDateTime,
     last_read_at: Option<NaiveDateTime>,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct UpdatedNotificationRow {
+    #[sqlx(flatten)]
+    pub notification_row: NotificationRow,
+    pub is_status_updated: bool,
 }
 
 impl TryFrom<NotificationRow> for Notification {
@@ -243,5 +252,63 @@ impl NotificationRepository for PgRepository {
         })?;
 
         Ok(Notification { id, ..notification })
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    async fn update<'a>(
+        &self,
+        notification_id: Uuid,
+        patch: &'a NotificationPatch,
+    ) -> Result<UpdateStatus<Box<Notification>>, UniversalInboxError> {
+        let status = patch.status.ok_or_else(|| {
+            UniversalInboxError::MissingInputData(
+                "Missing `status` field value to update notification {notification_id}".to_string(),
+            )
+        })?;
+
+        let record: Option<UpdatedNotificationRow> = sqlx::query_as(
+            r#"UPDATE
+                 notification
+               SET
+                 status = $2
+               WHERE
+                 id = $1
+               RETURNING
+                 id,
+                 title,
+                 kind,
+                 status,
+                 source_id,
+                 metadata,
+                 updated_at,
+                 last_read_at,
+                 (SELECT status != $2 FROM notification WHERE id = $1) as "is_status_updated"
+            "#,
+        )
+        .bind(notification_id)
+        .bind(status.to_string())
+        .fetch_optional(&self.pool.clone())
+        .await
+        .context(format!(
+            "Failed to update notification {} from storage",
+            notification_id
+        ))?;
+
+        if let Some(updated_notification_row) = record {
+            Ok(UpdateStatus {
+                updated: updated_notification_row.is_status_updated,
+                result: Some(Box::new(
+                    updated_notification_row
+                        .notification_row
+                        .try_into()
+                        .unwrap(),
+                )),
+            })
+        } else {
+            Ok(UpdateStatus {
+                updated: false,
+                result: None,
+            })
+        }
     }
 }
