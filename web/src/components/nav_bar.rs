@@ -29,7 +29,7 @@ pub fn nav_bar(cx: Scope) -> Element {
                         id: "theme-toggle",
                         "type": "button",
                         onclick: |_| { toggle_dark_mode(true).expect("Failed to switch the theme"); },
-                        class: "hover:bg-gray-100 dark:hover:bg-dark-800 rounded-lg text-sm p-2.5",
+                        class: "hover:bg-light-100 dark:hover:bg-dark-800 rounded-lg text-sm p-2.5",
 
                         Icon { class: "block dark:hidden w-5 h-5", icon: BsMoon }
                         Icon { class: "hidden dark:block w-5 h-5", icon: BsSun }
