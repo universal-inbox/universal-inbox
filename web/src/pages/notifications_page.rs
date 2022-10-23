@@ -4,6 +4,7 @@ use crate::services::notification_service::{
 };
 use dioxus::core::to_owned;
 use dioxus::prelude::*;
+use universal_inbox::Notification;
 
 pub fn notifications_page(cx: Scope) -> Element {
     let notifications = use_atom_ref(&cx, NOTIFICATIONS);
@@ -22,7 +23,8 @@ pub fn notifications_page(cx: Scope) -> Element {
 
             self::notifications_list {
                 notifications: notifications.read().clone(),
-                selected_notification_index: selected_notification_index
+                selected_notification_index: selected_notification_index,
+                on_mark_as_done: |notification: &Notification| notification_service.send(NotificationCommand::MarkAsDone(notification.clone())),
             }
         }
     ))

@@ -9,6 +9,7 @@ use log::debug;
 use pages::notifications_page::notifications_page;
 use pages::page_not_found::page_not_found;
 use pages::settings_page::settings_page;
+use services::notification_service::NotificationCommand;
 use universal_inbox::Notification;
 use wasm_bindgen::prelude::Closure;
 use wasm_bindgen::JsCast;
@@ -25,13 +26,19 @@ mod services;
 pub fn app(cx: Scope) -> Element {
     let notifications = use_atom_ref(&cx, NOTIFICATIONS);
     let selected_notification_index = use_atom_ref(&cx, SELECTED_NOTIFICATION_INDEX);
-    use_coroutine(&cx, |rx| notification_service(rx, notifications.clone()));
+    let notification_service_handle =
+        use_coroutine(&cx, |rx| notification_service(rx, notifications.clone()));
 
     use_future(&cx, (), |()| {
         to_owned![selected_notification_index];
+        to_owned![notification_service_handle];
         to_owned![notifications];
         async move {
-            setup_key_bindings(selected_notification_index, notifications);
+            setup_key_bindings(
+                selected_notification_index,
+                notification_service_handle,
+                notifications,
+            );
         }
     });
 
@@ -43,9 +50,7 @@ pub fn app(cx: Scope) -> Element {
 
             Router {
                 self::nav_bar {}
-                Route { to: "/",
-                        self::notifications_page {}
-                }
+                Route { to: "/", self::notifications_page {} }
                 Route { to: "/settings", self::settings_page {} }
                 Route { to: "", self::page_not_found {} }
             }
@@ -55,19 +60,32 @@ pub fn app(cx: Scope) -> Element {
 
 fn setup_key_bindings(
     selected_notification_index: UseAtomRef<usize>,
+    notification_service_handle: CoroutineHandle<NotificationCommand>,
     notifications: UseAtomRef<Vec<Notification>>,
 ) -> Option<()> {
     let window = web_sys::window()?;
     let document = window.document()?;
 
     let handler = Closure::wrap(Box::new(move |evt: KeyboardEvent| {
-        evt.prevent_default();
         let mut index = selected_notification_index.write();
-        let list_length = notifications.read().len();
-        if evt.key() == *"ArrowDown" && *index < (list_length - 1) {
-            *index += 1;
-        } else if evt.key() == *"ArrowUp" && *index > 0 {
-            *index -= 1;
+        let read_notifications = notifications.read();
+        let list_length = read_notifications.len();
+        let selected_notification = read_notifications.get(*index);
+        let mut handled = true;
+
+        match evt.key().as_ref() {
+            "ArrowDown" if *index < (list_length - 1) => *index += 1,
+            "ArrowUp" if *index > 0 => *index -= 1,
+            "d" => {
+                if let Some(notification) = selected_notification {
+                    notification_service_handle
+                        .send(NotificationCommand::MarkAsDone(notification.clone()))
+                }
+            }
+            _ => handled = false,
+        }
+        if handled {
+            evt.prevent_default();
         }
     }) as Box<dyn FnMut(KeyboardEvent)>);
 

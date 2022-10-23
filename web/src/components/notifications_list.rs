@@ -1,5 +1,6 @@
 use ::universal_inbox::Notification;
 use dioxus::core::to_owned;
+use dioxus::events::MouseEvent;
 use dioxus::fermi::UseAtomRef;
 use dioxus::prelude::*;
 use dioxus_free_icons::icons::bs_icons::{
@@ -12,6 +13,7 @@ pub fn notifications_list<'a>(
     cx: Scope,
     notifications: Vec<Notification>,
     selected_notification_index: &'a UseAtomRef<usize>,
+    on_mark_as_done: EventHandler<'a, &'a Notification>,
 ) -> Element {
     cx.render(rsx!(ul {
         class: "flex flex-col gap-2",
@@ -23,7 +25,8 @@ pub fn notifications_list<'a>(
 
                     self::notification {
                         notif: notif,
-                        selected: i == *(selected_notification_index.read())
+                        selected: i == *(selected_notification_index.read()),
+                        on_mark_as_done: |n| on_mark_as_done.call(n)
                     }
                 }
             }
@@ -32,7 +35,12 @@ pub fn notifications_list<'a>(
 }
 
 #[inline_props]
-fn notification<'a>(cx: Scope, notif: &'a Notification, selected: bool) -> Element {
+fn notification<'a>(
+    cx: Scope,
+    notif: &'a Notification,
+    selected: bool,
+    on_mark_as_done: EventHandler<'a, &'a Notification>,
+) -> Element {
     let is_hovered = use_state(&cx, || false);
     let style = use_state(&cx, || "");
 
@@ -50,6 +58,7 @@ fn notification<'a>(cx: Scope, notif: &'a Notification, selected: bool) -> Eleme
     cx.render(rsx!(
         div {
             class: "flex gap-2 rounded-lg h-14 items-center p-3 dark:border-white border-black {style}",
+            // Buggy as of Dioxus 0.2
             onmouseenter: |_| { is_hovered.set(true); },
             onmouseleave: |_| { is_hovered.set(false); },
 
@@ -62,7 +71,10 @@ fn notification<'a>(cx: Scope, notif: &'a Notification, selected: bool) -> Eleme
                 "{notif.title}"
             },
             (*selected || *is_hovered.get()).then(|| rsx!(
-                self::notification_button { Icon { class: "w-5 h-5" icon: BsCheck2 } },
+                self::notification_button {
+                    onclick: |_| on_mark_as_done.call(notif),
+                    Icon { class: "w-5 h-5" icon: BsCheck2 }
+                },
                 self::notification_button { Icon { class: "w-5 h-5" icon: BsBellSlash } },
                 self::notification_button { Icon { class: "w-5 h-5" icon: BsClockHistory } },
                 self::notification_button { Icon { class: "w-5 h-5" icon: BsBookmark } },
@@ -74,12 +86,20 @@ fn notification<'a>(cx: Scope, notif: &'a Notification, selected: bool) -> Eleme
 #[derive(Props)]
 struct NotificationButtonProps<'a> {
     children: Element<'a>,
+    #[props(optional)]
+    onclick: Option<EventHandler<'a, MouseEvent>>,
 }
 
 fn notification_button<'a>(cx: Scope<'a, NotificationButtonProps<'a>>) -> Element {
     cx.render(rsx!(
         div {
             class: "flex flex-none justify-center rounded-lg bg-light-300 dark:bg-dark-300 border-black dark:border-white h-8 w-8 hover:border-solid hover:border",
+            onclick: move |evt| {
+                if let Some(handler) = &cx.props.onclick {
+                    handler.call(evt)
+                }
+            },
+
             button {
                 class: "text-sm",
                 &cx.props.children
