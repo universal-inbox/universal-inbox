@@ -68,7 +68,7 @@
     },
     "query": "SELECT\n                 id,\n                 title,\n                 kind,\n                 status,\n                 source_id,\n                 source_html_url,\n                 metadata as \"metadata: Json<GithubNotification>\",\n                 updated_at,\n                 last_read_at\n               FROM notification\n               WHERE id = $1"
   },
-  "13c444f130fa4990f184fa0cc808fb09d2282e645145180a0c2a1b292e732a85": {
+  "51a95dc4c56e1200303a04c279c5e4a0c6ca6ecd52b40fff9ec1cfcae9ee41cd": {
     "describe": {
       "columns": [
         {
@@ -129,10 +129,12 @@
         true
       ],
       "parameters": {
-        "Left": []
+        "Left": [
+          "Text"
+        ]
       }
     },
-    "query": "SELECT\n                 id,\n                 title,\n                 kind,\n                 status,\n                 source_id,\n                 source_html_url,\n                 metadata as \"metadata: Json<GithubNotification>\",\n                 updated_at,\n                 last_read_at\n               FROM\n                 notification\n             "
+    "query": "SELECT\n                 id,\n                 title,\n                 kind,\n                 status,\n                 source_id,\n                 source_html_url,\n                 metadata as \"metadata: Json<GithubNotification>\",\n                 updated_at,\n                 last_read_at\n               FROM\n                 notification\n               WHERE\n                 status = $1\n             "
   },
   "8838517cb02e005ea047ac8b2ee63f8cde05bcf4476e186c0ff8b5744c1cdaaa": {
     "describe": {

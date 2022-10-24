@@ -10,7 +10,10 @@ pub mod notification;
 #[async_trait]
 pub trait NotificationRepository: Send + Sync + TransactionalRepository {
     async fn get_one(&self, id: uuid::Uuid) -> Result<Option<Notification>, UniversalInboxError>;
-    async fn fetch_all(&self) -> Result<Vec<Notification>, UniversalInboxError>;
+    async fn fetch_all(
+        &self,
+        status: NotificationStatus,
+    ) -> Result<Vec<Notification>, UniversalInboxError>;
     async fn create(&self, notification: Notification)
         -> Result<Notification, UniversalInboxError>;
     async fn update_stale_notifications_status_from_source_ids(
