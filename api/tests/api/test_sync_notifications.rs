@@ -5,6 +5,7 @@ use std::{env, fs};
 use crate::helpers::{create_notification, get_notification, tested_app, TestedApp};
 use chrono::{TimeZone, Utc};
 use format_serde_error::SerdeError;
+use http::Uri;
 use httpmock::{Method::GET, Mock, MockServer};
 use reqwest::Response;
 use rstest::*;
@@ -12,7 +13,9 @@ use serde_json::json;
 use universal_inbox::{
     integrations::github::GithubNotification, Notification, NotificationKind, NotificationStatus,
 };
-use universal_inbox_api::universal_inbox::notification::source::NotificationSource;
+use universal_inbox_api::{
+    integrations::github, universal_inbox::notification::source::NotificationSource,
+};
 
 async fn sync_notifications(app_address: &str, source: NotificationSource) -> Response {
     reqwest::Client::new()
@@ -34,6 +37,7 @@ async fn create_notification_from_github_notification(
             title: github_notification.subject.title.clone(),
             kind: NotificationKind::Github,
             source_id: github_notification.id.to_string(),
+            source_html_url: github::get_html_url_from_api_url(&github_notification.subject.url),
             status: if github_notification.unread {
                 NotificationStatus::Unread
             } else {
@@ -92,6 +96,9 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
             kind: NotificationKind::Github,
             status: NotificationStatus::Unread,
             source_id: "456".to_string(),
+            source_html_url: github::get_html_url_from_api_url(
+                &sync_github_notifications[1].subject.url,
+            ),
             metadata: *sync_github_notifications[1].clone(),
             updated_at: Utc.ymd(2014, 11, 6).and_hms(0, 0, 0),
             last_read_at: None,
@@ -156,6 +163,9 @@ async fn test_sync_notifications_should_mark_unsubscribed_notification_without_s
             kind: NotificationKind::Github,
             status: NotificationStatus::Unread,
             source_id: "789".to_string(),
+            source_html_url: github::get_html_url_from_api_url(
+                &sync_github_notifications[1].subject.url,
+            ),
             metadata: *sync_github_notifications[1].clone(), // reusing github notification but not useful
             updated_at: Utc.ymd(2014, 11, 6).and_hms(0, 0, 0),
             last_read_at: None,
@@ -198,6 +208,14 @@ fn assert_sync_notifications(
                 assert_eq!(notification.kind, NotificationKind::Github);
                 assert_eq!(notification.status, NotificationStatus::Unread);
                 assert_eq!(
+                    notification.source_html_url,
+                    Some(
+                        "https://github.com/octokit/octokit.rb/issues/123"
+                            .parse::<Uri>()
+                            .unwrap()
+                    )
+                );
+                assert_eq!(
                     notification.updated_at,
                     Utc.ymd(2014, 11, 7).and_hms(22, 1, 45)
                 );
@@ -212,6 +230,14 @@ fn assert_sync_notifications(
                 assert_eq!(notification.title, "Greetings 2".to_string());
                 assert_eq!(notification.kind, NotificationKind::Github);
                 assert_eq!(notification.status, NotificationStatus::Read);
+                assert_eq!(
+                    notification.source_html_url,
+                    Some(
+                        "https://github.com/octokit/octokit.rb/issues/456"
+                            .parse::<Uri>()
+                            .unwrap()
+                    )
+                );
                 assert_eq!(
                     notification.updated_at,
                     Utc.ymd(2014, 11, 7).and_hms(23, 1, 45)
