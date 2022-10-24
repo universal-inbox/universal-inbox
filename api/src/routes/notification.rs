@@ -5,7 +5,7 @@ use crate::universal_inbox::{
     notification::{service::NotificationService, source::NotificationSource},
     UniversalInboxError, UpdateStatus,
 };
-use ::universal_inbox::{Notification, NotificationPatch};
+use ::universal_inbox::{Notification, NotificationPatch, NotificationStatus};
 use actix_http::{body::BoxBody, header::TryIntoHeaderValue};
 use actix_web::{
     http::{
@@ -44,11 +44,19 @@ impl ResponseError for UniversalInboxError {
     }
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ListNotificationRequest {
+    status: NotificationStatus,
+}
+
 #[tracing::instrument(level = "debug", skip(service))]
 pub async fn list_notifications(
+    list_notification_request: web::Query<ListNotificationRequest>,
     service: web::Data<Arc<NotificationService>>,
 ) -> Result<HttpResponse, universal_inbox::UniversalInboxError> {
-    let notifications: Vec<Notification> = service.list_notifications().await?;
+    let notifications: Vec<Notification> = service
+        .list_notifications(list_notification_request.status)
+        .await?;
 
     Ok(HttpResponse::Ok()
         .content_type("application/json")
