@@ -15,6 +15,7 @@ use http::StatusCode;
 use httpmock::Method::PATCH;
 use rstest::*;
 use serde_json::json;
+use universal_inbox_api::integrations::github;
 
 #[fixture]
 fn github_notification() -> Box<GithubNotification> {
@@ -60,6 +61,9 @@ mod list_notifications {
                 kind: NotificationKind::Github,
                 status: NotificationStatus::Unread,
                 source_id: "1234".to_string(),
+                source_html_url: github::get_html_url_from_api_url(
+                    &github_notification.subject.url,
+                ),
                 metadata: *github_notification,
                 updated_at: Utc.ymd(2022, 1, 1).and_hms(0, 0, 0),
                 last_read_at: None,
@@ -75,6 +79,9 @@ mod list_notifications {
                 kind: NotificationKind::Github,
                 status: NotificationStatus::Read,
                 source_id: "5678".to_string(),
+                source_html_url: github::get_html_url_from_api_url(
+                    &github_notification2.subject.url,
+                ),
                 metadata: *github_notification2,
                 updated_at: Utc.ymd(2022, 2, 1).and_hms(0, 0, 0),
                 last_read_at: Some(Utc.ymd(2022, 2, 1).and_hms(1, 0, 0)),
@@ -108,6 +115,7 @@ mod create_notification {
             kind: NotificationKind::Github,
             status: NotificationStatus::Unread,
             source_id: "1234".to_string(),
+            source_html_url: github::get_html_url_from_api_url(&github_notification.subject.url),
             metadata: *github_notification,
             updated_at: Utc.ymd(2022, 1, 1).and_hms(0, 0, 0),
             last_read_at: None,
@@ -134,6 +142,7 @@ mod create_notification {
             kind: NotificationKind::Github,
             status: NotificationStatus::Unread,
             source_id: "1234".to_string(),
+            source_html_url: github::get_html_url_from_api_url(&github_notification.subject.url),
             metadata: *github_notification,
             updated_at: Utc.ymd(2022, 1, 1).and_hms(0, 0, 0),
             last_read_at: None,
@@ -154,6 +163,7 @@ mod create_notification {
     }
 }
 mod get_notification {
+    use universal_inbox_api::integrations::github;
     use uuid::Uuid;
 
     use crate::helpers::{get_notification, get_notification_response};
@@ -173,6 +183,7 @@ mod get_notification {
             kind: NotificationKind::Github,
             status: NotificationStatus::Unread,
             source_id: "1234".to_string(),
+            source_html_url: github::get_html_url_from_api_url(&github_notification.subject.url),
             metadata: *github_notification,
             updated_at: Utc.ymd(2022, 1, 1).and_hms(0, 0, 0),
             last_read_at: None,
@@ -233,6 +244,7 @@ mod patch_notification {
             kind: NotificationKind::Github,
             status: NotificationStatus::Unread,
             source_id: "1234".to_string(),
+            source_html_url: github::get_html_url_from_api_url(&github_notification.subject.url),
             metadata: *github_notification,
             updated_at: Utc.ymd(2022, 1, 1).and_hms(0, 0, 0),
             last_read_at: None,
@@ -280,6 +292,7 @@ mod patch_notification {
             kind: NotificationKind::Github,
             status: NotificationStatus::Unread,
             source_id: "1234".to_string(),
+            source_html_url: github::get_html_url_from_api_url(&github_notification.subject.url),
             metadata: *github_notification,
             updated_at: Utc.ymd(2022, 1, 1).and_hms(0, 0, 0),
             last_read_at: None,
@@ -325,6 +338,7 @@ mod patch_notification {
             kind: NotificationKind::Github,
             status: NotificationStatus::Unread,
             source_id: "1234".to_string(),
+            source_html_url: github::get_html_url_from_api_url(&github_notification.subject.url),
             metadata: *github_notification,
             updated_at: Utc.ymd(2022, 1, 1).and_hms(0, 0, 0),
             last_read_at: None,
@@ -364,6 +378,7 @@ mod patch_notification {
             kind: NotificationKind::Github,
             status: NotificationStatus::Unread,
             source_id: "1234".to_string(),
+            source_html_url: github::get_html_url_from_api_url(&github_notification.subject.url),
             metadata: *github_notification,
             updated_at: Utc.ymd(2022, 1, 1).and_hms(0, 0, 0),
             last_read_at: None,

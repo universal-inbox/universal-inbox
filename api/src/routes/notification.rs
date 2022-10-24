@@ -22,7 +22,8 @@ use uuid::Uuid;
 impl ResponseError for UniversalInboxError {
     fn status_code(&self) -> StatusCode {
         match self {
-            UniversalInboxError::InvalidData { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            UniversalInboxError::InvalidEnumData { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            UniversalInboxError::InvalidUriData { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             UniversalInboxError::MissingInputData(_) => StatusCode::BAD_REQUEST,
             UniversalInboxError::AlreadyExists { .. } => StatusCode::BAD_REQUEST,
             UniversalInboxError::Unexpected(_) => StatusCode::INTERNAL_SERVER_ERROR,
