@@ -62,14 +62,18 @@ fn notification<'a>(
             onmouseenter: |_| { is_hovered.set(true); },
             onmouseleave: |_| { is_hovered.set(false); },
 
-            div {
-                class: "flex flex-none h-6 items-center",
-                Icon { class: "w-5 h-5" icon: BsGithub }
+            if let Some(link) = &notif.source_html_url {
+                rsx!(a {
+                    class: "flex grow gap-2",
+                    href: "{link}",
+                    target: "_blank",
+
+                    self::notification_display { notif: notif }
+                })
+            } else {
+                rsx!(self::notification_display { notif: notif })
             },
-            div {
-                class: "flex grow text-sm justify-left",
-                "{notif.title}"
-            },
+
             (*selected || *is_hovered.get()).then(|| rsx!(
                 self::notification_button {
                     onclick: |_| on_mark_as_done.call(notif),
@@ -79,6 +83,20 @@ fn notification<'a>(
                 self::notification_button { Icon { class: "w-5 h-5" icon: BsClockHistory } },
                 self::notification_button { Icon { class: "w-5 h-5" icon: BsBookmark } },
             ))
+        }
+    ))
+}
+
+#[inline_props]
+fn notification_display<'a>(cx: Scope, notif: &'a Notification) -> Element {
+    cx.render(rsx!(
+        div {
+            class: "flex flex-none h-6 items-center",
+            Icon { class: "w-5 h-5" icon: BsGithub }
+        },
+        div {
+            class: "flex grow text-sm justify-left",
+            "{notif.title}"
         }
     ))
 }

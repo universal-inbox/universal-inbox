@@ -6,7 +6,7 @@ authors = ["David Rousselie <david@universal-inbox.app>"]
 
 [lib]
 path = "src/lib.rs"
-test = false
+test = true
 doctest = false
 
 [[bin]]

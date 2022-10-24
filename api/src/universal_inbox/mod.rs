@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use http::uri::InvalidUri;
 use universal_inbox::{Notification, NotificationPatch, NotificationStatus};
 use uuid::Uuid;
 
@@ -50,9 +51,15 @@ impl std::fmt::Debug for UniversalInboxError {
 #[derive(thiserror::Error)]
 pub enum UniversalInboxError {
     #[error("Error while parsing enum")]
-    InvalidData {
+    InvalidEnumData {
         #[source]
         source: enum_derive::ParseEnumError,
+        output: String,
+    },
+    #[error("Error while parsing URI")]
+    InvalidUriData {
+        #[source]
+        source: InvalidUri,
         output: String,
     },
     #[error("Missing input data: {0}")]
