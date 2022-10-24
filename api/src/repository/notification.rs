@@ -114,7 +114,10 @@ impl NotificationRepository for PgRepository {
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
-    async fn fetch_all(&self) -> Result<Vec<Notification>, UniversalInboxError> {
+    async fn fetch_all(
+        &self,
+        status: NotificationStatus,
+    ) -> Result<Vec<Notification>, UniversalInboxError> {
         let records = sqlx::query_as!(
             NotificationRow,
             r#"SELECT
@@ -129,7 +132,10 @@ impl NotificationRepository for PgRepository {
                  last_read_at
                FROM
                  notification
-             "#
+               WHERE
+                 status = $1
+             "#,
+            status.to_string()
         )
         .fetch_all(&self.pool.clone())
         .await

@@ -77,7 +77,7 @@ mod list_notifications {
                 id: uuid::Uuid::new_v4(),
                 title: "notif2".to_string(),
                 kind: NotificationKind::Github,
-                status: NotificationStatus::Read,
+                status: NotificationStatus::Unread,
                 source_id: "5678".to_string(),
                 source_html_url: github::get_html_url_from_api_url(
                     &github_notification2.subject.url,

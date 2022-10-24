@@ -157,7 +157,7 @@ pub async fn patch_notification(
 
 pub async fn list_notifications_response(app_address: &str) -> Response {
     reqwest::Client::new()
-        .get(&format!("{}/notifications", &app_address))
+        .get(&format!("{}/notifications?status=Unread", &app_address))
         .send()
         .await
         .expect("Failed to execute request")

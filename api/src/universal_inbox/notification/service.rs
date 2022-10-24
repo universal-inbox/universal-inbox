@@ -33,8 +33,11 @@ impl NotificationService {
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
-    pub async fn list_notifications(&self) -> Result<Vec<Notification>, UniversalInboxError> {
-        self.repository.fetch_all().await
+    pub async fn list_notifications(
+        &self,
+        status: NotificationStatus,
+    ) -> Result<Vec<Notification>, UniversalInboxError> {
+        self.repository.fetch_all(status).await
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
