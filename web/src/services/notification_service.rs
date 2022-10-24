@@ -23,9 +23,10 @@ pub async fn notification_service(
         match msg {
             Some(NotificationCommand::Refresh) => {
                 debug!("Fetching notifications from API");
-                let result: Vec<Notification> = call_api("GET", "/notifications", HashMap::new())
-                    .await
-                    .unwrap();
+                let result: Vec<Notification> =
+                    call_api("GET", "/notifications?status=Unread", HashMap::new())
+                        .await
+                        .unwrap();
                 notifications.write().extend(result);
             }
             Some(NotificationCommand::MarkAsDone(notification)) => {
