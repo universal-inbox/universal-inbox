@@ -2,7 +2,10 @@ use super::{
     super::{NotificationRepository, UniversalInboxError},
     source::NotificationSource,
 };
-use crate::{integrations::github::GithubService, universal_inbox::UpdateStatus};
+use crate::{
+    integrations::github::{self, GithubService},
+    universal_inbox::UpdateStatus,
+};
 use futures::stream::{self, StreamExt, TryStreamExt};
 use universal_inbox::{
     integrations::github::GithubNotification, Notification, NotificationKind, NotificationPatch,
@@ -80,11 +83,14 @@ impl NotificationService {
         let notifications = stream::iter(&all_github_notifications)
             .then(|github_notif| {
                 let github_notification_id = github_notif.id.to_string();
+                let source_html_url = github::get_html_url_from_api_url(&github_notif.subject.url);
+
                 self.repository.create_or_update(Notification {
                     id: Uuid::new_v4(),
                     title: github_notif.subject.title.clone(),
                     kind: NotificationKind::Github,
                     source_id: github_notification_id,
+                    source_html_url,
                     status: if github_notif.unread {
                         NotificationStatus::Unread
                     } else {

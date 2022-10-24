@@ -2,6 +2,7 @@ use crate::universal_inbox::{NotificationRepository, UniversalInboxError, Update
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
+use http::Uri;
 use sqlx::types::Json;
 use universal_inbox::{
     integrations::github::GithubNotification, Notification, NotificationPatch, NotificationStatus,
@@ -17,6 +18,7 @@ struct NotificationRow {
     kind: String,
     status: String,
     source_id: String,
+    source_html_url: Option<String>,
     metadata: Json<GithubNotification>,
     updated_at: NaiveDateTime,
     last_read_at: Option<NaiveDateTime>,
@@ -44,17 +46,28 @@ impl TryFrom<&NotificationRow> for Notification {
         let kind = row
             .kind
             .parse()
-            .map_err(|e| UniversalInboxError::InvalidData {
+            .map_err(|e| UniversalInboxError::InvalidEnumData {
                 source: e,
                 output: row.kind.clone(),
             })?;
         let status = row
             .status
             .parse()
-            .map_err(|e| UniversalInboxError::InvalidData {
+            .map_err(|e| UniversalInboxError::InvalidEnumData {
                 source: e,
                 output: row.status.clone(),
             })?;
+        let source_html_url = row
+            .source_html_url
+            .as_ref()
+            .map(|url| {
+                url.parse::<Uri>()
+                    .map_err(|e| UniversalInboxError::InvalidUriData {
+                        source: e,
+                        output: url.clone(),
+                    })
+            })
+            .transpose()?;
 
         Ok(Notification {
             id: row.id,
@@ -62,6 +75,7 @@ impl TryFrom<&NotificationRow> for Notification {
             kind,
             status,
             source_id: row.source_id.clone(),
+            source_html_url,
             metadata: row.metadata.0.clone(),
             updated_at: DateTime::<Utc>::from_utc(row.updated_at, Utc),
             last_read_at: row
@@ -83,6 +97,7 @@ impl NotificationRepository for PgRepository {
                  kind,
                  status,
                  source_id,
+                 source_html_url,
                  metadata as "metadata: Json<GithubNotification>",
                  updated_at,
                  last_read_at
@@ -108,6 +123,7 @@ impl NotificationRepository for PgRepository {
                  kind,
                  status,
                  source_id,
+                 source_html_url,
                  metadata as "metadata: Json<GithubNotification>",
                  updated_at,
                  last_read_at
@@ -133,15 +149,16 @@ impl NotificationRepository for PgRepository {
         sqlx::query!(
             r#"
           INSERT INTO notification
-            (id, title, kind, status, source_id, metadata, updated_at, last_read_at)
+            (id, title, kind, status, source_id, source_html_url, metadata, updated_at, last_read_at)
           VALUES
-            ($1, $2, $3, $4, $5, $6, $7, $8)
+            ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         "#,
             notification.id,
             notification.title,
             kind,
             notification.status.to_string(),
             notification.source_id,
+            notification.source_html_url.as_ref().map(|url| url.to_string()),
             metadata as Json<GithubNotification>, // force the macro to ignore type checking
             notification.updated_at.naive_utc(),
             notification
@@ -189,6 +206,7 @@ impl NotificationRepository for PgRepository {
                  kind,
                  status,
                  source_id,
+                 source_html_url,
                  metadata as "metadata: Json<GithubNotification>",
                  updated_at,
                  last_read_at
@@ -217,17 +235,18 @@ impl NotificationRepository for PgRepository {
         let id: Uuid = sqlx::query_scalar!(
             r#"
           INSERT INTO notification
-            (id, title, kind, status, source_id, metadata, updated_at, last_read_at)
+            (id, title, kind, status, source_id, source_html_url, metadata, updated_at, last_read_at)
           VALUES
-            ($1, $2, $3, $4, $5, $6, $7, $8)
+            ($1, $2, $3, $4, $5, $6, $7, $8, $9)
           ON CONFLICT (source_id) DO UPDATE
           SET
             title = $2,
             kind = $3,
             status = $4,
-            metadata = $6,
-            updated_at = $7,
-            last_read_at = $8
+            source_html_url = $6,
+            metadata = $7,
+            updated_at = $8,
+            last_read_at = $9
           RETURNING
             id
         "#,
@@ -236,6 +255,7 @@ impl NotificationRepository for PgRepository {
             kind,
             notification.status.to_string(),
             notification.source_id,
+            notification.source_html_url.as_ref().map(|url| url.to_string()),
             metadata as Json<GithubNotification>, // force the macro to ignore type checking
             notification.updated_at.naive_utc(),
             notification
@@ -279,6 +299,7 @@ impl NotificationRepository for PgRepository {
                  kind,
                  status,
                  source_id,
+                 source_html_url,
                  metadata,
                  updated_at,
                  last_read_at,
