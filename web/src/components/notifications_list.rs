@@ -15,22 +15,28 @@ pub fn notifications_list<'a>(
     selected_notification_index: &'a UseAtomRef<usize>,
     on_mark_as_done: EventHandler<'a, &'a Notification>,
 ) -> Element {
-    cx.render(rsx!(ul {
-        class: "flex flex-col gap-2",
+    cx.render(rsx!(table {
+        class: "w-full",
 
-        notifications.iter().enumerate().map(|(i, notif)| {
-            rsx!{
-                li {
-                    key: "{notif.id}",
+        thead {
+            tr { class: "border-b border-light-200 dark:border-dark-300" }
+        }
+        tbody {
+            notifications.iter().enumerate().map(|(i, notif)| {
+                rsx!{
+                    tr {
+                        class: "border-b border-light-200 dark:border-dark-300",
+                        key: "{notif.id}",
 
-                    self::notification {
-                        notif: notif,
-                        selected: i == *(selected_notification_index.read()),
-                        on_mark_as_done: |n| on_mark_as_done.call(n)
+                        self::notification {
+                            notif: notif,
+                            selected: i == *(selected_notification_index.read()),
+                            on_mark_as_done: |n| on_mark_as_done.call(n)
+                        }
                     }
                 }
-            }
-        })
+            })
+        }
     }))
 }
 
@@ -48,16 +54,16 @@ fn notification<'a>(
         to_owned![style];
         async move {
             style.set(if selected {
-                "dark:bg-dark-200 bg-light-200 border-solid border shadow-lg"
+                "dark:bg-dark-500 bg-light-200 drop-shadow-lg"
             } else {
-                "dark:bg-dark-500 bg-light-0 hover:border-solid hover:border"
+                "dark:bg-dark-200 bg-light-0 hover:drop-shadow-lg"
             });
         }
     });
 
     cx.render(rsx!(
-        div {
-            class: "flex gap-2 rounded-lg h-14 items-center p-3 dark:border-white border-black {style}",
+        td {
+            class: "flex gap-2 h-10 items-center px-3 py-1 {style}",
             // Buggy as of Dioxus 0.2
             onmouseenter: |_| { is_hovered.set(true); },
             onmouseleave: |_| { is_hovered.set(false); },
@@ -111,7 +117,7 @@ struct NotificationButtonProps<'a> {
 fn notification_button<'a>(cx: Scope<'a, NotificationButtonProps<'a>>) -> Element {
     cx.render(rsx!(
         div {
-            class: "flex flex-none justify-center rounded-lg bg-light-300 dark:bg-dark-300 border-black dark:border-white h-8 w-8 hover:border-solid hover:border",
+            class: "flex flex-none justify-center bg-light-200 dark:bg-dark-500 h-8 w-8 hover:shadow-md hover:bg-light-400 hover:dark:bg-dark-600",
             onclick: move |evt| {
                 if let Some(handler) = &cx.props.onclick {
                     handler.call(evt)

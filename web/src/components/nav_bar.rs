@@ -11,15 +11,17 @@ pub fn nav_bar(cx: Scope) -> Element {
 
     cx.render(rsx! {
         div {
-            class: "container mx-auto px-4 sticky top-0 bg-light-200 dark:bg-dark-900",
+            class: "container mx-auto px-4 sticky top-0 bg-light-0 dark:bg-dark-200",
             div {
                 class: "flex items-center",
                 div {
-                    class: "flex flex-none h-14 w-14 items-center justify-center",
+                    class: "flex flex-none h-14 items-center justify-center",
                     Link {
-                        class: "hover:bg-light-100 dark:hover:bg-dark-800 rounded-lg text-sm p-2.5",
+                        class: "flex gap-2 bg-light-0 hover:bg-light-400 hover:shadow-md dark:bg-dark-200 dark:hover:bg-dark-600 text-sm p-2.5",
+                        active_class: "flex gap-2 bg-light-200 hover:bg-light-400 hover:shadow-md dark:bg-dark-300 dark:hover:bg-dark-600 text-sm p-2.5",
                         to: "/",
                         Icon { class: "w-5 h-5", icon: BsInbox }
+                        p { "Inbox" }
                     }
                 }
                 div { class: "grow" }
@@ -29,7 +31,7 @@ pub fn nav_bar(cx: Scope) -> Element {
                         id: "theme-toggle",
                         "type": "button",
                         onclick: |_| { toggle_dark_mode(true).expect("Failed to switch the theme"); },
-                        class: "hover:bg-light-100 dark:hover:bg-dark-800 rounded-lg text-sm p-2.5",
+                        class: "bg-light-0 hover:bg-light-400 hover:shadow-md dark:bg-dark-200 dark:hover:bg-dark-600 text-sm p-2.5",
 
                         Icon { class: "block dark:hidden w-5 h-5", icon: BsMoon }
                         Icon { class: "hidden dark:block w-5 h-5", icon: BsSun }
@@ -38,8 +40,10 @@ pub fn nav_bar(cx: Scope) -> Element {
                 div {
                     class: "flex flex-none h-14 w-14 items-center justify-center",
                     Link {
-                        class: "hover:bg-light-100 dark:hover:bg-dark-800 rounded-lg text-sm p-2.5",
+                        class: "bg-light-0 hover:bg-light-400 hover:shadow-md dark:bg-dark-200 dark:hover:bg-dark-600 text-sm p-2.5",
+                        active_class: "bg-light-200 hover:bg-light-400 hover:shadow-md dark:bg-dark-300 dark:hover:bg-dark-600 text-sm p-2.5",
                         to: "/settings",
+                        title: "Settings",
                         Icon { class: "w-5 h-5", icon: BsGear }
                     }
                 }
