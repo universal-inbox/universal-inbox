@@ -11,8 +11,14 @@ pub enum NotificationCommand {
     MarkAsDone(Notification),
 }
 
+#[derive(Debug, Default)]
+pub struct UniversalInboxUIModel {
+    pub selected_notification_index: usize,
+    pub footer_help_opened: bool,
+}
+
 pub static NOTIFICATIONS: AtomRef<Vec<Notification>> = |_| vec![];
-pub static SELECTED_NOTIFICATION_INDEX: AtomRef<usize> = |_| 0;
+pub static UI_MODEL: AtomRef<UniversalInboxUIModel> = |_| Default::default();
 
 pub async fn notification_service(
     mut rx: UnboundedReceiver<NotificationCommand>,
