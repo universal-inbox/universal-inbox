@@ -11,7 +11,7 @@ pub fn nav_bar(cx: Scope) -> Element {
 
     cx.render(rsx! {
         div {
-            class: "container mx-auto px-4 sticky top-0 bg-light-0 dark:bg-dark-200",
+            class: "container mx-auto px-4 bg-light-0 dark:bg-dark-200",
             div {
                 class: "flex items-center",
                 div {

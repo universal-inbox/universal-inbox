@@ -8,11 +8,13 @@ use dioxus_free_icons::icons::bs_icons::{
 };
 use dioxus_free_icons::Icon;
 
+use crate::services::notification_service::UniversalInboxUIModel;
+
 #[inline_props]
 pub fn notifications_list<'a>(
     cx: Scope,
     notifications: Vec<Notification>,
-    selected_notification_index: &'a UseAtomRef<usize>,
+    ui_model: &'a UseAtomRef<UniversalInboxUIModel>,
     on_mark_as_done: EventHandler<'a, &'a Notification>,
 ) -> Element {
     cx.render(rsx!(table {
@@ -30,7 +32,7 @@ pub fn notifications_list<'a>(
 
                         self::notification {
                             notif: notif,
-                            selected: i == *(selected_notification_index.read()),
+                            selected: i == ui_model.read().selected_notification_index,
                             on_mark_as_done: |n| on_mark_as_done.call(n)
                         }
                     }

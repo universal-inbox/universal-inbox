@@ -1,3 +1,4 @@
+use components::footer::footer;
 use components::nav_bar::nav_bar;
 use dioxus::{
     core::to_owned,
@@ -9,15 +10,13 @@ use log::debug;
 use pages::notifications_page::notifications_page;
 use pages::page_not_found::page_not_found;
 use pages::settings_page::settings_page;
-use services::notification_service::NotificationCommand;
+use services::notification_service::{NotificationCommand, UniversalInboxUIModel};
 use universal_inbox::Notification;
 use wasm_bindgen::prelude::Closure;
 use wasm_bindgen::JsCast;
 use web_sys::KeyboardEvent;
 
-use crate::services::notification_service::{
-    notification_service, NOTIFICATIONS, SELECTED_NOTIFICATION_INDEX,
-};
+use crate::services::notification_service::{notification_service, NOTIFICATIONS, UI_MODEL};
 
 mod components;
 mod pages;
@@ -25,20 +24,16 @@ mod services;
 
 pub fn app(cx: Scope) -> Element {
     let notifications = use_atom_ref(&cx, NOTIFICATIONS);
-    let selected_notification_index = use_atom_ref(&cx, SELECTED_NOTIFICATION_INDEX);
+    let ui_model = use_atom_ref(&cx, UI_MODEL);
     let notification_service_handle =
         use_coroutine(&cx, |rx| notification_service(rx, notifications.clone()));
 
     use_future(&cx, (), |()| {
-        to_owned![selected_notification_index];
+        to_owned![ui_model];
         to_owned![notification_service_handle];
         to_owned![notifications];
         async move {
-            setup_key_bindings(
-                selected_notification_index,
-                notification_service_handle,
-                notifications,
-            );
+            setup_key_bindings(ui_model, notification_service_handle, notifications);
         }
     });
 
@@ -46,20 +41,21 @@ pub fn app(cx: Scope) -> Element {
     cx.render(rsx!(
         // Router + Route == 300KB (release) !!!
         div {
-            class: "bg-light-0 dark:bg-dark-200 text-black dark:text-white min-h-screen",
+            class: "bg-light-0 dark:bg-dark-200 text-black dark:text-white h-full flex flex-col",
 
             Router {
                 self::nav_bar {}
                 Route { to: "/", self::notifications_page {} }
                 Route { to: "/settings", self::settings_page {} }
                 Route { to: "", self::page_not_found {} }
+                self::footer {}
             }
         }
     ))
 }
 
 fn setup_key_bindings(
-    selected_notification_index: UseAtomRef<usize>,
+    ui_model: UseAtomRef<UniversalInboxUIModel>,
     notification_service_handle: CoroutineHandle<NotificationCommand>,
     notifications: UseAtomRef<Vec<Notification>>,
 ) -> Option<()> {
@@ -67,21 +63,26 @@ fn setup_key_bindings(
     let document = window.document()?;
 
     let handler = Closure::wrap(Box::new(move |evt: KeyboardEvent| {
-        let mut index = selected_notification_index.write();
+        let mut model = ui_model.write();
         let read_notifications = notifications.read();
         let list_length = read_notifications.len();
-        let selected_notification = read_notifications.get(*index);
+        let selected_notification = read_notifications.get(model.selected_notification_index);
         let mut handled = true;
 
         match evt.key().as_ref() {
-            "ArrowDown" if *index < (list_length - 1) => *index += 1,
-            "ArrowUp" if *index > 0 => *index -= 1,
+            "ArrowDown" if model.selected_notification_index < (list_length - 1) => {
+                model.selected_notification_index += 1
+            }
+            "ArrowUp" if model.selected_notification_index > 0 => {
+                model.selected_notification_index -= 1
+            }
             "d" => {
                 if let Some(notification) = selected_notification {
                     notification_service_handle
                         .send(NotificationCommand::MarkAsDone(notification.clone()))
                 }
             }
+            "h" => model.footer_help_opened = !model.footer_help_opened,
             _ => handled = false,
         }
         if handled {
