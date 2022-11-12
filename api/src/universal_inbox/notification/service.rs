@@ -187,11 +187,20 @@ impl<'a> notification_service<'a> {
             result: Some(ref notification),
         } = updated_notification
         {
-            if patch.status == Some(NotificationStatus::Done) {
-                self.service
-                    .github_service
-                    .mark_thread_as_read(&notification.source_id)
-                    .await?;
+            match patch.status {
+                Some(NotificationStatus::Done) => {
+                    self.service
+                        .github_service
+                        .mark_thread_as_read(&notification.source_id)
+                        .await?;
+                }
+                Some(NotificationStatus::Unsubscribed) => {
+                    self.service
+                        .github_service
+                        .unsubscribe_from_thread(&notification.source_id)
+                        .await?;
+                }
+                _ => {}
             }
         }
 
