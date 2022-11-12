@@ -216,6 +216,7 @@ mod get_notification {
 }
 
 mod patch_notification {
+    use httpmock::Method::PUT;
     use universal_inbox::NotificationPatch;
     use uuid::Uuid;
 
@@ -266,6 +267,56 @@ mod patch_notification {
             patched_notification,
             Box::new(Notification {
                 status: NotificationStatus::Done,
+                ..*created_notification
+            })
+        );
+        github_mark_thread_as_read_mock.assert();
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_patch_notification_status_as_unsubscribed(
+        #[future] tested_app: TestedApp,
+        github_notification: Box<GithubNotification>,
+        #[values(205, 304, 404)] github_status_code: u16,
+    ) {
+        let app = tested_app.await;
+        let github_mark_thread_as_read_mock = app.github_mock_server.mock(|when, then| {
+            when.method(PUT)
+                .path("/notifications/threads/1234/subscription")
+                .header("accept", "application/vnd.github.v3+json")
+                .json_body(json!({"ignored": true}));
+            then.status(github_status_code);
+        });
+        let address: String = app.app_address.into();
+        let expected_notification = Box::new(Notification {
+            id: uuid::Uuid::new_v4(),
+            title: "notif1".to_string(),
+            kind: NotificationKind::Github,
+            status: NotificationStatus::Unread,
+            source_id: "1234".to_string(),
+            source_html_url: github::get_html_url_from_api_url(&github_notification.subject.url),
+            metadata: *github_notification,
+            updated_at: Utc.ymd(2022, 1, 1).and_hms(0, 0, 0),
+            last_read_at: None,
+        });
+        let created_notification = create_notification(&address, &expected_notification).await;
+
+        assert_eq!(created_notification, expected_notification);
+
+        let patched_notification = patch_notification(
+            &address,
+            created_notification.id,
+            &NotificationPatch {
+                status: Some(NotificationStatus::Unsubscribed),
+            },
+        )
+        .await;
+
+        assert_eq!(
+            patched_notification,
+            Box::new(Notification {
+                status: NotificationStatus::Unsubscribed,
                 ..*created_notification
             })
         );

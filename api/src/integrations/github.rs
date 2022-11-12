@@ -76,6 +76,36 @@ impl GithubService {
             }
         }
     }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    pub async fn unsubscribe_from_thread(
+        &self,
+        thread_id: &str,
+    ) -> Result<(), UniversalInboxError> {
+        let response = self
+            .client
+            .put(&format!(
+                "{}/notifications/threads/{thread_id}/subscription",
+                self.github_base_url
+            ))
+            .body(r#"{"ignored": true}"#)
+            .send()
+            .await
+            .with_context(|| {
+                format!("Failed to unsubscribe from Github notification `{thread_id}`")
+            })?;
+
+        match response.error_for_status() {
+            Ok(_) => Ok(()),
+            Err(err) if err.status() == Some(reqwest::StatusCode::NOT_FOUND) => Ok(()),
+            Err(error) => {
+                tracing::error!("An error occurred when trying to unsubscribe from Github notification `{thread_id}`: {}", error);
+                Err(UniversalInboxError::Unexpected(anyhow!(
+                    "Failed to unsubscribe from Github notification `{thread_id}`"
+                )))
+            }
+        }
+    }
 }
 
 fn build_github_client(auth_token: &str) -> Result<reqwest::Client, reqwest::Error> {
