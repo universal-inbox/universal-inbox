@@ -1,5 +1,6 @@
 use components::footer::footer;
 use components::nav_bar::nav_bar;
+use components::toast_zone::toast_zone;
 use dioxus::{
     core::to_owned,
     fermi::UseAtomRef,
@@ -16,7 +17,10 @@ use wasm_bindgen::prelude::Closure;
 use wasm_bindgen::JsCast;
 use web_sys::KeyboardEvent;
 
-use crate::services::notification_service::{notification_service, NOTIFICATIONS, UI_MODEL};
+use crate::services::{
+    notification_service::{notification_service, NOTIFICATIONS, UI_MODEL},
+    toast_service::{toast_service, TOASTS},
+};
 
 mod components;
 mod pages;
@@ -25,8 +29,12 @@ mod services;
 pub fn app(cx: Scope) -> Element {
     let notifications = use_atom_ref(&cx, NOTIFICATIONS);
     let ui_model = use_atom_ref(&cx, UI_MODEL);
-    let notification_service_handle =
-        use_coroutine(&cx, |rx| notification_service(rx, notifications.clone()));
+    let toasts = use_atom_ref(&cx, TOASTS);
+    let toast_service_handle = use_coroutine(&cx, |rx| toast_service(rx, toasts.clone()));
+    let notification_service_handle = use_coroutine(&cx, |rx| {
+        to_owned![toast_service_handle];
+        notification_service(rx, notifications.clone(), toast_service_handle)
+    });
 
     use_future(&cx, (), |()| {
         to_owned![ui_model];
@@ -49,6 +57,7 @@ pub fn app(cx: Scope) -> Element {
                 Route { to: "/settings", self::settings_page {} }
                 Route { to: "", self::page_not_found {} }
                 self::footer {}
+                self::toast_zone {}
             }
         }
     ))
