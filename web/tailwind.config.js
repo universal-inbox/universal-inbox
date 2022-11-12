@@ -12,6 +12,7 @@ module.exports = {
       white: colors.white,
       slate: colors.slate,
       red: colors.red,
+      gray: colors.gray,
       light: {
         0: "#FFFFFF",
         100: "#F5F8FB",
@@ -28,6 +29,7 @@ module.exports = {
         400: "#373D47",
         500: "#2A3F53",
         600: "#336CCB",
+        700: "#58A6FE",
       }
     },
     extend: {},
