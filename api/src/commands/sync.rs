@@ -1,27 +1,30 @@
+use std::sync::Arc;
+
+use anyhow::Context;
+
 use crate::universal_inbox::{
     notification::{service::NotificationService, source::NotificationSource},
     UniversalInboxError,
 };
-use anyhow::Context;
-use std::sync::Arc;
 
 pub async fn sync(
     service: Arc<NotificationService>,
     source: &Option<NotificationSource>,
 ) -> Result<(), UniversalInboxError> {
-    let transaction = service.repository.begin().await.context(format!(
+    let transactional_service = service.begin().await.context(format!(
         "Failed to create new transaction while syncing {:?}",
         &source
     ))?;
 
-    service
+    transactional_service
         .sync_notifications(source)
         .await
         .context(format!("Failed to sync {:?}", &source))?;
 
-    transaction
+    transactional_service
         .commit()
         .await
         .context(format!("Failed to commit while syncing {:?}", &source))?;
+
     Ok(())
 }

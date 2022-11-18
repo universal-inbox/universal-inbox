@@ -6,6 +6,7 @@ use http::{HeaderMap, HeaderValue, Uri};
 use crate::universal_inbox::UniversalInboxError;
 use universal_inbox::integrations::github::GithubNotification;
 
+#[derive(Clone)]
 pub struct GithubService {
     client: reqwest::Client,
     github_base_url: String,
@@ -13,23 +14,6 @@ pub struct GithubService {
 
 static GITHUB_BASE_URL: &str = "https://api.github.com";
 static APP_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
-
-fn build_github_client(auth_token: &str) -> Result<reqwest::Client, reqwest::Error> {
-    let mut headers = HeaderMap::new();
-
-    headers.insert(
-        "Accept",
-        HeaderValue::from_static("application/vnd.github.v3+json"),
-    );
-    let mut auth_header_value: HeaderValue = format!("token {}", auth_token).parse().unwrap();
-    auth_header_value.set_sensitive(true);
-    headers.insert("Authorization", auth_header_value);
-
-    reqwest::Client::builder()
-        .default_headers(headers)
-        .user_agent(APP_USER_AGENT)
-        .build()
-}
 
 impl GithubService {
     pub fn new(
@@ -92,6 +76,23 @@ impl GithubService {
             }
         }
     }
+}
+
+fn build_github_client(auth_token: &str) -> Result<reqwest::Client, reqwest::Error> {
+    let mut headers = HeaderMap::new();
+
+    headers.insert(
+        "Accept",
+        HeaderValue::from_static("application/vnd.github.v3+json"),
+    );
+    let mut auth_header_value: HeaderValue = format!("token {}", auth_token).parse().unwrap();
+    auth_header_value.set_sensitive(true);
+    headers.insert("Authorization", auth_header_value);
+
+    reqwest::Client::builder()
+        .default_headers(headers)
+        .user_agent(APP_USER_AGENT)
+        .build()
 }
 
 #[tracing::instrument(level = "debug")]
