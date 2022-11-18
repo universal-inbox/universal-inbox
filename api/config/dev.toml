@@ -1,5 +1,6 @@
 [application]
 log_directive = "debug"
+dependencies_log_directive = "debug"
 static_dir = "../web/dist"
 api_path = "/api"
 static_path = ""

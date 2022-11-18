@@ -1,27 +1,34 @@
-use super::{
-    super::{NotificationRepository, UniversalInboxError},
-    source::NotificationSource,
-};
+use std::sync::Arc;
+
+use anyhow::anyhow;
+use duplicate::duplicate_item;
+use futures::stream::{self, StreamExt, TryStreamExt};
+use uuid::Uuid;
+
 use crate::{
     integrations::github::{self, GithubService},
-    universal_inbox::UpdateStatus,
+    repository::notification::{
+        ConnectedNotificationRepository, NotificationRepository,
+        TransactionalNotificationRepository,
+    },
+    universal_inbox::{UniversalInboxError, UpdateStatus},
 };
-use futures::stream::{self, StreamExt, TryStreamExt};
 use universal_inbox::{
     integrations::github::GithubNotification, Notification, NotificationKind, NotificationPatch,
     NotificationStatus,
 };
-use uuid::Uuid;
+
+use super::source::NotificationSource;
 
 pub struct NotificationService {
-    pub repository: Box<dyn NotificationRepository>,
+    repository: Box<NotificationRepository>,
     github_service: GithubService,
     page_size: usize,
 }
 
 impl NotificationService {
     pub fn new(
-        repository: Box<dyn NotificationRepository>,
+        repository: Box<NotificationRepository>,
         github_service: GithubService,
         page_size: usize,
     ) -> Result<NotificationService, UniversalInboxError> {
@@ -32,6 +39,48 @@ impl NotificationService {
         })
     }
 
+    pub async fn connect(&self) -> Result<Box<ConnectedNotificationService>, UniversalInboxError> {
+        Ok(Box::new(ConnectedNotificationService {
+            repository: self.repository.connect().await?,
+            service: self,
+        }))
+    }
+
+    pub async fn begin(
+        &self,
+    ) -> Result<Box<TransactionalNotificationService>, UniversalInboxError> {
+        Ok(Box::new(TransactionalNotificationService {
+            repository: self.repository.begin().await?,
+            service: self,
+        }))
+    }
+}
+
+pub struct ConnectedNotificationService<'a> {
+    repository: Arc<ConnectedNotificationRepository>,
+    service: &'a NotificationService,
+}
+
+pub struct TransactionalNotificationService<'a> {
+    repository: Arc<TransactionalNotificationRepository<'a>>,
+    service: &'a NotificationService,
+}
+
+impl<'a> TransactionalNotificationService<'a> {
+    pub async fn commit(self) -> Result<(), UniversalInboxError> {
+        let repository = Arc::try_unwrap(self.repository)
+            .map_err(|_| {
+                UniversalInboxError::Unexpected(anyhow!(
+                    "Cannot extract repository to commit transaction it as it has other references using it"
+                ))
+            })?;
+
+        repository.commit().await
+    }
+}
+
+#[duplicate_item(notification_service; [ConnectedNotificationService]; [TransactionalNotificationService];)]
+impl<'a> notification_service<'a> {
     #[tracing::instrument(level = "debug", skip(self))]
     pub async fn list_notifications(
         &self,
@@ -51,9 +100,9 @@ impl NotificationService {
     #[tracing::instrument(level = "debug", skip(self))]
     pub async fn create_notification(
         &self,
-        notification: &Notification,
+        notification: Box<Notification>,
     ) -> Result<Notification, UniversalInboxError> {
-        self.repository.create(notification.clone()).await
+        self.repository.create(notification).await
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
@@ -67,13 +116,14 @@ impl NotificationService {
             }
 
             let response = self
+                .service
                 .github_service
-                .fetch_notifications(page, self.page_size)
+                .fetch_notifications(page, self.service.page_size)
                 .await;
 
             response.map(|github_notifs| {
                 let notifs_count = github_notifs.len();
-                let is_last_page = notifs_count < self.page_size;
+                let is_last_page = notifs_count < self.service.page_size;
                 Some((github_notifs, (page + 1, is_last_page)))
             })
         })
@@ -88,7 +138,7 @@ impl NotificationService {
                 let github_notification_id = github_notif.id.to_string();
                 let source_html_url = github::get_html_url_from_api_url(&github_notif.subject.url);
 
-                self.repository.create_or_update(Notification {
+                self.repository.create_or_update(Box::new(Notification {
                     id: Uuid::new_v4(),
                     title: github_notif.subject.title.clone(),
                     kind: NotificationKind::Github,
@@ -102,7 +152,7 @@ impl NotificationService {
                     metadata: github_notif.clone(),
                     updated_at: github_notif.updated_at,
                     last_read_at: github_notif.last_read_at,
-                })
+                }))
             })
             .collect::<Vec<Result<Notification, UniversalInboxError>>>()
             .await
@@ -138,7 +188,8 @@ impl NotificationService {
         } = updated_notification
         {
             if patch.status == Some(NotificationStatus::Done) {
-                self.github_service
+                self.service
+                    .github_service
                     .mark_thread_as_read(&notification.source_id)
                     .await?;
             }

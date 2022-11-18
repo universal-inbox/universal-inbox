@@ -1,48 +1,17 @@
 use std::sync::Arc;
 
-use crate::universal_inbox::{
-    self,
-    notification::{service::NotificationService, source::NotificationSource},
-    UniversalInboxError, UpdateStatus,
-};
-use ::universal_inbox::{Notification, NotificationPatch, NotificationStatus};
-use actix_http::{body::BoxBody, header::TryIntoHeaderValue};
-use actix_web::{
-    http::{
-        header::{self, ContentType},
-        StatusCode,
-    },
-    web, HttpResponse, ResponseError,
-};
+use actix_http::body::BoxBody;
+use actix_web::{web, HttpResponse};
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
 
-impl ResponseError for UniversalInboxError {
-    fn status_code(&self) -> StatusCode {
-        match self {
-            UniversalInboxError::InvalidEnumData { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            UniversalInboxError::InvalidUriData { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            UniversalInboxError::MissingInputData(_) => StatusCode::BAD_REQUEST,
-            UniversalInboxError::AlreadyExists { .. } => StatusCode::BAD_REQUEST,
-            UniversalInboxError::Unexpected(_) => StatusCode::INTERNAL_SERVER_ERROR,
-        }
-    }
-
-    fn error_response(&self) -> HttpResponse<BoxBody> {
-        let mut res = HttpResponse::new(self.status_code());
-
-        res.headers_mut().insert(
-            header::CONTENT_TYPE,
-            ContentType::json().try_into_value().unwrap(),
-        );
-
-        res.set_body(BoxBody::new(
-            json!({ "message": format!("{}", self) }).to_string(),
-        ))
-    }
-}
+use crate::universal_inbox::{
+    notification::{service::NotificationService, source::NotificationSource},
+    UniversalInboxError, UpdateStatus,
+};
+use ::universal_inbox::{Notification, NotificationPatch, NotificationStatus};
 
 #[derive(Debug, Deserialize)]
 pub struct ListNotificationRequest {
@@ -53,8 +22,10 @@ pub struct ListNotificationRequest {
 pub async fn list_notifications(
     list_notification_request: web::Query<ListNotificationRequest>,
     service: web::Data<Arc<NotificationService>>,
-) -> Result<HttpResponse, universal_inbox::UniversalInboxError> {
+) -> Result<HttpResponse, UniversalInboxError> {
     let notifications: Vec<Notification> = service
+        .connect()
+        .await?
         .list_notifications(list_notification_request.status)
         .await?;
 
@@ -67,10 +38,15 @@ pub async fn list_notifications(
 pub async fn get_notification(
     path: web::Path<Uuid>,
     service: web::Data<Arc<NotificationService>>,
-) -> Result<HttpResponse, universal_inbox::UniversalInboxError> {
+) -> Result<HttpResponse, UniversalInboxError> {
     let notification_id = path.into_inner();
 
-    match service.get_notification(notification_id).await? {
+    match service
+        .connect()
+        .await?
+        .get_notification(notification_id)
+        .await?
+    {
         Some(notification) => Ok(HttpResponse::Ok()
             .content_type("application/json")
             .body(serde_json::to_string(&notification).context("Cannot serialize notification")?)),
@@ -87,10 +63,20 @@ pub async fn get_notification(
 pub async fn create_notification(
     notification: web::Json<Notification>,
     service: web::Data<Arc<NotificationService>>,
-) -> Result<HttpResponse, universal_inbox::UniversalInboxError> {
-    let created_notification = service
-        .create_notification(&notification.into_inner())
+) -> Result<HttpResponse, UniversalInboxError> {
+    let transactional_service = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while creating notification")?;
+
+    let created_notification = transactional_service
+        .create_notification(Box::new(notification.into_inner()))
         .await?;
+
+    transactional_service
+        .commit()
+        .await
+        .context("Failed to commit while creating notification")?;
 
     Ok(HttpResponse::Ok().content_type("application/json").body(
         serde_json::to_string(&created_notification).context("Cannot serialize notification")?,
@@ -106,15 +92,17 @@ pub struct SyncNotificationsParameters {
 pub async fn sync_notifications(
     params: web::Json<SyncNotificationsParameters>,
     service: web::Data<Arc<NotificationService>>,
-) -> Result<HttpResponse, universal_inbox::UniversalInboxError> {
-    let transaction = service.repository.begin().await.context(format!(
+) -> Result<HttpResponse, UniversalInboxError> {
+    let transactional_service = service.begin().await.context(format!(
         "Failed to create new transaction while syncing {:?}",
         &params.source
     ))?;
 
-    let notifications: Vec<Notification> = service.sync_notifications(&Some(params.source)).await?;
+    let notifications: Vec<Notification> = transactional_service
+        .sync_notifications(&Some(params.source))
+        .await?;
 
-    transaction.commit().await.context(format!(
+    transactional_service.commit().await.context(format!(
         "Failed to commit while syncing {:?}",
         &params.source
     ))?;
@@ -129,19 +117,18 @@ pub async fn patch_notification(
     path: web::Path<Uuid>,
     patch: web::Json<NotificationPatch>,
     service: web::Data<Arc<NotificationService>>,
-) -> Result<HttpResponse, universal_inbox::UniversalInboxError> {
+) -> Result<HttpResponse, UniversalInboxError> {
     let notification_id = path.into_inner();
-    let transaction = service
-        .repository
+    let transactional_service = service
         .begin()
         .await
         .context(format!("Failed to patch notification {notification_id}"))?;
 
-    let updated_notification = service
+    let updated_notification = transactional_service
         .patch_notification(notification_id, &patch.into_inner())
         .await?;
 
-    transaction.commit().await.context(format!(
+    transactional_service.commit().await.context(format!(
         "Failed to commit while patching notification {notification_id}"
     ))?;
 

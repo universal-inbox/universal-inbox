@@ -52,7 +52,6 @@ sqlx = { version = "0.6.2", default-features = false, features = [
   "offline",
   "json",
 ] }
-async-trait = "0.1.0"
 enum_derive = "0.1.0"
 macro-attr = "0.2.0"
 log = "0.4.0"
@@ -61,6 +60,7 @@ reqwest = { version = "0.11.0", features = ["json", "tokio-rustls", "gzip"] }
 format_serde_error = "0.3.0"
 futures = "0.3.0"
 color-backtrace = "0.5"
+duplicate = "0.4.1"
 
 [dev-dependencies]
 proptest = "1.0.0"
