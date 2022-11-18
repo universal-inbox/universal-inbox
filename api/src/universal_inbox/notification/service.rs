@@ -167,7 +167,7 @@ impl<'a> notification_service<'a> {
         self.repository
             .update_stale_notifications_status_from_source_ids(
                 all_github_notification_ids,
-                NotificationStatus::Done,
+                NotificationStatus::Deleted,
             )
             .await?;
 
@@ -188,7 +188,7 @@ impl<'a> notification_service<'a> {
         } = updated_notification
         {
             match patch.status {
-                Some(NotificationStatus::Done) => {
+                Some(NotificationStatus::Deleted) => {
                     self.service
                         .github_service
                         .mark_thread_as_read(&notification.source_id)

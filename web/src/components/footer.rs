@@ -60,7 +60,7 @@ pub fn footer(cx: Scope) -> Element {
                             Icon { class: "text-red-500 w-4 h-4", icon: BsArrowUpShort }
                             span { "previous notification" }
                         }
-                        self::shortcut_text { shortcut: "d", text: "mark notification as done" }
+                        self::shortcut_text { shortcut: "d", text: "delete notification" }
                         self::shortcut_text { shortcut: "u", text: "unsubscribe from notification" }
                         self::shortcut_text { shortcut: "s", text: "snooze notification" }
                         self::shortcut_text { shortcut: "t", text: "add notification to todo task" }
