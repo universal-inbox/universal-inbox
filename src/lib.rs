@@ -42,7 +42,7 @@ macro_attr! {
     pub enum NotificationStatus {
         Unread,
         Read,
-        Done,
+        Deleted,
         Unsubscribed,
     }
 }
