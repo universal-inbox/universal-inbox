@@ -25,8 +25,8 @@ pub fn notifications_page(cx: Scope) -> Element {
                 self::notifications_list {
                     notifications: notifications.read().clone(),
                     ui_model: ui_model,
-                    on_mark_as_done: |notification: &Notification| {
-                        notification_service.send(NotificationCommand::MarkAsDone(notification.clone()))
+                    on_delete: |notification: &Notification| {
+                        notification_service.send(NotificationCommand::Delete(notification.clone()))
                     },
                     on_unsubscribe: |notification: &Notification| {
                         notification_service.send(NotificationCommand::Unsubscribe(notification.clone()))

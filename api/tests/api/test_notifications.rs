@@ -226,7 +226,7 @@ mod patch_notification {
 
     #[rstest]
     #[tokio::test]
-    async fn test_patch_notification_status_as_done(
+    async fn test_patch_notification_status_as_deleted(
         #[future] tested_app: TestedApp,
         github_notification: Box<GithubNotification>,
         #[values(205, 304, 404)] github_status_code: u16,
@@ -258,7 +258,7 @@ mod patch_notification {
             &address,
             created_notification.id,
             &NotificationPatch {
-                status: Some(NotificationStatus::Done),
+                status: Some(NotificationStatus::Deleted),
             },
         )
         .await;
@@ -266,7 +266,7 @@ mod patch_notification {
         assert_eq!(
             patched_notification,
             Box::new(Notification {
-                status: NotificationStatus::Done,
+                status: NotificationStatus::Deleted,
                 ..*created_notification
             })
         );
@@ -325,7 +325,7 @@ mod patch_notification {
 
     #[rstest]
     #[tokio::test]
-    async fn test_patch_notification_status_as_done_with_github_api_error(
+    async fn test_patch_notification_status_as_deleted_with_github_api_error(
         #[future] tested_app: TestedApp,
         github_notification: Box<GithubNotification>,
     ) {
@@ -356,7 +356,7 @@ mod patch_notification {
             &address,
             created_notification.id,
             &NotificationPatch {
-                status: Some(NotificationStatus::Done),
+                status: Some(NotificationStatus::Deleted),
             },
         )
         .await;
@@ -467,7 +467,7 @@ mod patch_notification {
             &address,
             unknown_notification_id,
             &NotificationPatch {
-                status: Some(NotificationStatus::Done),
+                status: Some(NotificationStatus::Deleted),
             },
         )
         .await;

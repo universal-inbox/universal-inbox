@@ -16,7 +16,7 @@ use super::toast_service::ToastCommand;
 #[derive(Debug)]
 pub enum NotificationCommand {
     Refresh,
-    MarkAsDone(Notification),
+    Delete(Notification),
     Unsubscribe(Notification),
 }
 
@@ -60,7 +60,7 @@ pub async fn notification_service<'a>(
                 };
                 toast_service.send(ToastCommand::Update(toast_update));
             }
-            Some(NotificationCommand::MarkAsDone(notification)) => {
+            Some(NotificationCommand::Delete(notification)) => {
                 notifications
                     .write()
                     .retain(|notif| notif.id != notification.id);
@@ -69,12 +69,12 @@ pub async fn notification_service<'a>(
                     "PATCH",
                     &format!("/notifications/{}", notification.id),
                     NotificationPatch {
-                        status: Some(NotificationStatus::Done),
+                        status: Some(NotificationStatus::Deleted),
                     },
                     HashMap::new(),
                     &toast_service,
-                    "Marking notification as done...",
-                    "Successfully marked notification as done",
+                    "Deleting notification...",
+                    "Successfully deleted notification",
                 )
                 .await
                 .unwrap();
