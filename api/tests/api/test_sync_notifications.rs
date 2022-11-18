@@ -194,7 +194,10 @@ async fn test_sync_notifications_should_mark_unsubscribed_notification_without_s
     let unsubscribed_notification =
         get_notification(&app.app_address, existing_notification.id).await;
     assert_eq!(unsubscribed_notification.id, existing_notification.id);
-    assert_eq!(unsubscribed_notification.status, NotificationStatus::Done);
+    assert_eq!(
+        unsubscribed_notification.status,
+        NotificationStatus::Deleted
+    );
 }
 
 fn assert_sync_notifications(

@@ -88,7 +88,7 @@ fn setup_key_bindings(
             "d" => {
                 if let Some(notification) = selected_notification {
                     notification_service_handle
-                        .send(NotificationCommand::MarkAsDone(notification.clone()))
+                        .send(NotificationCommand::Delete(notification.clone()))
                 }
             }
             "u" => {
