@@ -9,6 +9,7 @@ use dioxus::{fermi::UseAtomRef, prelude::*};
 use futures_util::StreamExt;
 use std::collections::HashMap;
 use universal_inbox::{Notification, NotificationPatch, NotificationStatus};
+use wasm_bindgen::JsValue;
 
 use super::toast_service::ToastCommand;
 
@@ -16,6 +17,7 @@ use super::toast_service::ToastCommand;
 pub enum NotificationCommand {
     Refresh,
     MarkAsDone(Notification),
+    Unsubscribe(Notification),
 }
 
 #[derive(Debug, Default)]
@@ -59,38 +61,74 @@ pub async fn notification_service<'a>(
                 toast_service.send(ToastCommand::Update(toast_update));
             }
             Some(NotificationCommand::MarkAsDone(notification)) => {
-                let toast = Toast {
-                    kind: ToastKind::Loading,
-                    message: "Marking notification as done...".to_string(),
-                    ..Default::default()
-                };
-                let toast_id = toast.id;
-                toast_service.send(ToastCommand::Push(toast));
-
                 notifications
                     .write()
                     .retain(|notif| notif.id != notification.id);
 
-                let _result: Notification = call_api_with_body(
+                let _result: Notification = call_api_and_notify(
                     "PATCH",
                     &format!("/notifications/{}", notification.id),
                     NotificationPatch {
                         status: Some(NotificationStatus::Done),
                     },
                     HashMap::new(),
+                    &toast_service,
+                    "Marking notification as done...",
+                    "Successfully marked notification as done",
                 )
                 .await
                 .unwrap();
+            }
+            Some(NotificationCommand::Unsubscribe(notification)) => {
+                notifications
+                    .write()
+                    .retain(|notif| notif.id != notification.id);
 
-                let toast_update = ToastUpdate {
-                    id: toast_id,
-                    kind: Some(ToastKind::Success),
-                    message: Some("Successfully marked notification as done".to_string()),
-                    timeout: Some(Some(5_000)),
-                };
-                toast_service.send(ToastCommand::Update(toast_update));
+                let _result: Notification = call_api_and_notify(
+                    "PATCH",
+                    &format!("/notifications/{}", notification.id),
+                    NotificationPatch {
+                        status: Some(NotificationStatus::Unsubscribed),
+                    },
+                    HashMap::new(),
+                    &toast_service,
+                    "Unsubscribing from notification...",
+                    "Successfully unsubscribed from notification",
+                )
+                .await
+                .unwrap();
             }
             None => {}
         }
     }
+}
+
+async fn call_api_and_notify<R: for<'de> serde::de::Deserialize<'de>, B: serde::Serialize>(
+    method: &str,
+    path: &str,
+    body: B,
+    headers: HashMap<String, String>,
+    toast_service: &CoroutineHandle<ToastCommand>,
+    loading_message: &str,
+    success_message: &str,
+) -> Result<R, JsValue> {
+    let toast = Toast {
+        kind: ToastKind::Loading,
+        message: loading_message.to_string(),
+        ..Default::default()
+    };
+    let toast_id = toast.id;
+    toast_service.send(ToastCommand::Push(toast));
+
+    let result: R = call_api_with_body(method, path, body, headers).await?;
+
+    let toast_update = ToastUpdate {
+        id: toast_id,
+        kind: Some(ToastKind::Success),
+        message: Some(success_message.to_string()),
+        timeout: Some(Some(5_000)),
+    };
+    toast_service.send(ToastCommand::Update(toast_update));
+
+    Ok(result)
 }
