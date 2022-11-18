@@ -16,6 +16,7 @@ pub fn notifications_list<'a>(
     notifications: Vec<Notification>,
     ui_model: &'a UseAtomRef<UniversalInboxUIModel>,
     on_mark_as_done: EventHandler<'a, &'a Notification>,
+    on_unsubscribe: EventHandler<'a, &'a Notification>,
 ) -> Element {
     cx.render(rsx!(table {
         class: "w-full",
@@ -34,6 +35,7 @@ pub fn notifications_list<'a>(
                             notif: notif,
                             selected: i == ui_model.read().selected_notification_index,
                             on_mark_as_done: |n| on_mark_as_done.call(n)
+                            on_unsubscribe: |n| on_unsubscribe.call(n)
                         }
                     }
                 }
@@ -48,6 +50,7 @@ fn notification<'a>(
     notif: &'a Notification,
     selected: bool,
     on_mark_as_done: EventHandler<'a, &'a Notification>,
+    on_unsubscribe: EventHandler<'a, &'a Notification>,
 ) -> Element {
     let is_hovered = use_state(&cx, || false);
     let style = use_state(&cx, || "");
@@ -87,7 +90,10 @@ fn notification<'a>(
                     onclick: |_| on_mark_as_done.call(notif),
                     Icon { class: "w-5 h-5" icon: BsCheck2 }
                 },
-                self::notification_button { Icon { class: "w-5 h-5" icon: BsBellSlash } },
+                self::notification_button {
+                    onclick: |_| on_unsubscribe.call(notif),
+                    Icon { class: "w-5 h-5" icon: BsBellSlash }
+                },
                 self::notification_button { Icon { class: "w-5 h-5" icon: BsClockHistory } },
                 self::notification_button { Icon { class: "w-5 h-5" icon: BsBookmark } },
             ))
