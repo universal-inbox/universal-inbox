@@ -1,74 +1,54 @@
 {
   "db": "PostgreSQL",
-  "01a73580fe9b9fd0656ef413ace68e8449932325bbc7b711bf9f7340703e3872": {
+  "7e3763c5b99d66f872de23d30c2353a3e821553946bdaa8d1ed5141a6ca605c2": {
     "describe": {
       "columns": [
         {
           "name": "id",
           "ordinal": 0,
           "type_info": "Uuid"
-        },
-        {
-          "name": "title",
-          "ordinal": 1,
-          "type_info": "Text"
-        },
-        {
-          "name": "kind",
-          "ordinal": 2,
-          "type_info": "Text"
-        },
-        {
-          "name": "status",
-          "ordinal": 3,
-          "type_info": "Text"
-        },
-        {
-          "name": "source_id",
-          "ordinal": 4,
-          "type_info": "Text"
-        },
-        {
-          "name": "source_html_url",
-          "ordinal": 5,
-          "type_info": "Text"
-        },
-        {
-          "name": "metadata: Json<GithubNotification>",
-          "ordinal": 6,
-          "type_info": "Json"
-        },
-        {
-          "name": "updated_at",
-          "ordinal": 7,
-          "type_info": "Timestamp"
-        },
-        {
-          "name": "last_read_at",
-          "ordinal": 8,
-          "type_info": "Timestamp"
         }
       ],
       "nullable": [
-        false,
-        false,
-        false,
-        false,
-        false,
-        true,
-        false,
-        false,
-        true
+        false
       ],
       "parameters": {
         "Left": [
-          "Uuid"
+          "Uuid",
+          "Text",
+          "Text",
+          "Text",
+          "Text",
+          "Text",
+          "Json",
+          "Timestamp",
+          "Timestamp"
         ]
       }
     },
-    "query": "SELECT\n                 id,\n                 title,\n                 kind,\n                 status,\n                 source_id,\n                 source_html_url,\n                 metadata as \"metadata: Json<GithubNotification>\",\n                 updated_at,\n                 last_read_at\n               FROM notification\n               WHERE id = $1"
+    "query": "\n                INSERT INTO notification\n                  (\n                    id,\n                    title,\n                    kind,\n                    status,\n                    source_id,\n                    source_html_url,\n                    metadata,\n                    updated_at,\n                    last_read_at\n                  )\n                VALUES\n                  ($1, $2, $3, $4, $5, $6, $7, $8, $9)\n                ON CONFLICT (source_id) DO UPDATE\n                SET\n                  title = $2,\n                  kind = $3,\n                  status = $4,\n                  source_html_url = $6,\n                  metadata = $7,\n                  updated_at = $8,\n                  last_read_at = $9\n                RETURNING\n                  id\n            "
   },
-  "51a95dc4c56e1200303a04c279c5e4a0c6ca6ecd52b40fff9ec1cfcae9ee41cd": {
+  "b71b82c1abd2c850c3af5c66c0c84a9eaf452c4fdbc3f3298c416c5b227e635c": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": [
+          "Uuid",
+          "Text",
+          "Text",
+          "Text",
+          "Text",
+          "Text",
+          "Json",
+          "Timestamp",
+          "Timestamp"
+        ]
+      }
+    },
+    "query": "\n                INSERT INTO notification\n                  (\n                    id,\n                    title,\n                    kind,\n                    status,\n                    source_id,\n                    source_html_url,\n                    metadata,\n                    updated_at,\n                    last_read_at\n                  )\n                VALUES\n                  ($1, $2, $3, $4, $5, $6, $7, $8, $9)\n            "
+  },
+  "d296e92ca52f935b64e8c8c11740fc68c35608c24b1c8c5e6857ebf9f63a7c6a": {
     "describe": {
       "columns": [
         {
@@ -134,29 +114,77 @@
         ]
       }
     },
-    "query": "SELECT\n                 id,\n                 title,\n                 kind,\n                 status,\n                 source_id,\n                 source_html_url,\n                 metadata as \"metadata: Json<GithubNotification>\",\n                 updated_at,\n                 last_read_at\n               FROM\n                 notification\n               WHERE\n                 status = $1\n             "
+    "query": "\n                SELECT\n                  id,\n                  title,\n                  kind,\n                  status,\n                  source_id,\n                  source_html_url,\n                  metadata as \"metadata: Json<GithubNotification>\",\n                  updated_at,\n                  last_read_at\n                FROM\n                  notification\n                WHERE\n                  status = $1\n            "
   },
-  "8838517cb02e005ea047ac8b2ee63f8cde05bcf4476e186c0ff8b5744c1cdaaa": {
+  "dd5335395b570947ff03ca1f29d16c8be811ff6eb522e12b8e0e36c478a1b6f0": {
     "describe": {
-      "columns": [],
-      "nullable": [],
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "title",
+          "ordinal": 1,
+          "type_info": "Text"
+        },
+        {
+          "name": "kind",
+          "ordinal": 2,
+          "type_info": "Text"
+        },
+        {
+          "name": "status",
+          "ordinal": 3,
+          "type_info": "Text"
+        },
+        {
+          "name": "source_id",
+          "ordinal": 4,
+          "type_info": "Text"
+        },
+        {
+          "name": "source_html_url",
+          "ordinal": 5,
+          "type_info": "Text"
+        },
+        {
+          "name": "metadata: Json<GithubNotification>",
+          "ordinal": 6,
+          "type_info": "Json"
+        },
+        {
+          "name": "updated_at",
+          "ordinal": 7,
+          "type_info": "Timestamp"
+        },
+        {
+          "name": "last_read_at",
+          "ordinal": 8,
+          "type_info": "Timestamp"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        false,
+        false,
+        true
+      ],
       "parameters": {
         "Left": [
-          "Uuid",
-          "Text",
-          "Text",
-          "Text",
-          "Text",
-          "Text",
-          "Json",
-          "Timestamp",
-          "Timestamp"
+          "Uuid"
         ]
       }
     },
-    "query": "\n          INSERT INTO notification\n            (id, title, kind, status, source_id, source_html_url, metadata, updated_at, last_read_at)\n          VALUES\n            ($1, $2, $3, $4, $5, $6, $7, $8, $9)\n        "
+    "query": "\n                SELECT\n                  id,\n                  title,\n                  kind,\n                  status,\n                  source_id,\n                  source_html_url,\n                  metadata as \"metadata: Json<GithubNotification>\",\n                  updated_at,\n                  last_read_at\n                FROM notification\n                WHERE id = $1\n            "
   },
-  "c52c5d14172fb1d51cf313b2e0ee5412ea1992ff7972e1729a23763ced88e8f5": {
+  "e3f5a2eeccaeda8cd6d4f139c6a0be8b5f1f79868af1b4a68178675d6b28a193": {
     "describe": {
       "columns": [
         {
@@ -223,34 +251,6 @@
         ]
       }
     },
-    "query": "UPDATE\n                 notification\n               SET\n                 status = $1\n               WHERE\n                 NOT source_id = ANY($2)\n                 AND (status = 'Read' OR status = 'Unread')\n               RETURNING\n                 id,\n                 title,\n                 kind,\n                 status,\n                 source_id,\n                 source_html_url,\n                 metadata as \"metadata: Json<GithubNotification>\",\n                 updated_at,\n                 last_read_at\n            "
-  },
-  "d686c750da157c9adb1cf103868529aa67dfb370bdbf287fa052cc9f069d8765": {
-    "describe": {
-      "columns": [
-        {
-          "name": "id",
-          "ordinal": 0,
-          "type_info": "Uuid"
-        }
-      ],
-      "nullable": [
-        false
-      ],
-      "parameters": {
-        "Left": [
-          "Uuid",
-          "Text",
-          "Text",
-          "Text",
-          "Text",
-          "Text",
-          "Json",
-          "Timestamp",
-          "Timestamp"
-        ]
-      }
-    },
-    "query": "\n          INSERT INTO notification\n            (id, title, kind, status, source_id, source_html_url, metadata, updated_at, last_read_at)\n          VALUES\n            ($1, $2, $3, $4, $5, $6, $7, $8, $9)\n          ON CONFLICT (source_id) DO UPDATE\n          SET\n            title = $2,\n            kind = $3,\n            status = $4,\n            source_html_url = $6,\n            metadata = $7,\n            updated_at = $8,\n            last_read_at = $9\n          RETURNING\n            id\n        "
+    "query": "\n                UPDATE\n                  notification\n                SET\n                  status = $1\n                WHERE\n                  NOT source_id = ANY($2)\n                  AND (status = 'Read' OR status = 'Unread')\n                RETURNING\n                  id,\n                  title,\n                  kind,\n                  status,\n                  source_id,\n                  source_html_url,\n                  metadata as \"metadata: Json<GithubNotification>\",\n                  updated_at,\n                  last_read_at\n            "
   }
 }

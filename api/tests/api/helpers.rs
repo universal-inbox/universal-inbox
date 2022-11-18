@@ -3,15 +3,16 @@
 use httpmock::prelude::*;
 use reqwest::Response;
 use rstest::*;
-use sqlx::{Connection, Executor, PgConnection, PgPool};
-use std::net::TcpListener;
-use std::sync::Arc;
+use sqlx::{
+    postgres::PgConnectOptions, ConnectOptions, Connection, Executor, PgConnection, PgPool,
+};
+use std::{net::TcpListener, str::FromStr, sync::Arc};
 use tracing::info;
 use universal_inbox::{Notification, NotificationPatch};
 use universal_inbox_api::configuration::Settings;
 use universal_inbox_api::integrations::github::GithubService;
 use universal_inbox_api::observability::{get_subscriber, init_subscriber};
-use universal_inbox_api::repository::database::PgRepository;
+use universal_inbox_api::repository::notification::NotificationRepository;
 use universal_inbox_api::universal_inbox::notification::service::NotificationService;
 use uuid::Uuid;
 
@@ -27,7 +28,11 @@ fn tracing_setup(settings: Settings) {
     color_backtrace::install();
 
     let subscriber = get_subscriber(&settings.application.log_directive);
-    init_subscriber(subscriber, log::LevelFilter::Error);
+    init_subscriber(
+        subscriber,
+        log::LevelFilter::from_str(&settings.application.dependencies_log_directive)
+            .unwrap_or(log::LevelFilter::Error),
+    );
 }
 
 #[fixture]
@@ -45,9 +50,14 @@ async fn db_connection(mut settings: Settings) -> PgPool {
         .await
         .expect("Failed to create database.");
 
-    let db_connection = PgPool::connect(&settings.database.connection_string())
-        .await
-        .expect("error");
+    let mut options = PgConnectOptions::new()
+        .username(&settings.database.username)
+        .password(&settings.database.password)
+        .host(&settings.database.host)
+        .port(settings.database.port)
+        .database(&settings.database.database_name);
+    options.log_statements(log::LevelFilter::Info);
+    let db_connection = PgPool::connect_with(options).await.expect("error");
 
     sqlx::migrate!("./migrations")
         .run(&db_connection)
@@ -72,7 +82,7 @@ pub async fn tested_app(
     info!("Setting up server");
     let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
     let port = listener.local_addr().unwrap().port();
-    let repository = Box::new(PgRepository::new(db_connection.await.into())); // useless_conversion disabled here
+    let repository = Box::new(NotificationRepository::new(db_connection.await.into())); // useless_conversion disabled here
 
     let mock_server = MockServer::start();
     let mock_server_uri = &mock_server.base_url();

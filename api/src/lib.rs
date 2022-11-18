@@ -4,15 +4,17 @@ extern crate macro_attr;
 #[macro_use]
 extern crate enum_derive;
 
-use crate::universal_inbox::{notification::service::NotificationService, UniversalInboxError};
+use std::{net::TcpListener, sync::Arc};
+
 use actix_files as fs;
 use actix_web::{dev::Server, http, middleware, web, App, HttpServer};
 use anyhow::Context;
 use configuration::Settings;
 use core::time::Duration;
-use std::{net::TcpListener, sync::Arc};
 use tracing::info;
 use tracing_actix_web::TracingLogger;
+
+use crate::universal_inbox::{notification::service::NotificationService, UniversalInboxError};
 
 pub mod commands;
 pub mod configuration;

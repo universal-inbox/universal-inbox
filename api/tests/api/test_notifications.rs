@@ -219,13 +219,13 @@ mod patch_notification {
     use universal_inbox::NotificationPatch;
     use uuid::Uuid;
 
-    use crate::helpers::{patch_notification, patch_notification_response};
+    use crate::helpers::{get_notification, patch_notification, patch_notification_response};
 
     use super::*;
 
     #[rstest]
     #[tokio::test]
-    async fn test_patch_notification_status(
+    async fn test_patch_notification_status_as_done(
         #[future] tested_app: TestedApp,
         github_notification: Box<GithubNotification>,
         #[values(205, 304, 404)] github_status_code: u16,
@@ -274,7 +274,7 @@ mod patch_notification {
 
     #[rstest]
     #[tokio::test]
-    async fn test_patch_notification_status_with_github_api_error(
+    async fn test_patch_notification_status_as_done_with_github_api_error(
         #[future] tested_app: TestedApp,
         github_notification: Box<GithubNotification>,
     ) {
@@ -318,6 +318,9 @@ mod patch_notification {
                 .to_string()
         );
         github_mark_thread_as_read_mock.assert();
+
+        let notification = get_notification(&address, created_notification.id).await;
+        assert_eq!(notification.status, NotificationStatus::Unread);
     }
 
     #[rstest]

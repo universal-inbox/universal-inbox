@@ -1242,6 +1242,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "duplicate"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a0a4be4cd710e92098de6ad258e6e7c24af11c29c5142f3c6f2a545652480ff8"
+dependencies = [
+ "heck",
+ "proc-macro-error",
+]
+
+[[package]]
 name = "either"
 version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3752,12 +3762,12 @@ dependencies = [
  "actix-http",
  "actix-web",
  "anyhow",
- "async-trait",
  "chrono",
  "clap",
  "color-backtrace",
  "config",
  "configparser",
+ "duplicate",
  "enum_derive",
  "format_serde_error",
  "futures",

@@ -1,13 +1,15 @@
-use clap::{Parser, Subcommand};
-use sqlx::PgPool;
 use std::{net::TcpListener, str::FromStr, sync::Arc};
+
+use clap::{Parser, Subcommand};
+use sqlx::{postgres::PgConnectOptions, ConnectOptions, PgPool};
 use tracing::{error, info};
+
 use universal_inbox_api::{
     commands,
     configuration::Settings,
     integrations::github::GithubService,
     observability::{get_subscriber, init_subscriber},
-    repository::database::PgRepository,
+    repository::notification::NotificationRepository,
     run,
     universal_inbox::notification::{service::NotificationService, source::NotificationSource},
 };
@@ -61,10 +63,18 @@ async fn main() -> std::io::Result<()> {
         "Connecting to PostgreSQL on {}",
         &settings.database.connection_string()
     );
-    let connection = PgPool::connect(&settings.database.connection_string())
+    let mut options = PgConnectOptions::new()
+        .username(&settings.database.username)
+        .password(&settings.database.password)
+        .host(&settings.database.host)
+        .port(settings.database.port)
+        .database(&settings.database.database_name);
+    options.log_statements(log::LevelFilter::Debug);
+    let connection = PgPool::connect_with(options)
         .await
         .expect("Failed to connect to Postgresql");
-    let repository = Box::new(PgRepository::new(connection));
+    let repository = Box::new(NotificationRepository::new(connection));
+
     let service = Arc::new(
         NotificationService::new(
             repository,
