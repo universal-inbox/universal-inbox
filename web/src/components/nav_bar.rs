@@ -32,6 +32,7 @@ pub fn nav_bar(cx: Scope) -> Element {
                         "type": "button",
                         onclick: |_| { toggle_dark_mode(true).expect("Failed to switch the theme"); },
                         class: "bg-light-0 hover:bg-light-400 hover:shadow-md dark:bg-dark-200 dark:hover:bg-dark-600 text-sm p-2.5",
+                        title: "Switch lightning theme",
 
                         Icon { class: "block dark:hidden w-5 h-5", icon: BsMoon }
                         Icon { class: "hidden dark:block w-5 h-5", icon: BsSun }
