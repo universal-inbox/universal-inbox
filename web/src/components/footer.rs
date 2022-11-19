@@ -23,13 +23,21 @@ pub fn footer(cx: Scope) -> Element {
                 if ui_model.read().footer_help_opened {
                     rsx! {
                         Icon { class: "w-3 h-3", icon: BsArrowDownShort }
-                        div { class: "grow flex items-center justify-center", Icon { class: "w-3 h-3", icon: BsQuestionCircle } }
+                        div {
+                            class: "grow flex items-center justify-center",
+                            title: "Help",
+                            Icon { class: "w-3 h-3", icon: BsQuestionCircle }
+                        }
                         Icon { class: "w-3 h-3", icon: BsArrowDownShort }
                     }
                 } else {
                     rsx! {
                         Icon { class: "w-3 h-3", icon: BsArrowUpShort }
-                        div { class: "grow flex items-center justify-center", Icon { class: "w-3 h-3", icon: BsQuestionCircle } }
+                        div {
+                            class: "grow flex items-center justify-center",
+                            title: "Help",
+                            Icon { class: "w-3 h-3", icon: BsQuestionCircle }
+                        }
                         Icon { class: "w-3 h-3", icon: BsArrowUpShort }
                     }
                 }

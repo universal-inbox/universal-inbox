@@ -87,15 +87,17 @@ fn notification<'a>(
 
             (*selected || *is_hovered.get()).then(|| rsx!(
                 self::notification_button {
+                    title: "Delete notification",
                     onclick: |_| on_delete.call(notif),
                     Icon { class: "w-5 h-5" icon: BsTrash }
                 },
                 self::notification_button {
+                    title: "Unsubscribe from the notification",
                     onclick: |_| on_unsubscribe.call(notif),
                     Icon { class: "w-5 h-5" icon: BsBellSlash }
                 },
-                self::notification_button { Icon { class: "w-5 h-5" icon: BsClockHistory } },
-                self::notification_button { Icon { class: "w-5 h-5" icon: BsBookmark } },
+                self::notification_button { title: "not yet implemented", Icon { class: "w-5 h-5" icon: BsClockHistory } },
+                self::notification_button { title: "not yet implemented", Icon { class: "w-5 h-5" icon: BsBookmark } },
             ))
         }
     ))
@@ -118,6 +120,7 @@ fn notification_display<'a>(cx: Scope, notif: &'a Notification) -> Element {
 #[derive(Props)]
 struct NotificationButtonProps<'a> {
     children: Element<'a>,
+    title: &'a str,
     #[props(optional)]
     onclick: Option<EventHandler<'a, MouseEvent>>,
 }
@@ -134,6 +137,8 @@ fn notification_button<'a>(cx: Scope<'a, NotificationButtonProps<'a>>) -> Elemen
 
             button {
                 class: "text-sm",
+                title: "{cx.props.title}",
+
                 &cx.props.children
             }
         }
