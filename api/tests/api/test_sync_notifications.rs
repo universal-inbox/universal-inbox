@@ -46,6 +46,7 @@ async fn create_notification_from_github_notification(
             metadata: *github_notification.clone(),
             updated_at: github_notification.updated_at,
             last_read_at: github_notification.last_read_at,
+            snoozed_until: None,
         },
     )
     .await
@@ -102,6 +103,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
             metadata: *sync_github_notifications[1].clone(),
             updated_at: Utc.ymd(2014, 11, 6).and_hms(0, 0, 0),
             last_read_at: None,
+            snoozed_until: None,
         },
     )
     .await;
@@ -169,6 +171,7 @@ async fn test_sync_notifications_should_mark_unsubscribed_notification_without_s
             metadata: *sync_github_notifications[1].clone(), // reusing github notification but not useful
             updated_at: Utc.ymd(2014, 11, 6).and_hms(0, 0, 0),
             last_read_at: None,
+            snoozed_until: None,
         },
     )
     .await;

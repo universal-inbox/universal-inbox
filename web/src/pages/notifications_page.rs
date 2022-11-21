@@ -31,6 +31,9 @@ pub fn notifications_page(cx: Scope) -> Element {
                     on_unsubscribe: |notification: &Notification| {
                         notification_service.send(NotificationCommand::Unsubscribe(notification.clone()))
                     },
+                    on_snooze: |notification: &Notification| {
+                        notification_service.send(NotificationCommand::Snooze(notification.clone()))
+                    },
                 }
             }
         }

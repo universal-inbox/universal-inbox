@@ -28,6 +28,7 @@ pub struct Notification {
     pub metadata: GithubNotification,
     pub updated_at: DateTime<Utc>,
     pub last_read_at: Option<DateTime<Utc>>,
+    pub snoozed_until: Option<DateTime<Utc>>,
 }
 
 macro_attr! {
@@ -47,7 +48,8 @@ macro_attr! {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default, PartialEq, Eq)]
 pub struct NotificationPatch {
     pub status: Option<NotificationStatus>,
+    pub snoozed_until: Option<DateTime<Utc>>,
 }

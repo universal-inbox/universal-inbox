@@ -4,7 +4,7 @@ use anyhow::{anyhow, Context};
 use chrono::{DateTime, NaiveDateTime, Utc};
 use duplicate::duplicate_item;
 use http::Uri;
-use sqlx::{pool::PoolConnection, types::Json, PgPool, Postgres, Transaction};
+use sqlx::{pool::PoolConnection, types::Json, PgPool, Postgres, QueryBuilder, Transaction};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
@@ -93,7 +93,8 @@ impl<'a> repository {
                   source_html_url,
                   metadata as "metadata: Json<GithubNotification>",
                   updated_at,
-                  last_read_at
+                  last_read_at,
+                  snoozed_until
                 FROM notification
                 WHERE id = $1
             "#,
@@ -111,10 +112,11 @@ impl<'a> repository {
     pub async fn fetch_all(
         &self,
         status: NotificationStatus,
+        include_snoozed_notifications: bool,
     ) -> Result<Vec<Notification>, UniversalInboxError> {
         let mut executor = self.executor.lock().await;
-        let records = sqlx::query_as!(
-            NotificationRow,
+
+        let mut query_builder = QueryBuilder::new(
             r#"
                 SELECT
                   id,
@@ -123,19 +125,30 @@ impl<'a> repository {
                   status,
                   source_id,
                   source_html_url,
-                  metadata as "metadata: Json<GithubNotification>",
+                  metadata,
                   updated_at,
-                  last_read_at
+                  last_read_at,
+                  snoozed_until
                 FROM
                   notification
                 WHERE
-                  status = $1
+                  status =
             "#,
-            status.to_string()
-        )
-        .fetch_all(&mut *executor)
-        .await
-        .context("Failed to fetch notifications from storage")?;
+        );
+        query_builder.push_bind(status.to_string());
+
+        if !include_snoozed_notifications {
+            query_builder
+                .push(" AND (snoozed_until is NULL OR snoozed_until <=")
+                .push_bind(Utc::now().naive_utc())
+                .push(")");
+        }
+
+        let records = query_builder
+            .build_query_as::<NotificationRow>()
+            .fetch_all(&mut *executor)
+            .await
+            .context("Failed to fetch notifications from storage")?;
 
         records.iter().map(|r| r.try_into()).collect()
     }
@@ -161,10 +174,11 @@ impl<'a> repository {
                     source_html_url,
                     metadata,
                     updated_at,
-                    last_read_at
+                    last_read_at,
+                    snoozed_until
                   )
                 VALUES
-                  ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             "#,
             notification.id,
             notification.title,
@@ -179,7 +193,10 @@ impl<'a> repository {
             notification.updated_at.naive_utc(),
             notification
                 .last_read_at
-                .map(|last_read_at| last_read_at.naive_utc())
+                .map(|last_read_at| last_read_at.naive_utc()),
+            notification
+                .snoozed_until
+                .map(|snoozed_until| snoozed_until.naive_utc())
         )
         .execute(&mut *executor)
         .await
@@ -227,7 +244,8 @@ impl<'a> repository {
                   source_html_url,
                   metadata as "metadata: Json<GithubNotification>",
                   updated_at,
-                  last_read_at
+                  last_read_at,
+                  snoozed_until
             "#,
             status.to_string(),
             &active_source_notification_ids[..]
@@ -263,10 +281,11 @@ impl<'a> repository {
                     source_html_url,
                     metadata,
                     updated_at,
-                    last_read_at
+                    last_read_at,
+                    snoozed_until
                   )
                 VALUES
-                  ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 ON CONFLICT (source_id) DO UPDATE
                 SET
                   title = $2,
@@ -275,7 +294,8 @@ impl<'a> repository {
                   source_html_url = $6,
                   metadata = $7,
                   updated_at = $8,
-                  last_read_at = $9
+                  last_read_at = $9,
+                  snoozed_until = $10
                 RETURNING
                   id
             "#,
@@ -292,7 +312,10 @@ impl<'a> repository {
             notification.updated_at.naive_utc(),
             notification
                 .last_read_at
-                .map(|last_read_at| last_read_at.naive_utc())
+                .map(|last_read_at| last_read_at.naive_utc()),
+            notification
+                .snoozed_until
+                .map(|snoozed_until| snoozed_until.naive_utc())
         )
         .fetch_one(&mut *executor)
         .await
@@ -315,21 +338,32 @@ impl<'a> repository {
         notification_id: Uuid,
         patch: &'b NotificationPatch,
     ) -> Result<UpdateStatus<Box<Notification>>, UniversalInboxError> {
-        let status = patch.status.ok_or_else(|| {
-            UniversalInboxError::MissingInputData(
+        if *patch == Default::default() {
+            return Err(UniversalInboxError::MissingInputData(
                 "Missing `status` field value to update notification {notification_id}".to_string(),
-            )
-        })?;
+            ));
+        };
+
         let mut executor = self.executor.lock().await;
 
-        let record: Option<UpdatedNotificationRow> = sqlx::query_as(
+        let mut query_builder = QueryBuilder::new("UPDATE notification SET");
+        let mut separated = query_builder.separated(", ");
+        if let Some(status) = patch.status {
+            separated
+                .push(" status = ")
+                .push_bind_unseparated(status.to_string());
+        }
+        if let Some(snoozed_until) = patch.snoozed_until {
+            separated
+                .push(" snoozed_until = ")
+                .push_bind_unseparated(snoozed_until.naive_utc());
+        }
+
+        query_builder
+            .push(" WHERE id = ")
+            .push_bind(notification_id);
+        query_builder.push(
             r#"
-                UPDATE
-                  notification
-                SET
-                  status = $2
-                WHERE
-                  id = $1
                 RETURNING
                   id,
                   title,
@@ -340,21 +374,40 @@ impl<'a> repository {
                   metadata,
                   updated_at,
                   last_read_at,
-                  (SELECT status != $2 FROM notification WHERE id = $1) as "is_status_updated"
-            "#,
-        )
-        .bind(notification_id)
-        .bind(status.to_string())
-        .fetch_optional(&mut *executor)
-        .await
-        .context(format!(
-            "Failed to update notification {} from storage",
-            notification_id
-        ))?;
+                  snoozed_until,
+                  (SELECT"#,
+        );
+
+        let mut separated = query_builder.separated(" AND ");
+        if let Some(status) = patch.status {
+            separated
+                .push(" status != ")
+                .push_bind_unseparated(status.to_string());
+        }
+        if let Some(snoozed_until) = patch.snoozed_until {
+            separated
+                .push(" (snoozed_until is NULL OR snoozed_until != ")
+                .push_bind_unseparated(snoozed_until.naive_utc())
+                .push_unseparated(")");
+        }
+
+        query_builder
+            .push(" FROM notification WHERE id = ")
+            .push_bind(notification_id);
+        query_builder.push(r#") as "is_updated""#);
+
+        let record: Option<UpdatedNotificationRow> = query_builder
+            .build_query_as::<UpdatedNotificationRow>()
+            .fetch_optional(&mut *executor)
+            .await
+            .context(format!(
+                "Failed to update notification {} from storage",
+                notification_id
+            ))?;
 
         if let Some(updated_notification_row) = record {
             Ok(UpdateStatus {
-                updated: updated_notification_row.is_status_updated,
+                updated: updated_notification_row.is_updated,
                 result: Some(Box::new(
                     updated_notification_row
                         .notification_row
@@ -382,13 +435,14 @@ struct NotificationRow {
     metadata: Json<GithubNotification>,
     updated_at: NaiveDateTime,
     last_read_at: Option<NaiveDateTime>,
+    snoozed_until: Option<NaiveDateTime>,
 }
 
 #[derive(Debug, sqlx::FromRow)]
 struct UpdatedNotificationRow {
     #[sqlx(flatten)]
     pub notification_row: NotificationRow,
-    pub is_status_updated: bool,
+    pub is_updated: bool,
 }
 
 impl TryFrom<NotificationRow> for Notification {
@@ -441,6 +495,9 @@ impl TryFrom<&NotificationRow> for Notification {
             last_read_at: row
                 .last_read_at
                 .map(|last_read_at| DateTime::<Utc>::from_utc(last_read_at, Utc)),
+            snoozed_until: row
+                .snoozed_until
+                .map(|snoozed_until| DateTime::<Utc>::from_utc(snoozed_until, Utc)),
         })
     }
 }
