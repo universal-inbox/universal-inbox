@@ -1,6 +1,6 @@
 {
   "db": "PostgreSQL",
-  "7e3763c5b99d66f872de23d30c2353a3e821553946bdaa8d1ed5141a6ca605c2": {
+  "0ea52edeb920aeb09637a5a23cc49a8639835381ec3b8cc87cce6284bbd62891": {
     "describe": {
       "columns": [
         {
@@ -22,13 +22,14 @@
           "Text",
           "Json",
           "Timestamp",
+          "Timestamp",
           "Timestamp"
         ]
       }
     },
-    "query": "\n                INSERT INTO notification\n                  (\n                    id,\n                    title,\n                    kind,\n                    status,\n                    source_id,\n                    source_html_url,\n                    metadata,\n                    updated_at,\n                    last_read_at\n                  )\n                VALUES\n                  ($1, $2, $3, $4, $5, $6, $7, $8, $9)\n                ON CONFLICT (source_id) DO UPDATE\n                SET\n                  title = $2,\n                  kind = $3,\n                  status = $4,\n                  source_html_url = $6,\n                  metadata = $7,\n                  updated_at = $8,\n                  last_read_at = $9\n                RETURNING\n                  id\n            "
+    "query": "\n                INSERT INTO notification\n                  (\n                    id,\n                    title,\n                    kind,\n                    status,\n                    source_id,\n                    source_html_url,\n                    metadata,\n                    updated_at,\n                    last_read_at,\n                    snoozed_until\n                  )\n                VALUES\n                  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)\n                ON CONFLICT (source_id) DO UPDATE\n                SET\n                  title = $2,\n                  kind = $3,\n                  status = $4,\n                  source_html_url = $6,\n                  metadata = $7,\n                  updated_at = $8,\n                  last_read_at = $9,\n                  snoozed_until = $10\n                RETURNING\n                  id\n            "
   },
-  "b71b82c1abd2c850c3af5c66c0c84a9eaf452c4fdbc3f3298c416c5b227e635c": {
+  "1007c3b3bad521d604f48151f08a1adecce3791e538ebf3ec8c7afbfa5c456a4": {
     "describe": {
       "columns": [],
       "nullable": [],
@@ -42,13 +43,14 @@
           "Text",
           "Json",
           "Timestamp",
+          "Timestamp",
           "Timestamp"
         ]
       }
     },
-    "query": "\n                INSERT INTO notification\n                  (\n                    id,\n                    title,\n                    kind,\n                    status,\n                    source_id,\n                    source_html_url,\n                    metadata,\n                    updated_at,\n                    last_read_at\n                  )\n                VALUES\n                  ($1, $2, $3, $4, $5, $6, $7, $8, $9)\n            "
+    "query": "\n                INSERT INTO notification\n                  (\n                    id,\n                    title,\n                    kind,\n                    status,\n                    source_id,\n                    source_html_url,\n                    metadata,\n                    updated_at,\n                    last_read_at,\n                    snoozed_until\n                  )\n                VALUES\n                  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)\n            "
   },
-  "d296e92ca52f935b64e8c8c11740fc68c35608c24b1c8c5e6857ebf9f63a7c6a": {
+  "e0f3525c9388116f7ee311d03fdca3270a85f237b8a3c7aea93e75d0eadb2636": {
     "describe": {
       "columns": [
         {
@@ -95,73 +97,10 @@
           "name": "last_read_at",
           "ordinal": 8,
           "type_info": "Timestamp"
-        }
-      ],
-      "nullable": [
-        false,
-        false,
-        false,
-        false,
-        false,
-        true,
-        false,
-        false,
-        true
-      ],
-      "parameters": {
-        "Left": [
-          "Text"
-        ]
-      }
-    },
-    "query": "\n                SELECT\n                  id,\n                  title,\n                  kind,\n                  status,\n                  source_id,\n                  source_html_url,\n                  metadata as \"metadata: Json<GithubNotification>\",\n                  updated_at,\n                  last_read_at\n                FROM\n                  notification\n                WHERE\n                  status = $1\n            "
-  },
-  "dd5335395b570947ff03ca1f29d16c8be811ff6eb522e12b8e0e36c478a1b6f0": {
-    "describe": {
-      "columns": [
-        {
-          "name": "id",
-          "ordinal": 0,
-          "type_info": "Uuid"
         },
         {
-          "name": "title",
-          "ordinal": 1,
-          "type_info": "Text"
-        },
-        {
-          "name": "kind",
-          "ordinal": 2,
-          "type_info": "Text"
-        },
-        {
-          "name": "status",
-          "ordinal": 3,
-          "type_info": "Text"
-        },
-        {
-          "name": "source_id",
-          "ordinal": 4,
-          "type_info": "Text"
-        },
-        {
-          "name": "source_html_url",
-          "ordinal": 5,
-          "type_info": "Text"
-        },
-        {
-          "name": "metadata: Json<GithubNotification>",
-          "ordinal": 6,
-          "type_info": "Json"
-        },
-        {
-          "name": "updated_at",
-          "ordinal": 7,
-          "type_info": "Timestamp"
-        },
-        {
-          "name": "last_read_at",
-          "ordinal": 8,
+          "name": "snoozed_until",
+          "ordinal": 9,
           "type_info": "Timestamp"
         }
       ],
@@ -174,6 +113,7 @@
         true,
         false,
         false,
+        true,
         true
       ],
       "parameters": {
@@ -182,9 +122,9 @@
         ]
       }
     },
-    "query": "\n                SELECT\n                  id,\n                  title,\n                  kind,\n                  status,\n                  source_id,\n                  source_html_url,\n                  metadata as \"metadata: Json<GithubNotification>\",\n                  updated_at,\n                  last_read_at\n                FROM notification\n                WHERE id = $1\n            "
+    "query": "\n                SELECT\n                  id,\n                  title,\n                  kind,\n                  status,\n                  source_id,\n                  source_html_url,\n                  metadata as \"metadata: Json<GithubNotification>\",\n                  updated_at,\n                  last_read_at,\n                  snoozed_until\n                FROM notification\n                WHERE id = $1\n            "
   },
-  "e3f5a2eeccaeda8cd6d4f139c6a0be8b5f1f79868af1b4a68178675d6b28a193": {
+  "f01d83556bc2d14435526424f0c590466f1f79d457652ff67f59ae453138f322": {
     "describe": {
       "columns": [
         {
@@ -231,6 +171,11 @@
           "name": "last_read_at",
           "ordinal": 8,
           "type_info": "Timestamp"
+        },
+        {
+          "name": "snoozed_until",
+          "ordinal": 9,
+          "type_info": "Timestamp"
         }
       ],
       "nullable": [
@@ -242,6 +187,7 @@
         true,
         false,
         false,
+        true,
         true
       ],
       "parameters": {
@@ -251,6 +197,6 @@
         ]
       }
     },
-    "query": "\n                UPDATE\n                  notification\n                SET\n                  status = $1\n                WHERE\n                  NOT source_id = ANY($2)\n                  AND (status = 'Read' OR status = 'Unread')\n                RETURNING\n                  id,\n                  title,\n                  kind,\n                  status,\n                  source_id,\n                  source_html_url,\n                  metadata as \"metadata: Json<GithubNotification>\",\n                  updated_at,\n                  last_read_at\n            "
+    "query": "\n                UPDATE\n                  notification\n                SET\n                  status = $1\n                WHERE\n                  NOT source_id = ANY($2)\n                  AND (status = 'Read' OR status = 'Unread')\n                RETURNING\n                  id,\n                  title,\n                  kind,\n                  status,\n                  source_id,\n                  source_html_url,\n                  metadata as \"metadata: Json<GithubNotification>\",\n                  updated_at,\n                  last_read_at,\n                  snoozed_until\n            "
   }
 }

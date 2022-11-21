@@ -16,6 +16,7 @@ use ::universal_inbox::{Notification, NotificationPatch, NotificationStatus};
 #[derive(Debug, Deserialize)]
 pub struct ListNotificationRequest {
     status: NotificationStatus,
+    include_snoozed_notifications: Option<bool>,
 }
 
 #[tracing::instrument(level = "debug", skip(service))]
@@ -26,7 +27,12 @@ pub async fn list_notifications(
     let notifications: Vec<Notification> = service
         .connect()
         .await?
-        .list_notifications(list_notification_request.status)
+        .list_notifications(
+            list_notification_request.status,
+            list_notification_request
+                .include_snoozed_notifications
+                .unwrap_or(false),
+        )
         .await?;
 
     Ok(HttpResponse::Ok()

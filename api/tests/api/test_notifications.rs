@@ -3,18 +3,19 @@
 use std::env;
 use std::fs;
 
+use chrono::{Duration, TimeZone, Utc};
+use format_serde_error::SerdeError;
+use http::StatusCode;
+use httpmock::Method::PATCH;
+use rstest::*;
+use serde_json::json;
+
 use crate::helpers::{
     create_notification, get_notification, list_notifications, tested_app, TestedApp,
 };
 use ::universal_inbox::{
     integrations::github::GithubNotification, Notification, NotificationKind, NotificationStatus,
 };
-use chrono::{TimeZone, Utc};
-use format_serde_error::SerdeError;
-use http::StatusCode;
-use httpmock::Method::PATCH;
-use rstest::*;
-use serde_json::json;
 use universal_inbox_api::integrations::github;
 
 #[fixture]
@@ -30,6 +31,7 @@ fn github_notification() -> Box<GithubNotification> {
 }
 
 mod list_notifications {
+
     use crate::helpers::create_notification;
 
     use super::*;
@@ -38,7 +40,7 @@ mod list_notifications {
     #[tokio::test]
     async fn test_empty_list_notifications(#[future] tested_app: TestedApp) {
         let address: String = tested_app.await.app_address.into();
-        let notifications = list_notifications(&address).await;
+        let notifications = list_notifications(&address, NotificationStatus::Unread, false).await;
 
         assert_eq!(notifications.len(), 0);
     }
@@ -64,9 +66,10 @@ mod list_notifications {
                 source_html_url: github::get_html_url_from_api_url(
                     &github_notification.subject.url,
                 ),
-                metadata: *github_notification,
+                metadata: *github_notification.clone(),
                 updated_at: Utc.ymd(2022, 1, 1).and_hms(0, 0, 0),
                 last_read_at: None,
+                snoozed_until: None,
             },
         )
         .await;
@@ -82,18 +85,76 @@ mod list_notifications {
                 source_html_url: github::get_html_url_from_api_url(
                     &github_notification2.subject.url,
                 ),
-                metadata: *github_notification2,
+                metadata: *github_notification2.clone(),
                 updated_at: Utc.ymd(2022, 2, 1).and_hms(0, 0, 0),
                 last_read_at: Some(Utc.ymd(2022, 2, 1).and_hms(1, 0, 0)),
+                // Snooze time has expired
+                snoozed_until: Some(Utc::now() - Duration::minutes(1)),
             },
         )
         .await;
 
-        let notifications = list_notifications(&address).await;
+        let deleted_notification = create_notification(
+            &address,
+            &Notification {
+                id: uuid::Uuid::new_v4(),
+                title: "notif3".to_string(),
+                kind: NotificationKind::Github,
+                status: NotificationStatus::Deleted,
+                source_id: "9012".to_string(),
+                source_html_url: github::get_html_url_from_api_url(
+                    &github_notification.subject.url,
+                ),
+                metadata: *github_notification,
+                updated_at: Utc.ymd(2022, 1, 1).and_hms(0, 0, 0),
+                last_read_at: None,
+                snoozed_until: None,
+            },
+        )
+        .await;
+
+        let snoozed_notification = create_notification(
+            &address,
+            &Notification {
+                id: uuid::Uuid::new_v4(),
+                title: "notif4".to_string(),
+                kind: NotificationKind::Github,
+                status: NotificationStatus::Unread,
+                source_id: "3456".to_string(),
+                source_html_url: github::get_html_url_from_api_url(
+                    &github_notification2.subject.url,
+                ),
+                metadata: *github_notification2,
+                updated_at: Utc.ymd(2022, 2, 1).and_hms(0, 0, 0),
+                last_read_at: Some(Utc.ymd(2022, 2, 1).and_hms(1, 0, 0)),
+                // Snooze time in the future
+                snoozed_until: Some(Utc::now() + Duration::minutes(1)),
+            },
+        )
+        .await;
+
+        let notifications = list_notifications(&address, NotificationStatus::Unread, false).await;
 
         assert_eq!(notifications.len(), 2);
         assert_eq!(notifications[0], *expected_notification1);
         assert_eq!(notifications[1], *expected_notification2);
+
+        let notifications = list_notifications(&address, NotificationStatus::Unread, true).await;
+
+        assert_eq!(notifications.len(), 3);
+        assert_eq!(notifications[0], *expected_notification1);
+        assert_eq!(notifications[1], *expected_notification2);
+        assert_eq!(notifications[2], *snoozed_notification);
+
+        let notifications = list_notifications(&address, NotificationStatus::Deleted, false).await;
+
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(notifications[0], *deleted_notification);
+
+        let notifications =
+            list_notifications(&address, NotificationStatus::Unsubscribed, false).await;
+
+        assert_eq!(notifications.len(), 0);
     }
 }
 
@@ -119,6 +180,7 @@ mod create_notification {
             metadata: *github_notification,
             updated_at: Utc.ymd(2022, 1, 1).and_hms(0, 0, 0),
             last_read_at: None,
+            snoozed_until: None,
         });
         let created_notification = create_notification(&address, &expected_notification).await;
 
@@ -146,6 +208,7 @@ mod create_notification {
             metadata: *github_notification,
             updated_at: Utc.ymd(2022, 1, 1).and_hms(0, 0, 0),
             last_read_at: None,
+            snoozed_until: None,
         });
         let created_notification = create_notification(&address, &expected_notification).await;
 
@@ -187,6 +250,7 @@ mod get_notification {
             metadata: *github_notification,
             updated_at: Utc.ymd(2022, 1, 1).and_hms(0, 0, 0),
             last_read_at: None,
+            snoozed_until: None,
         });
         let created_notification = create_notification(&address, &expected_notification).await;
 
@@ -249,6 +313,7 @@ mod patch_notification {
             metadata: *github_notification,
             updated_at: Utc.ymd(2022, 1, 1).and_hms(0, 0, 0),
             last_read_at: None,
+            snoozed_until: None,
         });
         let created_notification = create_notification(&address, &expected_notification).await;
 
@@ -259,6 +324,7 @@ mod patch_notification {
             created_notification.id,
             &NotificationPatch {
                 status: Some(NotificationStatus::Deleted),
+                ..Default::default()
             },
         )
         .await;
@@ -299,6 +365,7 @@ mod patch_notification {
             metadata: *github_notification,
             updated_at: Utc.ymd(2022, 1, 1).and_hms(0, 0, 0),
             last_read_at: None,
+            snoozed_until: None,
         });
         let created_notification = create_notification(&address, &expected_notification).await;
 
@@ -309,6 +376,7 @@ mod patch_notification {
             created_notification.id,
             &NotificationPatch {
                 status: Some(NotificationStatus::Unsubscribed),
+                ..Default::default()
             },
         )
         .await;
@@ -347,6 +415,7 @@ mod patch_notification {
             metadata: *github_notification,
             updated_at: Utc.ymd(2022, 1, 1).and_hms(0, 0, 0),
             last_read_at: None,
+            snoozed_until: None,
         });
         let created_notification = create_notification(&address, &expected_notification).await;
 
@@ -357,6 +426,7 @@ mod patch_notification {
             created_notification.id,
             &NotificationPatch {
                 status: Some(NotificationStatus::Deleted),
+                ..Default::default()
             },
         )
         .await;
@@ -376,6 +446,50 @@ mod patch_notification {
 
     #[rstest]
     #[tokio::test]
+    async fn test_patch_notification_snoozed_until(
+        #[future] tested_app: TestedApp,
+        github_notification: Box<GithubNotification>,
+    ) {
+        let app = tested_app.await;
+        let address: String = app.app_address.into();
+        let expected_notification = Box::new(Notification {
+            id: uuid::Uuid::new_v4(),
+            title: "notif1".to_string(),
+            kind: NotificationKind::Github,
+            status: NotificationStatus::Unread,
+            source_id: "1234".to_string(),
+            source_html_url: github::get_html_url_from_api_url(&github_notification.subject.url),
+            metadata: *github_notification,
+            updated_at: Utc.ymd(2022, 1, 1).and_hms(0, 0, 0),
+            last_read_at: None,
+            snoozed_until: None,
+        });
+        let snoozed_time = Utc.ymd(2022, 1, 1).and_hms(1, 2, 3);
+        let created_notification = create_notification(&address, &expected_notification).await;
+
+        assert_eq!(created_notification, expected_notification);
+
+        let patched_notification = patch_notification(
+            &address,
+            created_notification.id,
+            &NotificationPatch {
+                snoozed_until: Some(snoozed_time),
+                ..Default::default()
+            },
+        )
+        .await;
+
+        assert_eq!(
+            patched_notification,
+            Box::new(Notification {
+                snoozed_until: Some(snoozed_time),
+                ..*created_notification
+            })
+        );
+    }
+
+    #[rstest]
+    #[tokio::test]
     async fn test_patch_notification_status_without_modification(
         #[future] tested_app: TestedApp,
         github_notification: Box<GithubNotification>,
@@ -386,6 +500,7 @@ mod patch_notification {
             then.status(200);
         });
         let address: String = app.app_address.into();
+        let snoozed_time = Utc.ymd(2022, 1, 1).and_hms(1, 2, 3);
         let expected_notification = Box::new(Notification {
             id: uuid::Uuid::new_v4(),
             title: "notif1".to_string(),
@@ -396,6 +511,7 @@ mod patch_notification {
             metadata: *github_notification,
             updated_at: Utc.ymd(2022, 1, 1).and_hms(0, 0, 0),
             last_read_at: None,
+            snoozed_until: Some(snoozed_time),
         });
         let created_notification = create_notification(&address, &expected_notification).await;
 
@@ -406,6 +522,7 @@ mod patch_notification {
             created_notification.id,
             &NotificationPatch {
                 status: Some(created_notification.status),
+                snoozed_until: Some(snoozed_time),
             },
         )
         .await;
@@ -416,7 +533,7 @@ mod patch_notification {
 
     #[rstest]
     #[tokio::test]
-    async fn test_patch_notification_status_without_value(
+    async fn test_patch_notification_without_values_to_update(
         #[future] tested_app: TestedApp,
         github_notification: Box<GithubNotification>,
     ) {
@@ -436,6 +553,7 @@ mod patch_notification {
             metadata: *github_notification,
             updated_at: Utc.ymd(2022, 1, 1).and_hms(0, 0, 0),
             last_read_at: None,
+            snoozed_until: None,
         });
         let created_notification = create_notification(&address, &expected_notification).await;
 
@@ -444,7 +562,9 @@ mod patch_notification {
         let response = patch_notification_response(
             &address,
             created_notification.id,
-            &NotificationPatch { status: None },
+            &NotificationPatch {
+                ..Default::default()
+            },
         )
         .await;
 
@@ -468,6 +588,7 @@ mod patch_notification {
             unknown_notification_id,
             &NotificationPatch {
                 status: Some(NotificationStatus::Deleted),
+                ..Default::default()
             },
         )
         .await;

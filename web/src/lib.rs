@@ -97,6 +97,12 @@ fn setup_key_bindings(
                         .send(NotificationCommand::Unsubscribe(notification.clone()))
                 }
             }
+            "s" => {
+                if let Some(notification) = selected_notification {
+                    notification_service_handle
+                        .send(NotificationCommand::Snooze(notification.clone()))
+                }
+            }
             "h" => model.footer_help_opened = !model.footer_help_opened,
             _ => handled = false,
         }

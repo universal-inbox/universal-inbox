@@ -27,6 +27,7 @@ futures-util = "0.3"
 serde-wasm-bindgen = "0.4"
 dioxus-free-icons = { version = "0.5.0", features = ["bootstrap"] }
 gloo-timers = "0.2.0"
+chrono = { version = "0.4.0", features = ["wasmbind"] }
 
 [dependencies.web-sys]
 version = "0.3"
@@ -44,6 +45,9 @@ features = [
   'Storage',
   'Window',
 ]
+
+[dev-dependencies]
+rstest = "0.13.0"
 
 [features]
 default = ["console_log"]

@@ -682,11 +682,13 @@ version = "0.4.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "670ad68c9088c2a963aaa298cb369688cf3f9465ce5e2d4ca10e6e0098a1ce73"
 dependencies = [
+ "js-sys",
  "libc",
  "num-integer",
  "num-traits",
  "serde",
  "time 0.1.43",
+ "wasm-bindgen",
  "winapi",
 ]
 
@@ -3748,6 +3750,7 @@ dependencies = [
  "git-url-parse",
  "http",
  "macro-attr",
+ "rstest",
  "serde",
  "serde_json",
  "serde_with",
@@ -3800,6 +3803,7 @@ name = "universal-inbox-web"
 version = "0.1.0"
 dependencies = [
  "cfg-if",
+ "chrono",
  "console_error_panic_hook",
  "console_log",
  "dioxus",
@@ -3808,6 +3812,7 @@ dependencies = [
  "gloo-timers",
  "js-sys",
  "log",
+ "rstest",
  "serde",
  "serde-wasm-bindgen",
  "universal-inbox",
