@@ -394,8 +394,9 @@ pub struct GithubNotification {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::*;
 
-    #[test]
+    #[rstest]
     fn test_uri_serialization_config() {
         assert_eq!(
             r#"{"key":"key1","name":"name1","url":"https://api.github.com/1","body":"body1"}"#,
@@ -422,7 +423,7 @@ mod tests {
         );
     }
 
-    #[test]
+    #[rstest]
     fn test_uri_deserialization_config() {
         assert_eq!(
             GithubCodeOfConduct {

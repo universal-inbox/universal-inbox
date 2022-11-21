@@ -5,6 +5,7 @@ use crate::{
         toast_service::ToastUpdate,
     },
 };
+use chrono::{DateTime, Duration, Local, TimeZone, Timelike, Utc};
 use dioxus::{fermi::UseAtomRef, prelude::*};
 use futures_util::StreamExt;
 use std::collections::HashMap;
@@ -18,6 +19,7 @@ pub enum NotificationCommand {
     Refresh,
     Delete(Notification),
     Unsubscribe(Notification),
+    Snooze(Notification),
 }
 
 #[derive(Debug, Default)]
@@ -70,6 +72,7 @@ pub async fn notification_service<'a>(
                     &format!("/notifications/{}", notification.id),
                     NotificationPatch {
                         status: Some(NotificationStatus::Deleted),
+                        ..Default::default()
                     },
                     HashMap::new(),
                     &toast_service,
@@ -89,11 +92,34 @@ pub async fn notification_service<'a>(
                     &format!("/notifications/{}", notification.id),
                     NotificationPatch {
                         status: Some(NotificationStatus::Unsubscribed),
+                        ..Default::default()
                     },
                     HashMap::new(),
                     &toast_service,
                     "Unsubscribing from notification...",
                     "Successfully unsubscribed from notification",
+                )
+                .await
+                .unwrap();
+            }
+            Some(NotificationCommand::Snooze(notification)) => {
+                let snoozed_time = compute_snoozed_until(Local::now(), 1, 6);
+
+                notifications
+                    .write()
+                    .retain(|notif| notif.id != notification.id);
+
+                let _result: Notification = call_api_and_notify(
+                    "PATCH",
+                    &format!("/notifications/{}", notification.id),
+                    NotificationPatch {
+                        snoozed_until: Some(snoozed_time),
+                        ..Default::default()
+                    },
+                    HashMap::new(),
+                    &toast_service,
+                    "Snoozing notification...",
+                    "Successfully snoozed notification",
                 )
                 .await
                 .unwrap();
@@ -131,4 +157,62 @@ async fn call_api_and_notify<R: for<'de> serde::de::Deserialize<'de>, B: serde::
     toast_service.send(ToastCommand::Update(toast_update));
 
     Ok(result)
+}
+
+fn compute_snoozed_until<Tz: TimeZone>(
+    from: DateTime<Tz>,
+    days_offset: i64,
+    reset_hour: u32,
+) -> DateTime<Utc>
+where
+    DateTime<Utc>: From<DateTime<Tz>>,
+{
+    let day_adjusted_time = if from.hour() < reset_hour {
+        from
+    } else {
+        from + Duration::days(days_offset)
+    };
+    day_adjusted_time
+        .with_hour(reset_hour)
+        .unwrap()
+        .with_minute(0)
+        .unwrap()
+        .with_second(0)
+        .unwrap()
+        .with_nanosecond(0)
+        .unwrap()
+        .into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::{FixedOffset, TimeZone};
+    use rstest::*;
+
+    #[rstest]
+    #[case::localized_before_reset_hour_utc_before_reset_hour(5, 0, 2022, 1, 1, 1)]
+    #[case::localized_before_reset_hour_utc_after_reset_hour(7, 0, 2021, 12, 31, 23)]
+    #[case::localized_after_reset_hour_utc_after_reset_hour(5, 12, 2022, 1, 2, 1)]
+    #[case::localized_after_reset_hour_utc_before_reset_hour(7, 12, 2022, 1, 1, 23)]
+    fn test_compute_snoozed_until(
+        #[case] offset_hour: i32,
+        #[case] current_hour: u32,
+        #[case] expected_year: i32,
+        #[case] expected_month: u32,
+        #[case] expected_day: u32,
+        #[case] expected_hour: u32,
+    ) {
+        assert_eq!(
+            compute_snoozed_until(
+                FixedOffset::east(offset_hour * 3600)
+                    .ymd(2022, 1, 1)
+                    .and_hms(current_hour, 3, 42),
+                1,
+                6
+            ),
+            Utc.ymd(expected_year, expected_month, expected_day)
+                .and_hms(expected_hour, 0, 0)
+        );
+    }
 }
