@@ -118,7 +118,7 @@ fn toast<'a>(
                     ToastKind::Success => cx.render(rsx!(Icon { class: "w-8 h-8 px-2", icon: BsCheck2 }))
                 }
                 div {
-                    class: "py-1.5 px-2",
+                    class: "py-1.5 grow px-2",
                     "{message}"
                 }
                 div {

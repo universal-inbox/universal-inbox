@@ -17,6 +17,7 @@ pub fn notifications_list<'a>(
     ui_model: &'a UseAtomRef<UniversalInboxUIModel>,
     on_delete: EventHandler<'a, &'a Notification>,
     on_unsubscribe: EventHandler<'a, &'a Notification>,
+    on_snooze: EventHandler<'a, &'a Notification>,
 ) -> Element {
     cx.render(rsx!(table {
         class: "w-full",
@@ -36,6 +37,7 @@ pub fn notifications_list<'a>(
                             selected: i == ui_model.read().selected_notification_index,
                             on_delete: |n| on_delete.call(n)
                             on_unsubscribe: |n| on_unsubscribe.call(n)
+                                on_snooze: |n| on_snooze.call(n)
                         }
                     }
                 }
@@ -51,6 +53,7 @@ fn notification<'a>(
     selected: bool,
     on_delete: EventHandler<'a, &'a Notification>,
     on_unsubscribe: EventHandler<'a, &'a Notification>,
+    on_snooze: EventHandler<'a, &'a Notification>,
 ) -> Element {
     let is_hovered = use_state(&cx, || false);
     let style = use_state(&cx, || "");
@@ -96,7 +99,11 @@ fn notification<'a>(
                     onclick: |_| on_unsubscribe.call(notif),
                     Icon { class: "w-5 h-5" icon: BsBellSlash }
                 },
-                self::notification_button { title: "not yet implemented", Icon { class: "w-5 h-5" icon: BsClockHistory } },
+                self::notification_button {
+                    title: "Snooze notification",
+                    onclick: |_| on_snooze.call(notif),
+                    Icon { class: "w-5 h-5" icon: BsClockHistory }
+                },
                 self::notification_button { title: "not yet implemented", Icon { class: "w-5 h-5" icon: BsBookmark } },
             ))
         }

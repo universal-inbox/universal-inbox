@@ -8,7 +8,7 @@ use sqlx::{
 };
 use std::{net::TcpListener, str::FromStr, sync::Arc};
 use tracing::info;
-use universal_inbox::{Notification, NotificationPatch};
+use universal_inbox::{Notification, NotificationPatch, NotificationStatus};
 use universal_inbox_api::configuration::Settings;
 use universal_inbox_api::integrations::github::GithubService;
 use universal_inbox_api::observability::{get_subscriber, init_subscriber};
@@ -165,16 +165,32 @@ pub async fn patch_notification(
         .expect("Cannot parse JSON result")
 }
 
-pub async fn list_notifications_response(app_address: &str) -> Response {
+pub async fn list_notifications_response(
+    app_address: &str,
+    status_filter: NotificationStatus,
+    include_snoozed_notifications: bool,
+) -> Response {
+    let snoozed_notifications_parameter = if include_snoozed_notifications {
+        "&include_snoozed_notifications=true"
+    } else {
+        ""
+    };
+
     reqwest::Client::new()
-        .get(&format!("{}/notifications?status=Unread", &app_address))
+        .get(&format!(
+            "{app_address}/notifications?status={status_filter}{snoozed_notifications_parameter}"
+        ))
         .send()
         .await
         .expect("Failed to execute request")
 }
 
-pub async fn list_notifications(app_address: &str) -> Box<Vec<Notification>> {
-    list_notifications_response(app_address)
+pub async fn list_notifications(
+    app_address: &str,
+    status_filter: NotificationStatus,
+    include_snoozed_notifications: bool,
+) -> Box<Vec<Notification>> {
+    list_notifications_response(app_address, status_filter, include_snoozed_notifications)
         .await
         .json()
         .await

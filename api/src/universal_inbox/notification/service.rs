@@ -85,8 +85,11 @@ impl<'a> notification_service<'a> {
     pub async fn list_notifications(
         &self,
         status: NotificationStatus,
+        include_snoozed_notifications: bool,
     ) -> Result<Vec<Notification>, UniversalInboxError> {
-        self.repository.fetch_all(status).await
+        self.repository
+            .fetch_all(status, include_snoozed_notifications)
+            .await
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
@@ -152,6 +155,7 @@ impl<'a> notification_service<'a> {
                     metadata: github_notif.clone(),
                     updated_at: github_notif.updated_at,
                     last_read_at: github_notif.last_read_at,
+                    snoozed_until: None,
                 }))
             })
             .collect::<Vec<Result<Notification, UniversalInboxError>>>()
