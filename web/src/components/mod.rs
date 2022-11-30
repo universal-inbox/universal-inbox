@@ -1,4 +1,5 @@
 pub mod footer;
+pub mod icons;
 pub mod nav_bar;
 pub mod notifications_list;
 pub mod spinner;

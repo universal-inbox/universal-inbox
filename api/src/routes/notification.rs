@@ -8,7 +8,7 @@ use serde_json::json;
 use uuid::Uuid;
 
 use crate::universal_inbox::{
-    notification::{service::NotificationService, source::NotificationSource},
+    notification::{service::NotificationService, source::NotificationSourceKind},
     UniversalInboxError, UpdateStatus,
 };
 use ::universal_inbox::{Notification, NotificationPatch, NotificationStatus};
@@ -67,7 +67,7 @@ pub async fn get_notification(
 
 #[tracing::instrument(level = "debug", skip(service))]
 pub async fn create_notification(
-    notification: web::Json<Notification>,
+    notification: web::Json<Box<Notification>>,
     service: web::Data<Arc<NotificationService>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let transactional_service = service
@@ -76,7 +76,7 @@ pub async fn create_notification(
         .context("Failed to create new transaction while creating notification")?;
 
     let created_notification = transactional_service
-        .create_notification(Box::new(notification.into_inner()))
+        .create_notification(notification.into_inner())
         .await?;
 
     transactional_service
@@ -91,7 +91,7 @@ pub async fn create_notification(
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SyncNotificationsParameters {
-    source: NotificationSource,
+    source: Option<NotificationSourceKind>,
 }
 
 #[tracing::instrument(level = "debug", skip(service))]
@@ -105,7 +105,7 @@ pub async fn sync_notifications(
     ))?;
 
     let notifications: Vec<Notification> = transactional_service
-        .sync_notifications(&Some(params.source))
+        .sync_notifications(&params.source)
         .await?;
 
     transactional_service.commit().await.context(format!(

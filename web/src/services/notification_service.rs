@@ -20,6 +20,7 @@ pub enum NotificationCommand {
     Delete(Notification),
     Unsubscribe(Notification),
     Snooze(Notification),
+    MarkAsDone(Notification),
 }
 
 #[derive(Debug, Default)]
@@ -124,6 +125,7 @@ pub async fn notification_service<'a>(
                 .await
                 .unwrap();
             }
+            Some(NotificationCommand::MarkAsDone(_)) => {}
             None => {}
         }
     }
@@ -205,14 +207,22 @@ mod tests {
     ) {
         assert_eq!(
             compute_snoozed_until(
-                FixedOffset::east(offset_hour * 3600)
-                    .ymd(2022, 1, 1)
-                    .and_hms(current_hour, 3, 42),
+                FixedOffset::east_opt(offset_hour * 3600)
+                    .unwrap()
+                    .with_ymd_and_hms(2022, 1, 1, current_hour, 3, 42)
+                    .unwrap(),
                 1,
                 6
             ),
-            Utc.ymd(expected_year, expected_month, expected_day)
-                .and_hms(expected_hour, 0, 0)
+            Utc.with_ymd_and_hms(
+                expected_year,
+                expected_month,
+                expected_day,
+                expected_hour,
+                0,
+                0
+            )
+            .unwrap()
         );
     }
 }

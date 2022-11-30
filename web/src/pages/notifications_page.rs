@@ -34,6 +34,9 @@ pub fn notifications_page(cx: Scope) -> Element {
                     on_snooze: |notification: &Notification| {
                         notification_service.send(NotificationCommand::Snooze(notification.clone()))
                     },
+                    on_mark_as_done: |notification: &Notification| {
+                        notification_service.send(NotificationCommand::MarkAsDone(notification.clone()))
+                    },
                 }
             }
         }

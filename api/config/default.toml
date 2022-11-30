@@ -15,3 +15,5 @@ database_name = "universal-inbox"
 
 [integrations.github]
 page_size = 50
+
+[integrations.todoist]
