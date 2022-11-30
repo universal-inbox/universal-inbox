@@ -7,11 +7,11 @@ use tracing::{error, info};
 use universal_inbox_api::{
     commands,
     configuration::Settings,
-    integrations::github::GithubService,
+    integrations::{github::GithubService, todoist::TodoistService},
     observability::{get_subscriber, init_subscriber},
     repository::notification::NotificationRepository,
     run,
-    universal_inbox::notification::{service::NotificationService, source::NotificationSource},
+    universal_inbox::notification::{service::NotificationService, source::NotificationSourceKind},
 };
 
 /// Universal Inbox API server and associated commands
@@ -31,7 +31,7 @@ enum Commands {
     /// Synchronize sources of notification
     Sync {
         #[clap(arg_enum, value_parser)]
-        source: Option<NotificationSource>,
+        source: Option<NotificationSourceKind>,
     },
 
     /// Run API server
@@ -78,9 +78,14 @@ async fn main() -> std::io::Result<()> {
     let service = Arc::new(
         NotificationService::new(
             repository,
-            GithubService::new(&settings.integrations.github.api_token, None)
-                .expect("Failed to create new GithubService"),
-            settings.integrations.github.page_size,
+            GithubService::new(
+                &settings.integrations.github.api_token,
+                None,
+                settings.integrations.github.page_size,
+            )
+            .expect("Failed to create new GithubService"),
+            TodoistService::new(&settings.integrations.todoist.api_token, None)
+                .expect("Failed to create new TodoistService"),
         )
         .expect("Failed to setup notification service"),
     );
