@@ -21,6 +21,7 @@ impl ResponseError for UniversalInboxError {
             UniversalInboxError::MissingInputData(_) => StatusCode::BAD_REQUEST,
             UniversalInboxError::AlreadyExists { .. } => StatusCode::BAD_REQUEST,
             UniversalInboxError::Unexpected(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            UniversalInboxError::UnsupportedAction(_) => StatusCode::BAD_REQUEST,
         }
     }
 

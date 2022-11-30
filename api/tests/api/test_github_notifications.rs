@@ -1,271 +1,179 @@
-use chrono::{Duration, TimeZone, Utc};
+use chrono::{TimeZone, Utc};
 use http::StatusCode;
+use httpmock::Method::{PATCH, PUT};
 use rstest::*;
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::helpers::{
-    create_notification, get_notification, github::github_notification, list_notifications,
-    patch_notification, patch_notification_response, tested_app, TestedApp,
-};
-use ::universal_inbox::{
+use universal_inbox::{
     integrations::github::GithubNotification, Notification, NotificationMetadata,
-    NotificationStatus,
+    NotificationPatch, NotificationStatus,
 };
-use universal_inbox::NotificationPatch;
 use universal_inbox_api::integrations::github;
 
-mod list_notifications {
-
-    use crate::helpers::create_notification;
-
-    use super::*;
-
-    #[rstest]
-    #[tokio::test]
-    async fn test_empty_list_notifications(#[future] tested_app: TestedApp) {
-        let app = tested_app.await;
-        let notifications =
-            list_notifications(&app.app_address, NotificationStatus::Unread, false).await;
-
-        assert_eq!(notifications.len(), 0);
-    }
-
-    #[rstest]
-    #[tokio::test]
-    async fn test_list_notifications(
-        #[future] tested_app: TestedApp,
-        github_notification: Box<GithubNotification>,
-    ) {
-        let mut github_notification2 = github_notification.clone();
-        github_notification2.id = "43".to_string();
-
-        let app = tested_app.await;
-        let expected_notification1 = create_notification(
-            &app.app_address,
-            Box::new(Notification {
-                id: uuid::Uuid::new_v4(),
-                title: "notif1".to_string(),
-                status: NotificationStatus::Unread,
-                source_id: "1234".to_string(),
-                source_html_url: github::get_html_url_from_api_url(
-                    &github_notification.subject.url,
-                ),
-                metadata: NotificationMetadata::Github(*github_notification.clone()),
-                updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-                last_read_at: None,
-                snoozed_until: None,
-            }),
-        )
-        .await;
-
-        let expected_notification2 = create_notification(
-            &app.app_address,
-            Box::new(Notification {
-                id: uuid::Uuid::new_v4(),
-                title: "notif2".to_string(),
-                status: NotificationStatus::Unread,
-                source_id: "5678".to_string(),
-                source_html_url: github::get_html_url_from_api_url(
-                    &github_notification2.subject.url,
-                ),
-                metadata: NotificationMetadata::Github(*github_notification2.clone()),
-                updated_at: Utc.with_ymd_and_hms(2022, 2, 1, 0, 0, 0).unwrap(),
-                last_read_at: Some(Utc.with_ymd_and_hms(2022, 2, 1, 1, 0, 0).unwrap()),
-                // Snooze time has expired
-                snoozed_until: Some(Utc::now() - Duration::minutes(1)),
-            }),
-        )
-        .await;
-
-        let deleted_notification = create_notification(
-            &app.app_address,
-            Box::new(Notification {
-                id: uuid::Uuid::new_v4(),
-                title: "notif3".to_string(),
-                status: NotificationStatus::Deleted,
-                source_id: "9012".to_string(),
-                source_html_url: github::get_html_url_from_api_url(
-                    &github_notification.subject.url,
-                ),
-                metadata: NotificationMetadata::Github(*github_notification),
-                updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-                last_read_at: None,
-                snoozed_until: None,
-            }),
-        )
-        .await;
-
-        let snoozed_notification = create_notification(
-            &app.app_address,
-            Box::new(Notification {
-                id: uuid::Uuid::new_v4(),
-                title: "notif4".to_string(),
-                status: NotificationStatus::Unread,
-                source_id: "3456".to_string(),
-                source_html_url: github::get_html_url_from_api_url(
-                    &github_notification2.subject.url,
-                ),
-                metadata: NotificationMetadata::Github(*github_notification2),
-                updated_at: Utc.with_ymd_and_hms(2022, 2, 1, 0, 0, 0).unwrap(),
-                last_read_at: Some(Utc.with_ymd_and_hms(2022, 2, 1, 1, 0, 0).unwrap()),
-                // Snooze time in the future
-                snoozed_until: Some(Utc::now() + Duration::minutes(1)),
-            }),
-        )
-        .await;
-
-        let notifications =
-            list_notifications(&app.app_address, NotificationStatus::Unread, false).await;
-
-        assert_eq!(notifications.len(), 2);
-        assert_eq!(notifications[0], *expected_notification1);
-        assert_eq!(notifications[1], *expected_notification2);
-
-        let notifications =
-            list_notifications(&app.app_address, NotificationStatus::Unread, true).await;
-
-        assert_eq!(notifications.len(), 3);
-        assert_eq!(notifications[0], *expected_notification1);
-        assert_eq!(notifications[1], *expected_notification2);
-        assert_eq!(notifications[2], *snoozed_notification);
-
-        let notifications =
-            list_notifications(&app.app_address, NotificationStatus::Deleted, false).await;
-
-        assert_eq!(notifications.len(), 1);
-        assert_eq!(notifications[0], *deleted_notification);
-
-        let notifications =
-            list_notifications(&app.app_address, NotificationStatus::Unsubscribed, false).await;
-
-        assert_eq!(notifications.len(), 0);
-    }
-}
-
-mod create_notification {
-    use crate::helpers::create_notification_response;
-
-    use super::*;
-
-    #[rstest]
-    #[tokio::test]
-    async fn test_create_notification(
-        #[future] tested_app: TestedApp,
-        github_notification: Box<GithubNotification>,
-    ) {
-        let app = tested_app.await;
-        let expected_notification = Box::new(Notification {
-            id: uuid::Uuid::new_v4(),
-            title: "notif1".to_string(),
-            status: NotificationStatus::Unread,
-            source_id: "1234".to_string(),
-            source_html_url: github::get_html_url_from_api_url(&github_notification.subject.url),
-            metadata: NotificationMetadata::Github(*github_notification),
-            updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-            last_read_at: None,
-            snoozed_until: None,
-        });
-        let created_notification =
-            create_notification(&app.app_address, expected_notification.clone()).await;
-
-        assert_eq!(created_notification, expected_notification);
-
-        let notification = get_notification(&app.app_address, created_notification.id).await;
-
-        assert_eq!(notification, expected_notification);
-    }
-
-    #[rstest]
-    #[tokio::test]
-    async fn test_create_notification_duplicate_notification(
-        #[future] tested_app: TestedApp,
-        github_notification: Box<GithubNotification>,
-    ) {
-        let app = tested_app.await;
-        let expected_notification = Box::new(Notification {
-            id: uuid::Uuid::new_v4(),
-            title: "notif1".to_string(),
-            status: NotificationStatus::Unread,
-            source_id: "1234".to_string(),
-            source_html_url: github::get_html_url_from_api_url(&github_notification.subject.url),
-            metadata: NotificationMetadata::Github(*github_notification),
-            updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-            last_read_at: None,
-            snoozed_until: None,
-        });
-        let created_notification =
-            create_notification(&app.app_address, expected_notification.clone()).await;
-
-        assert_eq!(created_notification, expected_notification);
-
-        let response = create_notification_response(&app.app_address, expected_notification).await;
-
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-        let body = response.text().await.expect("Cannot get response body");
-        assert_eq!(
-            body,
-            json!({ "message": format!("The entity {} already exists", created_notification.id) })
-                .to_string()
-        );
-    }
-}
-mod get_notification {
-    use universal_inbox_api::integrations::github;
-    use uuid::Uuid;
-
-    use crate::helpers::{get_notification, get_notification_response};
-
-    use super::*;
-
-    #[rstest]
-    #[tokio::test]
-    async fn test_get_existing_notification(
-        #[future] tested_app: TestedApp,
-        github_notification: Box<GithubNotification>,
-    ) {
-        let app = tested_app.await;
-        let expected_notification = Box::new(Notification {
-            id: uuid::Uuid::new_v4(),
-            title: "notif1".to_string(),
-            status: NotificationStatus::Unread,
-            source_id: "1234".to_string(),
-            source_html_url: github::get_html_url_from_api_url(&github_notification.subject.url),
-            metadata: NotificationMetadata::Github(*github_notification),
-            updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-            last_read_at: None,
-            snoozed_until: None,
-        });
-        let created_notification =
-            create_notification(&app.app_address, expected_notification.clone()).await;
-
-        assert_eq!(created_notification, expected_notification);
-
-        let notification = get_notification(&app.app_address, created_notification.id).await;
-
-        assert_eq!(notification, created_notification);
-    }
-
-    #[rstest]
-    #[tokio::test]
-    async fn test_get_unknown_notification(#[future] tested_app: TestedApp) {
-        let app = tested_app.await;
-        let unknown_notification_id = Uuid::new_v4();
-
-        let response = get_notification_response(&app.app_address, unknown_notification_id).await;
-
-        assert_eq!(response.status(), StatusCode::NOT_FOUND);
-        let body = response.text().await.expect("Cannot get response body");
-        assert_eq!(
-            body,
-            json!({ "message": format!("Cannot find notification {}", unknown_notification_id) })
-                .to_string()
-        );
-    }
-}
+use crate::helpers::{
+    create_notification, get_notification, github::github_notification, patch_notification,
+    patch_notification_response, tested_app, TestedApp,
+};
 
 mod patch_notification {
     use super::*;
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_patch_notification_status_as_deleted(
+        #[future] tested_app: TestedApp,
+        github_notification: Box<GithubNotification>,
+        #[values(205, 304, 404)] github_status_code: u16,
+    ) {
+        let app = tested_app.await;
+        let github_mark_thread_as_read_mock = app.github_mock_server.mock(|when, then| {
+            when.method(PATCH)
+                .path("/notifications/threads/1234")
+                .header("accept", "application/vnd.github.v3+json")
+                .header("authorization", "token github_test_token");
+            then.status(github_status_code);
+        });
+        let expected_notification = Box::new(Notification {
+            id: uuid::Uuid::new_v4(),
+            title: "notif1".to_string(),
+            status: NotificationStatus::Unread,
+            source_id: "1234".to_string(),
+            source_html_url: github::get_html_url_from_api_url(&github_notification.subject.url),
+            metadata: NotificationMetadata::Github(*github_notification),
+            updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
+            last_read_at: None,
+            snoozed_until: None,
+        });
+        let created_notification =
+            create_notification(&app.app_address, expected_notification.clone()).await;
+
+        assert_eq!(created_notification, expected_notification);
+
+        let patched_notification = patch_notification(
+            &app.app_address,
+            created_notification.id,
+            &NotificationPatch {
+                status: Some(NotificationStatus::Deleted),
+                ..Default::default()
+            },
+        )
+        .await;
+
+        assert_eq!(
+            patched_notification,
+            Box::new(Notification {
+                status: NotificationStatus::Deleted,
+                ..*created_notification
+            })
+        );
+        github_mark_thread_as_read_mock.assert();
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_patch_notification_status_as_unsubscribed(
+        #[future] tested_app: TestedApp,
+        github_notification: Box<GithubNotification>,
+        #[values(205, 304, 404)] github_status_code: u16,
+    ) {
+        let app = tested_app.await;
+        let github_mark_thread_as_read_mock = app.github_mock_server.mock(|when, then| {
+            when.method(PUT)
+                .path("/notifications/threads/1234/subscription")
+                .header("accept", "application/vnd.github.v3+json")
+                .header("authorization", "token github_test_token")
+                .json_body(json!({"ignored": true}));
+            then.status(github_status_code);
+        });
+        let expected_notification = Box::new(Notification {
+            id: uuid::Uuid::new_v4(),
+            title: "notif1".to_string(),
+            status: NotificationStatus::Unread,
+            source_id: "1234".to_string(),
+            source_html_url: github::get_html_url_from_api_url(&github_notification.subject.url),
+            metadata: NotificationMetadata::Github(*github_notification),
+            updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
+            last_read_at: None,
+            snoozed_until: None,
+        });
+        let created_notification =
+            create_notification(&app.app_address, expected_notification.clone()).await;
+
+        assert_eq!(created_notification, expected_notification);
+
+        let patched_notification = patch_notification(
+            &app.app_address,
+            created_notification.id,
+            &NotificationPatch {
+                status: Some(NotificationStatus::Unsubscribed),
+                ..Default::default()
+            },
+        )
+        .await;
+
+        assert_eq!(
+            patched_notification,
+            Box::new(Notification {
+                status: NotificationStatus::Unsubscribed,
+                ..*created_notification
+            })
+        );
+        github_mark_thread_as_read_mock.assert();
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_patch_notification_status_as_deleted_with_github_api_error(
+        #[future] tested_app: TestedApp,
+        github_notification: Box<GithubNotification>,
+    ) {
+        let app = tested_app.await;
+        let github_mark_thread_as_read_mock = app.github_mock_server.mock(|when, then| {
+            when.method(PATCH)
+                .path("/notifications/threads/1234")
+                .header("accept", "application/vnd.github.v3+json")
+                .header("authorization", "token github_test_token");
+            then.status(403);
+        });
+        let expected_notification = Box::new(Notification {
+            id: uuid::Uuid::new_v4(),
+            title: "notif1".to_string(),
+            status: NotificationStatus::Unread,
+            source_id: "1234".to_string(),
+            source_html_url: github::get_html_url_from_api_url(&github_notification.subject.url),
+            metadata: NotificationMetadata::Github(*github_notification),
+            updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
+            last_read_at: None,
+            snoozed_until: None,
+        });
+        let created_notification =
+            create_notification(&app.app_address, expected_notification.clone()).await;
+
+        assert_eq!(created_notification, expected_notification);
+
+        let response = patch_notification_response(
+            &app.app_address,
+            created_notification.id,
+            &NotificationPatch {
+                status: Some(NotificationStatus::Deleted),
+                ..Default::default()
+            },
+        )
+        .await;
+        assert_eq!(response.status(), 500);
+
+        let body = response.text().await.expect("Cannot get response body");
+        assert_eq!(
+            body,
+            json!({ "message": format!("Failed to mark Github notification `1234` as read") })
+                .to_string()
+        );
+        github_mark_thread_as_read_mock.assert();
+
+        let notification = get_notification(&app.app_address, created_notification.id).await;
+        assert_eq!(notification.status, NotificationStatus::Unread);
+    }
 
     #[rstest]
     #[tokio::test]
@@ -317,6 +225,10 @@ mod patch_notification {
         github_notification: Box<GithubNotification>,
     ) {
         let app = tested_app.await;
+        let github_api_mock = app.github_mock_server.mock(|when, then| {
+            when.any_request();
+            then.status(200);
+        });
         let snoozed_time = Utc.with_ymd_and_hms(2022, 1, 1, 1, 2, 3).unwrap();
         let expected_notification = Box::new(Notification {
             id: uuid::Uuid::new_v4(),
@@ -345,6 +257,7 @@ mod patch_notification {
         .await;
 
         assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
+        github_api_mock.assert_hits(0);
     }
 
     #[rstest]
@@ -354,6 +267,10 @@ mod patch_notification {
         github_notification: Box<GithubNotification>,
     ) {
         let app = tested_app.await;
+        let github_api_mock = app.github_mock_server.mock(|when, then| {
+            when.any_request();
+            then.status(200);
+        });
         let expected_notification = Box::new(Notification {
             id: uuid::Uuid::new_v4(),
             title: "notif1".to_string(),
@@ -380,12 +297,17 @@ mod patch_notification {
         .await;
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        github_api_mock.assert_hits(0);
     }
 
     #[rstest]
     #[tokio::test]
     async fn test_patch_unknown_notification(#[future] tested_app: TestedApp) {
         let app = tested_app.await;
+        let github_api_mock = app.github_mock_server.mock(|when, then| {
+            when.any_request();
+            then.status(200);
+        });
         let unknown_notification_id = Uuid::new_v4();
 
         let response = patch_notification_response(
@@ -411,5 +333,6 @@ mod patch_notification {
             })
             .to_string()
         );
+        github_api_mock.assert_hits(0);
     }
 }

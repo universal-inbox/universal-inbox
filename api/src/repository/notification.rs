@@ -8,10 +8,10 @@ use sqlx::{pool::PoolConnection, types::Json, PgPool, Postgres, QueryBuilder, Tr
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
-use crate::universal_inbox::{UniversalInboxError, UpdateStatus};
-use universal_inbox::{
-    integrations::github::GithubNotification, Notification, NotificationPatch, NotificationStatus,
+use crate::universal_inbox::{
+    notification::source::NotificationSourceKind, UniversalInboxError, UpdateStatus,
 };
+use universal_inbox::{Notification, NotificationMetadata, NotificationPatch, NotificationStatus};
 
 pub struct NotificationRepository {
     pub pool: Box<PgPool>,
@@ -87,11 +87,10 @@ impl<'a> repository {
                 SELECT
                   id,
                   title,
-                  kind,
                   status,
                   source_id,
                   source_html_url,
-                  metadata as "metadata: Json<GithubNotification>",
+                  metadata as "metadata: Json<NotificationMetadata>",
                   updated_at,
                   last_read_at,
                   snoozed_until
@@ -121,7 +120,6 @@ impl<'a> repository {
                 SELECT
                   id,
                   title,
-                  kind,
                   status,
                   source_id,
                   source_html_url,
@@ -157,10 +155,9 @@ impl<'a> repository {
     pub async fn create(
         &self,
         notification: Box<Notification>,
-    ) -> Result<Notification, UniversalInboxError> {
+    ) -> Result<Box<Notification>, UniversalInboxError> {
         let mut executor = self.executor.lock().await;
         let metadata = Json(notification.metadata.clone());
-        let kind = notification.kind.to_string();
 
         sqlx::query!(
             r#"
@@ -168,7 +165,6 @@ impl<'a> repository {
                   (
                     id,
                     title,
-                    kind,
                     status,
                     source_id,
                     source_html_url,
@@ -178,18 +174,17 @@ impl<'a> repository {
                     snoozed_until
                   )
                 VALUES
-                  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                  ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             "#,
             notification.id,
             notification.title,
-            kind,
             notification.status.to_string(),
             notification.source_id,
             notification
                 .source_html_url
                 .as_ref()
                 .map(|url| url.to_string()),
-            metadata as Json<GithubNotification>, // force the macro to ignore type checking
+            metadata as Json<NotificationMetadata>, // force the macro to ignore type checking
             notification.updated_at.naive_utc(),
             notification
                 .last_read_at
@@ -215,13 +210,14 @@ impl<'a> repository {
             }
         })?;
 
-        Ok(*notification.clone())
+        Ok(notification)
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
     pub async fn update_stale_notifications_status_from_source_ids(
         &self,
         active_source_notification_ids: Vec<String>,
+        kind: NotificationSourceKind,
         status: NotificationStatus,
     ) -> Result<Vec<Notification>, UniversalInboxError> {
         let mut executor = self.executor.lock().await;
@@ -234,21 +230,22 @@ impl<'a> repository {
                   status = $1
                 WHERE
                   NOT source_id = ANY($2)
+                  AND kind = $3
                   AND (status = 'Read' OR status = 'Unread')
                 RETURNING
                   id,
                   title,
-                  kind,
                   status,
                   source_id,
                   source_html_url,
-                  metadata as "metadata: Json<GithubNotification>",
+                  metadata as "metadata: Json<NotificationMetadata>",
                   updated_at,
                   last_read_at,
                   snoozed_until
             "#,
             status.to_string(),
-            &active_source_notification_ids[..]
+            &active_source_notification_ids[..],
+            kind.to_string(),
         )
         .fetch_all(&mut *executor)
         .await
@@ -267,7 +264,6 @@ impl<'a> repository {
     ) -> Result<Notification, UniversalInboxError> {
         let mut executor = self.executor.lock().await;
         let metadata = Json(notification.metadata.clone());
-        let kind = notification.kind.to_string();
 
         let id: Uuid = sqlx::query_scalar!(
             r#"
@@ -275,7 +271,6 @@ impl<'a> repository {
                   (
                     id,
                     title,
-                    kind,
                     status,
                     source_id,
                     source_html_url,
@@ -285,30 +280,28 @@ impl<'a> repository {
                     snoozed_until
                   )
                 VALUES
-                  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-                ON CONFLICT (source_id) DO UPDATE
+                  ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                ON CONFLICT (source_id, kind) DO UPDATE
                 SET
                   title = $2,
-                  kind = $3,
-                  status = $4,
-                  source_html_url = $6,
-                  metadata = $7,
-                  updated_at = $8,
-                  last_read_at = $9,
-                  snoozed_until = $10
+                  status = $3,
+                  source_html_url = $5,
+                  metadata = $6,
+                  updated_at = $7,
+                  last_read_at = $8,
+                  snoozed_until = $9
                 RETURNING
                   id
             "#,
             notification.id,
             notification.title,
-            kind,
             notification.status.to_string(),
             notification.source_id,
             notification
                 .source_html_url
                 .as_ref()
                 .map(|url| url.to_string()),
-            metadata as Json<GithubNotification>, // force the macro to ignore type checking
+            metadata as Json<NotificationMetadata>, // force the macro to ignore type checking
             notification.updated_at.naive_utc(),
             notification
                 .last_read_at
@@ -367,7 +360,6 @@ impl<'a> repository {
                 RETURNING
                   id,
                   title,
-                  kind,
                   status,
                   source_id,
                   source_html_url,
@@ -428,11 +420,10 @@ impl<'a> repository {
 struct NotificationRow {
     id: Uuid,
     title: String,
-    kind: String,
     status: String,
     source_id: String,
     source_html_url: Option<String>,
-    metadata: Json<GithubNotification>,
+    metadata: Json<NotificationMetadata>,
     updated_at: NaiveDateTime,
     last_read_at: Option<NaiveDateTime>,
     snoozed_until: Option<NaiveDateTime>,
@@ -457,13 +448,6 @@ impl TryFrom<&NotificationRow> for Notification {
     type Error = UniversalInboxError;
 
     fn try_from(row: &NotificationRow) -> Result<Self, Self::Error> {
-        let kind = row
-            .kind
-            .parse()
-            .map_err(|e| UniversalInboxError::InvalidEnumData {
-                source: e,
-                output: row.kind.clone(),
-            })?;
         let status = row
             .status
             .parse()
@@ -486,7 +470,6 @@ impl TryFrom<&NotificationRow> for Notification {
         Ok(Notification {
             id: row.id,
             title: row.title.to_string(),
-            kind,
             status,
             source_id: row.source_id.clone(),
             source_html_url,
