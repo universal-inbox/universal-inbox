@@ -44,6 +44,8 @@ pub enum UniversalInboxError {
         source: sqlx::Error,
         id: Uuid,
     },
+    #[error("Unsupported action: {0}")]
+    UnsupportedAction(String),
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
 }

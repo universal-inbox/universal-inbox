@@ -33,11 +33,17 @@ pub struct DatabaseSettings {
 #[derive(Deserialize)]
 pub struct IntegrationsSettings {
     pub github: GithubIntegrationSettings,
+    pub todoist: TodoistIntegrationSettings,
 }
 
 #[derive(Deserialize)]
 pub struct GithubIntegrationSettings {
     pub page_size: usize,
+    pub api_token: String, // Temporary until oauth is implemented
+}
+
+#[derive(Deserialize)]
+pub struct TodoistIntegrationSettings {
     pub api_token: String, // Temporary until oauth is implemented
 }
 

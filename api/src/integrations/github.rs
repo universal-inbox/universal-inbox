@@ -1,15 +1,24 @@
 use actix_http::uri::Authority;
 use anyhow::{anyhow, Context};
+use async_trait::async_trait;
 use format_serde_error::SerdeError;
+use futures::stream::{self, TryStreamExt};
 use http::{HeaderMap, HeaderValue, Uri};
+use uuid::Uuid;
 
-use crate::universal_inbox::UniversalInboxError;
-use universal_inbox::integrations::github::GithubNotification;
+use crate::universal_inbox::{notification::source::NotificationSourceKind, UniversalInboxError};
+use universal_inbox::{
+    integrations::github::GithubNotification, Notification, NotificationMetadata,
+    NotificationStatus,
+};
+
+use super::{NotificationSourceService, SourceNotification};
 
 #[derive(Clone)]
 pub struct GithubService {
     client: reqwest::Client,
     github_base_url: String,
+    page_size: usize,
 }
 
 static GITHUB_BASE_URL: &str = "https://api.github.com";
@@ -19,10 +28,12 @@ impl GithubService {
     pub fn new(
         auth_token: &str,
         github_base_url: Option<String>,
+        page_size: usize,
     ) -> Result<GithubService, UniversalInboxError> {
         Ok(GithubService {
             client: build_github_client(auth_token).context("Cannot build Github client")?,
             github_base_url: github_base_url.unwrap_or_else(|| GITHUB_BASE_URL.to_string()),
+            page_size,
         })
     }
 
@@ -138,6 +149,76 @@ pub fn get_html_url_from_api_url(api_url: &Option<Uri>) -> Option<Uri> {
         }
         None
     })
+}
+
+#[async_trait]
+impl NotificationSourceService<GithubNotification> for GithubService {
+    async fn fetch_all_notifications(
+        &self,
+    ) -> Result<Vec<GithubNotification>, UniversalInboxError> {
+        Ok(stream::try_unfold((1, false), |(page, stop)| async move {
+            if stop {
+                return Ok(None);
+            }
+
+            let response = self.fetch_notifications(page, self.page_size).await;
+
+            response.map(|github_notifs| {
+                let notifs_count = github_notifs.len();
+                let is_last_page = notifs_count < self.page_size;
+                Some((github_notifs, (page + 1, is_last_page)))
+            })
+        })
+        .try_collect::<Vec<Vec<GithubNotification>>>()
+        .await?
+        .into_iter()
+        .flatten()
+        .collect::<Vec<GithubNotification>>())
+    }
+
+    fn build_notification(&self, source: &GithubNotification) -> Box<Notification> {
+        let source_html_url = get_html_url_from_api_url(&source.subject.url);
+
+        Box::new(Notification {
+            id: Uuid::new_v4(),
+            title: source.subject.title.clone(),
+            source_id: source.id.clone(),
+            source_html_url,
+            status: if source.unread {
+                NotificationStatus::Unread
+            } else {
+                NotificationStatus::Read
+            },
+            metadata: NotificationMetadata::Github(source.clone()),
+            updated_at: source.updated_at,
+            last_read_at: source.last_read_at,
+            snoozed_until: None,
+        })
+    }
+
+    fn get_notification_source_kind(&self) -> NotificationSourceKind {
+        NotificationSourceKind::Github
+    }
+
+    async fn delete_notification_from_source(
+        &self,
+        source_id: &str,
+    ) -> Result<(), UniversalInboxError> {
+        self.mark_thread_as_read(source_id).await
+    }
+
+    async fn unsubscribe_notification_from_source(
+        &self,
+        source_id: &str,
+    ) -> Result<(), UniversalInboxError> {
+        self.unsubscribe_from_thread(source_id).await
+    }
+}
+
+impl SourceNotification for GithubNotification {
+    fn get_id(&self) -> String {
+        self.id.clone()
+    }
 }
 
 #[cfg(test)]
