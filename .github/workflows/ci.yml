@@ -64,7 +64,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres
+        image: postgres:15.1
         env:
           POSTGRES_PASSWORD: password
         options: >-
@@ -87,6 +87,8 @@ jobs:
           sharedKey: ci
       - name: Run cargo-tarpaulin
         uses: actions-rs/tarpaulin@v0.1
+        env:
+          RUST_MIN_STACK: 4194304
         with:
           args: '--all-features --workspace --ignore-tests --out Lcov'
       - name: Upload to Coveralls

@@ -1,3 +1,9 @@
 [application]
 log_directive = "debug"
 dependencies_log_directive = "debug"
+
+[integrations.github]
+api_token = "github_test_token"
+
+[integrations.todoist]
+api_token = "todoist_test_token"
