@@ -102,7 +102,7 @@ pub async fn tested_app(
         NotificationService::new(
             repository,
             GithubService::new(
-                "github_test_token",
+                &settings.integrations.github.api_token,
                 Some(github_mock_server_uri.to_string()),
                 2,
             )
@@ -113,7 +113,7 @@ pub async fn tested_app(
                 )
             }),
             TodoistService::new(
-                "todoist_test_token",
+                &settings.integrations.todoist.api_token,
                 Some(todoist_mock_server_uri.to_string()),
             )
             .unwrap_or_else(|_| {
