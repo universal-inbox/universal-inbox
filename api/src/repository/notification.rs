@@ -11,17 +11,17 @@ use uuid::Uuid;
 use crate::universal_inbox::{
     notification::source::NotificationSourceKind, UniversalInboxError, UpdateStatus,
 };
-use universal_inbox::{Notification, NotificationMetadata, NotificationPatch, NotificationStatus};
+use universal_inbox::notification::{
+    Notification, NotificationMetadata, NotificationPatch, NotificationStatus,
+};
 
 pub struct NotificationRepository {
-    pub pool: Box<PgPool>,
+    pub pool: Arc<PgPool>,
 }
 
 impl NotificationRepository {
-    pub fn new(pool: PgPool) -> NotificationRepository {
-        NotificationRepository {
-            pool: Box::new(pool),
-        }
+    pub fn new(pool: Arc<PgPool>) -> NotificationRepository {
+        NotificationRepository { pool }
     }
 
     pub async fn connect(
@@ -332,9 +332,12 @@ impl<'a> repository {
         patch: &'b NotificationPatch,
     ) -> Result<UpdateStatus<Box<Notification>>, UniversalInboxError> {
         if *patch == Default::default() {
-            return Err(UniversalInboxError::MissingInputData(
-                "Missing `status` field value to update notification {notification_id}".to_string(),
-            ));
+            return Err(UniversalInboxError::InvalidInputData {
+                source: None,
+                user_error: format!(
+                    "Missing `status` field value to update notification {notification_id}"
+                ),
+            });
         };
 
         let mut executor = self.executor.lock().await;

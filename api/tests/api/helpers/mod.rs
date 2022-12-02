@@ -1,29 +1,25 @@
-#![allow(clippy::useless_conversion)]
-
 use std::{env, fs, net::TcpListener, str::FromStr, sync::Arc};
 
 use format_serde_error::SerdeError;
-use httpmock::prelude::*;
-use reqwest::Response;
+use httpmock::MockServer;
 use rstest::*;
-use serde_json::json;
 use sqlx::{
     postgres::PgConnectOptions, ConnectOptions, Connection, Executor, PgConnection, PgPool,
 };
 use tracing::info;
 use uuid::Uuid;
 
-use universal_inbox::{Notification, NotificationPatch, NotificationStatus};
-use universal_inbox_api::configuration::Settings;
-use universal_inbox_api::integrations::github::GithubService;
-use universal_inbox_api::integrations::todoist::TodoistService;
-use universal_inbox_api::observability::{get_subscriber, init_subscriber};
-use universal_inbox_api::repository::notification::NotificationRepository;
-use universal_inbox_api::universal_inbox::notification::service::NotificationService;
-use universal_inbox_api::universal_inbox::notification::source::NotificationSourceKind;
+use universal_inbox_api::{
+    configuration::Settings,
+    integrations::{github::GithubService, todoist::TodoistService},
+    observability::{get_subscriber, init_subscriber},
+    repository::{notification::NotificationRepository, task::TaskRepository},
+    universal_inbox::{notification::service::NotificationService, task::service::TaskService},
+};
 
-pub mod github;
-pub mod todoist;
+pub mod notification;
+pub mod rest;
+pub mod task;
 
 pub struct TestedApp {
     pub app_address: String,
@@ -46,7 +42,7 @@ fn tracing_setup(settings: Settings) {
 }
 
 #[fixture]
-async fn db_connection(mut settings: Settings) -> PgPool {
+async fn db_connection(mut settings: Settings) -> Arc<PgPool> {
     settings.database.database_name = Uuid::new_v4().to_string();
     let mut server_connection =
         PgConnection::connect(&settings.database.connection_string_without_db())
@@ -74,7 +70,7 @@ async fn db_connection(mut settings: Settings) -> PgPool {
         .await
         .expect("Failed to migrate the database");
 
-    db_connection
+    Arc::new(db_connection)
 }
 
 #[fixture]
@@ -87,20 +83,31 @@ pub fn settings() -> Settings {
 pub async fn tested_app(
     settings: Settings,
     #[allow(unused)] tracing_setup: (),
-    #[future] db_connection: PgPool,
+    #[future] db_connection: Arc<PgPool>,
 ) -> TestedApp {
     info!("Setting up server");
     let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
     let port = listener.local_addr().unwrap().port();
-    let repository = Box::new(NotificationRepository::new(db_connection.await.into())); // useless_conversion disabled here
 
     let github_mock_server = MockServer::start();
     let github_mock_server_uri = &github_mock_server.base_url();
     let todoist_mock_server = MockServer::start();
     let todoist_mock_server_uri = &todoist_mock_server.base_url();
-    let service = Arc::new(
+    let pool: Arc<PgPool> = db_connection.await;
+
+    let todoist_service = TodoistService::new(
+        &settings.integrations.todoist.api_token,
+        Some(todoist_mock_server_uri.to_string()),
+    )
+    .unwrap_or_else(|_| {
+        panic!(
+            "Failed to setup Todoist service with mock server at {}",
+            todoist_mock_server_uri
+        )
+    });
+    let notification_service = Arc::new(
         NotificationService::new(
-            repository,
+            Box::new(NotificationRepository::new(pool.clone())),
             GithubService::new(
                 &settings.integrations.github.api_token,
                 Some(github_mock_server_uri.to_string()),
@@ -112,21 +119,17 @@ pub async fn tested_app(
                     github_mock_server_uri
                 )
             }),
-            TodoistService::new(
-                &settings.integrations.todoist.api_token,
-                Some(todoist_mock_server_uri.to_string()),
-            )
-            .unwrap_or_else(|_| {
-                panic!(
-                    "Failed to setup Todoist service with mock server at {}",
-                    todoist_mock_server_uri
-                )
-            }),
+            todoist_service.clone(),
         )
         .expect("Failed to setup notification service"),
     );
 
-    let server = universal_inbox_api::run(listener, &settings, service)
+    let task_service = Arc::new(
+        TaskService::new(Box::new(TaskRepository::new(pool.clone())), todoist_service)
+            .expect("Failed to setup task service"),
+    );
+
+    let server = universal_inbox_api::run(listener, &settings, notification_service, task_service)
         .await
         .expect("Failed to bind address");
 
@@ -137,132 +140,6 @@ pub async fn tested_app(
         github_mock_server,
         todoist_mock_server,
     }
-}
-
-pub async fn create_notification_response(
-    app_address: &str,
-    notification: Box<Notification>,
-) -> Response {
-    reqwest::Client::new()
-        .post(&format!("{}/notifications", &app_address))
-        .json(&*notification)
-        .send()
-        .await
-        .expect("Failed to execute request")
-}
-
-pub async fn create_notification(
-    app_address: &str,
-    notification: Box<Notification>,
-) -> Box<Notification> {
-    create_notification_response(app_address, notification)
-        .await
-        .json()
-        .await
-        .expect("Cannot parse JSON result")
-}
-
-pub async fn patch_notification_response(
-    app_address: &str,
-    notification_id: Uuid,
-    patch: &NotificationPatch,
-) -> Response {
-    reqwest::Client::new()
-        .patch(&format!(
-            "{}/notifications/{}",
-            &app_address, notification_id
-        ))
-        .json(patch)
-        .send()
-        .await
-        .expect("Failed to execute request")
-}
-
-pub async fn patch_notification(
-    app_address: &str,
-    notification_id: Uuid,
-    patch: &NotificationPatch,
-) -> Box<Notification> {
-    patch_notification_response(app_address, notification_id, patch)
-        .await
-        .json()
-        .await
-        .expect("Cannot parse JSON result")
-}
-
-pub async fn list_notifications_response(
-    app_address: &str,
-    status_filter: NotificationStatus,
-    include_snoozed_notifications: bool,
-) -> Response {
-    let snoozed_notifications_parameter = if include_snoozed_notifications {
-        "&include_snoozed_notifications=true"
-    } else {
-        ""
-    };
-
-    reqwest::Client::new()
-        .get(&format!(
-            "{app_address}/notifications?status={status_filter}{snoozed_notifications_parameter}"
-        ))
-        .send()
-        .await
-        .expect("Failed to execute request")
-}
-
-pub async fn list_notifications(
-    app_address: &str,
-    status_filter: NotificationStatus,
-    include_snoozed_notifications: bool,
-) -> Box<Vec<Notification>> {
-    list_notifications_response(app_address, status_filter, include_snoozed_notifications)
-        .await
-        .json()
-        .await
-        .expect("Cannot parse JSON result")
-}
-
-pub async fn get_notification_response(app_address: &str, id: uuid::Uuid) -> Response {
-    reqwest::Client::new()
-        .get(&format!("{}/notifications/{}", &app_address, id))
-        .send()
-        .await
-        .expect("Failed to execute request")
-}
-
-pub async fn get_notification(app_address: &str, id: uuid::Uuid) -> Box<Notification> {
-    get_notification_response(app_address, id)
-        .await
-        .json()
-        .await
-        .expect("Cannot parse JSON result")
-}
-
-pub async fn sync_notifications_response(
-    app_address: &str,
-    source: Option<NotificationSourceKind>,
-) -> Response {
-    reqwest::Client::new()
-        .post(&format!("{}/notifications/sync", &app_address))
-        .json(
-            &source
-                .map(|src| json!({"source": src.to_string()}))
-                .unwrap_or_else(|| json!({})),
-        )
-        .send()
-        .await
-        .expect("Failed to execute request")
-}
-
-pub async fn sync_notifications(
-    app_address: &str,
-    source: Option<NotificationSourceKind>,
-) -> Vec<Notification> {
-    sync_notifications_response(app_address, source)
-        .await
-        .json()
-        .await
-        .expect("Cannot parse JSON result")
 }
 
 pub fn load_json_fixture_file<T: for<'de> serde::de::Deserialize<'de>>(

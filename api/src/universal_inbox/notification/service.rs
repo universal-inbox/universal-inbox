@@ -7,8 +7,9 @@ use uuid::Uuid;
 
 use crate::{
     integrations::{
-        github::GithubService, todoist::TodoistService, NotificationSourceService,
-        SourceNotification,
+        github::GithubService,
+        notification::{NotificationSourceService, SourceNotification},
+        todoist::TodoistService,
     },
     repository::notification::{
         ConnectedNotificationRepository, NotificationRepository,
@@ -16,7 +17,9 @@ use crate::{
     },
     universal_inbox::{UniversalInboxError, UpdateStatus},
 };
-use universal_inbox::{Notification, NotificationMetadata, NotificationPatch, NotificationStatus};
+use universal_inbox::notification::{
+    Notification, NotificationMetadata, NotificationPatch, NotificationStatus,
+};
 
 use super::source::NotificationSourceKind;
 
@@ -117,9 +120,9 @@ impl<'a> notification_service<'a> {
             .await?;
 
         let notifications = stream::iter(&all_source_notifications)
-            .then(|github_notif| {
+            .then(|notif| {
                 self.repository
-                    .create_or_update(notification_source_service.build_notification(github_notif))
+                    .create_or_update(notification_source_service.build_notification(notif))
             })
             .collect::<Vec<Result<Notification, UniversalInboxError>>>()
             .await
