@@ -7,12 +7,12 @@ use http::{HeaderMap, HeaderValue, Uri};
 use uuid::Uuid;
 
 use crate::universal_inbox::{notification::source::NotificationSourceKind, UniversalInboxError};
-use universal_inbox::{
+use universal_inbox::notification::{
     integrations::github::GithubNotification, Notification, NotificationMetadata,
     NotificationStatus,
 };
 
-use super::{NotificationSourceService, SourceNotification};
+use super::notification::{NotificationSourceService, SourceNotification};
 
 #[derive(Clone)]
 pub struct GithubService {

@@ -14,7 +14,9 @@ use core::time::Duration;
 use tracing::info;
 use tracing_actix_web::TracingLogger;
 
-use crate::universal_inbox::{notification::service::NotificationService, UniversalInboxError};
+use crate::universal_inbox::{
+    notification::service::NotificationService, task::service::TaskService, UniversalInboxError,
+};
 
 pub mod commands;
 pub mod configuration;
@@ -27,7 +29,8 @@ pub mod universal_inbox;
 pub async fn run(
     listener: TcpListener,
     settings: &Settings,
-    service: Arc<NotificationService>,
+    notification_service: Arc<NotificationService>,
+    task_service: Arc<TaskService>,
 ) -> Result<Server, UniversalInboxError> {
     let api_path = settings.application.api_path.clone();
     let front_base_url = settings.application.front_base_url.clone();
@@ -56,37 +59,15 @@ pub async fn run(
                     ))
                     .add(("Access-Control-Allow-Headers", "content-type".as_bytes())),
             )
-            .route("/notifications", web::get().to(routes::list_notifications))
-            .route(
-                "/notifications/sync",
-                web::post().to(routes::sync_notifications),
-            )
-            .route(
-                "/notifications/{notification_id}",
-                web::get().to(routes::get_notification),
-            )
-            .route(
-                "/notifications/{notification_id}",
-                web::patch().to(routes::patch_notification),
-            )
-            .route(
-                "/notifications/{notification_id}",
-                web::method(http::Method::OPTIONS).to(routes::option_wildcard),
-            )
-            .route(
-                "/notifications",
-                web::post().to(routes::create_notification),
-            )
-            .route(
-                "/notifications",
-                web::method(http::Method::OPTIONS).to(routes::option_wildcard),
-            )
-            .app_data(web::Data::new(service.clone()));
+            .service(routes::notification::scope())
+            .service(routes::task::scope())
+            .app_data(web::Data::new(notification_service.clone()))
+            .app_data(web::Data::new(task_service.clone()));
 
         let mut app = App::new()
             .wrap(TracingLogger::default())
             .wrap(middleware::Compress::default())
-            .route("/ping", web::get().to(routes::ping))
+            .route("/ping", web::get().to(routes::health_check::ping))
             .service(api_scope);
         if let Some(path) = &static_path {
             info!(

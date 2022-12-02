@@ -1,3 +1,5 @@
+use log::debug;
+
 use dioxus::core::to_owned;
 use dioxus::events::MouseEvent;
 use dioxus::fermi::UseAtomRef;
@@ -7,9 +9,7 @@ use dioxus_free_icons::icons::bs_icons::{
 };
 use dioxus_free_icons::Icon;
 
-use ::universal_inbox::Notification;
-use log::debug;
-use universal_inbox::NotificationMetadata;
+use universal_inbox::notification::{Notification, NotificationMetadata};
 
 use super::icons::{github, todoist};
 use crate::services::notification_service::UniversalInboxUIModel;

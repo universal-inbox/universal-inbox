@@ -1,18 +1,19 @@
+use std::collections::HashMap;
+
+use chrono::{DateTime, Duration, Local, TimeZone, Timelike, Utc};
+use dioxus::{fermi::UseAtomRef, prelude::*};
+use futures_util::StreamExt;
+use wasm_bindgen::JsValue;
+
+use universal_inbox::notification::{Notification, NotificationPatch, NotificationStatus};
+
 use crate::{
     components::toast_zone::{Toast, ToastKind},
     services::{
         api::{call_api, call_api_with_body},
-        toast_service::ToastUpdate,
+        toast_service::{ToastCommand, ToastUpdate},
     },
 };
-use chrono::{DateTime, Duration, Local, TimeZone, Timelike, Utc};
-use dioxus::{fermi::UseAtomRef, prelude::*};
-use futures_util::StreamExt;
-use std::collections::HashMap;
-use universal_inbox::{Notification, NotificationPatch, NotificationStatus};
-use wasm_bindgen::JsValue;
-
-use super::toast_service::ToastCommand;
 
 #[derive(Debug)]
 pub enum NotificationCommand {

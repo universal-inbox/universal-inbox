@@ -6,11 +6,11 @@ use reqwest::Url;
 use uuid::Uuid;
 
 use crate::universal_inbox::{notification::source::NotificationSourceKind, UniversalInboxError};
-use universal_inbox::{
+use universal_inbox::notification::{
     integrations::todoist::TodoistTask, Notification, NotificationMetadata, NotificationStatus,
 };
 
-use super::{NotificationSourceService, SourceNotification};
+use super::notification::{NotificationSourceService, SourceNotification};
 
 #[derive(Clone)]
 pub struct TodoistService {

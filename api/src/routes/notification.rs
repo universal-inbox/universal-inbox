@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use actix_http::body::BoxBody;
-use actix_web::{web, HttpResponse};
+use actix_web::{web, HttpResponse, Scope};
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -11,7 +11,27 @@ use crate::universal_inbox::{
     notification::{service::NotificationService, source::NotificationSourceKind},
     UniversalInboxError, UpdateStatus,
 };
-use ::universal_inbox::{Notification, NotificationPatch, NotificationStatus};
+use ::universal_inbox::notification::{Notification, NotificationPatch, NotificationStatus};
+
+use super::option_wildcard;
+
+pub fn scope() -> Scope {
+    web::scope("/notifications")
+        .route("/sync", web::post().to(sync_notifications))
+        .service(
+            web::resource("")
+                .name("notifications")
+                .route(web::get().to(list_notifications))
+                .route(web::post().to(create_notification))
+                .route(web::method(http::Method::OPTIONS).to(option_wildcard)),
+        )
+        .service(
+            web::resource("/{notification_id}")
+                .route(web::get().to(get_notification))
+                .route(web::patch().to(patch_notification))
+                .route(web::method(http::Method::OPTIONS).to(option_wildcard)),
+        )
+}
 
 #[derive(Debug, Deserialize)]
 pub struct ListNotificationRequest {
@@ -161,9 +181,4 @@ pub async fn patch_notification(
                 .to_string(),
             ))),
     }
-}
-
-#[tracing::instrument(level = "debug")]
-pub async fn option_wildcard() -> HttpResponse {
-    HttpResponse::Ok().finish()
 }
