@@ -1,24 +1,25 @@
-use components::footer::footer;
-use components::nav_bar::nav_bar;
-use components::toast_zone::toast_zone;
+use log::debug;
+
 use dioxus::{
     core::to_owned,
     fermi::UseAtomRef,
     prelude::*,
     router::{Route, Router},
 };
-use log::debug;
-use pages::notifications_page::notifications_page;
-use pages::page_not_found::page_not_found;
-use pages::settings_page::settings_page;
-use services::notification_service::{NotificationCommand, UniversalInboxUIModel};
-use universal_inbox::Notification;
-use wasm_bindgen::prelude::Closure;
-use wasm_bindgen::JsCast;
+use wasm_bindgen::{prelude::Closure, JsCast};
 use web_sys::KeyboardEvent;
 
-use crate::services::{
-    notification_service::{notification_service, NOTIFICATIONS, UI_MODEL},
+use universal_inbox::notification::Notification;
+
+use components::{footer::footer, nav_bar::nav_bar, toast_zone::toast_zone};
+use pages::{
+    notifications_page::notifications_page, page_not_found::page_not_found,
+    settings_page::settings_page,
+};
+use services::{
+    notification_service::{
+        notification_service, NotificationCommand, UniversalInboxUIModel, NOTIFICATIONS, UI_MODEL,
+    },
     toast_service::{toast_service, TOASTS},
 };
 

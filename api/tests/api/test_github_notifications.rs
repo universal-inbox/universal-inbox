@@ -5,23 +5,24 @@ use rstest::*;
 use serde_json::json;
 use uuid::Uuid;
 
-use universal_inbox::{
+use universal_inbox::notification::{
     integrations::github::GithubNotification, Notification, NotificationMetadata,
     NotificationPatch, NotificationStatus,
 };
 use universal_inbox_api::integrations::github;
 
 use crate::helpers::{
-    create_notification, get_notification, github::github_notification, patch_notification,
-    patch_notification_response, tested_app, TestedApp,
+    notification::github::github_notification,
+    rest::{create_resource, get_resource, patch_resource, patch_resource_response},
+    tested_app, TestedApp,
 };
 
-mod patch_notification {
+mod patch_resource {
     use super::*;
 
     #[rstest]
     #[tokio::test]
-    async fn test_patch_notification_status_as_deleted(
+    async fn test_patch_resource_status_as_deleted(
         #[future] tested_app: TestedApp,
         github_notification: Box<GithubNotification>,
         #[values(205, 304, 404)] github_status_code: u16,
@@ -45,13 +46,18 @@ mod patch_notification {
             last_read_at: None,
             snoozed_until: None,
         });
-        let created_notification =
-            create_notification(&app.app_address, expected_notification.clone()).await;
+        let created_notification = create_resource(
+            &app.app_address,
+            "notifications",
+            expected_notification.clone(),
+        )
+        .await;
 
         assert_eq!(created_notification, expected_notification);
 
-        let patched_notification = patch_notification(
+        let patched_notification = patch_resource(
             &app.app_address,
+            "notifications",
             created_notification.id,
             &NotificationPatch {
                 status: Some(NotificationStatus::Deleted),
@@ -72,7 +78,7 @@ mod patch_notification {
 
     #[rstest]
     #[tokio::test]
-    async fn test_patch_notification_status_as_unsubscribed(
+    async fn test_patch_resource_status_as_unsubscribed(
         #[future] tested_app: TestedApp,
         github_notification: Box<GithubNotification>,
         #[values(205, 304, 404)] github_status_code: u16,
@@ -97,13 +103,18 @@ mod patch_notification {
             last_read_at: None,
             snoozed_until: None,
         });
-        let created_notification =
-            create_notification(&app.app_address, expected_notification.clone()).await;
+        let created_notification = create_resource(
+            &app.app_address,
+            "notifications",
+            expected_notification.clone(),
+        )
+        .await;
 
         assert_eq!(created_notification, expected_notification);
 
-        let patched_notification = patch_notification(
+        let patched_notification = patch_resource(
             &app.app_address,
+            "notifications",
             created_notification.id,
             &NotificationPatch {
                 status: Some(NotificationStatus::Unsubscribed),
@@ -124,7 +135,7 @@ mod patch_notification {
 
     #[rstest]
     #[tokio::test]
-    async fn test_patch_notification_status_as_deleted_with_github_api_error(
+    async fn test_patch_resource_status_as_deleted_with_github_api_error(
         #[future] tested_app: TestedApp,
         github_notification: Box<GithubNotification>,
     ) {
@@ -147,13 +158,18 @@ mod patch_notification {
             last_read_at: None,
             snoozed_until: None,
         });
-        let created_notification =
-            create_notification(&app.app_address, expected_notification.clone()).await;
+        let created_notification = create_resource(
+            &app.app_address,
+            "notifications",
+            expected_notification.clone(),
+        )
+        .await;
 
         assert_eq!(created_notification, expected_notification);
 
-        let response = patch_notification_response(
+        let response = patch_resource_response(
             &app.app_address,
+            "notifications",
             created_notification.id,
             &NotificationPatch {
                 status: Some(NotificationStatus::Deleted),
@@ -171,13 +187,14 @@ mod patch_notification {
         );
         github_mark_thread_as_read_mock.assert();
 
-        let notification = get_notification(&app.app_address, created_notification.id).await;
+        let notification: Box<Notification> =
+            get_resource(&app.app_address, "notifications", created_notification.id).await;
         assert_eq!(notification.status, NotificationStatus::Unread);
     }
 
     #[rstest]
     #[tokio::test]
-    async fn test_patch_notification_snoozed_until(
+    async fn test_patch_resource_snoozed_until(
         #[future] tested_app: TestedApp,
         github_notification: Box<GithubNotification>,
     ) {
@@ -194,13 +211,18 @@ mod patch_notification {
             snoozed_until: None,
         });
         let snoozed_time = Utc.with_ymd_and_hms(2022, 1, 1, 1, 2, 3).unwrap();
-        let created_notification =
-            create_notification(&app.app_address, expected_notification.clone()).await;
+        let created_notification = create_resource(
+            &app.app_address,
+            "notifications",
+            expected_notification.clone(),
+        )
+        .await;
 
         assert_eq!(created_notification, expected_notification);
 
-        let patched_notification = patch_notification(
+        let patched_notification = patch_resource(
             &app.app_address,
+            "notifications",
             created_notification.id,
             &NotificationPatch {
                 snoozed_until: Some(snoozed_time),
@@ -220,7 +242,7 @@ mod patch_notification {
 
     #[rstest]
     #[tokio::test]
-    async fn test_patch_notification_status_without_modification(
+    async fn test_patch_resource_status_without_modification(
         #[future] tested_app: TestedApp,
         github_notification: Box<GithubNotification>,
     ) {
@@ -241,13 +263,18 @@ mod patch_notification {
             last_read_at: None,
             snoozed_until: Some(snoozed_time),
         });
-        let created_notification =
-            create_notification(&app.app_address, expected_notification.clone()).await;
+        let created_notification = create_resource(
+            &app.app_address,
+            "notifications",
+            expected_notification.clone(),
+        )
+        .await;
 
         assert_eq!(created_notification, expected_notification);
 
-        let response = patch_notification_response(
+        let response = patch_resource_response(
             &app.app_address,
+            "notifications",
             created_notification.id,
             &NotificationPatch {
                 status: Some(created_notification.status),
@@ -262,7 +289,7 @@ mod patch_notification {
 
     #[rstest]
     #[tokio::test]
-    async fn test_patch_notification_without_values_to_update(
+    async fn test_patch_resource_without_values_to_update(
         #[future] tested_app: TestedApp,
         github_notification: Box<GithubNotification>,
     ) {
@@ -282,13 +309,18 @@ mod patch_notification {
             last_read_at: None,
             snoozed_until: None,
         });
-        let created_notification =
-            create_notification(&app.app_address, expected_notification.clone()).await;
+        let created_notification = create_resource(
+            &app.app_address,
+            "notifications",
+            expected_notification.clone(),
+        )
+        .await;
 
         assert_eq!(created_notification, expected_notification);
 
-        let response = patch_notification_response(
+        let response = patch_resource_response(
             &app.app_address,
+            "notifications",
             created_notification.id,
             &NotificationPatch {
                 ..Default::default()
@@ -310,8 +342,9 @@ mod patch_notification {
         });
         let unknown_notification_id = Uuid::new_v4();
 
-        let response = patch_notification_response(
+        let response = patch_resource_response(
             &app.app_address,
+            "notifications",
             unknown_notification_id,
             &NotificationPatch {
                 status: Some(NotificationStatus::Deleted),

@@ -158,6 +158,156 @@
     },
     "query": "\n                INSERT INTO notification\n                  (\n                    id,\n                    title,\n                    status,\n                    source_id,\n                    source_html_url,\n                    metadata,\n                    updated_at,\n                    last_read_at,\n                    snoozed_until\n                  )\n                VALUES\n                  ($1, $2, $3, $4, $5, $6, $7, $8, $9)\n            "
   },
+  "9e8f7409186aa51a346c037841e0b2c43344fd1e2a52f41cf19a7488d0e38fa7": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "source_id",
+          "ordinal": 1,
+          "type_info": "Text"
+        },
+        {
+          "name": "title",
+          "ordinal": 2,
+          "type_info": "Text"
+        },
+        {
+          "name": "body",
+          "ordinal": 3,
+          "type_info": "Text"
+        },
+        {
+          "name": "status: _",
+          "ordinal": 4,
+          "type_info": {
+            "Custom": {
+              "kind": {
+                "Enum": [
+                  "Active",
+                  "Done"
+                ]
+              },
+              "name": "task_status"
+            }
+          }
+        },
+        {
+          "name": "completed_at",
+          "ordinal": 5,
+          "type_info": "Timestamp"
+        },
+        {
+          "name": "priority",
+          "ordinal": 6,
+          "type_info": "Int4"
+        },
+        {
+          "name": "due_at",
+          "ordinal": 7,
+          "type_info": "Timestamp"
+        },
+        {
+          "name": "source_html_url",
+          "ordinal": 8,
+          "type_info": "Text"
+        },
+        {
+          "name": "tags",
+          "ordinal": 9,
+          "type_info": "TextArray"
+        },
+        {
+          "name": "parent_id",
+          "ordinal": 10,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "project",
+          "ordinal": 11,
+          "type_info": "Text"
+        },
+        {
+          "name": "is_recurring",
+          "ordinal": 12,
+          "type_info": "Bool"
+        },
+        {
+          "name": "created_at",
+          "ordinal": 13,
+          "type_info": "Timestamp"
+        },
+        {
+          "name": "metadata: Json<TaskMetadata>",
+          "ordinal": 14,
+          "type_info": "Json"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        false,
+        true,
+        true,
+        false,
+        true,
+        false,
+        false,
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Uuid"
+        ]
+      }
+    },
+    "query": "\n                SELECT\n                  id,\n                  source_id,\n                  title,\n                  body,\n                  status as \"status: _\",\n                  completed_at,\n                  priority,\n                  due_at,\n                  source_html_url,\n                  tags,\n                  parent_id,\n                  project,\n                  is_recurring,\n                  created_at,\n                  metadata as \"metadata: Json<TaskMetadata>\"\n                FROM task\n                WHERE id = $1\n            "
+  },
+  "c9f44d052c06475ee9049d371bcd172967a302dd8eb44d16487fea7877970606": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": [
+          "Uuid",
+          "Text",
+          "Text",
+          "Text",
+          {
+            "Custom": {
+              "kind": {
+                "Enum": [
+                  "Active",
+                  "Done"
+                ]
+              },
+              "name": "task_status"
+            }
+          },
+          "Timestamp",
+          "Int4",
+          "Timestamp",
+          "Text",
+          "TextArray",
+          "Uuid",
+          "Text",
+          "Bool",
+          "Timestamp",
+          "Json"
+        ]
+      }
+    },
+    "query": "\n                INSERT INTO task\n                  (\n                    id,\n                    source_id,\n                    title,\n                    body,\n                    status,\n                    completed_at,\n                    priority,\n                    due_at,\n                    source_html_url,\n                    tags,\n                    parent_id,\n                    project,\n                    is_recurring,\n                    created_at,\n                    metadata\n                  )\n                VALUES\n                  ($1, $2, $3, $4, $5::task_status, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)\n            "
+  },
   "cedd97120b4d29f3f48b399afd91a1e1f9ee99b75be88053286e8a866ee06122": {
     "describe": {
       "columns": [

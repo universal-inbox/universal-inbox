@@ -6,20 +6,21 @@ use http::Uri;
 use httpmock::{Method::GET, Mock, MockServer};
 use rstest::*;
 
-use universal_inbox::{
+use universal_inbox::notification::{
     integrations::github::GithubNotification, Notification, NotificationMetadata,
     NotificationStatus,
 };
 use universal_inbox_api::integrations::github;
 
-use super::{create_notification, load_json_fixture_file};
+use crate::helpers::{load_json_fixture_file, rest::create_resource};
 
 pub async fn create_notification_from_github_notification(
     app_address: &str,
     github_notification: &GithubNotification,
 ) -> Box<Notification> {
-    create_notification(
+    create_resource(
         app_address,
+        "notifications",
         Box::new(Notification {
             id: uuid::Uuid::new_v4(),
             title: github_notification.subject.title.clone(),

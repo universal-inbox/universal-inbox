@@ -1,22 +1,25 @@
 use chrono::{TimeZone, Utc};
 use rstest::*;
 
-use crate::helpers::{
-    create_notification, get_notification, sync_notifications, tested_app,
-    todoist::{assert_sync_notifications, mock_todoist_tasks_service, sync_todoist_tasks},
-    TestedApp,
-};
-use universal_inbox::{
+use universal_inbox::notification::{
     integrations::todoist::TodoistTask, Notification, NotificationMetadata, NotificationStatus,
 };
 use universal_inbox_api::universal_inbox::notification::source::NotificationSourceKind;
+
+use crate::helpers::{
+    notification::{sync_notifications, todoist::assert_sync_notifications},
+    rest::{create_resource, get_resource},
+    task::todoist::{mock_todoist_tasks_service, sync_todoist_tasks},
+    tested_app, TestedApp,
+};
 
 async fn create_notification_from_todoist_task(
     app_address: &str,
     todoist_task: &TodoistTask,
 ) -> Box<Notification> {
-    create_notification(
+    create_resource(
         app_address,
+        "notifications",
         Box::new(Notification {
             id: uuid::Uuid::new_v4(),
             title: todoist_task.content.clone(),
@@ -40,8 +43,9 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     sync_todoist_tasks: Vec<TodoistTask>,
 ) {
     let app = tested_app.await;
-    let existing_todoist_notification = create_notification(
+    let existing_todoist_notification = create_resource(
         &app.app_address,
+        "notifications",
         Box::new(Notification {
             id: uuid::Uuid::new_v4(),
             title: "Other task".to_string(),
@@ -66,8 +70,12 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     assert_sync_notifications(&notifications, &sync_todoist_tasks);
     todoist_tasks_mock.assert();
 
-    let updated_todoist_notification =
-        get_notification(&app.app_address, existing_todoist_notification.id).await;
+    let updated_todoist_notification: Box<Notification> = get_resource(
+        &app.app_address,
+        "notifications",
+        existing_todoist_notification.id,
+    )
+    .await;
     assert_eq!(
         updated_todoist_notification.id,
         existing_todoist_notification.id
@@ -103,8 +111,9 @@ async fn test_sync_notifications_should_mark_deleted_notification_for_task_not_i
         create_notification_from_todoist_task(&app.app_address, todoist_task).await;
     }
     // to be deleted during sync
-    let existing_todoist_notification = create_notification(
+    let existing_todoist_notification = create_resource(
         &app.app_address,
+        "notifications",
         Box::new(Notification {
             id: uuid::Uuid::new_v4(),
             title: "Task 3".to_string(),
@@ -129,8 +138,12 @@ async fn test_sync_notifications_should_mark_deleted_notification_for_task_not_i
     assert_sync_notifications(&notifications, &sync_todoist_tasks);
     todoist_tasks_mock.assert();
 
-    let deleted_notification =
-        get_notification(&app.app_address, existing_todoist_notification.id).await;
+    let deleted_notification: Box<Notification> = get_resource(
+        &app.app_address,
+        "notifications",
+        existing_todoist_notification.id,
+    )
+    .await;
     assert_eq!(deleted_notification.id, existing_todoist_notification.id);
     assert_eq!(deleted_notification.status, NotificationStatus::Deleted);
 }

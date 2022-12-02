@@ -3,14 +3,15 @@ use httpmock::Method::DELETE;
 use rstest::*;
 use serde_json::json;
 
-use universal_inbox::{
+use universal_inbox::notification::{
     integrations::todoist::TodoistTask, Notification, NotificationMetadata, NotificationPatch,
     NotificationStatus,
 };
 
 use crate::helpers::{
-    create_notification, get_notification, patch_notification, patch_notification_response,
-    tested_app, todoist::todoist_task, TestedApp,
+    rest::{create_resource, get_resource, patch_resource, patch_resource_response},
+    task::todoist::todoist_task,
+    tested_app, TestedApp,
 };
 
 mod patch_notification {
@@ -41,13 +42,18 @@ mod patch_notification {
             last_read_at: None,
             snoozed_until: None,
         });
-        let created_notification =
-            create_notification(&app.app_address, expected_notification.clone()).await;
+        let created_notification = create_resource(
+            &app.app_address,
+            "notifications",
+            expected_notification.clone(),
+        )
+        .await;
 
         assert_eq!(created_notification, expected_notification);
 
-        let patched_notification = patch_notification(
+        let patched_notification = patch_resource(
             &app.app_address,
+            "notifications",
             created_notification.id,
             &NotificationPatch {
                 status: Some(NotificationStatus::Deleted),
@@ -84,13 +90,18 @@ mod patch_notification {
             last_read_at: None,
             snoozed_until: None,
         });
-        let created_notification =
-            create_notification(&app.app_address, expected_notification.clone()).await;
+        let created_notification = create_resource(
+            &app.app_address,
+            "notifications",
+            expected_notification.clone(),
+        )
+        .await;
 
         assert_eq!(created_notification, expected_notification);
 
-        let response = patch_notification_response(
+        let response = patch_resource_response(
             &app.app_address,
+            "notifications",
             created_notification.id,
             &NotificationPatch {
                 status: Some(NotificationStatus::Unsubscribed),
@@ -136,13 +147,18 @@ mod patch_notification {
             last_read_at: None,
             snoozed_until: None,
         });
-        let created_notification =
-            create_notification(&app.app_address, expected_notification.clone()).await;
+        let created_notification = create_resource(
+            &app.app_address,
+            "notifications",
+            expected_notification.clone(),
+        )
+        .await;
 
         assert_eq!(created_notification, expected_notification);
 
-        let response = patch_notification_response(
+        let response = patch_resource_response(
             &app.app_address,
+            "notifications",
             created_notification.id,
             &NotificationPatch {
                 status: Some(NotificationStatus::Deleted),
@@ -159,7 +175,8 @@ mod patch_notification {
         );
         todoist_mark_thread_as_read_mock.assert();
 
-        let notification = get_notification(&app.app_address, created_notification.id).await;
+        let notification: Box<Notification> =
+            get_resource(&app.app_address, "notifications", created_notification.id).await;
         assert_eq!(notification.status, NotificationStatus::Unread);
     }
 }

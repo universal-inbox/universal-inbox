@@ -4,21 +4,22 @@ use rstest::*;
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::helpers::{
-    create_notification, get_notification, github::github_notification, list_notifications,
-    patch_notification, patch_notification_response, tested_app, TestedApp,
-};
-use ::universal_inbox::{
+use universal_inbox::notification::{
     integrations::github::GithubNotification, Notification, NotificationMetadata,
-    NotificationStatus,
+    NotificationPatch, NotificationStatus,
 };
-use universal_inbox::NotificationPatch;
 use universal_inbox_api::integrations::github;
 
+use crate::helpers::{
+    notification::{github::github_notification, list_notifications},
+    rest::{
+        create_resource, create_resource_response, get_resource, get_resource_response,
+        patch_resource, patch_resource_response,
+    },
+    tested_app, TestedApp,
+};
+
 mod list_notifications {
-
-    use crate::helpers::create_notification;
-
     use super::*;
 
     #[rstest]
@@ -41,8 +42,9 @@ mod list_notifications {
         github_notification2.id = "43".to_string();
 
         let app = tested_app.await;
-        let expected_notification1 = create_notification(
+        let expected_notification1 = create_resource(
             &app.app_address,
+            "notifications",
             Box::new(Notification {
                 id: uuid::Uuid::new_v4(),
                 title: "notif1".to_string(),
@@ -59,8 +61,9 @@ mod list_notifications {
         )
         .await;
 
-        let expected_notification2 = create_notification(
+        let expected_notification2 = create_resource(
             &app.app_address,
+            "notifications",
             Box::new(Notification {
                 id: uuid::Uuid::new_v4(),
                 title: "notif2".to_string(),
@@ -78,8 +81,9 @@ mod list_notifications {
         )
         .await;
 
-        let deleted_notification = create_notification(
+        let deleted_notification = create_resource(
             &app.app_address,
+            "notifications",
             Box::new(Notification {
                 id: uuid::Uuid::new_v4(),
                 title: "notif3".to_string(),
@@ -96,8 +100,9 @@ mod list_notifications {
         )
         .await;
 
-        let snoozed_notification = create_notification(
+        let snoozed_notification = create_resource(
             &app.app_address,
+            "notifications",
             Box::new(Notification {
                 id: uuid::Uuid::new_v4(),
                 title: "notif4".to_string(),
@@ -144,8 +149,6 @@ mod list_notifications {
 }
 
 mod create_notification {
-    use crate::helpers::create_notification_response;
-
     use super::*;
 
     #[rstest]
@@ -166,12 +169,17 @@ mod create_notification {
             last_read_at: None,
             snoozed_until: None,
         });
-        let created_notification =
-            create_notification(&app.app_address, expected_notification.clone()).await;
+        let created_notification = create_resource(
+            &app.app_address,
+            "notifications",
+            expected_notification.clone(),
+        )
+        .await;
 
         assert_eq!(created_notification, expected_notification);
 
-        let notification = get_notification(&app.app_address, created_notification.id).await;
+        let notification =
+            get_resource(&app.app_address, "notifications", created_notification.id).await;
 
         assert_eq!(notification, expected_notification);
     }
@@ -194,12 +202,18 @@ mod create_notification {
             last_read_at: None,
             snoozed_until: None,
         });
-        let created_notification =
-            create_notification(&app.app_address, expected_notification.clone()).await;
+        let created_notification = create_resource(
+            &app.app_address,
+            "notifications",
+            expected_notification.clone(),
+        )
+        .await;
 
         assert_eq!(created_notification, expected_notification);
 
-        let response = create_notification_response(&app.app_address, expected_notification).await;
+        let response =
+            create_resource_response(&app.app_address, "notifications", expected_notification)
+                .await;
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
         let body = response.text().await.expect("Cannot get response body");
@@ -210,41 +224,9 @@ mod create_notification {
         );
     }
 }
+
 mod get_notification {
-    use universal_inbox_api::integrations::github;
-    use uuid::Uuid;
-
-    use crate::helpers::{get_notification, get_notification_response};
-
     use super::*;
-
-    #[rstest]
-    #[tokio::test]
-    async fn test_get_existing_notification(
-        #[future] tested_app: TestedApp,
-        github_notification: Box<GithubNotification>,
-    ) {
-        let app = tested_app.await;
-        let expected_notification = Box::new(Notification {
-            id: uuid::Uuid::new_v4(),
-            title: "notif1".to_string(),
-            status: NotificationStatus::Unread,
-            source_id: "1234".to_string(),
-            source_html_url: github::get_html_url_from_api_url(&github_notification.subject.url),
-            metadata: NotificationMetadata::Github(*github_notification),
-            updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-            last_read_at: None,
-            snoozed_until: None,
-        });
-        let created_notification =
-            create_notification(&app.app_address, expected_notification.clone()).await;
-
-        assert_eq!(created_notification, expected_notification);
-
-        let notification = get_notification(&app.app_address, created_notification.id).await;
-
-        assert_eq!(notification, created_notification);
-    }
 
     #[rstest]
     #[tokio::test]
@@ -252,7 +234,8 @@ mod get_notification {
         let app = tested_app.await;
         let unknown_notification_id = Uuid::new_v4();
 
-        let response = get_notification_response(&app.app_address, unknown_notification_id).await;
+        let response =
+            get_resource_response(&app.app_address, "notifications", unknown_notification_id).await;
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
         let body = response.text().await.expect("Cannot get response body");
@@ -286,13 +269,18 @@ mod patch_notification {
             snoozed_until: None,
         });
         let snoozed_time = Utc.with_ymd_and_hms(2022, 1, 1, 1, 2, 3).unwrap();
-        let created_notification =
-            create_notification(&app.app_address, expected_notification.clone()).await;
+        let created_notification = create_resource(
+            &app.app_address,
+            "notifications",
+            expected_notification.clone(),
+        )
+        .await;
 
         assert_eq!(created_notification, expected_notification);
 
-        let patched_notification = patch_notification(
+        let patched_notification = patch_resource(
             &app.app_address,
+            "notifications",
             created_notification.id,
             &NotificationPatch {
                 snoozed_until: Some(snoozed_time),
@@ -329,13 +317,18 @@ mod patch_notification {
             last_read_at: None,
             snoozed_until: Some(snoozed_time),
         });
-        let created_notification =
-            create_notification(&app.app_address, expected_notification.clone()).await;
+        let created_notification = create_resource(
+            &app.app_address,
+            "notifications",
+            expected_notification.clone(),
+        )
+        .await;
 
         assert_eq!(created_notification, expected_notification);
 
-        let response = patch_notification_response(
+        let response = patch_resource_response(
             &app.app_address,
+            "notifications",
             created_notification.id,
             &NotificationPatch {
                 status: Some(created_notification.status),
@@ -365,13 +358,18 @@ mod patch_notification {
             last_read_at: None,
             snoozed_until: None,
         });
-        let created_notification =
-            create_notification(&app.app_address, expected_notification.clone()).await;
+        let created_notification = create_resource(
+            &app.app_address,
+            "notifications",
+            expected_notification.clone(),
+        )
+        .await;
 
         assert_eq!(created_notification, expected_notification);
 
-        let response = patch_notification_response(
+        let response = patch_resource_response(
             &app.app_address,
+            "notifications",
             created_notification.id,
             &NotificationPatch {
                 ..Default::default()
@@ -380,6 +378,17 @@ mod patch_notification {
         .await;
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = response.text().await.expect("Cannot get response body");
+        assert_eq!(
+            body,
+            json!({
+                "message":
+                format!(
+                    "Invalid input data: Missing `status` field value to update notification {}", expected_notification.id
+                )
+            })
+                .to_string()
+        );
     }
 
     #[rstest]
@@ -388,8 +397,9 @@ mod patch_notification {
         let app = tested_app.await;
         let unknown_notification_id = Uuid::new_v4();
 
-        let response = patch_notification_response(
+        let response = patch_resource_response(
             &app.app_address,
+            "notifications",
             unknown_notification_id,
             &NotificationPatch {
                 status: Some(NotificationStatus::Deleted),
