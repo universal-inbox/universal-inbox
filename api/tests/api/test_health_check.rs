@@ -1,5 +1,6 @@
-use crate::helpers::{tested_app, TestedApp};
 use rstest::*;
+
+use crate::helpers::{tested_app, TestedApp};
 
 #[rstest]
 #[tokio::test]

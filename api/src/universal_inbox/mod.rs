@@ -2,6 +2,7 @@ use http::uri::InvalidUri;
 use uuid::Uuid;
 
 pub mod notification;
+pub mod task;
 
 fn error_chain_fmt(
     e: &impl std::error::Error,
@@ -36,8 +37,12 @@ pub enum UniversalInboxError {
         source: InvalidUri,
         output: String,
     },
-    #[error("Missing input data: {0}")]
-    MissingInputData(String),
+    #[error("Invalid input data: {user_error}")]
+    InvalidInputData {
+        #[source]
+        source: Option<sqlx::Error>,
+        user_error: String,
+    },
     #[error("The entity {id} already exists")]
     AlreadyExists {
         #[source]

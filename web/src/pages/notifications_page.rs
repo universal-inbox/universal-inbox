@@ -1,8 +1,10 @@
-use crate::components::notifications_list::notifications_list;
-use crate::services::notification_service::{NotificationCommand, NOTIFICATIONS, UI_MODEL};
 use dioxus::core::to_owned;
 use dioxus::prelude::*;
-use universal_inbox::Notification;
+
+use universal_inbox::notification::Notification;
+
+use crate::components::notifications_list::notifications_list;
+use crate::services::notification_service::{NotificationCommand, NOTIFICATIONS, UI_MODEL};
 
 pub fn notifications_page(cx: Scope) -> Element {
     let notifications = use_atom_ref(&cx, NOTIFICATIONS);
