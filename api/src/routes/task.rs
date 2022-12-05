@@ -3,17 +3,21 @@ use std::sync::Arc;
 use actix_http::body::BoxBody;
 use actix_web::{web, HttpResponse, Scope};
 use anyhow::Context;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::universal_inbox::{task::service::TaskService, UniversalInboxError, UpdateStatus};
+use crate::universal_inbox::{
+    task::{service::TaskService, source::TaskSourceKind},
+    UniversalInboxError, UpdateStatus,
+};
 use ::universal_inbox::task::{Task, TaskPatch, TaskStatus};
 
 use super::option_wildcard;
 
 pub fn scope() -> Scope {
     web::scope("/tasks")
+        .route("/sync", web::post().to(sync_tasks))
         .service(
             web::resource("")
                 .name("tasks")
@@ -89,6 +93,33 @@ pub async fn create_task(
     Ok(HttpResponse::Ok()
         .content_type("application/json")
         .body(serde_json::to_string(&created_task).context("Cannot serialize task")?))
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SyncTasksParameters {
+    source: Option<TaskSourceKind>,
+}
+
+#[tracing::instrument(level = "debug", skip(service))]
+pub async fn sync_tasks(
+    params: web::Json<SyncTasksParameters>,
+    service: web::Data<Arc<TaskService>>,
+) -> Result<HttpResponse, UniversalInboxError> {
+    let transactional_service = service.begin().await.context(format!(
+        "Failed to create new transaction while syncing {:?}",
+        &params.source
+    ))?;
+
+    let tasks: Vec<Task> = transactional_service.sync_tasks(&params.source).await?;
+
+    transactional_service.commit().await.context(format!(
+        "Failed to commit while syncing {:?}",
+        &params.source
+    ))?;
+
+    Ok(HttpResponse::Ok()
+        .content_type("application/json")
+        .body(serde_json::to_string(&tasks).context("Cannot serialize tasks")?))
 }
 
 #[tracing::instrument(level = "debug", skip(service))]
