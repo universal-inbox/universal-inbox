@@ -1,0 +1,30 @@
+[
+  {
+    "id": "1111",
+    "name": "Inbox",
+    "color": "lime_green",
+    "parent_id": null,
+    "child_order": 1,
+    "collapsed": false,
+    "shared": false,
+    "sync_id": null,
+    "is_deleted": false,
+    "is_archived": false,
+    "is_favorite": false,
+    "view_style": "list"
+  },
+  {
+    "id": "2222",
+    "name": "Project2",
+    "color": "lime_green",
+    "parent_id": null,
+    "child_order": 1,
+    "collapsed": false,
+    "shared": false,
+    "sync_id": null,
+    "is_deleted": false,
+    "is_archived": false,
+    "is_favorite": false,
+    "view_style": "list"
+  }
+]

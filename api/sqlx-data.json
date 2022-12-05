@@ -1,5 +1,132 @@
 {
   "db": "PostgreSQL",
+  "0079112e71a1bcde85cf5a2409e58e67b34a18e2932d32434b2ad8c9f9f8d262": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "source_id",
+          "ordinal": 1,
+          "type_info": "Text"
+        },
+        {
+          "name": "title",
+          "ordinal": 2,
+          "type_info": "Text"
+        },
+        {
+          "name": "body",
+          "ordinal": 3,
+          "type_info": "Text"
+        },
+        {
+          "name": "status: _",
+          "ordinal": 4,
+          "type_info": {
+            "Custom": {
+              "kind": {
+                "Enum": [
+                  "Active",
+                  "Done"
+                ]
+              },
+              "name": "task_status"
+            }
+          }
+        },
+        {
+          "name": "completed_at",
+          "ordinal": 5,
+          "type_info": "Timestamp"
+        },
+        {
+          "name": "priority",
+          "ordinal": 6,
+          "type_info": "Int4"
+        },
+        {
+          "name": "due_at: Json<Option<DueDate>>",
+          "ordinal": 7,
+          "type_info": "Json"
+        },
+        {
+          "name": "source_html_url",
+          "ordinal": 8,
+          "type_info": "Text"
+        },
+        {
+          "name": "tags",
+          "ordinal": 9,
+          "type_info": "TextArray"
+        },
+        {
+          "name": "parent_id",
+          "ordinal": 10,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "project",
+          "ordinal": 11,
+          "type_info": "Text"
+        },
+        {
+          "name": "is_recurring",
+          "ordinal": 12,
+          "type_info": "Bool"
+        },
+        {
+          "name": "created_at",
+          "ordinal": 13,
+          "type_info": "Timestamp"
+        },
+        {
+          "name": "metadata: Json<TaskMetadata>",
+          "ordinal": 14,
+          "type_info": "Json"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        false,
+        false,
+        true,
+        false,
+        true,
+        false,
+        false,
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          {
+            "Custom": {
+              "kind": {
+                "Enum": [
+                  "Active",
+                  "Done"
+                ]
+              },
+              "name": "task_status"
+            }
+          },
+          "Timestamp",
+          "TextArray",
+          "Text"
+        ]
+      }
+    },
+    "query": "\n                UPDATE\n                  task\n                SET\n                  status = $1::task_status,\n                  completed_at = $2\n                WHERE\n                  NOT source_id = ANY($3)\n                  AND kind::TEXT = $4\n                  AND (status = 'Active')\n                RETURNING\n                  id,\n                  source_id,\n                  title,\n                  body,\n                  status as \"status: _\",\n                  completed_at,\n                  priority,\n                  due_at as \"due_at: Json<Option<DueDate>>\",\n                  source_html_url,\n                  tags,\n                  parent_id,\n                  project,\n                  is_recurring,\n                  created_at,\n                  metadata as \"metadata: Json<TaskMetadata>\"\n            "
+  },
   "0badf821540ac0be94a430265a9ecbf97f1774ea5ea20f53242918fa07b1fa47": {
     "describe": {
       "columns": [
@@ -158,7 +285,7 @@
     },
     "query": "\n                INSERT INTO notification\n                  (\n                    id,\n                    title,\n                    status,\n                    source_id,\n                    source_html_url,\n                    metadata,\n                    updated_at,\n                    last_read_at,\n                    snoozed_until\n                  )\n                VALUES\n                  ($1, $2, $3, $4, $5, $6, $7, $8, $9)\n            "
   },
-  "9e8f7409186aa51a346c037841e0b2c43344fd1e2a52f41cf19a7488d0e38fa7": {
+  "6c3ce6a44e87df8ab3af416a35fd11194b871f185a2b58c39ce9485e00812d6b": {
     "describe": {
       "columns": [
         {
@@ -207,9 +334,9 @@
           "type_info": "Int4"
         },
         {
-          "name": "due_at",
+          "name": "due_at: Json<Option<DueDate>>",
           "ordinal": 7,
-          "type_info": "Timestamp"
+          "type_info": "Json"
         },
         {
           "name": "source_html_url",
@@ -255,7 +382,7 @@
         false,
         true,
         false,
-        true,
+        false,
         true,
         false,
         true,
@@ -270,7 +397,51 @@
         ]
       }
     },
-    "query": "\n                SELECT\n                  id,\n                  source_id,\n                  title,\n                  body,\n                  status as \"status: _\",\n                  completed_at,\n                  priority,\n                  due_at,\n                  source_html_url,\n                  tags,\n                  parent_id,\n                  project,\n                  is_recurring,\n                  created_at,\n                  metadata as \"metadata: Json<TaskMetadata>\"\n                FROM task\n                WHERE id = $1\n            "
+    "query": "\n                SELECT\n                  id,\n                  source_id,\n                  title,\n                  body,\n                  status as \"status: _\",\n                  completed_at,\n                  priority,\n                  due_at as \"due_at: Json<Option<DueDate>>\",\n                  source_html_url,\n                  tags,\n                  parent_id,\n                  project,\n                  is_recurring,\n                  created_at,\n                  metadata as \"metadata: Json<TaskMetadata>\"\n                FROM task\n                WHERE id = $1\n            "
+  },
+  "a7d589b6b089547b49eaaed13cac366c7281c53c930d2175e87c43e363d57292": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        }
+      ],
+      "nullable": [
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Uuid",
+          "Text",
+          "Text",
+          "Text",
+          {
+            "Custom": {
+              "kind": {
+                "Enum": [
+                  "Active",
+                  "Done"
+                ]
+              },
+              "name": "task_status"
+            }
+          },
+          "Timestamp",
+          "Int4",
+          "Json",
+          "Text",
+          "TextArray",
+          "Uuid",
+          "Text",
+          "Bool",
+          "Timestamp",
+          "Json"
+        ]
+      }
+    },
+    "query": "\n                INSERT INTO task\n                  (\n                    id,\n                    source_id,\n                    title,\n                    body,\n                    status,\n                    completed_at,\n                    priority,\n                    due_at,\n                    source_html_url,\n                    tags,\n                    parent_id,\n                    project,\n                    is_recurring,\n                    created_at,\n                    metadata\n                  )\n                VALUES\n                  ($1, $2, $3, $4, $5::task_status, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)\n                ON CONFLICT (source_id, kind) DO UPDATE\n                SET\n                  title = $3,\n                  body = $4,\n                  status = $5::task_status,\n                  completed_at = $6,\n                  priority = $7,\n                  due_at = $8,\n                  source_html_url = $9,\n                  tags = $10,\n                  parent_id = $11,\n                  project = $12,\n                  is_recurring = $13,\n                  created_at = $14,\n                  metadata = $15\n                RETURNING\n                  id\n            "
   },
   "c9f44d052c06475ee9049d371bcd172967a302dd8eb44d16487fea7877970606": {
     "describe": {
@@ -295,7 +466,7 @@
           },
           "Timestamp",
           "Int4",
-          "Timestamp",
+          "Json",
           "Text",
           "TextArray",
           "Uuid",

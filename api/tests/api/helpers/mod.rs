@@ -98,6 +98,7 @@ pub async fn tested_app(
     let todoist_service = TodoistService::new(
         &settings.integrations.todoist.api_token,
         Some(todoist_mock_server_uri.to_string()),
+        Some(todoist_mock_server_uri.to_string()),
     )
     .unwrap_or_else(|_| {
         panic!(

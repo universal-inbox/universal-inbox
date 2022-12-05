@@ -1,0 +1,5 @@
+ALTER TABLE task
+    DROP COLUMN due_at;
+    
+ALTER TABLE task
+    ADD COLUMN due_at JSON NOT NULL;

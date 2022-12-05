@@ -22,7 +22,7 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 serde = { version = "1.0.0", features = ["derive"] }
 serde_json = { version = "1.0", features = ["unbounded_depth"] }
 uuid = { version = "1.0", features = ["serde", "v4"] }
-chrono = { version = "0.4.0", features = ["serde"] }
+chrono = { version = "0.4.0", features = ["serde", "clock"] }
 mktemp = "0.4.0"
 configparser = "3.0.0"
 tracing = { version = "0.1.0", features = ["log"] }
@@ -60,10 +60,12 @@ reqwest = { version = "0.11.0", features = ["json", "tokio-rustls", "gzip"] }
 format_serde_error = "0.3.0"
 futures = "0.3.0"
 color-backtrace = "0.5"
-duplicate = "0.4.1"
+duplicate = "0.4.0"
 async-trait = "0.1.0"
+cached = { version = "0.40.0", features = ["async_tokio_rt_multi_thread"] }
 
 [dev-dependencies]
 proptest = "1.0.0"
 rstest = "0.13.0"
 httpmock = "0.6.0"
+pretty_assertions = "1.3.0"
