@@ -8,8 +8,8 @@ use sqlx::{pool::PoolConnection, types::Json, PgPool, Postgres, QueryBuilder, Tr
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
-use crate::universal_inbox::{UniversalInboxError, UpdateStatus};
-use universal_inbox::task::{Task, TaskMetadata, TaskPatch, TaskPriority, TaskStatus};
+use crate::universal_inbox::{task::source::TaskSourceKind, UniversalInboxError, UpdateStatus};
+use universal_inbox::task::{DueDate, Task, TaskMetadata, TaskPatch, TaskPriority, TaskStatus};
 
 pub struct TaskRepository {
     pub pool: Arc<PgPool>,
@@ -84,7 +84,7 @@ impl<'a> repository {
                   status as "status: _",
                   completed_at,
                   priority,
-                  due_at,
+                  due_at as "due_at: Json<Option<DueDate>>",
                   source_html_url,
                   tags,
                   parent_id,
@@ -180,7 +180,7 @@ impl<'a> repository {
             task.completed_at
                 .map(|last_read_at| last_read_at.naive_utc()),
             priority as i32,
-            task.due_at.map(|last_read_at| last_read_at.naive_utc()),
+            Json(task.due_at.clone()) as Json<Option<DueDate>>,
             task.source_html_url.as_ref().map(|url| url.to_string()),
             &task.tags,
             task.parent_id,
@@ -213,6 +213,139 @@ impl<'a> repository {
         })?;
 
         Ok(task)
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    pub async fn update_stale_tasks_status_from_source_ids(
+        &self,
+        active_source_task_ids: Vec<String>,
+        kind: TaskSourceKind,
+        status: TaskStatus,
+    ) -> Result<Vec<Task>, UniversalInboxError> {
+        let mut executor = self.executor.lock().await;
+        let completed_at = if status == TaskStatus::Done {
+            Some(Utc::now().naive_utc())
+        } else {
+            None
+        };
+
+        let records = sqlx::query_as!(
+            TaskRow,
+            r#"
+                UPDATE
+                  task
+                SET
+                  status = $1::task_status,
+                  completed_at = $2
+                WHERE
+                  NOT source_id = ANY($3)
+                  AND kind::TEXT = $4
+                  AND (status = 'Active')
+                RETURNING
+                  id,
+                  source_id,
+                  title,
+                  body,
+                  status as "status: _",
+                  completed_at,
+                  priority,
+                  due_at as "due_at: Json<Option<DueDate>>",
+                  source_html_url,
+                  tags,
+                  parent_id,
+                  project,
+                  is_recurring,
+                  created_at,
+                  metadata as "metadata: Json<TaskMetadata>"
+            "#,
+            status.to_string() as _,
+            completed_at,
+            &active_source_task_ids[..],
+            kind.to_string(),
+        )
+        .fetch_all(&mut *executor)
+        .await
+        .context("Failed to update stale task status from storage")?;
+
+        records
+            .iter()
+            .map(|r| r.try_into())
+            .collect::<Result<Vec<Task>, UniversalInboxError>>()
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    pub async fn create_or_update(&self, task: Box<Task>) -> Result<Task, UniversalInboxError> {
+        let mut executor = self.executor.lock().await;
+        let metadata = Json(task.metadata.clone());
+        let priority: u8 = task.priority.into();
+
+        let id: Uuid = sqlx::query_scalar!(
+            r#"
+                INSERT INTO task
+                  (
+                    id,
+                    source_id,
+                    title,
+                    body,
+                    status,
+                    completed_at,
+                    priority,
+                    due_at,
+                    source_html_url,
+                    tags,
+                    parent_id,
+                    project,
+                    is_recurring,
+                    created_at,
+                    metadata
+                  )
+                VALUES
+                  ($1, $2, $3, $4, $5::task_status, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+                ON CONFLICT (source_id, kind) DO UPDATE
+                SET
+                  title = $3,
+                  body = $4,
+                  status = $5::task_status,
+                  completed_at = $6,
+                  priority = $7,
+                  due_at = $8,
+                  source_html_url = $9,
+                  tags = $10,
+                  parent_id = $11,
+                  project = $12,
+                  is_recurring = $13,
+                  created_at = $14,
+                  metadata = $15
+                RETURNING
+                  id
+            "#,
+            task.id,
+            task.source_id,
+            task.title,
+            task.body,
+            task.status.to_string() as _,
+            task.completed_at
+                .map(|last_read_at| last_read_at.naive_utc()),
+            priority as i32,
+            Json(task.due_at.clone()) as Json<Option<DueDate>>,
+            task.source_html_url.as_ref().map(|url| url.to_string()),
+            &task.tags,
+            task.parent_id,
+            task.project,
+            task.is_recurring,
+            task.created_at.naive_utc(),
+            metadata as Json<TaskMetadata>,
+        )
+        .fetch_one(&mut *executor)
+        .await
+        .with_context(|| {
+            format!(
+                "Failed to update task with source ID {} from storage",
+                task.source_id
+            )
+        })?;
+
+        Ok(Task { id, ..*task })
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
@@ -309,7 +442,7 @@ struct TaskRow {
     status: PgTaskStatus,
     completed_at: Option<NaiveDateTime>,
     priority: i32,
-    due_at: Option<NaiveDateTime>,
+    due_at: Json<Option<DueDate>>,
     source_html_url: Option<String>,
     tags: Vec<String>,
     parent_id: Option<Uuid>,
@@ -377,9 +510,7 @@ impl TryFrom<&TaskRow> for Task {
                 .completed_at
                 .map(|completed_at| DateTime::<Utc>::from_utc(completed_at, Utc)),
             priority,
-            due_at: row
-                .due_at
-                .map(|due_at| DateTime::<Utc>::from_utc(due_at, Utc)),
+            due_at: row.due_at.0.clone(),
             source_html_url,
             tags: row.tags.clone(),
             parent_id: row.parent_id,

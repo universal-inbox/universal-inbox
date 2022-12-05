@@ -5,7 +5,7 @@ use serde_json::json;
 use uuid::Uuid;
 
 use universal_inbox::task::{
-    integrations::todoist::TodoistTask, Task, TaskMetadata, TaskPatch, TaskPriority, TaskStatus,
+    integrations::todoist::TodoistItem, Task, TaskMetadata, TaskPatch, TaskPriority, TaskStatus,
 };
 
 use crate::helpers::{
@@ -13,16 +13,18 @@ use crate::helpers::{
         create_resource, create_resource_response, get_resource, get_resource_response,
         patch_resource_response,
     },
-    task::{list_tasks, todoist::todoist_task2},
+    task::{list_tasks, todoist::todoist_item},
     tested_app, TestedApp,
 };
 
 mod create_task {
+    use chrono::NaiveDate;
+
     use super::*;
 
     #[rstest]
     #[tokio::test]
-    async fn test_create_task(#[future] tested_app: TestedApp, todoist_task2: Box<TodoistTask>) {
+    async fn test_create_task(#[future] tested_app: TestedApp, todoist_item: Box<TodoistItem>) {
         let app = tested_app.await;
         let expected_minimal_task = Box::new(Task {
             id: uuid::Uuid::new_v4(),
@@ -39,7 +41,7 @@ mod create_task {
             project: "Inbox".to_string(),
             is_recurring: false,
             created_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-            metadata: TaskMetadata::Todoist(*todoist_task2.clone()),
+            metadata: TaskMetadata::Todoist(*todoist_item.clone()),
         });
 
         let created_task =
@@ -59,14 +61,16 @@ mod create_task {
             status: TaskStatus::Done,
             completed_at: Some(Utc.with_ymd_and_hms(2022, 1, 3, 0, 0, 0).unwrap()),
             priority: TaskPriority::P3,
-            due_at: Some(Utc.with_ymd_and_hms(2022, 1, 3, 0, 0, 0).unwrap()),
+            due_at: Some(universal_inbox::task::DueDate::Date(
+                NaiveDate::from_ymd_opt(2016, 9, 1).unwrap(),
+            )),
             source_html_url: "https://todoist.com/showTask?id=5678".parse::<Uri>().ok(),
             tags: vec!["tag1".to_string(), "tag2".to_string()],
             parent_id: Some(expected_minimal_task.id),
             project: "project 1".to_string(),
             is_recurring: true,
             created_at: Utc.with_ymd_and_hms(2022, 1, 2, 0, 0, 0).unwrap(),
-            metadata: TaskMetadata::Todoist(*todoist_task2),
+            metadata: TaskMetadata::Todoist(*todoist_item),
         });
 
         let created_task = create_resource(&app.app_address, "tasks", expected_task.clone()).await;
@@ -82,7 +86,7 @@ mod create_task {
     #[tokio::test]
     async fn test_create_task_as_done_with_not_completed_at_value(
         #[future] tested_app: TestedApp,
-        todoist_task2: Box<TodoistTask>,
+        todoist_item: Box<TodoistItem>,
     ) {
         let app = tested_app.await;
         let task_done = Box::new(Task {
@@ -93,14 +97,16 @@ mod create_task {
             status: TaskStatus::Done,
             completed_at: None,
             priority: TaskPriority::P3,
-            due_at: Some(Utc.with_ymd_and_hms(2022, 1, 3, 0, 0, 0).unwrap()),
+            due_at: Some(universal_inbox::task::DueDate::Date(
+                NaiveDate::from_ymd_opt(2022, 1, 3).unwrap(),
+            )),
             source_html_url: "https://todoist.com/showTask?id=5678".parse::<Uri>().ok(),
             tags: vec!["tag1".to_string(), "tag2".to_string()],
             parent_id: None,
             project: "project 1".to_string(),
             is_recurring: true,
             created_at: Utc.with_ymd_and_hms(2022, 1, 2, 0, 0, 0).unwrap(),
-            metadata: TaskMetadata::Todoist(*todoist_task2),
+            metadata: TaskMetadata::Todoist(*todoist_item),
         });
 
         let response = create_resource_response(&app.app_address, "tasks", task_done.clone()).await;
@@ -117,7 +123,7 @@ mod create_task {
     #[tokio::test]
     async fn test_create_task_duplicate_task(
         #[future] tested_app: TestedApp,
-        todoist_task2: Box<TodoistTask>,
+        todoist_item: Box<TodoistItem>,
     ) {
         let app = tested_app.await;
         let expected_task = Box::new(Task {
@@ -135,7 +141,7 @@ mod create_task {
             project: "Inbox".to_string(),
             is_recurring: false,
             created_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-            metadata: TaskMetadata::Todoist(*todoist_task2.clone()),
+            metadata: TaskMetadata::Todoist(*todoist_item.clone()),
         });
 
         let created_task = create_resource(&app.app_address, "tasks", expected_task.clone()).await;
@@ -188,9 +194,9 @@ mod list_tasks {
 
     #[rstest]
     #[tokio::test]
-    async fn test_list_tasks(#[future] tested_app: TestedApp, todoist_task2: Box<TodoistTask>) {
-        let mut todoist_task2_ = todoist_task2.clone();
-        todoist_task2_.id = "43".to_string();
+    async fn test_list_tasks(#[future] tested_app: TestedApp, todoist_item: Box<TodoistItem>) {
+        let mut todoist_item_ = todoist_item.clone();
+        todoist_item_.id = "43".to_string();
 
         let app = tested_app.await;
         let task_active = create_resource(
@@ -211,7 +217,7 @@ mod list_tasks {
                 project: "Inbox".to_string(),
                 is_recurring: false,
                 created_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-                metadata: TaskMetadata::Todoist(*todoist_task2.clone()),
+                metadata: TaskMetadata::Todoist(*todoist_item.clone()),
             }),
         )
         .await;
@@ -234,7 +240,7 @@ mod list_tasks {
                 project: "Inbox".to_string(),
                 is_recurring: false,
                 created_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-                metadata: TaskMetadata::Todoist(*todoist_task2.clone()),
+                metadata: TaskMetadata::Todoist(*todoist_item.clone()),
             }),
         )
         .await;
@@ -258,7 +264,7 @@ mod patch_task {
     #[tokio::test]
     async fn test_patch_task_status_without_modification(
         #[future] tested_app: TestedApp,
-        todoist_task2: Box<TodoistTask>,
+        todoist_item: Box<TodoistItem>,
     ) {
         let app = tested_app.await;
 
@@ -280,7 +286,7 @@ mod patch_task {
                 project: "Inbox".to_string(),
                 is_recurring: false,
                 created_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-                metadata: TaskMetadata::Todoist(*todoist_task2.clone()),
+                metadata: TaskMetadata::Todoist(*todoist_item.clone()),
             }),
         )
         .await;
@@ -302,7 +308,7 @@ mod patch_task {
     #[tokio::test]
     async fn test_patch_task_without_values_to_update(
         #[future] tested_app: TestedApp,
-        todoist_task2: Box<TodoistTask>,
+        todoist_item: Box<TodoistItem>,
     ) {
         let app = tested_app.await;
         let created_task = create_resource(
@@ -323,7 +329,7 @@ mod patch_task {
                 project: "Inbox".to_string(),
                 is_recurring: false,
                 created_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-                metadata: TaskMetadata::Todoist(*todoist_task2.clone()),
+                metadata: TaskMetadata::Todoist(*todoist_item.clone()),
             }),
         )
         .await;

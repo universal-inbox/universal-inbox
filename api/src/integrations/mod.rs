@@ -31,3 +31,22 @@ pub mod notification {
         ) -> Result<(), UniversalInboxError>;
     }
 }
+
+pub mod task {
+    use crate::universal_inbox::task::source::TaskSourceKind;
+
+    use super::*;
+
+    use universal_inbox::task::Task;
+
+    pub trait SourceTask {
+        fn get_id(&self) -> String;
+    }
+
+    #[async_trait]
+    pub trait TaskSourceService<T: SourceTask> {
+        async fn fetch_all_tasks(&self) -> Result<Vec<T>, UniversalInboxError>;
+        async fn build_task(&self, source: &T) -> Result<Box<Task>, UniversalInboxError>;
+        fn get_task_source_kind(&self) -> TaskSourceKind;
+    }
+}

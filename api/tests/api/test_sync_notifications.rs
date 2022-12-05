@@ -12,8 +12,7 @@ use crate::helpers::{
         github::{
             self as github_helper, mock_github_notifications_service, sync_github_notifications,
         },
-        sync_notifications,
-        todoist::{self as todoist_helper},
+        sync_notifications, todoist as todoist_helper,
     },
     rest::{create_resource, get_resource},
     task::todoist::{mock_todoist_tasks_service, sync_todoist_tasks},
