@@ -1,202 +1,249 @@
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, Utc};
 use http::Uri;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
-use serde_with::{serde_as, DisplayFromStr};
 
-#[serde_as]
+use crate::task::{DueDate, TaskPriority};
+
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
-pub struct TodoistTask {
+pub struct TodoistItem {
     pub id: String,
+    pub parent_id: Option<String>,
     pub project_id: String,
+    pub sync_id: Option<String>,
     pub section_id: Option<String>,
     pub content: String,
     pub description: String,
-    pub is_completed: bool,
     pub labels: Vec<String>,
-    pub parent_id: Option<String>,
-    pub order: u32,
-    pub priority: TodoistTaskPriority,
-    pub due: Option<TodoistTaskDue>,
-    #[serde_as(as = "DisplayFromStr")]
-    pub url: Uri,
-    pub comment_count: u32,
-    pub created_at: DateTime<Utc>,
-    pub creator_id: String,
-    pub assignee_id: Option<String>,
-    pub assigner_id: Option<String>,
+    pub child_order: i32,
+    pub day_order: i32,
+    pub priority: TodoistItemPriority,
+    pub checked: bool, // aka. is_completed
+    pub is_deleted: bool,
+    pub collapsed: bool,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub added_at: DateTime<Utc>,
+    pub due: Option<TodoistItemDue>,
+    pub user_id: String,
+    pub added_by_uid: String,
+    pub assigned_by_uid: String,
+    pub responsible_uid: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
-pub struct TodoistTaskDue {
+pub struct TodoistItemDue {
     pub string: String,
-    #[serde(with = "date_format")]
-    pub date: NaiveDate,
+    #[serde(with = "due_date_format")]
+    pub date: DueDate,
     pub is_recurring: bool,
-    pub datetime: Option<DateTime<Utc>>,
     pub timezone: Option<String>,
+    pub lang: String,
 }
 
 #[derive(Serialize_repr, Deserialize_repr, PartialEq, Debug, Clone, Eq, Copy)]
 #[repr(u8)]
-pub enum TodoistTaskPriority {
+pub enum TodoistItemPriority {
     P1 = 1,
     P2 = 2,
     P3 = 3,
     P4 = 4,
 }
 
-mod date_format {
-    use chrono::NaiveDate;
+impl From<TodoistItemPriority> for TaskPriority {
+    fn from(priority: TodoistItemPriority) -> Self {
+        match priority {
+            TodoistItemPriority::P1 => TaskPriority::P1,
+            TodoistItemPriority::P2 => TaskPriority::P2,
+            TodoistItemPriority::P3 => TaskPriority::P3,
+            TodoistItemPriority::P4 => TaskPriority::P4,
+        }
+    }
+}
+
+mod due_date_format {
     use serde::{self, Deserialize, Deserializer, Serializer};
 
-    const FORMAT: &str = "%Y-%m-%d";
+    use crate::task::DueDate;
 
-    pub fn serialize<S>(date: &NaiveDate, serializer: S) -> Result<S::Ok, S::Error>
+    pub fn serialize<S>(due_date: &DueDate, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        let s = format!("{}", date.format(FORMAT));
-        serializer.serialize_str(&s)
+        serializer.serialize_str(&due_date.to_string())
     }
 
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<NaiveDate, D::Error>
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<DueDate, D::Error>
     where
         D: Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        s.parse::<NaiveDate>().map_err(serde::de::Error::custom)
+        s.parse::<DueDate>().map_err(serde::de::Error::custom)
     }
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct TodoistProject {
+    pub id: String,
+    pub name: String,
+    pub color: String,
+    pub parent_id: Option<String>,
+    pub child_order: i32,
+    pub collapsed: bool,
+    pub shared: bool,
+    pub sync_id: Option<String>,
+    pub is_deleted: bool,
+    pub is_archived: bool,
+    pub is_favorite: bool,
+    pub view_style: String,
+}
+
+pub fn get_task_html_url(item_id: &str) -> Option<Uri> {
+    format!("https://todoist.com/showTask?id={item_id}")
+        .parse::<Uri>()
+        .ok()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::TimeZone;
+    use chrono::{NaiveDate, TimeZone};
+    use pretty_assertions::assert_eq;
     use rstest::*;
     use serde_json::json;
 
     #[rstest]
-    fn test_todoist_task_serialization_config() {
+    fn test_todoist_item_serialization_config() {
         assert_eq!(
             json!(
                 {
                     "id": "2995104339",
+                    "parent_id": "2995104589",
                     "project_id": "2203306141",
+                    "sync_id": "1234567890",
                     "section_id": "7025",
                     "content": "Buy Milk",
                     "description": "",
-                    "is_completed": false,
                     "labels": ["Food", "Shopping"],
-                    "parent_id": "2995104589",
-                    "order": 1,
+                    "child_order": 1,
+                    "day_order": -1,
                     "priority": 1,
+                    "checked": false,
+                    "is_deleted": false,
+                    "collapsed": false,
+                    "completed_at": null,
+                    "added_at": "2019-12-11T22:36:50Z",
                     "due": {
                         "string": "tomorrow at 12",
                         "date": "2016-09-01",
                         "is_recurring": false,
-                        "datetime": "2016-09-01T12:00:00Z",
-                        "timezone": "Europe/Moscow"
+                        "timezone": "Europe/Moscow",
+                        "lang": "en"
                     },
-                    "url": "https://todoist.com/showTask?id=2995104339",
-                    "comment_count": 10,
-                    "created_at": "2019-12-11T22:36:50Z",
-                    "creator_id": "2671355",
-                    "assignee_id": "2671362",
-                    "assigner_id": "2671355",
+                    "user_id": "2671355",
+                    "added_by_uid": "2671355",
+                    "assigned_by_uid": "2671362",
+                    "responsible_uid": "2671355"
                 }
             )
             .to_string(),
-            serde_json::to_string(&TodoistTask {
-                creator_id: "2671355".to_string(),
-                created_at: Utc.with_ymd_and_hms(2019, 12, 11, 22, 36, 50).unwrap(),
-                assignee_id: Some("2671362".to_string()),
-                assigner_id: Some("2671355".to_string()),
-                comment_count: 10,
-                is_completed: false,
+            serde_json::to_string(&TodoistItem {
+                id: "2995104339".to_string(),
+                parent_id: Some("2995104589".to_string()),
+                project_id: "2203306141".to_string(),
+                sync_id: Some("1234567890".to_string()),
+                section_id: Some("7025".to_string()),
                 content: "Buy Milk".to_string(),
                 description: "".to_string(),
-                due: Some(TodoistTaskDue {
-                    date: NaiveDate::from_ymd_opt(2016, 9, 1).unwrap(),
+                labels: vec!["Food".to_string(), "Shopping".to_string()],
+                child_order: 1,
+                day_order: -1,
+                priority: TodoistItemPriority::P1,
+                checked: false,
+                is_deleted: false,
+                collapsed: false,
+                completed_at: None,
+                added_at: Utc.with_ymd_and_hms(2019, 12, 11, 22, 36, 50).unwrap(),
+                due: Some(TodoistItemDue {
+                    date: DueDate::Date(NaiveDate::from_ymd_opt(2016, 9, 1).unwrap()),
                     is_recurring: false,
-                    datetime: Some(Utc.with_ymd_and_hms(2016, 9, 1, 12, 0, 0).unwrap()),
+                    lang: "en".to_string(),
                     string: "tomorrow at 12".to_string(),
                     timezone: Some("Europe/Moscow".to_string()),
                 }),
-                id: "2995104339".to_string(),
-                labels: vec!["Food".to_string(), "Shopping".to_string()],
-                order: 1,
-                priority: TodoistTaskPriority::P1,
-                project_id: "2203306141".to_string(),
-                section_id: Some("7025".to_string()),
-                parent_id: Some("2995104589".to_string()),
-                url: "https://todoist.com/showTask?id=2995104339"
-                    .parse::<Uri>()
-                    .unwrap()
+                user_id: "2671355".to_string(),
+                added_by_uid: "2671355".to_string(),
+                assigned_by_uid: "2671362".to_string(),
+                responsible_uid: Some("2671355".to_string()),
             })
             .unwrap()
         );
     }
 
     #[rstest]
-    fn test_todoist_task_deserialization_config() {
+    fn test_todoist_item_deserialization_config() {
         assert_eq!(
-            serde_json::from_str::<TodoistTask>(
+            serde_json::from_str::<TodoistItem>(
                 r#"
                 {
-                    "creator_id": "2671355",
-                    "created_at": "2019-12-11T22:36:50.000000Z",
-                    "assignee_id": "2671362",
-                    "assigner_id": "2671355",
-                    "comment_count": 10,
-                    "is_completed": false,
+                    "id": "2995104339",
+                    "parent_id": "2995104589",
+                    "project_id": "2203306141",
+                    "sync_id": "1234567890",
+                    "section_id": "7025",
                     "content": "Buy Milk",
                     "description": "",
+                    "labels": ["Food", "Shopping"],
+                    "child_order": 1,
+                    "day_order": -1,
+                    "priority": 1,
+                    "checked": false,
+                    "is_deleted": false,
+                    "collapsed": false,
+                    "completed_at": null,
+                    "added_at": "2019-12-11T22:36:50Z",
                     "due": {
+                        "string": "tomorrow at 12",
                         "date": "2016-09-01",
                         "is_recurring": false,
-                        "datetime": "2016-09-01T12:00:00.000000Z",
-                        "string": "tomorrow at 12",
-                        "timezone": "Europe/Moscow"
+                        "timezone": "Europe/Moscow",
+                        "lang": "en"
                     },
-                    "id": "2995104339",
-                    "labels": ["Food", "Shopping"],
-                    "order": 1,
-                    "priority": 1,
-                    "project_id": "2203306141",
-                    "section_id": "7025",
-                    "parent_id": "2995104589",
-                    "url": "https://todoist.com/showTask?id=2995104339"
+                    "user_id": "2671355",
+                    "added_by_uid": "2671355",
+                    "assigned_by_uid": "2671362",
+                    "responsible_uid": "2671355"
                 }
             "#
             )
             .unwrap(),
-            TodoistTask {
-                creator_id: "2671355".to_string(),
-                created_at: Utc.with_ymd_and_hms(2019, 12, 11, 22, 36, 50).unwrap(),
-                assignee_id: Some("2671362".to_string()),
-                assigner_id: Some("2671355".to_string()),
-                comment_count: 10,
-                is_completed: false,
+            TodoistItem {
+                id: "2995104339".to_string(),
+                parent_id: Some("2995104589".to_string()),
+                project_id: "2203306141".to_string(),
+                sync_id: Some("1234567890".to_string()),
+                section_id: Some("7025".to_string()),
                 content: "Buy Milk".to_string(),
                 description: "".to_string(),
-                due: Some(TodoistTaskDue {
-                    date: NaiveDate::from_ymd_opt(2016, 9, 1).unwrap(),
-                    is_recurring: false,
-                    datetime: Some(Utc.with_ymd_and_hms(2016, 9, 1, 12, 0, 0).unwrap()),
-                    string: "tomorrow at 12".to_string(),
-                    timezone: Some("Europe/Moscow".to_string())
-                }),
-                id: "2995104339".to_string(),
                 labels: vec!["Food".to_string(), "Shopping".to_string()],
-                order: 1,
-                priority: TodoistTaskPriority::P1,
-                project_id: "2203306141".to_string(),
-                section_id: Some("7025".to_string()),
-                parent_id: Some("2995104589".to_string()),
-                url: "https://todoist.com/showTask?id=2995104339"
-                    .parse::<Uri>()
-                    .unwrap()
+                child_order: 1,
+                day_order: -1,
+                priority: TodoistItemPriority::P1,
+                checked: false,
+                is_deleted: false,
+                collapsed: false,
+                completed_at: None,
+                added_at: Utc.with_ymd_and_hms(2019, 12, 11, 22, 36, 50).unwrap(),
+                due: Some(TodoistItemDue {
+                    date: DueDate::Date(NaiveDate::from_ymd_opt(2016, 9, 1).unwrap()),
+                    is_recurring: false,
+                    lang: "en".to_string(),
+                    string: "tomorrow at 12".to_string(),
+                    timezone: Some("Europe/Moscow".to_string()),
+                }),
+                user_id: "2671355".to_string(),
+                added_by_uid: "2671355".to_string(),
+                assigned_by_uid: "2671362".to_string(),
+                responsible_uid: Some("2671355".to_string()),
             }
         );
     }

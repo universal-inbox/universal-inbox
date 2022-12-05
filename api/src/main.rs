@@ -79,7 +79,7 @@ async fn main() -> std::io::Result<()> {
             .expect("Failed to connect to Postgresql"),
     );
 
-    let todoist_service = TodoistService::new(&settings.integrations.todoist.api_token, None)
+    let todoist_service = TodoistService::new(&settings.integrations.todoist.api_token, None, None)
         .expect("Failed to create new TodoistService");
     let notification_service = Arc::new(
         NotificationService::new(
