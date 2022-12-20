@@ -1,85 +1,64 @@
-use std::sync::Arc;
-
 use anyhow::{anyhow, Context};
+use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use duplicate::duplicate_item;
 use http::Uri;
-use sqlx::{pool::PoolConnection, types::Json, PgPool, Postgres, QueryBuilder, Transaction};
-use tokio::sync::Mutex;
+use sqlx::{types::Json, QueryBuilder};
 use uuid::Uuid;
 
-use crate::universal_inbox::{
-    notification::source::NotificationSourceKind, UniversalInboxError, UpdateStatus,
-};
 use universal_inbox::notification::{
     Notification, NotificationMetadata, NotificationPatch, NotificationStatus,
 };
 
-pub struct NotificationRepository {
-    pub pool: Arc<PgPool>,
-}
+use crate::{
+    integrations::notification::NotificationSourceKind,
+    universal_inbox::{UniversalInboxError, UpdateStatus},
+};
 
-impl NotificationRepository {
-    pub fn new(pool: Arc<PgPool>) -> NotificationRepository {
-        NotificationRepository { pool }
-    }
+use super::{ConnectedRepository, TransactionalRepository};
 
-    pub async fn connect(
+#[async_trait]
+pub trait NotificationRepository {
+    async fn get_one_notification(
         &self,
-    ) -> Result<Arc<ConnectedNotificationRepository>, UniversalInboxError> {
-        let connection = self
-            .pool
-            .acquire()
-            .await
-            .context("Failed to connection to the database")?;
-        Ok(Arc::new(ConnectedNotificationRepository {
-            executor: Arc::new(Mutex::new(connection)),
-        }))
-    }
-
-    pub async fn begin(
+        id: Uuid,
+    ) -> Result<Option<Notification>, UniversalInboxError>;
+    async fn fetch_all_notifications(
         &self,
-    ) -> Result<Arc<TransactionalNotificationRepository>, UniversalInboxError> {
-        let transaction = self
-            .pool
-            .begin()
-            .await
-            .context("Failed to begin database transaction")?;
-        Ok(Arc::new(TransactionalNotificationRepository {
-            executor: Arc::new(Mutex::new(transaction)),
-        }))
-    }
+        status: NotificationStatus,
+        include_snoozed_notifications: bool,
+        task_id: Option<Uuid>,
+    ) -> Result<Vec<Notification>, UniversalInboxError>;
+    async fn create_notification(
+        &self,
+        notification: Box<Notification>,
+    ) -> Result<Box<Notification>, UniversalInboxError>;
+    async fn update_stale_notifications_status_from_source_ids(
+        &self,
+        active_source_notification_ids: Vec<String>,
+        kind: NotificationSourceKind,
+        status: NotificationStatus,
+    ) -> Result<Vec<Notification>, UniversalInboxError>;
+    async fn create_or_update_notification(
+        &self,
+        notification: Box<Notification>,
+    ) -> Result<Notification, UniversalInboxError>;
+    async fn update_notification<'b>(
+        &self,
+        notification_id: Uuid,
+        patch: &'b NotificationPatch,
+    ) -> Result<UpdateStatus<Box<Notification>>, UniversalInboxError>;
 }
 
-pub struct ConnectedNotificationRepository {
-    pub executor: Arc<Mutex<PoolConnection<Postgres>>>,
-}
-
-pub struct TransactionalNotificationRepository<'a> {
-    pub executor: Arc<Mutex<Transaction<'a, Postgres>>>,
-}
-
-impl<'a> TransactionalNotificationRepository<'a> {
+#[duplicate_item(repository; [ConnectedRepository]; [TransactionalRepository<'a>])]
+#[async_trait]
+#[allow(clippy::extra_unused_lifetimes)]
+impl<'a> NotificationRepository for repository {
     #[tracing::instrument(level = "debug", skip(self))]
-    pub async fn commit(self) -> Result<(), UniversalInboxError> {
-        let transaction = Arc::try_unwrap(self.executor)
-            .map_err(|_| {
-                UniversalInboxError::Unexpected(anyhow!(
-                    "Cannot extract transaction to commit it as it has other references using it"
-                ))
-            })?
-            .into_inner();
-        Ok(transaction
-            .commit()
-            .await
-            .context("Failed to commit database transaction")?)
-    }
-}
-
-#[duplicate_item(repository; [ConnectedNotificationRepository]; [TransactionalNotificationRepository<'a>])]
-impl<'a> repository {
-    #[tracing::instrument(level = "debug", skip(self))]
-    pub async fn get_one(&self, id: Uuid) -> Result<Option<Notification>, UniversalInboxError> {
+    async fn get_one_notification(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<Notification>, UniversalInboxError> {
         let mut executor = self.executor.lock().await;
         let row = sqlx::query_as!(
             NotificationRow,
@@ -93,7 +72,9 @@ impl<'a> repository {
                   metadata as "metadata: Json<NotificationMetadata>",
                   updated_at,
                   last_read_at,
-                  snoozed_until
+                  snoozed_until,
+                  task_id,
+                  task_source_id
                 FROM notification
                 WHERE id = $1
             "#,
@@ -108,10 +89,11 @@ impl<'a> repository {
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
-    pub async fn fetch_all(
+    async fn fetch_all_notifications(
         &self,
         status: NotificationStatus,
         include_snoozed_notifications: bool,
+        task_id: Option<Uuid>,
     ) -> Result<Vec<Notification>, UniversalInboxError> {
         let mut executor = self.executor.lock().await;
 
@@ -126,7 +108,9 @@ impl<'a> repository {
                   metadata,
                   updated_at,
                   last_read_at,
-                  snoozed_until
+                  snoozed_until,
+                  task_id,
+                  task_source_id
                 FROM
                   notification
                 WHERE
@@ -142,6 +126,10 @@ impl<'a> repository {
                 .push(")");
         }
 
+        if let Some(id) = task_id {
+            query_builder.push(" AND task_id = ").push_bind(id);
+        }
+
         let records = query_builder
             .build_query_as::<NotificationRow>()
             .fetch_all(&mut *executor)
@@ -152,7 +140,7 @@ impl<'a> repository {
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
-    pub async fn create(
+    async fn create_notification(
         &self,
         notification: Box<Notification>,
     ) -> Result<Box<Notification>, UniversalInboxError> {
@@ -171,10 +159,12 @@ impl<'a> repository {
                     metadata,
                     updated_at,
                     last_read_at,
-                    snoozed_until
+                    snoozed_until,
+                    task_id,
+                    task_source_id
                   )
                 VALUES
-                  ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             "#,
             notification.id,
             notification.title,
@@ -191,7 +181,9 @@ impl<'a> repository {
                 .map(|last_read_at| last_read_at.naive_utc()),
             notification
                 .snoozed_until
-                .map(|snoozed_until| snoozed_until.naive_utc())
+                .map(|snoozed_until| snoozed_until.naive_utc()),
+            notification.task_id,
+            notification.task_source_id
         )
         .execute(&mut *executor)
         .await
@@ -214,7 +206,7 @@ impl<'a> repository {
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
-    pub async fn update_stale_notifications_status_from_source_ids(
+    async fn update_stale_notifications_status_from_source_ids(
         &self,
         active_source_notification_ids: Vec<String>,
         kind: NotificationSourceKind,
@@ -241,7 +233,9 @@ impl<'a> repository {
                   metadata as "metadata: Json<NotificationMetadata>",
                   updated_at,
                   last_read_at,
-                  snoozed_until
+                  snoozed_until,
+                  task_id,
+                  task_source_id
             "#,
             status.to_string(),
             &active_source_notification_ids[..],
@@ -258,7 +252,7 @@ impl<'a> repository {
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
-    pub async fn create_or_update(
+    async fn create_or_update_notification(
         &self,
         notification: Box<Notification>,
     ) -> Result<Notification, UniversalInboxError> {
@@ -277,10 +271,12 @@ impl<'a> repository {
                     metadata,
                     updated_at,
                     last_read_at,
-                    snoozed_until
+                    snoozed_until,
+                    task_id,
+                    task_source_id
                   )
                 VALUES
-                  ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                 ON CONFLICT (source_id, kind) DO UPDATE
                 SET
                   title = $2,
@@ -289,7 +285,9 @@ impl<'a> repository {
                   metadata = $6,
                   updated_at = $7,
                   last_read_at = $8,
-                  snoozed_until = $9
+                  snoozed_until = $9,
+                  task_id = $10,
+                  task_source_id = $11
                 RETURNING
                   id
             "#,
@@ -308,7 +306,9 @@ impl<'a> repository {
                 .map(|last_read_at| last_read_at.naive_utc()),
             notification
                 .snoozed_until
-                .map(|snoozed_until| snoozed_until.naive_utc())
+                .map(|snoozed_until| snoozed_until.naive_utc()),
+            notification.task_id,
+            notification.task_source_id
         )
         .fetch_one(&mut *executor)
         .await
@@ -326,7 +326,7 @@ impl<'a> repository {
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
-    pub async fn update<'b>(
+    async fn update_notification<'b>(
         &self,
         notification_id: Uuid,
         patch: &'b NotificationPatch,
@@ -370,6 +370,8 @@ impl<'a> repository {
                   updated_at,
                   last_read_at,
                   snoozed_until,
+                  task_id,
+                  task_source_id,
                   (SELECT"#,
         );
 
@@ -430,6 +432,8 @@ struct NotificationRow {
     updated_at: NaiveDateTime,
     last_read_at: Option<NaiveDateTime>,
     snoozed_until: Option<NaiveDateTime>,
+    task_id: Option<Uuid>,
+    task_source_id: Option<String>,
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -484,6 +488,8 @@ impl TryFrom<&NotificationRow> for Notification {
             snoozed_until: row
                 .snoozed_until
                 .map(|snoozed_until| DateTime::<Utc>::from_utc(snoozed_until, Utc)),
+            task_id: row.task_id,
+            task_source_id: row.task_source_id.clone(),
         })
     }
 }

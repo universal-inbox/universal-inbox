@@ -1,55 +1,37 @@
-use std::{env, fs};
-
 use chrono::{TimeZone, Utc};
-use format_serde_error::SerdeError;
 use http::Uri;
-use httpmock::{Method::GET, Method::POST, Mock, MockServer};
+use httpmock::{Method::POST, Mock, MockServer};
+use pretty_assertions::assert_eq;
 use rstest::*;
 use serde_json::json;
 
 use universal_inbox::{
-    notification::integrations::todoist::TodoistTask,
+    notification::{NotificationMetadata, NotificationStatus},
     task::{
-        integrations::todoist::{self, TodoistItem, TodoistProject},
+        integrations::todoist::{self, TodoistItem},
         Task, TaskMetadata, TaskStatus,
     },
+};
+
+use universal_inbox_api::{
+    integrations::todoist::TodoistSyncResponse, universal_inbox::task::TaskCreationResult,
 };
 
 use crate::helpers::{load_json_fixture_file, rest::create_resource};
 
 #[fixture]
-pub fn sync_todoist_tasks() -> Vec<TodoistTask> {
-    load_json_fixture_file("/tests/api/fixtures/sync_todoist_tasks.json")
+pub fn sync_todoist_items_response() -> TodoistSyncResponse {
+    load_json_fixture_file("/tests/api/fixtures/sync_todoist_items_response.json")
 }
 
 #[fixture]
-pub fn sync_todoist_items() -> Vec<TodoistItem> {
-    load_json_fixture_file("/tests/api/fixtures/sync_todoist_items.json")
-}
-
-#[fixture]
-pub fn sync_todoist_projects() -> Vec<TodoistProject> {
-    load_json_fixture_file("/tests/api/fixtures/sync_todoist_projects.json")
-}
-
-pub fn mock_todoist_tasks_service<'a>(
-    todoist_mock_server: &'a MockServer,
-    result: &'a Vec<TodoistTask>,
-) -> Mock<'a> {
-    todoist_mock_server.mock(|when, then| {
-        when.method(GET)
-            .path("/tasks")
-            .query_param("filter", "#Inbox")
-            .header("authorization", "Bearer todoist_test_token");
-        then.status(200)
-            .header("content-type", "application/json")
-            .json_body_obj(result);
-    })
+pub fn sync_todoist_projects_response() -> TodoistSyncResponse {
+    load_json_fixture_file("/tests/api/fixtures/sync_todoist_projects_response.json")
 }
 
 pub fn mock_todoist_sync_items_service<'a>(
     todoist_mock_server: &'a MockServer,
-    result: &'a Vec<TodoistItem>,
+    result: &'a TodoistSyncResponse,
 ) -> Mock<'a> {
     todoist_mock_server.mock(|when, then| {
         when.method(POST)
@@ -64,7 +46,7 @@ pub fn mock_todoist_sync_items_service<'a>(
 
 pub fn mock_todoist_sync_projects_service<'a>(
     todoist_mock_server: &'a MockServer,
-    result: &'a Vec<TodoistProject>,
+    result: &'a TodoistSyncResponse,
 ) -> Mock<'a> {
     todoist_mock_server.mock(|when, then| {
         when.method(POST)
@@ -76,25 +58,20 @@ pub fn mock_todoist_sync_projects_service<'a>(
             .json_body_obj(result);
     })
 }
-#[fixture]
-pub fn todoist_task() -> Box<TodoistTask> {
-    let fixture_path = format!(
-        "{}/tests/api/fixtures/todoist_task.json",
-        env::var("CARGO_MANIFEST_DIR").unwrap(),
-    );
-    let input_str = fs::read_to_string(fixture_path).unwrap();
-    serde_json::from_str(&input_str)
-        .map_err(|err| SerdeError::new(input_str, err))
-        .unwrap()
-}
 
 #[fixture]
 pub fn todoist_item() -> Box<TodoistItem> {
     load_json_fixture_file("/tests/api/fixtures/todoist_item.json")
 }
 
-pub fn assert_sync_items(tasks: &[Task], sync_todoist_items: &[TodoistItem]) {
-    for task in tasks.iter() {
+pub fn assert_sync_items(
+    task_creations: &[TaskCreationResult],
+    sync_todoist_items: &[TodoistItem],
+) {
+    for task_creation in task_creations.iter() {
+        let task = &task_creation.task;
+        let notification = task_creation.notification.clone();
+
         match task.source_id.as_ref() {
             "1123" => {
                 assert_eq!(task.title, "Task 1".to_string());
@@ -116,6 +93,17 @@ pub fn assert_sync_items(tasks: &[Task], sync_todoist_items: &[TodoistItem]) {
                     task.metadata,
                     TaskMetadata::Todoist(sync_todoist_items[0].clone())
                 );
+
+                assert!(notification.is_some());
+                let notif = notification.unwrap();
+                assert_eq!(notif.title, task.title);
+                assert_eq!(notif.source_id, task.source_id.clone());
+                assert_eq!(notif.status, NotificationStatus::Unread);
+                assert_eq!(notif.source_html_url, task.source_html_url);
+                assert_eq!(notif.updated_at, task.created_at);
+                assert_eq!(notif.metadata, NotificationMetadata::Todoist);
+                assert_eq!(notif.task_id, Some(task.id));
+                assert_eq!(notif.task_source_id, Some(task.source_id.clone()));
             }
             // This task should be updated
             "1456" => {
@@ -138,6 +126,7 @@ pub fn assert_sync_items(tasks: &[Task], sync_todoist_items: &[TodoistItem]) {
                     task.metadata,
                     TaskMetadata::Todoist(sync_todoist_items[1].clone())
                 );
+                assert!(notification.is_none());
             }
             _ => {
                 unreachable!("Unexpected task title '{}'", &task.title);
@@ -149,7 +138,7 @@ pub fn assert_sync_items(tasks: &[Task], sync_todoist_items: &[TodoistItem]) {
 pub async fn create_task_from_todoist_item(
     app_address: &str,
     todoist_item: &TodoistItem,
-) -> Box<Task> {
+) -> Box<TaskCreationResult> {
     create_resource(
         app_address,
         "tasks",

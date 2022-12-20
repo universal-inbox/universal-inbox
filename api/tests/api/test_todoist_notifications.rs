@@ -1,16 +1,14 @@
 use chrono::{TimeZone, Utc};
-use httpmock::Method::DELETE;
 use rstest::*;
 use serde_json::json;
 
-use universal_inbox::notification::{
-    integrations::todoist::TodoistTask, Notification, NotificationMetadata, NotificationPatch,
-    NotificationStatus,
+use universal_inbox::{
+    notification::{Notification, NotificationMetadata, NotificationPatch, NotificationStatus},
+    task::integrations::todoist::get_task_html_url,
 };
 
 use crate::helpers::{
-    rest::{create_resource, get_resource, patch_resource, patch_resource_response},
-    task::todoist::todoist_task,
+    rest::{create_resource, patch_resource_response},
     tested_app, TestedApp,
 };
 
@@ -19,64 +17,10 @@ mod patch_notification {
 
     #[rstest]
     #[tokio::test]
-    async fn test_patch_notification_status_as_deleted(
+    async fn test_patch_todoist_notification_status(
         #[future] tested_app: TestedApp,
-        todoist_task: Box<TodoistTask>,
-        #[values(205, 304, 404)] todoist_status_code: u16,
-    ) {
-        let app = tested_app.await;
-        let todoist_mark_thread_as_read_mock = app.todoist_mock_server.mock(|when, then| {
-            when.method(DELETE)
-                .path("/tasks/1234")
-                .header("authorization", "Bearer todoist_test_token");
-            then.status(todoist_status_code);
-        });
-        let expected_notification = Box::new(Notification {
-            id: uuid::Uuid::new_v4(),
-            title: "task 1".to_string(),
-            status: NotificationStatus::Unread,
-            source_id: "1234".to_string(),
-            source_html_url: Some(todoist_task.url.clone()),
-            metadata: NotificationMetadata::Todoist(*todoist_task),
-            updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-            last_read_at: None,
-            snoozed_until: None,
-        });
-        let created_notification = create_resource(
-            &app.app_address,
-            "notifications",
-            expected_notification.clone(),
-        )
-        .await;
-
-        assert_eq!(created_notification, expected_notification);
-
-        let patched_notification = patch_resource(
-            &app.app_address,
-            "notifications",
-            created_notification.id,
-            &NotificationPatch {
-                status: Some(NotificationStatus::Deleted),
-                ..Default::default()
-            },
-        )
-        .await;
-
-        assert_eq!(
-            patched_notification,
-            Box::new(Notification {
-                status: NotificationStatus::Deleted,
-                ..*created_notification
-            })
-        );
-        todoist_mark_thread_as_read_mock.assert();
-    }
-
-    #[rstest]
-    #[tokio::test]
-    async fn test_patch_notification_status_as_unsubscribed(
-        #[future] tested_app: TestedApp,
-        todoist_task: Box<TodoistTask>,
+        #[values(NotificationStatus::Unsubscribed, NotificationStatus::Deleted)]
+        new_status: NotificationStatus,
     ) {
         let app = tested_app.await;
         let expected_notification = Box::new(Notification {
@@ -84,13 +28,15 @@ mod patch_notification {
             title: "task 1".to_string(),
             status: NotificationStatus::Unread,
             source_id: "1234".to_string(),
-            source_html_url: Some(todoist_task.url.clone()),
-            metadata: NotificationMetadata::Todoist(*todoist_task),
+            source_html_url: get_task_html_url("1234"),
+            metadata: NotificationMetadata::Todoist,
             updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
             last_read_at: None,
             snoozed_until: None,
+            task_id: None,
+            task_source_id: None,
         });
-        let created_notification = create_resource(
+        let created_notification: Box<Notification> = create_resource(
             &app.app_address,
             "notifications",
             expected_notification.clone(),
@@ -104,7 +50,7 @@ mod patch_notification {
             "notifications",
             created_notification.id,
             &NotificationPatch {
-                status: Some(NotificationStatus::Unsubscribed),
+                status: Some(new_status),
                 ..Default::default()
             },
         )
@@ -116,67 +62,12 @@ mod patch_notification {
         assert_eq!(
             body,
             json!({
-                "message":
-                    format!("Unsupported action: Cannot unsubscribe from Todoist task `1234`")
+                "message": format!(
+                    "Unsupported action: Cannot update the status of Todoist notification {}, update task's project",
+                    expected_notification.id
+                )
             })
             .to_string()
         );
-    }
-
-    #[rstest]
-    #[tokio::test]
-    async fn test_patch_notification_status_as_deleted_with_todoist_api_error(
-        #[future] tested_app: TestedApp,
-        todoist_task: Box<TodoistTask>,
-    ) {
-        let app = tested_app.await;
-        let todoist_mark_thread_as_read_mock = app.todoist_mock_server.mock(|when, then| {
-            when.method(DELETE)
-                .path("/tasks/1234")
-                .header("authorization", "Bearer todoist_test_token");
-            then.status(403);
-        });
-        let expected_notification = Box::new(Notification {
-            id: uuid::Uuid::new_v4(),
-            title: "task 1".to_string(),
-            status: NotificationStatus::Unread,
-            source_id: "1234".to_string(),
-            source_html_url: Some(todoist_task.url.clone()),
-            metadata: NotificationMetadata::Todoist(*todoist_task),
-            updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-            last_read_at: None,
-            snoozed_until: None,
-        });
-        let created_notification = create_resource(
-            &app.app_address,
-            "notifications",
-            expected_notification.clone(),
-        )
-        .await;
-
-        assert_eq!(created_notification, expected_notification);
-
-        let response = patch_resource_response(
-            &app.app_address,
-            "notifications",
-            created_notification.id,
-            &NotificationPatch {
-                status: Some(NotificationStatus::Deleted),
-                ..Default::default()
-            },
-        )
-        .await;
-        assert_eq!(response.status(), 500);
-
-        let body = response.text().await.expect("Cannot get response body");
-        assert_eq!(
-            body,
-            json!({ "message": format!("Failed to delete Todoist task `1234`") }).to_string()
-        );
-        todoist_mark_thread_as_read_mock.assert();
-
-        let notification: Box<Notification> =
-            get_resource(&app.app_address, "notifications", created_notification.id).await;
-        assert_eq!(notification.status, NotificationStatus::Unread);
     }
 }

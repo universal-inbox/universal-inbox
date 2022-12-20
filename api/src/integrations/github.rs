@@ -4,15 +4,15 @@ use async_trait::async_trait;
 use format_serde_error::SerdeError;
 use futures::stream::{self, TryStreamExt};
 use http::{HeaderMap, HeaderValue, Uri};
-use uuid::Uuid;
 
-use crate::universal_inbox::{notification::source::NotificationSourceKind, UniversalInboxError};
-use universal_inbox::notification::{
-    integrations::github::GithubNotification, Notification, NotificationMetadata,
-    NotificationStatus,
+use universal_inbox::notification::integrations::github::GithubNotification;
+
+use crate::{
+    integrations::notification::{
+        NotificationSource, NotificationSourceKind, NotificationSourceService,
+    },
+    universal_inbox::UniversalInboxError,
 };
-
-use super::notification::{NotificationSourceService, SourceNotification};
 
 #[derive(Clone)]
 pub struct GithubService {
@@ -176,30 +176,6 @@ impl NotificationSourceService<GithubNotification> for GithubService {
         .collect::<Vec<GithubNotification>>())
     }
 
-    fn build_notification(&self, source: &GithubNotification) -> Box<Notification> {
-        let source_html_url = get_html_url_from_api_url(&source.subject.url);
-
-        Box::new(Notification {
-            id: Uuid::new_v4(),
-            title: source.subject.title.clone(),
-            source_id: source.id.clone(),
-            source_html_url,
-            status: if source.unread {
-                NotificationStatus::Unread
-            } else {
-                NotificationStatus::Read
-            },
-            metadata: NotificationMetadata::Github(source.clone()),
-            updated_at: source.updated_at,
-            last_read_at: source.last_read_at,
-            snoozed_until: None,
-        })
-    }
-
-    fn get_notification_source_kind(&self) -> NotificationSourceKind {
-        NotificationSourceKind::Github
-    }
-
     async fn delete_notification_from_source(
         &self,
         source_id: &str,
@@ -215,9 +191,9 @@ impl NotificationSourceService<GithubNotification> for GithubService {
     }
 }
 
-impl SourceNotification for GithubNotification {
-    fn get_id(&self) -> String {
-        self.id.clone()
+impl NotificationSource for GithubService {
+    fn get_notification_source_kind(&self) -> NotificationSourceKind {
+        NotificationSourceKind::Github
     }
 }
 

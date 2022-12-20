@@ -38,11 +38,11 @@ pub async fn create_resource_response<T: serde::Serialize>(
         .expect("Failed to execute request")
 }
 
-pub async fn create_resource<T: serde::Serialize + for<'a> serde::Deserialize<'a>>(
+pub async fn create_resource<T: serde::Serialize, U: for<'a> serde::Deserialize<'a>>(
     app_address: &str,
     resource_name: &str,
     resource: Box<T>,
-) -> Box<T> {
+) -> Box<U> {
     create_resource_response(app_address, resource_name, resource)
         .await
         .json()

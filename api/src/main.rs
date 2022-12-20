@@ -7,14 +7,14 @@ use tracing::{error, info};
 use universal_inbox_api::{
     commands,
     configuration::Settings,
-    integrations::{github::GithubService, todoist::TodoistService},
-    observability::{get_subscriber, init_subscriber},
-    repository::{notification::NotificationRepository, task::TaskRepository},
-    run,
-    universal_inbox::{
-        notification::{service::NotificationService, source::NotificationSourceKind},
-        task::service::TaskService,
+    integrations::{
+        github::GithubService, notification::NotificationSyncSourceKind, task::TaskSyncSourceKind,
+        todoist::TodoistService,
     },
+    observability::{get_subscriber, init_subscriber},
+    repository::Repository,
+    run,
+    universal_inbox::{notification::service::NotificationService, task::service::TaskService},
 };
 
 /// Universal Inbox API server and associated commands
@@ -31,10 +31,16 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Synchronize sources of notification
-    Sync {
+    /// Synchronize sources of notifications
+    SyncNotifications {
         #[clap(arg_enum, value_parser)]
-        source: Option<NotificationSourceKind>,
+        source: Option<NotificationSyncSourceKind>,
+    },
+
+    /// Synchronize sources of tasks
+    SyncTasks {
+        #[clap(arg_enum, value_parser)]
+        source: Option<TaskSyncSourceKind>,
     },
 
     /// Run API server
@@ -79,29 +85,33 @@ async fn main() -> std::io::Result<()> {
             .expect("Failed to connect to Postgresql"),
     );
 
-    let todoist_service = TodoistService::new(&settings.integrations.todoist.api_token, None, None)
+    let todoist_service = TodoistService::new(&settings.integrations.todoist.api_token, None)
         .expect("Failed to create new TodoistService");
+
+    let repository = Arc::new(Repository::new(pool.clone()));
     let notification_service = Arc::new(
         NotificationService::new(
-            Box::new(NotificationRepository::new(pool.clone())),
+            repository.clone(),
             GithubService::new(
                 &settings.integrations.github.api_token,
                 None,
                 settings.integrations.github.page_size,
             )
             .expect("Failed to create new GithubService"),
-            todoist_service.clone(),
         )
         .expect("Failed to setup notification service"),
     );
 
     let task_service = Arc::new(
-        TaskService::new(Box::new(TaskRepository::new(pool.clone())), todoist_service)
+        TaskService::new(repository, todoist_service, notification_service.clone())
             .expect("Failed to setup task service"),
     );
 
     let result = match &cli.command {
-        Commands::Sync { source } => commands::sync::sync(notification_service, source).await,
+        Commands::SyncNotifications { source } => {
+            commands::sync::sync_notifications(notification_service, source).await
+        }
+        Commands::SyncTasks { source } => commands::sync::sync_tasks(task_service, source).await,
         Commands::Serve => {
             let listener = TcpListener::bind(format!("0.0.0.0:{}", settings.application.port))
                 .expect("Failed to bind port");
