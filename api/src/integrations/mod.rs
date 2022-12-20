@@ -1,4 +1,7 @@
 use async_trait::async_trait;
+use clap::ArgEnum;
+use macro_attr::macro_attr;
+use serde::{Deserialize, Serialize};
 
 use crate::universal_inbox::UniversalInboxError;
 
@@ -8,19 +11,30 @@ pub mod todoist;
 pub mod notification {
     use super::*;
 
-    use universal_inbox::notification::Notification;
+    macro_attr! {
+        // Synchronization sources for notifications
+        #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ArgEnum, Debug, EnumFromStr!, EnumDisplay!)]
+        pub enum NotificationSyncSourceKind {
+            Github
+        }
+    }
 
-    use crate::universal_inbox::notification::source::NotificationSourceKind;
+    macro_attr! {
+        // notification sources, either direct or from tasks
+        #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ArgEnum, Debug, EnumFromStr!, EnumDisplay!)]
+        pub enum NotificationSourceKind {
+            Github,
+            Todoist
+        }
+    }
 
-    pub trait SourceNotification {
-        fn get_id(&self) -> String;
+    pub trait NotificationSource {
+        fn get_notification_source_kind(&self) -> NotificationSourceKind;
     }
 
     #[async_trait]
-    pub trait NotificationSourceService<T: SourceNotification> {
+    pub trait NotificationSourceService<T>: NotificationSource {
         async fn fetch_all_notifications(&self) -> Result<Vec<T>, UniversalInboxError>;
-        fn build_notification(&self, source: &T) -> Box<Notification>;
-        fn get_notification_source_kind(&self) -> NotificationSourceKind;
         async fn delete_notification_from_source(
             &self,
             source_id: &str,
@@ -33,20 +47,31 @@ pub mod notification {
 }
 
 pub mod task {
-    use crate::universal_inbox::task::source::TaskSourceKind;
-
     use super::*;
 
     use universal_inbox::task::Task;
 
-    pub trait SourceTask {
-        fn get_id(&self) -> String;
+    macro_attr! {
+        #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ArgEnum, Debug, EnumFromStr!, EnumDisplay!)]
+        pub enum TaskSyncSourceKind {
+            Todoist
+        }
+    }
+
+    macro_attr! {
+        #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ArgEnum, Debug, EnumFromStr!, EnumDisplay!)]
+        pub enum TaskSourceKind {
+            Todoist
+        }
+    }
+
+    pub trait TaskSource {
+        fn get_task_source_kind(&self) -> TaskSourceKind;
     }
 
     #[async_trait]
-    pub trait TaskSourceService<T: SourceTask> {
+    pub trait TaskSourceService<T>: TaskSource {
         async fn fetch_all_tasks(&self) -> Result<Vec<T>, UniversalInboxError>;
         async fn build_task(&self, source: &T) -> Result<Box<Task>, UniversalInboxError>;
-        fn get_task_source_kind(&self) -> TaskSourceKind;
     }
 }

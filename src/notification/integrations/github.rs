@@ -1,8 +1,11 @@
 use chrono::{DateTime, Utc};
 use git_url_parse::GitUrl;
-use http::Uri;
+use http::{uri::Authority, Uri};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
+use uuid::Uuid;
+
+use crate::notification::{Notification, NotificationMetadata, NotificationStatus};
 
 #[serde_as]
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
@@ -389,6 +392,46 @@ pub struct GithubNotification {
     pub url: Uri,
     #[serde_as(as = "DisplayFromStr")]
     pub subscription_url: Uri,
+}
+
+impl GithubNotification {
+    pub fn get_html_url_from_api_url(api_url: &Option<Uri>) -> Option<Uri> {
+        api_url.as_ref().and_then(|uri| {
+            if uri.host() == Some("api.github.com") && uri.path().starts_with("/repos") {
+                let mut uri_parts = uri.clone().into_parts();
+                uri_parts.authority = Some(Authority::from_static("github.com"));
+                uri_parts.path_and_query = uri_parts
+                    .path_and_query
+                    .and_then(|pq| pq.as_str().trim_start_matches("/repos").parse().ok());
+                return Uri::from_parts(uri_parts).ok();
+            }
+            None
+        })
+    }
+}
+
+impl From<GithubNotification> for Notification {
+    fn from(source: GithubNotification) -> Self {
+        let source_html_url = GithubNotification::get_html_url_from_api_url(&source.subject.url);
+
+        Notification {
+            id: Uuid::new_v4(),
+            title: source.subject.title.clone(),
+            source_id: source.id.clone(),
+            source_html_url,
+            status: if source.unread {
+                NotificationStatus::Unread
+            } else {
+                NotificationStatus::Read
+            },
+            metadata: NotificationMetadata::Github(source.clone()),
+            updated_at: source.updated_at,
+            last_read_at: source.last_read_at,
+            snoozed_until: None,
+            task_id: None,
+            task_source_id: None,
+        }
+    }
 }
 
 #[cfg(test)]

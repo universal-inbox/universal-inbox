@@ -1,77 +1,45 @@
-use std::sync::Arc;
-
 use anyhow::{anyhow, Context};
+use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use duplicate::duplicate_item;
 use http::Uri;
-use sqlx::{pool::PoolConnection, types::Json, PgPool, Postgres, QueryBuilder, Transaction};
-use tokio::sync::Mutex;
+use sqlx::{types::Json, QueryBuilder};
 use uuid::Uuid;
 
-use crate::universal_inbox::{task::source::TaskSourceKind, UniversalInboxError, UpdateStatus};
 use universal_inbox::task::{DueDate, Task, TaskMetadata, TaskPatch, TaskPriority, TaskStatus};
 
-pub struct TaskRepository {
-    pub pool: Arc<PgPool>,
+use crate::{
+    integrations::task::TaskSourceKind,
+    universal_inbox::{UniversalInboxError, UpdateStatus},
+};
+
+use super::{ConnectedRepository, TransactionalRepository};
+
+#[async_trait]
+pub trait TaskRepository {
+    async fn get_one_task(&self, id: Uuid) -> Result<Option<Task>, UniversalInboxError>;
+    async fn fetch_all_tasks(&self, status: TaskStatus) -> Result<Vec<Task>, UniversalInboxError>;
+    async fn create_task(&self, task: Box<Task>) -> Result<Box<Task>, UniversalInboxError>;
+    async fn update_stale_tasks_status_from_source_ids(
+        &self,
+        active_source_task_ids: Vec<String>,
+        kind: TaskSourceKind,
+        status: TaskStatus,
+    ) -> Result<Vec<Task>, UniversalInboxError>;
+    async fn create_or_update_task(&self, task: Box<Task>) -> Result<Task, UniversalInboxError>;
+    async fn update_task<'b>(
+        &self,
+        task_id: Uuid,
+        patch: &'b TaskPatch,
+    ) -> Result<UpdateStatus<Box<Task>>, UniversalInboxError>;
 }
 
-impl TaskRepository {
-    pub fn new(pool: Arc<PgPool>) -> TaskRepository {
-        TaskRepository { pool }
-    }
-
-    pub async fn connect(&self) -> Result<Arc<ConnectedTaskRepository>, UniversalInboxError> {
-        let connection = self
-            .pool
-            .acquire()
-            .await
-            .context("Failed to connection to the database")?;
-        Ok(Arc::new(ConnectedTaskRepository {
-            executor: Arc::new(Mutex::new(connection)),
-        }))
-    }
-
-    pub async fn begin(&self) -> Result<Arc<TransactionalTaskRepository>, UniversalInboxError> {
-        let transaction = self
-            .pool
-            .begin()
-            .await
-            .context("Failed to begin database transaction")?;
-        Ok(Arc::new(TransactionalTaskRepository {
-            executor: Arc::new(Mutex::new(transaction)),
-        }))
-    }
-}
-
-pub struct ConnectedTaskRepository {
-    pub executor: Arc<Mutex<PoolConnection<Postgres>>>,
-}
-
-pub struct TransactionalTaskRepository<'a> {
-    pub executor: Arc<Mutex<Transaction<'a, Postgres>>>,
-}
-
-impl<'a> TransactionalTaskRepository<'a> {
+#[duplicate_item(repository; [ConnectedRepository]; [TransactionalRepository<'a>])]
+#[async_trait]
+#[allow(clippy::extra_unused_lifetimes)]
+impl<'a> TaskRepository for repository {
     #[tracing::instrument(level = "debug", skip(self))]
-    pub async fn commit(self) -> Result<(), UniversalInboxError> {
-        let transaction = Arc::try_unwrap(self.executor)
-            .map_err(|_| {
-                UniversalInboxError::Unexpected(anyhow!(
-                    "Cannot extract transaction to commit it as it has other references using it"
-                ))
-            })?
-            .into_inner();
-        Ok(transaction
-            .commit()
-            .await
-            .context("Failed to commit database transaction")?)
-    }
-}
-
-#[duplicate_item(repository; [ConnectedTaskRepository]; [TransactionalTaskRepository<'a>])]
-impl<'a> repository {
-    #[tracing::instrument(level = "debug", skip(self))]
-    pub async fn get_one(&self, id: Uuid) -> Result<Option<Task>, UniversalInboxError> {
+    async fn get_one_task(&self, id: Uuid) -> Result<Option<Task>, UniversalInboxError> {
         let mut executor = self.executor.lock().await;
         let row = sqlx::query_as!(
             TaskRow,
@@ -105,7 +73,7 @@ impl<'a> repository {
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
-    pub async fn fetch_all(&self, status: TaskStatus) -> Result<Vec<Task>, UniversalInboxError> {
+    async fn fetch_all_tasks(&self, status: TaskStatus) -> Result<Vec<Task>, UniversalInboxError> {
         let mut executor = self.executor.lock().await;
 
         let mut query_builder = QueryBuilder::new(
@@ -144,7 +112,7 @@ impl<'a> repository {
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
-    pub async fn create(&self, task: Box<Task>) -> Result<Box<Task>, UniversalInboxError> {
+    async fn create_task(&self, task: Box<Task>) -> Result<Box<Task>, UniversalInboxError> {
         let mut executor = self.executor.lock().await;
         let metadata = Json(task.metadata.clone());
         let priority: u8 = task.priority.into();
@@ -216,7 +184,7 @@ impl<'a> repository {
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
-    pub async fn update_stale_tasks_status_from_source_ids(
+    async fn update_stale_tasks_status_from_source_ids(
         &self,
         active_source_task_ids: Vec<String>,
         kind: TaskSourceKind,
@@ -274,7 +242,7 @@ impl<'a> repository {
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
-    pub async fn create_or_update(&self, task: Box<Task>) -> Result<Task, UniversalInboxError> {
+    async fn create_or_update_task(&self, task: Box<Task>) -> Result<Task, UniversalInboxError> {
         let mut executor = self.executor.lock().await;
         let metadata = Json(task.metadata.clone());
         let priority: u8 = task.priority.into();
@@ -349,7 +317,7 @@ impl<'a> repository {
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
-    pub async fn update<'b>(
+    async fn update_task<'b>(
         &self,
         task_id: Uuid,
         patch: &'b TaskPatch,

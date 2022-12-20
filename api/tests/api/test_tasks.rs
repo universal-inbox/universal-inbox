@@ -1,14 +1,20 @@
-use chrono::{TimeZone, Utc};
+use chrono::{NaiveDate, TimeZone, Utc};
 use http::{StatusCode, Uri};
 use rstest::*;
 use serde_json::json;
 use uuid::Uuid;
 
-use universal_inbox::task::{
-    integrations::todoist::TodoistItem, Task, TaskMetadata, TaskPatch, TaskPriority, TaskStatus,
+use universal_inbox::{
+    notification::{Notification, NotificationStatus},
+    task::{
+        integrations::todoist::TodoistItem, Task, TaskMetadata, TaskPatch, TaskPriority, TaskStatus,
+    },
 };
 
+use universal_inbox_api::universal_inbox::task::TaskCreationResult;
+
 use crate::helpers::{
+    notification::list_notifications,
     rest::{
         create_resource, create_resource_response, get_resource, get_resource_response,
         patch_resource_response,
@@ -18,13 +24,15 @@ use crate::helpers::{
 };
 
 mod create_task {
-    use chrono::NaiveDate;
-
     use super::*;
+    use pretty_assertions::assert_eq;
 
     #[rstest]
     #[tokio::test]
-    async fn test_create_task(#[future] tested_app: TestedApp, todoist_item: Box<TodoistItem>) {
+    async fn test_create_task_in_inbox(
+        #[future] tested_app: TestedApp,
+        todoist_item: Box<TodoistItem>,
+    ) {
         let app = tested_app.await;
         let expected_minimal_task = Box::new(Task {
             id: uuid::Uuid::new_v4(),
@@ -44,15 +52,39 @@ mod create_task {
             metadata: TaskMetadata::Todoist(*todoist_item.clone()),
         });
 
-        let created_task =
+        let creation_result: Box<TaskCreationResult> =
             create_resource(&app.app_address, "tasks", expected_minimal_task.clone()).await;
 
-        assert_eq!(created_task, expected_minimal_task);
+        assert_eq!(creation_result.task, *expected_minimal_task);
+        // A notification should have been created for tasks in the inbox (project)
+        assert!(creation_result.notification.is_some());
+        let created_notification = creation_result.notification.unwrap();
+        assert_eq!(created_notification.task_id, Some(creation_result.task.id));
 
-        let task = get_resource(&app.app_address, "tasks", created_task.id).await;
-
+        let task = get_resource(&app.app_address, "tasks", creation_result.task.id).await;
         assert_eq!(task, expected_minimal_task);
 
+        let notifications = list_notifications(
+            &app.app_address,
+            NotificationStatus::Unread,
+            false,
+            Some(creation_result.task.id),
+        )
+        .await;
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(
+            notifications[0],
+            Notification {
+                id: created_notification.id,
+                ..(*task).into()
+            }
+        );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_create_task(#[future] tested_app: TestedApp, todoist_item: Box<TodoistItem>) {
+        let app = tested_app.await;
         let expected_task = Box::new(Task {
             id: uuid::Uuid::new_v4(),
             source_id: "5678".to_string(),
@@ -66,20 +98,31 @@ mod create_task {
             )),
             source_html_url: "https://todoist.com/showTask?id=5678".parse::<Uri>().ok(),
             tags: vec!["tag1".to_string(), "tag2".to_string()],
-            parent_id: Some(expected_minimal_task.id),
+            parent_id: None,
             project: "project 1".to_string(),
             is_recurring: true,
             created_at: Utc.with_ymd_and_hms(2022, 1, 2, 0, 0, 0).unwrap(),
             metadata: TaskMetadata::Todoist(*todoist_item),
         });
 
-        let created_task = create_resource(&app.app_address, "tasks", expected_task.clone()).await;
+        let creation_result: Box<TaskCreationResult> =
+            create_resource(&app.app_address, "tasks", expected_task.clone()).await;
 
-        assert_eq!(created_task, expected_task);
+        assert_eq!(creation_result.task, *expected_task);
+        assert!(creation_result.notification.is_none());
 
-        let task = get_resource(&app.app_address, "tasks", created_task.id).await;
+        let task = get_resource(&app.app_address, "tasks", creation_result.task.id).await;
 
         assert_eq!(task, expected_task);
+
+        let notifications = list_notifications(
+            &app.app_address,
+            NotificationStatus::Unread,
+            false,
+            Some(creation_result.task.id),
+        )
+        .await;
+        assert_eq!(notifications.len(), 0);
     }
 
     #[rstest]
@@ -144,9 +187,10 @@ mod create_task {
             metadata: TaskMetadata::Todoist(*todoist_item.clone()),
         });
 
-        let created_task = create_resource(&app.app_address, "tasks", expected_task.clone()).await;
+        let creation_result: Box<TaskCreationResult> =
+            create_resource(&app.app_address, "tasks", expected_task.clone()).await;
 
-        assert_eq!(created_task, expected_task);
+        assert_eq!(creation_result.task, *expected_task);
 
         let response = create_resource_response(&app.app_address, "tasks", expected_task).await;
 
@@ -154,7 +198,7 @@ mod create_task {
         let body = response.text().await.expect("Cannot get response body");
         assert_eq!(
             body,
-            json!({ "message": format!("The entity {} already exists", created_task.id) })
+            json!({ "message": format!("The entity {} already exists", creation_result.task.id) })
                 .to_string()
         );
     }
@@ -162,6 +206,7 @@ mod create_task {
 
 mod get_task {
     use super::*;
+    use pretty_assertions::assert_eq;
 
     #[rstest]
     #[tokio::test]
@@ -182,6 +227,7 @@ mod get_task {
 
 mod list_tasks {
     use super::*;
+    use pretty_assertions::assert_eq;
 
     #[rstest]
     #[tokio::test]
@@ -199,7 +245,7 @@ mod list_tasks {
         todoist_item_.id = "43".to_string();
 
         let app = tested_app.await;
-        let task_active = create_resource(
+        let task_active: Box<TaskCreationResult> = create_resource(
             &app.app_address,
             "tasks",
             Box::new(Task {
@@ -222,7 +268,7 @@ mod list_tasks {
         )
         .await;
 
-        let task_done = create_resource(
+        let task_done: Box<TaskCreationResult> = create_resource(
             &app.app_address,
             "tasks",
             Box::new(Task {
@@ -248,17 +294,18 @@ mod list_tasks {
         let tasks = list_tasks(&app.app_address, TaskStatus::Active).await;
 
         assert_eq!(tasks.len(), 1);
-        assert_eq!(tasks[0], *task_active);
+        assert_eq!(tasks[0], task_active.task);
 
         let tasks = list_tasks(&app.app_address, TaskStatus::Done).await;
 
         assert_eq!(tasks.len(), 1);
-        assert_eq!(tasks[0], *task_done);
+        assert_eq!(tasks[0], task_done.task);
     }
 }
 
 mod patch_task {
     use super::*;
+    use pretty_assertions::assert_eq;
 
     #[rstest]
     #[tokio::test]
@@ -268,7 +315,7 @@ mod patch_task {
     ) {
         let app = tested_app.await;
 
-        let created_task = create_resource(
+        let creation_result: Box<TaskCreationResult> = create_resource(
             &app.app_address,
             "tasks",
             Box::new(Task {
@@ -294,9 +341,9 @@ mod patch_task {
         let response = patch_resource_response(
             &app.app_address,
             "tasks",
-            created_task.id,
+            creation_result.task.id,
             &TaskPatch {
-                status: Some(created_task.status),
+                status: Some(creation_result.task.status),
             },
         )
         .await;
@@ -311,7 +358,7 @@ mod patch_task {
         todoist_item: Box<TodoistItem>,
     ) {
         let app = tested_app.await;
-        let created_task = create_resource(
+        let creation_result: Box<TaskCreationResult> = create_resource(
             &app.app_address,
             "tasks",
             Box::new(Task {
@@ -337,7 +384,7 @@ mod patch_task {
         let response = patch_resource_response(
             &app.app_address,
             "tasks",
-            created_task.id,
+            creation_result.task.id,
             &TaskPatch {
                 ..Default::default()
             },
@@ -352,7 +399,7 @@ mod patch_task {
                 "message":
                     format!(
                         "Invalid input data: Missing `status` field value to update task {}",
-                        created_task.id
+                        creation_result.task.id
                     )
             })
             .to_string()

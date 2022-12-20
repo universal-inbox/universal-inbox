@@ -127,7 +127,7 @@
     },
     "query": "\n                UPDATE\n                  task\n                SET\n                  status = $1::task_status,\n                  completed_at = $2\n                WHERE\n                  NOT source_id = ANY($3)\n                  AND kind::TEXT = $4\n                  AND (status = 'Active')\n                RETURNING\n                  id,\n                  source_id,\n                  title,\n                  body,\n                  status as \"status: _\",\n                  completed_at,\n                  priority,\n                  due_at as \"due_at: Json<Option<DueDate>>\",\n                  source_html_url,\n                  tags,\n                  parent_id,\n                  project,\n                  is_recurring,\n                  created_at,\n                  metadata as \"metadata: Json<TaskMetadata>\"\n            "
   },
-  "0badf821540ac0be94a430265a9ecbf97f1774ea5ea20f53242918fa07b1fa47": {
+  "173c411e2ee8d10af0151f01135e07128773ab0a9041ef37b1adb3308de21937": {
     "describe": {
       "columns": [
         {
@@ -174,74 +174,16 @@
           "name": "snoozed_until",
           "ordinal": 8,
           "type_info": "Timestamp"
-        }
-      ],
-      "nullable": [
-        false,
-        false,
-        false,
-        false,
-        true,
-        false,
-        false,
-        true,
-        true
-      ],
-      "parameters": {
-        "Left": [
-          "Uuid"
-        ]
-      }
-    },
-    "query": "\n                SELECT\n                  id,\n                  title,\n                  status,\n                  source_id,\n                  source_html_url,\n                  metadata as \"metadata: Json<NotificationMetadata>\",\n                  updated_at,\n                  last_read_at,\n                  snoozed_until\n                FROM notification\n                WHERE id = $1\n            "
-  },
-  "1cafd2614b0e10fdcfacf943bfd7471a81b63b9994cfcb707675599a05e20ad7": {
-    "describe": {
-      "columns": [
+        },
         {
-          "name": "id",
-          "ordinal": 0,
+          "name": "task_id",
+          "ordinal": 9,
           "type_info": "Uuid"
         },
         {
-          "name": "title",
-          "ordinal": 1,
+          "name": "task_source_id",
+          "ordinal": 10,
           "type_info": "Text"
-        },
-        {
-          "name": "status",
-          "ordinal": 2,
-          "type_info": "Text"
-        },
-        {
-          "name": "source_id",
-          "ordinal": 3,
-          "type_info": "Text"
-        },
-        {
-          "name": "source_html_url",
-          "ordinal": 4,
-          "type_info": "Text"
-        },
-        {
-          "name": "metadata: Json<NotificationMetadata>",
-          "ordinal": 5,
-          "type_info": "Json"
-        },
-        {
-          "name": "updated_at",
-          "ordinal": 6,
-          "type_info": "Timestamp"
-        },
-        {
-          "name": "last_read_at",
-          "ordinal": 7,
-          "type_info": "Timestamp"
-        },
-        {
-          "name": "snoozed_until",
-          "ordinal": 8,
-          "type_info": "Timestamp"
         }
       ],
       "nullable": [
@@ -252,6 +194,8 @@
         true,
         false,
         false,
+        true,
+        true,
         true,
         true
       ],
@@ -263,12 +207,20 @@
         ]
       }
     },
-    "query": "\n                UPDATE\n                  notification\n                SET\n                  status = $1\n                WHERE\n                  NOT source_id = ANY($2)\n                  AND kind = $3\n                  AND (status = 'Read' OR status = 'Unread')\n                RETURNING\n                  id,\n                  title,\n                  status,\n                  source_id,\n                  source_html_url,\n                  metadata as \"metadata: Json<NotificationMetadata>\",\n                  updated_at,\n                  last_read_at,\n                  snoozed_until\n            "
+    "query": "\n                UPDATE\n                  notification\n                SET\n                  status = $1\n                WHERE\n                  NOT source_id = ANY($2)\n                  AND kind = $3\n                  AND (status = 'Read' OR status = 'Unread')\n                RETURNING\n                  id,\n                  title,\n                  status,\n                  source_id,\n                  source_html_url,\n                  metadata as \"metadata: Json<NotificationMetadata>\",\n                  updated_at,\n                  last_read_at,\n                  snoozed_until,\n                  task_id,\n                  task_source_id\n            "
   },
-  "465e989349ec2b039a11d81eb72bc5249d3c902015b79b7480b905d6fa50be28": {
+  "17ccf7dd3fecbd649f44cf3e3e89efdf22b6a4cf349bbb95fa599eadbf1466fa": {
     "describe": {
-      "columns": [],
-      "nullable": [],
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        }
+      ],
+      "nullable": [
+        false
+      ],
       "parameters": {
         "Left": [
           "Uuid",
@@ -279,11 +231,13 @@
           "Json",
           "Timestamp",
           "Timestamp",
-          "Timestamp"
+          "Timestamp",
+          "Uuid",
+          "Text"
         ]
       }
     },
-    "query": "\n                INSERT INTO notification\n                  (\n                    id,\n                    title,\n                    status,\n                    source_id,\n                    source_html_url,\n                    metadata,\n                    updated_at,\n                    last_read_at,\n                    snoozed_until\n                  )\n                VALUES\n                  ($1, $2, $3, $4, $5, $6, $7, $8, $9)\n            "
+    "query": "\n                INSERT INTO notification\n                  (\n                    id,\n                    title,\n                    status,\n                    source_id,\n                    source_html_url,\n                    metadata,\n                    updated_at,\n                    last_read_at,\n                    snoozed_until,\n                    task_id,\n                    task_source_id\n                  )\n                VALUES\n                  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)\n                ON CONFLICT (source_id, kind) DO UPDATE\n                SET\n                  title = $2,\n                  status = $3,\n                  source_html_url = $5,\n                  metadata = $6,\n                  updated_at = $7,\n                  last_read_at = $8,\n                  snoozed_until = $9,\n                  task_id = $10,\n                  task_source_id = $11\n                RETURNING\n                  id\n            "
   },
   "6c3ce6a44e87df8ab3af416a35fd11194b871f185a2b58c39ce9485e00812d6b": {
     "describe": {
@@ -479,18 +433,10 @@
     },
     "query": "\n                INSERT INTO task\n                  (\n                    id,\n                    source_id,\n                    title,\n                    body,\n                    status,\n                    completed_at,\n                    priority,\n                    due_at,\n                    source_html_url,\n                    tags,\n                    parent_id,\n                    project,\n                    is_recurring,\n                    created_at,\n                    metadata\n                  )\n                VALUES\n                  ($1, $2, $3, $4, $5::task_status, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)\n            "
   },
-  "cedd97120b4d29f3f48b399afd91a1e1f9ee99b75be88053286e8a866ee06122": {
+  "cf4ac5abf88fc55d024b71e8bf622b9ee09da93e7e95e1d8a84411ea1db8936f": {
     "describe": {
-      "columns": [
-        {
-          "name": "id",
-          "ordinal": 0,
-          "type_info": "Uuid"
-        }
-      ],
-      "nullable": [
-        false
-      ],
+      "columns": [],
+      "nullable": [],
       "parameters": {
         "Left": [
           "Uuid",
@@ -501,10 +447,92 @@
           "Json",
           "Timestamp",
           "Timestamp",
-          "Timestamp"
+          "Timestamp",
+          "Uuid",
+          "Text"
         ]
       }
     },
-    "query": "\n                INSERT INTO notification\n                  (\n                    id,\n                    title,\n                    status,\n                    source_id,\n                    source_html_url,\n                    metadata,\n                    updated_at,\n                    last_read_at,\n                    snoozed_until\n                  )\n                VALUES\n                  ($1, $2, $3, $4, $5, $6, $7, $8, $9)\n                ON CONFLICT (source_id, kind) DO UPDATE\n                SET\n                  title = $2,\n                  status = $3,\n                  source_html_url = $5,\n                  metadata = $6,\n                  updated_at = $7,\n                  last_read_at = $8,\n                  snoozed_until = $9\n                RETURNING\n                  id\n            "
+    "query": "\n                INSERT INTO notification\n                  (\n                    id,\n                    title,\n                    status,\n                    source_id,\n                    source_html_url,\n                    metadata,\n                    updated_at,\n                    last_read_at,\n                    snoozed_until,\n                    task_id,\n                    task_source_id\n                  )\n                VALUES\n                  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)\n            "
+  },
+  "da08ff9ac5abf8fdd5ebe31802ed5f7f97aad1edc4792a5340962d28a2af2031": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "title",
+          "ordinal": 1,
+          "type_info": "Text"
+        },
+        {
+          "name": "status",
+          "ordinal": 2,
+          "type_info": "Text"
+        },
+        {
+          "name": "source_id",
+          "ordinal": 3,
+          "type_info": "Text"
+        },
+        {
+          "name": "source_html_url",
+          "ordinal": 4,
+          "type_info": "Text"
+        },
+        {
+          "name": "metadata: Json<NotificationMetadata>",
+          "ordinal": 5,
+          "type_info": "Json"
+        },
+        {
+          "name": "updated_at",
+          "ordinal": 6,
+          "type_info": "Timestamp"
+        },
+        {
+          "name": "last_read_at",
+          "ordinal": 7,
+          "type_info": "Timestamp"
+        },
+        {
+          "name": "snoozed_until",
+          "ordinal": 8,
+          "type_info": "Timestamp"
+        },
+        {
+          "name": "task_id",
+          "ordinal": 9,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "task_source_id",
+          "ordinal": 10,
+          "type_info": "Text"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        false,
+        false,
+        true,
+        true,
+        true,
+        true
+      ],
+      "parameters": {
+        "Left": [
+          "Uuid"
+        ]
+      }
+    },
+    "query": "\n                SELECT\n                  id,\n                  title,\n                  status,\n                  source_id,\n                  source_html_url,\n                  metadata as \"metadata: Json<NotificationMetadata>\",\n                  updated_at,\n                  last_read_at,\n                  snoozed_until,\n                  task_id,\n                  task_source_id\n                FROM notification\n                WHERE id = $1\n            "
   }
 }

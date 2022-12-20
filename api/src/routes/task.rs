@@ -7,11 +7,15 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::universal_inbox::{
-    task::{service::TaskService, source::TaskSourceKind},
-    UniversalInboxError, UpdateStatus,
+use universal_inbox::task::{Task, TaskPatch, TaskStatus};
+
+use crate::{
+    integrations::task::TaskSyncSourceKind,
+    universal_inbox::{
+        task::{service::TaskService, TaskCreationResult},
+        UniversalInboxError, UpdateStatus,
+    },
 };
-use ::universal_inbox::task::{Task, TaskPatch, TaskStatus};
 
 use super::option_wildcard;
 
@@ -90,14 +94,14 @@ pub async fn create_task(
         .await
         .context("Failed to commit while creating task")?;
 
-    Ok(HttpResponse::Ok()
-        .content_type("application/json")
-        .body(serde_json::to_string(&created_task).context("Cannot serialize task")?))
+    Ok(HttpResponse::Ok().content_type("application/json").body(
+        serde_json::to_string(&created_task).context("Cannot serialize task creation result")?,
+    ))
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SyncTasksParameters {
-    source: Option<TaskSourceKind>,
+    source: Option<TaskSyncSourceKind>,
 }
 
 #[tracing::instrument(level = "debug", skip(service))]
@@ -110,7 +114,7 @@ pub async fn sync_tasks(
         &params.source
     ))?;
 
-    let tasks: Vec<Task> = transactional_service.sync_tasks(&params.source).await?;
+    let tasks: Vec<TaskCreationResult> = transactional_service.sync_tasks(&params.source).await?;
 
     transactional_service.commit().await.context(format!(
         "Failed to commit while syncing {:?}",
@@ -119,7 +123,7 @@ pub async fn sync_tasks(
 
     Ok(HttpResponse::Ok()
         .content_type("application/json")
-        .body(serde_json::to_string(&tasks).context("Cannot serialize tasks")?))
+        .body(serde_json::to_string(&tasks).context("Cannot serialize task creation results")?))
 }
 
 #[tracing::instrument(level = "debug", skip(service))]
