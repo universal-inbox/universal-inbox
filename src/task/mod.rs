@@ -11,6 +11,8 @@ use serde_repr::{Deserialize_repr, Serialize_repr};
 use serde_with::{serde_as, DisplayFromStr};
 use uuid::Uuid;
 
+use crate::notification::{Notification, NotificationMetadata, NotificationStatus};
+
 use self::integrations::todoist::TodoistItem;
 
 pub mod integrations;
@@ -35,6 +37,12 @@ pub struct Task {
     pub is_recurring: bool,
     pub created_at: DateTime<Utc>,
     pub metadata: TaskMetadata,
+}
+
+impl Task {
+    pub fn is_in_inbox(&self) -> bool {
+        self.project == "Inbox"
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
@@ -109,6 +117,32 @@ pub enum TaskPriority {
     P2 = 2,
     P3 = 3,
     P4 = 4,
+}
+
+impl From<Task> for Notification {
+    fn from(task: Task) -> Self {
+        (&task).into()
+    }
+}
+
+impl From<&Task> for Notification {
+    fn from(task: &Task) -> Self {
+        Notification {
+            id: Uuid::new_v4(),
+            title: task.title.clone(),
+            source_id: task.source_id.clone(),
+            source_html_url: task.source_html_url.clone(),
+            status: NotificationStatus::Unread,
+            metadata: match task.metadata {
+                TaskMetadata::Todoist(_) => NotificationMetadata::Todoist,
+            },
+            updated_at: task.created_at,
+            last_read_at: None,
+            snoozed_until: None,
+            task_id: Some(task.id),
+            task_source_id: Some(task.source_id.clone()),
+        }
+    }
 }
 
 #[cfg(test)]

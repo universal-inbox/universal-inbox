@@ -7,11 +7,14 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::universal_inbox::{
-    notification::{service::NotificationService, source::NotificationSourceKind},
-    UniversalInboxError, UpdateStatus,
+use universal_inbox::notification::{Notification, NotificationPatch, NotificationStatus};
+
+use crate::{
+    integrations::notification::NotificationSyncSourceKind,
+    universal_inbox::{
+        notification::service::NotificationService, UniversalInboxError, UpdateStatus,
+    },
 };
-use ::universal_inbox::notification::{Notification, NotificationPatch, NotificationStatus};
 
 use super::option_wildcard;
 
@@ -37,6 +40,7 @@ pub fn scope() -> Scope {
 pub struct ListNotificationRequest {
     status: NotificationStatus,
     include_snoozed_notifications: Option<bool>,
+    task_id: Option<Uuid>,
 }
 
 #[tracing::instrument(level = "debug", skip(service))]
@@ -52,6 +56,7 @@ pub async fn list_notifications(
             list_notification_request
                 .include_snoozed_notifications
                 .unwrap_or(false),
+            list_notification_request.task_id,
         )
         .await?;
 
@@ -111,7 +116,7 @@ pub async fn create_notification(
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SyncNotificationsParameters {
-    source: Option<NotificationSourceKind>,
+    source: Option<NotificationSyncSourceKind>,
 }
 
 #[tracing::instrument(level = "debug", skip(service))]
