@@ -5,9 +5,8 @@ use universal_inbox::notification::{
     integrations::github::GithubNotification, Notification, NotificationMetadata,
     NotificationStatus,
 };
-use universal_inbox_api::{
-    integrations::github, universal_inbox::notification::source::NotificationSourceKind,
-};
+
+use universal_inbox_api::integrations::{github, notification::NotificationSourceKind};
 
 use crate::helpers::{
     notification::{
@@ -29,7 +28,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     sync_github_notifications: Vec<GithubNotification>,
 ) {
     let app = tested_app.await;
-    let existing_notification = create_resource(
+    let existing_notification: Box<Notification> = create_resource(
         &app.app_address,
         "notifications",
         Box::new(Notification {
@@ -44,6 +43,8 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
             updated_at: Utc.with_ymd_and_hms(2014, 11, 6, 0, 0, 0).unwrap(),
             last_read_at: None,
             snoozed_until: None,
+            task_id: None,
+            task_source_id: None,
         }),
     )
     .await;
@@ -96,7 +97,7 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
         create_notification_from_github_notification(&app.app_address, github_notification).await;
     }
     // to be deleted during sync
-    let existing_notification = create_resource(
+    let existing_notification: Box<Notification> = create_resource(
         &app.app_address,
         "notifications",
         Box::new(Notification {
@@ -111,6 +112,8 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
             updated_at: Utc.with_ymd_and_hms(2014, 11, 6, 0, 0, 0).unwrap(),
             last_read_at: None,
             snoozed_until: None,
+            task_id: None,
+            task_source_id: None,
         }),
     )
     .await;

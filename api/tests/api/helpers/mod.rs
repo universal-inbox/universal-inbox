@@ -13,7 +13,7 @@ use universal_inbox_api::{
     configuration::Settings,
     integrations::{github::GithubService, todoist::TodoistService},
     observability::{get_subscriber, init_subscriber},
-    repository::{notification::NotificationRepository, task::TaskRepository},
+    repository::Repository,
     universal_inbox::{notification::service::NotificationService, task::service::TaskService},
 };
 
@@ -98,7 +98,6 @@ pub async fn tested_app(
     let todoist_service = TodoistService::new(
         &settings.integrations.todoist.api_token,
         Some(todoist_mock_server_uri.to_string()),
-        Some(todoist_mock_server_uri.to_string()),
     )
     .unwrap_or_else(|_| {
         panic!(
@@ -106,9 +105,11 @@ pub async fn tested_app(
             todoist_mock_server_uri
         )
     });
+
+    let repository = Arc::new(Repository::new(pool.clone()));
     let notification_service = Arc::new(
         NotificationService::new(
-            Box::new(NotificationRepository::new(pool.clone())),
+            repository.clone(),
             GithubService::new(
                 &settings.integrations.github.api_token,
                 Some(github_mock_server_uri.to_string()),
@@ -120,13 +121,12 @@ pub async fn tested_app(
                     github_mock_server_uri
                 )
             }),
-            todoist_service.clone(),
         )
         .expect("Failed to setup notification service"),
     );
 
     let task_service = Arc::new(
-        TaskService::new(Box::new(TaskRepository::new(pool.clone())), todoist_service)
+        TaskService::new(repository, todoist_service, notification_service.clone())
             .expect("Failed to setup task service"),
     );
 

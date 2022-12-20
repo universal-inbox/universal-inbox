@@ -2,7 +2,10 @@ use reqwest::Response;
 use serde_json::json;
 
 use universal_inbox::task::{Task, TaskStatus};
-use universal_inbox_api::universal_inbox::task::source::TaskSourceKind;
+
+use universal_inbox_api::{
+    integrations::task::TaskSourceKind, universal_inbox::task::TaskCreationResult,
+};
 
 pub mod todoist;
 
@@ -35,7 +38,10 @@ pub async fn sync_tasks_response(app_address: &str, source: Option<TaskSourceKin
         .expect("Failed to execute request")
 }
 
-pub async fn sync_tasks(app_address: &str, source: Option<TaskSourceKind>) -> Vec<Task> {
+pub async fn sync_tasks(
+    app_address: &str,
+    source: Option<TaskSourceKind>,
+) -> Vec<TaskCreationResult> {
     sync_tasks_response(app_address, source)
         .await
         .json()

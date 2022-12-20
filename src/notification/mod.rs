@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use uuid::Uuid;
 
-use integrations::{github::GithubNotification, todoist::TodoistTask};
+use integrations::github::GithubNotification;
 
 pub mod integrations;
 
@@ -22,13 +22,15 @@ pub struct Notification {
     pub updated_at: DateTime<Utc>,
     pub last_read_at: Option<DateTime<Utc>>,
     pub snoozed_until: Option<DateTime<Utc>>,
+    pub task_id: Option<Uuid>,
+    pub task_source_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
 #[serde(tag = "type", content = "content")]
 pub enum NotificationMetadata {
     Github(GithubNotification),
-    Todoist(TodoistTask),
+    Todoist,
 }
 
 macro_attr! {

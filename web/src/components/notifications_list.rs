@@ -1,5 +1,3 @@
-use log::debug;
-
 use dioxus::core::to_owned;
 use dioxus::events::MouseEvent;
 use dioxus::fermi::UseAtomRef;
@@ -83,13 +81,11 @@ fn notification<'a>(
         to_owned![notif_label];
         async move {
             match metadata {
-                NotificationMetadata::Todoist(_) => {
-                    debug!("Setting as task");
+                NotificationMetadata::Todoist => {
                     is_task.set(true);
                     notif_label.set("task");
                 }
                 _ => {
-                    debug!("Setting as notification");
                     is_task.set(false);
                     notif_label.set("notification");
                 }
@@ -151,7 +147,7 @@ fn notification<'a>(
 fn notification_display<'a>(cx: Scope, notif: &'a Notification) -> Element {
     let icon = match notif.metadata {
         NotificationMetadata::Github(_) => cx.render(rsx!(self::github {})),
-        NotificationMetadata::Todoist(_) => cx.render(rsx!(self::todoist {})),
+        NotificationMetadata::Todoist => cx.render(rsx!(self::todoist {})),
     };
 
     cx.render(rsx!(

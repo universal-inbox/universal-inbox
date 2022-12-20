@@ -45,8 +45,10 @@ mod patch_resource {
             updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
             last_read_at: None,
             snoozed_until: None,
+            task_id: None,
+            task_source_id: None,
         });
-        let created_notification = create_resource(
+        let created_notification: Box<Notification> = create_resource(
             &app.app_address,
             "notifications",
             expected_notification.clone(),
@@ -102,8 +104,10 @@ mod patch_resource {
             updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
             last_read_at: None,
             snoozed_until: None,
+            task_id: None,
+            task_source_id: None,
         });
-        let created_notification = create_resource(
+        let created_notification: Box<Notification> = create_resource(
             &app.app_address,
             "notifications",
             expected_notification.clone(),
@@ -157,8 +161,10 @@ mod patch_resource {
             updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
             last_read_at: None,
             snoozed_until: None,
+            task_id: None,
+            task_source_id: None,
         });
-        let created_notification = create_resource(
+        let created_notification: Box<Notification> = create_resource(
             &app.app_address,
             "notifications",
             expected_notification.clone(),
@@ -209,9 +215,11 @@ mod patch_resource {
             updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
             last_read_at: None,
             snoozed_until: None,
+            task_id: None,
+            task_source_id: None,
         });
         let snoozed_time = Utc.with_ymd_and_hms(2022, 1, 1, 1, 2, 3).unwrap();
-        let created_notification = create_resource(
+        let created_notification: Box<Notification> = create_resource(
             &app.app_address,
             "notifications",
             expected_notification.clone(),
@@ -262,8 +270,10 @@ mod patch_resource {
             updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
             last_read_at: None,
             snoozed_until: Some(snoozed_time),
+            task_id: None,
+            task_source_id: None,
         });
-        let created_notification = create_resource(
+        let created_notification: Box<Notification> = create_resource(
             &app.app_address,
             "notifications",
             expected_notification.clone(),
@@ -308,8 +318,10 @@ mod patch_resource {
             updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
             last_read_at: None,
             snoozed_until: None,
+            task_id: None,
+            task_source_id: None,
         });
-        let created_notification = create_resource(
+        let created_notification: Box<Notification> = create_resource(
             &app.app_address,
             "notifications",
             expected_notification.clone(),
