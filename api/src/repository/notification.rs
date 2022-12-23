@@ -1,65 +1,77 @@
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
-use duplicate::duplicate_item;
 use http::Uri;
-use sqlx::{types::Json, QueryBuilder};
+use sqlx::{types::Json, Postgres, QueryBuilder, Transaction};
 use uuid::Uuid;
 
-use universal_inbox::notification::{
-    Notification, NotificationMetadata, NotificationPatch, NotificationStatus,
+use universal_inbox::{
+    notification::{
+        Notification, NotificationId, NotificationMetadata, NotificationPatch, NotificationStatus,
+    },
+    task::TaskId,
 };
 
 use crate::{
     integrations::notification::NotificationSourceKind,
+    repository::Repository,
     universal_inbox::{UniversalInboxError, UpdateStatus},
 };
 
-use super::{ConnectedRepository, TransactionalRepository};
-
 #[async_trait]
 pub trait NotificationRepository {
-    async fn get_one_notification(
+    async fn get_one_notification<'a>(
         &self,
-        id: Uuid,
+        executor: &mut Transaction<'a, Postgres>,
+        id: NotificationId,
     ) -> Result<Option<Notification>, UniversalInboxError>;
-    async fn fetch_all_notifications(
+    async fn fetch_all_notifications<'a>(
         &self,
+        executor: &mut Transaction<'a, Postgres>,
         status: NotificationStatus,
         include_snoozed_notifications: bool,
-        task_id: Option<Uuid>,
+        task_id: Option<TaskId>,
     ) -> Result<Vec<Notification>, UniversalInboxError>;
-    async fn create_notification(
+    async fn create_notification<'a>(
         &self,
+        executor: &mut Transaction<'a, Postgres>,
         notification: Box<Notification>,
     ) -> Result<Box<Notification>, UniversalInboxError>;
-    async fn update_stale_notifications_status_from_source_ids(
+    async fn update_stale_notifications_status_from_source_ids<'a>(
         &self,
+        executor: &mut Transaction<'a, Postgres>,
         active_source_notification_ids: Vec<String>,
         kind: NotificationSourceKind,
         status: NotificationStatus,
     ) -> Result<Vec<Notification>, UniversalInboxError>;
-    async fn create_or_update_notification(
+    async fn create_or_update_notification<'a>(
         &self,
+        executor: &mut Transaction<'a, Postgres>,
         notification: Box<Notification>,
     ) -> Result<Notification, UniversalInboxError>;
-    async fn update_notification<'b>(
+    async fn update_notification<'a>(
         &self,
-        notification_id: Uuid,
-        patch: &'b NotificationPatch,
+        executor: &mut Transaction<'a, Postgres>,
+        notification_id: NotificationId,
+        patch: &NotificationPatch,
     ) -> Result<UpdateStatus<Box<Notification>>, UniversalInboxError>;
+    async fn update_notifications_for_task<'a, 'b>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        task_id: TaskId,
+        notification_kind: Option<NotificationSourceKind>,
+        patch: &'b NotificationPatch,
+    ) -> Result<Vec<UpdateStatus<Notification>>, UniversalInboxError>;
 }
 
-#[duplicate_item(repository; [ConnectedRepository]; [TransactionalRepository<'a>])]
 #[async_trait]
-#[allow(clippy::extra_unused_lifetimes)]
-impl<'a> NotificationRepository for repository {
+impl NotificationRepository for Repository {
     #[tracing::instrument(level = "debug", skip(self))]
-    async fn get_one_notification(
+    async fn get_one_notification<'a>(
         &self,
-        id: Uuid,
+        executor: &mut Transaction<'a, Postgres>,
+        id: NotificationId,
     ) -> Result<Option<Notification>, UniversalInboxError> {
-        let mut executor = self.executor.lock().await;
         let row = sqlx::query_as!(
             NotificationRow,
             r#"
@@ -78,9 +90,9 @@ impl<'a> NotificationRepository for repository {
                 FROM notification
                 WHERE id = $1
             "#,
-            id
+            id.0
         )
-        .fetch_optional(&mut *executor)
+        .fetch_optional(executor)
         .await
         .with_context(|| format!("Failed to fetch notification {} from storage", id))?;
 
@@ -89,14 +101,13 @@ impl<'a> NotificationRepository for repository {
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
-    async fn fetch_all_notifications(
+    async fn fetch_all_notifications<'a>(
         &self,
+        executor: &mut Transaction<'a, Postgres>,
         status: NotificationStatus,
         include_snoozed_notifications: bool,
-        task_id: Option<Uuid>,
+        task_id: Option<TaskId>,
     ) -> Result<Vec<Notification>, UniversalInboxError> {
-        let mut executor = self.executor.lock().await;
-
         let mut query_builder = QueryBuilder::new(
             r#"
                 SELECT
@@ -127,12 +138,12 @@ impl<'a> NotificationRepository for repository {
         }
 
         if let Some(id) = task_id {
-            query_builder.push(" AND task_id = ").push_bind(id);
+            query_builder.push(" AND task_id = ").push_bind(id.0);
         }
 
         let records = query_builder
             .build_query_as::<NotificationRow>()
-            .fetch_all(&mut *executor)
+            .fetch_all(executor)
             .await
             .context("Failed to fetch notifications from storage")?;
 
@@ -140,11 +151,11 @@ impl<'a> NotificationRepository for repository {
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
-    async fn create_notification(
+    async fn create_notification<'a>(
         &self,
+        executor: &mut Transaction<'a, Postgres>,
         notification: Box<Notification>,
     ) -> Result<Box<Notification>, UniversalInboxError> {
-        let mut executor = self.executor.lock().await;
         let metadata = Json(notification.metadata.clone());
 
         sqlx::query!(
@@ -166,7 +177,7 @@ impl<'a> NotificationRepository for repository {
                 VALUES
                   ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             "#,
-            notification.id,
+            notification.id.0,
             notification.title,
             notification.status.to_string(),
             notification.source_id,
@@ -182,10 +193,10 @@ impl<'a> NotificationRepository for repository {
             notification
                 .snoozed_until
                 .map(|snoozed_until| snoozed_until.naive_utc()),
-            notification.task_id,
+            notification.task_id.map(|task_id| task_id.0),
             notification.task_source_id
         )
-        .execute(&mut *executor)
+        .execute(executor)
         .await
         .map_err(|e| {
             match e
@@ -194,7 +205,7 @@ impl<'a> NotificationRepository for repository {
             {
                 Some(x) if x == *"23505" => UniversalInboxError::AlreadyExists {
                     source: e,
-                    id: notification.id,
+                    id: notification.id.0,
                 },
                 _ => UniversalInboxError::Unexpected(anyhow!(
                     "Failed to insert new notification into storage"
@@ -206,13 +217,13 @@ impl<'a> NotificationRepository for repository {
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
-    async fn update_stale_notifications_status_from_source_ids(
+    async fn update_stale_notifications_status_from_source_ids<'a>(
         &self,
+        executor: &mut Transaction<'a, Postgres>,
         active_source_notification_ids: Vec<String>,
         kind: NotificationSourceKind,
         status: NotificationStatus,
     ) -> Result<Vec<Notification>, UniversalInboxError> {
-        let mut executor = self.executor.lock().await;
         let records = sqlx::query_as!(
             NotificationRow,
             r#"
@@ -241,7 +252,7 @@ impl<'a> NotificationRepository for repository {
             &active_source_notification_ids[..],
             kind.to_string(),
         )
-        .fetch_all(&mut *executor)
+        .fetch_all(executor)
         .await
         .context("Failed to update stale notification status from storage")?;
 
@@ -252,15 +263,16 @@ impl<'a> NotificationRepository for repository {
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
-    async fn create_or_update_notification(
+    async fn create_or_update_notification<'a>(
         &self,
+        executor: &mut Transaction<'a, Postgres>,
         notification: Box<Notification>,
     ) -> Result<Notification, UniversalInboxError> {
-        let mut executor = self.executor.lock().await;
         let metadata = Json(notification.metadata.clone());
 
-        let id: Uuid = sqlx::query_scalar!(
-            r#"
+        let id: NotificationId = NotificationId(
+            sqlx::query_scalar!(
+                r#"
                 INSERT INTO notification
                   (
                     id,
@@ -291,33 +303,34 @@ impl<'a> NotificationRepository for repository {
                 RETURNING
                   id
             "#,
-            notification.id,
-            notification.title,
-            notification.status.to_string(),
-            notification.source_id,
-            notification
-                .source_html_url
-                .as_ref()
-                .map(|url| url.to_string()),
-            metadata as Json<NotificationMetadata>, // force the macro to ignore type checking
-            notification.updated_at.naive_utc(),
-            notification
-                .last_read_at
-                .map(|last_read_at| last_read_at.naive_utc()),
-            notification
-                .snoozed_until
-                .map(|snoozed_until| snoozed_until.naive_utc()),
-            notification.task_id,
-            notification.task_source_id
-        )
-        .fetch_one(&mut *executor)
-        .await
-        .with_context(|| {
-            format!(
-                "Failed to update notification with source ID {} from storage",
-                notification.source_id
+                notification.id.0,
+                notification.title,
+                notification.status.to_string(),
+                notification.source_id,
+                notification
+                    .source_html_url
+                    .as_ref()
+                    .map(|url| url.to_string()),
+                metadata as Json<NotificationMetadata>, // force the macro to ignore type checking
+                notification.updated_at.naive_utc(),
+                notification
+                    .last_read_at
+                    .map(|last_read_at| last_read_at.naive_utc()),
+                notification
+                    .snoozed_until
+                    .map(|snoozed_until| snoozed_until.naive_utc()),
+                notification.task_id.map(|task_id| task_id.0),
+                notification.task_source_id
             )
-        })?;
+            .fetch_one(executor)
+            .await
+            .with_context(|| {
+                format!(
+                    "Failed to update notification with source ID {} from storage",
+                    notification.source_id
+                )
+            })?,
+        );
 
         Ok(Notification {
             id,
@@ -326,10 +339,11 @@ impl<'a> NotificationRepository for repository {
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
-    async fn update_notification<'b>(
+    async fn update_notification<'a>(
         &self,
-        notification_id: Uuid,
-        patch: &'b NotificationPatch,
+        executor: &mut Transaction<'a, Postgres>,
+        notification_id: NotificationId,
+        patch: &NotificationPatch,
     ) -> Result<UpdateStatus<Box<Notification>>, UniversalInboxError> {
         if *patch == Default::default() {
             return Err(UniversalInboxError::InvalidInputData {
@@ -339,8 +353,6 @@ impl<'a> NotificationRepository for repository {
                 ),
             });
         };
-
-        let mut executor = self.executor.lock().await;
 
         let mut query_builder = QueryBuilder::new("UPDATE notification SET");
         let mut separated = query_builder.separated(", ");
@@ -357,7 +369,7 @@ impl<'a> NotificationRepository for repository {
 
         query_builder
             .push(" WHERE id = ")
-            .push_bind(notification_id);
+            .push_bind(notification_id.0);
         query_builder.push(
             r#"
                 RETURNING
@@ -390,12 +402,12 @@ impl<'a> NotificationRepository for repository {
 
         query_builder
             .push(" FROM notification WHERE id = ")
-            .push_bind(notification_id);
+            .push_bind(notification_id.0);
         query_builder.push(r#") as "is_updated""#);
 
         let record: Option<UpdatedNotificationRow> = query_builder
             .build_query_as::<UpdatedNotificationRow>()
-            .fetch_optional(&mut *executor)
+            .fetch_optional(executor)
             .await
             .context(format!(
                 "Failed to update notification {} from storage",
@@ -418,6 +430,107 @@ impl<'a> NotificationRepository for repository {
                 result: None,
             })
         }
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    async fn update_notifications_for_task<'a, 'b>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        task_id: TaskId,
+        notification_kind: Option<NotificationSourceKind>,
+        patch: &'b NotificationPatch,
+    ) -> Result<Vec<UpdateStatus<Notification>>, UniversalInboxError> {
+        if *patch == Default::default() {
+            return Err(UniversalInboxError::InvalidInputData {
+                source: None,
+                user_error: format!(
+                    "Missing `status` field value to update notifications for task {task_id}"
+                ),
+            });
+        };
+
+        let mut query_builder = QueryBuilder::new("UPDATE notification SET");
+        let mut separated = query_builder.separated(", ");
+        if let Some(status) = patch.status {
+            separated
+                .push(" status = ")
+                .push_bind_unseparated(status.to_string());
+        }
+        if let Some(snoozed_until) = patch.snoozed_until {
+            separated
+                .push(" snoozed_until = ")
+                .push_bind_unseparated(snoozed_until.naive_utc());
+        }
+
+        query_builder.push(" WHERE task_id = ").push_bind(task_id.0);
+
+        if let Some(kind) = notification_kind {
+            query_builder
+                .push(" AND kind = ")
+                .push_bind(kind.to_string());
+        }
+
+        query_builder.push(
+            r#"
+                RETURNING
+                  id,
+                  title,
+                  status,
+                  source_id,
+                  source_html_url,
+                  metadata,
+                  updated_at,
+                  last_read_at,
+                  snoozed_until,
+                  task_id,
+                  task_source_id,
+                  (SELECT"#,
+        );
+
+        let mut separated = query_builder.separated(" AND ");
+        if let Some(status) = patch.status {
+            separated
+                .push(" status != ")
+                .push_bind_unseparated(status.to_string());
+        }
+        if let Some(snoozed_until) = patch.snoozed_until {
+            separated
+                .push(" (snoozed_until is NULL OR snoozed_until != ")
+                .push_bind_unseparated(snoozed_until.naive_utc())
+                .push_unseparated(")");
+        }
+
+        query_builder
+            .push(" FROM notification WHERE task_id = ")
+            .push_bind(task_id.0);
+        if let Some(kind) = notification_kind {
+            query_builder
+                .push(" AND kind = ")
+                .push_bind(kind.to_string());
+        }
+        query_builder.push(r#") as "is_updated""#);
+
+        let records: Vec<UpdatedNotificationRow> = query_builder
+            .build_query_as::<UpdatedNotificationRow>()
+            .fetch_all(executor)
+            .await
+            .context(format!(
+                "Failed to update notifications for task {task_id} from storage"
+            ))?;
+
+        let update_statuses = records
+            .into_iter()
+            .map(|updated_notification_row| UpdateStatus {
+                updated: updated_notification_row.is_updated,
+                result: Some(
+                    updated_notification_row
+                        .notification_row
+                        .try_into()
+                        .unwrap(),
+                ),
+            })
+            .collect();
+        Ok(update_statuses)
     }
 }
 
@@ -475,7 +588,7 @@ impl TryFrom<&NotificationRow> for Notification {
             .transpose()?;
 
         Ok(Notification {
-            id: row.id,
+            id: row.id.into(),
             title: row.title.to_string(),
             status,
             source_id: row.source_id.clone(),
@@ -488,7 +601,7 @@ impl TryFrom<&NotificationRow> for Notification {
             snoozed_until: row
                 .snoozed_until
                 .map(|snoozed_until| DateTime::<Utc>::from_utc(snoozed_until, Utc)),
-            task_id: row.task_id,
+            task_id: row.task_id.map(|task_id| task_id.into()),
             task_source_id: row.task_source_id.clone(),
         })
     }

@@ -415,7 +415,7 @@ impl From<GithubNotification> for Notification {
         let source_html_url = GithubNotification::get_html_url_from_api_url(&source.subject.url);
 
         Notification {
-            id: Uuid::new_v4(),
+            id: Uuid::new_v4().into(),
             title: source.subject.title.clone(),
             source_id: source.id.clone(),
             source_html_url,

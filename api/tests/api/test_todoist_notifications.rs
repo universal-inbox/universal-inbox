@@ -1,14 +1,26 @@
+use std::collections::HashMap;
+
 use chrono::{TimeZone, Utc};
 use rstest::*;
 use serde_json::json;
+use uuid::Uuid;
 
 use universal_inbox::{
     notification::{Notification, NotificationMetadata, NotificationPatch, NotificationStatus},
-    task::integrations::todoist::get_task_html_url,
+    task::{
+        integrations::todoist::{get_task_html_url, TodoistItem},
+        Task, TaskMetadata, TaskPriority, TaskStatus,
+    },
+};
+
+use universal_inbox_api::{
+    integrations::todoist::{TodoistCommandStatus, TodoistSyncStatusResponse},
+    universal_inbox::task::TaskCreationResult,
 };
 
 use crate::helpers::{
-    rest::{create_resource, patch_resource_response},
+    rest::{create_resource, get_resource, patch_resource, patch_resource_response},
+    task::todoist::{mock_todoist_delete_item_service, todoist_item},
     tested_app, TestedApp,
 };
 
@@ -17,14 +29,81 @@ mod patch_notification {
 
     #[rstest]
     #[tokio::test]
-    async fn test_patch_todoist_notification_status(
+    async fn test_patch_todoist_notification_status_as_deleted(
         #[future] tested_app: TestedApp,
-        #[values(NotificationStatus::Unsubscribed, NotificationStatus::Deleted)]
-        new_status: NotificationStatus,
+        todoist_item: Box<TodoistItem>,
     ) {
         let app = tested_app.await;
+        let existing_todoist_task_creation: Box<TaskCreationResult> = create_resource(
+            &app.app_address,
+            "tasks",
+            Box::new(Task {
+                id: Uuid::new_v4().into(),
+                source_id: todoist_item.id.clone(),
+                title: todoist_item.content.clone(),
+                body: todoist_item.description.clone(),
+                status: TaskStatus::Active,
+                completed_at: None,
+                priority: TaskPriority::P4,
+                due_at: None,
+                source_html_url: get_task_html_url(&todoist_item.id),
+                tags: vec!["tag1".to_string()],
+                parent_id: None,
+                project: "Inbox".to_string(),
+                is_recurring: false,
+                created_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
+                metadata: TaskMetadata::Todoist(*todoist_item),
+            }),
+        )
+        .await;
+        let existing_todoist_task = existing_todoist_task_creation.task;
+        let existing_todoist_notification = existing_todoist_task_creation.notification.unwrap();
+        let sync_todoist_response = TodoistSyncStatusResponse {
+            sync_status: HashMap::from([(
+                Uuid::new_v4(),
+                TodoistCommandStatus::Ok("ok".to_string()),
+            )]),
+            full_sync: false,
+            temp_id_mapping: HashMap::new(),
+            sync_token: "sync token".to_string(),
+        };
+        let todoist_mock = mock_todoist_delete_item_service(
+            &app.todoist_mock_server,
+            &existing_todoist_task.source_id,
+            &sync_todoist_response,
+        );
+
+        let patched_notification = patch_resource(
+            &app.app_address,
+            "notifications",
+            existing_todoist_notification.id.into(),
+            &NotificationPatch {
+                status: Some(NotificationStatus::Deleted),
+                ..Default::default()
+            },
+        )
+        .await;
+
+        assert_eq!(
+            patched_notification,
+            Box::new(Notification {
+                status: NotificationStatus::Deleted,
+                ..existing_todoist_notification
+            })
+        );
+        todoist_mock.assert();
+
+        let deleted_task: Box<Task> =
+            get_resource(&app.app_address, "tasks", existing_todoist_task.id.into()).await;
+        assert_eq!(deleted_task.status, TaskStatus::Deleted);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_patch_todoist_notification_status(#[future] tested_app: TestedApp) {
+        let app = tested_app.await;
         let expected_notification = Box::new(Notification {
-            id: uuid::Uuid::new_v4(),
+            id: Uuid::new_v4().into(),
             title: "task 1".to_string(),
             status: NotificationStatus::Unread,
             source_id: "1234".to_string(),
@@ -48,9 +127,9 @@ mod patch_notification {
         let response = patch_resource_response(
             &app.app_address,
             "notifications",
-            created_notification.id,
+            created_notification.id.into(),
             &NotificationPatch {
-                status: Some(new_status),
+                status: Some(NotificationStatus::Unsubscribed),
                 ..Default::default()
             },
         )

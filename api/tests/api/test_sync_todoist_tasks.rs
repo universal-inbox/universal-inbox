@@ -1,6 +1,7 @@
 use chrono::{TimeZone, Utc};
 use pretty_assertions::assert_eq;
 use rstest::*;
+use uuid::Uuid;
 
 use universal_inbox::{
     notification::{Notification, NotificationStatus},
@@ -42,7 +43,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
         &app.app_address,
         "tasks",
         Box::new(Task {
-            id: uuid::Uuid::new_v4(),
+            id: Uuid::new_v4().into(),
             source_id: todoist_items[1].id.clone(),
             title: "old task 1".to_string(),
             body: "more details".to_string(),
@@ -79,7 +80,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
     todoist_projects_mock.assert();
 
     let updated_todoist_task: Box<Task> =
-        get_resource(&app.app_address, "tasks", existing_todoist_task.id).await;
+        get_resource(&app.app_address, "tasks", existing_todoist_task.id.into()).await;
     assert_eq!(updated_todoist_task.id, existing_todoist_task.id);
     assert_eq!(
         updated_todoist_task.source_id,
@@ -103,7 +104,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
     let updated_todoist_notification: Box<Notification> = get_resource(
         &app.app_address,
         "notifications",
-        existing_todoist_notification.id,
+        existing_todoist_notification.id.into(),
     )
     .await;
     assert_eq!(
@@ -171,7 +172,7 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
         &app.app_address,
         "tasks",
         Box::new(Task {
-            id: uuid::Uuid::new_v4(),
+            id: Uuid::new_v4().into(),
             source_id: "1789".to_string(),
             title: "Task 3".to_string(),
             body: "".to_string(),
@@ -208,8 +209,12 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
     todoist_sync_items_mock.assert();
     todoist_projects_mock.assert();
 
-    let completed_task: Box<Task> =
-        get_resource(&app.app_address, "tasks", existing_todoist_active_task.id).await;
+    let completed_task: Box<Task> = get_resource(
+        &app.app_address,
+        "tasks",
+        existing_todoist_active_task.id.into(),
+    )
+    .await;
     assert_eq!(completed_task.id, existing_todoist_active_task.id);
     assert_eq!(completed_task.status, TaskStatus::Done);
     assert_eq!(completed_task.completed_at.is_some(), true);
@@ -217,7 +222,7 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
     let deleted_notification: Box<Notification> = get_resource(
         &app.app_address,
         "notifications",
-        existing_todoist_unread_notification.id,
+        existing_todoist_unread_notification.id.into(),
     )
     .await;
     assert_eq!(

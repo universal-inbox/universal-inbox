@@ -4,6 +4,7 @@ use httpmock::{Method::POST, Mock, MockServer};
 use pretty_assertions::assert_eq;
 use rstest::*;
 use serde_json::json;
+use uuid::Uuid;
 
 use universal_inbox::{
     notification::{NotificationMetadata, NotificationStatus},
@@ -14,7 +15,8 @@ use universal_inbox::{
 };
 
 use universal_inbox_api::{
-    integrations::todoist::TodoistSyncResponse, universal_inbox::task::TaskCreationResult,
+    integrations::todoist::{TodoistSyncResponse, TodoistSyncStatusResponse},
+    universal_inbox::task::TaskCreationResult,
 };
 
 use crate::helpers::{load_json_fixture_file, rest::create_resource};
@@ -37,6 +39,24 @@ pub fn mock_todoist_sync_items_service<'a>(
         when.method(POST)
             .path("/sync")
             .json_body(json!({ "sync_token": "*", "resource_types": ["items"] }))
+            .header("authorization", "Bearer todoist_test_token");
+        then.status(200)
+            .header("content-type", "application/json")
+            .json_body_obj(result);
+    })
+}
+
+pub fn mock_todoist_delete_item_service<'a>(
+    todoist_mock_server: &'a MockServer,
+    task_id: &'a str,
+    result: &'a TodoistSyncStatusResponse,
+) -> Mock<'a> {
+    todoist_mock_server.mock(|when, then| {
+        when.method(POST)
+            .path("/sync")
+            .json_body_partial(format!(
+                r#"{{ "commands": [{{ "type": "item_delete", "args": {{ "id": "{task_id}" }} }}] }}"#
+            ))
             .header("authorization", "Bearer todoist_test_token");
         then.status(200)
             .header("content-type", "application/json")
@@ -143,7 +163,7 @@ pub async fn create_task_from_todoist_item(
         app_address,
         "tasks",
         Box::new(Task {
-            id: uuid::Uuid::new_v4(),
+            id: Uuid::new_v4().into(),
             source_id: todoist_item.id.clone(),
             title: todoist_item.content.clone(),
             body: todoist_item.description.clone(),

@@ -20,6 +20,7 @@ use services::{
     notification_service::{
         notification_service, NotificationCommand, UniversalInboxUIModel, NOTIFICATIONS, UI_MODEL,
     },
+    task_service::{task_service, TaskCommand},
     toast_service::{toast_service, TOASTS},
 };
 
@@ -28,21 +29,40 @@ mod pages;
 mod services;
 
 pub fn app(cx: Scope) -> Element {
-    let notifications = use_atom_ref(&cx, NOTIFICATIONS);
-    let ui_model = use_atom_ref(&cx, UI_MODEL);
-    let toasts = use_atom_ref(&cx, TOASTS);
-    let toast_service_handle = use_coroutine(&cx, |rx| toast_service(rx, toasts.clone()));
+    let notifications_ref = use_atom_ref(&cx, NOTIFICATIONS);
+    let ui_model_ref = use_atom_ref(&cx, UI_MODEL);
+    let toasts_ref = use_atom_ref(&cx, TOASTS);
+    let toast_service_handle = use_coroutine(&cx, |rx| toast_service(rx, toasts_ref.clone()));
+    let task_service_handle = use_coroutine(&cx, |rx| {
+        to_owned![toast_service_handle];
+
+        task_service(rx, toast_service_handle)
+    });
     let notification_service_handle = use_coroutine(&cx, |rx| {
         to_owned![toast_service_handle];
-        notification_service(rx, notifications.clone(), toast_service_handle)
+        to_owned![task_service_handle];
+
+        notification_service(
+            rx,
+            notifications_ref.clone(),
+            task_service_handle,
+            toast_service_handle,
+        )
     });
 
     use_future(&cx, (), |()| {
-        to_owned![ui_model];
+        to_owned![ui_model_ref];
         to_owned![notification_service_handle];
-        to_owned![notifications];
+        to_owned![task_service_handle];
+        to_owned![notifications_ref];
+
         async move {
-            setup_key_bindings(ui_model, notification_service_handle, notifications);
+            setup_key_bindings(
+                ui_model_ref,
+                notification_service_handle,
+                task_service_handle,
+                notifications_ref,
+            );
         }
     });
 
@@ -65,46 +85,47 @@ pub fn app(cx: Scope) -> Element {
 }
 
 fn setup_key_bindings(
-    ui_model: UseAtomRef<UniversalInboxUIModel>,
+    ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
     notification_service_handle: CoroutineHandle<NotificationCommand>,
-    notifications: UseAtomRef<Vec<Notification>>,
+    _task_service_handle: CoroutineHandle<TaskCommand>,
+    notifications_ref: UseAtomRef<Vec<Notification>>,
 ) -> Option<()> {
     let window = web_sys::window()?;
     let document = window.document()?;
 
     let handler = Closure::wrap(Box::new(move |evt: KeyboardEvent| {
-        let mut model = ui_model.write();
-        let read_notifications = notifications.read();
-        let list_length = read_notifications.len();
-        let selected_notification = read_notifications.get(model.selected_notification_index);
+        let mut ui_model = ui_model_ref.write();
+        let notifications = notifications_ref.read();
+        let list_length = notifications.len();
+        let selected_notification = notifications.get(ui_model.selected_notification_index);
         let mut handled = true;
 
         match evt.key().as_ref() {
-            "ArrowDown" if model.selected_notification_index < (list_length - 1) => {
-                model.selected_notification_index += 1
+            "ArrowDown" if ui_model.selected_notification_index < (list_length - 1) => {
+                ui_model.selected_notification_index += 1
             }
-            "ArrowUp" if model.selected_notification_index > 0 => {
-                model.selected_notification_index -= 1
+            "ArrowUp" if ui_model.selected_notification_index > 0 => {
+                ui_model.selected_notification_index -= 1
             }
             "d" => {
                 if let Some(notification) = selected_notification {
-                    notification_service_handle
-                        .send(NotificationCommand::Delete(notification.clone()))
+                    notification_service_handle.send(NotificationCommand::DeleteFromNotification(
+                        notification.clone(),
+                    ))
                 }
             }
             "u" => {
                 if let Some(notification) = selected_notification {
                     notification_service_handle
-                        .send(NotificationCommand::Unsubscribe(notification.clone()))
+                        .send(NotificationCommand::Unsubscribe(notification.id))
                 }
             }
             "s" => {
                 if let Some(notification) = selected_notification {
-                    notification_service_handle
-                        .send(NotificationCommand::Snooze(notification.clone()))
+                    notification_service_handle.send(NotificationCommand::Snooze(notification.id))
                 }
             }
-            "h" => model.footer_help_opened = !model.footer_help_opened,
+            "h" => ui_model.footer_help_opened = !ui_model.footer_help_opened,
             _ => handled = false,
         }
         if handled {

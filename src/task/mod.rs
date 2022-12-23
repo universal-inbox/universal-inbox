@@ -20,7 +20,7 @@ pub mod integrations;
 #[serde_as]
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
 pub struct Task {
-    pub id: Uuid,
+    pub id: TaskId,
     pub source_id: String,
     pub title: String,
     pub body: String,
@@ -32,7 +32,7 @@ pub struct Task {
     #[serde_as(as = "Option<DisplayFromStr>")]
     pub source_html_url: Option<Uri>,
     pub tags: Vec<String>,
-    pub parent_id: Option<Uuid>,
+    pub parent_id: Option<TaskId>,
     pub project: String,
     pub is_recurring: bool,
     pub created_at: DateTime<Utc>,
@@ -49,6 +49,28 @@ impl Task {
 #[serde(tag = "type", content = "content")]
 pub enum TaskMetadata {
     Todoist(TodoistItem),
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Copy, Clone, Eq, Hash)]
+#[serde(transparent)]
+pub struct TaskId(pub Uuid);
+
+impl fmt::Display for TaskId {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<Uuid> for TaskId {
+    fn from(uuid: Uuid) -> Self {
+        Self(uuid)
+    }
+}
+
+impl From<TaskId> for Uuid {
+    fn from(task_id: TaskId) -> Self {
+        task_id.0
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
@@ -91,7 +113,8 @@ macro_attr! {
     #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy, Eq, EnumFromStr!, EnumDisplay!)]
     pub enum TaskStatus {
         Active,
-        Done
+        Done,
+        Deleted
     }
 }
 
@@ -128,7 +151,7 @@ impl From<Task> for Notification {
 impl From<&Task> for Notification {
     fn from(task: &Task) -> Self {
         Notification {
-            id: Uuid::new_v4(),
+            id: Uuid::new_v4().into(),
             title: task.title.clone(),
             source_id: task.source_id.clone(),
             source_html_url: task.source_html_url.clone(),

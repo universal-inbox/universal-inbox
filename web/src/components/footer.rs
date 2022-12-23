@@ -1,13 +1,52 @@
-use dioxus::prelude::*;
+use dioxus::{core::to_owned, prelude::*};
 use dioxus_free_icons::{
     icons::bs_icons::{BsArrowDownShort, BsArrowUpShort, BsKeyboard, BsQuestionCircle},
     Icon,
 };
+use universal_inbox::notification::Notification;
 
-use crate::services::notification_service::UI_MODEL;
+use crate::services::notification_service::{NOTIFICATIONS, UI_MODEL};
 
 pub fn footer(cx: Scope) -> Element {
-    let ui_model = use_atom_ref(&cx, UI_MODEL);
+    fn compute_is_selected_notification_built_from_task(
+        notifications: Vec<Notification>,
+        selected_notification_index: usize,
+    ) -> bool {
+        let selected_notification = notifications.get(selected_notification_index);
+        selected_notification
+            .map(|notif| notif.is_built_from_task())
+            .unwrap_or(false)
+    }
+
+    let notifications_ref = use_atom_ref(&cx, NOTIFICATIONS);
+    let notifications = notifications_ref.read();
+
+    let ui_model_ref = use_atom_ref(&cx, UI_MODEL);
+    let ui_model = ui_model_ref.read();
+    let selected_notification_index = ui_model.selected_notification_index;
+
+    let is_selected_notification_built_from_task = use_state(&cx, || {
+        to_owned![notifications];
+
+        compute_is_selected_notification_built_from_task(notifications, selected_notification_index)
+    });
+
+    use_effect(
+        &cx,
+        &(selected_notification_index, notifications.clone()),
+        |(selected_notification_index, notifications)| {
+            to_owned![is_selected_notification_built_from_task];
+
+            async move {
+                is_selected_notification_built_from_task.set(
+                    compute_is_selected_notification_built_from_task(
+                        notifications,
+                        selected_notification_index,
+                    ),
+                );
+            }
+        },
+    );
 
     cx.render(rsx! {
         div {
@@ -16,11 +55,11 @@ pub fn footer(cx: Scope) -> Element {
             button {
                 class: "flex w-full items-center h-5 hover:bg-light-400 hover:dark:bg-dark-600",
                 onclick: |_| {
-                    let mut model = ui_model.write();
-                    model.footer_help_opened = !model.footer_help_opened;
+                    let mut ui_model = ui_model_ref.write();
+                    ui_model.footer_help_opened = !ui_model.footer_help_opened;
                 },
 
-                if ui_model.read().footer_help_opened {
+                if ui_model.footer_help_opened {
                     rsx! {
                         Icon { class: "w-3 h-3", icon: BsArrowDownShort }
                         div {
@@ -42,7 +81,7 @@ pub fn footer(cx: Scope) -> Element {
                     }
                 }
             }
-            ui_model.read().footer_help_opened.then(|| rsx! {
+            ui_model.footer_help_opened.then(|| rsx! {
                 div {
                     class: "flex flex-col px-2 pb-2 text-xs text-gray-100",
 
@@ -56,22 +95,41 @@ pub fn footer(cx: Scope) -> Element {
                         class: "grid grid-cols-4 text-slate-500",
 
                         self::shortcut_text { shortcut: "h", text: "help" }
-                        div {
-                            class: "flex items-center gap-2",
+                        (!is_selected_notification_built_from_task).then(|| rsx!(
+                            div {
+                                class: "flex items-center gap-2",
 
-                            Icon { class: "text-red-500 w-4 h-4", icon: BsArrowDownShort }
-                            span { "next notification" }
-                        }
-                        div {
-                            class: "flex items-center gap-2",
+                                Icon { class: "text-red-500 w-4 h-4", icon: BsArrowDownShort }
+                                span { "next notification" }
+                            }
+                            div {
+                                class: "flex items-center gap-2",
 
-                            Icon { class: "text-red-500 w-4 h-4", icon: BsArrowUpShort }
-                            span { "previous notification" }
-                        }
-                        self::shortcut_text { shortcut: "d", text: "delete notification" }
-                        self::shortcut_text { shortcut: "u", text: "unsubscribe from notification" }
-                        self::shortcut_text { shortcut: "s", text: "snooze notification" }
-                        self::shortcut_text { shortcut: "t", text: "add notification to todo task" }
+                                Icon { class: "text-red-500 w-4 h-4", icon: BsArrowUpShort }
+                                span { "previous notification" }
+                            }
+                            self::shortcut_text { shortcut: "d", text: "delete notification" }
+                            self::shortcut_text { shortcut: "u", text: "unsubscribe from notification" }
+                            self::shortcut_text { shortcut: "s", text: "snooze notification" }
+                            self::shortcut_text { shortcut: "t", text: "add notification to todo task" }
+                        )),
+
+                        (is_selected_notification_built_from_task).then(|| rsx!(
+                            div {
+                                class: "flex items-center gap-2",
+
+                                Icon { class: "text-red-500 w-4 h-4", icon: BsArrowDownShort }
+                                span { "next task" }
+                            }
+                            div {
+                                class: "flex items-center gap-2",
+
+                                Icon { class: "text-red-500 w-4 h-4", icon: BsArrowUpShort }
+                                span { "previous task" }
+                            }
+                            self::shortcut_text { shortcut: "d", text: "delete task" }
+                            self::shortcut_text { shortcut: "s", text: "snooze notification" }
+                        )),
                     }
                 }
             })
