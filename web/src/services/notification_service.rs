@@ -3,25 +3,29 @@ use std::collections::HashMap;
 use chrono::{DateTime, Duration, Local, TimeZone, Timelike, Utc};
 use dioxus::{fermi::UseAtomRef, prelude::*};
 use futures_util::StreamExt;
-use wasm_bindgen::JsValue;
 
-use universal_inbox::notification::{Notification, NotificationPatch, NotificationStatus};
+use universal_inbox::{
+    notification::{Notification, NotificationId, NotificationPatch, NotificationStatus},
+    task::TaskId,
+};
 
 use crate::{
     components::toast_zone::{Toast, ToastKind},
     services::{
-        api::{call_api, call_api_with_body},
+        api::{call_api, call_api_and_notify},
         toast_service::{ToastCommand, ToastUpdate},
     },
 };
 
+use super::task_service::TaskCommand;
+
 #[derive(Debug)]
 pub enum NotificationCommand {
     Refresh,
-    Delete(Notification),
-    Unsubscribe(Notification),
-    Snooze(Notification),
-    MarkAsDone(Notification),
+    DeleteFromNotification(Notification),
+    Unsubscribe(NotificationId),
+    Snooze(NotificationId),
+    MarkTaskAsDoneFromNotification(Notification),
 }
 
 #[derive(Debug, Default)]
@@ -36,6 +40,7 @@ pub static UI_MODEL: AtomRef<UniversalInboxUIModel> = |_| Default::default();
 pub async fn notification_service<'a>(
     mut rx: UnboundedReceiver<NotificationCommand>,
     notifications: UseAtomRef<Vec<Notification>>,
+    task_service: CoroutineHandle<TaskCommand>,
     toast_service: CoroutineHandle<ToastCommand>,
 ) {
     loop {
@@ -64,34 +69,25 @@ pub async fn notification_service<'a>(
                 };
                 toast_service.send(ToastCommand::Update(toast_update));
             }
-            Some(NotificationCommand::Delete(notification)) => {
-                notifications
-                    .write()
-                    .retain(|notif| notif.id != notification.id);
-
-                let _result: Notification = call_api_and_notify(
-                    "PATCH",
-                    &format!("/notifications/{}", notification.id),
-                    NotificationPatch {
-                        status: Some(NotificationStatus::Deleted),
-                        ..Default::default()
-                    },
-                    HashMap::new(),
-                    &toast_service,
-                    "Deleting notification...",
-                    "Successfully deleted notification",
-                )
-                .await
-                .unwrap();
+            Some(NotificationCommand::DeleteFromNotification(notification)) => {
+                if let Some(task_id) = notification.task_id {
+                    if notification.is_built_from_task() {
+                        delete_task(notification.id, task_id, &notifications, &task_service).await;
+                    } else {
+                        delete_notification(notification.id, &notifications, &toast_service).await;
+                    }
+                } else {
+                    delete_notification(notification.id, &notifications, &toast_service).await;
+                }
             }
-            Some(NotificationCommand::Unsubscribe(notification)) => {
+            Some(NotificationCommand::Unsubscribe(notification_id)) => {
                 notifications
                     .write()
-                    .retain(|notif| notif.id != notification.id);
+                    .retain(|notif| notif.id != notification_id);
 
                 let _result: Notification = call_api_and_notify(
                     "PATCH",
-                    &format!("/notifications/{}", notification.id),
+                    &format!("/notifications/{}", notification_id),
                     NotificationPatch {
                         status: Some(NotificationStatus::Unsubscribed),
                         ..Default::default()
@@ -104,16 +100,16 @@ pub async fn notification_service<'a>(
                 .await
                 .unwrap();
             }
-            Some(NotificationCommand::Snooze(notification)) => {
+            Some(NotificationCommand::Snooze(notification_id)) => {
                 let snoozed_time = compute_snoozed_until(Local::now(), 1, 6);
 
                 notifications
                     .write()
-                    .retain(|notif| notif.id != notification.id);
+                    .retain(|notif| notif.id != notification_id);
 
                 let _result: Notification = call_api_and_notify(
                     "PATCH",
-                    &format!("/notifications/{}", notification.id),
+                    &format!("/notifications/{}", notification_id),
                     NotificationPatch {
                         snoozed_until: Some(snoozed_time),
                         ..Default::default()
@@ -126,40 +122,48 @@ pub async fn notification_service<'a>(
                 .await
                 .unwrap();
             }
-            Some(NotificationCommand::MarkAsDone(_)) => {}
+            Some(NotificationCommand::MarkTaskAsDoneFromNotification(_)) => {}
             None => {}
         }
     }
 }
 
-async fn call_api_and_notify<R: for<'de> serde::de::Deserialize<'de>, B: serde::Serialize>(
-    method: &str,
-    path: &str,
-    body: B,
-    headers: HashMap<String, String>,
+async fn delete_notification(
+    notification_id: NotificationId,
+    notifications: &UseAtomRef<Vec<Notification>>,
     toast_service: &CoroutineHandle<ToastCommand>,
-    loading_message: &str,
-    success_message: &str,
-) -> Result<R, JsValue> {
-    let toast = Toast {
-        kind: ToastKind::Loading,
-        message: loading_message.to_string(),
-        ..Default::default()
-    };
-    let toast_id = toast.id;
-    toast_service.send(ToastCommand::Push(toast));
+) {
+    notifications
+        .write()
+        .retain(|notif| notif.id != notification_id);
 
-    let result: R = call_api_with_body(method, path, body, headers).await?;
+    let _result: Notification = call_api_and_notify(
+        "PATCH",
+        &format!("/notifications/{}", notification_id),
+        NotificationPatch {
+            status: Some(NotificationStatus::Deleted),
+            ..Default::default()
+        },
+        HashMap::new(),
+        toast_service,
+        "Deleting notification...",
+        "Successfully deleted notification",
+    )
+    .await
+    .unwrap();
+}
 
-    let toast_update = ToastUpdate {
-        id: toast_id,
-        kind: Some(ToastKind::Success),
-        message: Some(success_message.to_string()),
-        timeout: Some(Some(5_000)),
-    };
-    toast_service.send(ToastCommand::Update(toast_update));
+async fn delete_task(
+    notification_id: NotificationId,
+    task_id: TaskId,
+    notifications: &UseAtomRef<Vec<Notification>>,
+    task_service: &CoroutineHandle<TaskCommand>,
+) {
+    notifications
+        .write()
+        .retain(|notif| notif.id != notification_id);
 
-    Ok(result)
+    task_service.send(TaskCommand::Delete(task_id));
 }
 
 fn compute_snoozed_until<Tz: TimeZone>(

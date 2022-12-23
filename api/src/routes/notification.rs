@@ -5,9 +5,12 @@ use actix_web::{web, HttpResponse, Scope};
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use uuid::Uuid;
+use tokio::sync::RwLock;
 
-use universal_inbox::notification::{Notification, NotificationPatch, NotificationStatus};
+use universal_inbox::{
+    notification::{Notification, NotificationId, NotificationPatch, NotificationStatus},
+    task::TaskId,
+};
 
 use crate::{
     integrations::notification::NotificationSyncSourceKind,
@@ -40,18 +43,22 @@ pub fn scope() -> Scope {
 pub struct ListNotificationRequest {
     status: NotificationStatus,
     include_snoozed_notifications: Option<bool>,
-    task_id: Option<Uuid>,
+    task_id: Option<TaskId>,
 }
 
-#[tracing::instrument(level = "debug", skip(service))]
+#[tracing::instrument(level = "debug", skip(notification_service))]
 pub async fn list_notifications(
     list_notification_request: web::Query<ListNotificationRequest>,
-    service: web::Data<Arc<NotificationService>>,
+    notification_service: web::Data<Arc<RwLock<NotificationService>>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
+    let service = notification_service.read().await;
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while listing notifications")?;
     let notifications: Vec<Notification> = service
-        .connect()
-        .await?
         .list_notifications(
+            &mut transaction,
             list_notification_request.status,
             list_notification_request
                 .include_snoozed_notifications
@@ -65,17 +72,20 @@ pub async fn list_notifications(
         .body(serde_json::to_string(&notifications).context("Cannot serialize notifications")?))
 }
 
-#[tracing::instrument(level = "debug", skip(service))]
+#[tracing::instrument(level = "debug", skip(notification_service))]
 pub async fn get_notification(
-    path: web::Path<Uuid>,
-    service: web::Data<Arc<NotificationService>>,
+    path: web::Path<NotificationId>,
+    notification_service: web::Data<Arc<RwLock<NotificationService>>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let notification_id = path.into_inner();
+    let service = notification_service.read().await;
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while getting notification")?;
 
     match service
-        .connect()
-        .await?
-        .get_notification(notification_id)
+        .get_notification(&mut transaction, notification_id)
         .await?
     {
         Some(notification) => Ok(HttpResponse::Ok()
@@ -90,21 +100,22 @@ pub async fn get_notification(
     }
 }
 
-#[tracing::instrument(level = "debug", skip(service))]
+#[tracing::instrument(level = "debug", skip(notification_service))]
 pub async fn create_notification(
     notification: web::Json<Box<Notification>>,
-    service: web::Data<Arc<NotificationService>>,
+    notification_service: web::Data<Arc<RwLock<NotificationService>>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    let transactional_service = service
+    let service = notification_service.read().await;
+    let mut transaction = service
         .begin()
         .await
         .context("Failed to create new transaction while creating notification")?;
 
-    let created_notification = transactional_service
-        .create_notification(notification.into_inner())
+    let created_notification = service
+        .create_notification(&mut transaction, notification.into_inner())
         .await?;
 
-    transactional_service
+    transaction
         .commit()
         .await
         .context("Failed to commit while creating notification")?;
@@ -119,21 +130,22 @@ pub struct SyncNotificationsParameters {
     source: Option<NotificationSyncSourceKind>,
 }
 
-#[tracing::instrument(level = "debug", skip(service))]
+#[tracing::instrument(level = "debug", skip(notification_service))]
 pub async fn sync_notifications(
     params: web::Json<SyncNotificationsParameters>,
-    service: web::Data<Arc<NotificationService>>,
+    notification_service: web::Data<Arc<RwLock<NotificationService>>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    let transactional_service = service.begin().await.context(format!(
+    let service = notification_service.read().await;
+    let mut transaction = service.begin().await.context(format!(
         "Failed to create new transaction while syncing {:?}",
         &params.source
     ))?;
 
-    let notifications: Vec<Notification> = transactional_service
-        .sync_notifications(&params.source)
+    let notifications: Vec<Notification> = service
+        .sync_notifications(&mut transaction, &params.source)
         .await?;
 
-    transactional_service.commit().await.context(format!(
+    transaction.commit().await.context(format!(
         "Failed to commit while syncing {:?}",
         &params.source
     ))?;
@@ -143,23 +155,25 @@ pub async fn sync_notifications(
         .body(serde_json::to_string(&notifications).context("Cannot serialize notifications")?))
 }
 
-#[tracing::instrument(level = "debug", skip(service))]
+#[tracing::instrument(level = "debug", skip(notification_service))]
 pub async fn patch_notification(
-    path: web::Path<Uuid>,
+    path: web::Path<NotificationId>,
     patch: web::Json<NotificationPatch>,
-    service: web::Data<Arc<NotificationService>>,
+    notification_service: web::Data<Arc<RwLock<NotificationService>>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let notification_id = path.into_inner();
-    let transactional_service = service
+    let notification_patch = patch.into_inner();
+    let service = notification_service.read().await;
+    let mut transaction = service
         .begin()
         .await
         .context(format!("Failed to patch notification {notification_id}"))?;
 
-    let updated_notification = transactional_service
-        .patch_notification(notification_id, &patch.into_inner())
+    let updated_notification = service
+        .patch_notification(&mut transaction, notification_id, &notification_patch)
         .await?;
 
-    transactional_service.commit().await.context(format!(
+    transaction.commit().await.context(format!(
         "Failed to commit while patching notification {notification_id}"
     ))?;
 

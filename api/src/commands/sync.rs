@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Context;
+use tokio::sync::RwLock;
 
 use crate::{
     integrations::{notification::NotificationSyncSourceKind, task::TaskSyncSourceKind},
@@ -10,20 +11,21 @@ use crate::{
 };
 
 pub async fn sync_notifications(
-    service: Arc<NotificationService>,
+    notification_service: Arc<RwLock<NotificationService>>,
     source: &Option<NotificationSyncSourceKind>,
 ) -> Result<(), UniversalInboxError> {
-    let transactional_service = service.begin().await.context(format!(
+    let service = notification_service.read().await;
+    let mut transaction = service.begin().await.context(format!(
         "Failed to create new transaction while syncing {:?}",
         &source
     ))?;
 
-    transactional_service
-        .sync_notifications(source)
+    service
+        .sync_notifications(&mut transaction, source)
         .await
         .context(format!("Failed to sync {:?}", &source))?;
 
-    transactional_service
+    transaction
         .commit()
         .await
         .context(format!("Failed to commit while syncing {:?}", &source))?;
@@ -32,20 +34,21 @@ pub async fn sync_notifications(
 }
 
 pub async fn sync_tasks(
-    service: Arc<TaskService>,
+    task_service: Arc<RwLock<TaskService>>,
     source: &Option<TaskSyncSourceKind>,
 ) -> Result<(), UniversalInboxError> {
-    let transactional_service = service.begin().await.context(format!(
+    let service = task_service.read().await;
+    let mut transaction = service.begin().await.context(format!(
         "Failed to create new transaction while syncing {:?}",
         &source
     ))?;
 
-    transactional_service
-        .sync_tasks(source)
+    service
+        .sync_tasks(&mut transaction, source)
         .await
         .context(format!("Failed to sync {:?}", &source))?;
 
-    transactional_service
+    transaction
         .commit()
         .await
         .context(format!("Failed to commit while syncing {:?}", &source))?;

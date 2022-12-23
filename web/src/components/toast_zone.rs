@@ -39,14 +39,14 @@ pub enum ToastKind {
 
 #[inline_props]
 pub fn toast_zone(cx: Scope) -> Element {
-    let toasts = use_atom_ref(&cx, TOASTS);
+    let toasts_ref = use_atom_ref(&cx, TOASTS);
     let toast_service = use_coroutine_handle::<ToastCommand>(&cx).unwrap();
 
     cx.render(rsx! {
         div {
             class: "absolute bottom-5 right-5 flex flex-col gap-2",
 
-            toasts.read().clone().into_iter().map(move |(id, toast)| {
+            toasts_ref.read().clone().into_iter().map(move |(id, toast)| {
                 rsx!(
                     self::toast {
                         key: "{id}",
