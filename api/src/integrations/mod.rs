@@ -73,5 +73,7 @@ pub mod task {
     pub trait TaskSourceService<T>: TaskSource {
         async fn fetch_all_tasks(&self) -> Result<Vec<T>, UniversalInboxError>;
         async fn build_task(&self, source: &T) -> Result<Box<Task>, UniversalInboxError>;
+        async fn delete_task_from_source(&self, source_id: &str)
+            -> Result<(), UniversalInboxError>;
     }
 }

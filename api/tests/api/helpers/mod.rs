@@ -13,8 +13,6 @@ use universal_inbox_api::{
     configuration::Settings,
     integrations::{github::GithubService, todoist::TodoistService},
     observability::{get_subscriber, init_subscriber},
-    repository::Repository,
-    universal_inbox::{notification::service::NotificationService, task::service::TaskService},
 };
 
 pub mod notification;
@@ -105,30 +103,15 @@ pub async fn tested_app(
             todoist_mock_server_uri
         )
     });
+    let github_service = GithubService::new(
+        &settings.integrations.github.api_token,
+        Some(github_mock_server_uri.to_string()),
+        2,
+    )
+    .expect("Failed to create new GithubService");
 
-    let repository = Arc::new(Repository::new(pool.clone()));
-    let notification_service = Arc::new(
-        NotificationService::new(
-            repository.clone(),
-            GithubService::new(
-                &settings.integrations.github.api_token,
-                Some(github_mock_server_uri.to_string()),
-                2,
-            )
-            .unwrap_or_else(|_| {
-                panic!(
-                    "Failed to setup Github service with mock server at {}",
-                    github_mock_server_uri
-                )
-            }),
-        )
-        .expect("Failed to setup notification service"),
-    );
-
-    let task_service = Arc::new(
-        TaskService::new(repository, todoist_service, notification_service.clone())
-            .expect("Failed to setup task service"),
-    );
+    let (notification_service, task_service) =
+        universal_inbox_api::build_services(pool, github_service, todoist_service).await;
 
     let server = universal_inbox_api::run(listener, &settings, notification_service, task_service)
         .await

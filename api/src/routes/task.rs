@@ -5,9 +5,9 @@ use actix_web::{web, HttpResponse, Scope};
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use uuid::Uuid;
+use tokio::sync::RwLock;
 
-use universal_inbox::task::{Task, TaskPatch, TaskStatus};
+use universal_inbox::task::{Task, TaskId, TaskPatch, TaskStatus};
 
 use crate::{
     integrations::task::TaskSyncSourceKind,
@@ -42,15 +42,18 @@ pub struct ListTaskRequest {
     status: TaskStatus,
 }
 
-#[tracing::instrument(level = "debug", skip(service))]
+#[tracing::instrument(level = "debug", skip(task_service))]
 pub async fn list_tasks(
     list_task_request: web::Query<ListTaskRequest>,
-    service: web::Data<Arc<TaskService>>,
+    task_service: web::Data<Arc<RwLock<TaskService>>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
+    let service = task_service.read().await;
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while listing tasks")?;
     let tasks: Vec<Task> = service
-        .connect()
-        .await?
-        .list_tasks(list_task_request.status)
+        .list_tasks(&mut transaction, list_task_request.status)
         .await?;
 
     Ok(HttpResponse::Ok()
@@ -58,14 +61,19 @@ pub async fn list_tasks(
         .body(serde_json::to_string(&tasks).context("Cannot serialize tasks")?))
 }
 
-#[tracing::instrument(level = "debug", skip(service))]
+#[tracing::instrument(level = "debug", skip(task_service))]
 pub async fn get_task(
-    path: web::Path<Uuid>,
-    service: web::Data<Arc<TaskService>>,
+    path: web::Path<TaskId>,
+    task_service: web::Data<Arc<RwLock<TaskService>>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let task_id = path.into_inner();
+    let service = task_service.read().await;
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while getting task")?;
 
-    match service.connect().await?.get_task(task_id).await? {
+    match service.get_task(&mut transaction, task_id).await? {
         Some(task) => Ok(HttpResponse::Ok()
             .content_type("application/json")
             .body(serde_json::to_string(&task).context("Cannot serialize task")?)),
@@ -77,19 +85,22 @@ pub async fn get_task(
     }
 }
 
-#[tracing::instrument(level = "debug", skip(service))]
+#[tracing::instrument(level = "debug", skip(task_service))]
 pub async fn create_task(
     task: web::Json<Box<Task>>,
-    service: web::Data<Arc<TaskService>>,
+    task_service: web::Data<Arc<RwLock<TaskService>>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    let transactional_service = service
+    let service = task_service.read().await;
+    let mut transaction = service
         .begin()
         .await
         .context("Failed to create new transaction while creating task")?;
 
-    let created_task = transactional_service.create_task(task.into_inner()).await?;
+    let created_task = service
+        .create_task(&mut transaction, task.into_inner())
+        .await?;
 
-    transactional_service
+    transaction
         .commit()
         .await
         .context("Failed to commit while creating task")?;
@@ -104,19 +115,21 @@ pub struct SyncTasksParameters {
     source: Option<TaskSyncSourceKind>,
 }
 
-#[tracing::instrument(level = "debug", skip(service))]
+#[tracing::instrument(level = "debug", skip(task_service))]
 pub async fn sync_tasks(
     params: web::Json<SyncTasksParameters>,
-    service: web::Data<Arc<TaskService>>,
+    task_service: web::Data<Arc<RwLock<TaskService>>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    let transactional_service = service.begin().await.context(format!(
+    let service = task_service.read().await;
+    let mut transaction = service.begin().await.context(format!(
         "Failed to create new transaction while syncing {:?}",
         &params.source
     ))?;
 
-    let tasks: Vec<TaskCreationResult> = transactional_service.sync_tasks(&params.source).await?;
+    let tasks: Vec<TaskCreationResult> =
+        service.sync_tasks(&mut transaction, &params.source).await?;
 
-    transactional_service.commit().await.context(format!(
+    transaction.commit().await.context(format!(
         "Failed to commit while syncing {:?}",
         &params.source
     ))?;
@@ -126,23 +139,25 @@ pub async fn sync_tasks(
         .body(serde_json::to_string(&tasks).context("Cannot serialize task creation results")?))
 }
 
-#[tracing::instrument(level = "debug", skip(service))]
+#[tracing::instrument(level = "debug", skip(task_service))]
 pub async fn patch_task(
-    path: web::Path<Uuid>,
+    path: web::Path<TaskId>,
     patch: web::Json<TaskPatch>,
-    service: web::Data<Arc<TaskService>>,
+    task_service: web::Data<Arc<RwLock<TaskService>>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let task_id = path.into_inner();
-    let transactional_service = service
+    let task_patch = patch.into_inner();
+    let service = task_service.read().await;
+    let mut transaction = service
         .begin()
         .await
         .context(format!("Failed to patch task {task_id}"))?;
 
-    let updated_task = transactional_service
-        .patch_task(task_id, &patch.into_inner())
+    let updated_task = service
+        .patch_task(&mut transaction, task_id, &task_patch)
         .await?;
 
-    transactional_service
+    transaction
         .commit()
         .await
         .context(format!("Failed to commit while patching task {task_id}"))?;

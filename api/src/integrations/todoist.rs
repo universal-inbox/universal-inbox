@@ -23,7 +23,7 @@ use crate::{
     universal_inbox::UniversalInboxError,
 };
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct TodoistService {
     client: reqwest::Client,
     todoist_sync_base_url: String,
@@ -39,6 +39,21 @@ pub struct TodoistSyncResponse {
     pub full_sync: bool,
     pub temp_id_mapping: HashMap<String, String>,
     pub sync_token: String,
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct TodoistSyncStatusResponse {
+    pub sync_status: HashMap<Uuid, TodoistCommandStatus>,
+    pub full_sync: bool,
+    pub temp_id_mapping: HashMap<String, String>,
+    pub sync_token: String,
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+#[serde(untagged)]
+pub enum TodoistCommandStatus {
+    Ok(String),
+    Error { error_code: i32, error: String },
 }
 
 impl TodoistService {
@@ -81,13 +96,15 @@ impl TodoistService {
         let json_response: serde_json::value::Value = self
             .client
             .post(&format!("{}/sync", self.todoist_sync_base_url))
-            .json(&json!([
-                {
-                    "type": "item_delete",
-                    "uuid": command_uuid,
-                    "args": { "id": id }
-                }
-            ]))
+            .json(&json!({
+                "commands": [
+                    {
+                        "type": "item_delete",
+                        "uuid": command_uuid,
+                        "args": { "id": id }
+                    }
+                ]
+            }))
             .send()
             .await
             .with_context(|| format!("Cannot delete item `{id}` from Todoist API"))?
@@ -98,7 +115,10 @@ impl TodoistService {
             })?;
 
         let sync_status = json_response["sync_status"].as_object().with_context(|| {
-            format!("Failed to parse response from Todoist API while deleting item `{id}`")
+            format!(
+                "Failed to parse response from Todoist API while deleting item `{id}`: {:?}",
+                json_response
+            )
         })?;
         // It could be simpler as the first value is actually the `command_id` but httpmock
         // does not allow to use a request value into the mocked response
@@ -188,7 +208,7 @@ impl TaskSourceService<TodoistItem> for TodoistService {
         let project_name = self.get_project_name(&source.project_id).await?;
 
         Ok(Box::new(Task {
-            id: Uuid::new_v4(),
+            id: Uuid::new_v4().into(),
             source_id: source.id.clone(),
             title: source.content.clone(),
             body: source.description.clone(),
@@ -215,6 +235,10 @@ impl TaskSourceService<TodoistItem> for TodoistService {
             metadata: TaskMetadata::Todoist(source.clone()),
         }))
     }
+
+    async fn delete_task_from_source(&self, id: &str) -> Result<(), UniversalInboxError> {
+        self.delete_item(id).await
+    }
 }
 
 impl TaskSource for TodoistService {
@@ -226,5 +250,42 @@ impl TaskSource for TodoistService {
 impl NotificationSource for TodoistService {
     fn get_notification_source_kind(&self) -> NotificationSourceKind {
         NotificationSourceKind::Todoist
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pretty_assertions::assert_eq;
+    use rstest::*;
+
+    use uuid::uuid;
+
+    #[rstest]
+    fn test_parse_todoist_sync_status_response() {
+        assert_eq!(serde_json::from_str::<TodoistSyncStatusResponse>(
+            r#"
+            {
+                "sync_status": {
+                    "f8539c77-7fd7-4846-afad-3b201f0be8a4": "ok",
+                    "f8539c77-7fd7-4846-afad-3b201f0be8a5": { "error_code": 42, "error": "Something went wrong" }
+                },
+                "temp_id_mapping": {},
+                "full_sync": false,
+                "sync_token": "abcd"
+            }
+            "#
+        ).unwrap(), TodoistSyncStatusResponse {
+            sync_status: HashMap::from([
+                (uuid!("f8539c77-7fd7-4846-afad-3b201f0be8a4"), TodoistCommandStatus::Ok("ok".to_string())),
+                (uuid!("f8539c77-7fd7-4846-afad-3b201f0be8a5"), TodoistCommandStatus::Error {
+                    error_code: 42,
+                    error: "Something went wrong".to_string(),
+                }),
+            ]),
+            temp_id_mapping: HashMap::new(),
+            full_sync: false,
+            sync_token: "abcd".to_string(),
+        });
     }
 }

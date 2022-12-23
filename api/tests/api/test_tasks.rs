@@ -35,7 +35,7 @@ mod create_task {
     ) {
         let app = tested_app.await;
         let expected_minimal_task = Box::new(Task {
-            id: uuid::Uuid::new_v4(),
+            id: Uuid::new_v4().into(),
             source_id: "1234".to_string(),
             title: "task 1".to_string(),
             body: "more details".to_string(),
@@ -61,7 +61,7 @@ mod create_task {
         let created_notification = creation_result.notification.unwrap();
         assert_eq!(created_notification.task_id, Some(creation_result.task.id));
 
-        let task = get_resource(&app.app_address, "tasks", creation_result.task.id).await;
+        let task = get_resource(&app.app_address, "tasks", creation_result.task.id.into()).await;
         assert_eq!(task, expected_minimal_task);
 
         let notifications = list_notifications(
@@ -86,7 +86,7 @@ mod create_task {
     async fn test_create_task(#[future] tested_app: TestedApp, todoist_item: Box<TodoistItem>) {
         let app = tested_app.await;
         let expected_task = Box::new(Task {
-            id: uuid::Uuid::new_v4(),
+            id: Uuid::new_v4().into(),
             source_id: "5678".to_string(),
             title: "task 2".to_string(),
             body: "more details 2".to_string(),
@@ -111,7 +111,7 @@ mod create_task {
         assert_eq!(creation_result.task, *expected_task);
         assert!(creation_result.notification.is_none());
 
-        let task = get_resource(&app.app_address, "tasks", creation_result.task.id).await;
+        let task = get_resource(&app.app_address, "tasks", creation_result.task.id.into()).await;
 
         assert_eq!(task, expected_task);
 
@@ -133,7 +133,7 @@ mod create_task {
     ) {
         let app = tested_app.await;
         let task_done = Box::new(Task {
-            id: uuid::Uuid::new_v4(),
+            id: Uuid::new_v4().into(),
             source_id: "5678".to_string(),
             title: "task 2".to_string(),
             body: "more details 2".to_string(),
@@ -170,7 +170,7 @@ mod create_task {
     ) {
         let app = tested_app.await;
         let expected_task = Box::new(Task {
-            id: uuid::Uuid::new_v4(),
+            id: Uuid::new_v4().into(),
             source_id: "1234".to_string(),
             title: "task 1".to_string(),
             body: "more details".to_string(),
@@ -249,7 +249,7 @@ mod list_tasks {
             &app.app_address,
             "tasks",
             Box::new(Task {
-                id: uuid::Uuid::new_v4(),
+                id: Uuid::new_v4().into(),
                 source_id: "1234".to_string(),
                 title: "task 1".to_string(),
                 body: "more details".to_string(),
@@ -272,7 +272,7 @@ mod list_tasks {
             &app.app_address,
             "tasks",
             Box::new(Task {
-                id: uuid::Uuid::new_v4(),
+                id: Uuid::new_v4().into(),
                 source_id: "5678".to_string(),
                 title: "task 2".to_string(),
                 body: "more details".to_string(),
@@ -319,7 +319,7 @@ mod patch_task {
             &app.app_address,
             "tasks",
             Box::new(Task {
-                id: uuid::Uuid::new_v4(),
+                id: Uuid::new_v4().into(),
                 source_id: "1234".to_string(),
                 title: "task 1".to_string(),
                 body: "more details".to_string(),
@@ -341,7 +341,7 @@ mod patch_task {
         let response = patch_resource_response(
             &app.app_address,
             "tasks",
-            creation_result.task.id,
+            creation_result.task.id.into(),
             &TaskPatch {
                 status: Some(creation_result.task.status),
             },
@@ -362,7 +362,7 @@ mod patch_task {
             &app.app_address,
             "tasks",
             Box::new(Task {
-                id: uuid::Uuid::new_v4(),
+                id: Uuid::new_v4().into(),
                 source_id: "1234".to_string(),
                 title: "task 1".to_string(),
                 body: "more details".to_string(),
@@ -384,7 +384,7 @@ mod patch_task {
         let response = patch_resource_response(
             &app.app_address,
             "tasks",
-            creation_result.task.id,
+            creation_result.task.id.into(),
             &TaskPatch {
                 ..Default::default()
             },

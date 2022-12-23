@@ -46,7 +46,7 @@ mod list_notifications {
             &app.app_address,
             "notifications",
             Box::new(Notification {
-                id: uuid::Uuid::new_v4(),
+                id: Uuid::new_v4().into(),
                 title: "notif1".to_string(),
                 status: NotificationStatus::Unread,
                 source_id: "1234".to_string(),
@@ -67,7 +67,7 @@ mod list_notifications {
             &app.app_address,
             "notifications",
             Box::new(Notification {
-                id: uuid::Uuid::new_v4(),
+                id: Uuid::new_v4().into(),
                 title: "notif2".to_string(),
                 status: NotificationStatus::Unread,
                 source_id: "5678".to_string(),
@@ -89,7 +89,7 @@ mod list_notifications {
             &app.app_address,
             "notifications",
             Box::new(Notification {
-                id: uuid::Uuid::new_v4(),
+                id: Uuid::new_v4().into(),
                 title: "notif3".to_string(),
                 status: NotificationStatus::Deleted,
                 source_id: "9012".to_string(),
@@ -110,7 +110,7 @@ mod list_notifications {
             &app.app_address,
             "notifications",
             Box::new(Notification {
-                id: uuid::Uuid::new_v4(),
+                id: Uuid::new_v4().into(),
                 title: "notif4".to_string(),
                 status: NotificationStatus::Unread,
                 source_id: "3456".to_string(),
@@ -172,7 +172,7 @@ mod create_notification {
     ) {
         let app = tested_app.await;
         let expected_notification = Box::new(Notification {
-            id: uuid::Uuid::new_v4(),
+            id: Uuid::new_v4().into(),
             title: "notif1".to_string(),
             status: NotificationStatus::Unread,
             source_id: "1234".to_string(),
@@ -193,8 +193,12 @@ mod create_notification {
 
         assert_eq!(created_notification, expected_notification);
 
-        let notification =
-            get_resource(&app.app_address, "notifications", created_notification.id).await;
+        let notification = get_resource(
+            &app.app_address,
+            "notifications",
+            created_notification.id.into(),
+        )
+        .await;
 
         assert_eq!(notification, expected_notification);
     }
@@ -207,7 +211,7 @@ mod create_notification {
     ) {
         let app = tested_app.await;
         let expected_notification = Box::new(Notification {
-            id: uuid::Uuid::new_v4(),
+            id: Uuid::new_v4().into(),
             title: "notif1".to_string(),
             status: NotificationStatus::Unread,
             source_id: "1234".to_string(),
@@ -275,7 +279,7 @@ mod patch_notification {
     ) {
         let app = tested_app.await;
         let expected_notification = Box::new(Notification {
-            id: uuid::Uuid::new_v4(),
+            id: Uuid::new_v4().into(),
             title: "notif1".to_string(),
             status: NotificationStatus::Unread,
             source_id: "1234".to_string(),
@@ -300,7 +304,7 @@ mod patch_notification {
         let patched_notification = patch_resource(
             &app.app_address,
             "notifications",
-            created_notification.id,
+            created_notification.id.into(),
             &NotificationPatch {
                 snoozed_until: Some(snoozed_time),
                 ..Default::default()
@@ -326,7 +330,7 @@ mod patch_notification {
         let app = tested_app.await;
         let snoozed_time = Utc.with_ymd_and_hms(2022, 1, 1, 1, 2, 3).unwrap();
         let expected_notification = Box::new(Notification {
-            id: uuid::Uuid::new_v4(),
+            id: Uuid::new_v4().into(),
             title: "notif1".to_string(),
             status: NotificationStatus::Unread,
             source_id: "1234".to_string(),
@@ -350,7 +354,7 @@ mod patch_notification {
         let response = patch_resource_response(
             &app.app_address,
             "notifications",
-            created_notification.id,
+            created_notification.id.into(),
             &NotificationPatch {
                 status: Some(created_notification.status),
                 snoozed_until: Some(snoozed_time),
@@ -369,7 +373,7 @@ mod patch_notification {
     ) {
         let app = tested_app.await;
         let expected_notification = Box::new(Notification {
-            id: uuid::Uuid::new_v4(),
+            id: Uuid::new_v4().into(),
             title: "notif1".to_string(),
             status: NotificationStatus::Unread,
             source_id: "1234".to_string(),
@@ -393,7 +397,7 @@ mod patch_notification {
         let response = patch_resource_response(
             &app.app_address,
             "notifications",
-            created_notification.id,
+            created_notification.id.into(),
             &NotificationPatch {
                 ..Default::default()
             },

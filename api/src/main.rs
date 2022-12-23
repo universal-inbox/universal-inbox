@@ -5,16 +5,14 @@ use sqlx::{postgres::PgConnectOptions, ConnectOptions, PgPool};
 use tracing::{error, info};
 
 use universal_inbox_api::{
-    commands,
+    build_services, commands,
     configuration::Settings,
     integrations::{
         github::GithubService, notification::NotificationSyncSourceKind, task::TaskSyncSourceKind,
         todoist::TodoistService,
     },
     observability::{get_subscriber, init_subscriber},
-    repository::Repository,
     run,
-    universal_inbox::{notification::service::NotificationService, task::service::TaskService},
 };
 
 /// Universal Inbox API server and associated commands
@@ -87,25 +85,15 @@ async fn main() -> std::io::Result<()> {
 
     let todoist_service = TodoistService::new(&settings.integrations.todoist.api_token, None)
         .expect("Failed to create new TodoistService");
+    let github_service = GithubService::new(
+        &settings.integrations.github.api_token,
+        None,
+        settings.integrations.github.page_size,
+    )
+    .expect("Failed to create new GithubService");
 
-    let repository = Arc::new(Repository::new(pool.clone()));
-    let notification_service = Arc::new(
-        NotificationService::new(
-            repository.clone(),
-            GithubService::new(
-                &settings.integrations.github.api_token,
-                None,
-                settings.integrations.github.page_size,
-            )
-            .expect("Failed to create new GithubService"),
-        )
-        .expect("Failed to setup notification service"),
-    );
-
-    let task_service = Arc::new(
-        TaskService::new(repository, todoist_service, notification_service.clone())
-            .expect("Failed to setup task service"),
-    );
+    let (notification_service, task_service) =
+        build_services(pool, github_service, todoist_service).await;
 
     let result = match &cli.command {
         Commands::SyncNotifications { source } => {

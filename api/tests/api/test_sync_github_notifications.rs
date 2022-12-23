@@ -1,5 +1,6 @@
 use chrono::{TimeZone, Utc};
 use rstest::*;
+use uuid::Uuid;
 
 use universal_inbox::notification::{
     integrations::github::GithubNotification, Notification, NotificationMetadata,
@@ -32,7 +33,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         &app.app_address,
         "notifications",
         Box::new(Notification {
-            id: uuid::Uuid::new_v4(),
+            id: Uuid::new_v4().into(),
             title: "Greetings 2".to_string(),
             status: NotificationStatus::Unread,
             source_id: sync_github_notifications[1].id.clone(),
@@ -63,8 +64,12 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     github_notifications_mock.assert();
     github_notifications_mock2.assert();
 
-    let updated_notification: Box<Notification> =
-        get_resource(&app.app_address, "notifications", existing_notification.id).await;
+    let updated_notification: Box<Notification> = get_resource(
+        &app.app_address,
+        "notifications",
+        existing_notification.id.into(),
+    )
+    .await;
     assert_eq!(updated_notification.id, existing_notification.id);
     assert_eq!(
         updated_notification.source_id,
@@ -101,7 +106,7 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
         &app.app_address,
         "notifications",
         Box::new(Notification {
-            id: uuid::Uuid::new_v4(),
+            id: Uuid::new_v4().into(),
             title: "Greetings 3".to_string(),
             status: NotificationStatus::Unread,
             source_id: "789".to_string(),
@@ -132,8 +137,12 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
     github_notifications_mock.assert();
     github_notifications_mock2.assert();
 
-    let deleted_notification: Box<Notification> =
-        get_resource(&app.app_address, "notifications", existing_notification.id).await;
+    let deleted_notification: Box<Notification> = get_resource(
+        &app.app_address,
+        "notifications",
+        existing_notification.id.into(),
+    )
+    .await;
     assert_eq!(deleted_notification.id, existing_notification.id);
     assert_eq!(deleted_notification.status, NotificationStatus::Deleted);
 }
