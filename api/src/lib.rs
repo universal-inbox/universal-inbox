@@ -4,13 +4,17 @@ extern crate macro_attr;
 #[macro_use]
 extern crate enum_derive;
 
-use std::{net::TcpListener, sync::Arc};
+use std::{net::TcpListener, sync::Arc, sync::Weak};
 
 use actix_files as fs;
 use actix_web::{dev::Server, http, middleware, web, App, HttpServer};
 use anyhow::Context;
 use configuration::Settings;
 use core::time::Duration;
+use integrations::{github::GithubService, todoist::TodoistService};
+use repository::Repository;
+use sqlx::PgPool;
+use tokio::sync::RwLock;
 use tracing::info;
 use tracing_actix_web::TracingLogger;
 
@@ -29,8 +33,8 @@ pub mod universal_inbox;
 pub async fn run(
     listener: TcpListener,
     settings: &Settings,
-    notification_service: Arc<NotificationService>,
-    task_service: Arc<TaskService>,
+    notification_service: Arc<RwLock<NotificationService>>,
+    task_service: Arc<RwLock<TaskService>>,
 ) -> Result<Server, UniversalInboxError> {
     let api_path = settings.application.api_path.clone();
     let front_base_url = settings.application.front_base_url.clone();
@@ -87,4 +91,30 @@ pub async fn run(
     .context(format!("Failed to listen on {}", listen_address))?;
 
     Ok(server.run())
+}
+
+pub async fn build_services(
+    pool: Arc<PgPool>,
+    github_service: GithubService,
+    todoist_service: TodoistService,
+) -> (Arc<RwLock<NotificationService>>, Arc<RwLock<TaskService>>) {
+    let repository = Arc::new(Repository::new(pool.clone()));
+    let notification_service = Arc::new(RwLock::new(NotificationService::new(
+        repository.clone(),
+        github_service,
+        Weak::new(),
+    )));
+
+    let task_service = Arc::new(RwLock::new(TaskService::new(
+        repository,
+        todoist_service,
+        Arc::downgrade(&notification_service),
+    )));
+
+    notification_service
+        .write()
+        .await
+        .set_task_service(Arc::downgrade(&task_service));
+
+    (notification_service, task_service)
 }

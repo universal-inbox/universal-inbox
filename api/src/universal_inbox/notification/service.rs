@@ -1,12 +1,14 @@
-use std::{fmt::Debug, sync::Arc};
+use std::{fmt::Debug, sync::Arc, sync::Weak};
 
-use anyhow::anyhow;
-use duplicate::duplicate_item;
-use futures::stream::{self, StreamExt};
-use uuid::Uuid;
+use anyhow::{anyhow, Context};
+use sqlx::{Postgres, Transaction};
+use tokio::sync::RwLock;
 
-use universal_inbox::notification::{
-    Notification, NotificationMetadata, NotificationPatch, NotificationStatus,
+use universal_inbox::{
+    notification::{
+        Notification, NotificationId, NotificationMetadata, NotificationPatch, NotificationStatus,
+    },
+    task::{TaskId, TaskPatch, TaskStatus},
 };
 
 use crate::{
@@ -16,204 +18,40 @@ use crate::{
             NotificationSourceKind, NotificationSourceService, NotificationSyncSourceKind,
         },
     },
-    repository::{
-        notification::NotificationRepository, ConnectedRepository, Repository,
-        TransactionalRepository,
-    },
-    universal_inbox::{UniversalInboxError, UpdateStatus},
+    repository::{notification::NotificationRepository, Repository},
+    universal_inbox::{task::service::TaskService, UniversalInboxError, UpdateStatus},
 };
 
+#[derive(Debug)]
 pub struct NotificationService {
     repository: Arc<Repository>,
     github_service: GithubService,
+    task_service: Weak<RwLock<TaskService>>,
 }
 
 impl NotificationService {
     pub fn new(
         repository: Arc<Repository>,
         github_service: GithubService,
-    ) -> Result<NotificationService, UniversalInboxError> {
-        Ok(NotificationService {
+        task_service: Weak<RwLock<TaskService>>,
+    ) -> NotificationService {
+        NotificationService {
             repository,
             github_service,
-        })
-    }
-
-    pub async fn connect(&self) -> Result<Box<ConnectedNotificationService>, UniversalInboxError> {
-        Ok(Box::new(ConnectedNotificationService {
-            repository: self.repository.connect().await?,
-            service: self,
-        }))
-    }
-
-    pub fn connected_with(
-        &self,
-        repository: Arc<ConnectedRepository>,
-    ) -> Box<ConnectedNotificationService> {
-        Box::new(ConnectedNotificationService {
-            repository,
-            service: self,
-        })
-    }
-
-    pub async fn begin(
-        &self,
-    ) -> Result<Box<TransactionalNotificationService>, UniversalInboxError> {
-        Ok(Box::new(TransactionalNotificationService {
-            repository: self.repository.begin().await?,
-            service: self,
-        }))
-    }
-
-    pub fn transactional_with<'a>(
-        self: &'a NotificationService,
-        repository: Arc<TransactionalRepository<'a>>,
-    ) -> Box<TransactionalNotificationService> {
-        Box::new(TransactionalNotificationService {
-            repository,
-            service: self,
-        })
-    }
-}
-
-pub struct ConnectedNotificationService<'a> {
-    repository: Arc<ConnectedRepository>,
-    service: &'a NotificationService,
-}
-
-pub struct TransactionalNotificationService<'a> {
-    pub repository: Arc<TransactionalRepository<'a>>,
-    service: &'a NotificationService,
-}
-
-impl<'a> TransactionalNotificationService<'a> {
-    pub async fn commit(self) -> Result<(), UniversalInboxError> {
-        let repository = Arc::try_unwrap(self.repository)
-            .map_err(|_| {
-                UniversalInboxError::Unexpected(anyhow!(
-                    "Cannot extract repository to commit transaction it as it has other references using it"
-                ))
-            })?;
-
-        repository.commit().await
-    }
-}
-
-#[duplicate_item(notification_service; [ConnectedNotificationService]; [TransactionalNotificationService];)]
-impl<'a> notification_service<'a> {
-    #[tracing::instrument(level = "debug", skip(self))]
-    pub async fn list_notifications(
-        &self,
-        status: NotificationStatus,
-        include_snoozed_notifications: bool,
-        task_id: Option<Uuid>,
-    ) -> Result<Vec<Notification>, UniversalInboxError> {
-        self.repository
-            .fetch_all_notifications(status, include_snoozed_notifications, task_id)
-            .await
-    }
-
-    #[tracing::instrument(level = "debug", skip(self))]
-    pub async fn get_notification(
-        &self,
-        notification_id: Uuid,
-    ) -> Result<Option<Notification>, UniversalInboxError> {
-        self.repository.get_one_notification(notification_id).await
-    }
-
-    #[tracing::instrument(level = "debug", skip(self))]
-    pub async fn create_notification(
-        &self,
-        notification: Box<Notification>,
-    ) -> Result<Box<Notification>, UniversalInboxError> {
-        self.repository.create_notification(notification).await
-    }
-
-    #[tracing::instrument(level = "debug", skip(self))]
-    pub async fn create_or_update_notification(
-        &self,
-        notification: Box<Notification>,
-    ) -> Result<Box<Notification>, UniversalInboxError> {
-        self.repository
-            .create_or_update_notification(notification)
-            .await
-            .map(Box::new)
-    }
-
-    async fn sync_source_notifications<T: Debug>(
-        &self,
-        notification_source_service: &dyn NotificationSourceService<T>,
-    ) -> Result<Vec<Notification>, UniversalInboxError>
-    where
-        Notification: From<T>,
-    {
-        let source_notifications = notification_source_service
-            .fetch_all_notifications()
-            .await?;
-        self.save_notifications_from_source(
-            notification_source_service.get_notification_source_kind(),
-            source_notifications,
-        )
-        .await
-    }
-
-    #[tracing::instrument(level = "debug", skip(self))]
-    pub async fn save_notifications_from_source<T: Debug>(
-        &self,
-        notification_source_kind: NotificationSourceKind,
-        source_items: Vec<T>,
-    ) -> Result<Vec<Notification>, UniversalInboxError>
-    where
-        Notification: From<T>,
-    {
-        let notifications = stream::iter(source_items)
-            .then(|source_item| {
-                let notification: Notification = source_item.into();
-                self.repository
-                    .create_or_update_notification(Box::new(notification))
-            })
-            .collect::<Vec<Result<Notification, UniversalInboxError>>>()
-            .await
-            .into_iter()
-            .collect::<Result<Vec<Notification>, UniversalInboxError>>()?;
-
-        let source_notification_ids = notifications
-            .iter()
-            .map(|notification| notification.source_id.clone())
-            .collect::<Vec<String>>();
-
-        self.repository
-            .update_stale_notifications_status_from_source_ids(
-                source_notification_ids,
-                notification_source_kind,
-                NotificationStatus::Deleted,
-            )
-            .await?;
-
-        Ok(notifications)
-    }
-
-    #[tracing::instrument(level = "debug", skip(self))]
-    pub async fn sync_notifications(
-        &self,
-        source: &Option<NotificationSyncSourceKind>,
-    ) -> Result<Vec<Notification>, UniversalInboxError> {
-        match source {
-            Some(NotificationSyncSourceKind::Github) => {
-                self.sync_source_notifications(&self.service.github_service)
-                    .await
-            }
-            None => {
-                let notifications_from_github = self
-                    .sync_source_notifications(&self.service.github_service)
-                    .await?;
-                Ok(notifications_from_github)
-            }
+            task_service,
         }
     }
 
-    async fn apply_updated_notification_side_effect<T>(
-        &self,
+    pub fn set_task_service(&mut self, task_service: Weak<RwLock<TaskService>>) {
+        self.task_service = task_service;
+    }
+
+    pub async fn begin(&self) -> Result<Transaction<Postgres>, UniversalInboxError> {
+        self.repository.begin().await
+    }
+
+    #[tracing::instrument(level = "debug", skip(notification_source_service))]
+    pub async fn apply_updated_notification_side_effect<T>(
         notification_source_service: &dyn NotificationSourceService<T>,
         patch: &NotificationPatch,
         notification: Box<Notification>,
@@ -232,16 +70,142 @@ impl<'a> notification_service<'a> {
             _ => Ok(()),
         }
     }
+}
+
+impl NotificationService {
+    #[tracing::instrument(level = "debug", skip(self))]
+    pub async fn list_notifications<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        status: NotificationStatus,
+        include_snoozed_notifications: bool,
+        task_id: Option<TaskId>,
+    ) -> Result<Vec<Notification>, UniversalInboxError> {
+        self.repository
+            .fetch_all_notifications(executor, status, include_snoozed_notifications, task_id)
+            .await
+    }
 
     #[tracing::instrument(level = "debug", skip(self))]
-    pub async fn patch_notification(
+    pub async fn get_notification<'a>(
         &self,
-        notification_id: Uuid,
-        patch: &NotificationPatch,
+        executor: &mut Transaction<'a, Postgres>,
+        notification_id: NotificationId,
+    ) -> Result<Option<Notification>, UniversalInboxError> {
+        self.repository
+            .get_one_notification(executor, notification_id)
+            .await
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    pub async fn create_notification<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        notification: Box<Notification>,
+    ) -> Result<Box<Notification>, UniversalInboxError> {
+        self.repository
+            .create_notification(executor, notification)
+            .await
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    pub async fn create_or_update_notification<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        notification: Box<Notification>,
+    ) -> Result<Box<Notification>, UniversalInboxError> {
+        self.repository
+            .create_or_update_notification(executor, notification)
+            .await
+            .map(Box::new)
+    }
+
+    async fn sync_source_notifications<'a, T: Debug>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        notification_source_service: &dyn NotificationSourceService<T>,
+    ) -> Result<Vec<Notification>, UniversalInboxError>
+    where
+        Notification: From<T>,
+    {
+        let source_notifications = notification_source_service
+            .fetch_all_notifications()
+            .await?;
+        self.save_notifications_from_source(
+            executor,
+            notification_source_service.get_notification_source_kind(),
+            source_notifications,
+        )
+        .await
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    pub async fn save_notifications_from_source<'a, T: Debug>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        notification_source_kind: NotificationSourceKind,
+        source_items: Vec<T>,
+    ) -> Result<Vec<Notification>, UniversalInboxError>
+    where
+        Notification: From<T>,
+    {
+        let mut notifications = vec![];
+        for source_item in source_items {
+            let notification = source_item.into();
+            let uptodate_notification = self
+                .repository
+                .create_or_update_notification(executor, Box::new(notification))
+                .await?;
+            notifications.push(uptodate_notification);
+        }
+
+        let source_notification_ids = notifications
+            .iter()
+            .map(|notification| notification.source_id.clone())
+            .collect::<Vec<String>>();
+
+        self.repository
+            .update_stale_notifications_status_from_source_ids(
+                executor,
+                source_notification_ids,
+                notification_source_kind,
+                NotificationStatus::Deleted,
+            )
+            .await?;
+
+        Ok(notifications)
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    pub async fn sync_notifications<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        source: &Option<NotificationSyncSourceKind>,
+    ) -> Result<Vec<Notification>, UniversalInboxError> {
+        match source {
+            Some(NotificationSyncSourceKind::Github) => {
+                self.sync_source_notifications(executor, &self.github_service)
+                    .await
+            }
+            None => {
+                let notifications_from_github = self
+                    .sync_source_notifications(executor, &self.github_service)
+                    .await?;
+                Ok(notifications_from_github)
+            }
+        }
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    pub async fn patch_notification<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        notification_id: NotificationId,
+        patch: &'a NotificationPatch,
     ) -> Result<UpdateStatus<Box<Notification>>, UniversalInboxError> {
         let updated_notification = self
             .repository
-            .update_notification(notification_id, patch)
+            .update_notification(executor, notification_id, patch)
             .await?;
 
         if let UpdateStatus {
@@ -251,21 +215,56 @@ impl<'a> notification_service<'a> {
         {
             match notification.metadata {
                 NotificationMetadata::Github(_) => {
-                    self.apply_updated_notification_side_effect(
-                        &self.service.github_service,
+                    NotificationService::apply_updated_notification_side_effect(
+                        &self.github_service,
                         patch,
                         notification.clone(),
                     )
-                    .await?
+                    .await?;
                 }
                 NotificationMetadata::Todoist => {
-                    return Err(UniversalInboxError::UnsupportedAction(format!(
+                    if let Some(NotificationStatus::Deleted) = patch.status {
+                        if let Some(task_id) = notification.task_id {
+                            self.task_service
+                                .upgrade()
+                                .context("Unable to access task_service from notification_service")?
+                                .read()
+                                .await
+                                .patch_task(
+                                    executor,
+                                    task_id,
+                                    &TaskPatch {
+                                        status: Some(TaskStatus::Deleted),
+                                    },
+                                )
+                                .await?;
+                        } else {
+                            return Err(UniversalInboxError::Unexpected(anyhow!(
+                                "Todoist notification {notification_id} is expected to be linked to a task"
+                            )));
+                        }
+                    } else {
+                        return Err(UniversalInboxError::UnsupportedAction(format!(
                         "Cannot update the status of Todoist notification {notification_id}, update task's project"
-                    )))
+                    )));
+                    }
                 }
             };
         }
 
         Ok(updated_notification)
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    pub async fn patch_notifications_for_task<'a, 'b>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        task_id: TaskId,
+        notification_kind: Option<NotificationSourceKind>,
+        patch: &'b NotificationPatch,
+    ) -> Result<Vec<UpdateStatus<Notification>>, UniversalInboxError> {
+        self.repository
+            .update_notifications_for_task(executor, task_id, notification_kind, patch)
+            .await
     }
 }

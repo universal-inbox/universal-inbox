@@ -5,6 +5,7 @@ use format_serde_error::SerdeError;
 use http::Uri;
 use httpmock::{Method::GET, Mock, MockServer};
 use rstest::*;
+use uuid::Uuid;
 
 use universal_inbox::notification::{
     integrations::github::GithubNotification, Notification, NotificationMetadata,
@@ -22,7 +23,7 @@ pub async fn create_notification_from_github_notification(
         app_address,
         "notifications",
         Box::new(Notification {
-            id: uuid::Uuid::new_v4(),
+            id: Uuid::new_v4().into(),
             title: github_notification.subject.title.clone(),
             source_id: github_notification.id.to_string(),
             source_html_url: github::get_html_url_from_api_url(&github_notification.subject.url),

@@ -14,7 +14,7 @@ use crate::{
     universal_inbox::UniversalInboxError,
 };
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct GithubService {
     client: reqwest::Client,
     github_base_url: String,

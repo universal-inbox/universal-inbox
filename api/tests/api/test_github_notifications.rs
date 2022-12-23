@@ -22,7 +22,7 @@ mod patch_resource {
 
     #[rstest]
     #[tokio::test]
-    async fn test_patch_resource_status_as_deleted(
+    async fn test_patch_github_notification_status_as_deleted(
         #[future] tested_app: TestedApp,
         github_notification: Box<GithubNotification>,
         #[values(205, 304, 404)] github_status_code: u16,
@@ -36,7 +36,7 @@ mod patch_resource {
             then.status(github_status_code);
         });
         let expected_notification = Box::new(Notification {
-            id: uuid::Uuid::new_v4(),
+            id: Uuid::new_v4().into(),
             title: "notif1".to_string(),
             status: NotificationStatus::Unread,
             source_id: "1234".to_string(),
@@ -60,7 +60,7 @@ mod patch_resource {
         let patched_notification = patch_resource(
             &app.app_address,
             "notifications",
-            created_notification.id,
+            created_notification.id.into(),
             &NotificationPatch {
                 status: Some(NotificationStatus::Deleted),
                 ..Default::default()
@@ -80,7 +80,7 @@ mod patch_resource {
 
     #[rstest]
     #[tokio::test]
-    async fn test_patch_resource_status_as_unsubscribed(
+    async fn test_patch_github_notification_status_as_unsubscribed(
         #[future] tested_app: TestedApp,
         github_notification: Box<GithubNotification>,
         #[values(205, 304, 404)] github_status_code: u16,
@@ -95,7 +95,7 @@ mod patch_resource {
             then.status(github_status_code);
         });
         let expected_notification = Box::new(Notification {
-            id: uuid::Uuid::new_v4(),
+            id: Uuid::new_v4().into(),
             title: "notif1".to_string(),
             status: NotificationStatus::Unread,
             source_id: "1234".to_string(),
@@ -119,7 +119,7 @@ mod patch_resource {
         let patched_notification = patch_resource(
             &app.app_address,
             "notifications",
-            created_notification.id,
+            created_notification.id.into(),
             &NotificationPatch {
                 status: Some(NotificationStatus::Unsubscribed),
                 ..Default::default()
@@ -139,7 +139,7 @@ mod patch_resource {
 
     #[rstest]
     #[tokio::test]
-    async fn test_patch_resource_status_as_deleted_with_github_api_error(
+    async fn test_patch_github_notification_status_as_deleted_with_github_api_error(
         #[future] tested_app: TestedApp,
         github_notification: Box<GithubNotification>,
     ) {
@@ -152,7 +152,7 @@ mod patch_resource {
             then.status(403);
         });
         let expected_notification = Box::new(Notification {
-            id: uuid::Uuid::new_v4(),
+            id: Uuid::new_v4().into(),
             title: "notif1".to_string(),
             status: NotificationStatus::Unread,
             source_id: "1234".to_string(),
@@ -176,7 +176,7 @@ mod patch_resource {
         let response = patch_resource_response(
             &app.app_address,
             "notifications",
-            created_notification.id,
+            created_notification.id.into(),
             &NotificationPatch {
                 status: Some(NotificationStatus::Deleted),
                 ..Default::default()
@@ -193,20 +193,24 @@ mod patch_resource {
         );
         github_mark_thread_as_read_mock.assert();
 
-        let notification: Box<Notification> =
-            get_resource(&app.app_address, "notifications", created_notification.id).await;
+        let notification: Box<Notification> = get_resource(
+            &app.app_address,
+            "notifications",
+            created_notification.id.into(),
+        )
+        .await;
         assert_eq!(notification.status, NotificationStatus::Unread);
     }
 
     #[rstest]
     #[tokio::test]
-    async fn test_patch_resource_snoozed_until(
+    async fn test_patch_github_notification_snoozed_until(
         #[future] tested_app: TestedApp,
         github_notification: Box<GithubNotification>,
     ) {
         let app = tested_app.await;
         let expected_notification = Box::new(Notification {
-            id: uuid::Uuid::new_v4(),
+            id: Uuid::new_v4().into(),
             title: "notif1".to_string(),
             status: NotificationStatus::Unread,
             source_id: "1234".to_string(),
@@ -231,7 +235,7 @@ mod patch_resource {
         let patched_notification = patch_resource(
             &app.app_address,
             "notifications",
-            created_notification.id,
+            created_notification.id.into(),
             &NotificationPatch {
                 snoozed_until: Some(snoozed_time),
                 ..Default::default()
@@ -250,7 +254,7 @@ mod patch_resource {
 
     #[rstest]
     #[tokio::test]
-    async fn test_patch_resource_status_without_modification(
+    async fn test_patch_github_notification_status_without_modification(
         #[future] tested_app: TestedApp,
         github_notification: Box<GithubNotification>,
     ) {
@@ -261,7 +265,7 @@ mod patch_resource {
         });
         let snoozed_time = Utc.with_ymd_and_hms(2022, 1, 1, 1, 2, 3).unwrap();
         let expected_notification = Box::new(Notification {
-            id: uuid::Uuid::new_v4(),
+            id: Uuid::new_v4().into(),
             title: "notif1".to_string(),
             status: NotificationStatus::Unread,
             source_id: "1234".to_string(),
@@ -285,7 +289,7 @@ mod patch_resource {
         let response = patch_resource_response(
             &app.app_address,
             "notifications",
-            created_notification.id,
+            created_notification.id.into(),
             &NotificationPatch {
                 status: Some(created_notification.status),
                 snoozed_until: Some(snoozed_time),
@@ -299,7 +303,7 @@ mod patch_resource {
 
     #[rstest]
     #[tokio::test]
-    async fn test_patch_resource_without_values_to_update(
+    async fn test_patch_github_notification_without_values_to_update(
         #[future] tested_app: TestedApp,
         github_notification: Box<GithubNotification>,
     ) {
@@ -309,7 +313,7 @@ mod patch_resource {
             then.status(200);
         });
         let expected_notification = Box::new(Notification {
-            id: uuid::Uuid::new_v4(),
+            id: Uuid::new_v4().into(),
             title: "notif1".to_string(),
             status: NotificationStatus::Unread,
             source_id: "1234".to_string(),
@@ -333,7 +337,7 @@ mod patch_resource {
         let response = patch_resource_response(
             &app.app_address,
             "notifications",
-            created_notification.id,
+            created_notification.id.into(),
             &NotificationPatch {
                 ..Default::default()
             },

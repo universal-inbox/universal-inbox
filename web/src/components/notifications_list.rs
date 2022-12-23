@@ -16,12 +16,14 @@ use crate::services::notification_service::UniversalInboxUIModel;
 pub fn notifications_list<'a>(
     cx: Scope,
     notifications: Vec<Notification>,
-    ui_model: &'a UseAtomRef<UniversalInboxUIModel>,
+    ui_model_ref: &'a UseAtomRef<UniversalInboxUIModel>,
     on_delete: EventHandler<'a, &'a Notification>,
     on_unsubscribe: EventHandler<'a, &'a Notification>,
     on_snooze: EventHandler<'a, &'a Notification>,
     on_mark_as_done: EventHandler<'a, &'a Notification>,
 ) -> Element {
+    let selected_notification_index = ui_model_ref.read().selected_notification_index;
+
     cx.render(rsx!(table {
         class: "w-full",
 
@@ -35,14 +37,52 @@ pub fn notifications_list<'a>(
                         class: "border-b border-light-200 dark:border-dark-300",
                         key: "{notif.id}",
 
-                        self::notification {
-                            notif: notif,
-                            selected: i == ui_model.read().selected_notification_index,
-                            on_delete: |n| on_delete.call(n)
-                            on_unsubscribe: |n| on_unsubscribe.call(n)
-                            on_snooze: |n| on_snooze.call(n)
-                            on_mark_as_done: |n| on_mark_as_done.call(n)
-                        }
+                        (!notif.is_built_from_task()).then(|| rsx!(
+                            self::notification {
+                                notif: notif,
+                                selected: i == selected_notification_index,
+
+                                self::notification_button {
+                                    title: "Delete notification",
+                                    onclick: |_| on_delete.call(notif),
+                                    Icon { class: "w-5 h-5" icon: BsTrash }
+                                },
+                                self::notification_button {
+                                    title: "Unsubscribe from the notification",
+                                    onclick: |_| on_unsubscribe.call(notif),
+                                    Icon { class: "w-5 h-5" icon: BsBellSlash }
+                                }
+                                self::notification_button {
+                                    title: "Snooze notification",
+                                    onclick: |_| on_snooze.call(notif),
+                                    Icon { class: "w-5 h-5" icon: BsClockHistory }
+                                },
+                                self::notification_button { title: "not yet implemented", Icon { class: "w-5 h-5" icon: BsBookmark } },
+                            }
+                        )),
+
+                        (notif.is_built_from_task()).then(|| rsx!(
+                            self::notification {
+                                notif: notif,
+                                selected: i == selected_notification_index,
+
+                                self::notification_button {
+                                    title: "Delete task",
+                                    onclick: |_| on_delete.call(notif),
+                                    Icon { class: "w-5 h-5" icon: BsTrash }
+                                },
+                                self::notification_button {
+                                    title: "Mark task as done",
+                                    onclick: |_| on_mark_as_done.call(notif),
+                                    Icon { class: "w-5 h-5" icon: BsCheck2 }
+                                }
+                                self::notification_button {
+                                    title: "Snooze task",
+                                    onclick: |_| on_snooze.call(notif),
+                                    Icon { class: "w-5 h-5" icon: BsClockHistory }
+                                },
+                                self::notification_button { title: "not yet implemented", Icon { class: "w-5 h-5" icon: BsBookmark } }                            }
+                        ))
                     }
                 }
             })
@@ -55,15 +95,10 @@ fn notification<'a>(
     cx: Scope,
     notif: &'a Notification,
     selected: bool,
-    on_delete: EventHandler<'a, &'a Notification>,
-    on_unsubscribe: EventHandler<'a, &'a Notification>,
-    on_snooze: EventHandler<'a, &'a Notification>,
-    on_mark_as_done: EventHandler<'a, &'a Notification>,
+    children: Element<'a>,
 ) -> Element {
     let is_hovered = use_state(&cx, || false);
     let style = use_state(&cx, || "");
-    let is_task = use_state(&cx, || false);
-    let notif_label = use_state(&cx, || "notification");
 
     use_effect(&cx, (selected,), |(selected,)| {
         to_owned![style];
@@ -73,23 +108,6 @@ fn notification<'a>(
             } else {
                 "dark:bg-dark-200 bg-light-0 hover:drop-shadow-lg"
             });
-        }
-    });
-
-    use_effect(&cx, (&notif.metadata,), |(metadata,)| {
-        to_owned![is_task];
-        to_owned![notif_label];
-        async move {
-            match metadata {
-                NotificationMetadata::Todoist => {
-                    is_task.set(true);
-                    notif_label.set("task");
-                }
-                _ => {
-                    is_task.set(false);
-                    notif_label.set("notification");
-                }
-            }
         }
     });
 
@@ -113,31 +131,7 @@ fn notification<'a>(
             },
 
             (*selected || *is_hovered.get()).then(|| rsx!(
-                self::notification_button {
-                    title: "Delete {notif_label}",
-                    onclick: |_| on_delete.call(notif),
-                    Icon { class: "w-5 h-5" icon: BsTrash }
-                },
-                (!*is_task.get()).then(|| rsx!(
-                    self::notification_button {
-                        title: "Unsubscribe from the notification",
-                        onclick: |_| on_unsubscribe.call(notif),
-                        Icon { class: "w-5 h-5" icon: BsBellSlash }
-                    }
-                )),
-                (*is_task.get()).then(|| rsx!(
-                    self::notification_button {
-                        title: "Mark task as done",
-                        onclick: |_| on_mark_as_done.call(notif),
-                        Icon { class: "w-5 h-5" icon: BsCheck2 }
-                    }
-                )),
-                self::notification_button {
-                    title: "Snooze notification",
-                    onclick: |_| on_snooze.call(notif),
-                    Icon { class: "w-5 h-5" icon: BsClockHistory }
-                },
-                self::notification_button { title: "not yet implemented", Icon { class: "w-5 h-5" icon: BsBookmark } },
+                children
             ))
         }
     ))

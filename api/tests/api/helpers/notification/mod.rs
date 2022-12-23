@@ -2,9 +2,11 @@
 
 use reqwest::Response;
 use serde_json::json;
-use uuid::Uuid;
 
-use universal_inbox::notification::{Notification, NotificationStatus};
+use universal_inbox::{
+    notification::{Notification, NotificationStatus},
+    task::TaskId,
+};
 
 use universal_inbox_api::integrations::notification::NotificationSourceKind;
 
@@ -14,7 +16,7 @@ pub async fn list_notifications_response(
     app_address: &str,
     status_filter: NotificationStatus,
     include_snoozed_notifications: bool,
-    task_id: Option<Uuid>,
+    task_id: Option<TaskId>,
 ) -> Response {
     let snoozed_notifications_parameter = if include_snoozed_notifications {
         "&include_snoozed_notifications=true"
@@ -38,7 +40,7 @@ pub async fn list_notifications(
     app_address: &str,
     status_filter: NotificationStatus,
     include_snoozed_notifications: bool,
-    task_id: Option<Uuid>,
+    task_id: Option<TaskId>,
 ) -> Vec<Notification> {
     list_notifications_response(
         app_address,

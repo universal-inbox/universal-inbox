@@ -31,7 +31,8 @@
               "kind": {
                 "Enum": [
                   "Active",
-                  "Done"
+                  "Done",
+                  "Deleted"
                 ]
               },
               "name": "task_status"
@@ -113,7 +114,8 @@
               "kind": {
                 "Enum": [
                   "Active",
-                  "Done"
+                  "Done",
+                  "Deleted"
                 ]
               },
               "name": "task_status"
@@ -270,7 +272,8 @@
               "kind": {
                 "Enum": [
                   "Active",
-                  "Done"
+                  "Done",
+                  "Deleted"
                 ]
               },
               "name": "task_status"
@@ -376,7 +379,8 @@
               "kind": {
                 "Enum": [
                   "Active",
-                  "Done"
+                  "Done",
+                  "Deleted"
                 ]
               },
               "name": "task_status"
@@ -412,7 +416,8 @@
               "kind": {
                 "Enum": [
                   "Active",
-                  "Done"
+                  "Done",
+                  "Deleted"
                 ]
               },
               "name": "task_status"
