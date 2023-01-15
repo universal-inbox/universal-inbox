@@ -91,7 +91,7 @@ impl TodoistService {
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
-    pub async fn delete_item(&self, id: &str) -> Result<(), UniversalInboxError> {
+    pub async fn sync_item(&self, command_type: &str, id: &str) -> Result<(), UniversalInboxError> {
         let command_uuid = Uuid::new_v4().to_string();
         let json_response: serde_json::value::Value = self
             .client
@@ -99,7 +99,7 @@ impl TodoistService {
             .json(&json!({
                 "commands": [
                     {
-                        "type": "item_delete",
+                        "type": command_type,
                         "uuid": command_uuid,
                         "args": { "id": id }
                     }
@@ -107,16 +107,16 @@ impl TodoistService {
             }))
             .send()
             .await
-            .with_context(|| format!("Cannot delete item `{id}` from Todoist API"))?
+            .with_context(|| format!("Cannot sync item `{id}` from Todoist API (command: `{command_type}`)"))?
             .json()
             .await
             .with_context(|| {
-                format!("Failed to fetch response from Todoist API while deleting item `{id}`")
+                format!("Failed to fetch response from Todoist API while syncing item `{id}` (command: `{command_type}`)")
             })?;
 
         let sync_status = json_response["sync_status"].as_object().with_context(|| {
             format!(
-                "Failed to parse response from Todoist API while deleting item `{id}`: {:?}",
+                "Failed to parse response from Todoist API while syncing item `{id}` (command: `{command_type}`): {:?}",
                 json_response
             )
         })?;
@@ -127,12 +127,12 @@ impl TodoistService {
             Some(serde_json::Value::String(s)) if s == "ok" => Ok(()),
             Some(serde_json::Value::Object(error_obj)) if error_obj.contains_key("error") => {
                 Err(UniversalInboxError::Unexpected(anyhow!(
-                    "Unexpected error while deleting item `{id}`: {:?}",
+                    "Unexpected error while syncing item `{id}` (command: `{command_type}`): {:?}",
                     error_obj.get("error").unwrap().as_str()
                 )))
             }
             _ => Err(UniversalInboxError::Unexpected(anyhow!(
-                "Failed to parse response from Todoist API while deleting item `{id}`: {:?}",
+                "Failed to parse response from Todoist API while syncing item `{id}` (command: `{command_type}`): {:?}",
                 command_result
             ))),
         }
@@ -237,7 +237,11 @@ impl TaskSourceService<TodoistItem> for TodoistService {
     }
 
     async fn delete_task_from_source(&self, id: &str) -> Result<(), UniversalInboxError> {
-        self.delete_item(id).await
+        self.sync_item("item_delete", id).await
+    }
+
+    async fn complete_task_from_source(&self, id: &str) -> Result<(), UniversalInboxError> {
+        self.sync_item("item_complete", id).await
     }
 }
 

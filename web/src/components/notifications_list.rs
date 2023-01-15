@@ -20,7 +20,7 @@ pub fn notifications_list<'a>(
     on_delete: EventHandler<'a, &'a Notification>,
     on_unsubscribe: EventHandler<'a, &'a Notification>,
     on_snooze: EventHandler<'a, &'a Notification>,
-    on_mark_as_done: EventHandler<'a, &'a Notification>,
+    on_complete_task: EventHandler<'a, &'a Notification>,
 ) -> Element {
     let selected_notification_index = ui_model_ref.read().selected_notification_index;
 
@@ -72,8 +72,8 @@ pub fn notifications_list<'a>(
                                     Icon { class: "w-5 h-5" icon: BsTrash }
                                 },
                                 self::notification_button {
-                                    title: "Mark task as done",
-                                    onclick: |_| on_mark_as_done.call(notif),
+                                    title: "Complete task",
+                                    onclick: |_| on_complete_task.call(notif),
                                     Icon { class: "w-5 h-5" icon: BsCheck2 }
                                 }
                                 self::notification_button {

@@ -367,6 +367,11 @@ impl TaskRepository for Repository {
                 .push(" status = ")
                 .push_bind_unseparated(status.to_string())
                 .push_unseparated("::task_status");
+            if status == TaskStatus::Done {
+                separated
+                    .push(" completed_at = ")
+                    .push_bind_unseparated(Some(Utc::now().naive_utc()));
+            }
         }
 
         query_builder.push(" WHERE id = ").push_bind(task_id.0);

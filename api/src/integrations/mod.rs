@@ -75,5 +75,9 @@ pub mod task {
         async fn build_task(&self, source: &T) -> Result<Box<Task>, UniversalInboxError>;
         async fn delete_task_from_source(&self, source_id: &str)
             -> Result<(), UniversalInboxError>;
+        async fn complete_task_from_source(
+            &self,
+            source_id: &str,
+        ) -> Result<(), UniversalInboxError>;
     }
 }
