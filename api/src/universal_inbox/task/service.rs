@@ -63,6 +63,11 @@ impl TaskService {
                     .delete_task_from_source(&task.source_id)
                     .await
             }
+            Some(TaskStatus::Done) => {
+                task_source_service
+                    .complete_task_from_source(&task.source_id)
+                    .await
+            }
             _ => Ok(()),
         }
     }
@@ -243,7 +248,9 @@ impl TaskService {
         {
             match task.metadata {
                 TaskMetadata::Todoist(_) => {
-                    if patch.status == Some(TaskStatus::Deleted) {
+                    if patch.status == Some(TaskStatus::Deleted)
+                        || patch.status == Some(TaskStatus::Done)
+                    {
                         let notification_patch = NotificationPatch {
                             status: Some(NotificationStatus::Deleted),
                             ..Default::default()

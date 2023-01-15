@@ -64,6 +64,24 @@ pub fn mock_todoist_delete_item_service<'a>(
     })
 }
 
+pub fn mock_todoist_complete_item_service<'a>(
+    todoist_mock_server: &'a MockServer,
+    task_id: &'a str,
+    result: &'a TodoistSyncStatusResponse,
+) -> Mock<'a> {
+    todoist_mock_server.mock(|when, then| {
+        when.method(POST)
+            .path("/sync")
+            .json_body_partial(format!(
+                r#"{{ "commands": [{{ "type": "item_complete", "args": {{ "id": "{task_id}" }} }}] }}"#
+            ))
+            .header("authorization", "Bearer todoist_test_token");
+        then.status(200)
+            .header("content-type", "application/json")
+            .json_body_obj(result);
+    })
+}
+
 pub fn mock_todoist_sync_projects_service<'a>(
     todoist_mock_server: &'a MockServer,
     result: &'a TodoistSyncResponse,
