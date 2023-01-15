@@ -25,7 +25,7 @@ pub enum NotificationCommand {
     DeleteFromNotification(Notification),
     Unsubscribe(NotificationId),
     Snooze(NotificationId),
-    MarkTaskAsDoneFromNotification(Notification),
+    CompleteTaskFromNotification(Notification),
 }
 
 #[derive(Debug, Default)]
@@ -122,7 +122,17 @@ pub async fn notification_service<'a>(
                 .await
                 .unwrap();
             }
-            Some(NotificationCommand::MarkTaskAsDoneFromNotification(_)) => {}
+            Some(NotificationCommand::CompleteTaskFromNotification(notification)) => {
+                if let Some(task_id) = notification.task_id {
+                    if notification.is_built_from_task() {
+                        notifications
+                            .write()
+                            .retain(|notif| notif.id != notification.id);
+
+                        task_service.send(TaskCommand::Complete(task_id));
+                    }
+                }
+            }
             None => {}
         }
     }

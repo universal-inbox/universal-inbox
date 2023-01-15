@@ -114,6 +114,13 @@ fn setup_key_bindings(
                     ))
                 }
             }
+            "c" => {
+                if let Some(notification) = selected_notification {
+                    notification_service_handle.send(
+                        NotificationCommand::CompleteTaskFromNotification(notification.clone()),
+                    )
+                }
+            }
             "u" => {
                 if let Some(notification) = selected_notification {
                     notification_service_handle
