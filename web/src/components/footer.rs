@@ -128,6 +128,7 @@ pub fn footer(cx: Scope) -> Element {
                                 span { "previous task" }
                             }
                             self::shortcut_text { shortcut: "d", text: "delete task" }
+                            self::shortcut_text { shortcut: "c", text: "complete task" }
                             self::shortcut_text { shortcut: "s", text: "snooze notification" }
                         )),
                     }
