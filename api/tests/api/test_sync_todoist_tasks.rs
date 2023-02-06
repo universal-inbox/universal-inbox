@@ -18,9 +18,8 @@ use crate::helpers::{
     task::{
         sync_tasks,
         todoist::{
-            assert_sync_items, create_task_from_todoist_item, mock_todoist_sync_items_service,
-            mock_todoist_sync_projects_service, sync_todoist_items_response,
-            sync_todoist_projects_response,
+            assert_sync_items, create_task_from_todoist_item, mock_todoist_sync_resources_service,
+            sync_todoist_items_response, sync_todoist_projects_response,
         },
     },
     tested_app, TestedApp,
@@ -49,7 +48,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
             body: "more details".to_string(),
             status: TaskStatus::Active,
             completed_at: None,
-            priority: TaskPriority::P4,
+            priority: TaskPriority::P1,
             due_at: None,
             source_html_url: todoist::get_task_html_url(&todoist_items[1].id),
             tags: vec!["tag1".to_string()],
@@ -64,10 +63,14 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
     let existing_todoist_task = existing_todoist_task_creation.task;
     let existing_todoist_notification = existing_todoist_task_creation.notification.unwrap();
 
-    let todoist_tasks_mock =
-        mock_todoist_sync_items_service(&app.todoist_mock_server, &sync_todoist_items_response);
-    let todoist_projects_mock = mock_todoist_sync_projects_service(
+    let todoist_tasks_mock = mock_todoist_sync_resources_service(
         &app.todoist_mock_server,
+        "items",
+        &sync_todoist_items_response,
+    );
+    let todoist_projects_mock = mock_todoist_sync_resources_service(
+        &app.todoist_mock_server,
+        "projects",
         &sync_todoist_projects_response,
     );
 
@@ -89,7 +92,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
     // Updated fields
     assert_eq!(updated_todoist_task.title, "Task 2");
     assert_eq!(updated_todoist_task.body, "");
-    assert_eq!(updated_todoist_task.priority, TaskPriority::P1);
+    assert_eq!(updated_todoist_task.priority, TaskPriority::P4);
     assert_eq!(updated_todoist_task.tags.is_empty(), true);
     assert_eq!(updated_todoist_task.project, "Project2".to_string());
     assert_eq!(
@@ -136,22 +139,26 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
         .find(|task_creation| task_creation.task.source_id == todoist_items[0].id)
         .unwrap();
     let new_task = &new_todoist_task_creation.task;
-    let notifications_for_new_task = list_notifications(
+    let result_for_new_task = list_notifications(
         &app.app_address,
         NotificationStatus::Unread,
         false,
         Some(new_todoist_task_creation.task.id),
+        true,
     )
     .await;
 
-    assert_eq!(notifications_for_new_task.len(), 1);
-    let new_notification = &notifications_for_new_task[0];
+    assert_eq!(result_for_new_task.notifications.len(), 1);
+    let new_notification = &result_for_new_task.notifications[0];
     assert_eq!(new_notification.source_id, new_task.source_id);
     assert_eq!(new_notification.task_id, Some(new_task.id));
     assert_eq!(
         Some(new_notification.clone()),
         new_todoist_task_creation.notification
     );
+    let tasks = result_for_new_task.tasks.unwrap();
+    assert_eq!(tasks.len(), 1);
+    assert_eq!(tasks.get(&new_task.id), Some(new_task));
 }
 
 #[rstest]
@@ -194,10 +201,14 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
     let existing_todoist_unread_notification =
         existing_todoist_active_task_creation.notification.unwrap();
 
-    let todoist_sync_items_mock =
-        mock_todoist_sync_items_service(&app.todoist_mock_server, &sync_todoist_items_response);
-    let todoist_projects_mock = mock_todoist_sync_projects_service(
+    let todoist_sync_items_mock = mock_todoist_sync_resources_service(
         &app.todoist_mock_server,
+        "items",
+        &sync_todoist_items_response,
+    );
+    let todoist_projects_mock = mock_todoist_sync_resources_service(
+        &app.todoist_mock_server,
+        "projects",
         &sync_todoist_projects_response,
     );
 

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
-use dioxus::{fermi::UseAtomRef, prelude::*};
+use dioxus::prelude::*;
+use fermi::{AtomRef, UseAtomRef};
 use futures_util::StreamExt;
 use log::debug;
 use uuid::Uuid;

@@ -6,6 +6,7 @@ use serde_json::json;
 use universal_inbox::{
     notification::{Notification, NotificationStatus},
     task::TaskId,
+    NotificationsListResult,
 };
 
 use universal_inbox_api::integrations::notification::NotificationSourceKind;
@@ -17,6 +18,7 @@ pub async fn list_notifications_response(
     status_filter: NotificationStatus,
     include_snoozed_notifications: bool,
     task_id: Option<TaskId>,
+    load_tasks: bool,
 ) -> Response {
     let snoozed_notifications_parameter = if include_snoozed_notifications {
         "&include_snoozed_notifications=true"
@@ -26,10 +28,11 @@ pub async fn list_notifications_response(
     let task_id_parameter = task_id
         .map(|id| format!("&task_id={id}"))
         .unwrap_or_default();
+    let with_tasks_parameter = if load_tasks { "&with_tasks=true" } else { "" };
 
     reqwest::Client::new()
         .get(&format!(
-            "{app_address}/notifications?status={status_filter}{snoozed_notifications_parameter}{task_id_parameter}"
+            "{app_address}/notifications?status={status_filter}{snoozed_notifications_parameter}{task_id_parameter}{with_tasks_parameter}"
         ))
         .send()
         .await
@@ -41,12 +44,14 @@ pub async fn list_notifications(
     status_filter: NotificationStatus,
     include_snoozed_notifications: bool,
     task_id: Option<TaskId>,
-) -> Vec<Notification> {
+    load_tasks: bool,
+) -> NotificationsListResult {
     list_notifications_response(
         app_address,
         status_filter,
         include_snoozed_notifications,
         task_id,
+        load_tasks,
     )
     .await
     .json()

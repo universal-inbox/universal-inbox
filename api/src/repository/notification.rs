@@ -387,7 +387,7 @@ impl NotificationRepository for Repository {
                   (SELECT"#,
         );
 
-        let mut separated = query_builder.separated(" AND ");
+        let mut separated = query_builder.separated(" OR ");
         if let Some(status) = patch.status {
             separated
                 .push(" status != ")

@@ -61,15 +61,21 @@ impl TaskService {
             Some(TaskStatus::Deleted) => {
                 task_source_service
                     .delete_task_from_source(&task.source_id)
-                    .await
+                    .await?;
             }
             Some(TaskStatus::Done) => {
                 task_source_service
                     .complete_task_from_source(&task.source_id)
-                    .await
+                    .await?;
             }
-            _ => Ok(()),
+            _ => (),
         }
+
+        task_source_service
+            .update_task(&task.source_id, patch)
+            .await?;
+
+        Ok(())
     }
 }
 
@@ -92,6 +98,14 @@ impl TaskService {
         self.repository.get_one_task(executor, task_id).await
     }
 
+    #[tracing::instrument(level = "debug", skip(self))]
+    pub async fn get_tasks<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        task_ids: Vec<TaskId>,
+    ) -> Result<Vec<Task>, UniversalInboxError> {
+        self.repository.get_tasks(executor, task_ids).await
+    }
     #[tracing::instrument(level = "debug", skip(self))]
     pub async fn create_task<'a>(
         &self,
@@ -250,6 +264,7 @@ impl TaskService {
                 TaskMetadata::Todoist(_) => {
                     if patch.status == Some(TaskStatus::Deleted)
                         || patch.status == Some(TaskStatus::Done)
+                        || (patch.project.is_some() && !task.is_in_inbox())
                     {
                         let notification_patch = NotificationPatch {
                             status: Some(NotificationStatus::Deleted),
@@ -269,6 +284,7 @@ impl TaskService {
                             )
                             .await?;
                     }
+
                     TaskService::apply_updated_task_side_effect(
                         &self.todoist_service,
                         patch,

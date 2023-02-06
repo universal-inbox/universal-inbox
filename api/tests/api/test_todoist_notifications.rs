@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use chrono::{TimeZone, Utc};
 use rstest::*;
 use serde_json::json;
@@ -9,18 +7,15 @@ use universal_inbox::{
     notification::{Notification, NotificationMetadata, NotificationPatch, NotificationStatus},
     task::{
         integrations::todoist::{get_task_html_url, TodoistItem},
-        Task, TaskMetadata, TaskPriority, TaskStatus,
+        Task, TaskStatus,
     },
-};
-
-use universal_inbox_api::{
-    integrations::todoist::{TodoistCommandStatus, TodoistSyncStatusResponse},
-    universal_inbox::task::TaskCreationResult,
 };
 
 use crate::helpers::{
     rest::{create_resource, get_resource, patch_resource, patch_resource_response},
-    task::todoist::{mock_todoist_delete_item_service, todoist_item},
+    task::todoist::{
+        create_task_from_todoist_item, mock_todoist_delete_item_service, todoist_item,
+    },
     tested_app, TestedApp,
 };
 
@@ -34,43 +29,14 @@ mod patch_notification {
         todoist_item: Box<TodoistItem>,
     ) {
         let app = tested_app.await;
-        let existing_todoist_task_creation: Box<TaskCreationResult> = create_resource(
-            &app.app_address,
-            "tasks",
-            Box::new(Task {
-                id: Uuid::new_v4().into(),
-                source_id: todoist_item.id.clone(),
-                title: todoist_item.content.clone(),
-                body: todoist_item.description.clone(),
-                status: TaskStatus::Active,
-                completed_at: None,
-                priority: TaskPriority::P4,
-                due_at: None,
-                source_html_url: get_task_html_url(&todoist_item.id),
-                tags: vec!["tag1".to_string()],
-                parent_id: None,
-                project: "Inbox".to_string(),
-                is_recurring: false,
-                created_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-                metadata: TaskMetadata::Todoist(*todoist_item),
-            }),
-        )
-        .await;
+        let existing_todoist_task_creation =
+            create_task_from_todoist_item(&app.app_address, &todoist_item).await;
         let existing_todoist_task = existing_todoist_task_creation.task;
+        assert_eq!(existing_todoist_task.status, TaskStatus::Active);
         let existing_todoist_notification = existing_todoist_task_creation.notification.unwrap();
-        let sync_todoist_response = TodoistSyncStatusResponse {
-            sync_status: HashMap::from([(
-                Uuid::new_v4(),
-                TodoistCommandStatus::Ok("ok".to_string()),
-            )]),
-            full_sync: false,
-            temp_id_mapping: HashMap::new(),
-            sync_token: "sync token".to_string(),
-        };
         let todoist_mock = mock_todoist_delete_item_service(
             &app.todoist_mock_server,
             &existing_todoist_task.source_id,
-            &sync_todoist_response,
         );
 
         let patched_notification = patch_resource(
