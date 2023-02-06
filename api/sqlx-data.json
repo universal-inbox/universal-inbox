@@ -241,6 +241,121 @@
     },
     "query": "\n                INSERT INTO notification\n                  (\n                    id,\n                    title,\n                    status,\n                    source_id,\n                    source_html_url,\n                    metadata,\n                    updated_at,\n                    last_read_at,\n                    snoozed_until,\n                    task_id,\n                    task_source_id\n                  )\n                VALUES\n                  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)\n                ON CONFLICT (source_id, kind) DO UPDATE\n                SET\n                  title = $2,\n                  status = $3,\n                  source_html_url = $5,\n                  metadata = $6,\n                  updated_at = $7,\n                  last_read_at = $8,\n                  snoozed_until = $9,\n                  task_id = $10,\n                  task_source_id = $11\n                RETURNING\n                  id\n            "
   },
+  "4cc214b74e73edc9b15f71ca54367708a062986eec0fc8d54a7d23d88349e1d4": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "source_id",
+          "ordinal": 1,
+          "type_info": "Text"
+        },
+        {
+          "name": "title",
+          "ordinal": 2,
+          "type_info": "Text"
+        },
+        {
+          "name": "body",
+          "ordinal": 3,
+          "type_info": "Text"
+        },
+        {
+          "name": "status: _",
+          "ordinal": 4,
+          "type_info": {
+            "Custom": {
+              "kind": {
+                "Enum": [
+                  "Active",
+                  "Done",
+                  "Deleted"
+                ]
+              },
+              "name": "task_status"
+            }
+          }
+        },
+        {
+          "name": "completed_at",
+          "ordinal": 5,
+          "type_info": "Timestamp"
+        },
+        {
+          "name": "priority",
+          "ordinal": 6,
+          "type_info": "Int4"
+        },
+        {
+          "name": "due_at: Json<Option<DueDate>>",
+          "ordinal": 7,
+          "type_info": "Json"
+        },
+        {
+          "name": "source_html_url",
+          "ordinal": 8,
+          "type_info": "Text"
+        },
+        {
+          "name": "tags",
+          "ordinal": 9,
+          "type_info": "TextArray"
+        },
+        {
+          "name": "parent_id",
+          "ordinal": 10,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "project",
+          "ordinal": 11,
+          "type_info": "Text"
+        },
+        {
+          "name": "is_recurring",
+          "ordinal": 12,
+          "type_info": "Bool"
+        },
+        {
+          "name": "created_at",
+          "ordinal": 13,
+          "type_info": "Timestamp"
+        },
+        {
+          "name": "metadata: Json<TaskMetadata>",
+          "ordinal": 14,
+          "type_info": "Json"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        false,
+        false,
+        true,
+        false,
+        true,
+        false,
+        false,
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "UuidArray"
+        ]
+      }
+    },
+    "query": "\n                SELECT\n                  id,\n                  source_id,\n                  title,\n                  body,\n                  status as \"status: _\",\n                  completed_at,\n                  priority,\n                  due_at as \"due_at: Json<Option<DueDate>>\",\n                  source_html_url,\n                  tags,\n                  parent_id,\n                  project,\n                  is_recurring,\n                  created_at,\n                  metadata as \"metadata: Json<TaskMetadata>\"\n                FROM task\n                WHERE id = any($1)\n            "
+  },
   "6c3ce6a44e87df8ab3af416a35fd11194b871f185a2b58c39ce9485e00812d6b": {
     "describe": {
       "columns": [

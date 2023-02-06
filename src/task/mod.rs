@@ -93,6 +93,10 @@ impl FromStr for DueDate {
             return Ok(DueDate::DateTime(datetime));
         }
 
+        if let Ok(datetime) = NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M") {
+            return Ok(DueDate::DateTime(datetime));
+        }
+
         DateTime::parse_from_rfc3339(s)
             .map(|datetime| DueDate::DateTimeWithTz(datetime.with_timezone(&Utc)))
     }
@@ -121,6 +125,9 @@ macro_attr! {
 #[derive(Serialize, Deserialize, Debug, Default, PartialEq, Eq)]
 pub struct TaskPatch {
     pub status: Option<TaskStatus>,
+    pub project: Option<String>,
+    pub due_at: Option<Option<DueDate>>,
+    pub priority: Option<TaskPriority>,
 }
 
 #[derive(
@@ -140,6 +147,20 @@ pub enum TaskPriority {
     P2 = 2,
     P3 = 3,
     P4 = 4,
+}
+
+impl FromStr for TaskPriority {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "1" => Ok(TaskPriority::P1),
+            "2" => Ok(TaskPriority::P2),
+            "3" => Ok(TaskPriority::P3),
+            "4" => Ok(TaskPriority::P4),
+            _ => Err(format!("Invalid task priority: {s}")),
+        }
+    }
 }
 
 impl From<Task> for Notification {
@@ -170,47 +191,83 @@ impl From<&Task> for Notification {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use pretty_assertions::assert_eq;
-    use rstest::*;
 
-    #[rstest]
-    fn test_parse_due_date_for_naive_date() {
-        assert_eq!(
-            "2022-01-02".parse::<DueDate>().unwrap(),
-            DueDate::Date(NaiveDate::from_ymd_opt(2022, 1, 2).unwrap())
-        );
+    mod due_date_parsing {
+        use super::super::*;
+        use pretty_assertions::assert_eq;
+        use rstest::*;
+
+        #[rstest]
+        fn test_parse_due_date_for_naive_date() {
+            assert_eq!(
+                "2022-01-02".parse::<DueDate>().unwrap(),
+                DueDate::Date(NaiveDate::from_ymd_opt(2022, 1, 2).unwrap())
+            );
+        }
+
+        #[rstest]
+        fn test_parse_due_date_for_naive_datetime() {
+            assert_eq!(
+                "2022-01-02T11:43:02".parse::<DueDate>().unwrap(),
+                DueDate::DateTime(
+                    NaiveDate::from_ymd_opt(2022, 1, 2)
+                        .unwrap()
+                        .and_hms_opt(11, 43, 2)
+                        .unwrap()
+                )
+            );
+        }
+
+        #[rstest]
+        fn test_parse_due_date_for_naive_datetime_without_seconds() {
+            assert_eq!(
+                "2022-01-02T11:43".parse::<DueDate>().unwrap(),
+                DueDate::DateTime(
+                    NaiveDate::from_ymd_opt(2022, 1, 2)
+                        .unwrap()
+                        .and_hms_opt(11, 43, 0)
+                        .unwrap()
+                )
+            );
+        }
+
+        #[rstest]
+        fn test_parse_due_date_for_datetime_with_timezone() {
+            assert_eq!(
+                "2022-01-02T11:43:02.000000Z".parse::<DueDate>().unwrap(),
+                DueDate::DateTimeWithTz(DateTime::<Utc>::from_utc(
+                    NaiveDate::from_ymd_opt(2022, 1, 2)
+                        .unwrap()
+                        .and_hms_opt(11, 43, 2)
+                        .unwrap(),
+                    Utc
+                ))
+            );
+        }
+
+        #[rstest]
+        fn test_parse_due_date_for_wrong_date_format() {
+            assert_eq!("2022-01-02T".parse::<DueDate>().is_err(), true);
+        }
     }
 
-    #[rstest]
-    fn test_parse_due_date_for_naive_datetime() {
-        assert_eq!(
-            "2022-01-02T11:43:02".parse::<DueDate>().unwrap(),
-            DueDate::DateTime(
-                NaiveDate::from_ymd_opt(2022, 1, 2)
-                    .unwrap()
-                    .and_hms_opt(11, 43, 2)
-                    .unwrap()
-            )
-        );
-    }
+    mod task_priority_parsing {
+        use super::super::*;
+        use pretty_assertions::assert_eq;
+        use rstest::*;
 
-    #[rstest]
-    fn test_parse_due_date_for_datetime_with_timezone() {
-        assert_eq!(
-            "2022-01-02T11:43:02.000000Z".parse::<DueDate>().unwrap(),
-            DueDate::DateTimeWithTz(DateTime::<Utc>::from_utc(
-                NaiveDate::from_ymd_opt(2022, 1, 2)
-                    .unwrap()
-                    .and_hms_opt(11, 43, 2)
-                    .unwrap(),
-                Utc
-            ))
-        );
-    }
+        #[rstest]
+        #[case("1", TaskPriority::P1)]
+        #[case("2", TaskPriority::P2)]
+        #[case("3", TaskPriority::P3)]
+        #[case("4", TaskPriority::P4)]
+        fn test_parse_task_priority(#[case] string_prio: &str, #[case] priority: TaskPriority) {
+            assert_eq!(string_prio.parse::<TaskPriority>().unwrap(), priority);
+        }
 
-    #[rstest]
-    fn test_parse_due_date_for_wrong_date_format() {
-        assert_eq!("2022-01-02T".parse::<DueDate>().is_err(), true);
+        #[rstest]
+        fn test_parse_due_date_for_wrong_date_format() {
+            assert_eq!("5".parse::<TaskPriority>().is_err(), true);
+        }
     }
 }

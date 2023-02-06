@@ -40,6 +40,24 @@ pub struct TodoistItemDue {
     pub lang: String,
 }
 
+impl From<&TodoistItemDue> for DueDate {
+    fn from(due: &TodoistItemDue) -> Self {
+        due.date.clone()
+    }
+}
+
+impl From<&DueDate> for TodoistItemDue {
+    fn from(due: &DueDate) -> Self {
+        Self {
+            string: "".to_string(),
+            date: due.clone(),
+            is_recurring: false, // Not implemented yet
+            timezone: None,
+            lang: "en".to_string(),
+        }
+    }
+}
+
 #[derive(Serialize_repr, Deserialize_repr, PartialEq, Debug, Clone, Eq, Copy)]
 #[repr(u8)]
 pub enum TodoistItemPriority {
@@ -52,10 +70,21 @@ pub enum TodoistItemPriority {
 impl From<TodoistItemPriority> for TaskPriority {
     fn from(priority: TodoistItemPriority) -> Self {
         match priority {
-            TodoistItemPriority::P1 => TaskPriority::P1,
-            TodoistItemPriority::P2 => TaskPriority::P2,
-            TodoistItemPriority::P3 => TaskPriority::P3,
-            TodoistItemPriority::P4 => TaskPriority::P4,
+            TodoistItemPriority::P1 => TaskPriority::P4,
+            TodoistItemPriority::P2 => TaskPriority::P3,
+            TodoistItemPriority::P3 => TaskPriority::P2,
+            TodoistItemPriority::P4 => TaskPriority::P1,
+        }
+    }
+}
+
+impl From<TaskPriority> for TodoistItemPriority {
+    fn from(priority: TaskPriority) -> Self {
+        match priority {
+            TaskPriority::P1 => TodoistItemPriority::P4,
+            TaskPriority::P2 => TodoistItemPriority::P3,
+            TaskPriority::P3 => TodoistItemPriority::P2,
+            TaskPriority::P4 => TodoistItemPriority::P1,
         }
     }
 }

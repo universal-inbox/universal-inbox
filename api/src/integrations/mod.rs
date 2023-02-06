@@ -3,7 +3,11 @@ use clap::ArgEnum;
 use macro_attr::macro_attr;
 use serde::{Deserialize, Serialize};
 
-use crate::universal_inbox::UniversalInboxError;
+use universal_inbox::task::{Task, TaskPatch};
+
+use crate::{
+    integrations::todoist::TodoistSyncStatusResponse, universal_inbox::UniversalInboxError,
+};
 
 pub mod github;
 pub mod todoist;
@@ -49,8 +53,6 @@ pub mod notification {
 pub mod task {
     use super::*;
 
-    use universal_inbox::task::Task;
-
     macro_attr! {
         #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ArgEnum, Debug, EnumFromStr!, EnumDisplay!)]
         pub enum TaskSyncSourceKind {
@@ -73,11 +75,18 @@ pub mod task {
     pub trait TaskSourceService<T>: TaskSource {
         async fn fetch_all_tasks(&self) -> Result<Vec<T>, UniversalInboxError>;
         async fn build_task(&self, source: &T) -> Result<Box<Task>, UniversalInboxError>;
-        async fn delete_task_from_source(&self, source_id: &str)
-            -> Result<(), UniversalInboxError>;
+        async fn delete_task_from_source(
+            &self,
+            source_id: &str,
+        ) -> Result<TodoistSyncStatusResponse, UniversalInboxError>;
         async fn complete_task_from_source(
             &self,
             source_id: &str,
-        ) -> Result<(), UniversalInboxError>;
+        ) -> Result<TodoistSyncStatusResponse, UniversalInboxError>;
+        async fn update_task(
+            &self,
+            id: &str,
+            patch: &TaskPatch,
+        ) -> Result<Option<TodoistSyncStatusResponse>, UniversalInboxError>;
     }
 }

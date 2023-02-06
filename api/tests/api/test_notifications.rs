@@ -24,12 +24,26 @@ mod list_notifications {
 
     #[rstest]
     #[tokio::test]
-    async fn test_empty_list_notifications(#[future] tested_app: TestedApp) {
+    async fn test_empty_list_notifications(
+        #[future] tested_app: TestedApp,
+        #[values(true, false)] with_tasks: bool,
+    ) {
         let app = tested_app.await;
-        let notifications =
-            list_notifications(&app.app_address, NotificationStatus::Unread, false, None).await;
+        let result = list_notifications(
+            &app.app_address,
+            NotificationStatus::Unread,
+            false,
+            None,
+            with_tasks,
+        )
+        .await;
 
-        assert_eq!(notifications.len(), 0);
+        assert_eq!(result.notifications.len(), 0);
+        if with_tasks {
+            assert!(result.tasks.unwrap().is_empty());
+        } else {
+            assert!(result.tasks.is_none());
+        }
     }
 
     #[rstest]
@@ -37,6 +51,7 @@ mod list_notifications {
     async fn test_list_notifications(
         #[future] tested_app: TestedApp,
         github_notification: Box<GithubNotification>,
+        #[values(true, false)] with_tasks: bool,
     ) {
         let mut github_notification2 = github_notification.clone();
         github_notification2.id = "43".to_string();
@@ -128,36 +143,75 @@ mod list_notifications {
         )
         .await;
 
-        let notifications =
-            list_notifications(&app.app_address, NotificationStatus::Unread, false, None).await;
+        let result = list_notifications(
+            &app.app_address,
+            NotificationStatus::Unread,
+            false,
+            None,
+            with_tasks,
+        )
+        .await;
 
-        assert_eq!(notifications.len(), 2);
-        assert_eq!(notifications[0], *expected_notification1);
-        assert_eq!(notifications[1], *expected_notification2);
+        assert_eq!(result.notifications.len(), 2);
+        assert_eq!(result.notifications[0], *expected_notification1);
+        assert_eq!(result.notifications[1], *expected_notification2);
+        if with_tasks {
+            assert!(result.tasks.unwrap().is_empty());
+        } else {
+            assert!(result.tasks.is_none());
+        }
 
-        let notifications =
-            list_notifications(&app.app_address, NotificationStatus::Unread, true, None).await;
+        let result = list_notifications(
+            &app.app_address,
+            NotificationStatus::Unread,
+            true,
+            None,
+            with_tasks,
+        )
+        .await;
 
-        assert_eq!(notifications.len(), 3);
-        assert_eq!(notifications[0], *expected_notification1);
-        assert_eq!(notifications[1], *expected_notification2);
-        assert_eq!(notifications[2], *snoozed_notification);
+        assert_eq!(result.notifications.len(), 3);
+        assert_eq!(result.notifications[0], *expected_notification1);
+        assert_eq!(result.notifications[1], *expected_notification2);
+        assert_eq!(result.notifications[2], *snoozed_notification);
+        if with_tasks {
+            assert!(result.tasks.unwrap().is_empty());
+        } else {
+            assert!(result.tasks.is_none());
+        }
 
-        let notifications =
-            list_notifications(&app.app_address, NotificationStatus::Deleted, false, None).await;
+        let result = list_notifications(
+            &app.app_address,
+            NotificationStatus::Deleted,
+            false,
+            None,
+            with_tasks,
+        )
+        .await;
 
-        assert_eq!(notifications.len(), 1);
-        assert_eq!(notifications[0], *deleted_notification);
+        assert_eq!(result.notifications.len(), 1);
+        assert_eq!(result.notifications[0], *deleted_notification);
+        if with_tasks {
+            assert!(result.tasks.unwrap().is_empty());
+        } else {
+            assert!(result.tasks.is_none());
+        }
 
-        let notifications = list_notifications(
+        let result = list_notifications(
             &app.app_address,
             NotificationStatus::Unsubscribed,
             false,
             None,
+            with_tasks,
         )
         .await;
 
-        assert_eq!(notifications.len(), 0);
+        assert_eq!(result.notifications.len(), 0);
+        if with_tasks {
+            assert!(result.tasks.unwrap().is_empty());
+        } else {
+            assert!(result.tasks.is_none());
+        }
     }
 }
 

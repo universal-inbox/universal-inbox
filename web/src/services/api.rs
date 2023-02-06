@@ -1,17 +1,16 @@
 use std::collections::HashMap;
 
-use dioxus::prelude::CoroutineHandle;
+use dioxus::prelude::Coroutine;
 use js_sys::JSON::stringify;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{Request, RequestInit, RequestMode, Response};
 
-use crate::components::toast_zone::Toast;
-use crate::components::toast_zone::ToastKind;
-
-use super::toast_service::ToastCommand;
-use super::toast_service::ToastUpdate;
+use crate::{
+    components::toast_zone::{Toast, ToastKind},
+    services::toast_service::{ToastCommand, ToastUpdate},
+};
 
 #[wasm_bindgen(module = "/js/api.js")]
 extern "C" {
@@ -85,7 +84,7 @@ pub async fn call_api_and_notify<R: for<'de> serde::de::Deserialize<'de>, B: ser
     path: &str,
     body: B,
     headers: HashMap<String, String>,
-    toast_service: &CoroutineHandle<ToastCommand>,
+    toast_service: &Coroutine<ToastCommand>,
     loading_message: &str,
     success_message: &str,
 ) -> Result<R, JsValue> {
