@@ -1,11 +1,12 @@
 use dioxus::prelude::*;
 use dioxus_free_icons::icons::bs_icons::{BsGear, BsInbox, BsMoon, BsSun};
 use dioxus_free_icons::Icon;
+use dioxus_router::Link;
 use log::debug;
 use wasm_bindgen::JsValue;
 
 pub fn nav_bar(cx: Scope) -> Element {
-    use_future(&cx, (), |()| async move {
+    use_future(cx, (), |()| async move {
         toggle_dark_mode(false).expect("Failed to initialize the theme");
     });
 

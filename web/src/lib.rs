@@ -1,11 +1,7 @@
+use dioxus::prelude::*;
+use dioxus_router::{Route, Router};
+use fermi::{use_atom_ref, use_init_atom_root, UseAtomRef};
 use log::debug;
-
-use dioxus::{
-    core::to_owned,
-    fermi::UseAtomRef,
-    prelude::*,
-    router::{Route, Router},
-};
 use wasm_bindgen::{prelude::Closure, JsCast};
 use web_sys::KeyboardEvent;
 
@@ -20,25 +16,28 @@ use services::{
     notification_service::{
         notification_service, NotificationCommand, UniversalInboxUIModel, NOTIFICATIONS, UI_MODEL,
     },
-    task_service::{task_service, TaskCommand},
+    task_service::{task_service, TaskCommand, TASKS},
     toast_service::{toast_service, TOASTS},
 };
 
 mod components;
 mod pages;
 mod services;
+mod utils;
 
 pub fn app(cx: Scope) -> Element {
-    let notifications_ref = use_atom_ref(&cx, NOTIFICATIONS);
-    let ui_model_ref = use_atom_ref(&cx, UI_MODEL);
-    let toasts_ref = use_atom_ref(&cx, TOASTS);
-    let toast_service_handle = use_coroutine(&cx, |rx| toast_service(rx, toasts_ref.clone()));
-    let task_service_handle = use_coroutine(&cx, |rx| {
+    use_init_atom_root(cx);
+    let notifications_ref = use_atom_ref(cx, NOTIFICATIONS);
+    let tasks_ref = use_atom_ref(cx, TASKS);
+    let ui_model_ref = use_atom_ref(cx, UI_MODEL);
+    let toasts_ref = use_atom_ref(cx, TOASTS);
+    let toast_service_handle = use_coroutine(cx, |rx| toast_service(rx, toasts_ref.clone()));
+    let task_service_handle = use_coroutine(cx, |rx| {
         to_owned![toast_service_handle];
 
-        task_service(rx, toast_service_handle)
+        task_service(rx, tasks_ref.clone(), toast_service_handle)
     });
-    let notification_service_handle = use_coroutine(&cx, |rx| {
+    let notification_service_handle = use_coroutine(cx, |rx| {
         to_owned![toast_service_handle];
         to_owned![task_service_handle];
 
@@ -50,7 +49,7 @@ pub fn app(cx: Scope) -> Element {
         )
     });
 
-    use_future(&cx, (), |()| {
+    use_future(cx, (), |()| {
         to_owned![ui_model_ref];
         to_owned![notification_service_handle];
         to_owned![task_service_handle];
@@ -86,56 +85,69 @@ pub fn app(cx: Scope) -> Element {
 
 fn setup_key_bindings(
     ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
-    notification_service_handle: CoroutineHandle<NotificationCommand>,
-    _task_service_handle: CoroutineHandle<TaskCommand>,
+    notification_service_handle: Coroutine<NotificationCommand>,
+    _task_service_handle: Coroutine<TaskCommand>,
     notifications_ref: UseAtomRef<Vec<Notification>>,
 ) -> Option<()> {
     let window = web_sys::window()?;
     let document = window.document()?;
 
     let handler = Closure::wrap(Box::new(move |evt: KeyboardEvent| {
-        let mut ui_model = ui_model_ref.write();
         let notifications = notifications_ref.read();
         let list_length = notifications.len();
-        let selected_notification = notifications.get(ui_model.selected_notification_index);
+        let selected_notification =
+            notifications.get(ui_model_ref.read().selected_notification_index);
         let mut handled = true;
 
-        match evt.key().as_ref() {
-            "ArrowDown" if ui_model.selected_notification_index < (list_length - 1) => {
-                ui_model.selected_notification_index += 1
+        if ui_model_ref.read().task_planning_modal_opened {
+            match evt.key().as_ref() {
+                "Escape" => ui_model_ref.write().task_planning_modal_opened = false,
+                _ => handled = false,
             }
-            "ArrowUp" if ui_model.selected_notification_index > 0 => {
-                ui_model.selected_notification_index -= 1
-            }
-            "d" => {
-                if let Some(notification) = selected_notification {
-                    notification_service_handle.send(NotificationCommand::DeleteFromNotification(
-                        notification.clone(),
-                    ))
+        } else {
+            match evt.key().as_ref() {
+                "ArrowDown"
+                    if ui_model_ref.read().selected_notification_index < (list_length - 1) =>
+                {
+                    ui_model_ref.write().selected_notification_index += 1
                 }
-            }
-            "c" => {
-                if let Some(notification) = selected_notification {
-                    notification_service_handle.send(
-                        NotificationCommand::CompleteTaskFromNotification(notification.clone()),
-                    )
+                "ArrowUp" if ui_model_ref.read().selected_notification_index > 0 => {
+                    ui_model_ref.write().selected_notification_index -= 1
                 }
-            }
-            "u" => {
-                if let Some(notification) = selected_notification {
-                    notification_service_handle
-                        .send(NotificationCommand::Unsubscribe(notification.id))
+                "d" => {
+                    if let Some(notification) = selected_notification {
+                        notification_service_handle.send(
+                            NotificationCommand::DeleteFromNotification(notification.clone()),
+                        )
+                    }
                 }
-            }
-            "s" => {
-                if let Some(notification) = selected_notification {
-                    notification_service_handle.send(NotificationCommand::Snooze(notification.id))
+                "c" => {
+                    if let Some(notification) = selected_notification {
+                        notification_service_handle.send(
+                            NotificationCommand::CompleteTaskFromNotification(notification.clone()),
+                        )
+                    }
                 }
+                "u" => {
+                    if let Some(notification) = selected_notification {
+                        notification_service_handle
+                            .send(NotificationCommand::Unsubscribe(notification.id))
+                    }
+                }
+                "s" => {
+                    if let Some(notification) = selected_notification {
+                        notification_service_handle
+                            .send(NotificationCommand::Snooze(notification.id))
+                    }
+                }
+                "p" => ui_model_ref.write().task_planning_modal_opened = true,
+                "h" => ui_model_ref.write().toggle_help(),
+                _ => handled = false,
             }
-            "h" => ui_model.footer_help_opened = !ui_model.footer_help_opened,
-            _ => handled = false,
         }
+
         if handled {
+            ui_model_ref.write().set_unhover_element(true);
             evt.prevent_default();
         }
     }) as Box<dyn FnMut(KeyboardEvent)>);

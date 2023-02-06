@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use cached::proc_macro::cached;
-use chrono::{TimeZone, Utc};
 use format_serde_error::SerdeError;
 use http::{HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
@@ -11,8 +10,10 @@ use serde_json::json;
 use uuid::Uuid;
 
 use universal_inbox::task::{
-    integrations::todoist::{self, TodoistItem, TodoistProject},
-    DueDate, Task, TaskMetadata, TaskStatus,
+    integrations::todoist::{
+        self, TodoistItem, TodoistItemDue, TodoistItemPriority, TodoistProject,
+    },
+    Task, TaskMetadata, TaskPatch, TaskStatus,
 };
 
 use crate::{
@@ -26,11 +27,72 @@ use crate::{
 #[derive(Clone, Debug)]
 pub struct TodoistService {
     client: reqwest::Client,
-    todoist_sync_base_url: String,
+    pub todoist_sync_base_url: String,
 }
 
 static TODOIST_SYNC_BASE_URL: &str = "https://api.todoist.com/sync/v9";
 static APP_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
+
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+#[serde(tag = "type")]
+pub enum TodoistSyncCommand {
+    #[serde(rename = "item_delete")]
+    ItemDelete {
+        uuid: Uuid,
+        args: TodoistSyncCommandItemDeleteArgs,
+    },
+    #[serde(rename = "item_complete")]
+    ItemComplete {
+        uuid: Uuid,
+        args: TodoistSyncCommandItemCompleteArgs,
+    },
+    #[serde(rename = "item_update")]
+    ItemUpdate {
+        uuid: Uuid,
+        args: TodoistSyncCommandItemUpdateArgs,
+    },
+    #[serde(rename = "item_move")]
+    ItemMove {
+        uuid: Uuid,
+        args: TodoistSyncCommandItemMoveArgs,
+    },
+    #[serde(rename = "project_add")]
+    ProjectAdd {
+        uuid: Uuid,
+        temp_id: Uuid,
+        args: TodoistSyncCommandProjectAddArgs,
+    },
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct TodoistSyncCommandItemDeleteArgs {
+    pub id: String,
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct TodoistSyncCommandItemCompleteArgs {
+    pub id: String,
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct TodoistSyncCommandItemUpdateArgs {
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub due: Option<Option<TodoistItemDue>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub priority: Option<TodoistItemPriority>,
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct TodoistSyncCommandItemMoveArgs {
+    pub id: String,
+    pub project_id: String,
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct TodoistSyncCommandProjectAddArgs {
+    pub name: String,
+}
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct TodoistSyncResponse {
@@ -68,71 +130,78 @@ impl TodoistService {
         })
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
-    pub async fn sync_items(&self) -> Result<Vec<TodoistItem>, UniversalInboxError> {
+    pub async fn sync_resources(
+        &self,
+        resource_name: &str,
+    ) -> Result<TodoistSyncResponse, UniversalInboxError> {
         let response = self
             .client
             .post(&format!("{}/sync", self.todoist_sync_base_url))
-            .json(&json!({ "sync_token": "*", "resource_types": ["items"] }))
+            .json(&json!({ "sync_token": "*", "resource_types": [resource_name] }))
             .send()
             .await
-            .context("Cannot sync items from Todoist API")?
+            .context(format!("Cannot sync {resource_name} from Todoist API"))?
+            .error_for_status()
+            .context(format!("Cannot sync {resource_name} from Todoist API"))?
             .text()
             .await
-            .context("Failed to fetch items response from Todoist API")?;
+            .context(format!(
+                "Failed to fetch {resource_name} response from Todoist API"
+            ))?;
 
-        let sync_response: TodoistSyncResponse = serde_json::from_str(&response)
+        Ok(serde_json::from_str(&response)
             .map_err(|err| SerdeError::new(response, err))
-            .context("Failed to parse response from Todoist")?;
+            .context("Failed to parse response from Todoist")?)
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    pub async fn sync_items(&self) -> Result<Vec<TodoistItem>, UniversalInboxError> {
+        let sync_response = self.sync_resources("items").await?;
 
         sync_response.items.ok_or_else(|| {
             UniversalInboxError::Unexpected(anyhow!("Todoist response should include `items`"))
         })
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
-    pub async fn sync_item(&self, command_type: &str, id: &str) -> Result<(), UniversalInboxError> {
-        let command_uuid = Uuid::new_v4().to_string();
-        let json_response: serde_json::value::Value = self
+    #[tracing::instrument(level = "debug", skip(self), ret)]
+    pub async fn send_sync_commands(
+        &self,
+        commands: Vec<TodoistSyncCommand>,
+    ) -> Result<TodoistSyncStatusResponse, UniversalInboxError> {
+        let body = json!({ "commands": commands });
+
+        let response = self
             .client
             .post(&format!("{}/sync", self.todoist_sync_base_url))
-            .json(&json!({
-                "commands": [
-                    {
-                        "type": command_type,
-                        "uuid": command_uuid,
-                        "args": { "id": id }
-                    }
-                ]
-            }))
+            .json(&body)
             .send()
             .await
-            .with_context(|| format!("Cannot sync item `{id}` from Todoist API (command: `{command_type}`)"))?
-            .json()
+            .with_context(|| format!("Cannot send commands {commands:?} to the Todoist API"))?
+            .text()
             .await
             .with_context(|| {
-                format!("Failed to fetch response from Todoist API while syncing item `{id}` (command: `{command_type}`)")
+                format!(
+                    "Failed to fetch response from Todoist API while sending commands {commands:?}"
+                )
             })?;
 
-        let sync_status = json_response["sync_status"].as_object().with_context(|| {
-            format!(
-                "Failed to parse response from Todoist API while syncing item `{id}` (command: `{command_type}`): {:?}",
-                json_response
-            )
-        })?;
+        let sync_response: TodoistSyncStatusResponse = serde_json::from_str(&response)
+            .map_err(|err| SerdeError::new(response, err))
+            .context("Failed to parse response from Todoist")?;
+
         // It could be simpler as the first value is actually the `command_id` but httpmock
         // does not allow to use a request value into the mocked response
-        let command_result = sync_status.values().next();
+        let command_result = sync_response.sync_status.values().next();
         match command_result {
-            Some(serde_json::Value::String(s)) if s == "ok" => Ok(()),
-            Some(serde_json::Value::Object(error_obj)) if error_obj.contains_key("error") => {
+            Some(TodoistCommandStatus::Ok(_)) => Ok(sync_response),
+            Some(TodoistCommandStatus::Error { error_code: _, error }) => {
                 Err(UniversalInboxError::Unexpected(anyhow!(
-                    "Unexpected error while syncing item `{id}` (command: `{command_type}`): {:?}",
-                    error_obj.get("error").unwrap().as_str()
+                    "Unexpected error while sending commands {commands:?}: {:?}",
+                    error
                 )))
             }
             _ => Err(UniversalInboxError::Unexpected(anyhow!(
-                "Failed to parse response from Todoist API while syncing item `{id}` (command: `{command_type}`): {:?}",
+                "Failed to parse response from Todoist API while sending commands {commands:?}: {:?}",
                 command_result
             ))),
         }
@@ -140,21 +209,7 @@ impl TodoistService {
 
     #[tracing::instrument(level = "debug", skip(self))]
     pub async fn fetch_all_projects(&self) -> Result<Vec<TodoistProject>, UniversalInboxError> {
-        cached_fetch_all_projects(&self.client, &self.todoist_sync_base_url).await
-    }
-
-    #[tracing::instrument(level = "debug", skip(self))]
-    pub async fn get_project_name(&self, project_id: &str) -> Result<String, UniversalInboxError> {
-        let projects = self.fetch_all_projects().await?;
-        projects
-            .iter()
-            .find(|project| project.id == project_id)
-            .map(|project| project.name.clone())
-            .ok_or_else(|| {
-                UniversalInboxError::Unexpected(anyhow!(
-                    "Failed to find Todoist project with ID {project_id}"
-                ))
-            })
+        cached_fetch_all_projects(self).await
     }
 }
 
@@ -164,21 +219,12 @@ impl TodoistService {
     size = 1,
     time = 600,
     key = "String",
-    convert = r#"{ "default".to_string() }"#
+    convert = r#"{ service.todoist_sync_base_url.clone() }"#
 )]
 async fn cached_fetch_all_projects(
-    client: &reqwest::Client,
-    todoist_sync_base_url: &str,
+    service: &TodoistService,
 ) -> Result<Vec<TodoistProject>, UniversalInboxError> {
-    let sync_response: TodoistSyncResponse = client
-        .post(&format!("{}/sync", todoist_sync_base_url))
-        .json(&json!({ "sync_token": "*", "resource_types": ["projects"] }))
-        .send()
-        .await
-        .context("Cannot sync projects from Todoist API")?
-        .json()
-        .await
-        .context("Failed to fetch and parse projects response from Todoist API")?;
+    let sync_response: TodoistSyncResponse = service.sync_resources("projects").await?;
 
     sync_response.projects.ok_or_else(|| {
         UniversalInboxError::Unexpected(anyhow!("Todoist response should include `projects`"))
@@ -205,7 +251,17 @@ impl TaskSourceService<TodoistItem> for TodoistService {
     }
 
     async fn build_task(&self, source: &TodoistItem) -> Result<Box<Task>, UniversalInboxError> {
-        let project_name = self.get_project_name(&source.project_id).await?;
+        let projects = self.fetch_all_projects().await?;
+        let project_name = projects
+            .iter()
+            .find(|project| project.id == source.project_id)
+            .map(|project| project.name.clone())
+            .ok_or_else(|| {
+                UniversalInboxError::Unexpected(anyhow!(
+                    "Failed to find Todoist project with ID {}",
+                    source.project_id
+                ))
+            })?;
 
         Ok(Box::new(Task {
             id: Uuid::new_v4().into(),
@@ -219,9 +275,7 @@ impl TaskSourceService<TodoistItem> for TodoistService {
             },
             completed_at: source.completed_at,
             priority: source.priority.into(),
-            due_at: Some(DueDate::DateTimeWithTz(
-                Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).latest().unwrap(),
-            )),
+            due_at: source.due.as_ref().map(|due| due.into()),
             source_html_url: todoist::get_task_html_url(&source.id),
             tags: source.labels.clone(),
             parent_id: None, // Unsupported for now
@@ -236,12 +290,91 @@ impl TaskSourceService<TodoistItem> for TodoistService {
         }))
     }
 
-    async fn delete_task_from_source(&self, id: &str) -> Result<(), UniversalInboxError> {
-        self.sync_item("item_delete", id).await
+    async fn delete_task_from_source(
+        &self,
+        id: &str,
+    ) -> Result<TodoistSyncStatusResponse, UniversalInboxError> {
+        self.send_sync_commands(vec![TodoistSyncCommand::ItemDelete {
+            uuid: Uuid::new_v4(),
+            args: TodoistSyncCommandItemDeleteArgs { id: id.to_string() },
+        }])
+        .await
     }
 
-    async fn complete_task_from_source(&self, id: &str) -> Result<(), UniversalInboxError> {
-        self.sync_item("item_complete", id).await
+    async fn complete_task_from_source(
+        &self,
+        id: &str,
+    ) -> Result<TodoistSyncStatusResponse, UniversalInboxError> {
+        self.send_sync_commands(vec![TodoistSyncCommand::ItemComplete {
+            uuid: Uuid::new_v4(),
+            args: TodoistSyncCommandItemCompleteArgs { id: id.to_string() },
+        }])
+        .await
+    }
+
+    async fn update_task(
+        &self,
+        id: &str,
+        patch: &TaskPatch,
+    ) -> Result<Option<TodoistSyncStatusResponse>, UniversalInboxError> {
+        let mut commands: Vec<TodoistSyncCommand> = vec![];
+        if let Some(ref project_name) = patch.project {
+            let projects = self.fetch_all_projects().await?;
+            let project_id = if let Some(id) = projects
+                .iter()
+                .find(|project| project.name == *project_name)
+                .map(|project| project.id.clone())
+            {
+                id
+            } else {
+                let command_id = Uuid::new_v4();
+                let response = self
+                    .send_sync_commands(vec![TodoistSyncCommand::ProjectAdd {
+                        uuid: command_id,
+                        temp_id: Uuid::new_v4(),
+                        args: TodoistSyncCommandProjectAddArgs {
+                            name: project_name.to_string(),
+                        },
+                    }])
+                    .await?;
+                response
+                    .temp_id_mapping
+                    .values()
+                    .next()
+                    .context("Cannot find newly added project's ID".to_string())?
+                    .to_string()
+            };
+            commands.push(TodoistSyncCommand::ItemMove {
+                uuid: Uuid::new_v4(),
+                args: TodoistSyncCommandItemMoveArgs {
+                    id: id.to_string(),
+                    project_id,
+                },
+            });
+        }
+
+        if patch.priority.is_some() || patch.due_at.is_some() {
+            let priority = patch.priority.map(|priority| priority.into());
+            let due = patch
+                .due_at
+                .as_ref()
+                .map(|due| due.as_ref().map(|d| d.into()));
+
+            commands.push(TodoistSyncCommand::ItemUpdate {
+                uuid: Uuid::new_v4(),
+                args: TodoistSyncCommandItemUpdateArgs {
+                    id: id.to_string(),
+                    due,
+                    priority,
+                },
+            });
+        }
+
+        if commands.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(self.send_sync_commands(commands).await?))
+        }
     }
 }
 
@@ -260,9 +393,11 @@ impl NotificationSource for TodoistService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::NaiveDate;
     use pretty_assertions::assert_eq;
     use rstest::*;
 
+    use universal_inbox::task::DueDate;
     use uuid::uuid;
 
     #[rstest]
@@ -291,5 +426,60 @@ mod tests {
             full_sync: false,
             sync_token: "abcd".to_string(),
         });
+    }
+
+    #[rstest]
+    fn test_todoist_sync_command_item_update_args_serialization_no_values() {
+        assert_eq!(
+            serde_json::to_string(&TodoistSyncCommandItemUpdateArgs {
+                id: "123".to_string(),
+                due: None,
+                priority: None
+            })
+            .unwrap(),
+            json!({ "id": "123" }).to_string()
+        );
+    }
+
+    #[rstest]
+    fn test_todoist_sync_command_item_update_args_serialization_reset_due() {
+        assert_eq!(
+            serde_json::to_string(&TodoistSyncCommandItemUpdateArgs {
+                id: "123".to_string(),
+                due: Some(None),
+                priority: None
+            })
+            .unwrap(),
+            json!({ "id": "123", "due": null }).to_string()
+        );
+    }
+
+    #[rstest]
+    fn test_todoist_sync_command_item_update_args_serialization_with_values() {
+        assert_eq!(
+            serde_json::to_string(&TodoistSyncCommandItemUpdateArgs {
+                id: "123".to_string(),
+                due: Some(Some(TodoistItemDue {
+                    string: "every day".to_string(),
+                    date: DueDate::Date(NaiveDate::from_ymd_opt(2022, 1, 2).unwrap()),
+                    is_recurring: false,
+                    timezone: None,
+                    lang: "en".to_string()
+                })),
+                priority: None
+            })
+            .unwrap(),
+            json!({
+                "id": "123",
+                "due": {
+                    "string": "every day",
+                    "date": "2022-01-02",
+                    "is_recurring": false,
+                    "timezone": null,
+                    "lang": "en"
+                }
+            })
+            .to_string()
+        );
     }
 }

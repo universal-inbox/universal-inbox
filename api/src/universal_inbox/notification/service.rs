@@ -1,4 +1,8 @@
-use std::{fmt::Debug, sync::Arc, sync::Weak};
+use std::{
+    collections::HashMap,
+    fmt::Debug,
+    sync::{Arc, Weak},
+};
 
 use anyhow::{anyhow, Context};
 use sqlx::{Postgres, Transaction};
@@ -9,6 +13,7 @@ use universal_inbox::{
         Notification, NotificationId, NotificationMetadata, NotificationPatch, NotificationStatus,
     },
     task::{TaskId, TaskPatch, TaskStatus},
+    NotificationsListResult,
 };
 
 use crate::{
@@ -80,10 +85,35 @@ impl NotificationService {
         status: NotificationStatus,
         include_snoozed_notifications: bool,
         task_id: Option<TaskId>,
-    ) -> Result<Vec<Notification>, UniversalInboxError> {
-        self.repository
+        load_tasks: bool,
+    ) -> Result<NotificationsListResult, UniversalInboxError> {
+        let notifications = self
+            .repository
             .fetch_all_notifications(executor, status, include_snoozed_notifications, task_id)
-            .await
+            .await?;
+
+        let tasks = if load_tasks {
+            let task_ids_to_load: Vec<TaskId> =
+                notifications.iter().flat_map(|n| n.task_id).collect();
+            let loaded_tasks = self
+                .task_service
+                .upgrade()
+                .context("Unable to access task_service from notification_service")?
+                .read()
+                .await
+                .get_tasks(executor, task_ids_to_load)
+                .await?;
+            Some(HashMap::from_iter(
+                loaded_tasks.into_iter().map(|t| (t.id, t)),
+            ))
+        } else {
+            None
+        };
+
+        Ok(NotificationsListResult {
+            notifications,
+            tasks,
+        })
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
@@ -235,6 +265,7 @@ impl NotificationService {
                                     task_id,
                                     &TaskPatch {
                                         status: Some(TaskStatus::Deleted),
+                                        ..Default::default()
                                     },
                                 )
                                 .await?;

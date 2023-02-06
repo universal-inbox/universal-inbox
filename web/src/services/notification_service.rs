@@ -1,23 +1,25 @@
 use std::collections::HashMap;
 
 use chrono::{DateTime, Duration, Local, TimeZone, Timelike, Utc};
-use dioxus::{fermi::UseAtomRef, prelude::*};
+use dioxus::prelude::*;
+use fermi::{AtomRef, UseAtomRef};
 use futures_util::StreamExt;
+use log::{debug, error};
 
 use universal_inbox::{
     notification::{Notification, NotificationId, NotificationPatch, NotificationStatus},
     task::TaskId,
+    NotificationsListResult,
 };
 
 use crate::{
     components::toast_zone::{Toast, ToastKind},
     services::{
         api::{call_api, call_api_and_notify},
+        task_service::{TaskCommand, TaskPlanningParameters},
         toast_service::{ToastCommand, ToastUpdate},
     },
 };
-
-use super::task_service::TaskCommand;
 
 #[derive(Debug)]
 pub enum NotificationCommand {
@@ -26,12 +28,29 @@ pub enum NotificationCommand {
     Unsubscribe(NotificationId),
     Snooze(NotificationId),
     CompleteTaskFromNotification(Notification),
+    PlanTask(Notification, TaskPlanningParameters),
 }
 
 #[derive(Debug, Default)]
 pub struct UniversalInboxUIModel {
     pub selected_notification_index: usize,
     pub footer_help_opened: bool,
+    pub task_planning_modal_opened: bool,
+    pub unhover_element: bool,
+}
+
+impl UniversalInboxUIModel {
+    pub fn toggle_help(&mut self) {
+        self.footer_help_opened = !self.footer_help_opened;
+    }
+
+    pub fn set_unhover_element(&mut self, unhover_element: bool) -> bool {
+        if self.unhover_element != unhover_element {
+            self.unhover_element = unhover_element;
+            return true;
+        }
+        false
+    }
 }
 
 pub static NOTIFICATIONS: AtomRef<Vec<Notification>> = |_| vec![];
@@ -40,8 +59,8 @@ pub static UI_MODEL: AtomRef<UniversalInboxUIModel> = |_| Default::default();
 pub async fn notification_service<'a>(
     mut rx: UnboundedReceiver<NotificationCommand>,
     notifications: UseAtomRef<Vec<Notification>>,
-    task_service: CoroutineHandle<TaskCommand>,
-    toast_service: CoroutineHandle<ToastCommand>,
+    task_service: Coroutine<TaskCommand>,
+    toast_service: Coroutine<ToastCommand>,
 ) {
     loop {
         let msg = rx.next().await;
@@ -55,11 +74,21 @@ pub async fn notification_service<'a>(
                 let toast_id = toast.id;
                 toast_service.send(ToastCommand::Push(toast));
 
-                let result: Vec<Notification> =
-                    call_api("GET", "/notifications?status=Unread", HashMap::new())
-                        .await
-                        .unwrap();
-                notifications.write().extend(result);
+                let result: NotificationsListResult = call_api(
+                    "GET",
+                    "/notifications?status=Unread&with_tasks=true",
+                    HashMap::new(),
+                )
+                .await
+                .unwrap();
+
+                debug!("{} notifications loaded", result.notifications.len());
+                notifications.write().extend(result.notifications);
+                if let Some(tasks) = result.tasks {
+                    task_service.send(TaskCommand::UpdateTasks(tasks));
+                } else {
+                    error!("No tasks in notifications list result");
+                }
 
                 let toast_update = ToastUpdate {
                     id: toast_id,
@@ -133,6 +162,13 @@ pub async fn notification_service<'a>(
                     }
                 }
             }
+            Some(NotificationCommand::PlanTask(notification, parameters)) => {
+                notifications
+                    .write()
+                    .retain(|notif| notif.id != notification.id);
+
+                task_service.send(TaskCommand::Plan(parameters));
+            }
             None => {}
         }
     }
@@ -141,7 +177,7 @@ pub async fn notification_service<'a>(
 async fn delete_notification(
     notification_id: NotificationId,
     notifications: &UseAtomRef<Vec<Notification>>,
-    toast_service: &CoroutineHandle<ToastCommand>,
+    toast_service: &Coroutine<ToastCommand>,
 ) {
     notifications
         .write()
@@ -167,7 +203,7 @@ async fn delete_task(
     notification_id: NotificationId,
     task_id: TaskId,
     notifications: &UseAtomRef<Vec<Notification>>,
-    task_service: &CoroutineHandle<TaskCommand>,
+    task_service: &Coroutine<TaskCommand>,
 ) {
     notifications
         .write()

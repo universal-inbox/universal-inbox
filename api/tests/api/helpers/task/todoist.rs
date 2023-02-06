@@ -1,8 +1,11 @@
-use chrono::{TimeZone, Utc};
+use std::collections::HashMap;
+
+use chrono::{NaiveDate, TimeZone, Utc};
 use http::Uri;
 use httpmock::{Method::POST, Mock, MockServer};
 use pretty_assertions::assert_eq;
 use rstest::*;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
 
@@ -10,12 +13,16 @@ use universal_inbox::{
     notification::{NotificationMetadata, NotificationStatus},
     task::{
         integrations::todoist::{self, TodoistItem},
-        Task, TaskMetadata, TaskStatus,
+        DueDate, Task, TaskMetadata, TaskStatus,
     },
 };
 
 use universal_inbox_api::{
-    integrations::todoist::{TodoistSyncResponse, TodoistSyncStatusResponse},
+    integrations::todoist::{
+        TodoistCommandStatus, TodoistSyncCommandItemCompleteArgs, TodoistSyncCommandItemDeleteArgs,
+        TodoistSyncCommandItemMoveArgs, TodoistSyncCommandItemUpdateArgs,
+        TodoistSyncCommandProjectAddArgs, TodoistSyncResponse, TodoistSyncStatusResponse,
+    },
     universal_inbox::task::TaskCreationResult,
 };
 
@@ -31,65 +38,99 @@ pub fn sync_todoist_projects_response() -> TodoistSyncResponse {
     load_json_fixture_file("/tests/api/fixtures/sync_todoist_projects_response.json")
 }
 
-pub fn mock_todoist_sync_items_service<'a>(
-    todoist_mock_server: &'a MockServer,
-    result: &'a TodoistSyncResponse,
-) -> Mock<'a> {
-    todoist_mock_server.mock(|when, then| {
-        when.method(POST)
-            .path("/sync")
-            .json_body(json!({ "sync_token": "*", "resource_types": ["items"] }))
-            .header("authorization", "Bearer todoist_test_token");
-        then.status(200)
-            .header("content-type", "application/json")
-            .json_body_obj(result);
-    })
-}
-
 pub fn mock_todoist_delete_item_service<'a>(
     todoist_mock_server: &'a MockServer,
-    task_id: &'a str,
-    result: &'a TodoistSyncStatusResponse,
+    task_id: &str,
 ) -> Mock<'a> {
-    todoist_mock_server.mock(|when, then| {
-        when.method(POST)
-            .path("/sync")
-            .json_body_partial(format!(
-                r#"{{ "commands": [{{ "type": "item_delete", "args": {{ "id": "{task_id}" }} }}] }}"#
-            ))
-            .header("authorization", "Bearer todoist_test_token");
-        then.status(200)
-            .header("content-type", "application/json")
-            .json_body_obj(result);
-    })
+    mock_todoist_sync_service(
+        todoist_mock_server,
+        vec![TodoistSyncPartialCommand::ItemDelete {
+            args: TodoistSyncCommandItemDeleteArgs {
+                id: task_id.to_string(),
+            },
+        }],
+        None,
+    )
 }
 
 pub fn mock_todoist_complete_item_service<'a>(
     todoist_mock_server: &'a MockServer,
-    task_id: &'a str,
-    result: &'a TodoistSyncStatusResponse,
+    task_id: &str,
 ) -> Mock<'a> {
+    mock_todoist_sync_service(
+        todoist_mock_server,
+        vec![TodoistSyncPartialCommand::ItemComplete {
+            args: TodoistSyncCommandItemCompleteArgs {
+                id: task_id.to_string(),
+            },
+        }],
+        None,
+    )
+}
+
+pub fn mock_todoist_sync_project_add<'a>(
+    todoist_mock_server: &'a MockServer,
+    new_project: &str,
+    new_project_id: &str,
+) -> Mock<'a> {
+    let sync_project_add_todoist_response = TodoistSyncStatusResponse {
+        sync_status: HashMap::from([(Uuid::new_v4(), TodoistCommandStatus::Ok("ok".to_string()))]),
+        full_sync: false,
+        temp_id_mapping: HashMap::from([(Uuid::new_v4().to_string(), new_project_id.to_string())]),
+        sync_token: "sync token".to_string(),
+    };
+
+    mock_todoist_sync_service(
+        todoist_mock_server,
+        vec![TodoistSyncPartialCommand::ProjectAdd {
+            args: TodoistSyncCommandProjectAddArgs {
+                name: new_project.to_string(),
+            },
+        }],
+        Some(sync_project_add_todoist_response),
+    )
+}
+
+pub fn mock_todoist_sync_service(
+    todoist_mock_server: &MockServer,
+    commands: Vec<TodoistSyncPartialCommand>,
+    result: Option<TodoistSyncStatusResponse>,
+) -> Mock {
+    let body = json!({ "commands": commands });
+
+    let response = result.unwrap_or_else(|| {
+        let status: HashMap<Uuid, TodoistCommandStatus> = commands
+            .iter()
+            .map(|_| (Uuid::new_v4(), TodoistCommandStatus::Ok("ok".to_string())))
+            .collect();
+        TodoistSyncStatusResponse {
+            sync_status: status,
+            full_sync: false,
+            temp_id_mapping: HashMap::new(),
+            sync_token: "sync token".to_string(),
+        }
+    });
+
     todoist_mock_server.mock(|when, then| {
         when.method(POST)
             .path("/sync")
-            .json_body_partial(format!(
-                r#"{{ "commands": [{{ "type": "item_complete", "args": {{ "id": "{task_id}" }} }}] }}"#
-            ))
+            .json_body_partial(body.to_string())
             .header("authorization", "Bearer todoist_test_token");
         then.status(200)
             .header("content-type", "application/json")
-            .json_body_obj(result);
+            .json_body_obj(&response);
     })
 }
 
-pub fn mock_todoist_sync_projects_service<'a>(
+pub fn mock_todoist_sync_resources_service<'a>(
     todoist_mock_server: &'a MockServer,
-    result: &'a TodoistSyncResponse,
+    resource_name: &str,
+    result: &TodoistSyncResponse,
 ) -> Mock<'a> {
     todoist_mock_server.mock(|when, then| {
         when.method(POST)
             .path("/sync")
-            .json_body(json!({ "sync_token": "*", "resource_types": ["projects"] }))
+            .json_body(json!({ "sync_token": "*", "resource_types": [resource_name] }))
             .header("authorization", "Bearer todoist_test_token");
         then.status(200)
             .header("content-type", "application/json")
@@ -114,6 +155,10 @@ pub fn assert_sync_items(
             "1123" => {
                 assert_eq!(task.title, "Task 1".to_string());
                 assert_eq!(task.status, TaskStatus::Active);
+                assert_eq!(
+                    task.due_at,
+                    Some(DueDate::Date(NaiveDate::from_ymd_opt(2016, 9, 1).unwrap()))
+                );
                 assert_eq!(
                     task.source_html_url,
                     Some(
@@ -207,4 +252,29 @@ pub async fn create_task_from_todoist_item(
         }),
     )
     .await
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+#[serde(tag = "type")]
+pub enum TodoistSyncPartialCommand {
+    #[serde(rename = "item_delete")]
+    ItemDelete {
+        args: TodoistSyncCommandItemDeleteArgs,
+    },
+    #[serde(rename = "item_complete")]
+    ItemComplete {
+        args: TodoistSyncCommandItemCompleteArgs,
+    },
+    #[serde(rename = "item_update")]
+    ItemUpdate {
+        args: TodoistSyncCommandItemUpdateArgs,
+    },
+    #[serde(rename = "item_move")]
+    ItemMove {
+        args: TodoistSyncCommandItemMoveArgs,
+    },
+    #[serde(rename = "project_add")]
+    ProjectAdd {
+        args: TodoistSyncCommandProjectAddArgs,
+    },
 }

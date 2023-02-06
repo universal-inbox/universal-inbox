@@ -23,6 +23,11 @@ pub trait TaskRepository {
         executor: &mut Transaction<'a, Postgres>,
         id: TaskId,
     ) -> Result<Option<Task>, UniversalInboxError>;
+    async fn get_tasks<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        ids: Vec<TaskId>,
+    ) -> Result<Vec<Task>, UniversalInboxError>;
     async fn fetch_all_tasks<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -93,6 +98,46 @@ impl TaskRepository for Repository {
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
+    async fn get_tasks<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        ids: Vec<TaskId>,
+    ) -> Result<Vec<Task>, UniversalInboxError> {
+        let uuids: Vec<Uuid> = ids.into_iter().map(|id| id.0).collect();
+        let rows = sqlx::query_as!(
+            TaskRow,
+            r#"
+                SELECT
+                  id,
+                  source_id,
+                  title,
+                  body,
+                  status as "status: _",
+                  completed_at,
+                  priority,
+                  due_at as "due_at: Json<Option<DueDate>>",
+                  source_html_url,
+                  tags,
+                  parent_id,
+                  project,
+                  is_recurring,
+                  created_at,
+                  metadata as "metadata: Json<TaskMetadata>"
+                FROM task
+                WHERE id = any($1)
+            "#,
+            &uuids[..]
+        )
+        .fetch_all(executor)
+        .await
+        .with_context(|| format!("Failed to fetch tasks {:?} from storage", uuids))?;
+
+        rows.iter()
+            .map(|r| r.try_into())
+            .collect::<Result<Vec<Task>, UniversalInboxError>>()
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
     async fn fetch_all_tasks<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -124,13 +169,13 @@ impl TaskRepository for Repository {
         );
         query_builder.push_bind(status.to_string());
 
-        let records = query_builder
+        let rows = query_builder
             .build_query_as::<TaskRow>()
             .fetch_all(executor)
             .await
             .context("Failed to fetch tasks from storage")?;
 
-        records.iter().map(|r| r.try_into()).collect()
+        rows.iter().map(|r| r.try_into()).collect()
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
@@ -222,7 +267,7 @@ impl TaskRepository for Repository {
             None
         };
 
-        let records = sqlx::query_as!(
+        let rows = sqlx::query_as!(
             TaskRow,
             r#"
                 UPDATE
@@ -260,8 +305,7 @@ impl TaskRepository for Repository {
         .await
         .context("Failed to update stale task status from storage")?;
 
-        records
-            .iter()
+        rows.iter()
             .map(|r| r.try_into())
             .collect::<Result<Vec<Task>, UniversalInboxError>>()
     }
@@ -346,7 +390,7 @@ impl TaskRepository for Repository {
         Ok(Task { id, ..*task })
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self), ret)]
     async fn update_task<'a, 'b>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -374,6 +418,24 @@ impl TaskRepository for Repository {
             }
         }
 
+        if let Some(project) = &patch.project {
+            separated
+                .push(" project = ")
+                .push_bind_unseparated(project.to_string());
+        }
+
+        if let Some(due_at) = &patch.due_at {
+            separated
+                .push(" due_at = ")
+                .push_bind_unseparated(Json(due_at.clone()) as Json<Option<DueDate>>);
+        }
+
+        if let Some(priority) = patch.priority {
+            separated
+                .push(" priority = ")
+                .push_bind_unseparated(priority as i32);
+        }
+
         query_builder.push(" WHERE id = ").push_bind(task_id.0);
         query_builder.push(
             r#"
@@ -396,11 +458,33 @@ impl TaskRepository for Repository {
                   (SELECT"#,
         );
 
-        let mut separated = query_builder.separated(" AND ");
+        let mut separated = query_builder.separated(" OR ");
         if let Some(status) = patch.status {
             separated
                 .push(" status::TEXT != ")
                 .push_bind_unseparated(status.to_string());
+        }
+
+        if let Some(project) = &patch.project {
+            separated
+                .push(" project != ")
+                .push_bind_unseparated(project.to_string());
+        }
+
+        if let Some(due_at_value) = &patch.due_at {
+            if let Some(due_at) = due_at_value {
+                separated
+                    .push(" due_at->>'content' != ")
+                    .push_bind_unseparated(due_at.to_string());
+            } else {
+                separated.push(" due_at IS NOT NULL");
+            }
+        }
+
+        if let Some(priority) = patch.priority {
+            separated
+                .push(" priority != ")
+                .push_bind_unseparated(priority as i32);
         }
 
         query_builder
@@ -408,13 +492,13 @@ impl TaskRepository for Repository {
             .push_bind(task_id.0);
         query_builder.push(r#") as "is_updated""#);
 
-        let record: Option<UpdatedTaskRow> = query_builder
+        let row: Option<UpdatedTaskRow> = query_builder
             .build_query_as::<UpdatedTaskRow>()
             .fetch_optional(executor)
             .await
             .context(format!("Failed to update task {} from storage", task_id))?;
 
-        if let Some(updated_task_row) = record {
+        if let Some(updated_task_row) = row {
             Ok(UpdateStatus {
                 updated: updated_task_row.is_updated,
                 result: Some(Box::new(updated_task_row.task_row.try_into().unwrap())),

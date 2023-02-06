@@ -10,6 +10,7 @@ use tokio::sync::RwLock;
 use universal_inbox::{
     notification::{Notification, NotificationId, NotificationPatch, NotificationStatus},
     task::TaskId,
+    NotificationsListResult,
 };
 
 use crate::{
@@ -44,6 +45,7 @@ pub struct ListNotificationRequest {
     status: NotificationStatus,
     include_snoozed_notifications: Option<bool>,
     task_id: Option<TaskId>,
+    with_tasks: Option<bool>,
 }
 
 #[tracing::instrument(level = "debug", skip(notification_service))]
@@ -56,7 +58,7 @@ pub async fn list_notifications(
         .begin()
         .await
         .context("Failed to create new transaction while listing notifications")?;
-    let notifications: Vec<Notification> = service
+    let result: NotificationsListResult = service
         .list_notifications(
             &mut transaction,
             list_notification_request.status,
@@ -64,12 +66,13 @@ pub async fn list_notifications(
                 .include_snoozed_notifications
                 .unwrap_or(false),
             list_notification_request.task_id,
+            list_notification_request.with_tasks.unwrap_or(false),
         )
         .await?;
 
-    Ok(HttpResponse::Ok()
-        .content_type("application/json")
-        .body(serde_json::to_string(&notifications).context("Cannot serialize notifications")?))
+    Ok(HttpResponse::Ok().content_type("application/json").body(
+        serde_json::to_string(&result).context("Cannot serialize notifications list result")?,
+    ))
 }
 
 #[tracing::instrument(level = "debug", skip(notification_service))]
