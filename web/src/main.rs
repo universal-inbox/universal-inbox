@@ -27,5 +27,5 @@ cfg_if! {
 fn main() {
     panic::set_hook(Box::new(console_error_panic_hook::hook));
     init_log();
-    dioxus::web::launch(app);
+    dioxus_web::launch(app);
 }

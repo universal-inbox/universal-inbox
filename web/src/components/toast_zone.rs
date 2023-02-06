@@ -1,15 +1,18 @@
 #![allow(clippy::derive_partial_eq_without_eq)]
-
-use dioxus::core::to_owned;
 use dioxus::prelude::*;
-use dioxus_free_icons::icons::bs_icons::{BsCheck2, BsX};
-use dioxus_free_icons::Icon;
+use dioxus_free_icons::{
+    icons::bs_icons::{BsCheck2, BsX},
+    Icon,
+};
+use fermi::use_atom_ref;
 use gloo_timers::future::TimeoutFuture;
 use js_sys::Date;
 use uuid::Uuid;
 
-use crate::components::spinner::spinner;
-use crate::services::toast_service::{ToastCommand, TOASTS};
+use crate::{
+    components::spinner::spinner,
+    services::toast_service::{ToastCommand, TOASTS},
+};
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Toast {
@@ -39,8 +42,8 @@ pub enum ToastKind {
 
 #[inline_props]
 pub fn toast_zone(cx: Scope) -> Element {
-    let toasts_ref = use_atom_ref(&cx, TOASTS);
-    let toast_service = use_coroutine_handle::<ToastCommand>(&cx).unwrap();
+    let toasts_ref = use_atom_ref(cx, TOASTS);
+    let toast_service = use_coroutine_handle::<ToastCommand>(cx).unwrap();
 
     cx.render(rsx! {
         div {
@@ -72,9 +75,9 @@ fn toast<'a>(
     on_undo: Option<EventHandler<'a>>,
     on_close: EventHandler<'a>,
 ) -> Element {
-    let timeout_progress = use_state(&cx, || 100.0);
+    let timeout_progress = use_state(cx, || 100.0);
 
-    let timeout_future = use_future(&cx, (timeout,), |(timeout,)| {
+    let timeout_future = use_future(cx, (timeout,), |(timeout,)| {
         to_owned![timeout_progress];
         async move {
             if let Some(time) = timeout.flatten() {

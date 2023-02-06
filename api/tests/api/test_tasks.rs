@@ -19,7 +19,10 @@ use crate::helpers::{
         create_resource, create_resource_response, get_resource, get_resource_response,
         patch_resource_response,
     },
-    task::{list_tasks, todoist::todoist_item},
+    task::{
+        list_tasks,
+        todoist::{create_task_from_todoist_item, todoist_item},
+    },
     tested_app, TestedApp,
 };
 
@@ -64,21 +67,26 @@ mod create_task {
         let task = get_resource(&app.app_address, "tasks", creation_result.task.id.into()).await;
         assert_eq!(task, expected_minimal_task);
 
-        let notifications = list_notifications(
+        let result = list_notifications(
             &app.app_address,
             NotificationStatus::Unread,
             false,
             Some(creation_result.task.id),
+            true,
         )
         .await;
-        assert_eq!(notifications.len(), 1);
+        assert_eq!(result.notifications.len(), 1);
         assert_eq!(
-            notifications[0],
+            result.notifications[0],
             Notification {
                 id: created_notification.id,
-                ..(*task).into()
+                ..(*task).clone().into()
             }
         );
+        assert_eq!(result.notifications[0].task_id, Some(task.id));
+        let tasks_result = result.tasks.unwrap();
+        assert_eq!(tasks_result.len(), 1);
+        assert_eq!(tasks_result.get(&task.id), Some(&*task));
     }
 
     #[rstest]
@@ -115,14 +123,16 @@ mod create_task {
 
         assert_eq!(task, expected_task);
 
-        let notifications = list_notifications(
+        let result = list_notifications(
             &app.app_address,
             NotificationStatus::Unread,
             false,
             Some(creation_result.task.id),
+            true,
         )
         .await;
-        assert_eq!(notifications.len(), 0);
+        assert!(result.notifications.is_empty());
+        assert!(result.tasks.unwrap().is_empty());
     }
 
     #[rstest]
@@ -241,55 +251,17 @@ mod list_tasks {
     #[rstest]
     #[tokio::test]
     async fn test_list_tasks(#[future] tested_app: TestedApp, todoist_item: Box<TodoistItem>) {
-        let mut todoist_item_ = todoist_item.clone();
-        todoist_item_.id = "43".to_string();
-
         let app = tested_app.await;
-        let task_active: Box<TaskCreationResult> = create_resource(
-            &app.app_address,
-            "tasks",
-            Box::new(Task {
-                id: Uuid::new_v4().into(),
-                source_id: "1234".to_string(),
-                title: "task 1".to_string(),
-                body: "more details".to_string(),
-                status: TaskStatus::Active,
-                completed_at: None,
-                priority: TaskPriority::P4,
-                due_at: None,
-                source_html_url: "https://todoist.com/showTask?id=1234".parse::<Uri>().ok(),
-                tags: vec![],
-                parent_id: None,
-                project: "Inbox".to_string(),
-                is_recurring: false,
-                created_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-                metadata: TaskMetadata::Todoist(*todoist_item.clone()),
-            }),
-        )
-        .await;
+        let task_active = create_task_from_todoist_item(&app.app_address, &todoist_item).await;
+        assert_eq!(task_active.task.status, TaskStatus::Active);
 
-        let task_done: Box<TaskCreationResult> = create_resource(
-            &app.app_address,
-            "tasks",
-            Box::new(Task {
-                id: Uuid::new_v4().into(),
-                source_id: "5678".to_string(),
-                title: "task 2".to_string(),
-                body: "more details".to_string(),
-                status: TaskStatus::Done,
-                completed_at: Some(Utc.with_ymd_and_hms(2022, 1, 2, 0, 0, 0).unwrap()),
-                priority: TaskPriority::P4,
-                due_at: None,
-                source_html_url: "https://todoist.com/showTask?id=5678".parse::<Uri>().ok(),
-                tags: vec![],
-                parent_id: None,
-                project: "Inbox".to_string(),
-                is_recurring: false,
-                created_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-                metadata: TaskMetadata::Todoist(*todoist_item.clone()),
-            }),
-        )
-        .await;
+        let mut todoist_item_done = todoist_item.clone();
+        todoist_item_done.id = "5678".to_string();
+        todoist_item_done.checked = true;
+        todoist_item_done.completed_at = Some(Utc.with_ymd_and_hms(2022, 1, 2, 0, 0, 0).unwrap());
+
+        let task_done = create_task_from_todoist_item(&app.app_address, &todoist_item_done).await;
+        assert_eq!(task_done.task.status, TaskStatus::Done);
 
         let tasks = list_tasks(&app.app_address, TaskStatus::Active).await;
 
@@ -315,28 +287,7 @@ mod patch_task {
     ) {
         let app = tested_app.await;
 
-        let creation_result: Box<TaskCreationResult> = create_resource(
-            &app.app_address,
-            "tasks",
-            Box::new(Task {
-                id: Uuid::new_v4().into(),
-                source_id: "1234".to_string(),
-                title: "task 1".to_string(),
-                body: "more details".to_string(),
-                status: TaskStatus::Active,
-                completed_at: None,
-                priority: TaskPriority::P4,
-                due_at: None,
-                source_html_url: "https://todoist.com/showTask?id=1234".parse::<Uri>().ok(),
-                tags: vec![],
-                parent_id: None,
-                project: "Inbox".to_string(),
-                is_recurring: false,
-                created_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-                metadata: TaskMetadata::Todoist(*todoist_item.clone()),
-            }),
-        )
-        .await;
+        let creation_result = create_task_from_todoist_item(&app.app_address, &todoist_item).await;
 
         let response = patch_resource_response(
             &app.app_address,
@@ -344,6 +295,7 @@ mod patch_task {
             creation_result.task.id.into(),
             &TaskPatch {
                 status: Some(creation_result.task.status),
+                ..Default::default()
             },
         )
         .await;
@@ -358,28 +310,7 @@ mod patch_task {
         todoist_item: Box<TodoistItem>,
     ) {
         let app = tested_app.await;
-        let creation_result: Box<TaskCreationResult> = create_resource(
-            &app.app_address,
-            "tasks",
-            Box::new(Task {
-                id: Uuid::new_v4().into(),
-                source_id: "1234".to_string(),
-                title: "task 1".to_string(),
-                body: "more details".to_string(),
-                status: TaskStatus::Active,
-                completed_at: None,
-                priority: TaskPriority::P4,
-                due_at: None,
-                source_html_url: "https://todoist.com/showTask?id=1234".parse::<Uri>().ok(),
-                tags: vec![],
-                parent_id: None,
-                project: "Inbox".to_string(),
-                is_recurring: false,
-                created_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-                metadata: TaskMetadata::Todoist(*todoist_item.clone()),
-            }),
-        )
-        .await;
+        let creation_result = create_task_from_todoist_item(&app.app_address, &todoist_item).await;
 
         let response = patch_resource_response(
             &app.app_address,
@@ -418,6 +349,7 @@ mod patch_task {
             unknown_task_id,
             &TaskPatch {
                 status: Some(TaskStatus::Active),
+                ..Default::default()
             },
         )
         .await;

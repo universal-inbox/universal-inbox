@@ -1,26 +1,27 @@
-use dioxus::core::to_owned;
-use dioxus::events::MouseEvent;
-use dioxus::fermi::UseAtomRef;
-use dioxus::prelude::*;
-use dioxus_free_icons::icons::bs_icons::{
-    BsBellSlash, BsBookmark, BsCheck2, BsClockHistory, BsTrash,
+use dioxus::{events::MouseEvent, prelude::*};
+use dioxus_free_icons::{
+    icons::bs_icons::{BsBellSlash, BsBookmark, BsCheck2, BsClockHistory, BsTrash},
+    Icon,
 };
-use dioxus_free_icons::Icon;
+use fermi::UseAtomRef;
 
 use universal_inbox::notification::{Notification, NotificationMetadata};
 
-use super::icons::{github, todoist};
-use crate::services::notification_service::UniversalInboxUIModel;
+use crate::{
+    components::icons::{github, todoist},
+    services::notification_service::UniversalInboxUIModel,
+};
 
 #[inline_props]
 pub fn notifications_list<'a>(
     cx: Scope,
     notifications: Vec<Notification>,
-    ui_model_ref: &'a UseAtomRef<UniversalInboxUIModel>,
+    ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
     on_delete: EventHandler<'a, &'a Notification>,
     on_unsubscribe: EventHandler<'a, &'a Notification>,
     on_snooze: EventHandler<'a, &'a Notification>,
     on_complete_task: EventHandler<'a, &'a Notification>,
+    on_plan: EventHandler<'a, &'a Notification>,
 ) -> Element {
     let selected_notification_index = ui_model_ref.read().selected_notification_index;
 
@@ -41,6 +42,7 @@ pub fn notifications_list<'a>(
                             self::notification {
                                 notif: notif,
                                 selected: i == selected_notification_index,
+                                ui_model_ref: ui_model_ref,
 
                                 self::notification_button {
                                     title: "Delete notification",
@@ -57,7 +59,11 @@ pub fn notifications_list<'a>(
                                     onclick: |_| on_snooze.call(notif),
                                     Icon { class: "w-5 h-5" icon: BsClockHistory }
                                 },
-                                self::notification_button { title: "not yet implemented", Icon { class: "w-5 h-5" icon: BsBookmark } },
+                                self::notification_button {
+                                    title: "Create task",
+                                    onclick: |_| on_plan.call(notif),
+                                    Icon { class: "w-5 h-5" icon: BsBookmark }
+                                },
                             }
                         )),
 
@@ -65,6 +71,7 @@ pub fn notifications_list<'a>(
                             self::notification {
                                 notif: notif,
                                 selected: i == selected_notification_index,
+                                ui_model_ref: ui_model_ref,
 
                                 self::notification_button {
                                     title: "Delete task",
@@ -77,11 +84,16 @@ pub fn notifications_list<'a>(
                                     Icon { class: "w-5 h-5" icon: BsCheck2 }
                                 }
                                 self::notification_button {
-                                    title: "Snooze task",
+                                    title: "Snooze notification",
                                     onclick: |_| on_snooze.call(notif),
                                     Icon { class: "w-5 h-5" icon: BsClockHistory }
                                 },
-                                self::notification_button { title: "not yet implemented", Icon { class: "w-5 h-5" icon: BsBookmark } }                            }
+                                self::notification_button {
+                                    title: "Plan task",
+                                    onclick: |_| on_plan.call(notif),
+                                    Icon { class: "w-5 h-5" icon: BsBookmark }
+                                }
+                            }
                         ))
                     }
                 }
@@ -95,26 +107,29 @@ fn notification<'a>(
     cx: Scope,
     notif: &'a Notification,
     selected: bool,
+    ui_model_ref: &'a UseAtomRef<UniversalInboxUIModel>,
     children: Element<'a>,
 ) -> Element {
-    let is_hovered = use_state(&cx, || false);
-    let style = use_state(&cx, || "");
+    let is_hovered = use_state(cx, || false);
+    let style = use_state(cx, || "");
+    let unhover_element = ui_model_ref.read().unhover_element;
 
-    use_effect(&cx, (selected,), |(selected,)| {
-        to_owned![style];
-        async move {
-            style.set(if selected {
-                "dark:bg-dark-500 bg-light-200 drop-shadow-lg"
-            } else {
-                "dark:bg-dark-200 bg-light-0 hover:drop-shadow-lg"
-            });
-        }
+    use_memo(cx, (selected,), |(selected,)| {
+        style.set(if selected {
+            "dark:bg-dark-500 bg-light-200 drop-shadow-lg"
+        } else {
+            "dark:bg-dark-200 bg-light-0 hover:drop-shadow-lg"
+        });
     });
 
     cx.render(rsx!(
         td {
             class: "flex gap-2 h-10 items-center px-3 py-1 {style}",
-            // Buggy as of Dioxus 0.2
+            onmousemove: |_| {
+                if ui_model_ref.write_silent().set_unhover_element(false) {
+                    cx.needs_update();
+                }
+            },
             onmouseenter: |_| { is_hovered.set(true); },
             onmouseleave: |_| { is_hovered.set(false); },
 
@@ -130,7 +145,7 @@ fn notification<'a>(
                 rsx!(self::notification_display { notif: notif })
             },
 
-            (*selected || *is_hovered.get()).then(|| rsx!(
+            (*selected || (!unhover_element && *is_hovered.get())).then(|| rsx!(
                 children
             ))
         }
