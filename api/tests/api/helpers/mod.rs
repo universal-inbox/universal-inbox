@@ -117,7 +117,7 @@ pub async fn tested_app(
         .await
         .expect("Failed to bind address");
 
-    let _ = tokio::spawn(server);
+    tokio::spawn(server);
 
     TestedApp {
         app_address: format!("http://127.0.0.1:{}", port),
