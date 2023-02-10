@@ -1,8 +1,8 @@
 # Universal Inbox
 
 [![Apache 2 License](https://img.shields.io/badge/license-Apache%202-blue.svg)](https://www.apache.org/licenses/)
-[![Coverage Status](https://coveralls.io/repos/github/dax/universal-inbox/badge.svg?branch=main)](https://coveralls.io/github/dax/universal-inbox?branch=main)
-[![CI](https://github.com/dax/universal-inbox/workflows/CI/badge.svg)](https://github.com/dax/universal-inbox/actions)
+[![Coverage Status](https://coveralls.io/repos/github/universal-inbox/universal-inbox/badge.svg?branch=main)](https://coveralls.io/github/universal-inbox/universal-inbox?branch=main)
+[![CI](https://github.com/universal-inbox/universal-inbox/workflows/CI/badge.svg)](https://github.com/universal-inbox/universal-inbox/actions)
 
 Universal Inbox is ...
 
