@@ -2,19 +2,20 @@ use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use http::Uri;
-use sqlx::{types::Json, Postgres, QueryBuilder, Transaction};
+use sqlx::{postgres::PgRow, types::Json, FromRow, Postgres, QueryBuilder, Row, Transaction};
 use uuid::Uuid;
 
 use universal_inbox::{
     notification::{
         Notification, NotificationId, NotificationMetadata, NotificationPatch, NotificationStatus,
+        NotificationWithTask,
     },
     task::TaskId,
 };
 
 use crate::{
     integrations::notification::NotificationSourceKind,
-    repository::Repository,
+    repository::{task::TaskRow, Repository},
     universal_inbox::{UniversalInboxError, UpdateStatus},
 };
 
@@ -31,7 +32,7 @@ pub trait NotificationRepository {
         status: NotificationStatus,
         include_snoozed_notifications: bool,
         task_id: Option<TaskId>,
-    ) -> Result<Vec<Notification>, UniversalInboxError>;
+    ) -> Result<Vec<NotificationWithTask>, UniversalInboxError>;
     async fn create_notification<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -107,42 +108,60 @@ impl NotificationRepository for Repository {
         status: NotificationStatus,
         include_snoozed_notifications: bool,
         task_id: Option<TaskId>,
-    ) -> Result<Vec<Notification>, UniversalInboxError> {
+    ) -> Result<Vec<NotificationWithTask>, UniversalInboxError> {
         let mut query_builder = QueryBuilder::new(
             r#"
                 SELECT
-                  id,
-                  title,
-                  status,
-                  source_id,
-                  source_html_url,
-                  metadata,
-                  updated_at,
-                  last_read_at,
-                  snoozed_until,
-                  task_id,
-                  task_source_id
+                  notification.id as notification_id,
+                  notification.title as notification_title,
+                  notification.status as notification_status,
+                  notification.source_id as notification_source_id,
+                  notification.source_html_url as notification_source_html_url,
+                  notification.metadata as notification_metadata,
+                  notification.updated_at as notification_updated_at,
+                  notification.last_read_at as notification_last_read_at,
+                  notification.snoozed_until as notification_snoozed_until,
+                  notification.task_source_id as notification_task_source_id,
+                  task.id,
+                  task.source_id,
+                  task.title,
+                  task.body,
+                  task.status,
+                  task.completed_at,
+                  task.priority,
+                  task.due_at,
+                  task.source_html_url,
+                  task.tags,
+                  task.parent_id,
+                  task.project,
+                  task.is_recurring,
+                  task.created_at,
+                  task.metadata
                 FROM
                   notification
+                LEFT JOIN task ON task.id = notification.task_id
                 WHERE
-                  status =
+                  notification.status =
             "#,
         );
+
         query_builder.push_bind(status.to_string());
 
         if !include_snoozed_notifications {
             query_builder
-                .push(" AND (snoozed_until is NULL OR snoozed_until <=")
+                .push(" AND (notification.snoozed_until is NULL OR notification.snoozed_until <=")
                 .push_bind(Utc::now().naive_utc())
                 .push(")");
         }
 
         if let Some(id) = task_id {
-            query_builder.push(" AND task_id = ").push_bind(id.0);
+            query_builder
+                .push(" AND notification.task_id = ")
+                .push_bind(id.0);
         }
 
         let records = query_builder
-            .build_query_as::<NotificationRow>()
+            .build_query_as::<NotificationWithTaskRow>()
             .fetch_all(executor)
             .await
             .context("Failed to fetch notifications from storage")?;
@@ -549,6 +568,42 @@ struct NotificationRow {
     task_source_id: Option<String>,
 }
 
+#[derive(Debug)]
+struct NotificationWithTaskRow {
+    notification_id: Uuid,
+    notification_title: String,
+    notification_status: String,
+    notification_source_id: String,
+    notification_source_html_url: Option<String>,
+    notification_metadata: Json<NotificationMetadata>,
+    notification_updated_at: NaiveDateTime,
+    notification_last_read_at: Option<NaiveDateTime>,
+    notification_snoozed_until: Option<NaiveDateTime>,
+    task_row: Option<TaskRow>,
+    notification_task_source_id: Option<String>,
+}
+
+impl FromRow<'_, PgRow> for NotificationWithTaskRow {
+    fn from_row(row: &PgRow) -> sqlx::Result<Self> {
+        Ok(NotificationWithTaskRow {
+            notification_id: row.try_get("notification_id")?,
+            notification_title: row.try_get("notification_title")?,
+            notification_status: row.try_get("notification_status")?,
+            notification_source_id: row.try_get("notification_source_id")?,
+            notification_source_html_url: row.try_get("notification_source_html_url")?,
+            notification_metadata: row.try_get("notification_metadata")?,
+            notification_updated_at: row.try_get("notification_updated_at")?,
+            notification_last_read_at: row.try_get("notification_last_read_at")?,
+            notification_snoozed_until: row.try_get("notification_snoozed_until")?,
+            task_row: row
+                .try_get::<Option<Uuid>, &str>("id")?
+                .map(|_task_id| TaskRow::from_row(row))
+                .transpose()?,
+            notification_task_source_id: row.try_get("notification_task_source_id")?,
+        })
+    }
+}
+
 #[derive(Debug, sqlx::FromRow)]
 struct UpdatedNotificationRow {
     #[sqlx(flatten)]
@@ -603,6 +658,53 @@ impl TryFrom<&NotificationRow> for Notification {
                 .map(|snoozed_until| DateTime::<Utc>::from_utc(snoozed_until, Utc)),
             task_id: row.task_id.map(|task_id| task_id.into()),
             task_source_id: row.task_source_id.clone(),
+        })
+    }
+}
+
+impl TryFrom<&NotificationWithTaskRow> for NotificationWithTask {
+    type Error = UniversalInboxError;
+
+    fn try_from(row: &NotificationWithTaskRow) -> Result<Self, Self::Error> {
+        let status =
+            row.notification_status
+                .parse()
+                .map_err(|e| UniversalInboxError::InvalidEnumData {
+                    source: e,
+                    output: row.notification_status.clone(),
+                })?;
+        let source_html_url = row
+            .notification_source_html_url
+            .as_ref()
+            .map(|url| {
+                url.parse::<Uri>()
+                    .map_err(|e| UniversalInboxError::InvalidUriData {
+                        source: e,
+                        output: url.clone(),
+                    })
+            })
+            .transpose()?;
+
+        Ok(NotificationWithTask {
+            id: row.notification_id.into(),
+            title: row.notification_title.to_string(),
+            status,
+            source_id: row.notification_source_id.clone(),
+            source_html_url,
+            metadata: row.notification_metadata.0.clone(),
+            updated_at: DateTime::<Utc>::from_utc(row.notification_updated_at, Utc),
+            last_read_at: row
+                .notification_last_read_at
+                .map(|last_read_at| DateTime::<Utc>::from_utc(last_read_at, Utc)),
+            snoozed_until: row
+                .notification_snoozed_until
+                .map(|snoozed_until| DateTime::<Utc>::from_utc(snoozed_until, Utc)),
+            task: row
+                .task_row
+                .as_ref()
+                .map(|task_row| task_row.try_into())
+                .transpose()?,
+            task_source_id: row.notification_task_source_id.clone(),
         })
     }
 }

@@ -5,7 +5,7 @@ use serde_json::json;
 use uuid::Uuid;
 
 use universal_inbox::{
-    notification::{Notification, NotificationStatus},
+    notification::{NotificationStatus, NotificationWithTask},
     task::{
         integrations::todoist::TodoistItem, Task, TaskMetadata, TaskPatch, TaskPriority, TaskStatus,
     },
@@ -14,7 +14,7 @@ use universal_inbox::{
 use universal_inbox_api::universal_inbox::task::TaskCreationResult;
 
 use crate::helpers::{
-    notification::list_notifications,
+    notification::list_notifications_with_tasks,
     rest::{
         create_resource, create_resource_response, get_resource, get_resource_response,
         patch_resource_response,
@@ -67,26 +67,22 @@ mod create_task {
         let task = get_resource(&app.app_address, "tasks", creation_result.task.id.into()).await;
         assert_eq!(task, expected_minimal_task);
 
-        let result = list_notifications(
+        let result = list_notifications_with_tasks(
             &app.app_address,
             NotificationStatus::Unread,
             false,
             Some(creation_result.task.id),
-            true,
         )
         .await;
-        assert_eq!(result.notifications.len(), 1);
+        assert_eq!(result.len(), 1);
         assert_eq!(
-            result.notifications[0],
-            Notification {
+            result[0],
+            NotificationWithTask {
                 id: created_notification.id,
                 ..(*task).clone().into()
             }
         );
-        assert_eq!(result.notifications[0].task_id, Some(task.id));
-        let tasks_result = result.tasks.unwrap();
-        assert_eq!(tasks_result.len(), 1);
-        assert_eq!(tasks_result.get(&task.id), Some(&*task));
+        assert_eq!(result[0].task, Some(*task));
     }
 
     #[rstest]
@@ -123,16 +119,14 @@ mod create_task {
 
         assert_eq!(task, expected_task);
 
-        let result = list_notifications(
+        let result = list_notifications_with_tasks(
             &app.app_address,
             NotificationStatus::Unread,
             false,
             Some(creation_result.task.id),
-            true,
         )
         .await;
-        assert!(result.notifications.is_empty());
-        assert!(result.tasks.unwrap().is_empty());
+        assert!(result.is_empty());
     }
 
     #[rstest]
@@ -245,7 +239,7 @@ mod list_tasks {
         let app = tested_app.await;
         let tasks = list_tasks(&app.app_address, TaskStatus::Active).await;
 
-        assert_eq!(tasks.len(), 0);
+        assert!(tasks.is_empty());
     }
 
     #[rstest]

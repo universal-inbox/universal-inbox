@@ -1,10 +1,16 @@
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
+};
 
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use cached::proc_macro::cached;
 use format_serde_error::SerdeError;
-use http::{HeaderMap, HeaderValue};
+use http::{HeaderMap, HeaderValue, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
@@ -13,7 +19,7 @@ use universal_inbox::task::{
     integrations::todoist::{
         self, TodoistItem, TodoistItemDue, TodoistItemPriority, TodoistProject,
     },
-    Task, TaskMetadata, TaskPatch, TaskStatus,
+    Task, TaskCreation, TaskMetadata, TaskPatch, TaskStatus,
 };
 
 use crate::{
@@ -28,6 +34,7 @@ use crate::{
 pub struct TodoistService {
     client: reqwest::Client,
     pub todoist_sync_base_url: String,
+    pub projects_cache_index: Arc<AtomicU64>,
 }
 
 static TODOIST_SYNC_BASE_URL: &str = "https://api.todoist.com/sync/v9";
@@ -36,6 +43,12 @@ static APP_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_P
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 #[serde(tag = "type")]
 pub enum TodoistSyncCommand {
+    #[serde(rename = "item_add")]
+    ItemAdd {
+        uuid: Uuid,
+        temp_id: Uuid,
+        args: TodoistSyncCommandItemAddArgs,
+    },
     #[serde(rename = "item_delete")]
     ItemDelete {
         uuid: Uuid,
@@ -62,6 +75,15 @@ pub enum TodoistSyncCommand {
         temp_id: Uuid,
         args: TodoistSyncCommandProjectAddArgs,
     },
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct TodoistSyncCommandItemAddArgs {
+    pub content: String,
+    pub description: Option<String>,
+    pub project_id: String,
+    pub due: Option<TodoistItemDue>,
+    pub priority: TodoistItemPriority,
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
@@ -118,6 +140,11 @@ pub enum TodoistCommandStatus {
     Error { error_code: i32, error: String },
 }
 
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct TodoistItemInfoResponse {
+    pub item: TodoistItem,
+}
+
 impl TodoistService {
     pub fn new(
         auth_token: &str,
@@ -127,9 +154,11 @@ impl TodoistService {
             client: build_todoist_client(auth_token).context("Cannot build Todoist client")?,
             todoist_sync_base_url: todoist_sync_base_url
                 .unwrap_or_else(|| TODOIST_SYNC_BASE_URL.to_string()),
+            projects_cache_index: Arc::new(AtomicU64::new(0)),
         })
     }
 
+    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn sync_resources(
         &self,
         resource_name: &str,
@@ -161,6 +190,36 @@ impl TodoistService {
         sync_response.items.ok_or_else(|| {
             UniversalInboxError::Unexpected(anyhow!("Todoist response should include `items`"))
         })
+    }
+
+    #[tracing::instrument(level = "debug", skip(self), ret)]
+    pub async fn get_item(&self, id: &str) -> Result<Option<TodoistItem>, UniversalInboxError> {
+        let response = self
+            .client
+            .post(&format!("{}/items/get", self.todoist_sync_base_url))
+            .form(&[("item_id", id), ("all_data", "false")])
+            .send()
+            .await
+            .context(format!("Cannot get item {id} from Todoist API"))?;
+
+        if response.status() == StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+
+        let body = response
+            .error_for_status()
+            .context(format!("Cannot get item {id} from Todoist API"))?
+            .text()
+            .await
+            .context(format!(
+                "Failed to fetch item {id} response from Todoist API"
+            ))?;
+
+        let item_info: TodoistItemInfoResponse = serde_json::from_str(&body)
+            .map_err(|err| SerdeError::new(body.clone(), err))
+            .context(format!("Failed to parse response from Todoist: {}", body))?;
+
+        Ok(Some(item_info.item))
     }
 
     #[tracing::instrument(level = "debug", skip(self), ret)]
@@ -207,9 +266,73 @@ impl TodoistService {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self), ret)]
     pub async fn fetch_all_projects(&self) -> Result<Vec<TodoistProject>, UniversalInboxError> {
         cached_fetch_all_projects(self).await
+    }
+
+    async fn get_or_create_project_id(
+        &self,
+        project_name: &str,
+    ) -> Result<String, UniversalInboxError> {
+        let projects = self.fetch_all_projects().await?;
+        if let Some(id) = projects
+            .iter()
+            .find(|project| project.name == *project_name)
+            .map(|project| project.id.clone())
+        {
+            Ok(id)
+        } else {
+            let command_id = Uuid::new_v4();
+            let response = self
+                .send_sync_commands(vec![TodoistSyncCommand::ProjectAdd {
+                    uuid: command_id,
+                    temp_id: Uuid::new_v4(),
+                    args: TodoistSyncCommandProjectAddArgs {
+                        name: project_name.to_string(),
+                    },
+                }])
+                .await?;
+            self.projects_cache_index.fetch_add(1, Ordering::Relaxed);
+
+            Ok(response
+                .temp_id_mapping
+                .values()
+                .next()
+                .context("Cannot find newly added project's ID".to_string())?
+                .to_string())
+        }
+    }
+
+    pub async fn build_task_with_project_name(
+        source: &TodoistItem,
+        project_name: String,
+    ) -> Box<Task> {
+        Box::new(Task {
+            id: Uuid::new_v4().into(),
+            source_id: source.id.clone(),
+            title: source.content.clone(),
+            body: source.description.clone(),
+            status: if source.checked {
+                TaskStatus::Done
+            } else {
+                TaskStatus::Active
+            },
+            completed_at: source.completed_at,
+            priority: source.priority.into(),
+            due_at: source.due.as_ref().map(|due| due.into()),
+            source_html_url: todoist::get_task_html_url(&source.id),
+            tags: source.labels.clone(),
+            parent_id: None, // Unsupported for now
+            project: project_name,
+            is_recurring: source
+                .due
+                .as_ref()
+                .map(|due| due.is_recurring)
+                .unwrap_or(false),
+            created_at: source.added_at,
+            metadata: TaskMetadata::Todoist(source.clone()),
+        })
     }
 }
 
@@ -219,7 +342,7 @@ impl TodoistService {
     size = 1,
     time = 600,
     key = "String",
-    convert = r#"{ service.todoist_sync_base_url.clone() }"#
+    convert = r#"{ format!("{}{}", service.projects_cache_index.load(Ordering::Relaxed), service.todoist_sync_base_url.clone()) }"#
 )]
 async fn cached_fetch_all_projects(
     service: &TodoistService,
@@ -246,10 +369,20 @@ fn build_todoist_client(auth_token: &str) -> Result<reqwest::Client, reqwest::Er
 
 #[async_trait]
 impl TaskSourceService<TodoistItem> for TodoistService {
+    #[tracing::instrument(level = "debug", skip(self))]
     async fn fetch_all_tasks(&self) -> Result<Vec<TodoistItem>, UniversalInboxError> {
         self.sync_items().await
     }
 
+    #[tracing::instrument(level = "debug", skip(self))]
+    async fn fetch_task(
+        &self,
+        source_id: &str,
+    ) -> Result<Option<TodoistItem>, UniversalInboxError> {
+        self.get_item(source_id).await
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
     async fn build_task(&self, source: &TodoistItem) -> Result<Box<Task>, UniversalInboxError> {
         let projects = self.fetch_all_projects().await?;
         let project_name = projects
@@ -263,34 +396,46 @@ impl TaskSourceService<TodoistItem> for TodoistService {
                 ))
             })?;
 
-        Ok(Box::new(Task {
-            id: Uuid::new_v4().into(),
-            source_id: source.id.clone(),
-            title: source.content.clone(),
-            body: source.description.clone(),
-            status: if source.checked {
-                TaskStatus::Done
-            } else {
-                TaskStatus::Active
-            },
-            completed_at: source.completed_at,
-            priority: source.priority.into(),
-            due_at: source.due.as_ref().map(|due| due.into()),
-            source_html_url: todoist::get_task_html_url(&source.id),
-            tags: source.labels.clone(),
-            parent_id: None, // Unsupported for now
-            project: project_name,
-            is_recurring: source
-                .due
-                .as_ref()
-                .map(|due| due.is_recurring)
-                .unwrap_or(false),
-            created_at: source.added_at,
-            metadata: TaskMetadata::Todoist(source.clone()),
-        }))
+        Ok(TodoistService::build_task_with_project_name(source, project_name).await)
     }
 
-    async fn delete_task_from_source(
+    #[tracing::instrument(level = "debug", skip(self))]
+    async fn create_task(&self, task: &TaskCreation) -> Result<TodoistItem, UniversalInboxError> {
+        let project_id = self
+            .get_or_create_project_id(&task.project.to_string())
+            .await?;
+        let sync_result = self
+            .send_sync_commands(vec![TodoistSyncCommand::ItemAdd {
+                uuid: Uuid::new_v4(),
+                temp_id: Uuid::new_v4(),
+                args: TodoistSyncCommandItemAddArgs {
+                    content: task.title.clone(),
+                    description: task.body.clone(),
+                    project_id,
+                    due: task.due_at.as_ref().map(|due| due.into()),
+                    priority: task.priority.into(),
+                },
+            }])
+            .await?;
+
+        let task = self
+            .fetch_task(
+                &sync_result
+                    .temp_id_mapping
+                    .values()
+                    .next()
+                    .context("Cannot find newly created task's ID".to_string())?
+                    .to_string(),
+            )
+            .await?;
+
+        task.ok_or_else(|| {
+            UniversalInboxError::Unexpected(anyhow!("Failed to find newly created task on Todoist"))
+        })
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    async fn delete_task(
         &self,
         id: &str,
     ) -> Result<TodoistSyncStatusResponse, UniversalInboxError> {
@@ -301,7 +446,8 @@ impl TaskSourceService<TodoistItem> for TodoistService {
         .await
     }
 
-    async fn complete_task_from_source(
+    #[tracing::instrument(level = "debug", skip(self))]
+    async fn complete_task(
         &self,
         id: &str,
     ) -> Result<TodoistSyncStatusResponse, UniversalInboxError> {
@@ -312,6 +458,7 @@ impl TaskSourceService<TodoistItem> for TodoistService {
         .await
     }
 
+    #[tracing::instrument(level = "debug", skip(self))]
     async fn update_task(
         &self,
         id: &str,
@@ -319,31 +466,7 @@ impl TaskSourceService<TodoistItem> for TodoistService {
     ) -> Result<Option<TodoistSyncStatusResponse>, UniversalInboxError> {
         let mut commands: Vec<TodoistSyncCommand> = vec![];
         if let Some(ref project_name) = patch.project {
-            let projects = self.fetch_all_projects().await?;
-            let project_id = if let Some(id) = projects
-                .iter()
-                .find(|project| project.name == *project_name)
-                .map(|project| project.id.clone())
-            {
-                id
-            } else {
-                let command_id = Uuid::new_v4();
-                let response = self
-                    .send_sync_commands(vec![TodoistSyncCommand::ProjectAdd {
-                        uuid: command_id,
-                        temp_id: Uuid::new_v4(),
-                        args: TodoistSyncCommandProjectAddArgs {
-                            name: project_name.to_string(),
-                        },
-                    }])
-                    .await?;
-                response
-                    .temp_id_mapping
-                    .values()
-                    .next()
-                    .context("Cannot find newly added project's ID".to_string())?
-                    .to_string()
-            };
+            let project_id = self.get_or_create_project_id(project_name).await?;
             commands.push(TodoistSyncCommand::ItemMove {
                 uuid: Uuid::new_v4(),
                 args: TodoistSyncCommandItemMoveArgs {

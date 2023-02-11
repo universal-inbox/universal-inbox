@@ -8,9 +8,10 @@ use serde_json::json;
 use tokio::sync::RwLock;
 
 use universal_inbox::{
-    notification::{Notification, NotificationId, NotificationPatch, NotificationStatus},
-    task::TaskId,
-    NotificationsListResult,
+    notification::{
+        Notification, NotificationId, NotificationPatch, NotificationStatus, NotificationWithTask,
+    },
+    task::{TaskCreation, TaskId},
 };
 
 use crate::{
@@ -38,6 +39,11 @@ pub fn scope() -> Scope {
                 .route(web::patch().to(patch_notification))
                 .route(web::method(http::Method::OPTIONS).to(option_wildcard)),
         )
+        .service(
+            web::resource("/{notification_id}/task")
+                .route(web::post().to(create_task_from_notification))
+                .route(web::method(http::Method::OPTIONS).to(option_wildcard)),
+        )
 }
 
 #[derive(Debug, Deserialize)]
@@ -45,7 +51,6 @@ pub struct ListNotificationRequest {
     status: NotificationStatus,
     include_snoozed_notifications: Option<bool>,
     task_id: Option<TaskId>,
-    with_tasks: Option<bool>,
 }
 
 #[tracing::instrument(level = "debug", skip(notification_service))]
@@ -58,7 +63,7 @@ pub async fn list_notifications(
         .begin()
         .await
         .context("Failed to create new transaction while listing notifications")?;
-    let result: NotificationsListResult = service
+    let result: Vec<NotificationWithTask> = service
         .list_notifications(
             &mut transaction,
             list_notification_request.status,
@@ -66,7 +71,6 @@ pub async fn list_notifications(
                 .include_snoozed_notifications
                 .unwrap_or(false),
             list_notification_request.task_id,
-            list_notification_request.with_tasks.unwrap_or(false),
         )
         .await?;
 
@@ -203,4 +207,31 @@ pub async fn patch_notification(
                 .to_string(),
             ))),
     }
+}
+
+#[tracing::instrument(level = "debug", skip(notification_service))]
+pub async fn create_task_from_notification(
+    path: web::Path<NotificationId>,
+    task_creation: web::Json<TaskCreation>,
+    notification_service: web::Data<Arc<RwLock<NotificationService>>>,
+) -> Result<HttpResponse, UniversalInboxError> {
+    let notification_id = path.into_inner();
+    let task_creation = task_creation.into_inner();
+    let service = notification_service.read().await;
+    let mut transaction = service
+        .begin()
+        .await
+        .context(format!("Failed to create task from {notification_id}"))?;
+
+    let notification_with_task = service
+        .create_task_from_notification(&mut transaction, notification_id, &task_creation)
+        .await?;
+
+    transaction.commit().await.context(format!(
+        "Failed to commit while creating task from notification {notification_id}"
+    ))?;
+
+    Ok(HttpResponse::Ok().content_type("application/json").body(
+        serde_json::to_string(&notification_with_task).context("Cannot serialize created task")?,
+    ))
 }

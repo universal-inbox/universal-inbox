@@ -1,25 +1,20 @@
 use dioxus::prelude::*;
 use fermi::use_atom_ref;
 
-use universal_inbox::{notification::Notification, task::Task};
+use universal_inbox::notification::NotificationWithTask;
 
 use crate::{
     components::{notifications_list::notifications_list, task_planning::task_planning_modal},
-    services::{
-        notification_service::{NotificationCommand, NOTIFICATIONS, UI_MODEL},
-        task_service::TASKS,
-    },
+    services::notification_service::{NotificationCommand, NOTIFICATIONS, UI_MODEL},
 };
 
 pub fn notifications_page(cx: Scope) -> Element {
     let notifications_ref = use_atom_ref(cx, NOTIFICATIONS);
-    let tasks_ref = use_atom_ref(cx, TASKS);
     let ui_model_ref = use_atom_ref(cx, UI_MODEL);
 
     let notification_service = use_coroutine_handle::<NotificationCommand>(cx).unwrap();
 
-    let selected_notification: &UseState<Option<Notification>> = use_state(cx, || None);
-    let associated_task: &UseState<Option<Task>> = use_state(cx, || None);
+    let notification_to_plan: &UseState<Option<NotificationWithTask>> = use_state(cx, || None);
 
     use_future(cx, (), |()| {
         to_owned![notification_service];
@@ -33,16 +28,10 @@ pub fn notifications_page(cx: Scope) -> Element {
         &(
             ui_model_ref.read().selected_notification_index,
             notifications_ref.read().clone(),
-            tasks_ref.read().clone(),
         ),
-        |(selected_notification_index, notifications, tasks)| {
+        |(selected_notification_index, notifications)| {
             if let Some(notification) = notifications.get(selected_notification_index) {
-                selected_notification.set(Some(notification.clone()));
-                associated_task.set(
-                    notification
-                        .task_id
-                        .and_then(|task_id| tasks.get(&task_id).cloned()),
-                );
+                notification_to_plan.set(Some(notification.clone()));
             }
         },
     );
@@ -57,44 +46,45 @@ pub fn notifications_page(cx: Scope) -> Element {
                 self::notifications_list {
                     notifications: notifications_ref.read().clone(),
                     ui_model_ref: ui_model_ref.clone(),
-                    on_delete: |notification: &Notification| {
+                    on_delete: |notification: &NotificationWithTask| {
                         notification_service.send(NotificationCommand::DeleteFromNotification(notification.clone()));
                     },
-                    on_unsubscribe: |notification: &Notification| {
+                    on_unsubscribe: |notification: &NotificationWithTask| {
                         notification_service.send(NotificationCommand::Unsubscribe(notification.id))
                     },
-                    on_snooze: |notification: &Notification| {
+                    on_snooze: |notification: &NotificationWithTask| {
                         notification_service.send(NotificationCommand::Snooze(notification.id))
                     },
-                    on_complete_task: |notification: &Notification| {
+                    on_complete_task: |notification: &NotificationWithTask| {
                         notification_service.send(NotificationCommand::CompleteTaskFromNotification(notification.clone()));
                     }
-                    on_plan: |notification: &Notification| {
-                        if let Some(task_id) = notification.task_id {
-                            if let Some(task) = tasks_ref.read().get(&task_id) {
-                                ui_model_ref.write().task_planning_modal_opened = true;
-                                associated_task.set(Some(task.clone()));
-                            }
-                        }
+                    on_plan: |notification: &NotificationWithTask| {
+                        notification_to_plan.set(Some(notification.clone()));
+                        ui_model_ref.write().task_planning_modal_opened = true;
                     }
                 }
             }
         }
 
         ui_model_ref.read().task_planning_modal_opened.then(|| {
-            associated_task.as_ref().map(|associated_task| {
+            notification_to_plan.as_ref().map(|notification_to_plan| {
                 rsx!{
                     task_planning_modal {
-                        task: associated_task.clone(),
+                        notification_to_plan: notification_to_plan.clone(),
                         on_close: |_| { ui_model_ref.write().task_planning_modal_opened = false; },
-                        on_submit: |params| {
+                        on_task_planning: |(params, task_id)| {
                             ui_model_ref.write().task_planning_modal_opened = false;
-                            notification_service.send(
-                                NotificationCommand::PlanTask(
-                                    selected_notification.as_ref().unwrap().clone(),
+                            notification_service.send(NotificationCommand::PlanTask(
+                                    notification_to_plan.clone(),
+                                    task_id,
                                     params
-                                )
-                            );
+                                ));
+                        },
+                        on_task_creation: |params| {
+                            ui_model_ref.write().task_planning_modal_opened = false;
+                            notification_service.send(NotificationCommand::CreateTaskFromNotification(
+                                notification_to_plan.clone(),
+                                params));
                         },
                     }
                 }

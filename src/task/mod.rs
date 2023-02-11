@@ -1,5 +1,5 @@
 use std::{
-    fmt::{self, Display},
+    fmt::{self, Display, Formatter},
     str::FromStr,
 };
 
@@ -11,7 +11,9 @@ use serde_repr::{Deserialize_repr, Serialize_repr};
 use serde_with::{serde_as, DisplayFromStr};
 use uuid::Uuid;
 
-use crate::notification::{Notification, NotificationMetadata, NotificationStatus};
+use crate::notification::{
+    Notification, NotificationMetadata, NotificationStatus, NotificationWithTask,
+};
 
 use self::integrations::todoist::TodoistItem;
 
@@ -130,6 +132,51 @@ pub struct TaskPatch {
     pub priority: Option<TaskPriority>,
 }
 
+#[derive(Serialize, Deserialize, Debug, Default, PartialEq, Eq, Clone)]
+pub struct TaskCreation {
+    pub title: String,
+    pub body: Option<String>,
+    pub project: TaskProject,
+    pub due_at: Option<DueDate>,
+    pub priority: TaskPriority,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+pub struct TaskPlanning {
+    pub project: TaskProject,
+    pub due_at: Option<DueDate>,
+    pub priority: TaskPriority,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct TaskProject(String);
+
+impl Display for TaskProject {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl FromStr for TaskProject {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        if value.is_empty() {
+            Err("Task's project is required".to_string())
+        } else if value == "Inbox" {
+            Err("Task's project must be moved out of the inbox".to_string())
+        } else {
+            Ok(TaskProject(value.to_string()))
+        }
+    }
+}
+
+impl Default for TaskProject {
+    fn default() -> Self {
+        TaskProject("Inbox".to_string())
+    }
+}
+
 #[derive(
     Serialize_repr,
     Deserialize_repr,
@@ -163,6 +210,12 @@ impl FromStr for TaskPriority {
     }
 }
 
+impl Default for TaskPriority {
+    fn default() -> Self {
+        TaskPriority::P4
+    }
+}
+
 impl From<Task> for Notification {
     fn from(task: Task) -> Self {
         (&task).into()
@@ -184,6 +237,32 @@ impl From<&Task> for Notification {
             last_read_at: None,
             snoozed_until: None,
             task_id: Some(task.id),
+            task_source_id: Some(task.source_id.clone()),
+        }
+    }
+}
+
+impl From<Task> for NotificationWithTask {
+    fn from(task: Task) -> Self {
+        (&task).into()
+    }
+}
+
+impl From<&Task> for NotificationWithTask {
+    fn from(task: &Task) -> Self {
+        NotificationWithTask {
+            id: Uuid::new_v4().into(),
+            title: task.title.clone(),
+            source_id: task.source_id.clone(),
+            source_html_url: task.source_html_url.clone(),
+            status: NotificationStatus::Unread,
+            metadata: match task.metadata {
+                TaskMetadata::Todoist(_) => NotificationMetadata::Todoist,
+            },
+            updated_at: task.created_at,
+            last_read_at: None,
+            snoozed_until: None,
+            task: Some(task.clone()),
             task_source_id: Some(task.source_id.clone()),
         }
     }

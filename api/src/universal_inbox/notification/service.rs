@@ -1,5 +1,4 @@
 use std::{
-    collections::HashMap,
     fmt::Debug,
     sync::{Arc, Weak},
 };
@@ -11,9 +10,9 @@ use tokio::sync::RwLock;
 use universal_inbox::{
     notification::{
         Notification, NotificationId, NotificationMetadata, NotificationPatch, NotificationStatus,
+        NotificationWithTask,
     },
-    task::{TaskId, TaskPatch, TaskStatus},
-    NotificationsListResult,
+    task::{TaskCreation, TaskId, TaskPatch, TaskStatus},
 };
 
 use crate::{
@@ -85,35 +84,10 @@ impl NotificationService {
         status: NotificationStatus,
         include_snoozed_notifications: bool,
         task_id: Option<TaskId>,
-        load_tasks: bool,
-    ) -> Result<NotificationsListResult, UniversalInboxError> {
-        let notifications = self
-            .repository
+    ) -> Result<Vec<NotificationWithTask>, UniversalInboxError> {
+        self.repository
             .fetch_all_notifications(executor, status, include_snoozed_notifications, task_id)
-            .await?;
-
-        let tasks = if load_tasks {
-            let task_ids_to_load: Vec<TaskId> =
-                notifications.iter().flat_map(|n| n.task_id).collect();
-            let loaded_tasks = self
-                .task_service
-                .upgrade()
-                .context("Unable to access task_service from notification_service")?
-                .read()
-                .await
-                .get_tasks(executor, task_ids_to_load)
-                .await?;
-            Some(HashMap::from_iter(
-                loaded_tasks.into_iter().map(|t| (t.id, t)),
-            ))
-        } else {
-            None
-        };
-
-        Ok(NotificationsListResult {
-            notifications,
-            tasks,
-        })
+            .await
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
@@ -227,11 +201,11 @@ impl NotificationService {
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
-    pub async fn patch_notification<'a>(
+    pub async fn patch_notification<'a, 'b>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
         notification_id: NotificationId,
-        patch: &'a NotificationPatch,
+        patch: &'b NotificationPatch,
     ) -> Result<UpdateStatus<Box<Notification>>, UniversalInboxError> {
         let updated_notification = self
             .repository
@@ -297,5 +271,40 @@ impl NotificationService {
         self.repository
             .update_notifications_for_task(executor, task_id, notification_kind, patch)
             .await
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    pub async fn create_task_from_notification<'a, 'b>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        notification_id: NotificationId,
+        task_creation: &'b TaskCreation,
+    ) -> Result<Option<NotificationWithTask>, UniversalInboxError> {
+        let delete_patch = NotificationPatch {
+            status: Some(NotificationStatus::Deleted),
+            ..Default::default()
+        };
+        let updated_notification = self
+            .patch_notification(executor, notification_id, &delete_patch)
+            .await?;
+
+        if let UpdateStatus {
+            updated: true,
+            result: Some(ref notification),
+        } = updated_notification
+        {
+            let task = self
+                .task_service
+                .upgrade()
+                .context("Unable to access task_service from notification_service")?
+                .read()
+                .await
+                .create_task_from_notification(executor, task_creation, notification)
+                .await?;
+
+            return Ok(Some(NotificationWithTask::build(notification, Some(*task))));
+        }
+
+        Ok(None)
     }
 }

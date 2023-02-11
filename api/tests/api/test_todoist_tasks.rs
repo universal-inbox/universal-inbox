@@ -2,22 +2,31 @@ use chrono::NaiveDate;
 use rstest::*;
 
 use universal_inbox::{
-    notification::{Notification, NotificationStatus},
+    notification::{
+        integrations::github::GithubNotification, Notification, NotificationStatus,
+        NotificationWithTask,
+    },
     task::{
         integrations::todoist::{TodoistItem, TodoistItemDue, TodoistItemPriority},
-        DueDate, Task, TaskPatch, TaskPriority, TaskStatus,
+        DueDate, Task, TaskCreation, TaskPatch, TaskPriority, TaskProject, TaskStatus,
     },
 };
 
 use universal_inbox_api::integrations::todoist::{
-    TodoistSyncCommandItemMoveArgs, TodoistSyncCommandItemUpdateArgs, TodoistSyncResponse,
+    TodoistService, TodoistSyncCommandItemMoveArgs, TodoistSyncCommandItemUpdateArgs,
+    TodoistSyncResponse,
 };
 
 use crate::helpers::{
+    notification::{
+        create_task_from_notification,
+        github::{create_notification_from_github_notification, github_notification},
+    },
     rest::{get_resource, patch_resource},
     task::todoist::{
         create_task_from_todoist_item, mock_todoist_complete_item_service,
-        mock_todoist_delete_item_service, mock_todoist_sync_project_add,
+        mock_todoist_delete_item_service, mock_todoist_get_item_service,
+        mock_todoist_item_add_service, mock_todoist_sync_project_add,
         mock_todoist_sync_resources_service, mock_todoist_sync_service,
         sync_todoist_projects_response, todoist_item, TodoistSyncPartialCommand,
     },
@@ -212,6 +221,95 @@ mod patch_task {
             existing_todoist_notification.id.into(),
         )
         .await;
+        assert_eq!(deleted_notification.status, NotificationStatus::Deleted);
+    }
+
+    // Cannot test project creation as it will fetch projects more than once
+    // and httpmock does not support mocking the same URL with different results
+    #[rstest]
+    #[tokio::test]
+    async fn test_create_todoist_task_from_notification(
+        #[future] tested_app: TestedApp,
+        github_notification: Box<GithubNotification>,
+        sync_todoist_projects_response: TodoistSyncResponse,
+        todoist_item: Box<TodoistItem>,
+    ) {
+        let app = tested_app.await;
+
+        let notification =
+            create_notification_from_github_notification(&app.app_address, &github_notification)
+                .await;
+        // Existing project in sync_todoist_projects_response
+        let project = "Project2".to_string();
+        let project_id = "2222".to_string();
+        let todoist_item = Box::new(TodoistItem {
+            project_id: project_id.clone(),
+            ..(*todoist_item).clone()
+        });
+        let due_at: Option<DueDate> = todoist_item.due.as_ref().map(|due| due.into());
+        let body = Some(format!(
+            "- [{}]({})",
+            notification.title,
+            notification.source_html_url.as_ref().unwrap()
+        ));
+
+        let todoist_projects_mock = mock_todoist_sync_resources_service(
+            &app.todoist_mock_server,
+            "projects",
+            &sync_todoist_projects_response,
+        );
+        let todoist_item_add_mock = mock_todoist_item_add_service(
+            &app.todoist_mock_server,
+            &todoist_item.id,
+            todoist_item.content.clone(),
+            body.clone(),
+            todoist_item.project_id.clone(),
+            due_at.as_ref().map(|due_at| due_at.into()),
+            todoist_item.priority,
+        );
+        let todoist_get_item_mock =
+            mock_todoist_get_item_service(&app.todoist_mock_server, todoist_item.clone());
+
+        let notification_with_task = create_task_from_notification(
+            &app.app_address,
+            notification.id,
+            &TaskCreation {
+                title: todoist_item.content.clone(),
+                body,
+                project: project.parse::<TaskProject>().unwrap(),
+                due_at,
+                priority: todoist_item.priority.into(),
+            },
+        )
+        .await;
+
+        todoist_projects_mock.assert();
+        todoist_item_add_mock.assert();
+        todoist_get_item_mock.assert();
+
+        let new_task_id = notification_with_task
+            .as_ref()
+            .unwrap()
+            .task
+            .as_ref()
+            .unwrap()
+            .id;
+        assert_eq!(
+            notification_with_task,
+            Some(NotificationWithTask::build(
+                &Notification {
+                    status: NotificationStatus::Deleted,
+                    ..*notification
+                },
+                Some(Task {
+                    id: new_task_id,
+                    ..*TodoistService::build_task_with_project_name(&todoist_item, project).await
+                })
+            ))
+        );
+
+        let deleted_notification: Box<Notification> =
+            get_resource(&app.app_address, "notifications", notification.id.into()).await;
         assert_eq!(deleted_notification.status, NotificationStatus::Deleted);
     }
 }
