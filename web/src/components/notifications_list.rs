@@ -5,7 +5,7 @@ use dioxus_free_icons::{
 };
 use fermi::UseAtomRef;
 
-use universal_inbox::notification::{Notification, NotificationMetadata};
+use universal_inbox::notification::{NotificationMetadata, NotificationWithTask};
 
 use crate::{
     components::icons::{github, todoist},
@@ -15,13 +15,13 @@ use crate::{
 #[inline_props]
 pub fn notifications_list<'a>(
     cx: Scope,
-    notifications: Vec<Notification>,
+    notifications: Vec<NotificationWithTask>,
     ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
-    on_delete: EventHandler<'a, &'a Notification>,
-    on_unsubscribe: EventHandler<'a, &'a Notification>,
-    on_snooze: EventHandler<'a, &'a Notification>,
-    on_complete_task: EventHandler<'a, &'a Notification>,
-    on_plan: EventHandler<'a, &'a Notification>,
+    on_delete: EventHandler<'a, &'a NotificationWithTask>,
+    on_unsubscribe: EventHandler<'a, &'a NotificationWithTask>,
+    on_snooze: EventHandler<'a, &'a NotificationWithTask>,
+    on_complete_task: EventHandler<'a, &'a NotificationWithTask>,
+    on_plan: EventHandler<'a, &'a NotificationWithTask>,
 ) -> Element {
     let selected_notification_index = ui_model_ref.read().selected_notification_index;
 
@@ -105,7 +105,7 @@ pub fn notifications_list<'a>(
 #[inline_props]
 fn notification<'a>(
     cx: Scope,
-    notif: &'a Notification,
+    notif: &'a NotificationWithTask,
     selected: bool,
     ui_model_ref: &'a UseAtomRef<UniversalInboxUIModel>,
     children: Element<'a>,
@@ -153,7 +153,7 @@ fn notification<'a>(
 }
 
 #[inline_props]
-fn notification_display<'a>(cx: Scope, notif: &'a Notification) -> Element {
+fn notification_display<'a>(cx: Scope, notif: &'a NotificationWithTask) -> Element {
     let icon = match notif.metadata {
         NotificationMetadata::Github(_) => cx.render(rsx!(self::github {})),
         NotificationMetadata::Todoist => cx.render(rsx!(self::todoist {})),

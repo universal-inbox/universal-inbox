@@ -4,19 +4,20 @@ use chrono::{DateTime, Duration, Local, TimeZone, Timelike, Utc};
 use dioxus::prelude::*;
 use fermi::{AtomRef, UseAtomRef};
 use futures_util::StreamExt;
-use log::{debug, error};
+use log::debug;
 
 use universal_inbox::{
-    notification::{Notification, NotificationId, NotificationPatch, NotificationStatus},
-    task::TaskId,
-    NotificationsListResult,
+    notification::{
+        Notification, NotificationId, NotificationPatch, NotificationStatus, NotificationWithTask,
+    },
+    task::{TaskCreation, TaskId, TaskPlanning},
 };
 
 use crate::{
     components::toast_zone::{Toast, ToastKind},
     services::{
         api::{call_api, call_api_and_notify},
-        task_service::{TaskCommand, TaskPlanningParameters},
+        task_service::TaskCommand,
         toast_service::{ToastCommand, ToastUpdate},
     },
 };
@@ -24,11 +25,12 @@ use crate::{
 #[derive(Debug)]
 pub enum NotificationCommand {
     Refresh,
-    DeleteFromNotification(Notification),
+    DeleteFromNotification(NotificationWithTask),
     Unsubscribe(NotificationId),
     Snooze(NotificationId),
-    CompleteTaskFromNotification(Notification),
-    PlanTask(Notification, TaskPlanningParameters),
+    CompleteTaskFromNotification(NotificationWithTask),
+    PlanTask(NotificationWithTask, TaskId, TaskPlanning),
+    CreateTaskFromNotification(NotificationWithTask, TaskCreation),
 }
 
 #[derive(Debug, Default)]
@@ -53,12 +55,12 @@ impl UniversalInboxUIModel {
     }
 }
 
-pub static NOTIFICATIONS: AtomRef<Vec<Notification>> = |_| vec![];
+pub static NOTIFICATIONS: AtomRef<Vec<NotificationWithTask>> = |_| vec![];
 pub static UI_MODEL: AtomRef<UniversalInboxUIModel> = |_| Default::default();
 
 pub async fn notification_service<'a>(
     mut rx: UnboundedReceiver<NotificationCommand>,
-    notifications: UseAtomRef<Vec<Notification>>,
+    notifications: UseAtomRef<Vec<NotificationWithTask>>,
     task_service: Coroutine<TaskCommand>,
     toast_service: Coroutine<ToastCommand>,
 ) {
@@ -74,7 +76,7 @@ pub async fn notification_service<'a>(
                 let toast_id = toast.id;
                 toast_service.send(ToastCommand::Push(toast));
 
-                let result: NotificationsListResult = call_api(
+                let result: Vec<NotificationWithTask> = call_api(
                     "GET",
                     "/notifications?status=Unread&with_tasks=true",
                     HashMap::new(),
@@ -82,13 +84,8 @@ pub async fn notification_service<'a>(
                 .await
                 .unwrap();
 
-                debug!("{} notifications loaded", result.notifications.len());
-                notifications.write().extend(result.notifications);
-                if let Some(tasks) = result.tasks {
-                    task_service.send(TaskCommand::UpdateTasks(tasks));
-                } else {
-                    error!("No tasks in notifications list result");
-                }
+                debug!("{} notifications loaded", result.len());
+                notifications.write().extend(result);
 
                 let toast_update = ToastUpdate {
                     id: toast_id,
@@ -99,9 +96,9 @@ pub async fn notification_service<'a>(
                 toast_service.send(ToastCommand::Update(toast_update));
             }
             Some(NotificationCommand::DeleteFromNotification(notification)) => {
-                if let Some(task_id) = notification.task_id {
+                if let Some(ref task) = notification.task {
                     if notification.is_built_from_task() {
-                        delete_task(notification.id, task_id, &notifications, &task_service).await;
+                        delete_task(notification.id, task.id, &notifications, &task_service).await;
                     } else {
                         delete_notification(notification.id, &notifications, &toast_service).await;
                     }
@@ -152,22 +149,39 @@ pub async fn notification_service<'a>(
                 .unwrap();
             }
             Some(NotificationCommand::CompleteTaskFromNotification(notification)) => {
-                if let Some(task_id) = notification.task_id {
+                if let Some(ref task) = notification.task {
                     if notification.is_built_from_task() {
                         notifications
                             .write()
                             .retain(|notif| notif.id != notification.id);
 
-                        task_service.send(TaskCommand::Complete(task_id));
+                        task_service.send(TaskCommand::Complete(task.id));
                     }
                 }
             }
-            Some(NotificationCommand::PlanTask(notification, parameters)) => {
+            Some(NotificationCommand::PlanTask(notification, task_id, parameters)) => {
                 notifications
                     .write()
                     .retain(|notif| notif.id != notification.id);
 
-                task_service.send(TaskCommand::Plan(parameters));
+                task_service.send(TaskCommand::Plan(task_id, parameters));
+            }
+            Some(NotificationCommand::CreateTaskFromNotification(notification, parameters)) => {
+                notifications
+                    .write()
+                    .retain(|notif| notif.id != notification.id);
+
+                let _result: Option<NotificationWithTask> = call_api_and_notify(
+                    "POST",
+                    &format!("/notifications/{}/task", notification.id),
+                    parameters,
+                    HashMap::new(),
+                    &toast_service,
+                    "Creating task from notification...",
+                    "Task successfully created",
+                )
+                .await
+                .unwrap();
             }
             None => {}
         }
@@ -176,7 +190,7 @@ pub async fn notification_service<'a>(
 
 async fn delete_notification(
     notification_id: NotificationId,
-    notifications: &UseAtomRef<Vec<Notification>>,
+    notifications: &UseAtomRef<Vec<NotificationWithTask>>,
     toast_service: &Coroutine<ToastCommand>,
 ) {
     notifications
@@ -202,7 +216,7 @@ async fn delete_notification(
 async fn delete_task(
     notification_id: NotificationId,
     task_id: TaskId,
-    notifications: &UseAtomRef<Vec<Notification>>,
+    notifications: &UseAtomRef<Vec<NotificationWithTask>>,
     task_service: &Coroutine<TaskCommand>,
 ) {
     notifications

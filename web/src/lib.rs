@@ -5,7 +5,7 @@ use log::debug;
 use wasm_bindgen::{prelude::Closure, JsCast};
 use web_sys::KeyboardEvent;
 
-use universal_inbox::notification::Notification;
+use universal_inbox::notification::NotificationWithTask;
 
 use components::{footer::footer, nav_bar::nav_bar, toast_zone::toast_zone};
 use pages::{
@@ -16,7 +16,7 @@ use services::{
     notification_service::{
         notification_service, NotificationCommand, UniversalInboxUIModel, NOTIFICATIONS, UI_MODEL,
     },
-    task_service::{task_service, TaskCommand, TASKS},
+    task_service::{task_service, TaskCommand},
     toast_service::{toast_service, TOASTS},
 };
 
@@ -28,14 +28,13 @@ mod utils;
 pub fn app(cx: Scope) -> Element {
     use_init_atom_root(cx);
     let notifications_ref = use_atom_ref(cx, NOTIFICATIONS);
-    let tasks_ref = use_atom_ref(cx, TASKS);
     let ui_model_ref = use_atom_ref(cx, UI_MODEL);
     let toasts_ref = use_atom_ref(cx, TOASTS);
     let toast_service_handle = use_coroutine(cx, |rx| toast_service(rx, toasts_ref.clone()));
     let task_service_handle = use_coroutine(cx, |rx| {
         to_owned![toast_service_handle];
 
-        task_service(rx, tasks_ref.clone(), toast_service_handle)
+        task_service(rx, toast_service_handle)
     });
     let notification_service_handle = use_coroutine(cx, |rx| {
         to_owned![toast_service_handle];
@@ -87,7 +86,7 @@ fn setup_key_bindings(
     ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
     notification_service_handle: Coroutine<NotificationCommand>,
     _task_service_handle: Coroutine<TaskCommand>,
-    notifications_ref: UseAtomRef<Vec<Notification>>,
+    notifications_ref: UseAtomRef<Vec<NotificationWithTask>>,
 ) -> Option<()> {
     let window = web_sys::window()?;
     let document = window.document()?;
