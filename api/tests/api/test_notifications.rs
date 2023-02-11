@@ -1,4 +1,4 @@
-use chrono::{Duration, TimeZone, Utc};
+use chrono::{Duration, TimeZone, Timelike, Utc};
 use http::StatusCode;
 use rstest::*;
 use serde_json::json;
@@ -24,26 +24,12 @@ mod list_notifications {
 
     #[rstest]
     #[tokio::test]
-    async fn test_empty_list_notifications(
-        #[future] tested_app: TestedApp,
-        #[values(true, false)] with_tasks: bool,
-    ) {
+    async fn test_empty_list_notifications(#[future] tested_app: TestedApp) {
         let app = tested_app.await;
-        let result = list_notifications(
-            &app.app_address,
-            NotificationStatus::Unread,
-            false,
-            None,
-            with_tasks,
-        )
-        .await;
+        let result =
+            list_notifications(&app.app_address, NotificationStatus::Unread, false, None).await;
 
-        assert_eq!(result.notifications.len(), 0);
-        if with_tasks {
-            assert!(result.tasks.unwrap().is_empty());
-        } else {
-            assert!(result.tasks.is_none());
-        }
+        assert!(result.is_empty());
     }
 
     #[rstest]
@@ -51,7 +37,6 @@ mod list_notifications {
     async fn test_list_notifications(
         #[future] tested_app: TestedApp,
         github_notification: Box<GithubNotification>,
-        #[values(true, false)] with_tasks: bool,
     ) {
         let mut github_notification2 = github_notification.clone();
         github_notification2.id = "43".to_string();
@@ -93,7 +78,7 @@ mod list_notifications {
                 updated_at: Utc.with_ymd_and_hms(2022, 2, 1, 0, 0, 0).unwrap(),
                 last_read_at: Some(Utc.with_ymd_and_hms(2022, 2, 1, 1, 0, 0).unwrap()),
                 // Snooze time has expired
-                snoozed_until: Some(Utc::now() - Duration::minutes(1)),
+                snoozed_until: Some(Utc::now().with_nanosecond(0).unwrap() - Duration::minutes(1)),
                 task_id: None,
                 task_source_id: None,
             }),
@@ -136,82 +121,43 @@ mod list_notifications {
                 updated_at: Utc.with_ymd_and_hms(2022, 2, 1, 0, 0, 0).unwrap(),
                 last_read_at: Some(Utc.with_ymd_and_hms(2022, 2, 1, 1, 0, 0).unwrap()),
                 // Snooze time in the future
-                snoozed_until: Some(Utc::now() + Duration::minutes(1)),
+                snoozed_until: Some(Utc::now().with_nanosecond(0).unwrap() + Duration::minutes(1)),
                 task_id: None,
                 task_source_id: None,
             }),
         )
         .await;
 
-        let result = list_notifications(
-            &app.app_address,
-            NotificationStatus::Unread,
-            false,
-            None,
-            with_tasks,
-        )
-        .await;
+        let result =
+            list_notifications(&app.app_address, NotificationStatus::Unread, false, None).await;
 
-        assert_eq!(result.notifications.len(), 2);
-        assert_eq!(result.notifications[0], *expected_notification1);
-        assert_eq!(result.notifications[1], *expected_notification2);
-        if with_tasks {
-            assert!(result.tasks.unwrap().is_empty());
-        } else {
-            assert!(result.tasks.is_none());
-        }
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0], *expected_notification1);
+        assert_eq!(result[1], *expected_notification2);
 
-        let result = list_notifications(
-            &app.app_address,
-            NotificationStatus::Unread,
-            true,
-            None,
-            with_tasks,
-        )
-        .await;
+        let result =
+            list_notifications(&app.app_address, NotificationStatus::Unread, true, None).await;
 
-        assert_eq!(result.notifications.len(), 3);
-        assert_eq!(result.notifications[0], *expected_notification1);
-        assert_eq!(result.notifications[1], *expected_notification2);
-        assert_eq!(result.notifications[2], *snoozed_notification);
-        if with_tasks {
-            assert!(result.tasks.unwrap().is_empty());
-        } else {
-            assert!(result.tasks.is_none());
-        }
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[0], *expected_notification1);
+        assert_eq!(result[1], *expected_notification2);
+        assert_eq!(result[2], *snoozed_notification);
 
-        let result = list_notifications(
-            &app.app_address,
-            NotificationStatus::Deleted,
-            false,
-            None,
-            with_tasks,
-        )
-        .await;
+        let result =
+            list_notifications(&app.app_address, NotificationStatus::Deleted, false, None).await;
 
-        assert_eq!(result.notifications.len(), 1);
-        assert_eq!(result.notifications[0], *deleted_notification);
-        if with_tasks {
-            assert!(result.tasks.unwrap().is_empty());
-        } else {
-            assert!(result.tasks.is_none());
-        }
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], *deleted_notification);
 
         let result = list_notifications(
             &app.app_address,
             NotificationStatus::Unsubscribed,
             false,
             None,
-            with_tasks,
         )
         .await;
 
-        assert_eq!(result.notifications.len(), 0);
-        if with_tasks {
-            assert!(result.tasks.unwrap().is_empty());
-        } else {
-            assert!(result.tasks.is_none());
-        }
+        assert!(result.is_empty());
     }
 }
 

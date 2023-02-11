@@ -521,7 +521,7 @@ enum PgTaskStatus {
 }
 
 #[derive(Debug, sqlx::FromRow)]
-struct TaskRow {
+pub struct TaskRow {
     id: Uuid,
     source_id: String,
     title: String,
