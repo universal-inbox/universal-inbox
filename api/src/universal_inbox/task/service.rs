@@ -10,7 +10,7 @@ use tokio::sync::RwLock;
 
 use universal_inbox::{
     notification::{Notification, NotificationPatch, NotificationStatus},
-    task::{Task, TaskId, TaskMetadata, TaskPatch, TaskStatus},
+    task::{Task, TaskCreation, TaskId, TaskMetadata, TaskPatch, TaskStatus},
 };
 
 use crate::{
@@ -59,14 +59,10 @@ impl TaskService {
     ) -> Result<(), UniversalInboxError> {
         match patch.status {
             Some(TaskStatus::Deleted) => {
-                task_source_service
-                    .delete_task_from_source(&task.source_id)
-                    .await?;
+                task_source_service.delete_task(&task.source_id).await?;
             }
             Some(TaskStatus::Done) => {
-                task_source_service
-                    .complete_task_from_source(&task.source_id)
-                    .await?;
+                task_source_service.complete_task(&task.source_id).await?;
             }
             _ => (),
         }
@@ -106,6 +102,7 @@ impl TaskService {
     ) -> Result<Vec<Task>, UniversalInboxError> {
         self.repository.get_tasks(executor, task_ids).await
     }
+
     #[tracing::instrument(level = "debug", skip(self))]
     pub async fn create_task<'a>(
         &self,
@@ -131,6 +128,30 @@ impl TaskService {
             task: *task,
             notification: notification.map(|n| *n),
         }))
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    pub async fn create_task_from_notification<'a, 'b>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        task_creation: &'b TaskCreation,
+        notification: &'b Notification,
+    ) -> Result<Box<Task>, UniversalInboxError> {
+        let source_task = self
+            .todoist_service
+            .create_task(&TaskCreation {
+                body: Some(format!(
+                    "- [{}]({})",
+                    notification.title,
+                    notification.source_html_url.as_ref().unwrap()
+                )),
+                ..(*task_creation).clone()
+            })
+            .await?;
+        let task = self.todoist_service.build_task(&source_task).await?;
+        let created_task = self.repository.create_task(executor, task).await?;
+
+        Ok(created_task)
     }
 
     async fn sync_source_tasks_and_notifications<'a, T: Debug, U>(

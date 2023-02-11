@@ -3,7 +3,7 @@ use clap::ArgEnum;
 use macro_attr::macro_attr;
 use serde::{Deserialize, Serialize};
 
-use universal_inbox::task::{Task, TaskPatch};
+use universal_inbox::task::{Task, TaskCreation, TaskPatch};
 
 use crate::{
     integrations::todoist::TodoistSyncStatusResponse, universal_inbox::UniversalInboxError,
@@ -74,12 +74,14 @@ pub mod task {
     #[async_trait]
     pub trait TaskSourceService<T>: TaskSource {
         async fn fetch_all_tasks(&self) -> Result<Vec<T>, UniversalInboxError>;
+        async fn fetch_task(&self, source_id: &str) -> Result<Option<T>, UniversalInboxError>;
         async fn build_task(&self, source: &T) -> Result<Box<Task>, UniversalInboxError>;
-        async fn delete_task_from_source(
+        async fn create_task(&self, task: &TaskCreation) -> Result<T, UniversalInboxError>;
+        async fn delete_task(
             &self,
             source_id: &str,
         ) -> Result<TodoistSyncStatusResponse, UniversalInboxError>;
-        async fn complete_task_from_source(
+        async fn complete_task(
             &self,
             source_id: &str,
         ) -> Result<TodoistSyncStatusResponse, UniversalInboxError>;

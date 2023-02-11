@@ -13,7 +13,7 @@ use universal_inbox_api::{
 };
 
 use crate::helpers::{
-    notification::list_notifications,
+    notification::list_notifications_with_tasks,
     rest::{create_resource, get_resource},
     task::{
         sync_tasks,
@@ -139,26 +139,21 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
         .find(|task_creation| task_creation.task.source_id == todoist_items[0].id)
         .unwrap();
     let new_task = &new_todoist_task_creation.task;
-    let result_for_new_task = list_notifications(
+    let notifications = list_notifications_with_tasks(
         &app.app_address,
         NotificationStatus::Unread,
         false,
-        Some(new_todoist_task_creation.task.id),
-        true,
+        Some(new_task.id),
     )
     .await;
 
-    assert_eq!(result_for_new_task.notifications.len(), 1);
-    let new_notification = &result_for_new_task.notifications[0];
-    assert_eq!(new_notification.source_id, new_task.source_id);
-    assert_eq!(new_notification.task_id, Some(new_task.id));
+    assert_eq!(notifications.len(), 1);
+    assert_eq!(notifications[0].source_id, new_task.source_id);
+    assert_eq!(notifications[0].task, Some(new_task.clone()));
     assert_eq!(
-        Some(new_notification.clone()),
+        Some((&notifications[0]).into()),
         new_todoist_task_creation.notification
     );
-    let tasks = result_for_new_task.tasks.unwrap();
-    assert_eq!(tasks.len(), 1);
-    assert_eq!(tasks.get(&new_task.id), Some(new_task));
 }
 
 #[rstest]

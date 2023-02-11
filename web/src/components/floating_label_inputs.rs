@@ -67,15 +67,21 @@ where
         },
     );
 
-    use_future(cx, (), |()| async {
-        if let Err(error) = focus_and_select_element("task-project-input").await {
-            error!("Error focusing element task-project-input: {error:?}");
-        }
-    });
+    use_future(
+        cx,
+        &(cx.props.autofocus, cx.props.name.clone()),
+        |(autofocus, id)| async move {
+            if autofocus.unwrap_or_default() {
+                if let Err(error) = focus_and_select_element(&id).await {
+                    error!("Error focusing element task-project-input: {error:?}");
+                }
+            }
+        },
+    );
 
     cx.render(rsx!(
         div {
-            class: "relative z-0",
+            class: "relative z-0 grow",
             input {
                 "type": "text",
                 name: "{cx.props.name}",
@@ -161,7 +167,7 @@ where
 
     cx.render(rsx!(
         div {
-            class: "relative z-0",
+            class: "relative z-0 grow",
             input {
                 "type": "date",
                 name: "{cx.props.name}",
@@ -230,7 +236,7 @@ where
 
     cx.render(rsx!(
         div {
-            class: "relative z-0",
+            class: "relative z-0 grow",
             select {
                 id: "{cx.props.name}",
                 name: "{cx.props.name}",
