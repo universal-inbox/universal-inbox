@@ -3,23 +3,11 @@
 @tailwind utilities;
 
 @layer components {
-    .btn-primary {
-        @apply py-2 px-4 font-semibold text-center bg-light-400 dark:bg-dark-500 hover:bg-light-500 hover:text-white dark:hover:bg-dark-600 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-light-500 focus:dark:ring-dark-600 focus:ring-opacity-75 focus:bg-light-500 focus:text-white dark:focus:bg-dark-600 focus:shadow-md;
+    .btn {
+        @apply rounded-none;
     }
 
-    .floating-label-invalid {
-        @apply text-red-600 dark:text-red-500 peer-focus:text-red-600 peer-focus:dark:text-red-500;
-    }
-
-    .input-invalid {
-        @apply border-red-600 dark:border-red-500 focus:border-red-600 dark:focus:border-red-500;
-    }
-
-    .floating-label-valid {
-        @apply text-gray-900 dark:text-dark-800 peer-focus:text-light-500 peer-focus:dark:text-dark-700;
-    }
-
-    .input-valid {
-        @apply border-light-400 dark:border-dark-800 focus:border-light-500 dark:focus:border-dark-700;
+    .alert {
+        @apply rounded-none;
     }
 }

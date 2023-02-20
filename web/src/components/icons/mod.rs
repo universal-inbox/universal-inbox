@@ -1,9 +1,11 @@
 use dioxus::prelude::*;
 
-pub fn github(cx: Scope) -> Element {
+#[inline_props]
+pub fn github<'a>(cx: Scope, class: Option<&'a str>) -> Element {
     cx.render(rsx!(
         svg {
             xmlns: "http://www.w3.org/2000/svg",
+            class: "{class.unwrap_or_default()}",
             role: "img",
             "viewBox": "0 0 24 24",
             fill: "currentColor",
@@ -16,10 +18,12 @@ pub fn github(cx: Scope) -> Element {
     ))
 }
 
-pub fn todoist(cx: Scope) -> Element {
+#[inline_props]
+pub fn todoist<'a>(cx: Scope, class: Option<&'a str>) -> Element {
     cx.render(rsx!(
         svg {
             xmlns: "http://www.w3.org/2000/svg",
+            class: "{class.unwrap_or_default()}",
             role: "img",
             "viewBox": "0 0 24 24",
             fill: "currentColor",
