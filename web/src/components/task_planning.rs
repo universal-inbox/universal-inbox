@@ -60,48 +60,45 @@ pub fn task_planning_modal<'a>(
         dialog {
             id: "task-planning-modal",
             tabindex: "-1",
-            class: "text-black dark:text-white backdrop-blur-sm bg-light-0/30 dark:bg-dark-200/30 fixed top-0 left-0 right-0 z-50 w-full p-2 overflow-x-hidden overflow-y-auto md:inset-0 md:h-full flex justify-center items-center",
+            class: "modal modal-open backdrop-blur-sm fixed top-0 left-0 w-full h-full",
             open: true,
 
             div {
-                class: "relative w-full h-full max-w-md md:h-auto",
+                class: "modal-box relative w-96 overflow-x-hidden overflow-y-hidden",
 
+                button {
+                    "type": "button",
+                    class: "btn btn-sm btn-ghost absolute right-2 top-5",
+                    onclick: move |_| on_close.call(()),
+                    tabindex: -1,
+
+                    span { class: "sr-only", "Close" }
+                    Icon { class: "w-5 h-5", icon: BsX }
+                }
                 div {
-                    class: "relative bg-light-200 shadow dark:bg-dark-300",
-
-                    button {
-                        "type": "button",
-                        class: "absolute top-3 right-2.5 px-2 py-1.5 rounded-lg inline-flex hover:shadow-md hover:bg-light-400 hover:dark:bg-dark-600",
-                        onclick: move |_| on_close.call(()),
-                        tabindex: -1,
-
-                        span { class: "sr-only", "Close" }
-                        Icon { class: "w-5 h-5", icon: BsX }
+                    h3 {
+                        class: "mb-4 text-xl font-medium",
+                        "Plan task"
                     }
-                    div {
-                        class: "px-4 py-4 lg:px-6",
 
-                        h3 {
-                            class: "mb-4 text-xl font-medium",
-                           "Plan task"
-                        }
-
-                        form {
-                            class: "space-y-4",
-                            method: "dialog",
-                            onsubmit: |evt| {
-                                if let Some(ref task) = *task_to_plan.current() {
-                                    if let Some(task_planning_parameters) = validate_planning_form(&evt.data.values) {
-                                        on_task_planning.call((task_planning_parameters, task.id));
-                                    }
-                                } else if let Some(task_creation_parameters) = validate_creation_form(&evt.data.values) {
-                                    on_task_creation.call(task_creation_parameters);
+                    form {
+                        class: "flex flex-col space-y-4",
+                        method: "dialog",
+                        onsubmit: |evt| {
+                            if let Some(ref task) = *task_to_plan.current() {
+                                if let Some(task_planning_parameters) = validate_planning_form(&evt.data.values) {
+                                    on_task_planning.call((task_planning_parameters, task.id));
                                 }
-                            },
+                            } else if let Some(task_creation_parameters) = validate_creation_form(&evt.data.values) {
+                                on_task_creation.call(task_creation_parameters);
+                            }
+                        },
 
+                        div {
+                            class: "flex flex-none items-center gap-2",
+                            div { class: "h-5 w-5 flex-none", icon }
                             div {
-                                class: "flex flex-none items-center gap-2 mb-5",
-                                div { class: "h-5 w-5 flex-none", icon }
+                                class: "grow",
                                 (task_to_plan.current().is_some()).then(|| rsx!(
                                     "{task_title}"
                                 )),
@@ -115,37 +112,39 @@ pub fn task_planning_modal<'a>(
                                         force_validation: *force_validation.current(),
                                     }
                                 ))
-                            },
-
-
-                            floating_label_input_text::<TaskProject> {
-                                name: "task-project-input".to_string(),
-                                label: "Project".to_string(),
-                                required: true,
-                                value: project.clone(),
-                                autofocus: task_to_plan.current().is_some(),
-                                force_validation: *force_validation.current(),
                             }
+                        }
 
-                            floating_label_input_date::<DueDate> {
-                                name: "task-due_at-input".to_string(),
-                                label: "Due at".to_string(),
-                                required: false,
-                                value: due_at.clone(),
-                                force_validation: *force_validation.current(),
-                            }
+                        floating_label_input_text::<TaskProject> {
+                            name: "task-project-input".to_string(),
+                            label: "Project".to_string(),
+                            required: true,
+                            value: project.clone(),
+                            autofocus: task_to_plan.current().is_some(),
+                            force_validation: *force_validation.current(),
+                        }
 
-                            floating_label_select::<TaskPriority> {
-                                name: "task-priority-input".to_string(),
-                                label: "Priority".to_string(),
-                                required: false,
-                                value: priority.clone(),
-                                force_validation: *force_validation.current(),
-                            }
+                        floating_label_input_date::<DueDate> {
+                            name: "task-due_at-input".to_string(),
+                            label: "Due at".to_string(),
+                            required: false,
+                            value: due_at.clone(),
+                            force_validation: *force_validation.current(),
+                        }
 
+                        floating_label_select::<TaskPriority> {
+                            name: "task-priority-input".to_string(),
+                            label: "Priority".to_string(),
+                            required: false,
+                            value: priority.clone(),
+                            force_validation: *force_validation.current(),
+                        }
+
+                        div {
+                            class: "modal-action",
                             button {
                                 "type": "submit",
-                                class: "w-full btn-primary",
+                                class: "btn btn-primary w-full",
                                 "Plan"
                             }
                         }

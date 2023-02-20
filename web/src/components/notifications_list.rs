@@ -26,76 +26,77 @@ pub fn notifications_list<'a>(
     let selected_notification_index = ui_model_ref.read().selected_notification_index;
 
     cx.render(rsx!(table {
-        class: "w-full",
+        class: "table w-full",
 
         thead {
-            tr { class: "border-b border-light-200 dark:border-dark-300" }
+            tr { class: "border-b" }
         }
         tbody {
             notifications.iter().enumerate().map(|(i, notif)| {
                 rsx!{
-                    tr {
-                        class: "border-b border-light-200 dark:border-dark-300",
-                        key: "{notif.id}",
+                    (!notif.is_built_from_task()).then(|| rsx!(
+                        self::notification {
+                            notif: notif,
+                            selected: i == selected_notification_index,
+                            ui_model_ref: ui_model_ref,
 
-                        (!notif.is_built_from_task()).then(|| rsx!(
-                            self::notification {
-                                notif: notif,
-                                selected: i == selected_notification_index,
-                                ui_model_ref: ui_model_ref,
-
-                                self::notification_button {
-                                    title: "Delete notification",
-                                    onclick: |_| on_delete.call(notif),
-                                    Icon { class: "w-5 h-5" icon: BsTrash }
-                                },
-                                self::notification_button {
-                                    title: "Unsubscribe from the notification",
-                                    onclick: |_| on_unsubscribe.call(notif),
-                                    Icon { class: "w-5 h-5" icon: BsBellSlash }
-                                }
-                                self::notification_button {
-                                    title: "Snooze notification",
-                                    onclick: |_| on_snooze.call(notif),
-                                    Icon { class: "w-5 h-5" icon: BsClockHistory }
-                                },
-                                self::notification_button {
-                                    title: "Create task",
-                                    onclick: |_| on_plan.call(notif),
-                                    Icon { class: "w-5 h-5" icon: BsBookmark }
-                                },
+                            self::notification_button {
+                                title: "Delete notification",
+                                onclick: |_| on_delete.call(notif),
+                                Icon { class: "w-5 h-5" icon: BsTrash }
                             }
-                        )),
 
-                        (notif.is_built_from_task()).then(|| rsx!(
-                            self::notification {
-                                notif: notif,
-                                selected: i == selected_notification_index,
-                                ui_model_ref: ui_model_ref,
-
-                                self::notification_button {
-                                    title: "Delete task",
-                                    onclick: |_| on_delete.call(notif),
-                                    Icon { class: "w-5 h-5" icon: BsTrash }
-                                },
-                                self::notification_button {
-                                    title: "Complete task",
-                                    onclick: |_| on_complete_task.call(notif),
-                                    Icon { class: "w-5 h-5" icon: BsCheck2 }
-                                }
-                                self::notification_button {
-                                    title: "Snooze notification",
-                                    onclick: |_| on_snooze.call(notif),
-                                    Icon { class: "w-5 h-5" icon: BsClockHistory }
-                                },
-                                self::notification_button {
-                                    title: "Plan task",
-                                    onclick: |_| on_plan.call(notif),
-                                    Icon { class: "w-5 h-5" icon: BsBookmark }
-                                }
+                            self::notification_button {
+                                title: "Unsubscribe from the notification",
+                                onclick: |_| on_unsubscribe.call(notif),
+                                Icon { class: "w-5 h-5" icon: BsBellSlash }
                             }
-                        ))
-                    }
+
+                            self::notification_button {
+                                title: "Snooze notification",
+                                onclick: |_| on_snooze.call(notif),
+                                Icon { class: "w-5 h-5" icon: BsClockHistory }
+                            }
+
+                            self::notification_button {
+                                title: "Create task",
+                                onclick: |_| on_plan.call(notif),
+                                Icon { class: "w-5 h-5" icon: BsBookmark }
+                            }
+                        }
+                    )),
+
+                    (notif.is_built_from_task()).then(|| rsx!(
+                        self::notification {
+                            notif: notif,
+                            selected: i == selected_notification_index,
+                            ui_model_ref: ui_model_ref,
+
+                            self::notification_button {
+                                title: "Delete task",
+                                onclick: |_| on_delete.call(notif),
+                                Icon { class: "w-5 h-5" icon: BsTrash }
+                            }
+
+                            self::notification_button {
+                                title: "Complete task",
+                                onclick: |_| on_complete_task.call(notif),
+                                Icon { class: "w-5 h-5" icon: BsCheck2 }
+                            }
+
+                            self::notification_button {
+                                title: "Snooze notification",
+                                onclick: |_| on_snooze.call(notif),
+                                Icon { class: "w-5 h-5" icon: BsClockHistory }
+                            }
+
+                            self::notification_button {
+                                title: "Plan task",
+                                onclick: |_| on_plan.call(notif),
+                                Icon { class: "w-5 h-5" icon: BsBookmark }
+                            }
+                        }
+                    ))
                 }
             })
         }
@@ -110,44 +111,41 @@ fn notification<'a>(
     ui_model_ref: &'a UseAtomRef<UniversalInboxUIModel>,
     children: Element<'a>,
 ) -> Element {
-    let is_hovered = use_state(cx, || false);
-    let style = use_state(cx, || "");
-    let unhover_element = ui_model_ref.read().unhover_element;
-
-    use_memo(cx, (selected,), |(selected,)| {
-        style.set(if selected {
-            "dark:bg-dark-500 bg-light-200 drop-shadow-lg"
+    let style = use_memo(
+        cx,
+        (selected,),
+        |(selected,)| {
+            if selected {
+                "active"
+            } else {
+                ""
+            }
+        },
+    );
+    let button_style = use_memo(cx, (selected,), |(selected,)| {
+        if selected {
+            "visible"
         } else {
-            "dark:bg-dark-200 bg-light-0 hover:drop-shadow-lg"
-        });
+            "invisible group-hover:visible"
+        }
     });
 
     cx.render(rsx!(
-        td {
-            class: "flex gap-2 h-10 items-center px-3 py-1 {style}",
+        tr {
+            class: "hover py-1 h-16 {style} group",
+            key: "{notif.id}",
             onmousemove: |_| {
                 if ui_model_ref.write_silent().set_unhover_element(false) {
                     cx.needs_update();
                 }
             },
-            onmouseenter: |_| { is_hovered.set(true); },
-            onmouseleave: |_| { is_hovered.set(false); },
 
-            if let Some(link) = &notif.source_html_url {
-                rsx!(a {
-                    class: "flex grow gap-2",
-                    href: "{link}",
-                    target: "_blank",
+            self::notification_display { notif: notif }
 
-                    self::notification_display { notif: notif }
-                })
-            } else {
-                rsx!(self::notification_display { notif: notif })
-            },
-
-            (*selected || (!unhover_element && *is_hovered.get())).then(|| rsx!(
+            td {
+                class: "p-2 {button_style} border-b flex justify-end",
                 children
-            ))
+            }
         }
     ))
 }
@@ -155,18 +153,20 @@ fn notification<'a>(
 #[inline_props]
 fn notification_display<'a>(cx: Scope, notif: &'a NotificationWithTask) -> Element {
     let icon = match notif.metadata {
-        NotificationMetadata::Github(_) => cx.render(rsx!(self::github {})),
-        NotificationMetadata::Todoist => cx.render(rsx!(self::todoist {})),
+        NotificationMetadata::Github(_) => cx.render(rsx!(self::github { class: "h-5 w-5" })),
+        NotificationMetadata::Todoist => cx.render(rsx!(self::todoist { class: "h-5 w-5" })),
     };
 
     cx.render(rsx!(
-        div {
-            class: "flex flex-none h-6 items-center",
-            div { class: "h-5 w-5", icon }
-        }
-        div {
-            class: "flex grow text-sm justify-left",
-            "{notif.title}"
+        td { class: "p-2 border-b", div { class: "flex justify-center", icon } }
+        td {
+            class: "p-2 border-b",
+
+            if let Some(link) = &notif.source_html_url {
+                rsx!(a { href: "{link}", target: "_blank", "{notif.title}" })
+            } else {
+                rsx!("{notif.title}")
+            }
         }
     ))
 }
@@ -181,20 +181,16 @@ struct NotificationButtonProps<'a> {
 
 fn notification_button<'a>(cx: Scope<'a, NotificationButtonProps<'a>>) -> Element {
     cx.render(rsx!(
-        div {
-            class: "flex flex-none justify-center bg-light-200 dark:bg-dark-500 h-8 w-8 hover:shadow-md hover:bg-light-400 hover:dark:bg-dark-600",
+        button {
+            class: "btn btn-ghost btn-square",
+            title: "{cx.props.title}",
             onclick: move |evt| {
                 if let Some(handler) = &cx.props.onclick {
                     handler.call(evt)
                 }
             },
 
-            button {
-                class: "text-sm",
-                title: "{cx.props.title}",
-
-                &cx.props.children
-            }
+            &cx.props.children
         }
     ))
 }

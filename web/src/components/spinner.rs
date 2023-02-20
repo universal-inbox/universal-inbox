@@ -7,7 +7,7 @@ pub fn spinner(cx: Scope) -> Element {
 
             svg {
                 xmlns: "http://www.w3.org/2000/svg",
-                class: "mr-2 w-8 h-8 text-gray-200 animate-spin dark:text-gray-600 fill-light-500 dark:fill-dark-700",
+                class: "mr-2 w-12 h-12 p-2 text-base-200 fill-accent animate-spin",
                 "viewBox": "0 0 100 101",
                 fill: "none",
                 "aria-hidden": "true",
