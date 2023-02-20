@@ -47,7 +47,7 @@ pub fn toast_zone(cx: Scope) -> Element {
 
     cx.render(rsx! {
         div {
-            class: "absolute bottom-5 right-5 flex flex-col gap-2",
+            class: "toast",
 
             toasts_ref.read().clone().into_iter().map(move |(id, toast)| {
                 rsx!(
@@ -75,7 +75,12 @@ fn toast<'a>(
     on_undo: Option<EventHandler<'a>>,
     on_close: EventHandler<'a>,
 ) -> Element {
-    let timeout_progress = use_state(cx, || 100.0);
+    let timeout_progress = use_state(cx, || 50.0);
+    let alert_style = use_memo(cx, kind, |kind| match kind {
+        ToastKind::Message => "alert-info",
+        ToastKind::Loading => "alert-info",
+        ToastKind::Success => "alert-success",
+    });
 
     let timeout_future = use_future(cx, (timeout,), |(timeout,)| {
         to_owned![timeout_progress];
@@ -103,22 +108,23 @@ fn toast<'a>(
     cx.render(rsx! {
         div {
             id: "toast-undo",
-            class: "w-full max-w-sm text-sm shadow bg-light-200/90 dark:bg-dark-500/90",
+            class: "alert {alert_style} shadow-lg p-0 flex flex-col gap-0",
             role: "alert",
 
             (timeout.flatten().is_some() && (**timeout_progress > 0.0)).then(|| rsx!(
-                div {
-                    class: "w-full rounded-full h-0.5",
-                    div { class: "bg-light-500 dark:bg-dark-600 h-0.5 rounded-full", style: "width: {timeout_progress}%" }
+                progress {
+                    class: "progress progress-accent w-full h-1",
+                    value: "{timeout_progress}",
+                    max: "100"
                 }
             ))
             div {
-                class: "flex items-center p-2 divide-x divide-light-400 dark:divide-dark-500",
+                class: "w-full flex items-center divide-x p-2",
 
                 match kind {
                     ToastKind::Message => None,
                     ToastKind::Loading => cx.render(rsx!(self::spinner {})),
-                    ToastKind::Success => cx.render(rsx!(Icon { class: "w-8 h-8 px-2", icon: BsCheck2 }))
+                    ToastKind::Success => cx.render(rsx!(Icon { class: "w-12 h-12 px-4", icon: BsCheck2 }))
                 }
                 div {
                     class: "py-1.5 grow px-2",
@@ -129,7 +135,7 @@ fn toast<'a>(
 
                     has_callback.then(|| rsx!(
                         a {
-                            class: "px-2 py-1.5 rounded-lg text-light-500 dark:text-dark-700 hover:bg-light-400 hover:dark:bg-dark-600 hover:dark:text-white",
+                            class: "px-2 py-1.5 rounded-lg",
                             onclick: move |_| {
                                 if let Some(handler) = on_undo.as_ref() {
                                     handler.call(())
@@ -141,7 +147,7 @@ fn toast<'a>(
 
                     button {
                         "type": "button",
-                        class: "h-8 w-8 px-2 py-1.5 rounded-lg inline-flex hover:shadow-md hover:bg-light-400 hover:dark:bg-dark-600",
+                        class: "btn btn-ghost",
                         onclick: |_| on_close.call(()),
                         span { class: "sr-only", "Close" }
                         Icon { class: "w-5 h-5", icon: BsX }

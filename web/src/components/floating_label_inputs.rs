@@ -19,10 +19,8 @@ pub struct InputProps<T: 'static> {
     phantom: PhantomData<T>,
 }
 
-const INPUT_VALID_STYLE: &str = "input-valid";
-const INPUT_INVALID_STYLE: &str = "input-invalid";
-const FLOATING_LABEL_VALID_STYLE: &str = "floating-label-valid";
-const FLOATING_LABEL_INVALID_STYLE: &str = "floating-label-invalid";
+const INPUT_INVALID_STYLE: &str = "border-error focus:border-error";
+const FLOATING_LABEL_INVALID_STYLE: &str = "text-error peer-focus:text-error";
 
 pub fn floating_label_input_text<T>(cx: Scope<InputProps<T>>) -> Element
 where
@@ -32,23 +30,21 @@ where
     let required_label_style = cx
         .props
         .required
-        .then_some("after:content-['*'] after:ml-0.5 after:text-red-500")
+        .then_some("after:content-['*'] after:ml-0.5 after:text-error")
         .unwrap_or_default();
 
     let error_message = use_state(cx, || None);
     let input_style = use_memo(cx, &(error_message.clone(),), |(error_message,)| {
-        if error_message.current().is_some() {
-            INPUT_INVALID_STYLE.to_string()
-        } else {
-            INPUT_VALID_STYLE.to_string()
-        }
+        error_message
+            .as_ref()
+            .and(Some(INPUT_INVALID_STYLE))
+            .unwrap_or_default()
     });
     let label_style = use_memo(cx, &(error_message.clone(),), |(error_message,)| {
-        if error_message.current().is_some() {
-            FLOATING_LABEL_INVALID_STYLE.to_string()
-        } else {
-            FLOATING_LABEL_VALID_STYLE.to_string()
-        }
+        error_message
+            .as_ref()
+            .and(Some(FLOATING_LABEL_INVALID_STYLE))
+            .unwrap_or_default()
     });
 
     let validate = use_state(cx, || false);
@@ -62,7 +58,7 @@ where
         |(value, force_validation, validate)| {
             to_owned![error_message];
             if force_validation.unwrap_or_default() || *validate {
-                validate_value::<T>(&value, error_message);
+                validate_value::<T>(&value, error_message, cx.props.required);
             }
         },
     );
@@ -81,7 +77,7 @@ where
 
     cx.render(rsx!(
         div {
-            class: "relative z-0 grow",
+            class: "relative",
             input {
                 "type": "text",
                 name: "{cx.props.name}",
@@ -113,39 +109,40 @@ where
     <T as FromStr>::Err: Display,
 {
     const IS_NOT_EMPTY_STYLE: &str = "isnotempty";
-    const IS_EMPTY_STYLE: &str = "isempty text-opacity-0";
+    const IS_EMPTY_STYLE: &str = "isempty text-opacity-0 text-base-100";
 
     let required_label_style = cx
         .props
         .required
-        .then_some("after:content-['*'] after:ml-0.5 after:text-red-500")
+        .then_some("after:content-['*'] after:ml-0.5 after:text-error")
         .unwrap_or_default();
 
     let input_empty_style = use_memo(cx, &(cx.props.value.clone(),), |(value,)| {
         if value.is_empty() {
-            format!("{} {}", IS_EMPTY_STYLE, INPUT_VALID_STYLE)
+            IS_EMPTY_STYLE
         } else {
-            format!("{} {}", IS_NOT_EMPTY_STYLE, INPUT_VALID_STYLE)
+            IS_NOT_EMPTY_STYLE
         }
     });
 
     let error_message = use_state(cx, || None);
     let label_style = use_memo(cx, &error_message.clone(), |error_message| {
-        if error_message.current().is_some() {
-            FLOATING_LABEL_INVALID_STYLE.to_string()
-        } else {
-            FLOATING_LABEL_VALID_STYLE.to_string()
-        }
+        error_message
+            .as_ref()
+            .and(Some(FLOATING_LABEL_INVALID_STYLE))
+            .unwrap_or_default()
     });
     let input_style = use_memo(
         cx,
-        &(error_message.clone(), input_empty_style.clone()),
+        &(error_message.clone(), input_empty_style.to_string()),
         |(error_message, input_style)| {
-            if error_message.current().is_some() {
-                input_style.replace(INPUT_VALID_STYLE, INPUT_INVALID_STYLE)
-            } else {
-                input_style.replace(INPUT_INVALID_STYLE, INPUT_VALID_STYLE)
-            }
+            format!(
+                "{input_style} {}",
+                error_message
+                    .as_ref()
+                    .and(Some(INPUT_INVALID_STYLE))
+                    .unwrap_or_default()
+            )
         },
     );
 
@@ -160,19 +157,19 @@ where
         |(value, force_validation, validate)| {
             to_owned![error_message];
             if force_validation.unwrap_or_default() || *validate {
-                validate_value::<T>(&value, error_message);
+                validate_value::<T>(&value, error_message, cx.props.required);
             }
         },
     );
 
     cx.render(rsx!(
         div {
-            class: "relative z-0 grow",
+            class: "relative",
             input {
                 "type": "date",
                 name: "{cx.props.name}",
                 id: "{cx.props.name}",
-                class: "{input_style} block py-2.5 px-0 w-full text-sm bg-transparent border-0 border-b-2 text-white focus:text-opacity-1 focus:text-black focus:dark:text-white focus:outline-none focus:ring-0 peer",
+                class: "{input_style} block py-2.5 px-0 w-full text-sm bg-transparent border-0 border-b-2 focus:text-opacity-1 focus:text-base-content focus:dark:text-base-content outline-none focus:ring-0 peer",
                 required: "{cx.props.required}",
                 value: "{cx.props.value}",
                 oninput: move |evt| {
@@ -199,23 +196,21 @@ where
     let required_label_style = cx
         .props
         .required
-        .then_some("after:content-['*'] after:ml-0.5 after:text-red-500")
+        .then_some("after:content-['*'] after:ml-0.5 after:text-error")
         .unwrap_or_default();
 
     let error_message = use_state(cx, || None);
     let input_style = use_memo(cx, &(error_message.clone(),), |(error_message,)| {
-        if error_message.current().is_some() {
-            INPUT_INVALID_STYLE.to_string()
-        } else {
-            INPUT_VALID_STYLE.to_string()
-        }
+        error_message
+            .as_ref()
+            .and(Some(INPUT_INVALID_STYLE))
+            .unwrap_or_default()
     });
     let label_style = use_memo(cx, &(error_message.clone(),), |(error_message,)| {
-        if error_message.current().is_some() {
-            FLOATING_LABEL_INVALID_STYLE.to_string()
-        } else {
-            FLOATING_LABEL_VALID_STYLE.to_string()
-        }
+        error_message
+            .as_ref()
+            .and(Some(FLOATING_LABEL_INVALID_STYLE))
+            .unwrap_or_default()
     });
 
     let validate = use_state(cx, || false);
@@ -229,14 +224,14 @@ where
         |(value, force_validation, validate)| {
             to_owned![error_message];
             if force_validation.unwrap_or_default() || *validate {
-                validate_value::<T>(&value, error_message);
+                validate_value::<T>(&value, error_message, cx.props.required);
             }
         },
     );
 
     cx.render(rsx!(
         div {
-            class: "relative z-0 grow",
+            class: "relative",
             select {
                 id: "{cx.props.name}",
                 name: "{cx.props.name}",
@@ -268,17 +263,21 @@ fn error_message<'a>(cx: Scope, message: &'a UseState<Option<String>>) -> Elemen
     message.as_ref().and_then(|error| {
         cx.render(rsx!(
             p {
-                class: "mt-2 text-sm text-red-600 dark:text-red-500",
+                class: "mt-2 text-sm text-error dark:text-error",
                 span { class: "font-medium", "{error}" }
             }
         ))
     })
 }
 
-fn validate_value<T>(value: &str, error_message: UseState<Option<String>>)
+fn validate_value<T>(value: &str, error_message: UseState<Option<String>>, required: bool)
 where
     T: FromStr,
     <T as FromStr>::Err: Display,
 {
-    error_message.set(T::from_str(value).err().map(|error| error.to_string()));
+    if !required && value.is_empty() {
+        error_message.set(None);
+    } else {
+        error_message.set(T::from_str(value).err().map(|error| error.to_string()));
+    }
 }
