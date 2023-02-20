@@ -28,10 +28,10 @@ pub fn footer(cx: Scope) -> Element {
 
     cx.render(rsx! {
         div {
-            class: "w-full drop-shadow-lg bg-light-0 dark:bg-dark-200",
-            hr { class: "text-light-200 dark:text-dark-300" }
+            class: "w-full drop-shadow-lg",
+            hr {}
             button {
-                class: "flex w-full items-center h-5 hover:bg-light-400 hover:dark:bg-dark-600",
+                class: "flex w-full items-center h-5",
                 onclick: |_| {
                     let mut ui_model = ui_model_ref.write();
                     ui_model.footer_help_opened = !ui_model.footer_help_opened;
@@ -41,7 +41,7 @@ pub fn footer(cx: Scope) -> Element {
                     rsx! {
                         Icon { class: "w-3 h-3", icon: BsArrowDownShort }
                         div {
-                            class: "grow flex items-center justify-center",
+                            class: "grow flex items-center justify-center btn btn-ghost h-auto min-h-fit",
                             title: "Help",
                             Icon { class: "w-3 h-3", icon: BsQuestionCircle }
                         }
@@ -51,7 +51,7 @@ pub fn footer(cx: Scope) -> Element {
                     rsx! {
                         Icon { class: "w-3 h-3", icon: BsArrowUpShort }
                         div {
-                            class: "grow flex items-center justify-center",
+                            class: "grow flex items-center justify-center btn btn-ghost h-auto min-h-fit",
                             title: "Help",
                             Icon { class: "w-3 h-3", icon: BsQuestionCircle }
                         }
@@ -61,31 +61,21 @@ pub fn footer(cx: Scope) -> Element {
             }
             ui_model.footer_help_opened.then(|| rsx! {
                 div {
-                    class: "flex flex-col px-2 pb-2 text-xs text-gray-100",
+                    class: "flex flex-col px-2 pb-2 text-xs gap-2",
 
                     div {
-                        class: "flex items-center gap-2",
+                        class: "flex items-center gap-2 pb-2",
 
                         Icon { class: "w-4 h-4", icon: BsKeyboard }
                         div { "Keyboard shortcuts" }
                     }
                     div {
-                        class: "grid grid-cols-4 text-slate-500",
+                        class: "grid grid-cols-4",
 
                         self::shortcut_text { shortcut: "h", text: "help" }
                         (!is_selected_notification_built_from_task).then(|| rsx!(
-                            div {
-                                class: "flex items-center gap-2",
-
-                                Icon { class: "text-red-500 w-4 h-4", icon: BsArrowDownShort }
-                                span { "next notification" }
-                            }
-                            div {
-                                class: "flex items-center gap-2",
-
-                                Icon { class: "text-red-500 w-4 h-4", icon: BsArrowUpShort }
-                                span { "previous notification" }
-                            }
+                            self::shortcut_text { shortcut: "▼", text: "next notification" }
+                            self::shortcut_text { shortcut: "▲", text: "previous notification" }
                             self::shortcut_text { shortcut: "d", text: "delete notification" }
                             self::shortcut_text { shortcut: "u", text: "unsubscribe from notification" }
                             self::shortcut_text { shortcut: "s", text: "snooze notification" }
@@ -93,18 +83,8 @@ pub fn footer(cx: Scope) -> Element {
                         )),
 
                         (is_selected_notification_built_from_task).then(|| rsx!(
-                            div {
-                                class: "flex items-center gap-2",
-
-                                Icon { class: "text-red-500 w-4 h-4", icon: BsArrowDownShort }
-                                span { "next task" }
-                            }
-                            div {
-                                class: "flex items-center gap-2",
-
-                                Icon { class: "text-red-500 w-4 h-4", icon: BsArrowUpShort }
-                                span { "previous task" }
-                            }
+                            self::shortcut_text { shortcut: "▼", text: "next task" }
+                            self::shortcut_text { shortcut: "▲", text: "previous task" }
                             self::shortcut_text { shortcut: "d", text: "delete task" }
                             self::shortcut_text { shortcut: "c", text: "complete task" }
                             self::shortcut_text { shortcut: "s", text: "snooze notification" }
@@ -122,7 +102,7 @@ pub fn shortcut_text<'a>(cx: Scope, text: &'a str, shortcut: &'a str) -> Element
         div {
             class: "flex items-center gap-2",
 
-            span { class: "text-red-500 flex items-center justify-center w-4", "{shortcut}" }
+            kbd { class: "kbd kbd-sm", "{shortcut}" }
             span { "{text}" }
         }
     })
