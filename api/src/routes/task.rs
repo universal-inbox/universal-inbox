@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::sync::RwLock;
 
-use universal_inbox::task::{Task, TaskId, TaskPatch, TaskStatus};
+use universal_inbox::task::{Task, TaskId, TaskPatch, TaskStatus, TaskSummary};
 
 use crate::{
     integrations::task::TaskSyncSourceKind,
@@ -22,6 +22,7 @@ use super::option_wildcard;
 pub fn scope() -> Scope {
     web::scope("/tasks")
         .route("/sync", web::post().to(sync_tasks))
+        .route("/search", web::get().to(search_tasks))
         .service(
             web::resource("")
                 .name("tasks")
@@ -54,6 +55,30 @@ pub async fn list_tasks(
         .context("Failed to create new transaction while listing tasks")?;
     let tasks: Vec<Task> = service
         .list_tasks(&mut transaction, list_task_request.status)
+        .await?;
+
+    Ok(HttpResponse::Ok()
+        .content_type("application/json")
+        .body(serde_json::to_string(&tasks).context("Cannot serialize tasks")?))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SearchTaskRequest {
+    matches: String,
+}
+
+#[tracing::instrument(level = "debug", skip(task_service))]
+pub async fn search_tasks(
+    search_task_request: web::Query<SearchTaskRequest>,
+    task_service: web::Data<Arc<RwLock<TaskService>>>,
+) -> Result<HttpResponse, UniversalInboxError> {
+    let service = task_service.read().await;
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while listing tasks")?;
+    let tasks: Vec<TaskSummary> = service
+        .search_tasks(&mut transaction, &search_task_request.matches)
         .await?;
 
     Ok(HttpResponse::Ok()

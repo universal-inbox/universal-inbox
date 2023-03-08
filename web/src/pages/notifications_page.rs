@@ -4,7 +4,10 @@ use fermi::use_atom_ref;
 use universal_inbox::notification::NotificationWithTask;
 
 use crate::{
-    components::{notifications_list::notifications_list, task_planning::task_planning_modal},
+    components::{
+        notifications_list::notifications_list, task_association_modal::task_association_modal,
+        task_planning_modal::task_planning_modal,
+    },
     services::notification_service::{NotificationCommand, NOTIFICATIONS, UI_MODEL},
 };
 
@@ -15,6 +18,7 @@ pub fn notifications_page(cx: Scope) -> Element {
     let notification_service = use_coroutine_handle::<NotificationCommand>(cx).unwrap();
 
     let notification_to_plan: &UseState<Option<NotificationWithTask>> = use_state(cx, || None);
+    let notification_to_associate: &UseState<Option<NotificationWithTask>> = use_state(cx, || None);
 
     use_future(cx, (), |()| {
         to_owned![notification_service];
@@ -32,6 +36,7 @@ pub fn notifications_page(cx: Scope) -> Element {
         |(selected_notification_index, notifications)| {
             if let Some(notification) = notifications.get(selected_notification_index) {
                 notification_to_plan.set(Some(notification.clone()));
+                notification_to_associate.set(Some(notification.clone()));
             }
         },
     );
@@ -62,6 +67,10 @@ pub fn notifications_page(cx: Scope) -> Element {
                         notification_to_plan.set(Some(notification.clone()));
                         ui_model_ref.write().task_planning_modal_opened = true;
                     }
+                    on_associate: |notification: &NotificationWithTask| {
+                        notification_to_associate.set(Some(notification.clone()));
+                        ui_model_ref.write().task_association_modal_opened = true;
+                    }
                 }
             }
         }
@@ -85,6 +94,24 @@ pub fn notifications_page(cx: Scope) -> Element {
                             notification_service.send(NotificationCommand::CreateTaskFromNotification(
                                 notification_to_plan.clone(),
                                 params));
+                        },
+                    }
+                }
+            })
+        })
+
+        ui_model_ref.read().task_association_modal_opened.then(|| {
+            notification_to_associate.as_ref().map(|notification_to_associate| {
+                rsx!{
+                    task_association_modal {
+                        notification_to_associate: notification_to_associate.clone(),
+                        on_close: |_| { ui_model_ref.write().task_association_modal_opened = false; },
+                        on_task_association: |task_id| {
+                            ui_model_ref.write().task_association_modal_opened = false;
+                            notification_service.send(NotificationCommand::AssociateNotificationWithTask(
+                                notification_to_associate.id,
+                                task_id,
+                            ));
                         },
                     }
                 }

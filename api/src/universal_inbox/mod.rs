@@ -1,4 +1,5 @@
 use http::uri::InvalidUri;
+use universal_inbox::task::TaskId;
 use uuid::Uuid;
 
 pub mod notification;
@@ -51,6 +52,8 @@ pub enum UniversalInboxError {
     },
     #[error("Unsupported action: {0}")]
     UnsupportedAction(String),
+    #[error("Task not found: {0}")]
+    TaskNotFound(TaskId),
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
 }

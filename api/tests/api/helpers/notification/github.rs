@@ -37,7 +37,6 @@ pub async fn create_notification_from_github_notification(
             last_read_at: github_notification.last_read_at,
             snoozed_until: None,
             task_id: None,
-            task_source_id: None,
         }),
     )
     .await

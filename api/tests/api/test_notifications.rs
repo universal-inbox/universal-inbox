@@ -58,7 +58,6 @@ mod list_notifications {
                 last_read_at: None,
                 snoozed_until: None,
                 task_id: None,
-                task_source_id: None,
             }),
         )
         .await;
@@ -80,7 +79,6 @@ mod list_notifications {
                 // Snooze time has expired
                 snoozed_until: Some(Utc::now().with_nanosecond(0).unwrap() - Duration::minutes(1)),
                 task_id: None,
-                task_source_id: None,
             }),
         )
         .await;
@@ -101,7 +99,6 @@ mod list_notifications {
                 last_read_at: None,
                 snoozed_until: None,
                 task_id: None,
-                task_source_id: None,
             }),
         )
         .await;
@@ -123,7 +120,6 @@ mod list_notifications {
                 // Snooze time in the future
                 snoozed_until: Some(Utc::now().with_nanosecond(0).unwrap() + Duration::minutes(1)),
                 task_id: None,
-                task_source_id: None,
             }),
         )
         .await;
@@ -182,7 +178,6 @@ mod create_notification {
             last_read_at: None,
             snoozed_until: None,
             task_id: None,
-            task_source_id: None,
         });
         let created_notification: Box<Notification> = create_resource(
             &app.app_address,
@@ -221,7 +216,6 @@ mod create_notification {
             last_read_at: None,
             snoozed_until: None,
             task_id: None,
-            task_source_id: None,
         });
         let created_notification: Box<Notification> = create_resource(
             &app.app_address,
@@ -289,7 +283,6 @@ mod patch_notification {
             last_read_at: None,
             snoozed_until: None,
             task_id: None,
-            task_source_id: None,
         });
         let snoozed_time = Utc.with_ymd_and_hms(2022, 1, 1, 1, 2, 3).unwrap();
         let created_notification: Box<Notification> = create_resource(
@@ -340,7 +333,6 @@ mod patch_notification {
             last_read_at: None,
             snoozed_until: Some(snoozed_time),
             task_id: None,
-            task_source_id: None,
         });
         let created_notification: Box<Notification> = create_resource(
             &app.app_address,
@@ -358,6 +350,7 @@ mod patch_notification {
             &NotificationPatch {
                 status: Some(created_notification.status),
                 snoozed_until: Some(snoozed_time),
+                ..Default::default()
             },
         )
         .await;
@@ -383,7 +376,6 @@ mod patch_notification {
             last_read_at: None,
             snoozed_until: None,
             task_id: None,
-            task_source_id: None,
         });
         let created_notification: Box<Notification> = create_resource(
             &app.app_address,
