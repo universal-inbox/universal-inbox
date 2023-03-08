@@ -4444,6 +4444,7 @@ dependencies = [
  "gloo-timers",
  "js-sys",
  "log",
+ "pretty_assertions",
  "rstest",
  "serde",
  "serde-wasm-bindgen",

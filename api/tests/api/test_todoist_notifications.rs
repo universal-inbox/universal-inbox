@@ -30,7 +30,8 @@ mod patch_notification {
     ) {
         let app = tested_app.await;
         let existing_todoist_task_creation =
-            create_task_from_todoist_item(&app.app_address, &todoist_item).await;
+            create_task_from_todoist_item(&app.app_address, &todoist_item, "Inbox".to_string())
+                .await;
         let existing_todoist_task = existing_todoist_task_creation.task;
         assert_eq!(existing_todoist_task.status, TaskStatus::Active);
         let existing_todoist_notification = existing_todoist_task_creation.notification.unwrap();
@@ -79,7 +80,6 @@ mod patch_notification {
             last_read_at: None,
             snoozed_until: None,
             task_id: None,
-            task_source_id: None,
         });
         let created_notification: Box<Notification> = create_resource(
             &app.app_address,

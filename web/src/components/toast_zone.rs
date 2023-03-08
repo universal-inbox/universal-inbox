@@ -135,7 +135,7 @@ fn toast<'a>(
 
                     has_callback.then(|| rsx!(
                         a {
-                            class: "px-2 py-1.5 rounded-lg",
+                            class: "px-2 py-1.5",
                             onclick: move |_| {
                                 if let Some(handler) = on_undo.as_ref() {
                                     handler.call(())

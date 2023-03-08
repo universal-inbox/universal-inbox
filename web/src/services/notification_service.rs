@@ -1,10 +1,10 @@
+use log::debug;
 use std::collections::HashMap;
 
 use chrono::{DateTime, Duration, Local, TimeZone, Timelike, Utc};
 use dioxus::prelude::*;
 use fermi::{AtomRef, UseAtomRef};
 use futures_util::StreamExt;
-use log::debug;
 
 use universal_inbox::{
     notification::{
@@ -31,6 +31,7 @@ pub enum NotificationCommand {
     CompleteTaskFromNotification(NotificationWithTask),
     PlanTask(NotificationWithTask, TaskId, TaskPlanning),
     CreateTaskFromNotification(NotificationWithTask, TaskCreation),
+    AssociateNotificationWithTask(NotificationId, TaskId),
 }
 
 #[derive(Debug, Default)]
@@ -38,6 +39,7 @@ pub struct UniversalInboxUIModel {
     pub selected_notification_index: usize,
     pub footer_help_opened: bool,
     pub task_planning_modal_opened: bool,
+    pub task_association_modal_opened: bool,
     pub unhover_element: bool,
 }
 
@@ -179,6 +181,27 @@ pub async fn notification_service<'a>(
                     &toast_service,
                     "Creating task from notification...",
                     "Task successfully created",
+                )
+                .await
+                .unwrap();
+            }
+            Some(NotificationCommand::AssociateNotificationWithTask(notification_id, task_id)) => {
+                notifications
+                    .write()
+                    .retain(|notif| notif.id != notification_id);
+
+                let _result: NotificationWithTask = call_api_and_notify(
+                    "PATCH",
+                    &format!("/notifications/{}", notification_id),
+                    NotificationPatch {
+                        status: Some(NotificationStatus::Deleted),
+                        task_id: Some(task_id),
+                        ..Default::default()
+                    },
+                    HashMap::new(),
+                    &toast_service,
+                    "Associating notification...",
+                    "Notification successfully associated",
                 )
                 .await
                 .unwrap();

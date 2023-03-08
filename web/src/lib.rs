@@ -68,7 +68,7 @@ pub fn app(cx: Scope) -> Element {
     cx.render(rsx!(
         // Router + Route == 300KB (release) !!!
         div {
-            class: "h-full flex flex-col",
+            class: "h-full flex flex-col text-sm",
 
             Router {
                 self::nav_bar {}
@@ -98,9 +98,14 @@ fn setup_key_bindings(
             notifications.get(ui_model_ref.read().selected_notification_index);
         let mut handled = true;
 
-        if ui_model_ref.read().task_planning_modal_opened {
+        if ui_model_ref.read().task_planning_modal_opened
+            || ui_model_ref.read().task_association_modal_opened
+        {
             match evt.key().as_ref() {
-                "Escape" => ui_model_ref.write().task_planning_modal_opened = false,
+                "Escape" => {
+                    ui_model_ref.write().task_planning_modal_opened = false;
+                    ui_model_ref.write().task_association_modal_opened = false;
+                }
                 _ => handled = false,
             }
         } else {
@@ -140,6 +145,7 @@ fn setup_key_bindings(
                     }
                 }
                 "p" => ui_model_ref.write().task_planning_modal_opened = true,
+                "a" => ui_model_ref.write().task_association_modal_opened = true,
                 "h" => ui_model_ref.write().toggle_help(),
                 _ => handled = false,
             }

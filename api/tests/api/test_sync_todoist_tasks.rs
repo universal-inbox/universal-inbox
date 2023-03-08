@@ -167,7 +167,7 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
     let app = tested_app.await;
     let todoist_items = sync_todoist_items_response.items.clone().unwrap();
     for todoist_item in todoist_items.iter() {
-        create_task_from_todoist_item(&app.app_address, todoist_item).await;
+        create_task_from_todoist_item(&app.app_address, todoist_item, "Inbox".to_string()).await;
     }
     // to be marked as completed during sync
     let existing_todoist_active_task_creation: Box<TaskCreationResult> = create_resource(

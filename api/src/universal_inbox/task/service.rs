@@ -4,13 +4,13 @@ use std::{
     sync::{Arc, Weak},
 };
 
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
 
 use universal_inbox::{
     notification::{Notification, NotificationPatch, NotificationStatus},
-    task::{Task, TaskCreation, TaskId, TaskMetadata, TaskPatch, TaskStatus},
+    task::{Task, TaskCreation, TaskId, TaskMetadata, TaskPatch, TaskStatus, TaskSummary},
 };
 
 use crate::{
@@ -86,6 +86,15 @@ impl TaskService {
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
+    pub async fn search_tasks<'a, 'b>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        matches: &'b str,
+    ) -> Result<Vec<TaskSummary>, UniversalInboxError> {
+        self.repository.search_tasks(executor, matches).await
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn get_task<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -143,7 +152,11 @@ impl TaskService {
                 body: Some(format!(
                     "- [{}]({})",
                     notification.title,
-                    notification.source_html_url.as_ref().unwrap()
+                    notification
+                        .source_html_url
+                        .as_ref()
+                        .map(|url| url.to_string())
+                        .unwrap_or_default()
                 )),
                 ..(*task_creation).clone()
             })
@@ -317,5 +330,49 @@ impl TaskService {
         }
 
         Ok(updated_task)
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    pub async fn associate_notification_with_task<'a, 'b>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        notification: &'b Notification,
+        task_id: TaskId,
+    ) -> Result<Box<Task>, UniversalInboxError> {
+        let task = self.get_task(executor, task_id).await?.ok_or_else(|| {
+            UniversalInboxError::Unexpected(anyhow!(
+                "Cannot associate notification {} with unknown task {task_id}",
+                notification.id
+            ))
+        })?;
+
+        let updated_task = self
+            .patch_task(
+                executor,
+                task_id,
+                &TaskPatch {
+                    body: Some(format!(
+                        "{}\n- [{}]({})",
+                        task.body,
+                        notification.title,
+                        notification
+                            .source_html_url
+                            .as_ref()
+                            .map(|url| url.to_string())
+                            .unwrap_or_default()
+                    )),
+                    ..Default::default()
+                },
+            )
+            .await?;
+
+        if let Some(task) = updated_task.result {
+            Ok(task)
+        } else {
+            Err(UniversalInboxError::Unexpected(anyhow!(
+                "Cannot update task {task_id} body while associating notification {} to it",
+                notification.id
+            )))
+        }
     }
 }

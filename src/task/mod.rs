@@ -41,6 +41,25 @@ pub struct Task {
     pub metadata: TaskMetadata,
 }
 
+#[serde_as]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
+pub struct TaskSummary {
+    pub id: TaskId,
+    pub source_id: String,
+    pub title: String,
+    pub body: String,
+    pub priority: TaskPriority,
+    pub due_at: Option<DueDate>,
+    pub tags: Vec<String>,
+    pub project: String,
+}
+
+impl fmt::Display for TaskSummary {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.title)
+    }
+}
+
 impl Task {
     pub fn is_in_inbox(&self) -> bool {
         self.project == "Inbox"
@@ -130,6 +149,7 @@ pub struct TaskPatch {
     pub project: Option<String>,
     pub due_at: Option<Option<DueDate>>,
     pub priority: Option<TaskPriority>,
+    pub body: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default, PartialEq, Eq, Clone)]
@@ -237,7 +257,6 @@ impl From<&Task> for Notification {
             last_read_at: None,
             snoozed_until: None,
             task_id: Some(task.id),
-            task_source_id: Some(task.source_id.clone()),
         }
     }
 }
@@ -263,7 +282,6 @@ impl From<&Task> for NotificationWithTask {
             last_read_at: None,
             snoozed_until: None,
             task: Some(task.clone()),
-            task_source_id: Some(task.source_id.clone()),
         }
     }
 }

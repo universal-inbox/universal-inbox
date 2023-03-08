@@ -255,6 +255,16 @@ impl NotificationService {
                     }
                 }
             };
+
+            if let Some(task_id) = patch.task_id {
+                self.task_service
+                    .upgrade()
+                    .context("Unable to access task_service from notification_service")?
+                    .read()
+                    .await
+                    .associate_notification_with_task(executor, notification, task_id)
+                    .await?;
+            }
         }
 
         Ok(updated_notification)

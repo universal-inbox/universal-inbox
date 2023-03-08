@@ -238,7 +238,6 @@ pub fn assert_sync_items(
                 assert_eq!(notif.updated_at, task.created_at);
                 assert_eq!(notif.metadata, NotificationMetadata::Todoist);
                 assert_eq!(notif.task_id, Some(task.id));
-                assert_eq!(notif.task_source_id, Some(task.source_id.clone()));
             }
             // This task should be updated
             "1456" => {
@@ -273,6 +272,7 @@ pub fn assert_sync_items(
 pub async fn create_task_from_todoist_item(
     app_address: &str,
     todoist_item: &TodoistItem,
+    project: String,
 ) -> Box<TaskCreationResult> {
     create_resource(
         app_address,
@@ -293,7 +293,7 @@ pub async fn create_task_from_todoist_item(
             source_html_url: todoist::get_task_html_url(&todoist_item.id),
             tags: todoist_item.labels.clone(),
             parent_id: None,
-            project: "Inbox".to_string(),
+            project,
             is_recurring: todoist_item
                 .due
                 .as_ref()
