@@ -17,6 +17,7 @@ impl ResponseError for UniversalInboxError {
             UniversalInboxError::InvalidEnumData { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             UniversalInboxError::InvalidUriData { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             UniversalInboxError::InvalidInputData { .. } => StatusCode::BAD_REQUEST,
+            UniversalInboxError::TaskNotFound { .. } => StatusCode::BAD_REQUEST,
             UniversalInboxError::AlreadyExists { .. } => StatusCode::BAD_REQUEST,
             UniversalInboxError::Unexpected(_) => StatusCode::INTERNAL_SERVER_ERROR,
             UniversalInboxError::UnsupportedAction(_) => StatusCode::BAD_REQUEST,

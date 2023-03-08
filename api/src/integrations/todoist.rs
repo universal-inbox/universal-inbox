@@ -96,13 +96,15 @@ pub struct TodoistSyncCommandItemCompleteArgs {
     pub id: String,
 }
 
-#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone, Default)]
 pub struct TodoistSyncCommandItemUpdateArgs {
     pub id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub due: Option<Option<TodoistItemDue>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub priority: Option<TodoistItemPriority>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
@@ -476,12 +478,13 @@ impl TaskSourceService<TodoistItem> for TodoistService {
             });
         }
 
-        if patch.priority.is_some() || patch.due_at.is_some() {
+        if patch.priority.is_some() || patch.due_at.is_some() || patch.body.is_some() {
             let priority = patch.priority.map(|priority| priority.into());
             let due = patch
                 .due_at
                 .as_ref()
                 .map(|due| due.as_ref().map(|d| d.into()));
+            let description = patch.body.clone();
 
             commands.push(TodoistSyncCommand::ItemUpdate {
                 uuid: Uuid::new_v4(),
@@ -489,6 +492,7 @@ impl TaskSourceService<TodoistItem> for TodoistService {
                     id: id.to_string(),
                     due,
                     priority,
+                    description,
                 },
             });
         }
@@ -556,8 +560,7 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&TodoistSyncCommandItemUpdateArgs {
                 id: "123".to_string(),
-                due: None,
-                priority: None
+                ..Default::default()
             })
             .unwrap(),
             json!({ "id": "123" }).to_string()
@@ -570,7 +573,7 @@ mod tests {
             serde_json::to_string(&TodoistSyncCommandItemUpdateArgs {
                 id: "123".to_string(),
                 due: Some(None),
-                priority: None
+                ..Default::default()
             })
             .unwrap(),
             json!({ "id": "123", "due": null }).to_string()
@@ -589,7 +592,7 @@ mod tests {
                     timezone: None,
                     lang: "en".to_string()
                 })),
-                priority: None
+                ..Default::default()
             })
             .unwrap(),
             json!({

@@ -246,7 +246,9 @@ mod list_tasks {
     #[tokio::test]
     async fn test_list_tasks(#[future] tested_app: TestedApp, todoist_item: Box<TodoistItem>) {
         let app = tested_app.await;
-        let task_active = create_task_from_todoist_item(&app.app_address, &todoist_item).await;
+        let task_active =
+            create_task_from_todoist_item(&app.app_address, &todoist_item, "Inbox".to_string())
+                .await;
         assert_eq!(task_active.task.status, TaskStatus::Active);
 
         let mut todoist_item_done = todoist_item.clone();
@@ -254,7 +256,12 @@ mod list_tasks {
         todoist_item_done.checked = true;
         todoist_item_done.completed_at = Some(Utc.with_ymd_and_hms(2022, 1, 2, 0, 0, 0).unwrap());
 
-        let task_done = create_task_from_todoist_item(&app.app_address, &todoist_item_done).await;
+        let task_done = create_task_from_todoist_item(
+            &app.app_address,
+            &todoist_item_done,
+            "Inbox".to_string(),
+        )
+        .await;
         assert_eq!(task_done.task.status, TaskStatus::Done);
 
         let tasks = list_tasks(&app.app_address, TaskStatus::Active).await;
@@ -281,7 +288,9 @@ mod patch_task {
     ) {
         let app = tested_app.await;
 
-        let creation_result = create_task_from_todoist_item(&app.app_address, &todoist_item).await;
+        let creation_result =
+            create_task_from_todoist_item(&app.app_address, &todoist_item, "Inbox".to_string())
+                .await;
 
         let response = patch_resource_response(
             &app.app_address,
@@ -304,7 +313,9 @@ mod patch_task {
         todoist_item: Box<TodoistItem>,
     ) {
         let app = tested_app.await;
-        let creation_result = create_task_from_todoist_item(&app.app_address, &todoist_item).await;
+        let creation_result =
+            create_task_from_todoist_item(&app.app_address, &todoist_item, "Inbox".to_string())
+                .await;
 
         let response = patch_resource_response(
             &app.app_address,

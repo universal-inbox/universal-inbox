@@ -45,7 +45,6 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
             last_read_at: None,
             snoozed_until: None,
             task_id: None,
-            task_source_id: None,
         }),
     )
     .await;
@@ -118,7 +117,6 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
             last_read_at: None,
             snoozed_until: None,
             task_id: None,
-            task_source_id: None,
         }),
     )
     .await;

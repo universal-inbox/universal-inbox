@@ -27,7 +27,6 @@ pub struct Notification {
     pub last_read_at: Option<DateTime<Utc>>,
     pub snoozed_until: Option<DateTime<Utc>>,
     pub task_id: Option<TaskId>,
-    pub task_source_id: Option<String>,
 }
 
 #[serde_as]
@@ -45,7 +44,6 @@ pub struct NotificationWithTask {
     pub last_read_at: Option<DateTime<Utc>>,
     pub snoozed_until: Option<DateTime<Utc>>,
     pub task: Option<Task>,
-    pub task_source_id: Option<String>,
 }
 
 impl From<NotificationWithTask> for Notification {
@@ -67,7 +65,6 @@ impl From<&NotificationWithTask> for Notification {
             last_read_at: notification.last_read_at,
             snoozed_until: notification.snoozed_until,
             task_id: notification.task.as_ref().map(|task| task.id),
-            task_source_id: notification.task_source_id.clone(),
         }
     }
 }
@@ -85,7 +82,6 @@ impl NotificationWithTask {
             last_read_at: notification.last_read_at,
             snoozed_until: notification.snoozed_until,
             task,
-            task_source_id: notification.task_source_id.clone(),
         }
     }
 }
@@ -133,6 +129,7 @@ macro_attr! {
 pub struct NotificationPatch {
     pub status: Option<NotificationStatus>,
     pub snoozed_until: Option<DateTime<Utc>>,
+    pub task_id: Option<TaskId>,
 }
 
 impl NotificationWithTask {

@@ -1,4 +1,3 @@
-use log::debug;
 use std::collections::HashMap;
 
 use dioxus::prelude::*;
@@ -24,7 +23,6 @@ pub fn task_planning_modal<'a>(
     on_task_planning: EventHandler<'a, (TaskPlanning, TaskId)>,
     on_task_creation: EventHandler<'a, TaskCreation>,
 ) -> Element {
-    debug!("Rendering task planning");
     let icon = cx.render(rsx!(self::todoist {}));
     let project = use_state(cx, || "".to_string());
     let due_at = use_state(cx, || "".to_string()); // TODO Set today as default
