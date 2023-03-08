@@ -45,7 +45,8 @@ mod patch_task {
     ) {
         let app = tested_app.await;
         let existing_todoist_task_creation =
-            create_task_from_todoist_item(&app.app_address, &todoist_item).await;
+            create_task_from_todoist_item(&app.app_address, &todoist_item, "Inbox".to_string())
+                .await;
         let existing_todoist_task = existing_todoist_task_creation.task;
         assert_eq!(existing_todoist_task.status, TaskStatus::Active);
         let existing_todoist_notification = existing_todoist_task_creation.notification.unwrap();
@@ -91,7 +92,8 @@ mod patch_task {
     ) {
         let app = tested_app.await;
         let existing_todoist_task_creation =
-            create_task_from_todoist_item(&app.app_address, &todoist_item).await;
+            create_task_from_todoist_item(&app.app_address, &todoist_item, "Inbox".to_string())
+                .await;
         let existing_todoist_task = existing_todoist_task_creation.task;
         assert_eq!(existing_todoist_task.status, TaskStatus::Active);
         let existing_todoist_notification = existing_todoist_task_creation.notification.unwrap();
@@ -140,7 +142,8 @@ mod patch_task {
     ) {
         let app = tested_app.await;
         let existing_todoist_task_creation =
-            create_task_from_todoist_item(&app.app_address, &todoist_item).await;
+            create_task_from_todoist_item(&app.app_address, &todoist_item, "Inbox".to_string())
+                .await;
         let existing_todoist_task = existing_todoist_task_creation.task;
         assert_eq!(
             existing_todoist_task.due_at,
@@ -182,6 +185,7 @@ mod patch_task {
                             lang: "en".to_string(),
                         })),
                         priority: Some(new_priority),
+                        description: None,
                     },
                 },
             ],
@@ -311,5 +315,63 @@ mod patch_task {
         let deleted_notification: Box<Notification> =
             get_resource(&app.app_address, "notifications", notification.id.into()).await;
         assert_eq!(deleted_notification.status, NotificationStatus::Deleted);
+    }
+}
+
+mod patch_notification {
+    use universal_inbox::notification::NotificationPatch;
+
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_patch_notification_to_associate_with_task(
+        #[future] tested_app: TestedApp,
+        github_notification: Box<GithubNotification>,
+        todoist_item: Box<TodoistItem>,
+    ) {
+        let app = tested_app.await;
+        let notification =
+            create_notification_from_github_notification(&app.app_address, &github_notification)
+                .await;
+        let existing_todoist_task =
+            create_task_from_todoist_item(&app.app_address, &todoist_item, "Project2".to_string())
+                .await;
+        let todoist_sync_mock = mock_todoist_sync_service(
+            &app.todoist_mock_server,
+            vec![TodoistSyncPartialCommand::ItemUpdate {
+                args: TodoistSyncCommandItemUpdateArgs {
+                    id: existing_todoist_task.task.source_id.clone(),
+                    description: Some(format!(
+                        "\n- [{}]({})",
+                        notification.title,
+                        notification.source_html_url.as_ref().unwrap()
+                    )),
+                    ..Default::default()
+                },
+            }],
+            None,
+        );
+
+        let patched_notification = patch_resource(
+            &app.app_address,
+            "notifications",
+            notification.id.into(),
+            &NotificationPatch {
+                task_id: Some(existing_todoist_task.task.id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+        todoist_sync_mock.assert();
+        assert_eq!(
+            patched_notification,
+            Box::new(Notification {
+                task_id: Some(existing_todoist_task.task.id),
+                ..*notification
+            })
+        );
     }
 }

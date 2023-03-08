@@ -86,8 +86,7 @@ impl NotificationRepository for Repository {
                   updated_at,
                   last_read_at,
                   snoozed_until,
-                  task_id,
-                  task_source_id
+                  task_id
                 FROM notification
                 WHERE id = $1
             "#,
@@ -121,7 +120,6 @@ impl NotificationRepository for Repository {
                   notification.updated_at as notification_updated_at,
                   notification.last_read_at as notification_last_read_at,
                   notification.snoozed_until as notification_snoozed_until,
-                  notification.task_source_id as notification_task_source_id,
                   task.id,
                   task.source_id,
                   task.title,
@@ -190,11 +188,10 @@ impl NotificationRepository for Repository {
                     updated_at,
                     last_read_at,
                     snoozed_until,
-                    task_id,
-                    task_source_id
+                    task_id
                   )
                 VALUES
-                  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             "#,
             notification.id.0,
             notification.title,
@@ -213,7 +210,6 @@ impl NotificationRepository for Repository {
                 .snoozed_until
                 .map(|snoozed_until| snoozed_until.naive_utc()),
             notification.task_id.map(|task_id| task_id.0),
-            notification.task_source_id
         )
         .execute(executor)
         .await
@@ -264,8 +260,7 @@ impl NotificationRepository for Repository {
                   updated_at,
                   last_read_at,
                   snoozed_until,
-                  task_id,
-                  task_source_id
+                  task_id
             "#,
             status.to_string(),
             &active_source_notification_ids[..],
@@ -303,11 +298,10 @@ impl NotificationRepository for Repository {
                     updated_at,
                     last_read_at,
                     snoozed_until,
-                    task_id,
-                    task_source_id
+                    task_id
                   )
                 VALUES
-                  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 ON CONFLICT (source_id, kind) DO UPDATE
                 SET
                   title = $2,
@@ -317,8 +311,7 @@ impl NotificationRepository for Repository {
                   updated_at = $7,
                   last_read_at = $8,
                   snoozed_until = $9,
-                  task_id = $10,
-                  task_source_id = $11
+                  task_id = $10
                 RETURNING
                   id
             "#,
@@ -339,7 +332,6 @@ impl NotificationRepository for Repository {
                     .snoozed_until
                     .map(|snoozed_until| snoozed_until.naive_utc()),
                 notification.task_id.map(|task_id| task_id.0),
-                notification.task_source_id
             )
             .fetch_one(executor)
             .await
@@ -385,6 +377,11 @@ impl NotificationRepository for Repository {
                 .push(" snoozed_until = ")
                 .push_bind_unseparated(snoozed_until.naive_utc());
         }
+        if let Some(task_id) = patch.task_id {
+            separated
+                .push(" task_id = ")
+                .push_bind_unseparated(task_id.0);
+        }
 
         query_builder
             .push(" WHERE id = ")
@@ -402,7 +399,6 @@ impl NotificationRepository for Repository {
                   last_read_at,
                   snoozed_until,
                   task_id,
-                  task_source_id,
                   (SELECT"#,
         );
 
@@ -416,6 +412,12 @@ impl NotificationRepository for Repository {
             separated
                 .push(" (snoozed_until is NULL OR snoozed_until != ")
                 .push_bind_unseparated(snoozed_until.naive_utc())
+                .push_unseparated(")");
+        }
+        if let Some(task_id) = patch.task_id {
+            separated
+                .push(" (task_id is NULL OR task_id != ")
+                .push_bind_unseparated(task_id.0)
                 .push_unseparated(")");
         }
 
@@ -502,7 +504,6 @@ impl NotificationRepository for Repository {
                   last_read_at,
                   snoozed_until,
                   task_id,
-                  task_source_id,
                   (SELECT"#,
         );
 
@@ -565,7 +566,6 @@ struct NotificationRow {
     last_read_at: Option<NaiveDateTime>,
     snoozed_until: Option<NaiveDateTime>,
     task_id: Option<Uuid>,
-    task_source_id: Option<String>,
 }
 
 #[derive(Debug)]
@@ -580,7 +580,6 @@ struct NotificationWithTaskRow {
     notification_last_read_at: Option<NaiveDateTime>,
     notification_snoozed_until: Option<NaiveDateTime>,
     task_row: Option<TaskRow>,
-    notification_task_source_id: Option<String>,
 }
 
 impl FromRow<'_, PgRow> for NotificationWithTaskRow {
@@ -599,7 +598,6 @@ impl FromRow<'_, PgRow> for NotificationWithTaskRow {
                 .try_get::<Option<Uuid>, &str>("id")?
                 .map(|_task_id| TaskRow::from_row(row))
                 .transpose()?,
-            notification_task_source_id: row.try_get("notification_task_source_id")?,
         })
     }
 }
@@ -657,7 +655,6 @@ impl TryFrom<&NotificationRow> for Notification {
                 .snoozed_until
                 .map(|snoozed_until| DateTime::<Utc>::from_utc(snoozed_until, Utc)),
             task_id: row.task_id.map(|task_id| task_id.into()),
-            task_source_id: row.task_source_id.clone(),
         })
     }
 }
@@ -704,7 +701,6 @@ impl TryFrom<&NotificationWithTaskRow> for NotificationWithTask {
                 .as_ref()
                 .map(|task_row| task_row.try_into())
                 .transpose()?,
-            task_source_id: row.notification_task_source_id.clone(),
         })
     }
 }

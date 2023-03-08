@@ -6,7 +6,7 @@ use sqlx::{types::Json, Postgres, QueryBuilder, Transaction};
 use uuid::Uuid;
 
 use universal_inbox::task::{
-    DueDate, Task, TaskId, TaskMetadata, TaskPatch, TaskPriority, TaskStatus,
+    DueDate, Task, TaskId, TaskMetadata, TaskPatch, TaskPriority, TaskStatus, TaskSummary,
 };
 
 use crate::{
@@ -33,6 +33,11 @@ pub trait TaskRepository {
         executor: &mut Transaction<'a, Postgres>,
         status: TaskStatus,
     ) -> Result<Vec<Task>, UniversalInboxError>;
+    async fn search_tasks<'a, 'b>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        matches: &'b str,
+    ) -> Result<Vec<TaskSummary>, UniversalInboxError>;
     async fn create_task<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -176,6 +181,51 @@ impl TaskRepository for Repository {
             .context("Failed to fetch tasks from storage")?;
 
         rows.iter().map(|r| r.try_into()).collect()
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    async fn search_tasks<'a, 'b>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        matches: &'b str,
+    ) -> Result<Vec<TaskSummary>, UniversalInboxError> {
+        // TODO: cleanup, only keep [a-zA-Z0-9]
+        let ts_query = matches
+            .split_whitespace()
+            .map(|word| format!("{word}:*"))
+            .collect::<Vec<String>>()
+            .join(" & ");
+
+        let rows = sqlx::query_as!(
+            TaskSummaryRow,
+            r#"
+                SELECT
+                  id,
+                  source_id,
+                  title,
+                  body,
+                  priority,
+                  due_at as "due_at: Json<Option<DueDate>>",
+                  tags,
+                  project
+                FROM
+                  task,
+                  to_tsquery('english', $1) query
+                WHERE
+                  query @@ title_body_project_tags_tsv
+                  AND status::TEXT = 'Active'
+                ORDER BY ts_rank_cd(title_body_project_tags_tsv, query) DESC
+                LIMIT 10;
+            "#,
+            ts_query
+        )
+        .fetch_all(executor)
+        .await
+        .context("Failed to search tasks from storage")?;
+
+        rows.iter()
+            .map(|r| r.try_into())
+            .collect::<Result<Vec<TaskSummary>, UniversalInboxError>>()
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
@@ -436,6 +486,10 @@ impl TaskRepository for Repository {
                 .push_bind_unseparated(priority as i32);
         }
 
+        if let Some(body) = &patch.body {
+            separated.push(" body = ").push_bind_unseparated(body);
+        }
+
         query_builder.push(" WHERE id = ").push_bind(task_id.0);
         query_builder.push(
             r#"
@@ -485,6 +539,10 @@ impl TaskRepository for Repository {
             separated
                 .push(" priority != ")
                 .push_bind_unseparated(priority as i32);
+        }
+
+        if let Some(body) = &patch.body {
+            separated.push(" body != ").push_bind_unseparated(body);
         }
 
         query_builder
@@ -605,6 +663,38 @@ impl TryFrom<&TaskRow> for Task {
             is_recurring: row.is_recurring,
             created_at: DateTime::<Utc>::from_utc(row.created_at, Utc),
             metadata: row.metadata.0.clone(),
+        })
+    }
+}
+
+#[derive(Debug, sqlx::FromRow)]
+pub struct TaskSummaryRow {
+    id: Uuid,
+    source_id: String,
+    title: String,
+    body: String,
+    priority: i32,
+    due_at: Json<Option<DueDate>>,
+    tags: Vec<String>,
+    project: String,
+}
+
+impl TryFrom<&TaskSummaryRow> for TaskSummary {
+    type Error = UniversalInboxError;
+
+    fn try_from(row: &TaskSummaryRow) -> Result<Self, Self::Error> {
+        let priority = TaskPriority::try_from(row.priority as u8)
+            .with_context(|| format!("Failed to parse {} as TaskPriority", row.priority))?;
+
+        Ok(TaskSummary {
+            id: row.id.into(),
+            source_id: row.source_id.to_string(),
+            title: row.title.to_string(),
+            body: row.body.to_string(),
+            priority,
+            due_at: row.due_at.0.clone(),
+            tags: row.tags.clone(),
+            project: row.project.to_string(),
         })
     }
 }

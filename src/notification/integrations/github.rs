@@ -429,7 +429,6 @@ impl From<GithubNotification> for Notification {
             last_read_at: source.last_read_at,
             snoozed_until: None,
             task_id: None,
-            task_source_id: None,
         }
     }
 }

@@ -3,11 +3,8 @@
 @tailwind utilities;
 
 @layer components {
-    .btn {
-        @apply rounded-none;
-    }
-
-    .alert {
-        @apply rounded-none;
+    :root {
+        --rounded-btn: 0.25rem;
+        --rounded-box: 0.5rem;
     }
 }
