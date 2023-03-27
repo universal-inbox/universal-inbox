@@ -1,3 +1,5 @@
+pub mod auth;
+pub mod config;
 pub mod health_check;
 pub mod notification;
 pub mod task;
@@ -33,7 +35,7 @@ impl ResponseError for UniversalInboxError {
         );
 
         res.set_body(BoxBody::new(
-            json!({ "message": format!("{}", self) }).to_string(),
+            json!({ "message": format!("{self}") }).to_string(),
         ))
     }
 }

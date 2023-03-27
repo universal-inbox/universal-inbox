@@ -1,4 +1,4 @@
-use reqwest::Response;
+use reqwest::{Client, Response};
 use serde_json::json;
 
 use universal_inbox::task::{Task, TaskStatus};
@@ -9,24 +9,36 @@ use universal_inbox_api::{
 
 pub mod todoist;
 
-pub async fn list_tasks_response(app_address: &str, status_filter: TaskStatus) -> Response {
-    reqwest::Client::new()
+pub async fn list_tasks_response(
+    client: &Client,
+    app_address: &str,
+    status_filter: TaskStatus,
+) -> Response {
+    client
         .get(&format!("{app_address}/tasks?status={status_filter}"))
         .send()
         .await
         .expect("Failed to execute request")
 }
 
-pub async fn list_tasks(app_address: &str, status_filter: TaskStatus) -> Vec<Task> {
-    list_tasks_response(app_address, status_filter)
+pub async fn list_tasks(
+    client: &Client,
+    app_address: &str,
+    status_filter: TaskStatus,
+) -> Vec<Task> {
+    list_tasks_response(client, app_address, status_filter)
         .await
         .json()
         .await
         .expect("Cannot parse JSON result")
 }
 
-pub async fn sync_tasks_response(app_address: &str, source: Option<TaskSourceKind>) -> Response {
-    reqwest::Client::new()
+pub async fn sync_tasks_response(
+    client: &Client,
+    app_address: &str,
+    source: Option<TaskSourceKind>,
+) -> Response {
+    client
         .post(&format!("{}/tasks/sync", &app_address))
         .json(
             &source
@@ -39,10 +51,11 @@ pub async fn sync_tasks_response(app_address: &str, source: Option<TaskSourceKin
 }
 
 pub async fn sync_tasks(
+    client: &Client,
     app_address: &str,
     source: Option<TaskSourceKind>,
 ) -> Vec<TaskCreationResult> {
-    sync_tasks_response(app_address, source)
+    sync_tasks_response(client, app_address, source)
         .await
         .json()
         .await

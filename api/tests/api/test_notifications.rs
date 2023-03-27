@@ -11,12 +11,12 @@ use universal_inbox::notification::{
 use universal_inbox_api::integrations::github;
 
 use crate::helpers::{
+    auth::{authenticated_app, AuthenticatedApp},
     notification::{github::github_notification, list_notifications},
     rest::{
         create_resource, create_resource_response, get_resource, get_resource_response,
         patch_resource, patch_resource_response,
     },
-    tested_app, TestedApp,
 };
 
 mod list_notifications {
@@ -24,10 +24,16 @@ mod list_notifications {
 
     #[rstest]
     #[tokio::test]
-    async fn test_empty_list_notifications(#[future] tested_app: TestedApp) {
-        let app = tested_app.await;
-        let result =
-            list_notifications(&app.app_address, NotificationStatus::Unread, false, None).await;
+    async fn test_empty_list_notifications(#[future] authenticated_app: AuthenticatedApp) {
+        let app = authenticated_app.await;
+        let result = list_notifications(
+            &app.client,
+            &app.app_address,
+            NotificationStatus::Unread,
+            false,
+            None,
+        )
+        .await;
 
         assert!(result.is_empty());
     }
@@ -35,14 +41,15 @@ mod list_notifications {
     #[rstest]
     #[tokio::test]
     async fn test_list_notifications(
-        #[future] tested_app: TestedApp,
+        #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
     ) {
         let mut github_notification2 = github_notification.clone();
         github_notification2.id = "43".to_string();
 
-        let app = tested_app.await;
+        let app = authenticated_app.await;
         let expected_notification1: Box<Notification> = create_resource(
+            &app.client,
             &app.app_address,
             "notifications",
             Box::new(Notification {
@@ -63,6 +70,7 @@ mod list_notifications {
         .await;
 
         let expected_notification2: Box<Notification> = create_resource(
+            &app.client,
             &app.app_address,
             "notifications",
             Box::new(Notification {
@@ -84,6 +92,7 @@ mod list_notifications {
         .await;
 
         let deleted_notification: Box<Notification> = create_resource(
+            &app.client,
             &app.app_address,
             "notifications",
             Box::new(Notification {
@@ -104,6 +113,7 @@ mod list_notifications {
         .await;
 
         let snoozed_notification: Box<Notification> = create_resource(
+            &app.client,
             &app.app_address,
             "notifications",
             Box::new(Notification {
@@ -124,28 +134,47 @@ mod list_notifications {
         )
         .await;
 
-        let result =
-            list_notifications(&app.app_address, NotificationStatus::Unread, false, None).await;
+        let result = list_notifications(
+            &app.client,
+            &app.app_address,
+            NotificationStatus::Unread,
+            false,
+            None,
+        )
+        .await;
 
         assert_eq!(result.len(), 2);
         assert_eq!(result[0], *expected_notification1);
         assert_eq!(result[1], *expected_notification2);
 
-        let result =
-            list_notifications(&app.app_address, NotificationStatus::Unread, true, None).await;
+        let result = list_notifications(
+            &app.client,
+            &app.app_address,
+            NotificationStatus::Unread,
+            true,
+            None,
+        )
+        .await;
 
         assert_eq!(result.len(), 3);
         assert_eq!(result[0], *expected_notification1);
         assert_eq!(result[1], *expected_notification2);
         assert_eq!(result[2], *snoozed_notification);
 
-        let result =
-            list_notifications(&app.app_address, NotificationStatus::Deleted, false, None).await;
+        let result = list_notifications(
+            &app.client,
+            &app.app_address,
+            NotificationStatus::Deleted,
+            false,
+            None,
+        )
+        .await;
 
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], *deleted_notification);
 
         let result = list_notifications(
+            &app.client,
             &app.app_address,
             NotificationStatus::Unsubscribed,
             false,
@@ -163,10 +192,10 @@ mod create_notification {
     #[rstest]
     #[tokio::test]
     async fn test_create_notification(
-        #[future] tested_app: TestedApp,
+        #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
     ) {
-        let app = tested_app.await;
+        let app = authenticated_app.await;
         let expected_notification = Box::new(Notification {
             id: Uuid::new_v4().into(),
             title: "notif1".to_string(),
@@ -180,6 +209,7 @@ mod create_notification {
             task_id: None,
         });
         let created_notification: Box<Notification> = create_resource(
+            &app.client,
             &app.app_address,
             "notifications",
             expected_notification.clone(),
@@ -189,6 +219,7 @@ mod create_notification {
         assert_eq!(created_notification, expected_notification);
 
         let notification = get_resource(
+            &app.client,
             &app.app_address,
             "notifications",
             created_notification.id.into(),
@@ -201,10 +232,10 @@ mod create_notification {
     #[rstest]
     #[tokio::test]
     async fn test_create_notification_duplicate_notification(
-        #[future] tested_app: TestedApp,
+        #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
     ) {
-        let app = tested_app.await;
+        let app = authenticated_app.await;
         let expected_notification = Box::new(Notification {
             id: Uuid::new_v4().into(),
             title: "notif1".to_string(),
@@ -218,6 +249,7 @@ mod create_notification {
             task_id: None,
         });
         let created_notification: Box<Notification> = create_resource(
+            &app.client,
             &app.app_address,
             "notifications",
             expected_notification.clone(),
@@ -226,9 +258,13 @@ mod create_notification {
 
         assert_eq!(created_notification, expected_notification);
 
-        let response =
-            create_resource_response(&app.app_address, "notifications", expected_notification)
-                .await;
+        let response = create_resource_response(
+            &app.client,
+            &app.app_address,
+            "notifications",
+            expected_notification,
+        )
+        .await;
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
         let body = response.text().await.expect("Cannot get response body");
@@ -245,18 +281,23 @@ mod get_notification {
 
     #[rstest]
     #[tokio::test]
-    async fn test_get_unknown_notification(#[future] tested_app: TestedApp) {
-        let app = tested_app.await;
+    async fn test_get_unknown_notification(#[future] authenticated_app: AuthenticatedApp) {
+        let app = authenticated_app.await;
         let unknown_notification_id = Uuid::new_v4();
 
-        let response =
-            get_resource_response(&app.app_address, "notifications", unknown_notification_id).await;
+        let response = get_resource_response(
+            &app.client,
+            &app.app_address,
+            "notifications",
+            unknown_notification_id,
+        )
+        .await;
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
         let body = response.text().await.expect("Cannot get response body");
         assert_eq!(
             body,
-            json!({ "message": format!("Cannot find notification {}", unknown_notification_id) })
+            json!({ "message": format!("Cannot find notification {unknown_notification_id}") })
                 .to_string()
         );
     }
@@ -268,10 +309,10 @@ mod patch_notification {
     #[rstest]
     #[tokio::test]
     async fn test_patch_notification_snoozed_until(
-        #[future] tested_app: TestedApp,
+        #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
     ) {
-        let app = tested_app.await;
+        let app = authenticated_app.await;
         let expected_notification = Box::new(Notification {
             id: Uuid::new_v4().into(),
             title: "notif1".to_string(),
@@ -286,6 +327,7 @@ mod patch_notification {
         });
         let snoozed_time = Utc.with_ymd_and_hms(2022, 1, 1, 1, 2, 3).unwrap();
         let created_notification: Box<Notification> = create_resource(
+            &app.client,
             &app.app_address,
             "notifications",
             expected_notification.clone(),
@@ -295,6 +337,7 @@ mod patch_notification {
         assert_eq!(created_notification, expected_notification);
 
         let patched_notification = patch_resource(
+            &app.client,
             &app.app_address,
             "notifications",
             created_notification.id.into(),
@@ -317,10 +360,10 @@ mod patch_notification {
     #[rstest]
     #[tokio::test]
     async fn test_patch_notification_status_without_modification(
-        #[future] tested_app: TestedApp,
+        #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
     ) {
-        let app = tested_app.await;
+        let app = authenticated_app.await;
         let snoozed_time = Utc.with_ymd_and_hms(2022, 1, 1, 1, 2, 3).unwrap();
         let expected_notification = Box::new(Notification {
             id: Uuid::new_v4().into(),
@@ -335,6 +378,7 @@ mod patch_notification {
             task_id: None,
         });
         let created_notification: Box<Notification> = create_resource(
+            &app.client,
             &app.app_address,
             "notifications",
             expected_notification.clone(),
@@ -344,6 +388,7 @@ mod patch_notification {
         assert_eq!(created_notification, expected_notification);
 
         let response = patch_resource_response(
+            &app.client,
             &app.app_address,
             "notifications",
             created_notification.id.into(),
@@ -361,10 +406,10 @@ mod patch_notification {
     #[rstest]
     #[tokio::test]
     async fn test_patch_notification_without_values_to_update(
-        #[future] tested_app: TestedApp,
+        #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
     ) {
-        let app = tested_app.await;
+        let app = authenticated_app.await;
         let expected_notification = Box::new(Notification {
             id: Uuid::new_v4().into(),
             title: "notif1".to_string(),
@@ -378,6 +423,7 @@ mod patch_notification {
             task_id: None,
         });
         let created_notification: Box<Notification> = create_resource(
+            &app.client,
             &app.app_address,
             "notifications",
             expected_notification.clone(),
@@ -387,6 +433,7 @@ mod patch_notification {
         assert_eq!(created_notification, expected_notification);
 
         let response = patch_resource_response(
+            &app.client,
             &app.app_address,
             "notifications",
             created_notification.id.into(),
@@ -412,11 +459,12 @@ mod patch_notification {
 
     #[rstest]
     #[tokio::test]
-    async fn test_patch_unknown_notification(#[future] tested_app: TestedApp) {
-        let app = tested_app.await;
+    async fn test_patch_unknown_notification(#[future] authenticated_app: AuthenticatedApp) {
+        let app = authenticated_app.await;
         let unknown_notification_id = Uuid::new_v4();
 
         let response = patch_resource_response(
+            &app.client,
             &app.app_address,
             "notifications",
             unknown_notification_id,
@@ -432,11 +480,7 @@ mod patch_notification {
         assert_eq!(
             body,
             json!({
-                "message":
-                    format!(
-                        "Cannot update unknown notification {}",
-                        unknown_notification_id
-                    )
+                "message": format!("Cannot update unknown notification {unknown_notification_id}")
             })
             .to_string()
         );

@@ -1,6 +1,6 @@
 #![allow(clippy::useless_conversion)]
 
-use reqwest::Response;
+use reqwest::{Client, Response};
 use serde_json::json;
 
 use universal_inbox::{
@@ -13,6 +13,7 @@ use universal_inbox_api::integrations::notification::NotificationSourceKind;
 pub mod github;
 
 pub async fn list_notifications_response(
+    client: &Client,
     app_address: &str,
     status_filter: NotificationStatus,
     include_snoozed_notifications: bool,
@@ -27,7 +28,7 @@ pub async fn list_notifications_response(
         .map(|id| format!("&task_id={id}"))
         .unwrap_or_default();
 
-    reqwest::Client::new()
+    client
         .get(&format!(
             "{app_address}/notifications?status={status_filter}{snoozed_notifications_parameter}{task_id_parameter}"
         ))
@@ -37,12 +38,14 @@ pub async fn list_notifications_response(
 }
 
 pub async fn list_notifications_with_tasks(
+    client: &Client,
     app_address: &str,
     status_filter: NotificationStatus,
     include_snoozed_notifications: bool,
     task_id: Option<TaskId>,
 ) -> Vec<NotificationWithTask> {
     list_notifications_response(
+        client,
         app_address,
         status_filter,
         include_snoozed_notifications,
@@ -55,12 +58,14 @@ pub async fn list_notifications_with_tasks(
 }
 
 pub async fn list_notifications(
+    client: &Client,
     app_address: &str,
     status_filter: NotificationStatus,
     include_snoozed_notifications: bool,
     task_id: Option<TaskId>,
 ) -> Vec<Notification> {
     list_notifications_with_tasks(
+        client,
         app_address,
         status_filter,
         include_snoozed_notifications,
@@ -73,10 +78,11 @@ pub async fn list_notifications(
 }
 
 pub async fn sync_notifications_response(
+    client: &Client,
     app_address: &str,
     source: Option<NotificationSourceKind>,
 ) -> Response {
-    reqwest::Client::new()
+    client
         .post(&format!("{}/notifications/sync", &app_address))
         .json(
             &source
@@ -89,10 +95,11 @@ pub async fn sync_notifications_response(
 }
 
 pub async fn sync_notifications(
+    client: &Client,
     app_address: &str,
     source: Option<NotificationSourceKind>,
 ) -> Vec<Notification> {
-    sync_notifications_response(app_address, source)
+    sync_notifications_response(client, app_address, source)
         .await
         .json()
         .await
@@ -100,11 +107,12 @@ pub async fn sync_notifications(
 }
 
 pub async fn create_task_from_notification_response(
+    client: &Client,
     app_address: &str,
     notification_id: NotificationId,
     task_creation: &TaskCreation,
 ) -> Response {
-    reqwest::Client::new()
+    client
         .post(&format!(
             "{}/notifications/{}/task",
             &app_address, notification_id
@@ -116,11 +124,12 @@ pub async fn create_task_from_notification_response(
 }
 
 pub async fn create_task_from_notification(
+    client: &Client,
     app_address: &str,
     notification_id: NotificationId,
     task_creation: &TaskCreation,
 ) -> Option<NotificationWithTask> {
-    create_task_from_notification_response(app_address, notification_id, task_creation)
+    create_task_from_notification_response(client, app_address, notification_id, task_creation)
         .await
         .json()
         .await

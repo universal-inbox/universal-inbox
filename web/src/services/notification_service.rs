@@ -1,10 +1,12 @@
 use log::debug;
-use std::collections::HashMap;
 
+use anyhow::Result;
 use chrono::{DateTime, Duration, Local, TimeZone, Timelike, Utc};
 use dioxus::prelude::*;
 use fermi::{AtomRef, UseAtomRef};
 use futures_util::StreamExt;
+use reqwest::Method;
+use url::Url;
 
 use universal_inbox::{
     notification::{
@@ -14,12 +16,8 @@ use universal_inbox::{
 };
 
 use crate::{
-    components::toast_zone::{Toast, ToastKind},
-    services::{
-        api::{call_api, call_api_and_notify},
-        task_service::TaskCommand,
-        toast_service::{ToastCommand, ToastUpdate},
-    },
+    model::UniversalInboxUIModel,
+    services::{api::call_api_and_notify, task_service::TaskCommand, toast_service::ToastCommand},
 };
 
 #[derive(Debug)]
@@ -34,35 +32,13 @@ pub enum NotificationCommand {
     AssociateNotificationWithTask(NotificationId, TaskId),
 }
 
-#[derive(Debug, Default)]
-pub struct UniversalInboxUIModel {
-    pub selected_notification_index: usize,
-    pub footer_help_opened: bool,
-    pub task_planning_modal_opened: bool,
-    pub task_association_modal_opened: bool,
-    pub unhover_element: bool,
-}
-
-impl UniversalInboxUIModel {
-    pub fn toggle_help(&mut self) {
-        self.footer_help_opened = !self.footer_help_opened;
-    }
-
-    pub fn set_unhover_element(&mut self, unhover_element: bool) -> bool {
-        if self.unhover_element != unhover_element {
-            self.unhover_element = unhover_element;
-            return true;
-        }
-        false
-    }
-}
-
 pub static NOTIFICATIONS: AtomRef<Vec<NotificationWithTask>> = |_| vec![];
-pub static UI_MODEL: AtomRef<UniversalInboxUIModel> = |_| Default::default();
 
 pub async fn notification_service<'a>(
     mut rx: UnboundedReceiver<NotificationCommand>,
+    api_base_url: Url,
     notifications: UseAtomRef<Vec<NotificationWithTask>>,
+    ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
     task_service: Coroutine<TaskCommand>,
     toast_service: Coroutine<ToastCommand>,
 ) {
@@ -70,42 +46,49 @@ pub async fn notification_service<'a>(
         let msg = rx.next().await;
         match msg {
             Some(NotificationCommand::Refresh) => {
-                let toast = Toast {
-                    kind: ToastKind::Loading,
-                    message: "Loading notifications...".to_string(),
-                    ..Default::default()
-                };
-                let toast_id = toast.id;
-                toast_service.send(ToastCommand::Push(toast));
-
-                let result: Vec<NotificationWithTask> = call_api(
-                    "GET",
-                    "/notifications?status=Unread&with_tasks=true",
-                    HashMap::new(),
+                let result: Result<Vec<NotificationWithTask>> = call_api_and_notify(
+                    Method::GET,
+                    &api_base_url,
+                    "notifications?status=Unread&with_tasks=true",
+                    // random type as we don't care about the body's type
+                    None::<i32>,
+                    Some(ui_model_ref.clone()),
+                    &toast_service,
+                    "Loading notifications...",
+                    "Successfully loaded notifications",
                 )
-                .await
-                .unwrap();
+                .await;
 
-                debug!("{} notifications loaded", result.len());
-                notifications.write().extend(result);
-
-                let toast_update = ToastUpdate {
-                    id: toast_id,
-                    kind: Some(ToastKind::Success),
-                    message: Some("Successfully loaded notifications".to_string()),
-                    timeout: Some(Some(5_000)),
+                if let Ok(new_notifications) = result {
+                    debug!("{} notifications loaded", new_notifications.len());
+                    let mut notifications = notifications.write();
+                    notifications.clear();
+                    notifications.extend(new_notifications);
                 };
-                toast_service.send(ToastCommand::Update(toast_update));
             }
             Some(NotificationCommand::DeleteFromNotification(notification)) => {
                 if let Some(ref task) = notification.task {
                     if notification.is_built_from_task() {
                         delete_task(notification.id, task.id, &notifications, &task_service).await;
                     } else {
-                        delete_notification(notification.id, &notifications, &toast_service).await;
+                        delete_notification(
+                            &api_base_url,
+                            notification.id,
+                            &notifications,
+                            &ui_model_ref,
+                            &toast_service,
+                        )
+                        .await;
                     }
                 } else {
-                    delete_notification(notification.id, &notifications, &toast_service).await;
+                    delete_notification(
+                        &api_base_url,
+                        notification.id,
+                        &notifications,
+                        &ui_model_ref,
+                        &toast_service,
+                    )
+                    .await;
                 }
             }
             Some(NotificationCommand::Unsubscribe(notification_id)) => {
@@ -113,20 +96,20 @@ pub async fn notification_service<'a>(
                     .write()
                     .retain(|notif| notif.id != notification_id);
 
-                let _result: Notification = call_api_and_notify(
-                    "PATCH",
-                    &format!("/notifications/{}", notification_id),
-                    NotificationPatch {
+                let _result: Result<Notification> = call_api_and_notify(
+                    Method::PATCH,
+                    &api_base_url,
+                    &format!("notifications/{notification_id}"),
+                    Some(NotificationPatch {
                         status: Some(NotificationStatus::Unsubscribed),
                         ..Default::default()
-                    },
-                    HashMap::new(),
+                    }),
+                    Some(ui_model_ref.clone()),
                     &toast_service,
                     "Unsubscribing from notification...",
                     "Successfully unsubscribed from notification",
                 )
-                .await
-                .unwrap();
+                .await;
             }
             Some(NotificationCommand::Snooze(notification_id)) => {
                 let snoozed_time = compute_snoozed_until(Local::now(), 1, 6);
@@ -135,20 +118,20 @@ pub async fn notification_service<'a>(
                     .write()
                     .retain(|notif| notif.id != notification_id);
 
-                let _result: Notification = call_api_and_notify(
-                    "PATCH",
-                    &format!("/notifications/{}", notification_id),
-                    NotificationPatch {
+                let _result: Result<Notification> = call_api_and_notify(
+                    Method::PATCH,
+                    &api_base_url,
+                    &format!("notifications/{notification_id}"),
+                    Some(NotificationPatch {
                         snoozed_until: Some(snoozed_time),
                         ..Default::default()
-                    },
-                    HashMap::new(),
+                    }),
+                    Some(ui_model_ref.clone()),
                     &toast_service,
                     "Snoozing notification...",
                     "Successfully snoozed notification",
                 )
-                .await
-                .unwrap();
+                .await;
             }
             Some(NotificationCommand::CompleteTaskFromNotification(notification)) => {
                 if let Some(ref task) = notification.task {
@@ -173,38 +156,38 @@ pub async fn notification_service<'a>(
                     .write()
                     .retain(|notif| notif.id != notification.id);
 
-                let _result: Option<NotificationWithTask> = call_api_and_notify(
-                    "POST",
-                    &format!("/notifications/{}/task", notification.id),
-                    parameters,
-                    HashMap::new(),
+                let _result: Result<Option<NotificationWithTask>> = call_api_and_notify(
+                    Method::POST,
+                    &api_base_url,
+                    &format!("notifications/{}/task", notification.id),
+                    Some(parameters),
+                    Some(ui_model_ref.clone()),
                     &toast_service,
                     "Creating task from notification...",
                     "Task successfully created",
                 )
-                .await
-                .unwrap();
+                .await;
             }
             Some(NotificationCommand::AssociateNotificationWithTask(notification_id, task_id)) => {
                 notifications
                     .write()
                     .retain(|notif| notif.id != notification_id);
 
-                let _result: NotificationWithTask = call_api_and_notify(
-                    "PATCH",
-                    &format!("/notifications/{}", notification_id),
-                    NotificationPatch {
+                let _result: Result<NotificationWithTask> = call_api_and_notify(
+                    Method::PATCH,
+                    &api_base_url,
+                    &format!("notifications/{notification_id}"),
+                    Some(NotificationPatch {
                         status: Some(NotificationStatus::Deleted),
                         task_id: Some(task_id),
                         ..Default::default()
-                    },
-                    HashMap::new(),
+                    }),
+                    Some(ui_model_ref.clone()),
                     &toast_service,
                     "Associating notification...",
                     "Notification successfully associated",
                 )
-                .await
-                .unwrap();
+                .await;
             }
             None => {}
         }
@@ -212,28 +195,30 @@ pub async fn notification_service<'a>(
 }
 
 async fn delete_notification(
+    api_base_url: &Url,
     notification_id: NotificationId,
     notifications: &UseAtomRef<Vec<NotificationWithTask>>,
+    ui_model_ref: &UseAtomRef<UniversalInboxUIModel>,
     toast_service: &Coroutine<ToastCommand>,
 ) {
     notifications
         .write()
         .retain(|notif| notif.id != notification_id);
 
-    let _result: Notification = call_api_and_notify(
-        "PATCH",
-        &format!("/notifications/{}", notification_id),
-        NotificationPatch {
+    let _result: Result<Notification, anyhow::Error> = call_api_and_notify(
+        Method::PATCH,
+        api_base_url,
+        &format!("notifications/{notification_id}"),
+        Some(NotificationPatch {
             status: Some(NotificationStatus::Deleted),
             ..Default::default()
-        },
-        HashMap::new(),
+        }),
+        Some(ui_model_ref.clone()),
         toast_service,
         "Deleting notification...",
         "Successfully deleted notification",
     )
-    .await
-    .unwrap();
+    .await;
 }
 
 async fn delete_task(
@@ -278,39 +263,65 @@ where
 mod tests {
     use super::*;
     use chrono::{FixedOffset, TimeZone};
-    use rstest::*;
+    use wasm_bindgen_test::*;
 
-    #[rstest]
-    #[case::localized_before_reset_hour_utc_before_reset_hour(5, 0, 2022, 1, 1, 1)]
-    #[case::localized_before_reset_hour_utc_after_reset_hour(7, 0, 2021, 12, 31, 23)]
-    #[case::localized_after_reset_hour_utc_after_reset_hour(5, 12, 2022, 1, 2, 1)]
-    #[case::localized_after_reset_hour_utc_before_reset_hour(7, 12, 2022, 1, 1, 23)]
-    fn test_compute_snoozed_until(
-        #[case] offset_hour: i32,
-        #[case] current_hour: u32,
-        #[case] expected_year: i32,
-        #[case] expected_month: u32,
-        #[case] expected_day: u32,
-        #[case] expected_hour: u32,
-    ) {
+    #[wasm_bindgen_test]
+    fn test_compute_snoozed_until_localized_before_reset_hour_utc_before_reset_hour() {
         assert_eq!(
             compute_snoozed_until(
-                FixedOffset::east_opt(offset_hour * 3600)
+                FixedOffset::east_opt(5 * 3600)
                     .unwrap()
-                    .with_ymd_and_hms(2022, 1, 1, current_hour, 3, 42)
+                    .with_ymd_and_hms(2022, 1, 1, 0, 3, 42)
                     .unwrap(),
                 1,
                 6
             ),
-            Utc.with_ymd_and_hms(
-                expected_year,
-                expected_month,
-                expected_day,
-                expected_hour,
-                0,
-                0
-            )
-            .unwrap()
+            Utc.with_ymd_and_hms(2022, 1, 1, 1, 0, 0).unwrap()
+        );
+    }
+
+    #[wasm_bindgen_test]
+    fn test_compute_snoozed_until_localized_before_reset_hour_utc_after_reset_hour() {
+        assert_eq!(
+            compute_snoozed_until(
+                FixedOffset::east_opt(7 * 3600)
+                    .unwrap()
+                    .with_ymd_and_hms(2022, 1, 1, 0, 3, 42)
+                    .unwrap(),
+                1,
+                6
+            ),
+            Utc.with_ymd_and_hms(2021, 12, 31, 23, 0, 0).unwrap()
+        );
+    }
+
+    #[wasm_bindgen_test]
+    fn test_compute_snoozed_until_localized_after_reset_hour_utc_after_reset_hour() {
+        assert_eq!(
+            compute_snoozed_until(
+                FixedOffset::east_opt(5 * 3600)
+                    .unwrap()
+                    .with_ymd_and_hms(2022, 1, 1, 12, 3, 42)
+                    .unwrap(),
+                1,
+                6
+            ),
+            Utc.with_ymd_and_hms(2022, 1, 2, 1, 0, 0).unwrap()
+        );
+    }
+
+    #[wasm_bindgen_test]
+    fn test_compute_snoozed_until_localized_after_reset_hour_utc_before_reset_hour() {
+        assert_eq!(
+            compute_snoozed_until(
+                FixedOffset::east_opt(7 * 3600)
+                    .unwrap()
+                    .with_ymd_and_hms(2022, 1, 1, 12, 3, 42)
+                    .unwrap(),
+                1,
+                6
+            ),
+            Utc.with_ymd_and_hms(2022, 1, 1, 23, 0, 0).unwrap()
         );
     }
 }

@@ -1,12 +1,15 @@
 use std::env;
 
 use config::{Config, ConfigError, Environment, File};
+use openidconnect::{ClientId, ClientSecret, IntrospectionUrl, IssuerUrl};
 use serde::Deserialize;
+use url::Url;
 
 #[derive(Deserialize)]
 pub struct Settings {
     pub application: ApplicationSettings,
     pub database: DatabaseSettings,
+    pub redis: RedisSettings,
     pub integrations: IntegrationsSettings,
 }
 
@@ -15,10 +18,28 @@ pub struct ApplicationSettings {
     pub port: u16,
     pub log_directive: String,
     pub dependencies_log_directive: String,
-    pub front_base_url: String,
+    pub front_base_url: Url,
     pub api_path: String,
     pub static_path: Option<String>,
     pub static_dir: Option<String>,
+    pub authentication: AuthenticationSettings,
+    pub http_session: HttpSessionSettings,
+}
+
+#[derive(Deserialize)]
+pub struct AuthenticationSettings {
+    pub oidc_issuer_url: IssuerUrl,
+    pub oidc_introspection_url: IntrospectionUrl,
+    pub oidc_front_client_id: ClientId,
+    pub oidc_api_client_id: ClientId,
+    pub oidc_api_client_secret: ClientSecret,
+}
+
+#[derive(Deserialize)]
+pub struct HttpSessionSettings {
+    pub secret_key: String,
+    pub max_age_days: i64,
+    pub max_age_inactive_days: i64,
 }
 
 #[derive(Deserialize)]
@@ -28,6 +49,12 @@ pub struct DatabaseSettings {
     pub port: u16,
     pub host: String,
     pub database_name: String,
+}
+
+#[derive(Deserialize)]
+pub struct RedisSettings {
+    pub port: u16,
+    pub host: String,
 }
 
 #[derive(Deserialize)]
@@ -63,16 +90,22 @@ impl DatabaseSettings {
     }
 }
 
+impl RedisSettings {
+    pub fn connection_string(&self) -> String {
+        format!("{}:{}", self.host, self.port)
+    }
+}
+
 impl Settings {
     pub fn new_from_file(file: Option<String>) -> Result<Self, ConfigError> {
         let config_file_required = file.is_some();
         let config_path = env::var("CONFIG_PATH").unwrap_or_else(|_| "config".into());
         let config_file = file.unwrap_or_else(|| {
-            env::var("CONFIG_FILE").unwrap_or_else(|_| format!("{}/dev", &config_path))
+            env::var("CONFIG_FILE").unwrap_or_else(|_| format!("{config_path}/dev"))
         });
 
-        let default_config_file = format!("{}/default", config_path);
-        let local_config_file = format!("{}/local", config_path);
+        let default_config_file = format!("{config_path}/default");
+        let local_config_file = format!("{config_path}/local");
         println!(
             "Trying to load {:?} config files",
             vec![&default_config_file, &local_config_file, &config_file]

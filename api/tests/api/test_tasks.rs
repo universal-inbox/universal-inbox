@@ -14,6 +14,7 @@ use universal_inbox::{
 use universal_inbox_api::universal_inbox::task::TaskCreationResult;
 
 use crate::helpers::{
+    auth::{authenticated_app, AuthenticatedApp},
     notification::list_notifications_with_tasks,
     rest::{
         create_resource, create_resource_response, get_resource, get_resource_response,
@@ -23,7 +24,6 @@ use crate::helpers::{
         list_tasks,
         todoist::{create_task_from_todoist_item, todoist_item},
     },
-    tested_app, TestedApp,
 };
 
 mod create_task {
@@ -33,10 +33,10 @@ mod create_task {
     #[rstest]
     #[tokio::test]
     async fn test_create_task_in_inbox(
-        #[future] tested_app: TestedApp,
+        #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
     ) {
-        let app = tested_app.await;
+        let app = authenticated_app.await;
         let expected_minimal_task = Box::new(Task {
             id: Uuid::new_v4().into(),
             source_id: "1234".to_string(),
@@ -55,8 +55,13 @@ mod create_task {
             metadata: TaskMetadata::Todoist(*todoist_item.clone()),
         });
 
-        let creation_result: Box<TaskCreationResult> =
-            create_resource(&app.app_address, "tasks", expected_minimal_task.clone()).await;
+        let creation_result: Box<TaskCreationResult> = create_resource(
+            &app.client,
+            &app.app_address,
+            "tasks",
+            expected_minimal_task.clone(),
+        )
+        .await;
 
         assert_eq!(creation_result.task, *expected_minimal_task);
         // A notification should have been created for tasks in the inbox (project)
@@ -64,10 +69,17 @@ mod create_task {
         let created_notification = creation_result.notification.unwrap();
         assert_eq!(created_notification.task_id, Some(creation_result.task.id));
 
-        let task = get_resource(&app.app_address, "tasks", creation_result.task.id.into()).await;
+        let task = get_resource(
+            &app.client,
+            &app.app_address,
+            "tasks",
+            creation_result.task.id.into(),
+        )
+        .await;
         assert_eq!(task, expected_minimal_task);
 
         let result = list_notifications_with_tasks(
+            &app.client,
             &app.app_address,
             NotificationStatus::Unread,
             false,
@@ -87,8 +99,11 @@ mod create_task {
 
     #[rstest]
     #[tokio::test]
-    async fn test_create_task(#[future] tested_app: TestedApp, todoist_item: Box<TodoistItem>) {
-        let app = tested_app.await;
+    async fn test_create_task(
+        #[future] authenticated_app: AuthenticatedApp,
+        todoist_item: Box<TodoistItem>,
+    ) {
+        let app = authenticated_app.await;
         let expected_task = Box::new(Task {
             id: Uuid::new_v4().into(),
             source_id: "5678".to_string(),
@@ -109,17 +124,29 @@ mod create_task {
             metadata: TaskMetadata::Todoist(*todoist_item),
         });
 
-        let creation_result: Box<TaskCreationResult> =
-            create_resource(&app.app_address, "tasks", expected_task.clone()).await;
+        let creation_result: Box<TaskCreationResult> = create_resource(
+            &app.client,
+            &app.app_address,
+            "tasks",
+            expected_task.clone(),
+        )
+        .await;
 
         assert_eq!(creation_result.task, *expected_task);
         assert!(creation_result.notification.is_none());
 
-        let task = get_resource(&app.app_address, "tasks", creation_result.task.id.into()).await;
+        let task = get_resource(
+            &app.client,
+            &app.app_address,
+            "tasks",
+            creation_result.task.id.into(),
+        )
+        .await;
 
         assert_eq!(task, expected_task);
 
         let result = list_notifications_with_tasks(
+            &app.client,
             &app.app_address,
             NotificationStatus::Unread,
             false,
@@ -132,10 +159,10 @@ mod create_task {
     #[rstest]
     #[tokio::test]
     async fn test_create_task_as_done_with_not_completed_at_value(
-        #[future] tested_app: TestedApp,
+        #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
     ) {
-        let app = tested_app.await;
+        let app = authenticated_app.await;
         let task_done = Box::new(Task {
             id: Uuid::new_v4().into(),
             source_id: "5678".to_string(),
@@ -156,7 +183,9 @@ mod create_task {
             metadata: TaskMetadata::Todoist(*todoist_item),
         });
 
-        let response = create_resource_response(&app.app_address, "tasks", task_done.clone()).await;
+        let response =
+            create_resource_response(&app.client, &app.app_address, "tasks", task_done.clone())
+                .await;
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
         let body = response.text().await.expect("Cannot get response body");
@@ -169,10 +198,10 @@ mod create_task {
     #[rstest]
     #[tokio::test]
     async fn test_create_task_duplicate_task(
-        #[future] tested_app: TestedApp,
+        #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
     ) {
-        let app = tested_app.await;
+        let app = authenticated_app.await;
         let expected_task = Box::new(Task {
             id: Uuid::new_v4().into(),
             source_id: "1234".to_string(),
@@ -191,12 +220,18 @@ mod create_task {
             metadata: TaskMetadata::Todoist(*todoist_item.clone()),
         });
 
-        let creation_result: Box<TaskCreationResult> =
-            create_resource(&app.app_address, "tasks", expected_task.clone()).await;
+        let creation_result: Box<TaskCreationResult> = create_resource(
+            &app.client,
+            &app.app_address,
+            "tasks",
+            expected_task.clone(),
+        )
+        .await;
 
         assert_eq!(creation_result.task, *expected_task);
 
-        let response = create_resource_response(&app.app_address, "tasks", expected_task).await;
+        let response =
+            create_resource_response(&app.client, &app.app_address, "tasks", expected_task).await;
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
         let body = response.text().await.expect("Cannot get response body");
@@ -214,17 +249,18 @@ mod get_task {
 
     #[rstest]
     #[tokio::test]
-    async fn test_get_unknown_task(#[future] tested_app: TestedApp) {
-        let app = tested_app.await;
+    async fn test_get_unknown_task(#[future] authenticated_app: AuthenticatedApp) {
+        let app = authenticated_app.await;
         let unknown_task_id = Uuid::new_v4();
 
-        let response = get_resource_response(&app.app_address, "tasks", unknown_task_id).await;
+        let response =
+            get_resource_response(&app.client, &app.app_address, "tasks", unknown_task_id).await;
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
         let body = response.text().await.expect("Cannot get response body");
         assert_eq!(
             body,
-            json!({ "message": format!("Cannot find task {}", unknown_task_id) }).to_string()
+            json!({ "message": format!("Cannot find task {unknown_task_id}") }).to_string()
         );
     }
 }
@@ -235,20 +271,27 @@ mod list_tasks {
 
     #[rstest]
     #[tokio::test]
-    async fn test_empty_list_tasks(#[future] tested_app: TestedApp) {
-        let app = tested_app.await;
-        let tasks = list_tasks(&app.app_address, TaskStatus::Active).await;
+    async fn test_empty_list_tasks(#[future] authenticated_app: AuthenticatedApp) {
+        let app = authenticated_app.await;
+        let tasks = list_tasks(&app.client, &app.app_address, TaskStatus::Active).await;
 
         assert!(tasks.is_empty());
     }
 
     #[rstest]
     #[tokio::test]
-    async fn test_list_tasks(#[future] tested_app: TestedApp, todoist_item: Box<TodoistItem>) {
-        let app = tested_app.await;
-        let task_active =
-            create_task_from_todoist_item(&app.app_address, &todoist_item, "Inbox".to_string())
-                .await;
+    async fn test_list_tasks(
+        #[future] authenticated_app: AuthenticatedApp,
+        todoist_item: Box<TodoistItem>,
+    ) {
+        let app = authenticated_app.await;
+        let task_active = create_task_from_todoist_item(
+            &app.client,
+            &app.app_address,
+            &todoist_item,
+            "Inbox".to_string(),
+        )
+        .await;
         assert_eq!(task_active.task.status, TaskStatus::Active);
 
         let mut todoist_item_done = todoist_item.clone();
@@ -257,6 +300,7 @@ mod list_tasks {
         todoist_item_done.completed_at = Some(Utc.with_ymd_and_hms(2022, 1, 2, 0, 0, 0).unwrap());
 
         let task_done = create_task_from_todoist_item(
+            &app.client,
             &app.app_address,
             &todoist_item_done,
             "Inbox".to_string(),
@@ -264,12 +308,12 @@ mod list_tasks {
         .await;
         assert_eq!(task_done.task.status, TaskStatus::Done);
 
-        let tasks = list_tasks(&app.app_address, TaskStatus::Active).await;
+        let tasks = list_tasks(&app.client, &app.app_address, TaskStatus::Active).await;
 
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0], task_active.task);
 
-        let tasks = list_tasks(&app.app_address, TaskStatus::Done).await;
+        let tasks = list_tasks(&app.client, &app.app_address, TaskStatus::Done).await;
 
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0], task_done.task);
@@ -283,16 +327,21 @@ mod patch_task {
     #[rstest]
     #[tokio::test]
     async fn test_patch_task_status_without_modification(
-        #[future] tested_app: TestedApp,
+        #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
     ) {
-        let app = tested_app.await;
+        let app = authenticated_app.await;
 
-        let creation_result =
-            create_task_from_todoist_item(&app.app_address, &todoist_item, "Inbox".to_string())
-                .await;
+        let creation_result = create_task_from_todoist_item(
+            &app.client,
+            &app.app_address,
+            &todoist_item,
+            "Inbox".to_string(),
+        )
+        .await;
 
         let response = patch_resource_response(
+            &app.client,
             &app.app_address,
             "tasks",
             creation_result.task.id.into(),
@@ -309,15 +358,20 @@ mod patch_task {
     #[rstest]
     #[tokio::test]
     async fn test_patch_task_without_values_to_update(
-        #[future] tested_app: TestedApp,
+        #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
     ) {
-        let app = tested_app.await;
-        let creation_result =
-            create_task_from_todoist_item(&app.app_address, &todoist_item, "Inbox".to_string())
-                .await;
+        let app = authenticated_app.await;
+        let creation_result = create_task_from_todoist_item(
+            &app.client,
+            &app.app_address,
+            &todoist_item,
+            "Inbox".to_string(),
+        )
+        .await;
 
         let response = patch_resource_response(
+            &app.client,
             &app.app_address,
             "tasks",
             creation_result.task.id.into(),
@@ -344,11 +398,12 @@ mod patch_task {
 
     #[rstest]
     #[tokio::test]
-    async fn test_patch_unknown_task(#[future] tested_app: TestedApp) {
-        let app = tested_app.await;
+    async fn test_patch_unknown_task(#[future] authenticated_app: AuthenticatedApp) {
+        let app = authenticated_app.await;
         let unknown_task_id = Uuid::new_v4();
 
         let response = patch_resource_response(
+            &app.client,
             &app.app_address,
             "tasks",
             unknown_task_id,
@@ -363,7 +418,7 @@ mod patch_task {
         let body = response.text().await.expect("Cannot get response body");
         assert_eq!(
             body,
-            json!({ "message": format!("Cannot update unknown task {}", unknown_task_id) })
+            json!({ "message": format!("Cannot update unknown task {unknown_task_id}") })
                 .to_string()
         );
     }

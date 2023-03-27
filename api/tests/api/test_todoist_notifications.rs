@@ -12,11 +12,11 @@ use universal_inbox::{
 };
 
 use crate::helpers::{
+    auth::{authenticated_app, AuthenticatedApp},
     rest::{create_resource, get_resource, patch_resource, patch_resource_response},
     task::todoist::{
         create_task_from_todoist_item, mock_todoist_delete_item_service, todoist_item,
     },
-    tested_app, TestedApp,
 };
 
 mod patch_notification {
@@ -25,13 +25,17 @@ mod patch_notification {
     #[rstest]
     #[tokio::test]
     async fn test_patch_todoist_notification_status_as_deleted(
-        #[future] tested_app: TestedApp,
+        #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
     ) {
-        let app = tested_app.await;
-        let existing_todoist_task_creation =
-            create_task_from_todoist_item(&app.app_address, &todoist_item, "Inbox".to_string())
-                .await;
+        let app = authenticated_app.await;
+        let existing_todoist_task_creation = create_task_from_todoist_item(
+            &app.client,
+            &app.app_address,
+            &todoist_item,
+            "Inbox".to_string(),
+        )
+        .await;
         let existing_todoist_task = existing_todoist_task_creation.task;
         assert_eq!(existing_todoist_task.status, TaskStatus::Active);
         let existing_todoist_notification = existing_todoist_task_creation.notification.unwrap();
@@ -41,6 +45,7 @@ mod patch_notification {
         );
 
         let patched_notification = patch_resource(
+            &app.client,
             &app.app_address,
             "notifications",
             existing_todoist_notification.id.into(),
@@ -60,15 +65,20 @@ mod patch_notification {
         );
         todoist_mock.assert();
 
-        let deleted_task: Box<Task> =
-            get_resource(&app.app_address, "tasks", existing_todoist_task.id.into()).await;
+        let deleted_task: Box<Task> = get_resource(
+            &app.client,
+            &app.app_address,
+            "tasks",
+            existing_todoist_task.id.into(),
+        )
+        .await;
         assert_eq!(deleted_task.status, TaskStatus::Deleted);
     }
 
     #[rstest]
     #[tokio::test]
-    async fn test_patch_todoist_notification_status(#[future] tested_app: TestedApp) {
-        let app = tested_app.await;
+    async fn test_patch_todoist_notification_status(#[future] authenticated_app: AuthenticatedApp) {
+        let app = authenticated_app.await;
         let expected_notification = Box::new(Notification {
             id: Uuid::new_v4().into(),
             title: "task 1".to_string(),
@@ -82,6 +92,7 @@ mod patch_notification {
             task_id: None,
         });
         let created_notification: Box<Notification> = create_resource(
+            &app.client,
             &app.app_address,
             "notifications",
             expected_notification.clone(),
@@ -91,6 +102,7 @@ mod patch_notification {
         assert_eq!(created_notification, expected_notification);
 
         let response = patch_resource_response(
+            &app.client,
             &app.app_address,
             "notifications",
             created_notification.id.into(),

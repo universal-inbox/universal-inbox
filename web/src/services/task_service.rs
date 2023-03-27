@@ -1,11 +1,15 @@
-use std::collections::HashMap;
-
+use anyhow::Result;
 use dioxus::prelude::*;
+use fermi::UseAtomRef;
 use futures_util::StreamExt;
-
+use reqwest::Method;
 use universal_inbox::task::{Task, TaskId, TaskPatch, TaskPlanning, TaskStatus};
+use url::Url;
 
-use crate::services::{api::call_api_and_notify, toast_service::ToastCommand};
+use crate::{
+    model::UniversalInboxUIModel,
+    services::{api::call_api_and_notify, toast_service::ToastCommand},
+};
 
 #[derive(Debug)]
 pub enum TaskCommand {
@@ -14,8 +18,10 @@ pub enum TaskCommand {
     Plan(TaskId, TaskPlanning),
 }
 
-pub async fn task_service<'a>(
+pub async fn task_service(
     mut rx: UnboundedReceiver<TaskCommand>,
+    api_base_url: Url,
+    ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
     toast_service: Coroutine<ToastCommand>,
 ) {
     loop {
@@ -23,54 +29,54 @@ pub async fn task_service<'a>(
 
         match msg {
             Some(TaskCommand::Delete(task_id)) => {
-                let _result: Task = call_api_and_notify(
-                    "PATCH",
-                    &format!("/tasks/{}", task_id),
-                    TaskPatch {
+                let _result: Result<Task> = call_api_and_notify(
+                    Method::PATCH,
+                    &api_base_url,
+                    &format!("tasks/{task_id}"),
+                    Some(TaskPatch {
                         status: Some(TaskStatus::Deleted),
                         ..Default::default()
-                    },
-                    HashMap::new(),
+                    }),
+                    Some(ui_model_ref.clone()),
                     &toast_service,
                     "Deleting task...",
                     "Successfully deleted task",
                 )
-                .await
-                .unwrap();
+                .await;
             }
             Some(TaskCommand::Complete(task_id)) => {
-                let _result: Task = call_api_and_notify(
-                    "PATCH",
-                    &format!("/tasks/{}", task_id),
-                    TaskPatch {
+                let _result: Result<Task> = call_api_and_notify(
+                    Method::PATCH,
+                    &api_base_url,
+                    &format!("tasks/{task_id}"),
+                    Some(TaskPatch {
                         status: Some(TaskStatus::Done),
                         ..Default::default()
-                    },
-                    HashMap::new(),
+                    }),
+                    Some(ui_model_ref.clone()),
                     &toast_service,
                     "Completing task...",
                     "Successfully completed task",
                 )
-                .await
-                .unwrap();
+                .await;
             }
             Some(TaskCommand::Plan(task_id, parameters)) => {
-                let _result: Task = call_api_and_notify(
-                    "PATCH",
-                    &format!("/tasks/{}", task_id),
-                    TaskPatch {
+                let _result: Result<Task> = call_api_and_notify(
+                    Method::PATCH,
+                    &api_base_url,
+                    &format!("tasks/{task_id}"),
+                    Some(TaskPatch {
                         project: Some(parameters.project.to_string()),
                         due_at: Some(parameters.due_at),
                         priority: Some(parameters.priority),
                         ..Default::default()
-                    },
-                    HashMap::new(),
+                    }),
+                    Some(ui_model_ref.clone()),
                     &toast_service,
                     "Planning task...",
                     "Successfully planned task",
                 )
-                .await
-                .unwrap();
+                .await;
             }
             None => (),
         }

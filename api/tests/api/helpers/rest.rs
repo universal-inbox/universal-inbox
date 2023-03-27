@@ -1,12 +1,13 @@
-use reqwest::Response;
+use reqwest::{Client, Response};
 use uuid::Uuid;
 
 pub async fn get_resource_response(
+    client: &Client,
     app_address: &str,
     resource_name: &str,
     id: uuid::Uuid,
 ) -> Response {
-    reqwest::Client::new()
+    client
         .get(&format!("{app_address}/{resource_name}/{id}"))
         .send()
         .await
@@ -14,11 +15,12 @@ pub async fn get_resource_response(
 }
 
 pub async fn get_resource<T: serde::Serialize + for<'a> serde::Deserialize<'a>>(
+    client: &Client,
     app_address: &str,
     resource_name: &str,
     id: uuid::Uuid,
 ) -> Box<T> {
-    get_resource_response(app_address, resource_name, id)
+    get_resource_response(client, app_address, resource_name, id)
         .await
         .json()
         .await
@@ -26,11 +28,12 @@ pub async fn get_resource<T: serde::Serialize + for<'a> serde::Deserialize<'a>>(
 }
 
 pub async fn create_resource_response<T: serde::Serialize>(
+    client: &Client,
     app_address: &str,
     resource_name: &str,
     resource: Box<T>,
 ) -> Response {
-    reqwest::Client::new()
+    client
         .post(&format!("{app_address}/{resource_name}"))
         .json(&*resource)
         .send()
@@ -39,11 +42,12 @@ pub async fn create_resource_response<T: serde::Serialize>(
 }
 
 pub async fn create_resource<T: serde::Serialize, U: for<'a> serde::Deserialize<'a>>(
+    client: &Client,
     app_address: &str,
     resource_name: &str,
     resource: Box<T>,
 ) -> Box<U> {
-    create_resource_response(app_address, resource_name, resource)
+    create_resource_response(client, app_address, resource_name, resource)
         .await
         .json()
         .await
@@ -51,12 +55,13 @@ pub async fn create_resource<T: serde::Serialize, U: for<'a> serde::Deserialize<
 }
 
 pub async fn patch_resource_response<P: serde::Serialize>(
+    client: &Client,
     app_address: &str,
     resource_name: &str,
     id: Uuid,
     patch: &P,
 ) -> Response {
-    reqwest::Client::new()
+    client
         .patch(&format!("{app_address}/{resource_name}/{id}"))
         .json(patch)
         .send()
@@ -65,12 +70,13 @@ pub async fn patch_resource_response<P: serde::Serialize>(
 }
 
 pub async fn patch_resource<P: serde::Serialize, T: for<'a> serde::Deserialize<'a>>(
+    client: &Client,
     app_address: &str,
     resource_name: &str,
     id: Uuid,
     patch: &P,
 ) -> Box<T> {
-    patch_resource_response(app_address, resource_name, id, patch)
+    patch_resource_response(client, app_address, resource_name, id, patch)
         .await
         .json()
         .await

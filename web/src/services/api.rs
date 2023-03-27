@@ -1,93 +1,60 @@
-use std::collections::HashMap;
-
+use anyhow::{anyhow, Result};
 use dioxus::prelude::Coroutine;
-use js_sys::JSON::stringify;
-use wasm_bindgen::prelude::*;
-use wasm_bindgen::JsCast;
-use wasm_bindgen_futures::JsFuture;
-use web_sys::{Request, RequestInit, RequestMode, Response};
+use fermi::UseAtomRef;
+use reqwest::{
+    header::{HeaderMap, HeaderValue},
+    Client, Method, Response, StatusCode,
+};
+use url::Url;
 
 use crate::{
     components::toast_zone::{Toast, ToastKind},
+    model::{AuthenticationState, UniversalInboxUIModel},
     services::toast_service::{ToastCommand, ToastUpdate},
 };
 
-#[wasm_bindgen(module = "/js/api.js")]
-extern "C" {
-    fn get_api_base_url() -> String;
-}
-
-pub async fn call_api<R: for<'de> serde::de::Deserialize<'de>>(
-    method: &str,
+pub async fn call_api<R: for<'de> serde::de::Deserialize<'de>, B: serde::Serialize>(
+    method: Method,
+    base_url: &Url,
     path: &str,
-    headers: HashMap<String, String>,
-) -> Result<R, JsValue> {
-    let mut opts = RequestInit::new();
-    opts.method(method);
-    opts.mode(RequestMode::Cors);
+    body: Option<B>,
+    ui_model_ref: Option<UseAtomRef<UniversalInboxUIModel>>,
+) -> Result<R> {
+    let mut request = API_CLIENT
+        .request(method, base_url.join(path)?)
+        .fetch_credentials_include();
 
-    let url = format!("{}{}", get_api_base_url(), path);
-    let request = Request::new_with_str_and_init(&url, &opts)?;
-
-    for (name, value) in headers {
-        request.headers().set(&name, &value)?;
+    if let Some(body) = body {
+        request = request
+            .header("content-type", "application/json")
+            .json(&body);
     }
-    request.headers().set("Accept", "application/json")?;
 
-    let window = web_sys::window().unwrap();
-    let resp_value = JsFuture::from(window.fetch_with_request(&request)).await?;
+    let response: Response = request.send().await?;
 
-    let resp: Response = resp_value.dyn_into().unwrap();
+    if let Some(ui_model_ref) = ui_model_ref {
+        if response.status() == StatusCode::UNAUTHORIZED {
+            ui_model_ref.write().authentication_state = AuthenticationState::NotAuthenticated;
+            return Err(anyhow!("Unauthorized call to the API"));
+        } else if ui_model_ref.read().authentication_state != AuthenticationState::Authenticated {
+            ui_model_ref.write().authentication_state = AuthenticationState::Authenticated;
+        }
+    }
 
-    // Convert this other `Promise` into a rust `Future`.
-    let json = JsFuture::from(resp.json()?).await?;
-
-    // +200KB vs JsValue
-    Ok(serde_wasm_bindgen::from_value(json).unwrap())
+    Ok(response.json().await?)
 }
 
-pub async fn call_api_with_body<R: for<'de> serde::de::Deserialize<'de>, B: serde::Serialize>(
-    method: &str,
-    path: &str,
-    body: B,
-    headers: HashMap<String, String>,
-) -> Result<R, JsValue> {
-    let mut opts = RequestInit::new();
-    opts.method(method);
-    opts.mode(RequestMode::Cors);
-    let body_value = stringify(&serde_wasm_bindgen::to_value(&body)?)?;
-    opts.body(Some(&body_value));
-
-    let url = format!("{}{}", get_api_base_url(), path);
-    let request = Request::new_with_str_and_init(&url, &opts)?;
-
-    for (name, value) in headers {
-        request.headers().set(&name, &value)?;
-    }
-    request.headers().set("Accept", "application/json")?;
-    request.headers().set("content-type", "application/json")?;
-
-    let window = web_sys::window().unwrap();
-    let resp_value = JsFuture::from(window.fetch_with_request(&request)).await?;
-
-    let resp: Response = resp_value.dyn_into().unwrap();
-
-    // Convert this other `Promise` into a rust `Future`.
-    let json = JsFuture::from(resp.json()?).await?;
-
-    // +200KB vs JsValue
-    Ok(serde_wasm_bindgen::from_value(json).unwrap())
-}
-
+#[allow(clippy::too_many_arguments)]
 pub async fn call_api_and_notify<R: for<'de> serde::de::Deserialize<'de>, B: serde::Serialize>(
-    method: &str,
+    method: Method,
+    base_url: &Url,
     path: &str,
-    body: B,
-    headers: HashMap<String, String>,
+    body: Option<B>,
+    ui_model_ref: Option<UseAtomRef<UniversalInboxUIModel>>,
     toast_service: &Coroutine<ToastCommand>,
     loading_message: &str,
     success_message: &str,
-) -> Result<R, JsValue> {
+) -> Result<R> {
     let toast = Toast {
         kind: ToastKind::Loading,
         message: loading_message.to_string(),
@@ -96,15 +63,37 @@ pub async fn call_api_and_notify<R: for<'de> serde::de::Deserialize<'de>, B: ser
     let toast_id = toast.id;
     toast_service.send(ToastCommand::Push(toast));
 
-    let result: R = call_api_with_body(method, path, body, headers).await?;
+    call_api(method, base_url, path, body, ui_model_ref)
+        .await
+        .map(|result: R| {
+            let toast_update = ToastUpdate {
+                id: toast_id,
+                kind: Some(ToastKind::Success),
+                message: Some(success_message.to_string()),
+                timeout: Some(Some(5_000)),
+            };
+            toast_service.send(ToastCommand::Update(toast_update));
+            result
+        })
+        .map_err(|error| {
+            let toast_update = ToastUpdate {
+                id: toast_id,
+                kind: Some(ToastKind::Failure),
+                message: Some(format!("Error while calling the API: {error}")),
+                timeout: Some(Some(5_000)),
+            };
+            toast_service.send(ToastCommand::Update(toast_update));
+            error
+        })
+}
 
-    let toast_update = ToastUpdate {
-        id: toast_id,
-        kind: Some(ToastKind::Success),
-        message: Some(success_message.to_string()),
-        timeout: Some(Some(5_000)),
-    };
-    toast_service.send(ToastCommand::Update(toast_update));
-
-    Ok(result)
+lazy_static! {
+    pub static ref API_CLIENT: Client = reqwest::ClientBuilder::new()
+        .default_headers({
+            let mut headers = HeaderMap::new();
+            headers.insert("Accept", HeaderValue::from_static("application/json"));
+            headers
+        })
+        .build()
+        .unwrap();
 }

@@ -6,12 +6,27 @@ dependencies_log_directive = "error"
 api_path = ""
 front_base_url = "http://localhost:8080"
 
+# [application.authentication]
+# oidc_issuer_url = "https://oidc.provider"
+# oidc_front_client_id = "1234@universal_inbox"
+# oidc_api_client_id = "5678@universal_inbox"
+# oidc_api_client_secret = "secret"
+
+[application.http_session]
+# secret_key = ""
+max_age_days = 30
+max_age_inactive_days = 7
+
 [database]
 host = "127.0.0.1"
 port = 5432
 username = "postgres"
 password = "password"
 database_name = "universal-inbox"
+
+[redis]
+host = "127.0.0.1"
+port = 6379
 
 [integrations.github]
 page_size = 50
