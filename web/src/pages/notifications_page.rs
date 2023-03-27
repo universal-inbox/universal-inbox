@@ -1,3 +1,5 @@
+use log::debug;
+
 use dioxus::prelude::*;
 use fermi::use_atom_ref;
 
@@ -8,18 +10,22 @@ use crate::{
         notifications_list::notifications_list, task_association_modal::task_association_modal,
         task_planning_modal::task_planning_modal,
     },
-    services::notification_service::{NotificationCommand, NOTIFICATIONS, UI_MODEL},
+    config::get_api_base_url,
+    model::UI_MODEL,
+    services::notification_service::{NotificationCommand, NOTIFICATIONS},
 };
 
 pub fn notifications_page(cx: Scope) -> Element {
     let notifications_ref = use_atom_ref(cx, NOTIFICATIONS);
     let ui_model_ref = use_atom_ref(cx, UI_MODEL);
+    let api_base_url = use_memo(cx, (), |()| get_api_base_url().unwrap());
 
     let notification_service = use_coroutine_handle::<NotificationCommand>(cx).unwrap();
 
     let notification_to_plan: &UseState<Option<NotificationWithTask>> = use_state(cx, || None);
     let notification_to_associate: &UseState<Option<NotificationWithTask>> = use_state(cx, || None);
 
+    debug!("Rendering notifications page");
     use_future(cx, (), |()| {
         to_owned![notification_service];
         async move {
@@ -104,7 +110,9 @@ pub fn notifications_page(cx: Scope) -> Element {
             notification_to_associate.as_ref().map(|notification_to_associate| {
                 rsx!{
                     task_association_modal {
+                        api_base_url: api_base_url.clone(),
                         notification_to_associate: notification_to_associate.clone(),
+                        ui_model_ref: ui_model_ref.clone(),
                         on_close: |_| { ui_model_ref.write().task_association_modal_opened = false; },
                         on_task_association: |task_id| {
                             ui_model_ref.write().task_association_modal_opened = false;

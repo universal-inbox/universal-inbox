@@ -10,6 +10,7 @@ use universal_inbox::notification::{
 use universal_inbox_api::integrations::{github, notification::NotificationSourceKind};
 
 use crate::helpers::{
+    auth::{authenticated_app, AuthenticatedApp},
     notification::{
         github::{
             assert_sync_notifications, create_notification_from_github_notification,
@@ -18,18 +19,18 @@ use crate::helpers::{
         sync_notifications,
     },
     rest::{create_resource, get_resource},
-    tested_app, TestedApp,
 };
 
 #[rstest]
 #[tokio::test]
 async fn test_sync_notifications_should_add_new_notification_and_update_existing_one(
-    #[future] tested_app: TestedApp,
+    #[future] authenticated_app: AuthenticatedApp,
     // Vec[GithubNotification { source_id: "123", ... }, GithubNotification { source_id: "456", ... } ]
     sync_github_notifications: Vec<GithubNotification>,
 ) {
-    let app = tested_app.await;
+    let app = authenticated_app.await;
     let existing_notification: Box<Notification> = create_resource(
+        &app.client,
         &app.app_address,
         "notifications",
         Box::new(Notification {
@@ -55,8 +56,12 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     let github_notifications_mock2 =
         mock_github_notifications_service(&app.github_mock_server, "2", &empty_result);
 
-    let notifications: Vec<Notification> =
-        sync_notifications(&app.app_address, Some(NotificationSourceKind::Github)).await;
+    let notifications: Vec<Notification> = sync_notifications(
+        &app.client,
+        &app.app_address,
+        Some(NotificationSourceKind::Github),
+    )
+    .await;
 
     assert_eq!(notifications.len(), sync_github_notifications.len());
     assert_sync_notifications(&notifications, &sync_github_notifications);
@@ -64,6 +69,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     github_notifications_mock2.assert();
 
     let updated_notification: Box<Notification> = get_resource(
+        &app.client,
         &app.app_address,
         "notifications",
         existing_notification.id.into(),
@@ -92,16 +98,22 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
 #[rstest]
 #[tokio::test]
 async fn test_sync_notifications_should_mark_deleted_notification_without_subscription(
-    #[future] tested_app: TestedApp,
+    #[future] authenticated_app: AuthenticatedApp,
     // Vec[GithubNotification { source_id: "123", ... }, GithubNotification { source_id: "456", ... } ]
     sync_github_notifications: Vec<GithubNotification>,
 ) {
-    let app = tested_app.await;
+    let app = authenticated_app.await;
     for github_notification in sync_github_notifications.iter() {
-        create_notification_from_github_notification(&app.app_address, github_notification).await;
+        create_notification_from_github_notification(
+            &app.client,
+            &app.app_address,
+            github_notification,
+        )
+        .await;
     }
     // to be deleted during sync
     let existing_notification: Box<Notification> = create_resource(
+        &app.client,
         &app.app_address,
         "notifications",
         Box::new(Notification {
@@ -127,8 +139,12 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
     let github_notifications_mock2 =
         mock_github_notifications_service(&app.github_mock_server, "2", &empty_result);
 
-    let notifications: Vec<Notification> =
-        sync_notifications(&app.app_address, Some(NotificationSourceKind::Github)).await;
+    let notifications: Vec<Notification> = sync_notifications(
+        &app.client,
+        &app.app_address,
+        Some(NotificationSourceKind::Github),
+    )
+    .await;
 
     assert_eq!(notifications.len(), sync_github_notifications.len());
     assert_sync_notifications(&notifications, &sync_github_notifications);
@@ -136,6 +152,7 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
     github_notifications_mock2.assert();
 
     let deleted_notification: Box<Notification> = get_resource(
+        &app.client,
         &app.app_address,
         "notifications",
         existing_notification.id.into(),

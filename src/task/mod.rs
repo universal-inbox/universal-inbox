@@ -130,7 +130,7 @@ impl Display for DueDate {
             DueDate::DateTime(datetime) => datetime.format("%Y-%m-%dT%H:%M:%S"),
             DueDate::DateTimeWithTz(datetime) => datetime.format("%Y-%m-%dT%H:%M:%SZ"),
         };
-        write!(f, "{}", s)
+        write!(f, "{s}")
     }
 }
 
@@ -207,12 +207,14 @@ impl Default for TaskProject {
     Copy,
     TryFromPrimitive,
     IntoPrimitive,
+    Default,
 )]
 #[repr(u8)]
 pub enum TaskPriority {
     P1 = 1,
     P2 = 2,
     P3 = 3,
+    #[default]
     P4 = 4,
 }
 
@@ -227,12 +229,6 @@ impl FromStr for TaskPriority {
             "4" => Ok(TaskPriority::P4),
             _ => Err(format!("Invalid task priority: {s}")),
         }
-    }
-}
-
-impl Default for TaskPriority {
-    fn default() -> Self {
-        TaskPriority::P4
     }
 }
 

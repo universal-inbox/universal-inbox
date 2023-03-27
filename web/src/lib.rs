@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate lazy_static;
+
 use dioxus::prelude::*;
 use dioxus_router::{Route, Router};
 use fermi::{use_atom_ref, use_init_atom_root, UseAtomRef};
@@ -7,22 +10,26 @@ use web_sys::KeyboardEvent;
 
 use universal_inbox::notification::NotificationWithTask;
 
-use components::{footer::footer, nav_bar::nav_bar, toast_zone::toast_zone};
+use components::{footer::footer, nav_bar::nav_bar, spinner::spinner, toast_zone::toast_zone};
+use config::{get_api_base_url, get_app_config, APP_CONFIG};
+use model::{UniversalInboxUIModel, UI_MODEL};
 use pages::{
     notifications_page::notifications_page, page_not_found::page_not_found,
     settings_page::settings_page,
 };
 use services::{
-    notification_service::{
-        notification_service, NotificationCommand, UniversalInboxUIModel, NOTIFICATIONS, UI_MODEL,
-    },
+    notification_service::{notification_service, NotificationCommand, NOTIFICATIONS},
     task_service::{task_service, TaskCommand},
     toast_service::{toast_service, TOASTS},
 };
 
+mod auth;
 mod components;
+mod config;
+mod model;
 mod pages;
 mod services;
+mod theme;
 mod utils;
 
 pub fn app(cx: Scope) -> Element {
@@ -30,11 +37,22 @@ pub fn app(cx: Scope) -> Element {
     let notifications_ref = use_atom_ref(cx, NOTIFICATIONS);
     let ui_model_ref = use_atom_ref(cx, UI_MODEL);
     let toasts_ref = use_atom_ref(cx, TOASTS);
+    let app_config_ref = use_atom_ref(cx, APP_CONFIG);
+    let api_base_url = use_memo(cx, (), |()| get_api_base_url().unwrap());
+    let session_url = use_memo(cx, &(api_base_url.clone(),), |(api_base_url,)| {
+        api_base_url.join("auth/session").unwrap()
+    });
+
     let toast_service_handle = use_coroutine(cx, |rx| toast_service(rx, toasts_ref.clone()));
     let task_service_handle = use_coroutine(cx, |rx| {
         to_owned![toast_service_handle];
 
-        task_service(rx, toast_service_handle)
+        task_service(
+            rx,
+            api_base_url.clone(),
+            ui_model_ref.clone(),
+            toast_service_handle,
+        )
     });
     let notification_service_handle = use_coroutine(cx, |rx| {
         to_owned![toast_service_handle];
@@ -42,7 +60,9 @@ pub fn app(cx: Scope) -> Element {
 
         notification_service(
             rx,
+            api_base_url.clone(),
             notifications_ref.clone(),
+            ui_model_ref.clone(),
             task_service_handle,
             toast_service_handle,
         )
@@ -53,6 +73,7 @@ pub fn app(cx: Scope) -> Element {
         to_owned![notification_service_handle];
         to_owned![task_service_handle];
         to_owned![notifications_ref];
+        to_owned![app_config_ref];
 
         async move {
             setup_key_bindings(
@@ -61,25 +82,45 @@ pub fn app(cx: Scope) -> Element {
                 task_service_handle,
                 notifications_ref,
             );
+
+            let app_config = get_app_config().await.unwrap();
+            app_config_ref.write().replace(app_config);
         }
     });
 
     debug!("Rendering app");
-    cx.render(rsx!(
-        // Router + Route == 300KB (release) !!!
-        div {
-            class: "h-full flex flex-col text-sm",
+    if let Some(app_config) = app_config_ref.read().as_ref() {
+        cx.render(rsx!(
+            // Router + Route == 300KB (release) !!!
+            div {
+                class: "h-full flex flex-col text-sm",
 
-            Router {
-                self::nav_bar {}
-                Route { to: "/", self::notifications_page {} }
-                Route { to: "/settings", self::settings_page {} }
-                Route { to: "", self::page_not_found {} }
-                self::footer {}
-                self::toast_zone {}
+                Router {
+                   auth::authenticated {
+                       issuer_url: app_config.oidc_issuer_url.clone(),
+                       client_id: app_config.oidc_client_id.clone(),
+                       redirect_url: app_config.oidc_redirect_url.clone(),
+                       session_url: session_url.clone(),
+                       ui_model_ref: ui_model_ref.clone(),
+
+                       self::nav_bar {}
+                       Route { to: "/", self::notifications_page {} }
+                       Route { to: "/settings", self::settings_page {} }
+                       Route { to: "", self::page_not_found {} }
+                       self::footer {}
+                       self::toast_zone {}
+                   }
+                }
             }
-        }
-    ))
+        ))
+    } else {
+        cx.render(rsx!(div {
+            class: "h-full flex justify-center items-center",
+
+            self::spinner {}
+            "Loading Universal Inbox..."
+        }))
+    }
 }
 
 fn setup_key_bindings(

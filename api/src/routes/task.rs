@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use actix_http::body::BoxBody;
+use actix_identity::Identity;
 use actix_web::{web, HttpResponse, Scope};
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
@@ -43,10 +44,11 @@ pub struct ListTaskRequest {
     status: TaskStatus,
 }
 
-#[tracing::instrument(level = "debug", skip(task_service))]
+#[tracing::instrument(level = "debug", skip(task_service, _identity))]
 pub async fn list_tasks(
     list_task_request: web::Query<ListTaskRequest>,
     task_service: web::Data<Arc<RwLock<TaskService>>>,
+    _identity: Identity,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let service = task_service.read().await;
     let mut transaction = service
@@ -67,10 +69,11 @@ pub struct SearchTaskRequest {
     matches: String,
 }
 
-#[tracing::instrument(level = "debug", skip(task_service))]
+#[tracing::instrument(level = "debug", skip(task_service, _identity))]
 pub async fn search_tasks(
     search_task_request: web::Query<SearchTaskRequest>,
     task_service: web::Data<Arc<RwLock<TaskService>>>,
+    _identity: Identity,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let service = task_service.read().await;
     let mut transaction = service
@@ -86,10 +89,11 @@ pub async fn search_tasks(
         .body(serde_json::to_string(&tasks).context("Cannot serialize tasks")?))
 }
 
-#[tracing::instrument(level = "debug", skip(task_service))]
+#[tracing::instrument(level = "debug", skip(task_service, _identity))]
 pub async fn get_task(
     path: web::Path<TaskId>,
     task_service: web::Data<Arc<RwLock<TaskService>>>,
+    _identity: Identity,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let task_id = path.into_inner();
     let service = task_service.read().await;
@@ -105,15 +109,16 @@ pub async fn get_task(
         None => Ok(HttpResponse::NotFound()
             .content_type("application/json")
             .body(BoxBody::new(
-                json!({ "message": format!("Cannot find task {}", task_id) }).to_string(),
+                json!({ "message": format!("Cannot find task {task_id}") }).to_string(),
             ))),
     }
 }
 
-#[tracing::instrument(level = "debug", skip(task_service))]
+#[tracing::instrument(level = "debug", skip(task_service, _identity))]
 pub async fn create_task(
     task: web::Json<Box<Task>>,
     task_service: web::Data<Arc<RwLock<TaskService>>>,
+    _identity: Identity,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let service = task_service.read().await;
     let mut transaction = service
@@ -140,10 +145,11 @@ pub struct SyncTasksParameters {
     source: Option<TaskSyncSourceKind>,
 }
 
-#[tracing::instrument(level = "debug", skip(task_service))]
+#[tracing::instrument(level = "debug", skip(task_service, _identity))]
 pub async fn sync_tasks(
     params: web::Json<SyncTasksParameters>,
     task_service: web::Data<Arc<RwLock<TaskService>>>,
+    _identity: Identity,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let service = task_service.read().await;
     let mut transaction = service.begin().await.context(format!(
@@ -164,11 +170,12 @@ pub async fn sync_tasks(
         .body(serde_json::to_string(&tasks).context("Cannot serialize task creation results")?))
 }
 
-#[tracing::instrument(level = "debug", skip(task_service))]
+#[tracing::instrument(level = "debug", skip(task_service, _identity))]
 pub async fn patch_task(
     path: web::Path<TaskId>,
     patch: web::Json<TaskPatch>,
     task_service: web::Data<Arc<RwLock<TaskService>>>,
+    _identity: Identity,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let task_id = path.into_inner();
     let task_patch = patch.into_inner();
@@ -204,7 +211,7 @@ pub async fn patch_task(
         } => Ok(HttpResponse::NotFound()
             .content_type("application/json")
             .body(BoxBody::new(
-                json!({ "message": format!("Cannot update unknown task {}", task_id) }).to_string(),
+                json!({ "message": format!("Cannot update unknown task {task_id}") }).to_string(),
             ))),
     }
 }

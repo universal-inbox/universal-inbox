@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use actix_http::body::BoxBody;
+use actix_identity::Identity;
 use actix_web::{web, HttpResponse, Scope};
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
@@ -16,12 +17,11 @@ use universal_inbox::{
 
 use crate::{
     integrations::notification::NotificationSyncSourceKind,
+    routes::option_wildcard,
     universal_inbox::{
         notification::service::NotificationService, UniversalInboxError, UpdateStatus,
     },
 };
-
-use super::option_wildcard;
 
 pub fn scope() -> Scope {
     web::scope("/notifications")
@@ -53,10 +53,11 @@ pub struct ListNotificationRequest {
     task_id: Option<TaskId>,
 }
 
-#[tracing::instrument(level = "debug", skip(notification_service))]
+#[tracing::instrument(level = "debug", skip(notification_service, _identity))]
 pub async fn list_notifications(
     list_notification_request: web::Query<ListNotificationRequest>,
     notification_service: web::Data<Arc<RwLock<NotificationService>>>,
+    _identity: Identity,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let service = notification_service.read().await;
     let mut transaction = service
@@ -79,10 +80,11 @@ pub async fn list_notifications(
     ))
 }
 
-#[tracing::instrument(level = "debug", skip(notification_service))]
+#[tracing::instrument(level = "debug", skip(notification_service, _identity))]
 pub async fn get_notification(
     path: web::Path<NotificationId>,
     notification_service: web::Data<Arc<RwLock<NotificationService>>>,
+    _identity: Identity,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let notification_id = path.into_inner();
     let service = notification_service.read().await;
@@ -101,16 +103,17 @@ pub async fn get_notification(
         None => Ok(HttpResponse::NotFound()
             .content_type("application/json")
             .body(BoxBody::new(
-                json!({ "message": format!("Cannot find notification {}", notification_id) })
+                json!({ "message": format!("Cannot find notification {notification_id}") })
                     .to_string(),
             ))),
     }
 }
 
-#[tracing::instrument(level = "debug", skip(notification_service))]
+#[tracing::instrument(level = "debug", skip(notification_service, _identity))]
 pub async fn create_notification(
     notification: web::Json<Box<Notification>>,
     notification_service: web::Data<Arc<RwLock<NotificationService>>>,
+    _identity: Identity,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let service = notification_service.read().await;
     let mut transaction = service
@@ -137,10 +140,11 @@ pub struct SyncNotificationsParameters {
     source: Option<NotificationSyncSourceKind>,
 }
 
-#[tracing::instrument(level = "debug", skip(notification_service))]
+#[tracing::instrument(level = "debug", skip(notification_service, _identity))]
 pub async fn sync_notifications(
     params: web::Json<SyncNotificationsParameters>,
     notification_service: web::Data<Arc<RwLock<NotificationService>>>,
+    _identity: Identity,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let service = notification_service.read().await;
     let mut transaction = service.begin().await.context(format!(
@@ -162,11 +166,12 @@ pub async fn sync_notifications(
         .body(serde_json::to_string(&notifications).context("Cannot serialize notifications")?))
 }
 
-#[tracing::instrument(level = "debug", skip(notification_service))]
+#[tracing::instrument(level = "debug", skip(notification_service, _identity))]
 pub async fn patch_notification(
     path: web::Path<NotificationId>,
     patch: web::Json<NotificationPatch>,
     notification_service: web::Data<Arc<RwLock<NotificationService>>>,
+    _identity: Identity,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let notification_id = path.into_inner();
     let notification_patch = patch.into_inner();
@@ -202,18 +207,19 @@ pub async fn patch_notification(
             .content_type("application/json")
             .body(BoxBody::new(
                 json!({
-                    "message": format!("Cannot update unknown notification {}", notification_id)
+                    "message": format!("Cannot update unknown notification {notification_id}")
                 })
                 .to_string(),
             ))),
     }
 }
 
-#[tracing::instrument(level = "debug", skip(notification_service))]
+#[tracing::instrument(level = "debug", skip(notification_service, _identity))]
 pub async fn create_task_from_notification(
     path: web::Path<NotificationId>,
     task_creation: web::Json<TaskCreation>,
     notification_service: web::Data<Arc<RwLock<NotificationService>>>,
+    _identity: Identity,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let notification_id = path.into_inner();
     let task_creation = task_creation.into_inner();

@@ -18,6 +18,7 @@ use universal_inbox_api::integrations::todoist::{
 };
 
 use crate::helpers::{
+    auth::{authenticated_app, AuthenticatedApp},
     notification::{
         create_task_from_notification,
         github::{create_notification_from_github_notification, github_notification},
@@ -30,7 +31,6 @@ use crate::helpers::{
         mock_todoist_sync_resources_service, mock_todoist_sync_service,
         sync_todoist_projects_response, todoist_item, TodoistSyncPartialCommand,
     },
-    tested_app, TestedApp,
 };
 
 mod patch_task {
@@ -40,13 +40,17 @@ mod patch_task {
     #[rstest]
     #[tokio::test]
     async fn test_patch_todoist_task_status_as_deleted(
-        #[future] tested_app: TestedApp,
+        #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
     ) {
-        let app = tested_app.await;
-        let existing_todoist_task_creation =
-            create_task_from_todoist_item(&app.app_address, &todoist_item, "Inbox".to_string())
-                .await;
+        let app = authenticated_app.await;
+        let existing_todoist_task_creation = create_task_from_todoist_item(
+            &app.client,
+            &app.app_address,
+            &todoist_item,
+            "Inbox".to_string(),
+        )
+        .await;
         let existing_todoist_task = existing_todoist_task_creation.task;
         assert_eq!(existing_todoist_task.status, TaskStatus::Active);
         let existing_todoist_notification = existing_todoist_task_creation.notification.unwrap();
@@ -56,6 +60,7 @@ mod patch_task {
         );
 
         let patched_task = patch_resource(
+            &app.client,
             &app.app_address,
             "tasks",
             existing_todoist_task.id.into(),
@@ -76,6 +81,7 @@ mod patch_task {
         );
 
         let deleted_notification: Box<Notification> = get_resource(
+            &app.client,
             &app.app_address,
             "notifications",
             existing_todoist_notification.id.into(),
@@ -87,13 +93,17 @@ mod patch_task {
     #[rstest]
     #[tokio::test]
     async fn test_patch_todoist_task_status_as_done(
-        #[future] tested_app: TestedApp,
+        #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
     ) {
-        let app = tested_app.await;
-        let existing_todoist_task_creation =
-            create_task_from_todoist_item(&app.app_address, &todoist_item, "Inbox".to_string())
-                .await;
+        let app = authenticated_app.await;
+        let existing_todoist_task_creation = create_task_from_todoist_item(
+            &app.client,
+            &app.app_address,
+            &todoist_item,
+            "Inbox".to_string(),
+        )
+        .await;
         let existing_todoist_task = existing_todoist_task_creation.task;
         assert_eq!(existing_todoist_task.status, TaskStatus::Active);
         let existing_todoist_notification = existing_todoist_task_creation.notification.unwrap();
@@ -103,6 +113,7 @@ mod patch_task {
         );
 
         let patched_task: Box<Task> = patch_resource(
+            &app.client,
             &app.app_address,
             "tasks",
             existing_todoist_task.id.into(),
@@ -125,6 +136,7 @@ mod patch_task {
         );
 
         let deleted_notification: Box<Notification> = get_resource(
+            &app.client,
             &app.app_address,
             "notifications",
             existing_todoist_notification.id.into(),
@@ -136,14 +148,18 @@ mod patch_task {
     #[rstest]
     #[tokio::test]
     async fn test_patch_todoist_task_to_plan_to_new_project(
-        #[future] tested_app: TestedApp,
+        #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
         sync_todoist_projects_response: TodoistSyncResponse,
     ) {
-        let app = tested_app.await;
-        let existing_todoist_task_creation =
-            create_task_from_todoist_item(&app.app_address, &todoist_item, "Inbox".to_string())
-                .await;
+        let app = authenticated_app.await;
+        let existing_todoist_task_creation = create_task_from_todoist_item(
+            &app.client,
+            &app.app_address,
+            &todoist_item,
+            "Inbox".to_string(),
+        )
+        .await;
         let existing_todoist_task = existing_todoist_task_creation.task;
         assert_eq!(
             existing_todoist_task.due_at,
@@ -193,6 +209,7 @@ mod patch_task {
         );
 
         let patched_task = patch_resource(
+            &app.client,
             &app.app_address,
             "tasks",
             existing_todoist_task.id.into(),
@@ -220,6 +237,7 @@ mod patch_task {
         );
 
         let deleted_notification: Box<Notification> = get_resource(
+            &app.client,
             &app.app_address,
             "notifications",
             existing_todoist_notification.id.into(),
@@ -233,16 +251,19 @@ mod patch_task {
     #[rstest]
     #[tokio::test]
     async fn test_create_todoist_task_from_notification(
-        #[future] tested_app: TestedApp,
+        #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
         sync_todoist_projects_response: TodoistSyncResponse,
         todoist_item: Box<TodoistItem>,
     ) {
-        let app = tested_app.await;
+        let app = authenticated_app.await;
 
-        let notification =
-            create_notification_from_github_notification(&app.app_address, &github_notification)
-                .await;
+        let notification = create_notification_from_github_notification(
+            &app.client,
+            &app.app_address,
+            &github_notification,
+        )
+        .await;
         // Existing project in sync_todoist_projects_response
         let project = "Project2".to_string();
         let project_id = "2222".to_string();
@@ -275,6 +296,7 @@ mod patch_task {
             mock_todoist_get_item_service(&app.todoist_mock_server, todoist_item.clone());
 
         let notification_with_task = create_task_from_notification(
+            &app.client,
             &app.app_address,
             notification.id,
             &TaskCreation {
@@ -312,8 +334,13 @@ mod patch_task {
             ))
         );
 
-        let deleted_notification: Box<Notification> =
-            get_resource(&app.app_address, "notifications", notification.id.into()).await;
+        let deleted_notification: Box<Notification> = get_resource(
+            &app.client,
+            &app.app_address,
+            "notifications",
+            notification.id.into(),
+        )
+        .await;
         assert_eq!(deleted_notification.status, NotificationStatus::Deleted);
     }
 }
@@ -327,17 +354,24 @@ mod patch_notification {
     #[rstest]
     #[tokio::test]
     async fn test_patch_notification_to_associate_with_task(
-        #[future] tested_app: TestedApp,
+        #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
         todoist_item: Box<TodoistItem>,
     ) {
-        let app = tested_app.await;
-        let notification =
-            create_notification_from_github_notification(&app.app_address, &github_notification)
-                .await;
-        let existing_todoist_task =
-            create_task_from_todoist_item(&app.app_address, &todoist_item, "Project2".to_string())
-                .await;
+        let app = authenticated_app.await;
+        let notification = create_notification_from_github_notification(
+            &app.client,
+            &app.app_address,
+            &github_notification,
+        )
+        .await;
+        let existing_todoist_task = create_task_from_todoist_item(
+            &app.client,
+            &app.app_address,
+            &todoist_item,
+            "Project2".to_string(),
+        )
+        .await;
         let todoist_sync_mock = mock_todoist_sync_service(
             &app.todoist_mock_server,
             vec![TodoistSyncPartialCommand::ItemUpdate {
@@ -355,6 +389,7 @@ mod patch_notification {
         );
 
         let patched_notification = patch_resource(
+            &app.client,
             &app.app_address,
             "notifications",
             notification.id.into(),

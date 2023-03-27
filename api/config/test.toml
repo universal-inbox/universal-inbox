@@ -7,3 +7,13 @@ api_token = "github_test_token"
 
 [integrations.todoist]
 api_token = "todoist_test_token"
+
+[application.http_session]
+secret_key = "1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF"
+
+[application.authentication]
+oidc_issuer_url = "https://oidcprovider.com"
+oidc_introspection_url = "https://oidcprovider.com/oauth/v2/introspect"
+oidc_front_client_id = "12345"
+oidc_api_client_id = "67890"
+oidc_api_client_secret = "azerty"
