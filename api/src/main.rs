@@ -104,7 +104,7 @@ async fn main() -> std::io::Result<()> {
             let listener = TcpListener::bind(format!("0.0.0.0:{}", settings.application.port))
                 .expect("Failed to bind port");
 
-            let _ = run(listener, &settings, notification_service, task_service)
+            let _ = run(listener, settings, notification_service, task_service)
                 .await
                 .expect("Failed to start HTTP server")
                 .await;
@@ -114,8 +114,8 @@ async fn main() -> std::io::Result<()> {
 
     match result {
         Err(err) => {
-            error!("universal-inbox failed: {:?}", err);
-            panic!("universal-inbox failed: {:?}", err)
+            error!("universal-inbox failed: {err:?}");
+            panic!("universal-inbox failed: {err:?}")
         }
         Ok(_) => Ok(()),
     }

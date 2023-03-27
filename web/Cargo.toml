@@ -19,7 +19,7 @@ wasm-bindgen-futures = "0.4"
 wasm-bindgen = { version = "0.2" }
 dioxus = "0.3"
 dioxus-web = "0.3"
-dioxus-router = "0.3"
+dioxus-router = { version = "0.3", features = ["query", "web"] }
 fermi = "0.3"
 uuid = { version = "1.1", features = ["v4", "js"] }
 console_error_panic_hook = "0.1"
@@ -31,6 +31,13 @@ serde-wasm-bindgen = "0.4"
 dioxus-free-icons = { version = "0.6.0", features = ["bootstrap"] }
 gloo-timers = "0.2.0"
 chrono = { version = "0.4.0", features = ["wasmbind"] }
+openidconnect = "3.0.0-alpha.1"
+reqwest = { version = "0.11", features = ["json", "cookies"] }
+anyhow = "1.0.0"
+url = "2.3.0"
+gloo-utils = "0.1.0"
+lazy_static = "1.4.0"
+thiserror = "1.0.40"
 
 [dependencies.web-sys]
 version = "0.3"
@@ -53,6 +60,9 @@ features = [
 [dev-dependencies]
 rstest = "0.13.0"
 pretty_assertions = "1.3.0"
+tokio = { version = "1", features = ["macros", "rt"] }
+hamcrest2 = "*"
+wasm-bindgen-test = "0.3.0"
 
 [features]
 default = ["console_log"]

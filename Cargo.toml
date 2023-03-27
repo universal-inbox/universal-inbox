@@ -23,6 +23,7 @@ http = "0.2.0"
 git-url-parse = "0.4.0"
 serde_repr = "0.1.0"
 num_enum = "0.5.0"
+url = { version = "2.3.0", features = ["serde"] }
 
 [patch.crates-io]
 # Patch Dioxus to access use_memo, use_effect seems buggy as of 0.3.1

@@ -16,3 +16,10 @@ npm install --dev
 '''
 command = "trunk"
 args = ["serve"]
+
+[tasks.test]
+install_script = '''
+which wasm-bindgen-test-runner > /dev/null || cargo install wasm-bindgen-cli
+'''
+command = "cargo"
+args = ["test"]

@@ -12,9 +12,9 @@ use universal_inbox::notification::{
 use universal_inbox_api::integrations::github;
 
 use crate::helpers::{
+    auth::{authenticated_app, AuthenticatedApp},
     notification::github::github_notification,
     rest::{create_resource, get_resource, patch_resource, patch_resource_response},
-    tested_app, TestedApp,
 };
 
 mod patch_resource {
@@ -23,11 +23,11 @@ mod patch_resource {
     #[rstest]
     #[tokio::test]
     async fn test_patch_github_notification_status_as_deleted(
-        #[future] tested_app: TestedApp,
+        #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
         #[values(205, 304, 404)] github_status_code: u16,
     ) {
-        let app = tested_app.await;
+        let app = authenticated_app.await;
         let github_mark_thread_as_read_mock = app.github_mock_server.mock(|when, then| {
             when.method(PATCH)
                 .path("/notifications/threads/1234")
@@ -48,6 +48,7 @@ mod patch_resource {
             task_id: None,
         });
         let created_notification: Box<Notification> = create_resource(
+            &app.client,
             &app.app_address,
             "notifications",
             expected_notification.clone(),
@@ -57,6 +58,7 @@ mod patch_resource {
         assert_eq!(created_notification, expected_notification);
 
         let patched_notification = patch_resource(
+            &app.client,
             &app.app_address,
             "notifications",
             created_notification.id.into(),
@@ -80,11 +82,11 @@ mod patch_resource {
     #[rstest]
     #[tokio::test]
     async fn test_patch_github_notification_status_as_unsubscribed(
-        #[future] tested_app: TestedApp,
+        #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
         #[values(205, 304, 404)] github_status_code: u16,
     ) {
-        let app = tested_app.await;
+        let app = authenticated_app.await;
         let github_mark_thread_as_read_mock = app.github_mock_server.mock(|when, then| {
             when.method(PUT)
                 .path("/notifications/threads/1234/subscription")
@@ -106,6 +108,7 @@ mod patch_resource {
             task_id: None,
         });
         let created_notification: Box<Notification> = create_resource(
+            &app.client,
             &app.app_address,
             "notifications",
             expected_notification.clone(),
@@ -115,6 +118,7 @@ mod patch_resource {
         assert_eq!(created_notification, expected_notification);
 
         let patched_notification = patch_resource(
+            &app.client,
             &app.app_address,
             "notifications",
             created_notification.id.into(),
@@ -138,10 +142,10 @@ mod patch_resource {
     #[rstest]
     #[tokio::test]
     async fn test_patch_github_notification_status_as_deleted_with_github_api_error(
-        #[future] tested_app: TestedApp,
+        #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
     ) {
-        let app = tested_app.await;
+        let app = authenticated_app.await;
         let github_mark_thread_as_read_mock = app.github_mock_server.mock(|when, then| {
             when.method(PATCH)
                 .path("/notifications/threads/1234")
@@ -162,6 +166,7 @@ mod patch_resource {
             task_id: None,
         });
         let created_notification: Box<Notification> = create_resource(
+            &app.client,
             &app.app_address,
             "notifications",
             expected_notification.clone(),
@@ -171,6 +176,7 @@ mod patch_resource {
         assert_eq!(created_notification, expected_notification);
 
         let response = patch_resource_response(
+            &app.client,
             &app.app_address,
             "notifications",
             created_notification.id.into(),
@@ -191,6 +197,7 @@ mod patch_resource {
         github_mark_thread_as_read_mock.assert();
 
         let notification: Box<Notification> = get_resource(
+            &app.client,
             &app.app_address,
             "notifications",
             created_notification.id.into(),
@@ -202,10 +209,10 @@ mod patch_resource {
     #[rstest]
     #[tokio::test]
     async fn test_patch_github_notification_snoozed_until(
-        #[future] tested_app: TestedApp,
+        #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
     ) {
-        let app = tested_app.await;
+        let app = authenticated_app.await;
         let expected_notification = Box::new(Notification {
             id: Uuid::new_v4().into(),
             title: "notif1".to_string(),
@@ -220,6 +227,7 @@ mod patch_resource {
         });
         let snoozed_time = Utc.with_ymd_and_hms(2022, 1, 1, 1, 2, 3).unwrap();
         let created_notification: Box<Notification> = create_resource(
+            &app.client,
             &app.app_address,
             "notifications",
             expected_notification.clone(),
@@ -229,6 +237,7 @@ mod patch_resource {
         assert_eq!(created_notification, expected_notification);
 
         let patched_notification = patch_resource(
+            &app.client,
             &app.app_address,
             "notifications",
             created_notification.id.into(),
@@ -251,10 +260,10 @@ mod patch_resource {
     #[rstest]
     #[tokio::test]
     async fn test_patch_github_notification_status_without_modification(
-        #[future] tested_app: TestedApp,
+        #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
     ) {
-        let app = tested_app.await;
+        let app = authenticated_app.await;
         let github_api_mock = app.github_mock_server.mock(|when, then| {
             when.any_request();
             then.status(200);
@@ -273,6 +282,7 @@ mod patch_resource {
             task_id: None,
         });
         let created_notification: Box<Notification> = create_resource(
+            &app.client,
             &app.app_address,
             "notifications",
             expected_notification.clone(),
@@ -282,6 +292,7 @@ mod patch_resource {
         assert_eq!(created_notification, expected_notification);
 
         let response = patch_resource_response(
+            &app.client,
             &app.app_address,
             "notifications",
             created_notification.id.into(),
@@ -300,10 +311,10 @@ mod patch_resource {
     #[rstest]
     #[tokio::test]
     async fn test_patch_github_notification_without_values_to_update(
-        #[future] tested_app: TestedApp,
+        #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
     ) {
-        let app = tested_app.await;
+        let app = authenticated_app.await;
         let github_api_mock = app.github_mock_server.mock(|when, then| {
             when.any_request();
             then.status(200);
@@ -321,6 +332,7 @@ mod patch_resource {
             task_id: None,
         });
         let created_notification: Box<Notification> = create_resource(
+            &app.client,
             &app.app_address,
             "notifications",
             expected_notification.clone(),
@@ -330,6 +342,7 @@ mod patch_resource {
         assert_eq!(created_notification, expected_notification);
 
         let response = patch_resource_response(
+            &app.client,
             &app.app_address,
             "notifications",
             created_notification.id.into(),
@@ -345,8 +358,8 @@ mod patch_resource {
 
     #[rstest]
     #[tokio::test]
-    async fn test_patch_unknown_notification(#[future] tested_app: TestedApp) {
-        let app = tested_app.await;
+    async fn test_patch_unknown_notification(#[future] authenticated_app: AuthenticatedApp) {
+        let app = authenticated_app.await;
         let github_api_mock = app.github_mock_server.mock(|when, then| {
             when.any_request();
             then.status(200);
@@ -354,6 +367,7 @@ mod patch_resource {
         let unknown_notification_id = Uuid::new_v4();
 
         let response = patch_resource_response(
+            &app.client,
             &app.app_address,
             "notifications",
             unknown_notification_id,
@@ -369,11 +383,7 @@ mod patch_resource {
         assert_eq!(
             body,
             json!({
-                "message":
-                    format!(
-                        "Cannot update unknown notification {}",
-                        unknown_notification_id
-                    )
+                "message": format!("Cannot update unknown notification {unknown_notification_id}")
             })
             .to_string()
         );

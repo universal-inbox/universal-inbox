@@ -126,7 +126,7 @@ fn build_github_client(auth_token: &str) -> Result<reqwest::Client, reqwest::Err
         "Accept",
         HeaderValue::from_static("application/vnd.github.v3+json"),
     );
-    let mut auth_header_value: HeaderValue = format!("token {}", auth_token).parse().unwrap();
+    let mut auth_header_value: HeaderValue = format!("token {auth_token}").parse().unwrap();
     auth_header_value.set_sensitive(true);
     headers.insert("Authorization", auth_header_value);
 

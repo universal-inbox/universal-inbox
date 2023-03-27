@@ -4,6 +4,7 @@ use chrono::{TimeZone, Utc};
 use format_serde_error::SerdeError;
 use http::Uri;
 use httpmock::{Method::GET, Mock, MockServer};
+use reqwest::Client;
 use rstest::*;
 use uuid::Uuid;
 
@@ -16,10 +17,12 @@ use universal_inbox_api::integrations::github;
 use crate::helpers::{load_json_fixture_file, rest::create_resource};
 
 pub async fn create_notification_from_github_notification(
+    client: &Client,
     app_address: &str,
     github_notification: &GithubNotification,
 ) -> Box<Notification> {
     create_resource(
+        client,
         app_address,
         "notifications",
         Box::new(Notification {

@@ -219,7 +219,7 @@ impl TodoistService {
 
         let item_info: TodoistItemInfoResponse = serde_json::from_str(&body)
             .map_err(|err| SerdeError::new(body.clone(), err))
-            .context(format!("Failed to parse response from Todoist: {}", body))?;
+            .context(format!("Failed to parse response from Todoist: {body}"))?;
 
         Ok(Some(item_info.item))
     }

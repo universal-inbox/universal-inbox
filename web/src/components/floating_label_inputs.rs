@@ -499,29 +499,29 @@ where
 mod tests {
     mod compute_dropdown_style {
         use super::super::*;
-        use rstest::*;
+        use wasm_bindgen_test::*;
 
-        #[rstest]
+        #[wasm_bindgen_test]
         fn test_has_no_value_and_autofocus() {
             assert!(is_dropdown_opened(false, true, false));
         }
 
-        #[rstest]
+        #[wasm_bindgen_test]
         fn test_has_no_value_and_not_autofocus() {
             assert!(!is_dropdown_opened(false, false, false));
         }
 
-        #[rstest]
+        #[wasm_bindgen_test]
         fn test_has_no_value_and_not_autofocus_and_opened() {
             assert!(is_dropdown_opened(false, false, true));
         }
 
-        #[rstest]
+        #[wasm_bindgen_test]
         fn test_has_value_and_opened() {
             assert!(is_dropdown_opened(true, false, true));
         }
 
-        #[rstest]
+        #[wasm_bindgen_test]
         fn test_has_value_and_not_opened() {
             assert!(!is_dropdown_opened(true, false, false));
         }

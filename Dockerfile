@@ -19,6 +19,7 @@ FROM dep-builder as release-builder
 COPY . .
 RUN cargo make build-release
 RUN sed -i 's#http://localhost:8000/api#/api#' web/dist/snippets/universal-inbox-web-*/js/api.js
+RUN sed -i 's#http://localhost:8000/api#/api#' web/dist/index.html
 
 FROM debian:bullseye-slim AS runtime
 WORKDIR /app

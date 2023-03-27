@@ -5,7 +5,7 @@ use dioxus_free_icons::{
 };
 use fermi::use_atom_ref;
 
-use crate::services::notification_service::{NOTIFICATIONS, UI_MODEL};
+use crate::{model::UI_MODEL, services::notification_service::NOTIFICATIONS};
 
 pub fn footer(cx: Scope) -> Element {
     let notifications_ref = use_atom_ref(cx, NOTIFICATIONS);
