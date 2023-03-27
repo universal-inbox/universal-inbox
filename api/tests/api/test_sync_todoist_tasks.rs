@@ -13,6 +13,7 @@ use universal_inbox_api::{
 };
 
 use crate::helpers::{
+    auth::{authenticated_app, AuthenticatedApp},
     notification::list_notifications_with_tasks,
     rest::{create_resource, get_resource},
     task::{
@@ -22,13 +23,12 @@ use crate::helpers::{
             sync_todoist_items_response, sync_todoist_projects_response,
         },
     },
-    tested_app, TestedApp,
 };
 
 #[rstest]
 #[tokio::test]
 async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
-    #[future] tested_app: TestedApp,
+    #[future] authenticated_app: AuthenticatedApp,
     sync_todoist_items_response: TodoistSyncResponse,
     sync_todoist_projects_response: TodoistSyncResponse,
 ) {
@@ -36,9 +36,10 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
     // the associated notification will be marked as deleted as the task's project will not be Inbox anymore
     // a new task will be created
     // with an associated notification as the new task's project is Inbox
-    let app = tested_app.await;
+    let app = authenticated_app.await;
     let todoist_items = sync_todoist_items_response.items.clone().unwrap();
     let existing_todoist_task_creation: Box<TaskCreationResult> = create_resource(
+        &app.client,
         &app.app_address,
         "tasks",
         Box::new(Task {
@@ -75,15 +76,20 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
     );
 
     let task_creations: Vec<TaskCreationResult> =
-        sync_tasks(&app.app_address, Some(TaskSourceKind::Todoist)).await;
+        sync_tasks(&app.client, &app.app_address, Some(TaskSourceKind::Todoist)).await;
 
     assert_eq!(task_creations.len(), todoist_items.len());
     assert_sync_items(&task_creations, &todoist_items);
     todoist_tasks_mock.assert();
     todoist_projects_mock.assert();
 
-    let updated_todoist_task: Box<Task> =
-        get_resource(&app.app_address, "tasks", existing_todoist_task.id.into()).await;
+    let updated_todoist_task: Box<Task> = get_resource(
+        &app.client,
+        &app.app_address,
+        "tasks",
+        existing_todoist_task.id.into(),
+    )
+    .await;
     assert_eq!(updated_todoist_task.id, existing_todoist_task.id);
     assert_eq!(
         updated_todoist_task.source_id,
@@ -105,6 +111,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
     );
 
     let updated_todoist_notification: Box<Notification> = get_resource(
+        &app.client,
         &app.app_address,
         "notifications",
         existing_todoist_notification.id.into(),
@@ -140,6 +147,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
         .unwrap();
     let new_task = &new_todoist_task_creation.task;
     let notifications = list_notifications_with_tasks(
+        &app.client,
         &app.app_address,
         NotificationStatus::Unread,
         false,
@@ -159,18 +167,25 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
 #[rstest]
 #[tokio::test]
 async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
-    #[future] tested_app: TestedApp,
+    #[future] authenticated_app: AuthenticatedApp,
     // Vec[TodoistTask { source_id: "123", ... }, TodoistTask { source_id: "456", ... } ]
     sync_todoist_items_response: TodoistSyncResponse,
     sync_todoist_projects_response: TodoistSyncResponse,
 ) {
-    let app = tested_app.await;
+    let app = authenticated_app.await;
     let todoist_items = sync_todoist_items_response.items.clone().unwrap();
     for todoist_item in todoist_items.iter() {
-        create_task_from_todoist_item(&app.app_address, todoist_item, "Inbox".to_string()).await;
+        create_task_from_todoist_item(
+            &app.client,
+            &app.app_address,
+            todoist_item,
+            "Inbox".to_string(),
+        )
+        .await;
     }
     // to be marked as completed during sync
     let existing_todoist_active_task_creation: Box<TaskCreationResult> = create_resource(
+        &app.client,
         &app.app_address,
         "tasks",
         Box::new(Task {
@@ -208,7 +223,7 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
     );
 
     let task_creations: Vec<TaskCreationResult> =
-        sync_tasks(&app.app_address, Some(TaskSourceKind::Todoist)).await;
+        sync_tasks(&app.client, &app.app_address, Some(TaskSourceKind::Todoist)).await;
 
     assert_eq!(task_creations.len(), todoist_items.len());
     assert_sync_items(&task_creations, &todoist_items);
@@ -216,6 +231,7 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
     todoist_projects_mock.assert();
 
     let completed_task: Box<Task> = get_resource(
+        &app.client,
         &app.app_address,
         "tasks",
         existing_todoist_active_task.id.into(),
@@ -226,6 +242,7 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
     assert_eq!(completed_task.completed_at.is_some(), true);
 
     let deleted_notification: Box<Notification> = get_resource(
+        &app.client,
         &app.app_address,
         "notifications",
         existing_todoist_unread_notification.id.into(),

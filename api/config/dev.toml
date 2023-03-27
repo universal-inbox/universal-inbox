@@ -3,4 +3,6 @@ log_directive = "debug"
 dependencies_log_directive = "debug"
 static_dir = "../web/dist"
 api_path = "/api"
-static_path = ""
+
+[application.http_session]
+secret_key = "1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF"

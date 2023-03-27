@@ -40,6 +40,7 @@ pub async fn toast_service(
                 toasts.write().remove(&id);
             }
             Some(ToastCommand::Update(toast_update)) => {
+                debug!("Got Toast update command for {}", toast_update.id);
                 let mut writable_toasts = toasts.write();
                 if let Some(toast) = writable_toasts.get(&toast_update.id) {
                     debug!("Updating Toast {}", toast_update.id);

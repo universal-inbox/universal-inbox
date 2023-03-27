@@ -1,9 +1,11 @@
-use gloo_timers::future::TimeoutFuture;
 use log::error;
-use std::collections::HashMap;
 
 use dioxus::prelude::*;
 use dioxus_free_icons::{icons::bs_icons::BsX, Icon};
+use fermi::UseAtomRef;
+use gloo_timers::future::TimeoutFuture;
+use reqwest::Method;
+use url::Url;
 
 use universal_inbox::{
     notification::{NotificationMetadata, NotificationWithTask},
@@ -13,6 +15,7 @@ use universal_inbox::{
 use crate::{
     components::floating_label_inputs::floating_label_input_search_select,
     components::icons::{github, todoist},
+    model::UniversalInboxUIModel,
     services::api::call_api,
     utils::focus_element,
 };
@@ -20,7 +23,9 @@ use crate::{
 #[inline_props]
 pub fn task_association_modal<'a>(
     cx: Scope,
+    api_base_url: Url,
     notification_to_associate: NotificationWithTask,
+    ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
     on_close: EventHandler<'a, ()>,
     on_task_association: EventHandler<'a, TaskId>,
 ) -> Element {
@@ -34,10 +39,15 @@ pub fn task_association_modal<'a>(
 
     use_future(cx, &search_expression.clone(), |search_expression| {
         to_owned![search_results];
+        to_owned![api_base_url];
+        to_owned![ui_model_ref];
+
         async move {
             if search_expression.len() > 2 {
                 TimeoutFuture::new(500).await;
-                search_results.set(search_tasks(&search_expression.current()).await);
+                search_results.set(
+                    search_tasks(&api_base_url, &search_expression.current(), ui_model_ref).await,
+                );
             }
         }
     });
@@ -127,12 +137,25 @@ pub fn task_association_modal<'a>(
     ))
 }
 
-async fn search_tasks(search: &str) -> Vec<TaskSummary> {
-    call_api(
-        "GET",
-        &format!("/tasks/search?matches={}", search),
-        HashMap::new(),
+async fn search_tasks(
+    api_base_url: &Url,
+    search: &str,
+    ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
+) -> Vec<TaskSummary> {
+    let search_result = call_api(
+        Method::GET,
+        api_base_url,
+        &format!("/tasks/search?matches={search}"),
+        None::<i32>,
+        Some(ui_model_ref),
     )
-    .await
-    .unwrap()
+    .await;
+
+    match search_result {
+        Ok(tasks) => tasks,
+        Err(error) => {
+            error!("Error searching tasks: {error:?}");
+            Vec::new()
+        }
+    }
 }

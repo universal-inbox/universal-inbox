@@ -44,36 +44,17 @@ jobs:
           toolchain: stable
           profile: minimal
           target: wasm32-unknown-unknown
+      - uses: davidB/rust-cargo-make@v1
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci
-      - name: Cargo check
-        uses: actions-rs/cargo@v1
-        with:
-          command: check
-          args: --all-targets --all-features --workspace
       - name: Clippy check
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --all-targets --all-features --workspace -- -D warnings
+        run: cargo make clippy-ci-flow
 
-  test:
+  test-ui:
     needs: build
-    name: Test with coverage
+    name: Test shared package with coverage
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:15.1
-        env:
-          POSTGRES_PASSWORD: password
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -90,14 +71,90 @@ jobs:
         uses: taiki-e/install-action@nextest
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
-      - name: Collect coverage data
+      - name: Collect shared package coverage data
         env:
           RUST_MIN_STACK: 4194304
-        run: cargo llvm-cov nextest --all-features --workspace --lcov --output-path lcov.info
+        run: cargo llvm-cov nextest --all-features --package universal-inbox --lcov --output-path lcov-ui.info
       - name: Upload to Coveralls
         # upload only if push
         if: ${{ github.event_name == 'push' }}
         uses: coverallsapp/github-action@master
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          path-to-lcov: './lcov.info'
+          path-to-lcov: './lcov-ui.info'
+
+  test-ui-web:
+    needs: build
+    name: Test web frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          target: wasm32-unknown-unknown
+      - uses: jetli/wasm-bindgen-action@v0.2.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci
+      - name: Collect API coverage data
+        env:
+          RUST_MIN_STACK: 4194304
+        run: cargo test
+        working-directory: ./web
+
+  test-api:
+    needs: build
+    name: Test API with coverage
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15.1
+        env:
+          POSTGRES_PASSWORD: password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          components: llvm-tools-preview
+          profile: minimal
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci
+      - name: Install latest nextest release
+        uses: taiki-e/install-action@nextest
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Collect API coverage data
+        env:
+          RUST_MIN_STACK: 4194304
+        run: cargo llvm-cov nextest --all-features --package universal-inbox-api --lcov --output-path lcov-ui-api.info
+      - name: Upload to Coveralls
+        # upload only if push
+        if: ${{ github.event_name == 'push' }}
+        uses: coverallsapp/github-action@master
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path-to-lcov: './lcov-ui-api.info'

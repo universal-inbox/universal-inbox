@@ -4,6 +4,7 @@ use chrono::{NaiveDate, TimeZone, Utc};
 use http::Uri;
 use httpmock::{Method::POST, Mock, MockServer};
 use pretty_assertions::assert_eq;
+use reqwest::Client;
 use rstest::*;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -81,7 +82,7 @@ pub fn mock_todoist_get_item_service(
     todoist_mock_server.mock(|when, then| {
         when.method(POST)
             .path("/items/get")
-            .body(format!("item_id={}&all_data=false", item_id))
+            .body(format!("item_id={item_id}&all_data=false"))
             .header("authorization", "Bearer todoist_test_token");
         then.status(200)
             .header("content-type", "application/json")
@@ -270,11 +271,13 @@ pub fn assert_sync_items(
 }
 
 pub async fn create_task_from_todoist_item(
+    client: &Client,
     app_address: &str,
     todoist_item: &TodoistItem,
     project: String,
 ) -> Box<TaskCreationResult> {
     create_resource(
+        client,
         app_address,
         "tasks",
         Box::new(Task {

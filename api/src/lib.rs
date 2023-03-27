@@ -6,11 +6,21 @@ extern crate enum_derive;
 
 use std::{net::TcpListener, sync::Arc, sync::Weak};
 
-use actix_files as fs;
-use actix_web::{dev::Server, http, middleware, web, App, HttpServer};
+use actix_cors::Cors;
+use actix_identity::IdentityMiddleware;
+use actix_session::{
+    config::{CookieContentSecurity, PersistentSession},
+    storage::RedisActorSessionStore,
+    SessionMiddleware,
+};
+use actix_web::{
+    cookie::{time::Duration, Key},
+    dev::Server,
+    http, middleware, web, App, HttpServer,
+};
+use actix_web_lab::web::spa;
 use anyhow::Context;
 use configuration::Settings;
-use core::time::Duration;
 use integrations::{github::GithubService, todoist::TodoistService};
 use repository::Repository;
 use sqlx::PgPool;
@@ -32,12 +42,17 @@ pub mod universal_inbox;
 
 pub async fn run(
     listener: TcpListener,
-    settings: &Settings,
+    settings: Settings,
     notification_service: Arc<RwLock<NotificationService>>,
     task_service: Arc<RwLock<TaskService>>,
 ) -> Result<Server, UniversalInboxError> {
     let api_path = settings.application.api_path.clone();
-    let front_base_url = settings.application.front_base_url.clone();
+    let front_base_url = settings
+        .application
+        .front_base_url
+        .as_str()
+        .trim_end_matches('/')
+        .to_string();
     let static_path = settings.application.static_path.clone();
     let static_dir = settings
         .application
@@ -45,6 +60,11 @@ pub async fn run(
         .clone()
         .unwrap_or_else(|| ".".to_string());
     let listen_address = listener.local_addr().unwrap();
+    let redis_connection_string = settings.redis.connection_string();
+    let session_secret_key = Key::from(settings.application.http_session.secret_key.as_bytes());
+    let max_age_days = settings.application.http_session.max_age_days;
+    let max_age_inactive_days = settings.application.http_session.max_age_inactive_days;
+    let settings_web_data = web::Data::new(settings);
 
     info!("Listening on {}", listen_address);
 
@@ -53,42 +73,74 @@ pub async fn run(
             "Mounting API on {}",
             if api_path.is_empty() { "/" } else { &api_path }
         );
+
         let api_scope = web::scope(&api_path)
-            .wrap(
-                middleware::DefaultHeaders::new()
-                    .add(("Access-Control-Allow-Origin", front_base_url.as_bytes()))
-                    .add((
-                        "Access-Control-Allow-Methods",
-                        "POST, GET, OPTIONS, PATCH".as_bytes(),
-                    ))
-                    .add(("Access-Control-Allow-Headers", "content-type".as_bytes())),
-            )
+            .route("/front_config", web::get().to(routes::config::front_config))
+            .service(routes::auth::scope())
             .service(routes::notification::scope())
             .service(routes::task::scope())
             .app_data(web::Data::new(notification_service.clone()))
             .app_data(web::Data::new(task_service.clone()));
 
+        let cors = Cors::default()
+            .allowed_origin(&front_base_url)
+            .allowed_methods(vec!["GET", "POST", "PATCH"])
+            .allowed_headers(vec![
+                http::header::AUTHORIZATION,
+                http::header::COOKIE,
+                http::header::CONTENT_TYPE,
+            ])
+            .supports_credentials()
+            .max_age(3600);
+
         let mut app = App::new()
+            .wrap(cors)
             .wrap(TracingLogger::default())
             .wrap(middleware::Compress::default())
+            .wrap(
+                IdentityMiddleware::builder()
+                    .login_deadline(Some(Duration::days(max_age_days).try_into().unwrap()))
+                    .visit_deadline(Some(
+                        Duration::days(max_age_inactive_days).try_into().unwrap(),
+                    ))
+                    .build(),
+            )
+            .wrap(
+                SessionMiddleware::builder(
+                    RedisActorSessionStore::new(redis_connection_string.clone()),
+                    session_secret_key.clone(),
+                )
+                .session_lifecycle(
+                    PersistentSession::default().session_ttl(Duration::days(max_age_days)),
+                )
+                .cookie_content_security(CookieContentSecurity::Signed)
+                .build(),
+            )
             .route("/ping", web::get().to(routes::health_check::ping))
-            .service(api_scope);
+            .service(api_scope)
+            .app_data(settings_web_data.clone());
+
         if let Some(path) = &static_path {
             info!(
                 "Mounting static files on {}",
                 if path.is_empty() { "/" } else { path }
             );
-            let static_scope = fs::Files::new(path, &static_dir)
-                .use_last_modified(true)
-                .index_file("index.html");
-            app = app.service(static_scope);
+            app = app.service(
+                spa()
+                    .index_file("index.html")
+                    .static_resources_mount(path.clone())
+                    .static_resources_location(static_dir.clone())
+                    .finish(),
+            );
         }
         app
     })
-    .keep_alive(http::KeepAlive::Timeout(Duration::from_secs(60)))
+    .keep_alive(http::KeepAlive::Timeout(
+        Duration::seconds(60).try_into().unwrap(),
+    ))
     .shutdown_timeout(60)
     .listen(listener)
-    .context(format!("Failed to listen on {}", listen_address))?;
+    .context(format!("Failed to listen on {listen_address}"))?;
 
     Ok(server.run())
 }

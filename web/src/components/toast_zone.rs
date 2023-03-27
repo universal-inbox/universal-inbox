@@ -1,7 +1,7 @@
 #![allow(clippy::derive_partial_eq_without_eq)]
 use dioxus::prelude::*;
 use dioxus_free_icons::{
-    icons::bs_icons::{BsCheck2, BsX},
+    icons::bs_icons::{BsCheckCircle, BsExclamationTriangle, BsX},
     Icon,
 };
 use fermi::use_atom_ref;
@@ -32,12 +32,14 @@ impl Default for Toast {
         }
     }
 }
+
 #[derive(Clone, Default, PartialEq, Eq, Debug)]
 pub enum ToastKind {
     #[default]
     Message,
     Loading,
     Success,
+    Failure,
 }
 
 #[inline_props]
@@ -80,6 +82,7 @@ fn toast<'a>(
         ToastKind::Message => "alert-info",
         ToastKind::Loading => "alert-info",
         ToastKind::Success => "alert-success",
+        ToastKind::Failure => "alert-error",
     });
 
     let timeout_future = use_future(cx, (timeout,), |(timeout,)| {
@@ -124,7 +127,12 @@ fn toast<'a>(
                 match kind {
                     ToastKind::Message => None,
                     ToastKind::Loading => cx.render(rsx!(self::spinner {})),
-                    ToastKind::Success => cx.render(rsx!(Icon { class: "w-12 h-12 px-4", icon: BsCheck2 }))
+                    ToastKind::Success => cx.render(rsx!(Icon {
+                        class: "w-12 h-12 px-4", icon: BsCheckCircle
+                    })),
+                    ToastKind::Failure => cx.render(rsx!(Icon {
+                        class: "w-12 h-12 px-4", icon: BsExclamationTriangle
+                    })),
                 }
                 div {
                     class: "py-1.5 grow px-2",

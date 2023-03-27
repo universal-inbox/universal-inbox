@@ -94,7 +94,7 @@ impl NotificationRepository for Repository {
         )
         .fetch_optional(executor)
         .await
-        .with_context(|| format!("Failed to fetch notification {} from storage", id))?;
+        .with_context(|| format!("Failed to fetch notification {id} from storage"))?;
 
         row.map(|notification_row| notification_row.try_into())
             .transpose()
@@ -431,8 +431,7 @@ impl NotificationRepository for Repository {
             .fetch_optional(executor)
             .await
             .context(format!(
-                "Failed to update notification {} from storage",
-                notification_id
+                "Failed to update notification {notification_id} from storage"
             ))?;
 
         if let Some(updated_notification_row) = record {

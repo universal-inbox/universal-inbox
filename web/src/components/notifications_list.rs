@@ -9,7 +9,7 @@ use universal_inbox::notification::{NotificationMetadata, NotificationWithTask};
 
 use crate::{
     components::icons::{github, todoist},
-    services::notification_service::UniversalInboxUIModel,
+    model::UniversalInboxUIModel,
 };
 
 #[inline_props]

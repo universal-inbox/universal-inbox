@@ -97,7 +97,7 @@ impl TaskRepository for Repository {
         )
         .fetch_optional(executor)
         .await
-        .with_context(|| format!("Failed to fetch task {} from storage", id))?;
+        .with_context(|| format!("Failed to fetch task {id} from storage"))?;
 
         row.map(|task_row| task_row.try_into()).transpose()
     }
@@ -135,7 +135,7 @@ impl TaskRepository for Repository {
         )
         .fetch_all(executor)
         .await
-        .with_context(|| format!("Failed to fetch tasks {:?} from storage", uuids))?;
+        .with_context(|| format!("Failed to fetch tasks {uuids:?} from storage"))?;
 
         rows.iter()
             .map(|r| r.try_into())
@@ -554,7 +554,7 @@ impl TaskRepository for Repository {
             .build_query_as::<UpdatedTaskRow>()
             .fetch_optional(executor)
             .await
-            .context(format!("Failed to update task {} from storage", task_id))?;
+            .context(format!("Failed to update task {task_id} from storage"))?;
 
         if let Some(updated_task_row) = row {
             Ok(UpdateStatus {

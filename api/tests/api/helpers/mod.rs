@@ -2,6 +2,7 @@ use std::{env, fs, net::TcpListener, str::FromStr, sync::Arc};
 
 use format_serde_error::SerdeError;
 use httpmock::MockServer;
+use openidconnect::{IntrospectionUrl, IssuerUrl};
 use rstest::*;
 use sqlx::{
     postgres::PgConnectOptions, ConnectOptions, Connection, Executor, PgConnection, PgPool,
@@ -15,6 +16,7 @@ use universal_inbox_api::{
     observability::{get_subscriber, init_subscriber},
 };
 
+pub mod auth;
 pub mod notification;
 pub mod rest;
 pub mod task;
@@ -23,6 +25,7 @@ pub struct TestedApp {
     pub app_address: String,
     pub github_mock_server: MockServer,
     pub todoist_mock_server: MockServer,
+    pub oidc_issuer_mock_server: MockServer,
 }
 
 #[fixture]
@@ -79,7 +82,7 @@ pub fn settings() -> Settings {
 
 #[fixture]
 pub async fn tested_app(
-    settings: Settings,
+    mut settings: Settings,
     #[allow(unused)] tracing_setup: (),
     #[future] db_connection: Arc<PgPool>,
 ) -> TestedApp {
@@ -91,6 +94,13 @@ pub async fn tested_app(
     let github_mock_server_uri = &github_mock_server.base_url();
     let todoist_mock_server = MockServer::start();
     let todoist_mock_server_uri = &todoist_mock_server.base_url();
+    let oidc_issuer_mock_server = MockServer::start();
+    let oidc_issuer_mock_server_uri = &oidc_issuer_mock_server.base_url();
+    settings.application.authentication.oidc_issuer_url =
+        IssuerUrl::new(oidc_issuer_mock_server_uri.to_string()).unwrap();
+    settings.application.authentication.oidc_introspection_url =
+        IntrospectionUrl::new(format!("{oidc_issuer_mock_server_uri}/introspect")).unwrap();
+
     let pool: Arc<PgPool> = db_connection.await;
 
     let todoist_service = TodoistService::new(
@@ -98,10 +108,7 @@ pub async fn tested_app(
         Some(todoist_mock_server_uri.to_string()),
     )
     .unwrap_or_else(|_| {
-        panic!(
-            "Failed to setup Todoist service with mock server at {}",
-            todoist_mock_server_uri
-        )
+        panic!("Failed to setup Todoist service with mock server at {todoist_mock_server_uri}")
     });
     let github_service = GithubService::new(
         &settings.integrations.github.api_token,
@@ -113,16 +120,17 @@ pub async fn tested_app(
     let (notification_service, task_service) =
         universal_inbox_api::build_services(pool, github_service, todoist_service).await;
 
-    let server = universal_inbox_api::run(listener, &settings, notification_service, task_service)
+    let server = universal_inbox_api::run(listener, settings, notification_service, task_service)
         .await
         .expect("Failed to bind address");
 
     tokio::spawn(server);
 
     TestedApp {
-        app_address: format!("http://127.0.0.1:{}", port),
+        app_address: format!("http://127.0.0.1:{port}"),
         github_mock_server,
         todoist_mock_server,
+        oidc_issuer_mock_server,
     }
 }
 
