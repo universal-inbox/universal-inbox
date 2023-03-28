@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use clap::ArgEnum;
+use clap::ValueEnum;
 use macro_attr::macro_attr;
 use serde::{Deserialize, Serialize};
 
@@ -17,7 +17,7 @@ pub mod notification {
 
     macro_attr! {
         // Synchronization sources for notifications
-        #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ArgEnum, Debug, EnumFromStr!, EnumDisplay!)]
+        #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!)]
         pub enum NotificationSyncSourceKind {
             Github
         }
@@ -25,7 +25,7 @@ pub mod notification {
 
     macro_attr! {
         // notification sources, either direct or from tasks
-        #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ArgEnum, Debug, EnumFromStr!, EnumDisplay!)]
+        #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!)]
         pub enum NotificationSourceKind {
             Github,
             Todoist
@@ -54,14 +54,14 @@ pub mod task {
     use super::*;
 
     macro_attr! {
-        #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ArgEnum, Debug, EnumFromStr!, EnumDisplay!)]
+        #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!)]
         pub enum TaskSyncSourceKind {
             Todoist
         }
     }
 
     macro_attr! {
-        #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ArgEnum, Debug, EnumFromStr!, EnumDisplay!)]
+        #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!)]
         pub enum TaskSourceKind {
             Todoist
         }

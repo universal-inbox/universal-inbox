@@ -31,13 +31,13 @@ struct Cli {
 enum Commands {
     /// Synchronize sources of notifications
     SyncNotifications {
-        #[clap(arg_enum, value_parser)]
+        #[clap(value_enum, value_parser)]
         source: Option<NotificationSyncSourceKind>,
     },
 
     /// Synchronize sources of tasks
     SyncTasks {
-        #[clap(arg_enum, value_parser)]
+        #[clap(value_enum, value_parser)]
         source: Option<TaskSyncSourceKind>,
     },
 
