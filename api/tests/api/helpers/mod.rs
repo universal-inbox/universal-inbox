@@ -117,12 +117,18 @@ pub async fn tested_app(
     )
     .expect("Failed to create new GithubService");
 
-    let (notification_service, task_service) =
-        universal_inbox_api::build_services(pool, github_service, todoist_service).await;
+    let (notification_service, task_service, user_service) =
+        universal_inbox_api::build_services(pool, &settings, github_service, todoist_service).await;
 
-    let server = universal_inbox_api::run(listener, settings, notification_service, task_service)
-        .await
-        .expect("Failed to bind address");
+    let server = universal_inbox_api::run(
+        listener,
+        settings,
+        notification_service,
+        task_service,
+        user_service,
+    )
+    .await
+    .expect("Failed to bind address");
 
     tokio::spawn(server);
 

@@ -1,7 +1,12 @@
 use rstest::*;
 
+use universal_inbox::user::User;
+
 use crate::helpers::{
-    auth::{mock_oidc_introspection, mock_oidc_keys, mock_oidc_openid_configuration},
+    auth::{
+        mock_oidc_introspection, mock_oidc_keys, mock_oidc_openid_configuration,
+        mock_oidc_user_info,
+    },
     tested_app, TestedApp,
 };
 
@@ -16,8 +21,13 @@ mod authenticate_session {
         mock_oidc_openid_configuration(&app);
         mock_oidc_keys(&app);
         mock_oidc_introspection(&app, true);
+        mock_oidc_user_info(&app, "John", "Doe", "test@example.com");
 
-        let response = reqwest::Client::new()
+        let client = reqwest::Client::builder()
+            .cookie_store(true)
+            .build()
+            .unwrap();
+        let response = client
             .get(&format!("{}/auth/session", app.app_address))
             .bearer_auth("fake_token")
             .send()
@@ -25,6 +35,18 @@ mod authenticate_session {
             .unwrap();
 
         assert_eq!(response.status(), 200);
+
+        let user: User = client
+            .get(&format!("{}/auth/user", app.app_address))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+
+        assert_eq!(user.first_name, "John");
+        assert_eq!(user.last_name, "Doe");
     }
 
     #[rstest]

@@ -9,6 +9,7 @@ extern crate enum_derive;
 
 pub mod notification;
 pub mod task;
+pub mod user;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
 pub struct FrontConfig {

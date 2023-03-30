@@ -29,7 +29,8 @@ use tracing::info;
 use tracing_actix_web::TracingLogger;
 
 use crate::universal_inbox::{
-    notification::service::NotificationService, task::service::TaskService, UniversalInboxError,
+    notification::service::NotificationService, task::service::TaskService,
+    user::service::UserService, UniversalInboxError,
 };
 
 pub mod commands;
@@ -45,6 +46,7 @@ pub async fn run(
     settings: Settings,
     notification_service: Arc<RwLock<NotificationService>>,
     task_service: Arc<RwLock<TaskService>>,
+    user_service: Arc<RwLock<UserService>>,
 ) -> Result<Server, UniversalInboxError> {
     let api_path = settings.application.api_path.clone();
     let front_base_url = settings
@@ -80,7 +82,8 @@ pub async fn run(
             .service(routes::notification::scope())
             .service(routes::task::scope())
             .app_data(web::Data::new(notification_service.clone()))
-            .app_data(web::Data::new(task_service.clone()));
+            .app_data(web::Data::new(task_service.clone()))
+            .app_data(web::Data::new(user_service.clone()));
 
         let cors = Cors::default()
             .allowed_origin(&front_base_url)
@@ -147,10 +150,20 @@ pub async fn run(
 
 pub async fn build_services(
     pool: Arc<PgPool>,
+    settings: &Settings,
     github_service: GithubService,
     todoist_service: TodoistService,
-) -> (Arc<RwLock<NotificationService>>, Arc<RwLock<TaskService>>) {
+) -> (
+    Arc<RwLock<NotificationService>>,
+    Arc<RwLock<TaskService>>,
+    Arc<RwLock<UserService>>,
+) {
     let repository = Arc::new(Repository::new(pool.clone()));
+    let user_service = Arc::new(RwLock::new(UserService::new(
+        repository.clone(),
+        settings.application.authentication.clone(),
+    )));
+
     let notification_service = Arc::new(RwLock::new(NotificationService::new(
         repository.clone(),
         github_service,
@@ -168,5 +181,5 @@ pub async fn build_services(
         .await
         .set_task_service(Arc::downgrade(&task_service));
 
-    (notification_service, task_service)
+    (notification_service, task_service, user_service)
 }

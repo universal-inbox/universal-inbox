@@ -5,7 +5,7 @@ use openidconnect::{ClientId, ClientSecret, IntrospectionUrl, IssuerUrl};
 use serde::Deserialize;
 use url::Url;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct Settings {
     pub application: ApplicationSettings,
     pub database: DatabaseSettings,
@@ -13,7 +13,7 @@ pub struct Settings {
     pub integrations: IntegrationsSettings,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct ApplicationSettings {
     pub port: u16,
     pub log_directive: String,
@@ -26,7 +26,7 @@ pub struct ApplicationSettings {
     pub http_session: HttpSessionSettings,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct AuthenticationSettings {
     pub oidc_issuer_url: IssuerUrl,
     pub oidc_introspection_url: IntrospectionUrl,
@@ -35,14 +35,14 @@ pub struct AuthenticationSettings {
     pub oidc_api_client_secret: ClientSecret,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct HttpSessionSettings {
     pub secret_key: String,
     pub max_age_days: i64,
     pub max_age_inactive_days: i64,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct DatabaseSettings {
     pub username: String,
     pub password: String,
@@ -51,25 +51,25 @@ pub struct DatabaseSettings {
     pub database_name: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct RedisSettings {
     pub port: u16,
     pub host: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct IntegrationsSettings {
     pub github: GithubIntegrationSettings,
     pub todoist: TodoistIntegrationSettings,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct GithubIntegrationSettings {
     pub page_size: usize,
     pub api_token: String, // Temporary until oauth is implemented
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct TodoistIntegrationSettings {
     pub api_token: String, // Temporary until oauth is implemented
 }
