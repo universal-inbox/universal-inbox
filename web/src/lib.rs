@@ -21,6 +21,7 @@ use services::{
     notification_service::{notification_service, NotificationCommand, NOTIFICATIONS},
     task_service::{task_service, TaskCommand},
     toast_service::{toast_service, TOASTS},
+    user_service::{user_service, CONNECTED_USER},
 };
 
 mod auth;
@@ -38,6 +39,7 @@ pub fn app(cx: Scope) -> Element {
     let ui_model_ref = use_atom_ref(cx, UI_MODEL);
     let toasts_ref = use_atom_ref(cx, TOASTS);
     let app_config_ref = use_atom_ref(cx, APP_CONFIG);
+    let connected_user_ref = use_atom_ref(cx, CONNECTED_USER);
     let api_base_url = use_memo(cx, (), |()| get_api_base_url().unwrap());
     let session_url = use_memo(cx, &(api_base_url.clone(),), |(api_base_url,)| {
         api_base_url.join("auth/session").unwrap()
@@ -65,6 +67,14 @@ pub fn app(cx: Scope) -> Element {
             ui_model_ref.clone(),
             task_service_handle,
             toast_service_handle,
+        )
+    });
+    let _user_service_handle = use_coroutine(cx, |rx| {
+        user_service(
+            rx,
+            api_base_url.clone(),
+            connected_user_ref.clone(),
+            ui_model_ref.clone(),
         )
     });
 
