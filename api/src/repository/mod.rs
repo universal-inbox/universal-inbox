@@ -7,6 +7,7 @@ use crate::universal_inbox::UniversalInboxError;
 
 pub mod notification;
 pub mod task;
+pub mod user;
 
 #[derive(Debug)]
 pub struct Repository {

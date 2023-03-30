@@ -4,6 +4,7 @@ use uuid::Uuid;
 
 pub mod notification;
 pub mod task;
+pub mod user;
 
 fn error_chain_fmt(
     e: &impl std::error::Error,
@@ -54,6 +55,8 @@ pub enum UniversalInboxError {
     UnsupportedAction(String),
     #[error("Task not found: {0}")]
     TaskNotFound(TaskId),
+    #[error("Unauthorized")]
+    Unauthorized,
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
 }

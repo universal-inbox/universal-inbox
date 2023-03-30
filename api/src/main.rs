@@ -92,8 +92,8 @@ async fn main() -> std::io::Result<()> {
     )
     .expect("Failed to create new GithubService");
 
-    let (notification_service, task_service) =
-        build_services(pool, github_service, todoist_service).await;
+    let (notification_service, task_service, user_service) =
+        build_services(pool, &settings, github_service, todoist_service).await;
 
     let result = match &cli.command {
         Commands::SyncNotifications { source } => {
@@ -104,10 +104,16 @@ async fn main() -> std::io::Result<()> {
             let listener = TcpListener::bind(format!("0.0.0.0:{}", settings.application.port))
                 .expect("Failed to bind port");
 
-            let _ = run(listener, settings, notification_service, task_service)
-                .await
-                .expect("Failed to start HTTP server")
-                .await;
+            let _ = run(
+                listener,
+                settings,
+                notification_service,
+                task_service,
+                user_service,
+            )
+            .await
+            .expect("Failed to start HTTP server")
+            .await;
             Ok(())
         }
     };
