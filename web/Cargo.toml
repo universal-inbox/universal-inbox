@@ -37,6 +37,7 @@ url = { workspace = true }
 uuid = { workspace = true, features = ["js"] }
 wasm-bindgen-futures = "0.4"
 wasm-bindgen = "0.2"
+gravatar = "0.2.0"
 
 [dependencies.web-sys]
 version = "0.3"
