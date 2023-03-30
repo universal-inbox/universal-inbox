@@ -1,28 +1,36 @@
+use std::sync::Arc;
+
+use actix_http::body::BoxBody;
 use actix_identity::Identity;
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Scope};
-use anyhow::{anyhow, Context};
-use openidconnect::{
-    core::{CoreClient, CoreProviderMetadata},
-    reqwest::async_http_client,
-    AccessToken, TokenIntrospectionResponse,
-};
-use tracing::error;
+use anyhow::Context;
+use serde_json::json;
+use tokio::sync::RwLock;
+
+use universal_inbox::user::UserId;
 
 use crate::{
-    configuration::Settings, routes::option_wildcard, universal_inbox::UniversalInboxError,
+    routes::option_wildcard,
+    universal_inbox::{user::service::UserService, UniversalInboxError},
 };
 
 pub fn scope() -> Scope {
-    web::scope("/auth").service(
-        web::resource("session")
-            .route(web::get().to(authenticate_session))
-            .route(web::method(http::Method::OPTIONS).to(option_wildcard)),
-    )
+    web::scope("/auth")
+        .service(
+            web::resource("session")
+                .route(web::get().to(authenticate_session))
+                .route(web::method(http::Method::OPTIONS).to(option_wildcard)),
+        )
+        .service(
+            web::resource("user")
+                .route(web::get().to(get_user))
+                .route(web::method(http::Method::OPTIONS).to(option_wildcard)),
+        )
 }
 
 pub async fn authenticate_session(
     request: HttpRequest,
-    settings: web::Data<Settings>,
+    user_service: web::Data<Arc<RwLock<UserService>>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let bearer_access_token = request
         .headers()
@@ -34,55 +42,49 @@ pub async fn authenticate_session(
         .nth(1)
         .context("Failed to extract the access token from the `Authorization` request header")?;
 
-    let provider_metadata = CoreProviderMetadata::discover_async(
-        settings.application.authentication.oidc_issuer_url.clone(),
-        async_http_client,
-    )
-    .await
-    .context("metadata provider error")?;
-
-    // Create an OpenID Connect client by specifying the client ID
-    let client = CoreClient::from_provider_metadata(
-        provider_metadata,
-        settings
-            .application
-            .authentication
-            .oidc_api_client_id
-            .clone(),
-        Some(
-            settings
-                .application
-                .authentication
-                .oidc_api_client_secret
-                .clone(),
-        ),
-    )
-    .set_introspection_uri(
-        settings
-            .application
-            .authentication
-            .oidc_introspection_url
-            .clone(),
-    );
-
-    let access_token = AccessToken::new(bearer_access_token.to_string());
-    let introspection_result = client
-        .introspect(&access_token)
-        .context("Introspection configuration error")?
-        .set_token_type_hint("access_token")
-        .request_async(async_http_client)
+    let service = user_service.read().await;
+    let mut transaction = service
+        .begin()
         .await
-        .context("Introspection request error")?;
+        .context("Failed to create new transaction while authenticating user")?;
 
-    if !introspection_result.active() {
-        error!("Given access token is not active");
-        return Ok(HttpResponse::Unauthorized().finish());
-    }
+    let user = service
+        .authenticate_and_create_user_if_not_exists(&mut transaction, bearer_access_token)
+        .await?;
 
-    let auth_user_id = introspection_result
-        .sub()
-        .ok_or_else(|| anyhow!("No subject found in introspection result"))?;
-    Identity::login(&request.extensions(), auth_user_id.to_string())?;
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit while authenticating user")?;
+
+    Identity::login(&request.extensions(), user.id.to_string())?;
 
     Ok(HttpResponse::Ok().finish())
+}
+
+pub async fn get_user(
+    user_service: web::Data<Arc<RwLock<UserService>>>,
+    identity: Identity,
+) -> Result<HttpResponse, UniversalInboxError> {
+    let user_id: UserId = identity
+        .id()
+        .context("Missing `user_id` in session")?
+        .try_into()
+        .context("Wrong user ID format")?;
+    let service = user_service.read().await;
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while authenticating user")?;
+
+    match service.get_user(&mut transaction, user_id).await? {
+        Some(user) => Ok(HttpResponse::Ok()
+            .content_type("application/json")
+            .body(serde_json::to_string(&user).context("Cannot serialize user")?)),
+        None => Ok(HttpResponse::NotFound()
+            .content_type("application/json")
+            .body(BoxBody::new(
+                json!({ "message": format!("Cannot find user {user_id}") }).to_string(),
+            ))),
+    }
 }

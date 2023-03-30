@@ -24,6 +24,7 @@ pub async fn authenticated_app(#[future] tested_app: TestedApp) -> Authenticated
     mock_oidc_openid_configuration(&app);
     mock_oidc_keys(&app);
     mock_oidc_introspection(&app, true);
+    mock_oidc_user_info(&app, "John", "Doe", "test@example.com");
 
     let client = Client::builder().cookie_store(true).build().unwrap();
     let auth_app = AuthenticatedApp {
@@ -77,6 +78,7 @@ pub fn mock_oidc_openid_configuration(app: &TestedApp) {
                 "id_token_signing_alg_values_supported": [
                     "RS256"
                 ],
+                "userinfo_endpoint": format!("{oidc_issuer_mock_server_uri}/userinfo")
             }));
     });
 }
@@ -110,7 +112,6 @@ pub fn mock_oidc_introspection(app: &TestedApp, active: bool) {
             .header("Content-Type", "application/json")
             .json_body(json!({
                 "active": active,
-                "sub": "subject",
                 "scopes": "openid, profile, email",
                 "client_id": "1234567890",
                 "username": "test@example.com",
@@ -122,6 +123,22 @@ pub fn mock_oidc_introspection(app: &TestedApp, active: bool) {
                 "aud": ["1234567890"],
                 "iss": &oidc_issuer_mock_server_uri,
                 "jti": "1234567",
+            }));
+    });
+}
+
+pub fn mock_oidc_user_info(app: &TestedApp, first_name: &str, last_name: &str, email: &str) {
+    app.oidc_issuer_mock_server.mock(|when, then| {
+        when.method(GET).path("/userinfo");
+        then.status(200)
+            .header("Content-Type", "application/json")
+            .json_body(json!({
+                "sub": "1234",
+                "name": format!("{} {}", first_name, last_name),
+                "given_name": first_name,
+                "family_name": last_name,
+                "preferred_username": "username",
+                "email": email,
             }));
     });
 }

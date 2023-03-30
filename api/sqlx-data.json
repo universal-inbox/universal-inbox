@@ -129,6 +129,62 @@
     },
     "query": "\n                UPDATE\n                  task\n                SET\n                  status = $1::task_status,\n                  completed_at = $2\n                WHERE\n                  NOT source_id = ANY($3)\n                  AND kind::TEXT = $4\n                  AND (status = 'Active')\n                RETURNING\n                  id,\n                  source_id,\n                  title,\n                  body,\n                  status as \"status: _\",\n                  completed_at,\n                  priority,\n                  due_at as \"due_at: Json<Option<DueDate>>\",\n                  source_html_url,\n                  tags,\n                  parent_id,\n                  project,\n                  is_recurring,\n                  created_at,\n                  metadata as \"metadata: Json<TaskMetadata>\"\n            "
   },
+  "31dbf09e62c05c62ce7ca610689b4e4988c987cd2f6e17f1c0671f624753925f": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "auth_user_id",
+          "ordinal": 1,
+          "type_info": "Text"
+        },
+        {
+          "name": "first_name",
+          "ordinal": 2,
+          "type_info": "Text"
+        },
+        {
+          "name": "last_name",
+          "ordinal": 3,
+          "type_info": "Text"
+        },
+        {
+          "name": "email",
+          "ordinal": 4,
+          "type_info": "Text"
+        },
+        {
+          "name": "created_at",
+          "ordinal": 5,
+          "type_info": "Timestamp"
+        },
+        {
+          "name": "updated_at",
+          "ordinal": 6,
+          "type_info": "Timestamp"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Uuid"
+        ]
+      }
+    },
+    "query": "\n                SELECT\n                  id,\n                  auth_user_id,\n                  first_name,\n                  last_name,\n                  email,\n                  created_at,\n                  updated_at\n                FROM \"user\"\n                WHERE id = $1\n            "
+  },
   "4cc214b74e73edc9b15f71ca54367708a062986eec0fc8d54a7d23d88349e1d4": {
     "describe": {
       "columns": [
@@ -645,6 +701,62 @@
     },
     "query": "\n                SELECT\n                  id,\n                  source_id,\n                  title,\n                  body,\n                  priority,\n                  due_at as \"due_at: Json<Option<DueDate>>\",\n                  tags,\n                  project\n                FROM\n                  task,\n                  to_tsquery('english', $1) query\n                WHERE\n                  query @@ title_body_project_tags_tsv\n                  AND status::TEXT = 'Active'\n                ORDER BY ts_rank_cd(title_body_project_tags_tsv, query) DESC\n                LIMIT 10;\n            "
   },
+  "b00a99b78a230197095fe11540ad4b18192fd0627ce5289423bf4cb4fa6751f4": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "auth_user_id",
+          "ordinal": 1,
+          "type_info": "Text"
+        },
+        {
+          "name": "first_name",
+          "ordinal": 2,
+          "type_info": "Text"
+        },
+        {
+          "name": "last_name",
+          "ordinal": 3,
+          "type_info": "Text"
+        },
+        {
+          "name": "email",
+          "ordinal": 4,
+          "type_info": "Text"
+        },
+        {
+          "name": "created_at",
+          "ordinal": 5,
+          "type_info": "Timestamp"
+        },
+        {
+          "name": "updated_at",
+          "ordinal": 6,
+          "type_info": "Timestamp"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      }
+    },
+    "query": "\n                SELECT\n                  id,\n                  auth_user_id,\n                  first_name,\n                  last_name,\n                  email,\n                  created_at,\n                  updated_at\n                FROM \"user\"\n                WHERE auth_user_id = $1\n            "
+  },
   "b86c228adccd0e10963b0e20693e58ecb6f41991a599e102d1dd4203bf66adf1": {
     "describe": {
       "columns": [],
@@ -702,5 +814,31 @@
       }
     },
     "query": "\n                INSERT INTO task\n                  (\n                    id,\n                    source_id,\n                    title,\n                    body,\n                    status,\n                    completed_at,\n                    priority,\n                    due_at,\n                    source_html_url,\n                    tags,\n                    parent_id,\n                    project,\n                    is_recurring,\n                    created_at,\n                    metadata\n                  )\n                VALUES\n                  ($1, $2, $3, $4, $5::task_status, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)\n            "
+  },
+  "f77a6136db4975055d51aac6d2614f0f6cc8c6061956340216a5298e43381089": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        }
+      ],
+      "nullable": [
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Uuid",
+          "Text",
+          "Text",
+          "Text",
+          "Text",
+          "Timestamp",
+          "Timestamp"
+        ]
+      }
+    },
+    "query": "\n                INSERT INTO \"user\"\n                  (\n                    id,\n                    auth_user_id,\n                    first_name,\n                    last_name,\n                    email,\n                    created_at,\n                    updated_at\n                  )\n                VALUES ($1, $2, $3, $4, $5, $6, $7)\n                RETURNING\n                  id\n            "
   }
 }
