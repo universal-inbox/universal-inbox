@@ -20,8 +20,8 @@ mod authenticate_session {
 
         mock_oidc_openid_configuration(&app);
         mock_oidc_keys(&app);
-        mock_oidc_introspection(&app, true);
-        mock_oidc_user_info(&app, "John", "Doe", "test@example.com");
+        mock_oidc_introspection(&app, "1234", true);
+        mock_oidc_user_info(&app, "1234", "John", "Doe", "test@example.com");
 
         let client = reqwest::Client::builder()
             .cookie_store(true)
@@ -58,7 +58,7 @@ mod authenticate_session {
 
         mock_oidc_openid_configuration(&app);
         mock_oidc_keys(&app);
-        mock_oidc_introspection(&app, false);
+        mock_oidc_introspection(&app, "1234", false);
 
         let response = reqwest::Client::new()
             .get(&format!("{}/auth/session", app.app_address))

@@ -8,9 +8,12 @@ use reqwest::Client;
 use rstest::*;
 use uuid::Uuid;
 
-use universal_inbox::notification::{
-    integrations::github::GithubNotification, Notification, NotificationMetadata,
-    NotificationStatus,
+use universal_inbox::{
+    notification::{
+        integrations::github::GithubNotification, Notification, NotificationMetadata,
+        NotificationStatus,
+    },
+    user::UserId,
 };
 use universal_inbox_api::integrations::github;
 
@@ -20,6 +23,7 @@ pub async fn create_notification_from_github_notification(
     client: &Client,
     app_address: &str,
     github_notification: &GithubNotification,
+    user_id: UserId,
 ) -> Box<Notification> {
     create_resource(
         client,
@@ -39,6 +43,7 @@ pub async fn create_notification_from_github_notification(
             updated_at: github_notification.updated_at,
             last_read_at: github_notification.last_read_at,
             snoozed_until: None,
+            user_id,
             task_id: None,
         }),
     )
@@ -71,8 +76,10 @@ pub fn sync_github_notifications() -> Vec<GithubNotification> {
 pub fn assert_sync_notifications(
     notifications: &[Notification],
     sync_github_notifications: &[GithubNotification],
+    expected_user_id: UserId,
 ) {
     for notification in notifications.iter() {
+        assert_eq!(notification.user_id, expected_user_id);
         match notification.source_id.as_ref() {
             "123" => {
                 assert_eq!(notification.title, "Greetings 1".to_string());

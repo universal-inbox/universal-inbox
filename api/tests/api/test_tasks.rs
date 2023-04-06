@@ -14,7 +14,7 @@ use universal_inbox::{
 use universal_inbox_api::universal_inbox::task::TaskCreationResult;
 
 use crate::helpers::{
-    auth::{authenticated_app, AuthenticatedApp},
+    auth::{authenticate_user, authenticated_app, AuthenticatedApp},
     notification::list_notifications_with_tasks,
     rest::{
         create_resource, create_resource_response, get_resource, get_resource_response,
@@ -24,6 +24,7 @@ use crate::helpers::{
         list_tasks,
         todoist::{create_task_from_todoist_item, todoist_item},
     },
+    tested_app, TestedApp,
 };
 
 mod create_task {
@@ -53,6 +54,7 @@ mod create_task {
             is_recurring: false,
             created_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
             metadata: TaskMetadata::Todoist(*todoist_item.clone()),
+            user_id: app.user.id,
         });
 
         let creation_result: Box<TaskCreationResult> = create_resource(
@@ -122,6 +124,7 @@ mod create_task {
             is_recurring: true,
             created_at: Utc.with_ymd_and_hms(2022, 1, 2, 0, 0, 0).unwrap(),
             metadata: TaskMetadata::Todoist(*todoist_item),
+            user_id: app.user.id,
         });
 
         let creation_result: Box<TaskCreationResult> = create_resource(
@@ -158,6 +161,45 @@ mod create_task {
 
     #[rstest]
     #[tokio::test]
+    async fn test_create_task_with_wrong_user_id(
+        #[future] authenticated_app: AuthenticatedApp,
+        todoist_item: Box<TodoistItem>,
+    ) {
+        let app = authenticated_app.await;
+        let expected_task = Box::new(Task {
+            id: Uuid::new_v4().into(),
+            source_id: "5678".to_string(),
+            title: "task 2".to_string(),
+            body: "more details 2".to_string(),
+            status: TaskStatus::Done,
+            completed_at: Some(Utc.with_ymd_and_hms(2022, 1, 3, 0, 0, 0).unwrap()),
+            priority: TaskPriority::P3,
+            due_at: Some(universal_inbox::task::DueDate::Date(
+                NaiveDate::from_ymd_opt(2016, 9, 1).unwrap(),
+            )),
+            source_html_url: "https://todoist.com/showTask?id=5678".parse::<Uri>().ok(),
+            tags: vec!["tag1".to_string(), "tag2".to_string()],
+            parent_id: None,
+            project: "project 1".to_string(),
+            is_recurring: true,
+            created_at: Utc.with_ymd_and_hms(2022, 1, 2, 0, 0, 0).unwrap(),
+            metadata: TaskMetadata::Todoist(*todoist_item),
+            user_id: Uuid::new_v4().into(),
+        });
+
+        let response = create_resource_response(
+            &app.client,
+            &app.app_address,
+            "tasks",
+            expected_task.clone(),
+        )
+        .await;
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[rstest]
+    #[tokio::test]
     async fn test_create_task_as_done_with_not_completed_at_value(
         #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
@@ -181,6 +223,7 @@ mod create_task {
             is_recurring: true,
             created_at: Utc.with_ymd_and_hms(2022, 1, 2, 0, 0, 0).unwrap(),
             metadata: TaskMetadata::Todoist(*todoist_item),
+            user_id: app.user.id,
         });
 
         let response =
@@ -218,6 +261,7 @@ mod create_task {
             is_recurring: false,
             created_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
             metadata: TaskMetadata::Todoist(*todoist_item.clone()),
+            user_id: app.user.id,
         });
 
         let creation_result: Box<TaskCreationResult> = create_resource(
@@ -263,6 +307,41 @@ mod get_task {
             json!({ "message": format!("Cannot find task {unknown_task_id}") }).to_string()
         );
     }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_get_task_of_another_user(
+        #[future] tested_app: TestedApp,
+        #[future] authenticated_app: AuthenticatedApp,
+        todoist_item: Box<TodoistItem>,
+    ) {
+        let app = authenticated_app.await;
+
+        let creation_result = create_task_from_todoist_item(
+            &app.client,
+            &app.app_address,
+            &todoist_item,
+            "Inbox".to_string(),
+            app.user.id,
+        )
+        .await;
+        let task_id = creation_result.task.id.0;
+
+        let (client, _user) =
+            authenticate_user(&tested_app.await, "5678", "Jane", "Doe", "jane@example.com").await;
+        let response = get_resource_response(&client, &app.app_address, "tasks", task_id).await;
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        let body = response.text().await.expect("Cannot get response body");
+        assert_eq!(
+            body,
+            json!({
+                "message":
+                    format!("Forbidden access: Only the owner of the task {task_id} can access it")
+            })
+            .to_string()
+        );
+    }
 }
 
 mod list_tasks {
@@ -281,6 +360,7 @@ mod list_tasks {
     #[rstest]
     #[tokio::test]
     async fn test_list_tasks(
+        #[future] tested_app: TestedApp,
         #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
     ) {
@@ -290,6 +370,7 @@ mod list_tasks {
             &app.app_address,
             &todoist_item,
             "Inbox".to_string(),
+            app.user.id,
         )
         .await;
         assert_eq!(task_active.task.status, TaskStatus::Active);
@@ -304,6 +385,7 @@ mod list_tasks {
             &app.app_address,
             &todoist_item_done,
             "Inbox".to_string(),
+            app.user.id,
         )
         .await;
         assert_eq!(task_done.task.status, TaskStatus::Done);
@@ -317,6 +399,14 @@ mod list_tasks {
 
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0], task_done.task);
+
+        // Test listing tasks of another user
+        let (client, _user) =
+            authenticate_user(&tested_app.await, "5678", "Jane", "Doe", "jane@example.com").await;
+
+        let result = list_tasks(&client, &app.app_address, TaskStatus::Done).await;
+
+        assert_eq!(result.len(), 0);
     }
 }
 
@@ -337,6 +427,7 @@ mod patch_task {
             &app.app_address,
             &todoist_item,
             "Inbox".to_string(),
+            app.user.id,
         )
         .await;
 
@@ -357,6 +448,41 @@ mod patch_task {
 
     #[rstest]
     #[tokio::test]
+    async fn test_patch_task_of_another_user(
+        #[future] tested_app: TestedApp,
+        #[future] authenticated_app: AuthenticatedApp,
+        todoist_item: Box<TodoistItem>,
+    ) {
+        let app = authenticated_app.await;
+
+        let creation_result = create_task_from_todoist_item(
+            &app.client,
+            &app.app_address,
+            &todoist_item,
+            "Inbox".to_string(),
+            app.user.id,
+        )
+        .await;
+        let (client, _user) =
+            authenticate_user(&tested_app.await, "5678", "Jane", "Doe", "jane@example.com").await;
+
+        let response = patch_resource_response(
+            &client,
+            &app.app_address,
+            "tasks",
+            creation_result.task.id.into(),
+            &TaskPatch {
+                status: Some(TaskStatus::Done),
+                ..Default::default()
+            },
+        )
+        .await;
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[rstest]
+    #[tokio::test]
     async fn test_patch_task_without_values_to_update(
         #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
@@ -367,6 +493,7 @@ mod patch_task {
             &app.app_address,
             &todoist_item,
             "Inbox".to_string(),
+            app.user.id,
         )
         .await;
 
@@ -421,5 +548,87 @@ mod patch_task {
             json!({ "message": format!("Cannot update unknown task {unknown_task_id}") })
                 .to_string()
         );
+    }
+}
+
+mod search_tasks {
+    use crate::helpers::task::search_tasks;
+
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_empty_search_tasks(#[future] authenticated_app: AuthenticatedApp) {
+        let app = authenticated_app.await;
+        let tasks = search_tasks(&app.client, &app.app_address, "").await;
+
+        assert!(tasks.is_empty());
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_search_tasks(
+        #[future] tested_app: TestedApp,
+        #[future] authenticated_app: AuthenticatedApp,
+        todoist_item: Box<TodoistItem>,
+    ) {
+        let app = authenticated_app.await;
+        let task1 = create_task_from_todoist_item(
+            &app.client,
+            &app.app_address,
+            &todoist_item,
+            "Inbox".to_string(),
+            app.user.id,
+        )
+        .await;
+        assert_eq!(task1.task.title, "Task 1".to_string());
+
+        let mut other_todoist_item = todoist_item.clone();
+        other_todoist_item.id = "5678".to_string();
+        other_todoist_item.content = "Other todo".to_string();
+        other_todoist_item.description = "fill the form".to_string();
+
+        let task2 = create_task_from_todoist_item(
+            &app.client,
+            &app.app_address,
+            &other_todoist_item,
+            "Inbox".to_string(),
+            app.user.id,
+        )
+        .await;
+        assert_eq!(task2.task.title, "Other todo".to_string());
+
+        // Search by task title
+        let tasks = search_tasks(&app.client, &app.app_address, "Task").await;
+
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].id, task1.task.id);
+
+        let tasks = search_tasks(&app.client, &app.app_address, "todo").await;
+
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].id, task2.task.id);
+
+        // Search by task description
+        let tasks = search_tasks(&app.client, &app.app_address, "form").await;
+
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].id, task2.task.id);
+
+        // Search by task tags
+        let tasks = search_tasks(&app.client, &app.app_address, "Food").await;
+
+        assert_eq!(tasks.len(), 2);
+        assert!(tasks.iter().any(|t| t.id == task1.task.id));
+        assert!(tasks.iter().any(|t| t.id == task2.task.id));
+
+        // Test searching tasks of another user
+        let (client, _user) =
+            authenticate_user(&tested_app.await, "5678", "Jane", "Doe", "jane@example.com").await;
+
+        let result = search_tasks(&client, &app.app_address, "Task").await;
+
+        assert_eq!(result.len(), 0);
     }
 }

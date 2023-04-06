@@ -11,8 +11,12 @@ use serde_repr::{Deserialize_repr, Serialize_repr};
 use serde_with::{serde_as, DisplayFromStr};
 use uuid::Uuid;
 
-use crate::notification::{
-    Notification, NotificationMetadata, NotificationStatus, NotificationWithTask,
+use crate::{
+    notification::{
+        IntoNotification, Notification, NotificationMetadata, NotificationStatus,
+        NotificationWithTask,
+    },
+    user::UserId,
 };
 
 use self::integrations::todoist::TodoistItem;
@@ -39,6 +43,7 @@ pub struct Task {
     pub is_recurring: bool,
     pub created_at: DateTime<Utc>,
     pub metadata: TaskMetadata,
+    pub user_id: UserId,
 }
 
 #[serde_as]
@@ -232,39 +237,35 @@ impl FromStr for TaskPriority {
     }
 }
 
-impl From<Task> for Notification {
-    fn from(task: Task) -> Self {
-        (&task).into()
+impl IntoNotification for Task {
+    fn into_notification(self, user_id: UserId) -> Notification {
+        Notification {
+            id: Uuid::new_v4().into(),
+            title: self.title.clone(),
+            source_id: self.source_id.clone(),
+            source_html_url: self.source_html_url.clone(),
+            status: NotificationStatus::Unread,
+            metadata: match self.metadata {
+                TaskMetadata::Todoist(_) => NotificationMetadata::Todoist,
+            },
+            updated_at: self.created_at,
+            last_read_at: None,
+            snoozed_until: None,
+            user_id,
+            task_id: Some(self.id),
+        }
     }
 }
 
-impl From<&Task> for Notification {
-    fn from(task: &Task) -> Self {
-        Notification {
-            id: Uuid::new_v4().into(),
-            title: task.title.clone(),
-            source_id: task.source_id.clone(),
-            source_html_url: task.source_html_url.clone(),
-            status: NotificationStatus::Unread,
-            metadata: match task.metadata {
-                TaskMetadata::Todoist(_) => NotificationMetadata::Todoist,
-            },
-            updated_at: task.created_at,
-            last_read_at: None,
-            snoozed_until: None,
-            task_id: Some(task.id),
-        }
+impl From<Task> for Notification {
+    fn from(task: Task) -> Self {
+        let user_id = task.user_id;
+        task.into_notification(user_id)
     }
 }
 
 impl From<Task> for NotificationWithTask {
     fn from(task: Task) -> Self {
-        (&task).into()
-    }
-}
-
-impl From<&Task> for NotificationWithTask {
-    fn from(task: &Task) -> Self {
         NotificationWithTask {
             id: Uuid::new_v4().into(),
             title: task.title.clone(),
@@ -277,7 +278,8 @@ impl From<&Task> for NotificationWithTask {
             updated_at: task.created_at,
             last_read_at: None,
             snoozed_until: None,
-            task: Some(task.clone()),
+            user_id: task.user_id,
+            task: Some(task),
         }
     }
 }

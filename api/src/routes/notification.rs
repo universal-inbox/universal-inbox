@@ -13,6 +13,7 @@ use universal_inbox::{
         Notification, NotificationId, NotificationPatch, NotificationStatus, NotificationWithTask,
     },
     task::{TaskCreation, TaskId},
+    user::UserId,
 };
 
 use crate::{
@@ -53,12 +54,17 @@ pub struct ListNotificationRequest {
     task_id: Option<TaskId>,
 }
 
-#[tracing::instrument(level = "debug", skip(notification_service, _identity))]
+#[tracing::instrument(level = "debug", skip(notification_service, identity))]
 pub async fn list_notifications(
     list_notification_request: web::Query<ListNotificationRequest>,
     notification_service: web::Data<Arc<RwLock<NotificationService>>>,
-    _identity: Identity,
+    identity: Identity,
 ) -> Result<HttpResponse, UniversalInboxError> {
+    let user_id = identity
+        .id()
+        .context("No user ID found in identity")?
+        .parse::<UserId>()
+        .context("User ID has wrong format")?;
     let service = notification_service.read().await;
     let mut transaction = service
         .begin()
@@ -72,6 +78,7 @@ pub async fn list_notifications(
                 .include_snoozed_notifications
                 .unwrap_or(false),
             list_notification_request.task_id,
+            user_id,
         )
         .await?;
 
@@ -80,12 +87,17 @@ pub async fn list_notifications(
     ))
 }
 
-#[tracing::instrument(level = "debug", skip(notification_service, _identity))]
+#[tracing::instrument(level = "debug", skip(notification_service, identity))]
 pub async fn get_notification(
     path: web::Path<NotificationId>,
     notification_service: web::Data<Arc<RwLock<NotificationService>>>,
-    _identity: Identity,
+    identity: Identity,
 ) -> Result<HttpResponse, UniversalInboxError> {
+    let user_id = identity
+        .id()
+        .context("No user ID found in identity")?
+        .parse::<UserId>()
+        .context("User ID has wrong format")?;
     let notification_id = path.into_inner();
     let service = notification_service.read().await;
     let mut transaction = service
@@ -94,7 +106,7 @@ pub async fn get_notification(
         .context("Failed to create new transaction while getting notification")?;
 
     match service
-        .get_notification(&mut transaction, notification_id)
+        .get_notification(&mut transaction, notification_id, user_id)
         .await?
     {
         Some(notification) => Ok(HttpResponse::Ok()
@@ -109,12 +121,17 @@ pub async fn get_notification(
     }
 }
 
-#[tracing::instrument(level = "debug", skip(notification_service, _identity))]
+#[tracing::instrument(level = "debug", skip(notification_service, identity))]
 pub async fn create_notification(
     notification: web::Json<Box<Notification>>,
     notification_service: web::Data<Arc<RwLock<NotificationService>>>,
-    _identity: Identity,
+    identity: Identity,
 ) -> Result<HttpResponse, UniversalInboxError> {
+    let user_id = identity
+        .id()
+        .context("No user ID found in identity")?
+        .parse::<UserId>()
+        .context("User ID has wrong format")?;
     let service = notification_service.read().await;
     let mut transaction = service
         .begin()
@@ -122,7 +139,7 @@ pub async fn create_notification(
         .context("Failed to create new transaction while creating notification")?;
 
     let created_notification = service
-        .create_notification(&mut transaction, notification.into_inner())
+        .create_notification(&mut transaction, notification.into_inner(), user_id)
         .await?;
 
     transaction
@@ -140,12 +157,17 @@ pub struct SyncNotificationsParameters {
     source: Option<NotificationSyncSourceKind>,
 }
 
-#[tracing::instrument(level = "debug", skip(notification_service, _identity))]
+#[tracing::instrument(level = "debug", skip(notification_service, identity))]
 pub async fn sync_notifications(
     params: web::Json<SyncNotificationsParameters>,
     notification_service: web::Data<Arc<RwLock<NotificationService>>>,
-    _identity: Identity,
+    identity: Identity,
 ) -> Result<HttpResponse, UniversalInboxError> {
+    let user_id = identity
+        .id()
+        .context("No user ID found in identity")?
+        .parse::<UserId>()
+        .context("User ID has wrong format")?;
     let service = notification_service.read().await;
     let mut transaction = service.begin().await.context(format!(
         "Failed to create new transaction while syncing {:?}",
@@ -153,7 +175,7 @@ pub async fn sync_notifications(
     ))?;
 
     let notifications: Vec<Notification> = service
-        .sync_notifications(&mut transaction, &params.source)
+        .sync_notifications(&mut transaction, &params.source, user_id)
         .await?;
 
     transaction.commit().await.context(format!(
@@ -166,13 +188,18 @@ pub async fn sync_notifications(
         .body(serde_json::to_string(&notifications).context("Cannot serialize notifications")?))
 }
 
-#[tracing::instrument(level = "debug", skip(notification_service, _identity))]
+#[tracing::instrument(level = "debug", skip(notification_service, identity))]
 pub async fn patch_notification(
     path: web::Path<NotificationId>,
     patch: web::Json<NotificationPatch>,
     notification_service: web::Data<Arc<RwLock<NotificationService>>>,
-    _identity: Identity,
+    identity: Identity,
 ) -> Result<HttpResponse, UniversalInboxError> {
+    let user_id = identity
+        .id()
+        .context("No user ID found in identity")?
+        .parse::<UserId>()
+        .context("User ID has wrong format")?;
     let notification_id = path.into_inner();
     let notification_patch = patch.into_inner();
     let service = notification_service.read().await;
@@ -182,7 +209,12 @@ pub async fn patch_notification(
         .context(format!("Failed to patch notification {notification_id}"))?;
 
     let updated_notification = service
-        .patch_notification(&mut transaction, notification_id, &notification_patch)
+        .patch_notification(
+            &mut transaction,
+            notification_id,
+            &notification_patch,
+            user_id,
+        )
         .await?;
 
     transaction.commit().await.context(format!(
@@ -214,13 +246,18 @@ pub async fn patch_notification(
     }
 }
 
-#[tracing::instrument(level = "debug", skip(notification_service, _identity))]
+#[tracing::instrument(level = "debug", skip(notification_service, identity))]
 pub async fn create_task_from_notification(
     path: web::Path<NotificationId>,
     task_creation: web::Json<TaskCreation>,
     notification_service: web::Data<Arc<RwLock<NotificationService>>>,
-    _identity: Identity,
+    identity: Identity,
 ) -> Result<HttpResponse, UniversalInboxError> {
+    let user_id = identity
+        .id()
+        .context("No user ID found in identity")?
+        .parse::<UserId>()
+        .context("User ID has wrong format")?;
     let notification_id = path.into_inner();
     let task_creation = task_creation.into_inner();
     let service = notification_service.read().await;
@@ -230,7 +267,7 @@ pub async fn create_task_from_notification(
         .context(format!("Failed to create task from {notification_id}"))?;
 
     let notification_with_task = service
-        .create_task_from_notification(&mut transaction, notification_id, &task_creation)
+        .create_task_from_notification(&mut transaction, notification_id, &task_creation, user_id)
         .await?;
 
     transaction.commit().await.context(format!(

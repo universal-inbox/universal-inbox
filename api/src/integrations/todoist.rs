@@ -15,11 +15,14 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
 
-use universal_inbox::task::{
-    integrations::todoist::{
-        self, TodoistItem, TodoistItemDue, TodoistItemPriority, TodoistProject,
+use universal_inbox::{
+    task::{
+        integrations::todoist::{
+            self, TodoistItem, TodoistItemDue, TodoistItemPriority, TodoistProject,
+        },
+        Task, TaskCreation, TaskMetadata, TaskPatch, TaskStatus,
     },
-    Task, TaskCreation, TaskMetadata, TaskPatch, TaskStatus,
+    user::UserId,
 };
 
 use crate::{
@@ -309,6 +312,7 @@ impl TodoistService {
     pub async fn build_task_with_project_name(
         source: &TodoistItem,
         project_name: String,
+        user_id: UserId,
     ) -> Box<Task> {
         Box::new(Task {
             id: Uuid::new_v4().into(),
@@ -334,6 +338,7 @@ impl TodoistService {
                 .unwrap_or(false),
             created_at: source.added_at,
             metadata: TaskMetadata::Todoist(source.clone()),
+            user_id,
         })
     }
 }
@@ -385,7 +390,11 @@ impl TaskSourceService<TodoistItem> for TodoistService {
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
-    async fn build_task(&self, source: &TodoistItem) -> Result<Box<Task>, UniversalInboxError> {
+    async fn build_task(
+        &self,
+        source: &TodoistItem,
+        user_id: UserId,
+    ) -> Result<Box<Task>, UniversalInboxError> {
         let projects = self.fetch_all_projects().await?;
         let project_name = projects
             .iter()
@@ -398,7 +407,7 @@ impl TaskSourceService<TodoistItem> for TodoistService {
                 ))
             })?;
 
-        Ok(TodoistService::build_task_with_project_name(source, project_name).await)
+        Ok(TodoistService::build_task_with_project_name(source, project_name, user_id).await)
     }
 
     #[tracing::instrument(level = "debug", skip(self))]

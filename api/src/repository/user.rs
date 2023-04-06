@@ -18,6 +18,11 @@ pub trait UserRepository {
         id: UserId,
     ) -> Result<Option<User>, UniversalInboxError>;
 
+    async fn fetch_all_users<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+    ) -> Result<Vec<User>, UniversalInboxError>;
+
     async fn get_user_by_auth_id<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -60,6 +65,31 @@ impl UserRepository for Repository {
         .with_context(|| format!("Failed to fetch user {id} from storage"))?;
 
         Ok(row.map(|user_row| user_row.into()))
+    }
+
+    async fn fetch_all_users<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+    ) -> Result<Vec<User>, UniversalInboxError> {
+        let rows = sqlx::query_as!(
+            UserRow,
+            r#"
+                SELECT
+                  id,
+                  auth_user_id,
+                  first_name,
+                  last_name,
+                  email,
+                  created_at,
+                  updated_at
+                FROM "user"
+            "#
+        )
+        .fetch_all(executor)
+        .await
+        .context("Failed to fetch all users from storage")?;
+
+        Ok(rows.iter().map(|r| r.into()).collect())
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
@@ -151,12 +181,18 @@ pub struct UserRow {
 
 impl From<UserRow> for User {
     fn from(row: UserRow) -> Self {
+        (&row).into()
+    }
+}
+
+impl From<&UserRow> for User {
+    fn from(row: &UserRow) -> Self {
         User {
             id: row.id.into(),
-            auth_user_id: row.auth_user_id.into(),
-            first_name: row.first_name,
-            last_name: row.last_name,
-            email: row.email,
+            auth_user_id: row.auth_user_id.clone().into(),
+            first_name: row.first_name.clone(),
+            last_name: row.last_name.clone(),
+            email: row.email.clone(),
             created_at: DateTime::<Utc>::from_utc(row.created_at, Utc),
             updated_at: DateTime::<Utc>::from_utc(row.updated_at, Utc),
         }

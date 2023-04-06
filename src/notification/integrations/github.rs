@@ -5,7 +5,10 @@ use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use uuid::Uuid;
 
-use crate::notification::{Notification, NotificationMetadata, NotificationStatus};
+use crate::{
+    notification::{IntoNotification, Notification, NotificationMetadata, NotificationStatus},
+    user::UserId,
+};
 
 #[serde_as]
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
@@ -410,24 +413,25 @@ impl GithubNotification {
     }
 }
 
-impl From<GithubNotification> for Notification {
-    fn from(source: GithubNotification) -> Self {
-        let source_html_url = GithubNotification::get_html_url_from_api_url(&source.subject.url);
+impl IntoNotification for GithubNotification {
+    fn into_notification(self, user_id: UserId) -> Notification {
+        let source_html_url = GithubNotification::get_html_url_from_api_url(&self.subject.url);
 
         Notification {
             id: Uuid::new_v4().into(),
-            title: source.subject.title.clone(),
-            source_id: source.id.clone(),
+            title: self.subject.title.clone(),
+            source_id: self.id.clone(),
             source_html_url,
-            status: if source.unread {
+            status: if self.unread {
                 NotificationStatus::Unread
             } else {
                 NotificationStatus::Read
             },
-            metadata: NotificationMetadata::Github(source.clone()),
-            updated_at: source.updated_at,
-            last_read_at: source.last_read_at,
+            metadata: NotificationMetadata::Github(self.clone()),
+            updated_at: self.updated_at,
+            last_read_at: self.last_read_at,
             snoozed_until: None,
+            user_id,
             task_id: None,
         }
     }

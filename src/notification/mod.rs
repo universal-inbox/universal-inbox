@@ -8,7 +8,10 @@ use uuid::Uuid;
 
 use integrations::github::GithubNotification;
 
-use crate::task::{Task, TaskId};
+use crate::{
+    task::{Task, TaskId},
+    user::UserId,
+};
 
 pub mod integrations;
 
@@ -26,6 +29,7 @@ pub struct Notification {
     pub updated_at: DateTime<Utc>,
     pub last_read_at: Option<DateTime<Utc>>,
     pub snoozed_until: Option<DateTime<Utc>>,
+    pub user_id: UserId,
     pub task_id: Option<TaskId>,
 }
 
@@ -43,29 +47,36 @@ pub struct NotificationWithTask {
     pub updated_at: DateTime<Utc>,
     pub last_read_at: Option<DateTime<Utc>>,
     pub snoozed_until: Option<DateTime<Utc>>,
+    pub user_id: UserId,
     pub task: Option<Task>,
+}
+
+pub trait IntoNotification {
+    fn into_notification(self, user_id: UserId) -> Notification;
+}
+
+impl IntoNotification for NotificationWithTask {
+    fn into_notification(self, user_id: UserId) -> Notification {
+        Notification {
+            id: self.id,
+            title: self.title.clone(),
+            source_id: self.source_id.clone(),
+            source_html_url: self.source_html_url.clone(),
+            status: self.status,
+            metadata: self.metadata.clone(),
+            updated_at: self.updated_at,
+            last_read_at: self.last_read_at,
+            snoozed_until: self.snoozed_until,
+            user_id,
+            task_id: self.task.as_ref().map(|task| task.id),
+        }
+    }
 }
 
 impl From<NotificationWithTask> for Notification {
     fn from(notification: NotificationWithTask) -> Self {
-        (&notification).into()
-    }
-}
-
-impl From<&NotificationWithTask> for Notification {
-    fn from(notification: &NotificationWithTask) -> Self {
-        Notification {
-            id: notification.id,
-            title: notification.title.clone(),
-            source_id: notification.source_id.clone(),
-            source_html_url: notification.source_html_url.clone(),
-            status: notification.status,
-            metadata: notification.metadata.clone(),
-            updated_at: notification.updated_at,
-            last_read_at: notification.last_read_at,
-            snoozed_until: notification.snoozed_until,
-            task_id: notification.task.as_ref().map(|task| task.id),
-        }
+        let user_id = notification.user_id;
+        notification.into_notification(user_id)
     }
 }
 
@@ -81,6 +92,7 @@ impl NotificationWithTask {
             updated_at: notification.updated_at,
             last_read_at: notification.last_read_at,
             snoozed_until: notification.snoozed_until,
+            user_id: notification.user_id,
             task,
         }
     }
