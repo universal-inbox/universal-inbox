@@ -7,7 +7,7 @@ use openidconnect::{
     AccessToken, SubjectIdentifier, TokenIntrospectionResponse,
 };
 use sqlx::{Postgres, Transaction};
-use tracing::{error, info};
+use tracing::info;
 
 use universal_inbox::user::{AuthUserId, User, UserId};
 
@@ -46,6 +46,14 @@ impl UserService {
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
+    pub async fn fetch_all_users<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+    ) -> Result<Vec<User>, UniversalInboxError> {
+        self.repository.fetch_all_users(executor).await
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn authenticate_and_create_user_if_not_exists<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -76,8 +84,9 @@ impl UserService {
             .context("Introspection request error")?;
 
         if !introspection_result.active() {
-            error!("Given access token is not active");
-            return Err(UniversalInboxError::Unauthorized);
+            return Err(UniversalInboxError::Unauthorized(
+                "Given access token is not active".to_string(),
+            ));
         }
 
         let auth_user_id: AuthUserId = introspection_result

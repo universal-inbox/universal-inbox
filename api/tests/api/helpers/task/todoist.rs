@@ -17,6 +17,7 @@ use universal_inbox::{
         integrations::todoist::{self, TodoistItem, TodoistItemDue, TodoistItemPriority},
         DueDate, Task, TaskMetadata, TaskStatus,
     },
+    user::UserId,
 };
 
 use universal_inbox_api::{
@@ -199,11 +200,13 @@ pub fn todoist_item() -> Box<TodoistItem> {
 pub fn assert_sync_items(
     task_creations: &[TaskCreationResult],
     sync_todoist_items: &[TodoistItem],
+    expected_user_id: UserId,
 ) {
     for task_creation in task_creations.iter() {
         let task = &task_creation.task;
         let notification = task_creation.notification.clone();
 
+        assert_eq!(task.user_id, expected_user_id);
         match task.source_id.as_ref() {
             "1123" => {
                 assert_eq!(task.title, "Task 1".to_string());
@@ -239,6 +242,7 @@ pub fn assert_sync_items(
                 assert_eq!(notif.updated_at, task.created_at);
                 assert_eq!(notif.metadata, NotificationMetadata::Todoist);
                 assert_eq!(notif.task_id, Some(task.id));
+                assert_eq!(notif.user_id, expected_user_id);
             }
             // This task should be updated
             "1456" => {
@@ -275,6 +279,7 @@ pub async fn create_task_from_todoist_item(
     app_address: &str,
     todoist_item: &TodoistItem,
     project: String,
+    user_id: UserId,
 ) -> Box<TaskCreationResult> {
     create_resource(
         client,
@@ -282,6 +287,7 @@ pub async fn create_task_from_todoist_item(
         "tasks",
         Box::new(Task {
             id: Uuid::new_v4().into(),
+            user_id,
             source_id: todoist_item.id.clone(),
             title: todoist_item.content.clone(),
             body: todoist_item.description.clone(),

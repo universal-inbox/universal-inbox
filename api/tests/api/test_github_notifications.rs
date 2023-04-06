@@ -45,6 +45,7 @@ mod patch_resource {
             updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
             last_read_at: None,
             snoozed_until: None,
+            user_id: app.user.id,
             task_id: None,
         });
         let created_notification: Box<Notification> = create_resource(
@@ -105,6 +106,7 @@ mod patch_resource {
             updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
             last_read_at: None,
             snoozed_until: None,
+            user_id: app.user.id,
             task_id: None,
         });
         let created_notification: Box<Notification> = create_resource(
@@ -163,6 +165,7 @@ mod patch_resource {
             updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
             last_read_at: None,
             snoozed_until: None,
+            user_id: app.user.id,
             task_id: None,
         });
         let created_notification: Box<Notification> = create_resource(
@@ -223,6 +226,7 @@ mod patch_resource {
             updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
             last_read_at: None,
             snoozed_until: None,
+            user_id: app.user.id,
             task_id: None,
         });
         let snoozed_time = Utc.with_ymd_and_hms(2022, 1, 1, 1, 2, 3).unwrap();
@@ -279,6 +283,7 @@ mod patch_resource {
             updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
             last_read_at: None,
             snoozed_until: Some(snoozed_time),
+            user_id: app.user.id,
             task_id: None,
         });
         let created_notification: Box<Notification> = create_resource(
@@ -329,6 +334,7 @@ mod patch_resource {
             updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
             last_read_at: None,
             snoozed_until: None,
+            user_id: app.user.id,
             task_id: None,
         });
         let created_notification: Box<Notification> = create_resource(

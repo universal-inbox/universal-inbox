@@ -58,6 +58,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
             is_recurring: false,
             created_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
             metadata: TaskMetadata::Todoist(todoist_items[1].clone()),
+            user_id: app.user.id,
         }),
     )
     .await;
@@ -79,7 +80,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
         sync_tasks(&app.client, &app.app_address, Some(TaskSourceKind::Todoist)).await;
 
     assert_eq!(task_creations.len(), todoist_items.len());
-    assert_sync_items(&task_creations, &todoist_items);
+    assert_sync_items(&task_creations, &todoist_items, app.user.id);
     todoist_tasks_mock.assert();
     todoist_projects_mock.assert();
 
@@ -159,7 +160,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
     assert_eq!(notifications[0].source_id, new_task.source_id);
     assert_eq!(notifications[0].task, Some(new_task.clone()));
     assert_eq!(
-        Some((&notifications[0]).into()),
+        Some(notifications[0].clone().into()),
         new_todoist_task_creation.notification
     );
 }
@@ -180,6 +181,7 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
             &app.app_address,
             todoist_item,
             "Inbox".to_string(),
+            app.user.id,
         )
         .await;
     }
@@ -204,6 +206,7 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
             is_recurring: false,
             created_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
             metadata: TaskMetadata::Todoist(todoist_items[1].clone()),
+            user_id: app.user.id,
         }),
     )
     .await;
@@ -226,7 +229,7 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
         sync_tasks(&app.client, &app.app_address, Some(TaskSourceKind::Todoist)).await;
 
     assert_eq!(task_creations.len(), todoist_items.len());
-    assert_sync_items(&task_creations, &todoist_items);
+    assert_sync_items(&task_creations, &todoist_items, app.user.id);
     todoist_sync_items_mock.assert();
     todoist_projects_mock.assert();
 

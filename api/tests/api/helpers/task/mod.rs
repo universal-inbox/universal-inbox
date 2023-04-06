@@ -1,7 +1,7 @@
 use reqwest::{Client, Response};
 use serde_json::json;
 
-use universal_inbox::task::{Task, TaskStatus};
+use universal_inbox::task::{Task, TaskStatus, TaskSummary};
 
 use universal_inbox_api::{
     integrations::task::TaskSourceKind, universal_inbox::task::TaskCreationResult,
@@ -27,6 +27,22 @@ pub async fn list_tasks(
     status_filter: TaskStatus,
 ) -> Vec<Task> {
     list_tasks_response(client, app_address, status_filter)
+        .await
+        .json()
+        .await
+        .expect("Cannot parse JSON result")
+}
+
+pub async fn search_tasks_response(client: &Client, app_address: &str, matches: &str) -> Response {
+    client
+        .get(&format!("{app_address}/tasks/search?matches={matches}"))
+        .send()
+        .await
+        .expect("Failed to execute request")
+}
+
+pub async fn search_tasks(client: &Client, app_address: &str, matches: &str) -> Vec<TaskSummary> {
+    search_tasks_response(client, app_address, matches)
         .await
         .json()
         .await

@@ -11,6 +11,7 @@ use tokio::sync::RwLock;
 use universal_inbox::{
     notification::{Notification, NotificationPatch, NotificationStatus},
     task::{Task, TaskCreation, TaskId, TaskMetadata, TaskPatch, TaskStatus, TaskSummary},
+    user::UserId,
 };
 
 use crate::{
@@ -81,8 +82,11 @@ impl TaskService {
         &self,
         executor: &mut Transaction<'a, Postgres>,
         status: TaskStatus,
+        user_id: UserId,
     ) -> Result<Vec<Task>, UniversalInboxError> {
-        self.repository.fetch_all_tasks(executor, status).await
+        self.repository
+            .fetch_all_tasks(executor, status, user_id)
+            .await
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
@@ -90,8 +94,11 @@ impl TaskService {
         &self,
         executor: &mut Transaction<'a, Postgres>,
         matches: &'b str,
+        user_id: UserId,
     ) -> Result<Vec<TaskSummary>, UniversalInboxError> {
-        self.repository.search_tasks(executor, matches).await
+        self.repository
+            .search_tasks(executor, matches, user_id)
+            .await
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
@@ -99,8 +106,19 @@ impl TaskService {
         &self,
         executor: &mut Transaction<'a, Postgres>,
         task_id: TaskId,
+        for_user_id: UserId,
     ) -> Result<Option<Task>, UniversalInboxError> {
-        self.repository.get_one_task(executor, task_id).await
+        let task = self.repository.get_one_task(executor, task_id).await?;
+
+        if let Some(ref task) = task {
+            if task.user_id != for_user_id {
+                return Err(UniversalInboxError::Forbidden(format!(
+                    "Only the owner of the task {task_id} can access it"
+                )));
+            }
+        }
+
+        Ok(task)
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
@@ -117,7 +135,14 @@ impl TaskService {
         &self,
         executor: &mut Transaction<'a, Postgres>,
         task: Box<Task>,
+        for_user_id: UserId,
     ) -> Result<Box<TaskCreationResult>, UniversalInboxError> {
+        if task.user_id != for_user_id {
+            return Err(UniversalInboxError::Forbidden(format!(
+                "A task can only be created for {for_user_id}"
+            )));
+        }
+
         let task = self.repository.create_task(executor, task).await?;
         let notification = if task.is_in_inbox() {
             Some(
@@ -126,7 +151,7 @@ impl TaskService {
                     .context("Unable to access notification_service from task_service")?
                     .read()
                     .await
-                    .create_notification(executor, Box::new(task.as_ref().into()))
+                    .create_notification(executor, Box::new((*task).clone().into()), for_user_id)
                     .await?,
             )
         } else {
@@ -161,7 +186,10 @@ impl TaskService {
                 ..(*task_creation).clone()
             })
             .await?;
-        let task = self.todoist_service.build_task(&source_task).await?;
+        let task = self
+            .todoist_service
+            .build_task(&source_task, notification.user_id)
+            .await?;
         let created_task = self.repository.create_task(executor, task).await?;
 
         Ok(created_task)
@@ -171,16 +199,21 @@ impl TaskService {
         &self,
         executor: &mut Transaction<'a, Postgres>,
         task_source_service: &U,
+        user_id: UserId,
     ) -> Result<Vec<TaskCreationResult>, UniversalInboxError>
     where
         U: TaskSourceService<T> + NotificationSource,
     {
         let source_tasks = task_source_service.fetch_all_tasks().await?;
         let tasks = self
-            .save_tasks_from_source(executor, task_source_service, &source_tasks)
+            .save_tasks_from_source(executor, task_source_service, &source_tasks, user_id)
             .await?;
 
-        let tasks_in_inbox = tasks.iter().filter(|task| task.is_in_inbox()).collect();
+        let tasks_in_inbox: Vec<Task> = tasks
+            .iter()
+            .filter(|task| task.is_in_inbox())
+            .cloned()
+            .collect();
 
         let notifications = self
             .notification_service
@@ -192,6 +225,7 @@ impl TaskService {
                 executor,
                 task_source_service.get_notification_source_kind(),
                 tasks_in_inbox,
+                user_id,
             )
             .await?;
 
@@ -228,10 +262,11 @@ impl TaskService {
         executor: &mut Transaction<'a, Postgres>,
         task_source_service: &dyn TaskSourceService<T>,
         source_tasks: &[T],
+        user_id: UserId,
     ) -> Result<Vec<Task>, UniversalInboxError> {
         let mut tasks = vec![];
         for source_task in source_tasks {
-            let task = task_source_service.build_task(source_task).await?;
+            let task = task_source_service.build_task(source_task, user_id).await?;
             let uptodate_task = self
                 .repository
                 .create_or_update_task(executor, task)
@@ -261,15 +296,16 @@ impl TaskService {
         &self,
         executor: &mut Transaction<'a, Postgres>,
         source: &Option<TaskSyncSourceKind>,
+        user_id: UserId,
     ) -> Result<Vec<TaskCreationResult>, UniversalInboxError> {
         match source {
             Some(TaskSyncSourceKind::Todoist) => {
-                self.sync_source_tasks_and_notifications(executor, &self.todoist_service)
+                self.sync_source_tasks_and_notifications(executor, &self.todoist_service, user_id)
                     .await
             }
             None => {
                 let sync_result_from_todoist = self
-                    .sync_source_tasks_and_notifications(executor, &self.todoist_service)
+                    .sync_source_tasks_and_notifications(executor, &self.todoist_service, user_id)
                     .await?;
                 // merge result with other integrations here
                 Ok(sync_result_from_todoist)
@@ -283,18 +319,18 @@ impl TaskService {
         executor: &mut Transaction<'a, Postgres>,
         task_id: TaskId,
         patch: &TaskPatch,
+        for_user_id: UserId,
     ) -> Result<UpdateStatus<Box<Task>>, UniversalInboxError> {
         let updated_task = self
             .repository
-            .update_task(executor, task_id, patch)
+            .update_task(executor, task_id, patch, for_user_id)
             .await?;
 
-        if let UpdateStatus {
-            updated: true,
-            result: Some(ref task),
-        } = updated_task
-        {
-            match task.metadata {
+        match updated_task {
+            UpdateStatus {
+                updated: true,
+                result: Some(ref task),
+            } => match task.metadata {
                 TaskMetadata::Todoist(_) => {
                     if patch.status == Some(TaskStatus::Deleted)
                         || patch.status == Some(TaskStatus::Done)
@@ -326,7 +362,18 @@ impl TaskService {
                     )
                     .await?;
                 }
+            },
+            UpdateStatus {
+                updated: false,
+                result: None,
+            } => {
+                if self.repository.does_task_exist(executor, task_id).await? {
+                    return Err(UniversalInboxError::Forbidden(format!(
+                        "Only the owner of the task {task_id} can patch it"
+                    )));
+                }
             }
+            _ => {}
         }
 
         Ok(updated_task)
@@ -338,13 +385,17 @@ impl TaskService {
         executor: &mut Transaction<'a, Postgres>,
         notification: &'b Notification,
         task_id: TaskId,
+        for_user_id: UserId,
     ) -> Result<Box<Task>, UniversalInboxError> {
-        let task = self.get_task(executor, task_id).await?.ok_or_else(|| {
-            UniversalInboxError::Unexpected(anyhow!(
-                "Cannot associate notification {} with unknown task {task_id}",
-                notification.id
-            ))
-        })?;
+        let task = self
+            .get_task(executor, task_id, for_user_id)
+            .await?
+            .ok_or_else(|| {
+                UniversalInboxError::Unexpected(anyhow!(
+                    "Cannot associate notification {} with unknown task {task_id}",
+                    notification.id
+                ))
+            })?;
 
         let updated_task = self
             .patch_task(
@@ -363,6 +414,7 @@ impl TaskService {
                     )),
                     ..Default::default()
                 },
+                for_user_id,
             )
             .await?;
 

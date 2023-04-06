@@ -9,10 +9,11 @@ use tokio::sync::RwLock;
 
 use universal_inbox::{
     notification::{
-        Notification, NotificationId, NotificationMetadata, NotificationPatch, NotificationStatus,
-        NotificationWithTask,
+        IntoNotification, Notification, NotificationId, NotificationMetadata, NotificationPatch,
+        NotificationStatus, NotificationWithTask,
     },
     task::{TaskCreation, TaskId, TaskPatch, TaskStatus},
+    user::UserId,
 };
 
 use crate::{
@@ -84,9 +85,16 @@ impl NotificationService {
         status: NotificationStatus,
         include_snoozed_notifications: bool,
         task_id: Option<TaskId>,
+        user_id: UserId,
     ) -> Result<Vec<NotificationWithTask>, UniversalInboxError> {
         self.repository
-            .fetch_all_notifications(executor, status, include_snoozed_notifications, task_id)
+            .fetch_all_notifications(
+                executor,
+                status,
+                include_snoozed_notifications,
+                task_id,
+                user_id,
+            )
             .await
     }
 
@@ -95,10 +103,22 @@ impl NotificationService {
         &self,
         executor: &mut Transaction<'a, Postgres>,
         notification_id: NotificationId,
+        for_user_id: UserId,
     ) -> Result<Option<Notification>, UniversalInboxError> {
-        self.repository
+        let notification = self
+            .repository
             .get_one_notification(executor, notification_id)
-            .await
+            .await?;
+
+        if let Some(ref notif) = notification {
+            if notif.user_id != for_user_id {
+                return Err(UniversalInboxError::Forbidden(format!(
+                    "Only the owner of the notification {notification_id} can access it"
+                )));
+            }
+        }
+
+        Ok(notification)
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
@@ -106,7 +126,14 @@ impl NotificationService {
         &self,
         executor: &mut Transaction<'a, Postgres>,
         notification: Box<Notification>,
+        for_user_id: UserId,
     ) -> Result<Box<Notification>, UniversalInboxError> {
+        if notification.user_id != for_user_id {
+            return Err(UniversalInboxError::Forbidden(format!(
+                "A notification can only be created for {for_user_id}"
+            )));
+        }
+
         self.repository
             .create_notification(executor, notification)
             .await
@@ -124,14 +151,12 @@ impl NotificationService {
             .map(Box::new)
     }
 
-    async fn sync_source_notifications<'a, T: Debug>(
+    async fn sync_source_notifications<'a, T: Debug + IntoNotification>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
         notification_source_service: &dyn NotificationSourceService<T>,
-    ) -> Result<Vec<Notification>, UniversalInboxError>
-    where
-        Notification: From<T>,
-    {
+        user_id: UserId,
+    ) -> Result<Vec<Notification>, UniversalInboxError> {
         let source_notifications = notification_source_service
             .fetch_all_notifications()
             .await?;
@@ -139,23 +164,22 @@ impl NotificationService {
             executor,
             notification_source_service.get_notification_source_kind(),
             source_notifications,
+            user_id,
         )
         .await
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
-    pub async fn save_notifications_from_source<'a, T: Debug>(
+    pub async fn save_notifications_from_source<'a, T: Debug + IntoNotification>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
         notification_source_kind: NotificationSourceKind,
         source_items: Vec<T>,
-    ) -> Result<Vec<Notification>, UniversalInboxError>
-    where
-        Notification: From<T>,
-    {
+        user_id: UserId,
+    ) -> Result<Vec<Notification>, UniversalInboxError> {
         let mut notifications = vec![];
         for source_item in source_items {
-            let notification = source_item.into();
+            let notification = source_item.into_notification(user_id);
             let uptodate_notification = self
                 .repository
                 .create_or_update_notification(executor, Box::new(notification))
@@ -185,15 +209,16 @@ impl NotificationService {
         &self,
         executor: &mut Transaction<'a, Postgres>,
         source: &Option<NotificationSyncSourceKind>,
+        user_id: UserId,
     ) -> Result<Vec<Notification>, UniversalInboxError> {
         match source {
             Some(NotificationSyncSourceKind::Github) => {
-                self.sync_source_notifications(executor, &self.github_service)
+                self.sync_source_notifications(executor, &self.github_service, user_id)
                     .await
             }
             None => {
                 let notifications_from_github = self
-                    .sync_source_notifications(executor, &self.github_service)
+                    .sync_source_notifications(executor, &self.github_service, user_id)
                     .await?;
                 Ok(notifications_from_github)
             }
@@ -206,65 +231,90 @@ impl NotificationService {
         executor: &mut Transaction<'a, Postgres>,
         notification_id: NotificationId,
         patch: &'b NotificationPatch,
+        for_user_id: UserId,
     ) -> Result<UpdateStatus<Box<Notification>>, UniversalInboxError> {
         let updated_notification = self
             .repository
-            .update_notification(executor, notification_id, patch)
+            .update_notification(executor, notification_id, patch, for_user_id)
             .await?;
 
-        if let UpdateStatus {
-            updated: true,
-            result: Some(ref notification),
-        } = updated_notification
-        {
-            match notification.metadata {
-                NotificationMetadata::Github(_) => {
-                    NotificationService::apply_updated_notification_side_effect(
-                        &self.github_service,
-                        patch,
-                        notification.clone(),
-                    )
-                    .await?;
-                }
-                NotificationMetadata::Todoist => {
-                    if let Some(NotificationStatus::Deleted) = patch.status {
-                        if let Some(task_id) = notification.task_id {
-                            self.task_service
-                                .upgrade()
-                                .context("Unable to access task_service from notification_service")?
-                                .read()
-                                .await
-                                .patch_task(
-                                    executor,
-                                    task_id,
-                                    &TaskPatch {
-                                        status: Some(TaskStatus::Deleted),
-                                        ..Default::default()
-                                    },
-                                )
-                                .await?;
-                        } else {
-                            return Err(UniversalInboxError::Unexpected(anyhow!(
+        match updated_notification {
+            UpdateStatus {
+                updated: true,
+                result: Some(ref notification),
+            } => {
+                match notification.metadata {
+                    NotificationMetadata::Github(_) => {
+                        NotificationService::apply_updated_notification_side_effect(
+                            &self.github_service,
+                            patch,
+                            notification.clone(),
+                        )
+                        .await?;
+                    }
+                    NotificationMetadata::Todoist => {
+                        if let Some(NotificationStatus::Deleted) = patch.status {
+                            if let Some(task_id) = notification.task_id {
+                                self.task_service
+                                    .upgrade()
+                                    .context(
+                                        "Unable to access task_service from notification_service",
+                                    )?
+                                    .read()
+                                    .await
+                                    .patch_task(
+                                        executor,
+                                        task_id,
+                                        &TaskPatch {
+                                            status: Some(TaskStatus::Deleted),
+                                            ..Default::default()
+                                        },
+                                        for_user_id,
+                                    )
+                                    .await?;
+                            } else {
+                                return Err(UniversalInboxError::Unexpected(anyhow!(
                                 "Todoist notification {notification_id} is expected to be linked to a task"
                             )));
-                        }
-                    } else {
-                        return Err(UniversalInboxError::UnsupportedAction(format!(
+                            }
+                        } else {
+                            return Err(UniversalInboxError::UnsupportedAction(format!(
                         "Cannot update the status of Todoist notification {notification_id}, update task's project"
                     )));
+                        }
                     }
-                }
-            };
+                };
 
-            if let Some(task_id) = patch.task_id {
-                self.task_service
-                    .upgrade()
-                    .context("Unable to access task_service from notification_service")?
-                    .read()
-                    .await
-                    .associate_notification_with_task(executor, notification, task_id)
-                    .await?;
+                if let Some(task_id) = patch.task_id {
+                    self.task_service
+                        .upgrade()
+                        .context("Unable to access task_service from notification_service")?
+                        .read()
+                        .await
+                        .associate_notification_with_task(
+                            executor,
+                            notification,
+                            task_id,
+                            for_user_id,
+                        )
+                        .await?;
+                }
             }
+            UpdateStatus {
+                updated: false,
+                result: None,
+            } => {
+                if self
+                    .repository
+                    .does_notification_exist(executor, notification_id)
+                    .await?
+                {
+                    return Err(UniversalInboxError::Forbidden(format!(
+                        "Only the owner of the notification {notification_id} can patch it"
+                    )));
+                }
+            }
+            _ => {}
         }
 
         Ok(updated_notification)
@@ -289,13 +339,14 @@ impl NotificationService {
         executor: &mut Transaction<'a, Postgres>,
         notification_id: NotificationId,
         task_creation: &'b TaskCreation,
+        for_user_id: UserId,
     ) -> Result<Option<NotificationWithTask>, UniversalInboxError> {
         let delete_patch = NotificationPatch {
             status: Some(NotificationStatus::Deleted),
             ..Default::default()
         };
         let updated_notification = self
-            .patch_notification(executor, notification_id, &delete_patch)
+            .patch_notification(executor, notification_id, &delete_patch, for_user_id)
             .await?;
 
         if let UpdateStatus {

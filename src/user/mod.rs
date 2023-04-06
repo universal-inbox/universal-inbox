@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, str::FromStr};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -85,5 +85,13 @@ impl TryFrom<String> for UserId {
 
     fn try_from(uuid: String) -> Result<Self, Self::Error> {
         Ok(Self(Uuid::parse_str(&uuid)?))
+    }
+}
+
+impl FromStr for UserId {
+    type Err = uuid::Error;
+
+    fn from_str(uuid: &str) -> Result<Self, Self::Err> {
+        Ok(Self(Uuid::parse_str(uuid)?))
     }
 }

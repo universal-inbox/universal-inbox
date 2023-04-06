@@ -34,6 +34,7 @@ mod patch_notification {
             &app.app_address,
             &todoist_item,
             "Inbox".to_string(),
+            app.user.id,
         )
         .await;
         let existing_todoist_task = existing_todoist_task_creation.task;
@@ -81,6 +82,7 @@ mod patch_notification {
         let app = authenticated_app.await;
         let expected_notification = Box::new(Notification {
             id: Uuid::new_v4().into(),
+            user_id: app.user.id,
             title: "task 1".to_string(),
             status: NotificationStatus::Unread,
             source_id: "1234".to_string(),
