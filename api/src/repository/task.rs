@@ -5,8 +5,9 @@ use http::Uri;
 use sqlx::{types::Json, Postgres, QueryBuilder, Transaction};
 use uuid::Uuid;
 
-use universal_inbox::task::{
-    DueDate, Task, TaskId, TaskMetadata, TaskPatch, TaskPriority, TaskStatus, TaskSummary,
+use universal_inbox::{
+    task::{DueDate, Task, TaskId, TaskMetadata, TaskPatch, TaskPriority, TaskStatus, TaskSummary},
+    user::UserId,
 };
 
 use crate::{
@@ -23,6 +24,11 @@ pub trait TaskRepository {
         executor: &mut Transaction<'a, Postgres>,
         id: TaskId,
     ) -> Result<Option<Task>, UniversalInboxError>;
+    async fn does_task_exist<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        id: TaskId,
+    ) -> Result<bool, UniversalInboxError>;
     async fn get_tasks<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -32,11 +38,13 @@ pub trait TaskRepository {
         &self,
         executor: &mut Transaction<'a, Postgres>,
         status: TaskStatus,
+        user_id: UserId,
     ) -> Result<Vec<Task>, UniversalInboxError>;
     async fn search_tasks<'a, 'b>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
         matches: &'b str,
+        user_id: UserId,
     ) -> Result<Vec<TaskSummary>, UniversalInboxError>;
     async fn create_task<'a>(
         &self,
@@ -60,6 +68,7 @@ pub trait TaskRepository {
         executor: &mut Transaction<'a, Postgres>,
         task_id: TaskId,
         patch: &'b TaskPatch,
+        for_user_id: UserId,
     ) -> Result<UpdateStatus<Box<Task>>, UniversalInboxError>;
 }
 
@@ -89,7 +98,8 @@ impl TaskRepository for Repository {
                   project,
                   is_recurring,
                   created_at,
-                  metadata as "metadata: Json<TaskMetadata>"
+                  metadata as "metadata: Json<TaskMetadata>",
+                  user_id
                 FROM task
                 WHERE id = $1
             "#,
@@ -100,6 +110,24 @@ impl TaskRepository for Repository {
         .with_context(|| format!("Failed to fetch task {id} from storage"))?;
 
         row.map(|task_row| task_row.try_into()).transpose()
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    async fn does_task_exist<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        id: TaskId,
+    ) -> Result<bool, UniversalInboxError> {
+        let count: Option<i64> =
+            sqlx::query_scalar!(r#"SELECT count(*) FROM task WHERE id = $1"#, id.0)
+                .fetch_one(executor)
+                .await
+                .with_context(|| format!("Failed to check if task {id} exists",))?;
+
+        if let Some(1) = count {
+            return Ok(true);
+        }
+        return Ok(false);
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
@@ -127,7 +155,8 @@ impl TaskRepository for Repository {
                   project,
                   is_recurring,
                   created_at,
-                  metadata as "metadata: Json<TaskMetadata>"
+                  metadata as "metadata: Json<TaskMetadata>",
+                  user_id
                 FROM task
                 WHERE id = any($1)
             "#,
@@ -147,6 +176,7 @@ impl TaskRepository for Repository {
         &self,
         executor: &mut Transaction<'a, Postgres>,
         status: TaskStatus,
+        user_id: UserId,
     ) -> Result<Vec<Task>, UniversalInboxError> {
         let mut query_builder = QueryBuilder::new(
             r#"
@@ -165,7 +195,8 @@ impl TaskRepository for Repository {
                   project,
                   is_recurring,
                   created_at,
-                  metadata
+                  metadata,
+                  user_id
                 FROM
                   task
                 WHERE
@@ -173,6 +204,9 @@ impl TaskRepository for Repository {
             "#,
         );
         query_builder.push_bind(status.to_string());
+        query_builder
+            .push(" AND task.user_id = ")
+            .push_bind(user_id.0);
 
         let rows = query_builder
             .build_query_as::<TaskRow>()
@@ -188,6 +222,7 @@ impl TaskRepository for Repository {
         &self,
         executor: &mut Transaction<'a, Postgres>,
         matches: &'b str,
+        user_id: UserId,
     ) -> Result<Vec<TaskSummary>, UniversalInboxError> {
         // TODO: cleanup, only keep [a-zA-Z0-9]
         let ts_query = matches
@@ -214,10 +249,12 @@ impl TaskRepository for Repository {
                 WHERE
                   query @@ title_body_project_tags_tsv
                   AND status::TEXT = 'Active'
+                  AND user_id = $2
                 ORDER BY ts_rank_cd(title_body_project_tags_tsv, query) DESC
                 LIMIT 10;
             "#,
-            ts_query
+            ts_query,
+            user_id.0
         )
         .fetch_all(executor)
         .await
@@ -255,10 +292,11 @@ impl TaskRepository for Repository {
                     project,
                     is_recurring,
                     created_at,
-                    metadata
+                    metadata,
+                    user_id
                   )
                 VALUES
-                  ($1, $2, $3, $4, $5::task_status, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+                  ($1, $2, $3, $4, $5::task_status, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
             "#,
             task.id.0,
             task.source_id,
@@ -276,6 +314,7 @@ impl TaskRepository for Repository {
             task.is_recurring,
             task.created_at.naive_utc(),
             metadata as Json<TaskMetadata>,
+            task.user_id.0
         )
         .execute(executor)
         .await
@@ -344,7 +383,8 @@ impl TaskRepository for Repository {
                   project,
                   is_recurring,
                   created_at,
-                  metadata as "metadata: Json<TaskMetadata>"
+                  metadata as "metadata: Json<TaskMetadata>",
+                  user_id
             "#,
             status.to_string() as _,
             completed_at,
@@ -388,10 +428,11 @@ impl TaskRepository for Repository {
                     project,
                     is_recurring,
                     created_at,
-                    metadata
+                    metadata,
+                    user_id
                   )
                 VALUES
-                  ($1, $2, $3, $4, $5::task_status, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+                  ($1, $2, $3, $4, $5::task_status, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
                 ON CONFLICT (source_id, kind) DO UPDATE
                 SET
                   title = $3,
@@ -406,7 +447,8 @@ impl TaskRepository for Repository {
                   project = $12,
                   is_recurring = $13,
                   created_at = $14,
-                  metadata = $15
+                  metadata = $15,
+                  user_id = $16
                 RETURNING
                   id
             "#,
@@ -426,6 +468,7 @@ impl TaskRepository for Repository {
                 task.is_recurring,
                 task.created_at.naive_utc(),
                 metadata as Json<TaskMetadata>,
+                task.user_id.0
             )
             .fetch_one(executor)
             .await
@@ -446,6 +489,7 @@ impl TaskRepository for Repository {
         executor: &mut Transaction<'a, Postgres>,
         task_id: TaskId,
         patch: &'b TaskPatch,
+        for_user_id: UserId,
     ) -> Result<UpdateStatus<Box<Task>>, UniversalInboxError> {
         if *patch == Default::default() {
             return Err(UniversalInboxError::InvalidInputData {
@@ -490,7 +534,14 @@ impl TaskRepository for Repository {
             separated.push(" body = ").push_bind_unseparated(body);
         }
 
-        query_builder.push(" WHERE id = ").push_bind(task_id.0);
+        query_builder
+            .push(" WHERE ")
+            .separated(" AND ")
+            .push(" id = ")
+            .push_bind_unseparated(task_id.0)
+            .push(" user_id = ")
+            .push_bind_unseparated(for_user_id.0);
+
         query_builder.push(
             r#"
                 RETURNING
@@ -509,6 +560,7 @@ impl TaskRepository for Repository {
                   is_recurring,
                   created_at,
                   metadata,
+                  user_id,
                   (SELECT"#,
         );
 
@@ -595,6 +647,7 @@ pub struct TaskRow {
     is_recurring: bool,
     created_at: NaiveDateTime,
     metadata: Json<TaskMetadata>,
+    user_id: Uuid,
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -663,6 +716,7 @@ impl TryFrom<&TaskRow> for Task {
             is_recurring: row.is_recurring,
             created_at: DateTime::<Utc>::from_utc(row.created_at, Utc),
             metadata: row.metadata.0.clone(),
+            user_id: row.user_id.into(),
         })
     }
 }

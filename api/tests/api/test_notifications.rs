@@ -11,12 +11,16 @@ use universal_inbox::notification::{
 use universal_inbox_api::integrations::github;
 
 use crate::helpers::{
-    auth::{authenticated_app, AuthenticatedApp},
-    notification::{github::github_notification, list_notifications},
+    auth::{authenticate_user, authenticated_app, AuthenticatedApp},
+    notification::{
+        github::{create_notification_from_github_notification, github_notification},
+        list_notifications,
+    },
     rest::{
         create_resource, create_resource_response, get_resource, get_resource_response,
         patch_resource, patch_resource_response,
     },
+    tested_app, TestedApp,
 };
 
 mod list_notifications {
@@ -41,6 +45,7 @@ mod list_notifications {
     #[rstest]
     #[tokio::test]
     async fn test_list_notifications(
+        #[future] tested_app: TestedApp,
         #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
     ) {
@@ -64,6 +69,7 @@ mod list_notifications {
                 updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
                 last_read_at: None,
                 snoozed_until: None,
+                user_id: app.user.id,
                 task_id: None,
             }),
         )
@@ -86,6 +92,7 @@ mod list_notifications {
                 last_read_at: Some(Utc.with_ymd_and_hms(2022, 2, 1, 1, 0, 0).unwrap()),
                 // Snooze time has expired
                 snoozed_until: Some(Utc::now().with_nanosecond(0).unwrap() - Duration::minutes(1)),
+                user_id: app.user.id,
                 task_id: None,
             }),
         )
@@ -107,6 +114,7 @@ mod list_notifications {
                 updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
                 last_read_at: None,
                 snoozed_until: None,
+                user_id: app.user.id,
                 task_id: None,
             }),
         )
@@ -129,6 +137,7 @@ mod list_notifications {
                 last_read_at: Some(Utc.with_ymd_and_hms(2022, 2, 1, 1, 0, 0).unwrap()),
                 // Snooze time in the future
                 snoozed_until: Some(Utc::now().with_nanosecond(0).unwrap() + Duration::minutes(1)),
+                user_id: app.user.id,
                 task_id: None,
             }),
         )
@@ -183,6 +192,21 @@ mod list_notifications {
         .await;
 
         assert!(result.is_empty());
+
+        // Test listing notifications of another user
+        let (client, _user) =
+            authenticate_user(&tested_app.await, "5678", "Jane", "Doe", "jane@example.com").await;
+
+        let result = list_notifications(
+            &client,
+            &app.app_address,
+            NotificationStatus::Unread,
+            false,
+            None,
+        )
+        .await;
+
+        assert_eq!(result.len(), 0);
     }
 }
 
@@ -206,6 +230,7 @@ mod create_notification {
             updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
             last_read_at: None,
             snoozed_until: None,
+            user_id: app.user.id,
             task_id: None,
         });
         let created_notification: Box<Notification> = create_resource(
@@ -246,6 +271,7 @@ mod create_notification {
             updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
             last_read_at: None,
             snoozed_until: None,
+            user_id: app.user.id,
             task_id: None,
         });
         let created_notification: Box<Notification> = create_resource(
@@ -274,10 +300,85 @@ mod create_notification {
                 .to_string()
         );
     }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_create_notification_with_wrong_user_id(
+        #[future] authenticated_app: AuthenticatedApp,
+        github_notification: Box<GithubNotification>,
+    ) {
+        let app = authenticated_app.await;
+
+        let expected_notification = Box::new(Notification {
+            id: Uuid::new_v4().into(),
+            title: "notif1".to_string(),
+            status: NotificationStatus::Unread,
+            source_id: "1234".to_string(),
+            source_html_url: github::get_html_url_from_api_url(&github_notification.subject.url),
+            metadata: NotificationMetadata::Github(*github_notification),
+            updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
+            last_read_at: None,
+            snoozed_until: None,
+            user_id: Uuid::new_v4().into(),
+            task_id: None,
+        });
+
+        let response = create_resource_response(
+            &app.client,
+            &app.app_address,
+            "notifications",
+            expected_notification.clone(),
+        )
+        .await;
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
 }
 
 mod get_notification {
     use super::*;
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_get_notification_of_another_user(
+        #[future] tested_app: TestedApp,
+        #[future] authenticated_app: AuthenticatedApp,
+        github_notification: Box<GithubNotification>,
+    ) {
+        let app = authenticated_app.await;
+
+        let notification = create_notification_from_github_notification(
+            &app.client,
+            &app.app_address,
+            &github_notification,
+            app.user.id,
+        )
+        .await;
+
+        let (client, _user) =
+            authenticate_user(&tested_app.await, "5678", "Jane", "Doe", "jane@example.com").await;
+        let response = get_resource_response(
+            &client,
+            &app.app_address,
+            "notifications",
+            notification.id.0,
+        )
+        .await;
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        let body = response.text().await.expect("Cannot get response body");
+        assert_eq!(
+            body,
+            json!({
+                "message":
+                    format!(
+                        "Forbidden access: Only the owner of the notification {} can access it",
+                        notification.id
+                    )
+            })
+            .to_string()
+        );
+    }
 
     #[rstest]
     #[tokio::test]
@@ -323,6 +424,7 @@ mod patch_notification {
             updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
             last_read_at: None,
             snoozed_until: None,
+            user_id: app.user.id,
             task_id: None,
         });
         let snoozed_time = Utc.with_ymd_and_hms(2022, 1, 1, 1, 2, 3).unwrap();
@@ -375,6 +477,7 @@ mod patch_notification {
             updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
             last_read_at: None,
             snoozed_until: Some(snoozed_time),
+            user_id: app.user.id,
             task_id: None,
         });
         let created_notification: Box<Notification> = create_resource(
@@ -405,6 +508,50 @@ mod patch_notification {
 
     #[rstest]
     #[tokio::test]
+    async fn test_patch_notification_of_another_user(
+        #[future] tested_app: TestedApp,
+        #[future] authenticated_app: AuthenticatedApp,
+        github_notification: Box<GithubNotification>,
+    ) {
+        let app = authenticated_app.await;
+        let notification = create_notification_from_github_notification(
+            &app.client,
+            &app.app_address,
+            &github_notification,
+            app.user.id,
+        )
+        .await;
+        let (client, _user) =
+            authenticate_user(&tested_app.await, "5678", "Jane", "Doe", "jane@example.com").await;
+
+        let response = patch_resource_response(
+            &client,
+            &app.app_address,
+            "notifications",
+            notification.id.into(),
+            &NotificationPatch {
+                status: Some(NotificationStatus::Deleted),
+                ..Default::default()
+            },
+        )
+        .await;
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        // Verify notification has not been updated
+        let notification_from_db: Box<Notification> = get_resource(
+            &app.client,
+            &app.app_address,
+            "notifications",
+            notification.id.into(),
+        )
+        .await;
+
+        assert_eq!(notification_from_db.status, NotificationStatus::Unread);
+    }
+
+    #[rstest]
+    #[tokio::test]
     async fn test_patch_notification_without_values_to_update(
         #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
@@ -420,6 +567,7 @@ mod patch_notification {
             updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
             last_read_at: None,
             snoozed_until: None,
+            user_id: app.user.id,
             task_id: None,
         });
         let created_notification: Box<Notification> = create_resource(

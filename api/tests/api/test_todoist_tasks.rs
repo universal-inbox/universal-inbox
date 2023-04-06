@@ -49,6 +49,7 @@ mod patch_task {
             &app.app_address,
             &todoist_item,
             "Inbox".to_string(),
+            app.user.id,
         )
         .await;
         let existing_todoist_task = existing_todoist_task_creation.task;
@@ -102,6 +103,7 @@ mod patch_task {
             &app.app_address,
             &todoist_item,
             "Inbox".to_string(),
+            app.user.id,
         )
         .await;
         let existing_todoist_task = existing_todoist_task_creation.task;
@@ -158,6 +160,7 @@ mod patch_task {
             &app.app_address,
             &todoist_item,
             "Inbox".to_string(),
+            app.user.id,
         )
         .await;
         let existing_todoist_task = existing_todoist_task_creation.task;
@@ -262,6 +265,7 @@ mod patch_task {
             &app.client,
             &app.app_address,
             &github_notification,
+            app.user.id,
         )
         .await;
         // Existing project in sync_todoist_projects_response
@@ -329,7 +333,12 @@ mod patch_task {
                 },
                 Some(Task {
                     id: new_task_id,
-                    ..*TodoistService::build_task_with_project_name(&todoist_item, project).await
+                    ..*TodoistService::build_task_with_project_name(
+                        &todoist_item,
+                        project,
+                        app.user.id
+                    )
+                    .await
                 })
             ))
         );
@@ -363,6 +372,7 @@ mod patch_notification {
             &app.client,
             &app.app_address,
             &github_notification,
+            app.user.id,
         )
         .await;
         let existing_todoist_task = create_task_from_todoist_item(
@@ -370,6 +380,7 @@ mod patch_notification {
             &app.app_address,
             &todoist_item,
             "Project2".to_string(),
+            app.user.id,
         )
         .await;
         let todoist_sync_mock = mock_todoist_sync_service(

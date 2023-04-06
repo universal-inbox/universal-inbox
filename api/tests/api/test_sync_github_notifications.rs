@@ -35,6 +35,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         "notifications",
         Box::new(Notification {
             id: Uuid::new_v4().into(),
+            user_id: app.user.id,
             title: "Greetings 2".to_string(),
             status: NotificationStatus::Unread,
             source_id: sync_github_notifications[1].id.clone(),
@@ -64,7 +65,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     .await;
 
     assert_eq!(notifications.len(), sync_github_notifications.len());
-    assert_sync_notifications(&notifications, &sync_github_notifications);
+    assert_sync_notifications(&notifications, &sync_github_notifications, app.user.id);
     github_notifications_mock.assert();
     github_notifications_mock2.assert();
 
@@ -108,6 +109,7 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
             &app.client,
             &app.app_address,
             github_notification,
+            app.user.id,
         )
         .await;
     }
@@ -118,6 +120,7 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
         "notifications",
         Box::new(Notification {
             id: Uuid::new_v4().into(),
+            user_id: app.user.id,
             title: "Greetings 3".to_string(),
             status: NotificationStatus::Unread,
             source_id: "789".to_string(),
@@ -147,7 +150,7 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
     .await;
 
     assert_eq!(notifications.len(), sync_github_notifications.len());
-    assert_sync_notifications(&notifications, &sync_github_notifications);
+    assert_sync_notifications(&notifications, &sync_github_notifications, app.user.id);
     github_notifications_mock.assert();
     github_notifications_mock2.assert();
 

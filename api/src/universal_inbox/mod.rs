@@ -55,8 +55,10 @@ pub enum UniversalInboxError {
     UnsupportedAction(String),
     #[error("Task not found: {0}")]
     TaskNotFound(TaskId),
-    #[error("Unauthorized")]
-    Unauthorized,
+    #[error("Unauthorized access: {0}")]
+    Unauthorized(String),
+    #[error("Forbidden access: {0}")]
+    Forbidden(String),
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
 }

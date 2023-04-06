@@ -11,6 +11,7 @@ use universal_inbox::{
         NotificationWithTask,
     },
     task::TaskId,
+    user::UserId,
 };
 
 use crate::{
@@ -26,12 +27,18 @@ pub trait NotificationRepository {
         executor: &mut Transaction<'a, Postgres>,
         id: NotificationId,
     ) -> Result<Option<Notification>, UniversalInboxError>;
+    async fn does_notification_exist<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        id: NotificationId,
+    ) -> Result<bool, UniversalInboxError>;
     async fn fetch_all_notifications<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
         status: NotificationStatus,
         include_snoozed_notifications: bool,
         task_id: Option<TaskId>,
+        user_id: UserId,
     ) -> Result<Vec<NotificationWithTask>, UniversalInboxError>;
     async fn create_notification<'a>(
         &self,
@@ -55,6 +62,7 @@ pub trait NotificationRepository {
         executor: &mut Transaction<'a, Postgres>,
         notification_id: NotificationId,
         patch: &NotificationPatch,
+        for_user_id: UserId,
     ) -> Result<UpdateStatus<Box<Notification>>, UniversalInboxError>;
     async fn update_notifications_for_task<'a, 'b>(
         &self,
@@ -86,7 +94,8 @@ impl NotificationRepository for Repository {
                   updated_at,
                   last_read_at,
                   snoozed_until,
-                  task_id
+                  task_id,
+                  user_id
                 FROM notification
                 WHERE id = $1
             "#,
@@ -101,12 +110,31 @@ impl NotificationRepository for Repository {
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
+    async fn does_notification_exist<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        id: NotificationId,
+    ) -> Result<bool, UniversalInboxError> {
+        let count: Option<i64> =
+            sqlx::query_scalar!(r#"SELECT count(*) FROM notification WHERE id = $1"#, id.0)
+                .fetch_one(executor)
+                .await
+                .with_context(|| format!("Failed to check if notification {id} exists",))?;
+
+        if let Some(1) = count {
+            return Ok(true);
+        }
+        return Ok(false);
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
     async fn fetch_all_notifications<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
         status: NotificationStatus,
         include_snoozed_notifications: bool,
         task_id: Option<TaskId>,
+        user_id: UserId,
     ) -> Result<Vec<NotificationWithTask>, UniversalInboxError> {
         let mut query_builder = QueryBuilder::new(
             r#"
@@ -120,6 +148,7 @@ impl NotificationRepository for Repository {
                   notification.updated_at as notification_updated_at,
                   notification.last_read_at as notification_last_read_at,
                   notification.snoozed_until as notification_snoozed_until,
+                  notification.user_id as notification_user_id,
                   task.id,
                   task.source_id,
                   task.title,
@@ -134,7 +163,8 @@ impl NotificationRepository for Repository {
                   task.project,
                   task.is_recurring,
                   task.created_at,
-                  task.metadata
+                  task.metadata,
+                  task.user_id
                 FROM
                   notification
                 LEFT JOIN task ON task.id = notification.task_id
@@ -144,6 +174,9 @@ impl NotificationRepository for Repository {
         );
 
         query_builder.push_bind(status.to_string());
+        query_builder
+            .push(" AND notification.user_id = ")
+            .push_bind(user_id.0);
 
         if !include_snoozed_notifications {
             query_builder
@@ -188,10 +221,11 @@ impl NotificationRepository for Repository {
                     updated_at,
                     last_read_at,
                     snoozed_until,
+                    user_id,
                     task_id
                   )
                 VALUES
-                  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             "#,
             notification.id.0,
             notification.title,
@@ -209,6 +243,7 @@ impl NotificationRepository for Repository {
             notification
                 .snoozed_until
                 .map(|snoozed_until| snoozed_until.naive_utc()),
+            notification.user_id.0,
             notification.task_id.map(|task_id| task_id.0),
         )
         .execute(executor)
@@ -260,6 +295,7 @@ impl NotificationRepository for Repository {
                   updated_at,
                   last_read_at,
                   snoozed_until,
+                  user_id,
                   task_id
             "#,
             status.to_string(),
@@ -298,10 +334,11 @@ impl NotificationRepository for Repository {
                     updated_at,
                     last_read_at,
                     snoozed_until,
+                    user_id,
                     task_id
                   )
                 VALUES
-                  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                 ON CONFLICT (source_id, kind) DO UPDATE
                 SET
                   title = $2,
@@ -311,7 +348,8 @@ impl NotificationRepository for Repository {
                   updated_at = $7,
                   last_read_at = $8,
                   snoozed_until = $9,
-                  task_id = $10
+                  user_id = $10,
+                  task_id = $11
                 RETURNING
                   id
             "#,
@@ -331,6 +369,7 @@ impl NotificationRepository for Repository {
                 notification
                     .snoozed_until
                     .map(|snoozed_until| snoozed_until.naive_utc()),
+                notification.user_id.0,
                 notification.task_id.map(|task_id| task_id.0),
             )
             .fetch_one(executor)
@@ -355,6 +394,7 @@ impl NotificationRepository for Repository {
         executor: &mut Transaction<'a, Postgres>,
         notification_id: NotificationId,
         patch: &NotificationPatch,
+        for_user_id: UserId,
     ) -> Result<UpdateStatus<Box<Notification>>, UniversalInboxError> {
         if *patch == Default::default() {
             return Err(UniversalInboxError::InvalidInputData {
@@ -384,8 +424,13 @@ impl NotificationRepository for Repository {
         }
 
         query_builder
-            .push(" WHERE id = ")
-            .push_bind(notification_id.0);
+            .push(" WHERE ")
+            .separated(" AND ")
+            .push(" id = ")
+            .push_bind_unseparated(notification_id.0)
+            .push(" user_id = ")
+            .push_bind_unseparated(for_user_id.0);
+
         query_builder.push(
             r#"
                 RETURNING
@@ -398,6 +443,7 @@ impl NotificationRepository for Repository {
                   updated_at,
                   last_read_at,
                   snoozed_until,
+                  user_id,
                   task_id,
                   (SELECT"#,
         );
@@ -502,6 +548,7 @@ impl NotificationRepository for Repository {
                   updated_at,
                   last_read_at,
                   snoozed_until,
+                  user_id,
                   task_id,
                   (SELECT"#,
         );
@@ -564,6 +611,7 @@ struct NotificationRow {
     updated_at: NaiveDateTime,
     last_read_at: Option<NaiveDateTime>,
     snoozed_until: Option<NaiveDateTime>,
+    user_id: Uuid,
     task_id: Option<Uuid>,
 }
 
@@ -578,6 +626,7 @@ struct NotificationWithTaskRow {
     notification_updated_at: NaiveDateTime,
     notification_last_read_at: Option<NaiveDateTime>,
     notification_snoozed_until: Option<NaiveDateTime>,
+    notification_user_id: Uuid,
     task_row: Option<TaskRow>,
 }
 
@@ -593,6 +642,7 @@ impl FromRow<'_, PgRow> for NotificationWithTaskRow {
             notification_updated_at: row.try_get("notification_updated_at")?,
             notification_last_read_at: row.try_get("notification_last_read_at")?,
             notification_snoozed_until: row.try_get("notification_snoozed_until")?,
+            notification_user_id: row.try_get("notification_user_id")?,
             task_row: row
                 .try_get::<Option<Uuid>, &str>("id")?
                 .map(|_task_id| TaskRow::from_row(row))
@@ -653,6 +703,7 @@ impl TryFrom<&NotificationRow> for Notification {
             snoozed_until: row
                 .snoozed_until
                 .map(|snoozed_until| DateTime::<Utc>::from_utc(snoozed_until, Utc)),
+            user_id: row.user_id.into(),
             task_id: row.task_id.map(|task_id| task_id.into()),
         })
     }
@@ -695,6 +746,7 @@ impl TryFrom<&NotificationWithTaskRow> for NotificationWithTask {
             snoozed_until: row
                 .notification_snoozed_until
                 .map(|snoozed_until| DateTime::<Utc>::from_utc(snoozed_until, Utc)),
+            user_id: row.notification_user_id.into(),
             task: row
                 .task_row
                 .as_ref()
