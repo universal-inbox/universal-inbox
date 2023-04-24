@@ -12,7 +12,10 @@ use crate::{
     integrations::todoist::TodoistSyncStatusResponse, universal_inbox::UniversalInboxError,
 };
 
+static APP_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
+
 pub mod github;
+pub mod oauth2;
 pub mod todoist;
 
 pub mod notification {

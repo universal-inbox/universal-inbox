@@ -21,7 +21,7 @@ use actix_web::{
 use actix_web_lab::web::spa;
 use anyhow::Context;
 use configuration::Settings;
-use integrations::{github::GithubService, todoist::TodoistService};
+use integrations::{github::GithubService, oauth2::NangoService, todoist::TodoistService};
 use repository::Repository;
 use sqlx::PgPool;
 use tokio::sync::RwLock;
@@ -29,6 +29,7 @@ use tracing::info;
 use tracing_actix_web::TracingLogger;
 
 use crate::universal_inbox::{
+    integration_connection::service::IntegrationConnectionService,
     notification::service::NotificationService, task::service::TaskService,
     user::service::UserService, UniversalInboxError,
 };
@@ -47,6 +48,7 @@ pub async fn run(
     notification_service: Arc<RwLock<NotificationService>>,
     task_service: Arc<RwLock<TaskService>>,
     user_service: Arc<RwLock<UserService>>,
+    integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
 ) -> Result<Server, UniversalInboxError> {
     let api_path = settings.application.api_path.clone();
     let front_base_url = settings
@@ -81,13 +83,15 @@ pub async fn run(
             .service(routes::auth::scope())
             .service(routes::notification::scope())
             .service(routes::task::scope())
+            .service(routes::integration_connection::scope())
             .app_data(web::Data::new(notification_service.clone()))
             .app_data(web::Data::new(task_service.clone()))
-            .app_data(web::Data::new(user_service.clone()));
+            .app_data(web::Data::new(user_service.clone()))
+            .app_data(web::Data::new(integration_connection_service.clone()));
 
         let cors = Cors::default()
             .allowed_origin(&front_base_url)
-            .allowed_methods(vec!["GET", "POST", "PATCH"])
+            .allowed_methods(vec!["GET", "POST", "PATCH", "DELETE"])
             .allowed_headers(vec![
                 http::header::AUTHORIZATION,
                 http::header::COOKIE,
@@ -153,15 +157,23 @@ pub async fn build_services(
     settings: &Settings,
     github_service: GithubService,
     todoist_service: TodoistService,
+    nango_service: NangoService,
 ) -> (
     Arc<RwLock<NotificationService>>,
     Arc<RwLock<TaskService>>,
     Arc<RwLock<UserService>>,
+    Arc<RwLock<IntegrationConnectionService>>,
 ) {
     let repository = Arc::new(Repository::new(pool.clone()));
     let user_service = Arc::new(RwLock::new(UserService::new(
         repository.clone(),
         settings.application.authentication.clone(),
+    )));
+
+    let integration_connection_service = Arc::new(RwLock::new(IntegrationConnectionService::new(
+        repository.clone(),
+        nango_service,
+        settings.integrations.oauth2.nango_provider_keys.clone(),
     )));
 
     let notification_service = Arc::new(RwLock::new(NotificationService::new(
@@ -181,5 +193,10 @@ pub async fn build_services(
         .await
         .set_task_service(Arc::downgrade(&task_service));
 
-    (notification_service, task_service, user_service)
+    (
+        notification_service,
+        task_service,
+        user_service,
+        integration_connection_service,
+    )
 }

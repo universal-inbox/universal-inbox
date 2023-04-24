@@ -1,10 +1,14 @@
+use std::collections::HashMap;
+
 use anyhow::Result;
 use fermi::AtomRef;
 use reqwest::Method;
 use url::Url;
 use wasm_bindgen::prelude::*;
 
-use universal_inbox::FrontConfig;
+use universal_inbox::{
+    integration_connection::IntegrationProviderKind, FrontConfig, IntegrationProviderConfig,
+};
 
 use crate::services::api::call_api;
 
@@ -14,6 +18,8 @@ pub struct AppConfig {
     pub oidc_issuer_url: Url,
     pub oidc_client_id: String,
     pub oidc_redirect_url: Url,
+    pub nango_base_url: Url,
+    pub integration_providers: HashMap<IntegrationProviderKind, IntegrationProviderConfig>,
 }
 
 #[wasm_bindgen(module = "/js/api.js")]
@@ -43,6 +49,8 @@ pub async fn get_app_config() -> Result<AppConfig> {
         oidc_issuer_url: front_config.oidc_issuer_url,
         oidc_client_id: front_config.oidc_client_id,
         oidc_redirect_url: front_config.oidc_redirect_url,
+        nango_base_url: front_config.nango_base_url,
+        integration_providers: front_config.integration_providers,
     };
     Ok(app_config)
 }

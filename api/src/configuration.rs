@@ -1,8 +1,9 @@
-use std::env;
+use std::{collections::HashMap, env};
 
 use config::{Config, ConfigError, Environment, File};
 use openidconnect::{ClientId, ClientSecret, IntrospectionUrl, IssuerUrl};
 use serde::Deserialize;
+use universal_inbox::integration_connection::{IntegrationProviderKind, NangoProviderKey};
 use url::Url;
 
 #[derive(Deserialize, Clone)]
@@ -59,18 +60,30 @@ pub struct RedisSettings {
 
 #[derive(Deserialize, Clone)]
 pub struct IntegrationsSettings {
+    pub oauth2: Oauth2Settings,
     pub github: GithubIntegrationSettings,
     pub todoist: TodoistIntegrationSettings,
 }
 
 #[derive(Deserialize, Clone)]
+pub struct Oauth2Settings {
+    pub nango_base_url: Url,
+    pub nango_secret_key: String,
+    pub nango_provider_keys: HashMap<IntegrationProviderKind, NangoProviderKey>,
+}
+
+#[derive(Deserialize, Clone)]
 pub struct GithubIntegrationSettings {
+    pub name: String,
+    pub comment: Option<String>,
     pub page_size: usize,
     pub api_token: String, // Temporary until oauth is implemented
 }
 
 #[derive(Deserialize, Clone)]
 pub struct TodoistIntegrationSettings {
+    pub name: String,
+    pub comment: Option<String>,
     pub api_token: String, // Temporary until oauth is implemented
 }
 

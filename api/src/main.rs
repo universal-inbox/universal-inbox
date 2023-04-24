@@ -8,8 +8,8 @@ use universal_inbox_api::{
     build_services, commands,
     configuration::Settings,
     integrations::{
-        github::GithubService, notification::NotificationSyncSourceKind, task::TaskSyncSourceKind,
-        todoist::TodoistService,
+        github::GithubService, notification::NotificationSyncSourceKind, oauth2::NangoService,
+        task::TaskSyncSourceKind, todoist::TodoistService,
     },
     observability::{get_subscriber, init_subscriber},
     run,
@@ -91,9 +91,21 @@ async fn main() -> std::io::Result<()> {
         settings.integrations.github.page_size,
     )
     .expect("Failed to create new GithubService");
+    let nango_service = NangoService::new(
+        settings.integrations.oauth2.nango_base_url.clone(),
+        &settings.integrations.oauth2.nango_secret_key,
+    )
+    .expect("Failed to create new GithubService");
 
-    let (notification_service, task_service, user_service) =
-        build_services(pool, &settings, github_service, todoist_service).await;
+    let (notification_service, task_service, user_service, integration_connection_service) =
+        build_services(
+            pool,
+            &settings,
+            github_service,
+            todoist_service,
+            nango_service,
+        )
+        .await;
 
     let result = match &cli.command {
         Commands::SyncNotifications { source } => {
@@ -117,6 +129,7 @@ async fn main() -> std::io::Result<()> {
                 notification_service,
                 task_service,
                 user_service,
+                integration_connection_service,
             )
             .await
             .expect("Failed to start HTTP server")

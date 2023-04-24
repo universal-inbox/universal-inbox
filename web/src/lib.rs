@@ -18,6 +18,7 @@ use pages::{
     settings_page::settings_page,
 };
 use services::{
+    integration_connection_service::{integration_connnection_service, INTEGRATION_CONNECTIONS},
     notification_service::{notification_service, NotificationCommand, NOTIFICATIONS},
     task_service::{task_service, TaskCommand},
     toast_service::{toast_service, TOASTS},
@@ -40,6 +41,7 @@ pub fn app(cx: Scope) -> Element {
     let toasts_ref = use_atom_ref(cx, TOASTS);
     let app_config_ref = use_atom_ref(cx, APP_CONFIG);
     let connected_user_ref = use_atom_ref(cx, CONNECTED_USER);
+    let integration_connections_ref = use_atom_ref(cx, INTEGRATION_CONNECTIONS);
     let api_base_url = use_memo(cx, (), |()| get_api_base_url().unwrap());
     let session_url = use_memo(cx, &(api_base_url.clone(),), |(api_base_url,)| {
         api_base_url.join("auth/session").unwrap()
@@ -75,6 +77,15 @@ pub fn app(cx: Scope) -> Element {
             api_base_url.clone(),
             connected_user_ref.clone(),
             ui_model_ref.clone(),
+        )
+    });
+    let _integration_connection_service_handle = use_coroutine(cx, |rx| {
+        integration_connnection_service(
+            rx,
+            app_config_ref.clone(),
+            integration_connections_ref.clone(),
+            ui_model_ref.clone(),
+            toast_service_handle.clone(),
         )
     });
 

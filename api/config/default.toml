@@ -29,6 +29,19 @@ host = "127.0.0.1"
 port = 6379
 
 [integrations.github]
+name = "Github"
+comment = "⚠️ The Github notification API is not fully functional and does not allow to mark as done a notification. Hence, notification marked as done in Universal Inbox will only be marked as read in Github."
 page_size = 50
 
 [integrations.todoist]
+name = "Todoist"
+
+[integrations.oauth2]
+nango_base_url = "http://localhost:3003"
+# nango_secret_key = "To be generated"
+
+# Integration provider to be created on Nango
+# 1 key/value pair must be declared per IntegrationProviderKind enum value
+[integrations.oauth2.nango_provider_keys]
+Github = "github"
+Todoist = "todoist"

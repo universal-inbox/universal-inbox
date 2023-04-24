@@ -8,15 +8,17 @@ use sqlx::{
     postgres::PgConnectOptions, ConnectOptions, Connection, Executor, PgConnection, PgPool,
 };
 use tracing::info;
+use url::Url;
 use uuid::Uuid;
 
 use universal_inbox_api::{
     configuration::Settings,
-    integrations::{github::GithubService, todoist::TodoistService},
+    integrations::{github::GithubService, oauth2::NangoService, todoist::TodoistService},
     observability::{get_subscriber, init_subscriber},
 };
 
 pub mod auth;
+pub mod integration_connection;
 pub mod notification;
 pub mod rest;
 pub mod task;
@@ -26,6 +28,7 @@ pub struct TestedApp {
     pub github_mock_server: MockServer,
     pub todoist_mock_server: MockServer,
     pub oidc_issuer_mock_server: MockServer,
+    pub nango_mock_server: MockServer,
 }
 
 #[fixture]
@@ -96,6 +99,8 @@ pub async fn tested_app(
     let todoist_mock_server_uri = &todoist_mock_server.base_url();
     let oidc_issuer_mock_server = MockServer::start();
     let oidc_issuer_mock_server_uri = &oidc_issuer_mock_server.base_url();
+    let nango_mock_server = MockServer::start();
+    let nango_mock_server_uri = &nango_mock_server.base_url();
     settings.application.authentication.oidc_issuer_url =
         IssuerUrl::new(oidc_issuer_mock_server_uri.to_string()).unwrap();
     settings.application.authentication.oidc_introspection_url =
@@ -116,9 +121,21 @@ pub async fn tested_app(
         2,
     )
     .expect("Failed to create new GithubService");
+    let nango_service = NangoService::new(
+        nango_mock_server_uri.parse::<Url>().unwrap(),
+        &settings.integrations.oauth2.nango_secret_key,
+    )
+    .expect("Failed to create new NangoService");
 
-    let (notification_service, task_service, user_service) =
-        universal_inbox_api::build_services(pool, &settings, github_service, todoist_service).await;
+    let (notification_service, task_service, user_service, integration_connection_service) =
+        universal_inbox_api::build_services(
+            pool,
+            &settings,
+            github_service,
+            todoist_service,
+            nango_service,
+        )
+        .await;
 
     let server = universal_inbox_api::run(
         listener,
@@ -126,6 +143,7 @@ pub async fn tested_app(
         notification_service,
         task_service,
         user_service,
+        integration_connection_service,
     )
     .await
     .expect("Failed to bind address");
@@ -137,6 +155,7 @@ pub async fn tested_app(
         github_mock_server,
         todoist_mock_server,
         oidc_issuer_mock_server,
+        nango_mock_server,
     }
 }
 
