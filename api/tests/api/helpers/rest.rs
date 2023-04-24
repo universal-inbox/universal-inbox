@@ -82,3 +82,29 @@ pub async fn patch_resource<P: serde::Serialize, T: for<'a> serde::Deserialize<'
         .await
         .expect("Cannot parse JSON result")
 }
+
+pub async fn delete_resource_response(
+    client: &Client,
+    app_address: &str,
+    resource_name: &str,
+    id: uuid::Uuid,
+) -> Response {
+    client
+        .delete(&format!("{app_address}/{resource_name}/{id}"))
+        .send()
+        .await
+        .expect("Failed to execute request")
+}
+
+pub async fn delete_resource<T: serde::Serialize + for<'a> serde::Deserialize<'a>>(
+    client: &Client,
+    app_address: &str,
+    resource_name: &str,
+    id: uuid::Uuid,
+) -> Box<T> {
+    delete_resource_response(client, app_address, resource_name, id)
+        .await
+        .json()
+        .await
+        .expect("Cannot parse JSON result")
+}

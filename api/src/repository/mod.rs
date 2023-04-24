@@ -5,6 +5,7 @@ use sqlx::{pool::PoolConnection, PgPool, Postgres, Transaction};
 
 use crate::universal_inbox::UniversalInboxError;
 
+pub mod integration_connection;
 pub mod notification;
 pub mod task;
 pub mod user;

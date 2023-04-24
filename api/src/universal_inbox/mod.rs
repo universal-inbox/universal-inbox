@@ -2,6 +2,7 @@ use http::uri::InvalidUri;
 use universal_inbox::task::TaskId;
 use uuid::Uuid;
 
+pub mod integration_connection;
 pub mod notification;
 pub mod task;
 pub mod user;

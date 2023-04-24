@@ -1751,7 +1751,7 @@ dependencies = [
  "once_cell",
  "rustc-hash",
  "serde",
- "serde-wasm-bindgen",
+ "serde-wasm-bindgen 0.4.5",
  "serde_json",
  "smallstr",
  "wasm-bindgen",
@@ -4279,6 +4279,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde-wasm-bindgen"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f3b143e2833c57ab9ad3ea280d21fd34e285a42837aeb0ee301f4f41890fa00e"
+dependencies = [
+ "js-sys",
+ "serde",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "serde_derive"
 version = "1.0.159"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5271,6 +5282,7 @@ dependencies = [
  "actix-web-lab",
  "anyhow",
  "async-trait",
+ "base64 0.21.0",
  "cached",
  "chrono",
  "clap",
@@ -5291,6 +5303,7 @@ dependencies = [
  "rstest",
  "serde",
  "serde_json",
+ "serde_with 2.3.1",
  "sqlx",
  "thiserror",
  "tokio",
@@ -5330,6 +5343,7 @@ dependencies = [
  "reqwest",
  "rstest",
  "serde",
+ "serde-wasm-bindgen 0.5.0",
  "thiserror",
  "universal-inbox",
  "url 2.3.1",

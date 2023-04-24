@@ -8,8 +8,9 @@ use http::{HeaderMap, HeaderValue, Uri};
 use universal_inbox::notification::integrations::github::GithubNotification;
 
 use crate::{
-    integrations::notification::{
-        NotificationSource, NotificationSourceKind, NotificationSourceService,
+    integrations::{
+        notification::{NotificationSource, NotificationSourceKind, NotificationSourceService},
+        APP_USER_AGENT,
     },
     universal_inbox::UniversalInboxError,
 };
@@ -22,7 +23,6 @@ pub struct GithubService {
 }
 
 static GITHUB_BASE_URL: &str = "https://api.github.com";
-static APP_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
 
 impl GithubService {
     pub fn new(

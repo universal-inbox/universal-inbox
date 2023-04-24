@@ -2,6 +2,9 @@
 log_directive = "debug"
 dependencies_log_directive = "debug"
 
+[integrations.oauth2]
+nango_secret_key = "nango_test_key"
+
 [integrations.github]
 api_token = "github_test_token"
 

@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod config;
 pub mod health_check;
+pub mod integration_connection;
 pub mod notification;
 pub mod task;
 
