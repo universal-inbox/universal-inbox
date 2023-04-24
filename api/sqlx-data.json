@@ -46,6 +46,89 @@
     },
     "query": "\n                INSERT INTO task\n                  (\n                    id,\n                    source_id,\n                    title,\n                    body,\n                    status,\n                    completed_at,\n                    priority,\n                    due_at,\n                    source_html_url,\n                    tags,\n                    parent_id,\n                    project,\n                    is_recurring,\n                    created_at,\n                    metadata,\n                    user_id\n                  )\n                VALUES\n                  ($1, $2, $3, $4, $5::task_status, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)\n                ON CONFLICT (source_id, kind) DO UPDATE\n                SET\n                  title = $3,\n                  body = $4,\n                  status = $5::task_status,\n                  completed_at = $6,\n                  priority = $7,\n                  due_at = $8,\n                  source_html_url = $9,\n                  tags = $10,\n                  parent_id = $11,\n                  project = $12,\n                  is_recurring = $13,\n                  created_at = $14,\n                  metadata = $15,\n                  user_id = $16\n                RETURNING\n                  id\n            "
   },
+  "16327f5591a61c2da35eacfbe9377cbcb5eb9342372cd780ca637e63644aa86a": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "user_id",
+          "ordinal": 1,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "connection_id",
+          "ordinal": 2,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "provider_kind: _",
+          "ordinal": 3,
+          "type_info": {
+            "Custom": {
+              "kind": {
+                "Enum": [
+                  "Github",
+                  "Todoist"
+                ]
+              },
+              "name": "integration_provider_kind"
+            }
+          }
+        },
+        {
+          "name": "status: _",
+          "ordinal": 4,
+          "type_info": {
+            "Custom": {
+              "kind": {
+                "Enum": [
+                  "Created",
+                  "Validated",
+                  "Failing"
+                ]
+              },
+              "name": "integration_connection_status"
+            }
+          }
+        },
+        {
+          "name": "failure_message",
+          "ordinal": 5,
+          "type_info": "Text"
+        },
+        {
+          "name": "created_at",
+          "ordinal": 6,
+          "type_info": "Timestamp"
+        },
+        {
+          "name": "updated_at",
+          "ordinal": 7,
+          "type_info": "Timestamp"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Uuid"
+        ]
+      }
+    },
+    "query": "\n                SELECT\n                  id,\n                  user_id,\n                  connection_id,\n                  provider_kind as \"provider_kind: _\",\n                  status as \"status: _\",\n                  failure_message,\n                  created_at,\n                  updated_at\n                FROM integration_connection\n                WHERE id = $1\n            "
+  },
   "2e6e95e026ff52952122ca0846793525e448ae57c50503db456fd15e29eb6d40": {
     "describe": {
       "columns": [
@@ -527,6 +610,46 @@
     },
     "query": "\n                SELECT\n                  id,\n                  auth_user_id,\n                  first_name,\n                  last_name,\n                  email,\n                  created_at,\n                  updated_at\n                FROM \"user\"\n                WHERE auth_user_id = $1\n            "
   },
+  "b59b83dc26fe2569ee78c8b6d524f11e3095f1d6659bb595e97816129b5a2a7b": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": [
+          "Uuid",
+          "Uuid",
+          "Uuid",
+          {
+            "Custom": {
+              "kind": {
+                "Enum": [
+                  "Github",
+                  "Todoist"
+                ]
+              },
+              "name": "integration_provider_kind"
+            }
+          },
+          {
+            "Custom": {
+              "kind": {
+                "Enum": [
+                  "Created",
+                  "Validated",
+                  "Failing"
+                ]
+              },
+              "name": "integration_connection_status"
+            }
+          },
+          "Text",
+          "Timestamp",
+          "Timestamp"
+        ]
+      }
+    },
+    "query": "\n                INSERT INTO integration_connection\n                  (\n                    id,\n                    user_id,\n                    connection_id,\n                    provider_kind,\n                    status,\n                    failure_message,\n                    created_at,\n                    updated_at\n                  )\n                VALUES\n                  (\n                    $1,\n                    $2,\n                    $3,\n                    $4::integration_provider_kind,\n                    $5::integration_connection_status,\n                    $6,\n                    $7,\n                    $8\n                  )\n            "
+  },
   "bc9c16b885746b80c3e266f518dd6216a1024947b759d23ba6b5bc6c6fda6665": {
     "describe": {
       "columns": [],
@@ -584,6 +707,89 @@
       }
     },
     "query": "SELECT count(*) FROM task WHERE id = $1"
+  },
+  "c5c622c2423e252c9e08573e2653572977275704338715b65dd3595877eac800": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "user_id",
+          "ordinal": 1,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "connection_id",
+          "ordinal": 2,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "provider_kind: _",
+          "ordinal": 3,
+          "type_info": {
+            "Custom": {
+              "kind": {
+                "Enum": [
+                  "Github",
+                  "Todoist"
+                ]
+              },
+              "name": "integration_provider_kind"
+            }
+          }
+        },
+        {
+          "name": "status: _",
+          "ordinal": 4,
+          "type_info": {
+            "Custom": {
+              "kind": {
+                "Enum": [
+                  "Created",
+                  "Validated",
+                  "Failing"
+                ]
+              },
+              "name": "integration_connection_status"
+            }
+          }
+        },
+        {
+          "name": "failure_message",
+          "ordinal": 5,
+          "type_info": "Text"
+        },
+        {
+          "name": "created_at",
+          "ordinal": 6,
+          "type_info": "Timestamp"
+        },
+        {
+          "name": "updated_at",
+          "ordinal": 7,
+          "type_info": "Timestamp"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Uuid"
+        ]
+      }
+    },
+    "query": "\n                SELECT\n                  id,\n                  user_id,\n                  connection_id,\n                  provider_kind as \"provider_kind: _\",\n                  status as \"status: _\",\n                  failure_message,\n                  created_at,\n                  updated_at\n                FROM integration_connection\n                WHERE user_id = $1\n            "
   },
   "d9d42078fe4b74b281c9dc0e990c40866fbcdf88c3bcc280c18803df2d090d35": {
     "describe": {

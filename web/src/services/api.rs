@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Result};
 use dioxus::prelude::Coroutine;
 use fermi::UseAtomRef;
+use log::error;
 use reqwest::{
     header::{HeaderMap, HeaderValue},
     Client, Method, Response, StatusCode,
@@ -63,7 +64,7 @@ pub async fn call_api_and_notify<R: for<'de> serde::de::Deserialize<'de>, B: ser
     let toast_id = toast.id;
     toast_service.send(ToastCommand::Push(toast));
 
-    call_api(method, base_url, path, body, ui_model_ref)
+    call_api(method.clone(), base_url, path, body, ui_model_ref)
         .await
         .map(|result: R| {
             let toast_update = ToastUpdate {
@@ -76,10 +77,11 @@ pub async fn call_api_and_notify<R: for<'de> serde::de::Deserialize<'de>, B: ser
             result
         })
         .map_err(|error| {
+            error!("An error occurred while calling the API ({method} {base_url}{path}): {error:?}");
             let toast_update = ToastUpdate {
                 id: toast_id,
                 kind: Some(ToastKind::Failure),
-                message: Some(format!("Error while calling the API: {error}")),
+                message: Some("An error occurred while calling the Universal Inbox API. Please, retry 🙏 If the issue keeps happening, please contact our support.".to_string()),
                 timeout: Some(Some(5_000)),
             };
             toast_service.send(ToastCommand::Update(toast_update));

@@ -1,10 +1,14 @@
+use std::collections::HashMap;
+
 use actix_web::{
     http::header::{CacheControl, CacheDirective},
     web, HttpResponse,
 };
 use anyhow::Context;
 
-use universal_inbox::FrontConfig;
+use universal_inbox::{
+    integration_connection::IntegrationProviderKind, FrontConfig, IntegrationProviderConfig,
+};
 
 use crate::{configuration::Settings, universal_inbox::UniversalInboxError};
 
@@ -28,6 +32,37 @@ pub async fn front_config(
             .front_base_url
             .join("auth-oidc-callback")
             .context("Failed to parse OIDC redirect URL")?,
+        nango_base_url: settings.integrations.oauth2.nango_base_url.clone(),
+        integration_providers: HashMap::from([
+            (
+                IntegrationProviderKind::Github,
+                IntegrationProviderConfig {
+                    name: settings.integrations.github.name.clone(),
+                    nango_config_key: settings
+                        .integrations
+                        .oauth2
+                        .nango_provider_keys
+                        .get(&IntegrationProviderKind::Github)
+                        .context("Missing Nango config key for Github")?
+                        .clone(),
+                    comment: settings.integrations.github.comment.clone(),
+                },
+            ),
+            (
+                IntegrationProviderKind::Todoist,
+                IntegrationProviderConfig {
+                    name: settings.integrations.todoist.name.clone(),
+                    nango_config_key: settings
+                        .integrations
+                        .oauth2
+                        .nango_provider_keys
+                        .get(&IntegrationProviderKind::Todoist)
+                        .context("Missing Nango config key for Todoist")?
+                        .clone(),
+                    comment: settings.integrations.todoist.comment.clone(),
+                },
+            ),
+        ]),
     };
 
     Ok(HttpResponse::Ok()

@@ -18,6 +18,7 @@ pub struct AuthenticatedApp {
     pub github_mock_server: MockServer,
     pub todoist_mock_server: MockServer,
     pub oidc_issuer_mock_server: MockServer,
+    pub nango_mock_server: MockServer,
 }
 
 pub async fn authenticate_user(
@@ -67,6 +68,7 @@ pub async fn authenticated_app(#[future] tested_app: TestedApp) -> Authenticated
         github_mock_server: app.github_mock_server,
         todoist_mock_server: app.todoist_mock_server,
         oidc_issuer_mock_server: app.oidc_issuer_mock_server,
+        nango_mock_server: app.nango_mock_server,
     }
 }
 
