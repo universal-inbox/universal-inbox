@@ -4,6 +4,7 @@ use serde_json::json;
 use uuid::Uuid;
 
 use universal_inbox::{
+    integration_connection::IntegrationProviderKind,
     notification::{Notification, NotificationMetadata, NotificationPatch, NotificationStatus},
     task::{
         integrations::todoist::{get_task_html_url, TodoistItem},
@@ -11,9 +12,13 @@ use universal_inbox::{
     },
 };
 
+use universal_inbox_api::{configuration::Settings, integrations::oauth2::NangoConnection};
+
 use crate::helpers::{
     auth::{authenticated_app, AuthenticatedApp},
+    integration_connection::{create_and_mock_integration_connection, nango_todoist_connection},
     rest::{create_resource, get_resource, patch_resource, patch_resource_response},
+    settings,
     task::todoist::{
         create_task_from_todoist_item, mock_todoist_delete_item_service, todoist_item,
     },
@@ -25,10 +30,20 @@ mod patch_notification {
     #[rstest]
     #[tokio::test]
     async fn test_patch_todoist_notification_status_as_deleted(
+        settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
+        nango_todoist_connection: Box<NangoConnection>,
     ) {
         let app = authenticated_app.await;
+        create_and_mock_integration_connection(
+            &app,
+            IntegrationProviderKind::Todoist,
+            &settings,
+            nango_todoist_connection,
+        )
+        .await;
+
         let existing_todoist_task_creation = create_task_from_todoist_item(
             &app.client,
             &app.app_address,

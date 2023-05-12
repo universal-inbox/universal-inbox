@@ -25,6 +25,13 @@ pub trait IntegrationConnectionRepository {
         integration_connection_id: IntegrationConnectionId,
     ) -> Result<Option<IntegrationConnection>, UniversalInboxError>;
 
+    async fn get_integration_connection_per_provider<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        for_user_id: UserId,
+        integration_provider_kind: IntegrationProviderKind,
+    ) -> Result<Option<IntegrationConnection>, UniversalInboxError>;
+
     async fn update_integration_connection_status<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -76,6 +83,41 @@ impl IntegrationConnectionRepository for Repository {
         .await
         .context(
             "Failed to fetch integration connection {integration_connection_id} from storage",
+        )?;
+
+        row.map(|r| r.try_into()).transpose()
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    async fn get_integration_connection_per_provider<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        user_id: UserId,
+        integration_provider_kind: IntegrationProviderKind,
+    ) -> Result<Option<IntegrationConnection>, UniversalInboxError> {
+        let row = sqlx::query_as!(
+            IntegrationConnectionRow,
+            r#"
+                SELECT
+                  id,
+                  user_id,
+                  connection_id,
+                  provider_kind as "provider_kind: _",
+                  status as "status: _",
+                  failure_message,
+                  created_at,
+                  updated_at
+                FROM integration_connection
+                WHERE
+                  user_id = $1 AND provider_kind::TEXT = $2
+            "#,
+            user_id.0,
+            integration_provider_kind.to_string()
+        )
+        .fetch_optional(executor)
+        .await
+        .context(
+            "Failed to fetch integration connection for user {user_id} of kind {integration_provider_kind} from storage",
         )?;
 
         row.map(|r| r.try_into()).transpose()

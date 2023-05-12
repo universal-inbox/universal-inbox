@@ -77,14 +77,12 @@ pub struct GithubIntegrationSettings {
     pub name: String,
     pub comment: Option<String>,
     pub page_size: usize,
-    pub api_token: String, // Temporary until oauth is implemented
 }
 
 #[derive(Deserialize, Clone)]
 pub struct TodoistIntegrationSettings {
     pub name: String,
     pub comment: Option<String>,
-    pub api_token: String, // Temporary until oauth is implemented
 }
 
 impl DatabaseSettings {

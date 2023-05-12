@@ -26,6 +26,9 @@ impl ResponseError for UniversalInboxError {
             UniversalInboxError::Unauthorized(_) => StatusCode::UNAUTHORIZED,
             UniversalInboxError::Forbidden(_) => StatusCode::FORBIDDEN,
             UniversalInboxError::UnsupportedAction(_) => StatusCode::BAD_REQUEST,
+            UniversalInboxError::UnknownNangoConnectionError(_) => {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
         }
     }
 

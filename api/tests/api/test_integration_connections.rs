@@ -17,7 +17,7 @@ use universal_inbox_api::{
 use crate::helpers::{
     auth::{authenticate_user, authenticated_app, AuthenticatedApp},
     integration_connection::{
-        list_integration_connections, mock_nango_connection_service, nango_connection,
+        list_integration_connections, mock_nango_connection_service, nango_github_connection,
         verify_integration_connection, verify_integration_connection_response,
     },
     rest::create_resource,
@@ -60,7 +60,7 @@ mod list_integration_connections {
             &app.app_address,
             "integration-connections",
             Box::new(IntegrationConnectionCreation {
-                provider_kind: IntegrationProviderKind::Github,
+                provider_kind: IntegrationProviderKind::Todoist,
             }),
         )
         .await;
@@ -121,7 +121,7 @@ mod verify_integration_connections {
     async fn test_verify_valid_integration_connection(
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
-        nango_connection: Box<NangoConnection>,
+        nango_github_connection: Box<NangoConnection>,
     ) {
         let app = authenticated_app.await;
         let integration_connection: Box<IntegrationConnection> = create_resource(
@@ -143,7 +143,7 @@ mod verify_integration_connections {
             &app.nango_mock_server,
             &integration_connection.connection_id.to_string(),
             github_config_key,
-            nango_connection.clone(),
+            nango_github_connection.clone(),
         );
 
         let result: IntegrationConnection =
@@ -186,7 +186,7 @@ mod verify_integration_connections {
     async fn test_verify_unknown_integration_connection_by_nango(
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
-        nango_connection: Box<NangoConnection>,
+        nango_github_connection: Box<NangoConnection>,
     ) {
         let app = authenticated_app.await;
         let integration_connection: Box<IntegrationConnection> = create_resource(
@@ -210,7 +210,7 @@ mod verify_integration_connections {
             &app.nango_mock_server,
             &integration_connection.connection_id.to_string(),
             github_config_key,
-            nango_connection.clone(),
+            nango_github_connection.clone(),
         );
 
         let result: IntegrationConnection =
@@ -258,7 +258,7 @@ mod verify_integration_connections {
             &app.nango_mock_server,
             &integration_connection.connection_id.to_string(),
             github_config_key,
-            nango_connection.clone(),
+            nango_github_connection.clone(),
         );
 
         let result: IntegrationConnection =
@@ -317,16 +317,10 @@ mod disconnect_integration_connections {
     async fn test_disconnect_validated_integration_connection(
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
-        nango_connection: Box<NangoConnection>,
     ) {
         let app = authenticated_app.await;
-        let integration_connection = create_validated_integration_connection(
-            &settings,
-            &app,
-            nango_connection,
-            IntegrationProviderKind::Github,
-        )
-        .await;
+        let integration_connection =
+            create_validated_integration_connection(&app, IntegrationProviderKind::Github).await;
         let github_config_key = settings
             .integrations
             .oauth2
@@ -359,18 +353,11 @@ mod disconnect_integration_connections {
     #[rstest]
     #[tokio::test]
     async fn test_disconnect_unknown_integration_connection_by_nango(
-        settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
-        nango_connection: Box<NangoConnection>,
     ) {
         let app = authenticated_app.await;
-        let integration_connection = create_validated_integration_connection(
-            &settings,
-            &app,
-            nango_connection,
-            IntegrationProviderKind::Github,
-        )
-        .await;
+        let integration_connection =
+            create_validated_integration_connection(&app, IntegrationProviderKind::Github).await;
 
         let nango_mock = app.nango_mock_server.mock(|when, then| {
             when.method(DELETE)

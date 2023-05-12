@@ -18,21 +18,39 @@ use crate::helpers::{
 };
 
 mod patch_resource {
+    use universal_inbox::integration_connection::IntegrationProviderKind;
+    use universal_inbox_api::{configuration::Settings, integrations::oauth2::NangoConnection};
+
+    use crate::helpers::{
+        integration_connection::{create_and_mock_integration_connection, nango_github_connection},
+        settings,
+    };
+
     use super::*;
 
     #[rstest]
     #[tokio::test]
     async fn test_patch_github_notification_status_as_deleted(
+        settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
+        nango_github_connection: Box<NangoConnection>,
         github_notification: Box<GithubNotification>,
         #[values(205, 304, 404)] github_status_code: u16,
     ) {
         let app = authenticated_app.await;
+        create_and_mock_integration_connection(
+            &app,
+            IntegrationProviderKind::Github,
+            &settings,
+            nango_github_connection,
+        )
+        .await;
+
         let github_mark_thread_as_read_mock = app.github_mock_server.mock(|when, then| {
             when.method(PATCH)
                 .path("/notifications/threads/1234")
                 .header("accept", "application/vnd.github.v3+json")
-                .header("authorization", "token github_test_token");
+                .header("authorization", "Bearer github_test_access_token");
             then.status(github_status_code);
         });
         let expected_notification = Box::new(Notification {
@@ -83,16 +101,26 @@ mod patch_resource {
     #[rstest]
     #[tokio::test]
     async fn test_patch_github_notification_status_as_unsubscribed(
+        settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
+        nango_github_connection: Box<NangoConnection>,
         #[values(205, 304, 404)] github_status_code: u16,
     ) {
         let app = authenticated_app.await;
+        create_and_mock_integration_connection(
+            &app,
+            IntegrationProviderKind::Github,
+            &settings,
+            nango_github_connection,
+        )
+        .await;
+
         let github_mark_thread_as_read_mock = app.github_mock_server.mock(|when, then| {
             when.method(PUT)
                 .path("/notifications/threads/1234/subscription")
                 .header("accept", "application/vnd.github.v3+json")
-                .header("authorization", "token github_test_token")
+                .header("authorization", "Bearer github_test_access_token")
                 .json_body(json!({"ignored": true}));
             then.status(github_status_code);
         });
@@ -144,15 +172,25 @@ mod patch_resource {
     #[rstest]
     #[tokio::test]
     async fn test_patch_github_notification_status_as_deleted_with_github_api_error(
+        settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
+        nango_github_connection: Box<NangoConnection>,
     ) {
         let app = authenticated_app.await;
+        create_and_mock_integration_connection(
+            &app,
+            IntegrationProviderKind::Github,
+            &settings,
+            nango_github_connection,
+        )
+        .await;
+
         let github_mark_thread_as_read_mock = app.github_mock_server.mock(|when, then| {
             when.method(PATCH)
                 .path("/notifications/threads/1234")
                 .header("accept", "application/vnd.github.v3+json")
-                .header("authorization", "token github_test_token");
+                .header("authorization", "Bearer github_test_access_token");
             then.status(403);
         });
         let expected_notification = Box::new(Notification {

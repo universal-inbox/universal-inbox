@@ -84,7 +84,7 @@ pub fn mock_todoist_get_item_service(
         when.method(POST)
             .path("/items/get")
             .body(format!("item_id={item_id}&all_data=false"))
-            .header("authorization", "Bearer todoist_test_token");
+            .header("authorization", "Bearer todoist_test_access_token");
         then.status(200)
             .header("content-type", "application/json")
             .json_body_obj(&response);
@@ -169,7 +169,7 @@ pub fn mock_todoist_sync_service(
         when.method(POST)
             .path("/sync")
             .json_body_partial(body.to_string())
-            .header("authorization", "Bearer todoist_test_token");
+            .header("authorization", "Bearer todoist_test_access_token");
         then.status(200)
             .header("content-type", "application/json")
             .json_body_obj(&response);
@@ -185,7 +185,7 @@ pub fn mock_todoist_sync_resources_service<'a>(
         when.method(POST)
             .path("/sync")
             .json_body(json!({ "sync_token": "*", "resource_types": [resource_name] }))
-            .header("authorization", "Bearer todoist_test_token");
+            .header("authorization", "Bearer todoist_test_access_token");
         then.status(200)
             .header("content-type", "application/json")
             .json_body_obj(result);

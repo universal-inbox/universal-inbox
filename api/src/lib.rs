@@ -180,12 +180,14 @@ pub async fn build_services(
         repository.clone(),
         github_service,
         Weak::new(),
+        integration_connection_service.clone(),
     )));
 
     let task_service = Arc::new(RwLock::new(TaskService::new(
         repository,
         todoist_service,
         Arc::downgrade(&notification_service),
+        integration_connection_service.clone(),
     )));
 
     notification_service

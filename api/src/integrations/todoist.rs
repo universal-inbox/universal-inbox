@@ -16,6 +16,7 @@ use serde_json::json;
 use uuid::Uuid;
 
 use universal_inbox::{
+    integration_connection::{IntegrationProvider, IntegrationProviderKind},
     task::{
         integrations::todoist::{
             self, TodoistItem, TodoistItemDue, TodoistItemPriority, TodoistProject,
@@ -28,6 +29,7 @@ use universal_inbox::{
 use crate::{
     integrations::{
         notification::{NotificationSource, NotificationSourceKind},
+        oauth2::AccessToken,
         task::{TaskSource, TaskSourceKind, TaskSourceService},
     },
     universal_inbox::UniversalInboxError,
@@ -35,7 +37,6 @@ use crate::{
 
 #[derive(Clone, Debug)]
 pub struct TodoistService {
-    client: reqwest::Client,
     pub todoist_sync_base_url: String,
     pub projects_cache_index: Arc<AtomicU64>,
 }
@@ -152,11 +153,9 @@ pub struct TodoistItemInfoResponse {
 
 impl TodoistService {
     pub fn new(
-        auth_token: &str,
         todoist_sync_base_url: Option<String>,
     ) -> Result<TodoistService, UniversalInboxError> {
         Ok(TodoistService {
-            client: build_todoist_client(auth_token).context("Cannot build Todoist client")?,
             todoist_sync_base_url: todoist_sync_base_url
                 .unwrap_or_else(|| TODOIST_SYNC_BASE_URL.to_string()),
             projects_cache_index: Arc::new(AtomicU64::new(0)),
@@ -167,9 +166,10 @@ impl TodoistService {
     pub async fn sync_resources(
         &self,
         resource_name: &str,
+        access_token: &AccessToken,
     ) -> Result<TodoistSyncResponse, UniversalInboxError> {
-        let response = self
-            .client
+        let response = build_todoist_client(access_token)
+            .context("Cannot build Todoist client")?
             .post(&format!("{}/sync", self.todoist_sync_base_url))
             .json(&json!({ "sync_token": "*", "resource_types": [resource_name] }))
             .send()
@@ -189,8 +189,11 @@ impl TodoistService {
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
-    pub async fn sync_items(&self) -> Result<Vec<TodoistItem>, UniversalInboxError> {
-        let sync_response = self.sync_resources("items").await?;
+    pub async fn sync_items(
+        &self,
+        access_token: &AccessToken,
+    ) -> Result<Vec<TodoistItem>, UniversalInboxError> {
+        let sync_response = self.sync_resources("items", access_token).await?;
 
         sync_response.items.ok_or_else(|| {
             UniversalInboxError::Unexpected(anyhow!("Todoist response should include `items`"))
@@ -198,9 +201,13 @@ impl TodoistService {
     }
 
     #[tracing::instrument(level = "debug", skip(self), ret)]
-    pub async fn get_item(&self, id: &str) -> Result<Option<TodoistItem>, UniversalInboxError> {
-        let response = self
-            .client
+    pub async fn get_item(
+        &self,
+        id: &str,
+        access_token: &AccessToken,
+    ) -> Result<Option<TodoistItem>, UniversalInboxError> {
+        let response = build_todoist_client(access_token)
+            .context("Cannot build Todoist client")?
             .post(&format!("{}/items/get", self.todoist_sync_base_url))
             .form(&[("item_id", id), ("all_data", "false")])
             .send()
@@ -231,11 +238,12 @@ impl TodoistService {
     pub async fn send_sync_commands(
         &self,
         commands: Vec<TodoistSyncCommand>,
+        access_token: &AccessToken,
     ) -> Result<TodoistSyncStatusResponse, UniversalInboxError> {
         let body = json!({ "commands": commands });
 
-        let response = self
-            .client
+        let response = build_todoist_client(access_token)
+            .context("Cannot build Todoist client")?
             .post(&format!("{}/sync", self.todoist_sync_base_url))
             .json(&body)
             .send()
@@ -272,15 +280,19 @@ impl TodoistService {
     }
 
     #[tracing::instrument(level = "debug", skip(self), ret)]
-    pub async fn fetch_all_projects(&self) -> Result<Vec<TodoistProject>, UniversalInboxError> {
-        cached_fetch_all_projects(self).await
+    pub async fn fetch_all_projects(
+        &self,
+        access_token: &AccessToken,
+    ) -> Result<Vec<TodoistProject>, UniversalInboxError> {
+        cached_fetch_all_projects(self, access_token).await
     }
 
     async fn get_or_create_project_id(
         &self,
         project_name: &str,
+        access_token: &AccessToken,
     ) -> Result<String, UniversalInboxError> {
-        let projects = self.fetch_all_projects().await?;
+        let projects = self.fetch_all_projects(access_token).await?;
         if let Some(id) = projects
             .iter()
             .find(|project| project.name == *project_name)
@@ -290,13 +302,16 @@ impl TodoistService {
         } else {
             let command_id = Uuid::new_v4();
             let response = self
-                .send_sync_commands(vec![TodoistSyncCommand::ProjectAdd {
-                    uuid: command_id,
-                    temp_id: Uuid::new_v4(),
-                    args: TodoistSyncCommandProjectAddArgs {
-                        name: project_name.to_string(),
-                    },
-                }])
+                .send_sync_commands(
+                    vec![TodoistSyncCommand::ProjectAdd {
+                        uuid: command_id,
+                        temp_id: Uuid::new_v4(),
+                        args: TodoistSyncCommandProjectAddArgs {
+                            name: project_name.to_string(),
+                        },
+                    }],
+                    access_token,
+                )
                 .await?;
             self.projects_cache_index.fetch_add(1, Ordering::Relaxed);
 
@@ -353,18 +368,20 @@ impl TodoistService {
 )]
 async fn cached_fetch_all_projects(
     service: &TodoistService,
+    access_token: &AccessToken,
 ) -> Result<Vec<TodoistProject>, UniversalInboxError> {
-    let sync_response: TodoistSyncResponse = service.sync_resources("projects").await?;
+    let sync_response: TodoistSyncResponse =
+        service.sync_resources("projects", access_token).await?;
 
     sync_response.projects.ok_or_else(|| {
         UniversalInboxError::Unexpected(anyhow!("Todoist response should include `projects`"))
     })
 }
 
-fn build_todoist_client(auth_token: &str) -> Result<reqwest::Client, reqwest::Error> {
+fn build_todoist_client(access_token: &AccessToken) -> Result<reqwest::Client, reqwest::Error> {
     let mut headers = HeaderMap::new();
 
-    let mut auth_header_value: HeaderValue = format!("Bearer {auth_token}").parse().unwrap();
+    let mut auth_header_value: HeaderValue = format!("Bearer {access_token}").parse().unwrap();
     auth_header_value.set_sensitive(true);
     headers.insert("Authorization", auth_header_value);
 
@@ -377,16 +394,20 @@ fn build_todoist_client(auth_token: &str) -> Result<reqwest::Client, reqwest::Er
 #[async_trait]
 impl TaskSourceService<TodoistItem> for TodoistService {
     #[tracing::instrument(level = "debug", skip(self))]
-    async fn fetch_all_tasks(&self) -> Result<Vec<TodoistItem>, UniversalInboxError> {
-        self.sync_items().await
+    async fn fetch_all_tasks(
+        &self,
+        access_token: &AccessToken,
+    ) -> Result<Vec<TodoistItem>, UniversalInboxError> {
+        self.sync_items(access_token).await
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
     async fn fetch_task(
         &self,
         source_id: &str,
+        access_token: &AccessToken,
     ) -> Result<Option<TodoistItem>, UniversalInboxError> {
-        self.get_item(source_id).await
+        self.get_item(source_id, access_token).await
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
@@ -394,8 +415,9 @@ impl TaskSourceService<TodoistItem> for TodoistService {
         &self,
         source: &TodoistItem,
         user_id: UserId,
+        access_token: &AccessToken,
     ) -> Result<Box<Task>, UniversalInboxError> {
-        let projects = self.fetch_all_projects().await?;
+        let projects = self.fetch_all_projects(access_token).await?;
         let project_name = projects
             .iter()
             .find(|project| project.id == source.project_id)
@@ -411,22 +433,29 @@ impl TaskSourceService<TodoistItem> for TodoistService {
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
-    async fn create_task(&self, task: &TaskCreation) -> Result<TodoistItem, UniversalInboxError> {
+    async fn create_task(
+        &self,
+        task: &TaskCreation,
+        access_token: &AccessToken,
+    ) -> Result<TodoistItem, UniversalInboxError> {
         let project_id = self
-            .get_or_create_project_id(&task.project.to_string())
+            .get_or_create_project_id(&task.project.to_string(), access_token)
             .await?;
         let sync_result = self
-            .send_sync_commands(vec![TodoistSyncCommand::ItemAdd {
-                uuid: Uuid::new_v4(),
-                temp_id: Uuid::new_v4(),
-                args: TodoistSyncCommandItemAddArgs {
-                    content: task.title.clone(),
-                    description: task.body.clone(),
-                    project_id,
-                    due: task.due_at.as_ref().map(|due| due.into()),
-                    priority: task.priority.into(),
-                },
-            }])
+            .send_sync_commands(
+                vec![TodoistSyncCommand::ItemAdd {
+                    uuid: Uuid::new_v4(),
+                    temp_id: Uuid::new_v4(),
+                    args: TodoistSyncCommandItemAddArgs {
+                        content: task.title.clone(),
+                        description: task.body.clone(),
+                        project_id,
+                        due: task.due_at.as_ref().map(|due| due.into()),
+                        priority: task.priority.into(),
+                    },
+                }],
+                access_token,
+            )
             .await?;
 
         let task = self
@@ -437,6 +466,7 @@ impl TaskSourceService<TodoistItem> for TodoistService {
                     .next()
                     .context("Cannot find newly created task's ID".to_string())?
                     .to_string(),
+                access_token,
             )
             .await?;
 
@@ -449,11 +479,15 @@ impl TaskSourceService<TodoistItem> for TodoistService {
     async fn delete_task(
         &self,
         id: &str,
+        access_token: &AccessToken,
     ) -> Result<TodoistSyncStatusResponse, UniversalInboxError> {
-        self.send_sync_commands(vec![TodoistSyncCommand::ItemDelete {
-            uuid: Uuid::new_v4(),
-            args: TodoistSyncCommandItemDeleteArgs { id: id.to_string() },
-        }])
+        self.send_sync_commands(
+            vec![TodoistSyncCommand::ItemDelete {
+                uuid: Uuid::new_v4(),
+                args: TodoistSyncCommandItemDeleteArgs { id: id.to_string() },
+            }],
+            access_token,
+        )
         .await
     }
 
@@ -461,11 +495,15 @@ impl TaskSourceService<TodoistItem> for TodoistService {
     async fn complete_task(
         &self,
         id: &str,
+        access_token: &AccessToken,
     ) -> Result<TodoistSyncStatusResponse, UniversalInboxError> {
-        self.send_sync_commands(vec![TodoistSyncCommand::ItemComplete {
-            uuid: Uuid::new_v4(),
-            args: TodoistSyncCommandItemCompleteArgs { id: id.to_string() },
-        }])
+        self.send_sync_commands(
+            vec![TodoistSyncCommand::ItemComplete {
+                uuid: Uuid::new_v4(),
+                args: TodoistSyncCommandItemCompleteArgs { id: id.to_string() },
+            }],
+            access_token,
+        )
         .await
     }
 
@@ -474,10 +512,13 @@ impl TaskSourceService<TodoistItem> for TodoistService {
         &self,
         id: &str,
         patch: &TaskPatch,
+        access_token: &AccessToken,
     ) -> Result<Option<TodoistSyncStatusResponse>, UniversalInboxError> {
         let mut commands: Vec<TodoistSyncCommand> = vec![];
         if let Some(ref project_name) = patch.project {
-            let project_id = self.get_or_create_project_id(project_name).await?;
+            let project_id = self
+                .get_or_create_project_id(project_name, access_token)
+                .await?;
             commands.push(TodoistSyncCommand::ItemMove {
                 uuid: Uuid::new_v4(),
                 args: TodoistSyncCommandItemMoveArgs {
@@ -509,7 +550,7 @@ impl TaskSourceService<TodoistItem> for TodoistService {
         if commands.is_empty() {
             Ok(None)
         } else {
-            Ok(Some(self.send_sync_commands(commands).await?))
+            Ok(Some(self.send_sync_commands(commands, access_token).await?))
         }
     }
 }
@@ -517,6 +558,12 @@ impl TaskSourceService<TodoistItem> for TodoistService {
 impl TaskSource for TodoistService {
     fn get_task_source_kind(&self) -> TaskSourceKind {
         TaskSourceKind::Todoist
+    }
+}
+
+impl IntegrationProvider for TodoistService {
+    fn get_integration_provider_kind(&self) -> IntegrationProviderKind {
+        IntegrationProviderKind::Todoist
     }
 }
 
