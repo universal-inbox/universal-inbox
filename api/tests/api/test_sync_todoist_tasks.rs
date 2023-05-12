@@ -4,18 +4,22 @@ use rstest::*;
 use uuid::Uuid;
 
 use universal_inbox::{
+    integration_connection::IntegrationProviderKind,
     notification::{Notification, NotificationStatus},
     task::{integrations::todoist, Task, TaskMetadata, TaskPriority, TaskStatus},
 };
 use universal_inbox_api::{
-    integrations::{task::TaskSourceKind, todoist::TodoistSyncResponse},
+    configuration::Settings,
+    integrations::{oauth2::NangoConnection, task::TaskSourceKind, todoist::TodoistSyncResponse},
     universal_inbox::task::TaskCreationResult,
 };
 
 use crate::helpers::{
     auth::{authenticated_app, AuthenticatedApp},
+    integration_connection::{create_and_mock_integration_connection, nango_todoist_connection},
     notification::list_notifications_with_tasks,
     rest::{create_resource, get_resource},
+    settings,
     task::{
         sync_tasks,
         todoist::{
@@ -28,9 +32,11 @@ use crate::helpers::{
 #[rstest]
 #[tokio::test]
 async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
+    settings: Settings,
     #[future] authenticated_app: AuthenticatedApp,
     sync_todoist_items_response: TodoistSyncResponse,
     sync_todoist_projects_response: TodoistSyncResponse,
+    nango_todoist_connection: Box<NangoConnection>,
 ) {
     // existing task will be updated
     // the associated notification will be marked as deleted as the task's project will not be Inbox anymore
@@ -64,6 +70,13 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
     .await;
     let existing_todoist_task = existing_todoist_task_creation.task;
     let existing_todoist_notification = existing_todoist_task_creation.notification.unwrap();
+    create_and_mock_integration_connection(
+        &app,
+        IntegrationProviderKind::Todoist,
+        &settings,
+        nango_todoist_connection,
+    )
+    .await;
 
     let todoist_tasks_mock = mock_todoist_sync_resources_service(
         &app.todoist_mock_server,
@@ -168,10 +181,12 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
 #[rstest]
 #[tokio::test]
 async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
+    settings: Settings,
     #[future] authenticated_app: AuthenticatedApp,
     // Vec[TodoistTask { source_id: "123", ... }, TodoistTask { source_id: "456", ... } ]
     sync_todoist_items_response: TodoistSyncResponse,
     sync_todoist_projects_response: TodoistSyncResponse,
+    nango_todoist_connection: Box<NangoConnection>,
 ) {
     let app = authenticated_app.await;
     let todoist_items = sync_todoist_items_response.items.clone().unwrap();
@@ -213,6 +228,13 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
     let existing_todoist_active_task = existing_todoist_active_task_creation.task;
     let existing_todoist_unread_notification =
         existing_todoist_active_task_creation.notification.unwrap();
+    create_and_mock_integration_connection(
+        &app,
+        IntegrationProviderKind::Todoist,
+        &settings,
+        nango_todoist_connection,
+    )
+    .await;
 
     let todoist_sync_items_mock = mock_todoist_sync_resources_service(
         &app.todoist_mock_server,

@@ -24,7 +24,10 @@ use crate::{
         },
     },
     repository::{notification::NotificationRepository, Repository},
-    universal_inbox::{task::service::TaskService, UniversalInboxError, UpdateStatus},
+    universal_inbox::{
+        integration_connection::service::IntegrationConnectionService, task::service::TaskService,
+        UniversalInboxError, UpdateStatus,
+    },
 };
 
 #[derive(Debug)]
@@ -32,6 +35,7 @@ pub struct NotificationService {
     repository: Arc<Repository>,
     github_service: GithubService,
     task_service: Weak<RwLock<TaskService>>,
+    integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
 }
 
 impl NotificationService {
@@ -39,11 +43,13 @@ impl NotificationService {
         repository: Arc<Repository>,
         github_service: GithubService,
         task_service: Weak<RwLock<TaskService>>,
+        integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     ) -> NotificationService {
         NotificationService {
             repository,
             github_service,
             task_service,
+            integration_connection_service,
         }
     }
 
@@ -56,20 +62,46 @@ impl NotificationService {
     }
 
     #[tracing::instrument(level = "debug", skip(notification_source_service))]
-    pub async fn apply_updated_notification_side_effect<T>(
+    pub async fn apply_updated_notification_side_effect<'a, T>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
         notification_source_service: &dyn NotificationSourceService<T>,
         patch: &NotificationPatch,
         notification: Box<Notification>,
+        user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
+        let access_token = self
+            .integration_connection_service
+            .read()
+            .await
+            .get_access_token(
+                executor,
+                notification_source_service.get_integration_provider_kind(),
+                user_id,
+            )
+            .await?;
+
         match patch.status {
             Some(NotificationStatus::Deleted) => {
+                let access_token = access_token.ok_or_else(|| {
+                    anyhow!(
+                        "Cannot delete notification {} without an access token",
+                        notification.id
+                    )
+                })?;
                 notification_source_service
-                    .delete_notification_from_source(&notification.source_id)
+                    .delete_notification_from_source(&notification.source_id, &access_token)
                     .await
             }
             Some(NotificationStatus::Unsubscribed) => {
+                let access_token = access_token.ok_or_else(|| {
+                    anyhow!(
+                        "Cannot unsubscribe from notification {} without an access token",
+                        notification.id
+                    )
+                })?;
                 notification_source_service
-                    .unsubscribe_notification_from_source(&notification.source_id)
+                    .unsubscribe_notification_from_source(&notification.source_id, &access_token)
                     .await
             }
             _ => Ok(()),
@@ -157,16 +189,31 @@ impl NotificationService {
         notification_source_service: &dyn NotificationSourceService<T>,
         user_id: UserId,
     ) -> Result<Vec<Notification>, UniversalInboxError> {
-        let source_notifications = notification_source_service
-            .fetch_all_notifications()
+        let access_token = self
+            .integration_connection_service
+            .read()
+            .await
+            .get_access_token(
+                executor,
+                notification_source_service.get_integration_provider_kind(),
+                user_id,
+            )
             .await?;
-        self.save_notifications_from_source(
-            executor,
-            notification_source_service.get_notification_source_kind(),
-            source_notifications,
-            user_id,
-        )
-        .await
+
+        if let Some(access_token) = access_token {
+            let source_notifications = notification_source_service
+                .fetch_all_notifications(&access_token)
+                .await?;
+            self.save_notifications_from_source(
+                executor,
+                notification_source_service.get_notification_source_kind(),
+                source_notifications,
+                user_id,
+            )
+            .await
+        } else {
+            Ok(vec![])
+        }
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
@@ -245,10 +292,12 @@ impl NotificationService {
             } => {
                 match notification.metadata {
                     NotificationMetadata::Github(_) => {
-                        NotificationService::apply_updated_notification_side_effect(
+                        self.apply_updated_notification_side_effect(
+                            executor,
                             &self.github_service,
                             patch,
                             notification.clone(),
+                            for_user_id,
                         )
                         .await?;
                     }
@@ -360,7 +409,7 @@ impl NotificationService {
                 .context("Unable to access task_service from notification_service")?
                 .read()
                 .await
-                .create_task_from_notification(executor, task_creation, notification)
+                .create_task_from_notification(executor, task_creation, notification, for_user_id)
                 .await?;
 
             return Ok(Some(NotificationWithTask::build(notification, Some(*task))));

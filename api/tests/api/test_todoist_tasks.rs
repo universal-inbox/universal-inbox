@@ -2,9 +2,10 @@ use chrono::NaiveDate;
 use rstest::*;
 
 use universal_inbox::{
+    integration_connection::IntegrationProviderKind,
     notification::{
-        integrations::github::GithubNotification, Notification, NotificationStatus,
-        NotificationWithTask,
+        integrations::github::GithubNotification, Notification, NotificationPatch,
+        NotificationStatus, NotificationWithTask,
     },
     task::{
         integrations::todoist::{TodoistItem, TodoistItemDue, TodoistItemPriority},
@@ -12,18 +13,28 @@ use universal_inbox::{
     },
 };
 
-use universal_inbox_api::integrations::todoist::{
-    TodoistService, TodoistSyncCommandItemMoveArgs, TodoistSyncCommandItemUpdateArgs,
-    TodoistSyncResponse,
+use universal_inbox_api::{
+    configuration::Settings,
+    integrations::{
+        oauth2::NangoConnection,
+        todoist::{
+            TodoistService, TodoistSyncCommandItemMoveArgs, TodoistSyncCommandItemUpdateArgs,
+            TodoistSyncResponse,
+        },
+    },
 };
 
 use crate::helpers::{
     auth::{authenticated_app, AuthenticatedApp},
+    integration_connection::{
+        create_and_mock_integration_connection, nango_github_connection, nango_todoist_connection,
+    },
     notification::{
         create_task_from_notification,
         github::{create_notification_from_github_notification, github_notification},
     },
     rest::{get_resource, patch_resource},
+    settings,
     task::todoist::{
         create_task_from_todoist_item, mock_todoist_complete_item_service,
         mock_todoist_delete_item_service, mock_todoist_get_item_service,
@@ -34,14 +45,17 @@ use crate::helpers::{
 };
 
 mod patch_task {
+
     use super::*;
     use pretty_assertions::assert_eq;
 
     #[rstest]
     #[tokio::test]
     async fn test_patch_todoist_task_status_as_deleted(
+        settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
+        nango_todoist_connection: Box<NangoConnection>,
     ) {
         let app = authenticated_app.await;
         let existing_todoist_task_creation = create_task_from_todoist_item(
@@ -55,6 +69,14 @@ mod patch_task {
         let existing_todoist_task = existing_todoist_task_creation.task;
         assert_eq!(existing_todoist_task.status, TaskStatus::Active);
         let existing_todoist_notification = existing_todoist_task_creation.notification.unwrap();
+        create_and_mock_integration_connection(
+            &app,
+            IntegrationProviderKind::Todoist,
+            &settings,
+            nango_todoist_connection,
+        )
+        .await;
+
         let todoist_mock = mock_todoist_delete_item_service(
             &app.todoist_mock_server,
             &existing_todoist_task.source_id,
@@ -94,8 +116,10 @@ mod patch_task {
     #[rstest]
     #[tokio::test]
     async fn test_patch_todoist_task_status_as_done(
+        settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
+        nango_todoist_connection: Box<NangoConnection>,
     ) {
         let app = authenticated_app.await;
         let existing_todoist_task_creation = create_task_from_todoist_item(
@@ -109,6 +133,14 @@ mod patch_task {
         let existing_todoist_task = existing_todoist_task_creation.task;
         assert_eq!(existing_todoist_task.status, TaskStatus::Active);
         let existing_todoist_notification = existing_todoist_task_creation.notification.unwrap();
+        create_and_mock_integration_connection(
+            &app,
+            IntegrationProviderKind::Todoist,
+            &settings,
+            nango_todoist_connection,
+        )
+        .await;
+
         let todoist_mock = mock_todoist_complete_item_service(
             &app.todoist_mock_server,
             &existing_todoist_task.source_id,
@@ -150,9 +182,11 @@ mod patch_task {
     #[rstest]
     #[tokio::test]
     async fn test_patch_todoist_task_to_plan_to_new_project(
+        settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
         sync_todoist_projects_response: TodoistSyncResponse,
+        nango_todoist_connection: Box<NangoConnection>,
     ) {
         let app = authenticated_app.await;
         let existing_todoist_task_creation = create_task_from_todoist_item(
@@ -176,6 +210,13 @@ mod patch_task {
         let new_priority = TodoistItemPriority::P2;
         let new_project = "Project1".to_string();
         let new_project_id = "3333".to_string();
+        create_and_mock_integration_connection(
+            &app,
+            IntegrationProviderKind::Todoist,
+            &settings,
+            nango_todoist_connection,
+        )
+        .await;
 
         let todoist_projects_mock = mock_todoist_sync_resources_service(
             &app.todoist_mock_server,
@@ -254,10 +295,13 @@ mod patch_task {
     #[rstest]
     #[tokio::test]
     async fn test_create_todoist_task_from_notification(
+        settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
         sync_todoist_projects_response: TodoistSyncResponse,
         todoist_item: Box<TodoistItem>,
+        nango_todoist_connection: Box<NangoConnection>,
+        nango_github_connection: Box<NangoConnection>,
     ) {
         let app = authenticated_app.await;
 
@@ -281,6 +325,20 @@ mod patch_task {
             notification.title,
             notification.source_html_url.as_ref().unwrap()
         ));
+        create_and_mock_integration_connection(
+            &app,
+            IntegrationProviderKind::Todoist,
+            &settings,
+            nango_todoist_connection,
+        )
+        .await;
+        create_and_mock_integration_connection(
+            &app,
+            IntegrationProviderKind::Github,
+            &settings,
+            nango_github_connection,
+        )
+        .await;
 
         let todoist_projects_mock = mock_todoist_sync_resources_service(
             &app.todoist_mock_server,
@@ -355,17 +413,17 @@ mod patch_task {
 }
 
 mod patch_notification {
-    use universal_inbox::notification::NotificationPatch;
-
     use super::*;
     use pretty_assertions::assert_eq;
 
     #[rstest]
     #[tokio::test]
     async fn test_patch_notification_to_associate_with_task(
+        settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
         todoist_item: Box<TodoistItem>,
+        nango_todoist_connection: Box<NangoConnection>,
     ) {
         let app = authenticated_app.await;
         let notification = create_notification_from_github_notification(
@@ -381,6 +439,13 @@ mod patch_notification {
             &todoist_item,
             "Project2".to_string(),
             app.user.id,
+        )
+        .await;
+        create_and_mock_integration_connection(
+            &app,
+            IntegrationProviderKind::Todoist,
+            &settings,
+            nango_todoist_connection,
         )
         .await;
         let todoist_sync_mock = mock_todoist_sync_service(

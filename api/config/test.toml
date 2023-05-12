@@ -5,12 +5,6 @@ dependencies_log_directive = "debug"
 [integrations.oauth2]
 nango_secret_key = "nango_test_key"
 
-[integrations.github]
-api_token = "github_test_token"
-
-[integrations.todoist]
-api_token = "todoist_test_token"
-
 [application.http_session]
 secret_key = "1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF"
 

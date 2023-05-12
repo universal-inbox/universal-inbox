@@ -5,7 +5,10 @@ use format_serde_error::SerdeError;
 use futures::stream::{self, TryStreamExt};
 use http::{HeaderMap, HeaderValue, Uri};
 
-use universal_inbox::notification::integrations::github::GithubNotification;
+use universal_inbox::{
+    integration_connection::{IntegrationProvider, IntegrationProviderKind},
+    notification::integrations::github::GithubNotification,
+};
 
 use crate::{
     integrations::{
@@ -15,9 +18,10 @@ use crate::{
     universal_inbox::UniversalInboxError,
 };
 
+use super::oauth2::AccessToken;
+
 #[derive(Clone, Debug)]
 pub struct GithubService {
-    client: reqwest::Client,
     github_base_url: String,
     page_size: usize,
 }
@@ -26,12 +30,10 @@ static GITHUB_BASE_URL: &str = "https://api.github.com";
 
 impl GithubService {
     pub fn new(
-        auth_token: &str,
         github_base_url: Option<String>,
         page_size: usize,
     ) -> Result<GithubService, UniversalInboxError> {
         Ok(GithubService {
-            client: build_github_client(auth_token).context("Cannot build Github client")?,
             github_base_url: github_base_url.unwrap_or_else(|| GITHUB_BASE_URL.to_string()),
             page_size,
         })
@@ -42,13 +44,14 @@ impl GithubService {
         &self,
         page: u32,
         per_page: usize,
+        access_token: &AccessToken,
     ) -> Result<Vec<GithubNotification>, UniversalInboxError> {
         let url = format!(
             "{}/notifications?page={page}&per_page={per_page}",
             self.github_base_url
         );
-        let response = self
-            .client
+        let response = build_github_client(access_token)
+            .context("Failed to build Github client")?
             .get(&url)
             .send()
             .await
@@ -65,9 +68,13 @@ impl GithubService {
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
-    pub async fn mark_thread_as_read(&self, thread_id: &str) -> Result<(), UniversalInboxError> {
-        let response = self
-            .client
+    pub async fn mark_thread_as_read(
+        &self,
+        thread_id: &str,
+        access_token: &AccessToken,
+    ) -> Result<(), UniversalInboxError> {
+        let response = build_github_client(access_token)
+            .context("Failed to build Github client")?
             .patch(&format!(
                 "{}/notifications/threads/{thread_id}",
                 self.github_base_url
@@ -92,9 +99,10 @@ impl GithubService {
     pub async fn unsubscribe_from_thread(
         &self,
         thread_id: &str,
+        access_token: &AccessToken,
     ) -> Result<(), UniversalInboxError> {
-        let response = self
-            .client
+        let response = build_github_client(access_token)
+            .context("Failed to build Github client")?
             .put(&format!(
                 "{}/notifications/threads/{thread_id}/subscription",
                 self.github_base_url
@@ -119,14 +127,14 @@ impl GithubService {
     }
 }
 
-fn build_github_client(auth_token: &str) -> Result<reqwest::Client, reqwest::Error> {
+fn build_github_client(access_token: &AccessToken) -> Result<reqwest::Client, reqwest::Error> {
     let mut headers = HeaderMap::new();
 
     headers.insert(
         "Accept",
         HeaderValue::from_static("application/vnd.github.v3+json"),
     );
-    let mut auth_header_value: HeaderValue = format!("token {auth_token}").parse().unwrap();
+    let mut auth_header_value: HeaderValue = format!("Bearer {access_token}").parse().unwrap();
     auth_header_value.set_sensitive(true);
     headers.insert("Authorization", auth_header_value);
 
@@ -155,13 +163,16 @@ pub fn get_html_url_from_api_url(api_url: &Option<Uri>) -> Option<Uri> {
 impl NotificationSourceService<GithubNotification> for GithubService {
     async fn fetch_all_notifications(
         &self,
+        access_token: &AccessToken,
     ) -> Result<Vec<GithubNotification>, UniversalInboxError> {
         Ok(stream::try_unfold((1, false), |(page, stop)| async move {
             if stop {
                 return Ok(None);
             }
 
-            let response = self.fetch_notifications(page, self.page_size).await;
+            let response = self
+                .fetch_notifications(page, self.page_size, access_token)
+                .await;
 
             response.map(|github_notifs| {
                 let notifs_count = github_notifs.len();
@@ -179,15 +190,23 @@ impl NotificationSourceService<GithubNotification> for GithubService {
     async fn delete_notification_from_source(
         &self,
         source_id: &str,
+        access_token: &AccessToken,
     ) -> Result<(), UniversalInboxError> {
-        self.mark_thread_as_read(source_id).await
+        self.mark_thread_as_read(source_id, access_token).await
     }
 
     async fn unsubscribe_notification_from_source(
         &self,
         source_id: &str,
+        access_token: &AccessToken,
     ) -> Result<(), UniversalInboxError> {
-        self.unsubscribe_from_thread(source_id).await
+        self.unsubscribe_from_thread(source_id, access_token).await
+    }
+}
+
+impl IntegrationProvider for GithubService {
+    fn get_integration_provider_kind(&self) -> IntegrationProviderKind {
+        IntegrationProviderKind::Github
     }
 }
 

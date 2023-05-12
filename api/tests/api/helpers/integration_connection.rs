@@ -6,13 +6,16 @@ use reqwest::{Client, Response};
 
 use rstest::fixture;
 use universal_inbox::integration_connection::{
-    IntegrationConnection, IntegrationConnectionCreation, IntegrationConnectionId,
-    IntegrationConnectionStatus, IntegrationProviderKind, NangoProviderKey,
+    IntegrationConnection, IntegrationConnectionId, IntegrationConnectionStatus,
+    IntegrationProviderKind, NangoProviderKey,
 };
 
-use universal_inbox_api::{configuration::Settings, integrations::oauth2::NangoConnection};
+use universal_inbox_api::{
+    configuration::Settings, integrations::oauth2::NangoConnection,
+    repository::integration_connection::IntegrationConnectionRepository,
+};
 
-use crate::helpers::{load_json_fixture_file, rest::create_resource};
+use crate::helpers::load_json_fixture_file;
 
 use super::auth::AuthenticatedApp;
 
@@ -93,44 +96,64 @@ pub fn mock_nango_delete_connection_service<'a>(
 }
 
 pub async fn create_validated_integration_connection(
-    settings: &Settings,
     app: &AuthenticatedApp,
-    nango_connection: Box<NangoConnection>,
     provider_kind: IntegrationProviderKind,
-) -> IntegrationConnection {
-    let integration_connection: Box<IntegrationConnection> = create_resource(
-        &app.client,
-        &app.app_address,
-        "integration-connections",
-        Box::new(IntegrationConnectionCreation { provider_kind }),
-    )
-    .await;
+) -> Box<IntegrationConnection> {
+    let mut transaction = app.repository.begin().await.unwrap();
+    let integration_connection = app
+        .repository
+        .create_integration_connection(
+            &mut transaction,
+            Box::new(IntegrationConnection::new(app.user.id, provider_kind)),
+        )
+        .await
+        .unwrap();
+
+    let update_result = app
+        .repository
+        .update_integration_connection_status(
+            &mut transaction,
+            integration_connection.id,
+            IntegrationConnectionStatus::Validated,
+            None,
+            app.user.id,
+        )
+        .await
+        .unwrap();
+    transaction.commit().await.unwrap();
+
+    update_result.result.unwrap()
+}
+
+pub async fn create_and_mock_integration_connection(
+    app: &AuthenticatedApp,
+    provider_kind: IntegrationProviderKind,
+    settings: &Settings,
+    nango_connection: Box<NangoConnection>,
+) -> Box<IntegrationConnection> {
+    let integration_connection = create_validated_integration_connection(app, provider_kind).await;
     let github_config_key = settings
         .integrations
         .oauth2
         .nango_provider_keys
         .get(&provider_kind)
         .unwrap();
-    let mut nango_mock = mock_nango_connection_service(
+    mock_nango_connection_service(
         &app.nango_mock_server,
         &integration_connection.connection_id.to_string(),
         github_config_key,
-        nango_connection.clone(),
+        nango_connection,
     );
 
-    let result: IntegrationConnection =
-        verify_integration_connection(&app.client, &app.app_address, integration_connection.id)
-            .await;
-
-    assert_eq!(result.status, IntegrationConnectionStatus::Validated);
-    assert_eq!(result.failure_message, None);
-    nango_mock.assert();
-    nango_mock.delete();
-
-    result
+    integration_connection
 }
 
 #[fixture]
-pub fn nango_connection() -> Box<NangoConnection> {
-    load_json_fixture_file("/tests/api/fixtures/nango_connection.json")
+pub fn nango_github_connection() -> Box<NangoConnection> {
+    load_json_fixture_file("/tests/api/fixtures/nango_github_connection.json")
+}
+
+#[fixture]
+pub fn nango_todoist_connection() -> Box<NangoConnection> {
+    load_json_fixture_file("/tests/api/fixtures/nango_todoist_connection.json")
 }

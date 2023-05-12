@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use chrono::{TimeZone, Utc};
 use httpmock::{
     Method::{GET, POST},
@@ -8,6 +10,7 @@ use rstest::fixture;
 use serde_json::json;
 
 use universal_inbox::user::User;
+use universal_inbox_api::repository::Repository;
 
 use super::{tested_app, TestedApp};
 
@@ -15,6 +18,7 @@ pub struct AuthenticatedApp {
     pub client: Client,
     pub app_address: String,
     pub user: User,
+    pub repository: Arc<Repository>,
     pub github_mock_server: MockServer,
     pub todoist_mock_server: MockServer,
     pub oidc_issuer_mock_server: MockServer,
@@ -65,6 +69,7 @@ pub async fn authenticated_app(#[future] tested_app: TestedApp) -> Authenticated
         client,
         app_address: app.app_address.clone(),
         user,
+        repository: app.repository.clone(),
         github_mock_server: app.github_mock_server,
         todoist_mock_server: app.todoist_mock_server,
         oidc_issuer_mock_server: app.oidc_issuer_mock_server,

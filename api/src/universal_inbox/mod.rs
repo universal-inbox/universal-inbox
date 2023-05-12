@@ -1,5 +1,5 @@
 use http::uri::InvalidUri;
-use universal_inbox::task::TaskId;
+use universal_inbox::{integration_connection::ConnectionId, task::TaskId};
 use uuid::Uuid;
 
 pub mod integration_connection;
@@ -60,6 +60,8 @@ pub enum UniversalInboxError {
     Unauthorized(String),
     #[error("Forbidden access: {0}")]
     Forbidden(String),
+    #[error("Unknown Nango connection: {0}")]
+    UnknownNangoConnectionError(ConnectionId),
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
 }
