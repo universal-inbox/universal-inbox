@@ -44,18 +44,8 @@ pub struct IntegrationConnectionCreation {
 pub struct GithubProvider;
 
 pub trait IntegrationProvider {
-    fn kind(&self) -> IntegrationProviderKind;
+    fn get_integration_provider_kind(&self) -> IntegrationProviderKind;
 }
-
-impl IntegrationProvider for GithubProvider {
-    fn kind(&self) -> IntegrationProviderKind {
-        IntegrationProviderKind::Github
-    }
-}
-
-pub trait IntegrationProviderNotificationSource<T> {}
-
-impl IntegrationProviderNotificationSource<GithubProvider> for GithubProvider {}
 
 macro_attr! {
     #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy, Eq, EnumFromStr!, EnumDisplay!, Hash)]

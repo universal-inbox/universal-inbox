@@ -12,12 +12,13 @@ use universal_inbox::{
 };
 
 use crate::{
-    integrations::oauth2::NangoService,
+    integrations::oauth2::{AccessToken, NangoService},
     repository::integration_connection::IntegrationConnectionRepository,
     repository::Repository,
     universal_inbox::{UniversalInboxError, UpdateStatus},
 };
 
+#[derive(Debug)]
 pub struct IntegrationConnectionService {
     repository: Arc<Repository>,
     nango_service: NangoService,
@@ -170,5 +171,56 @@ impl IntegrationConnectionService {
             updated: false,
             result: None,
         })
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    pub async fn get_access_token<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        integration_provider_kind: IntegrationProviderKind,
+        for_user_id: UserId,
+    ) -> Result<Option<AccessToken>, UniversalInboxError> {
+        let integration_connection = self
+            .repository
+            .get_integration_connection_per_provider(
+                executor,
+                for_user_id,
+                integration_provider_kind,
+            )
+            .await?;
+
+        if let Some(integration_connection) = integration_connection {
+            let provider_config_key = self
+                .nango_provider_keys
+                .get(&integration_connection.provider_kind)
+                .context(format!(
+                    "No Nango provider config key found for {}",
+                    integration_connection.provider_kind,
+                ))?;
+
+            if let Some(nango_connection) = self
+                .nango_service
+                .get_connection(integration_connection.connection_id, provider_config_key)
+                .await?
+            {
+                return Ok(Some(nango_connection.credentials.access_token));
+            }
+
+            self.repository
+                .update_integration_connection_status(
+                    executor,
+                    integration_connection.id,
+                    IntegrationConnectionStatus::Failing,
+                    Some(UNKNOWN_NANGO_CONNECTION_ERROR_MESSAGE.to_string()),
+                    for_user_id,
+                )
+                .await?;
+
+            return Err(UniversalInboxError::UnknownNangoConnectionError(
+                integration_connection.connection_id,
+            ));
+        }
+
+        Ok(None)
     }
 }

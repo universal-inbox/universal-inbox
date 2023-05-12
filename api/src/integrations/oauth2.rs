@@ -1,3 +1,5 @@
+use std::fmt;
+
 use anyhow::{anyhow, Context};
 use base64::{engine::general_purpose, Engine as _};
 use chrono::{DateTime, Utc};
@@ -35,10 +37,30 @@ pub struct NangoConnection {
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct NangoConnectionCredentials {
     pub r#type: String,
-    pub access_token: String,
-    pub refresh_token: Option<String>,
+    pub access_token: AccessToken,
+    pub refresh_token: Option<RefreshToken>,
     pub expires_at: Option<DateTime<Utc>>,
     pub raw: Value,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Hash, Default)]
+#[serde(transparent)]
+pub struct AccessToken(pub String);
+
+impl fmt::Display for AccessToken {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Hash)]
+#[serde(transparent)]
+pub struct RefreshToken(pub String);
+
+impl fmt::Display for RefreshToken {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
 }
 
 impl NangoService {

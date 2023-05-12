@@ -59,7 +59,7 @@ pub fn mock_github_notifications_service<'a>(
         when.method(GET)
             .path("/notifications")
             .header("accept", "application/vnd.github.v3+json")
-            .header("authorization", "token github_test_token")
+            .header("authorization", "Bearer github_test_access_token")
             .query_param("page", page)
             .query_param_exists("per_page");
         then.status(200)

@@ -83,14 +83,9 @@ async fn main() -> std::io::Result<()> {
             .expect("Failed to connect to Postgresql"),
     );
 
-    let todoist_service = TodoistService::new(&settings.integrations.todoist.api_token, None)
-        .expect("Failed to create new TodoistService");
-    let github_service = GithubService::new(
-        &settings.integrations.github.api_token,
-        None,
-        settings.integrations.github.page_size,
-    )
-    .expect("Failed to create new GithubService");
+    let todoist_service = TodoistService::new(None).expect("Failed to create new TodoistService");
+    let github_service = GithubService::new(None, settings.integrations.github.page_size)
+        .expect("Failed to create new GithubService");
     let nango_service = NangoService::new(
         settings.integrations.oauth2.nango_base_url.clone(),
         &settings.integrations.oauth2.nango_secret_key,

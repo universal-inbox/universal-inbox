@@ -2,15 +2,22 @@ use chrono::{TimeZone, Utc};
 use rstest::*;
 use uuid::Uuid;
 
-use universal_inbox::notification::{
-    integrations::github::GithubNotification, Notification, NotificationMetadata,
-    NotificationStatus,
+use universal_inbox::{
+    integration_connection::IntegrationProviderKind,
+    notification::{
+        integrations::github::GithubNotification, Notification, NotificationMetadata,
+        NotificationStatus,
+    },
 };
 
-use universal_inbox_api::integrations::{github, notification::NotificationSourceKind};
+use universal_inbox_api::{
+    configuration::Settings,
+    integrations::{github, notification::NotificationSourceKind, oauth2::NangoConnection},
+};
 
 use crate::helpers::{
     auth::{authenticated_app, AuthenticatedApp},
+    integration_connection::{create_and_mock_integration_connection, nango_github_connection},
     notification::{
         github::{
             assert_sync_notifications, create_notification_from_github_notification,
@@ -19,14 +26,17 @@ use crate::helpers::{
         sync_notifications,
     },
     rest::{create_resource, get_resource},
+    settings,
 };
 
 #[rstest]
 #[tokio::test]
 async fn test_sync_notifications_should_add_new_notification_and_update_existing_one(
+    settings: Settings,
     #[future] authenticated_app: AuthenticatedApp,
     // Vec[GithubNotification { source_id: "123", ... }, GithubNotification { source_id: "456", ... } ]
     sync_github_notifications: Vec<GithubNotification>,
+    nango_github_connection: Box<NangoConnection>,
 ) {
     let app = authenticated_app.await;
     let existing_notification: Box<Notification> = create_resource(
@@ -48,6 +58,13 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
             snoozed_until: None,
             task_id: None,
         }),
+    )
+    .await;
+    create_and_mock_integration_connection(
+        &app,
+        IntegrationProviderKind::Github,
+        &settings,
+        nango_github_connection,
     )
     .await;
 
@@ -99,9 +116,11 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
 #[rstest]
 #[tokio::test]
 async fn test_sync_notifications_should_mark_deleted_notification_without_subscription(
+    settings: Settings,
     #[future] authenticated_app: AuthenticatedApp,
     // Vec[GithubNotification { source_id: "123", ... }, GithubNotification { source_id: "456", ... } ]
     sync_github_notifications: Vec<GithubNotification>,
+    nango_github_connection: Box<NangoConnection>,
 ) {
     let app = authenticated_app.await;
     for github_notification in sync_github_notifications.iter() {
@@ -133,6 +152,13 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
             snoozed_until: None,
             task_id: None,
         }),
+    )
+    .await;
+    create_and_mock_integration_connection(
+        &app,
+        IntegrationProviderKind::Github,
+        &settings,
+        nango_github_connection,
     )
     .await;
 
