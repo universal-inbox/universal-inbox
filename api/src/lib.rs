@@ -134,7 +134,7 @@ pub async fn run(
             );
             app = app.service(
                 spa()
-                    .index_file("index.html")
+                    .index_file(format!("{static_dir}/index.html"))
                     .static_resources_mount(path.clone())
                     .static_resources_location(static_dir.clone())
                     .finish(),
