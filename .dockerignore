@@ -1,7 +1,12 @@
 .git
 .github
 target/
+api/config/local.*
+web/dist
+.local_envrc
+node_modules
+.DS_Store
 tests/
 Dockerfile
-web/dist
-api/config/local.*
+docker-compose.yml
+universal-inbox.env

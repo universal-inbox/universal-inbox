@@ -10,7 +10,7 @@ use universal_inbox::{
     integration_connection::IntegrationProviderKind, FrontConfig, IntegrationProviderConfig,
 };
 
-use crate::services::api::call_api;
+use crate::{services::api::call_api, utils::current_origin};
 
 #[derive(Debug, PartialEq)]
 pub struct AppConfig {
@@ -30,7 +30,13 @@ extern "C" {
 pub static APP_CONFIG: AtomRef<Option<AppConfig>> = |_| None;
 
 pub fn get_api_base_url() -> Result<Url> {
-    Ok(Url::parse(&api_base_url())?)
+    match Url::parse(&api_base_url()) {
+        Ok(url) => Ok(url),
+        Err(err) => match current_origin()?.join(&api_base_url()) {
+            Ok(url) => Ok(url),
+            Err(_) => Err(anyhow::anyhow!("Failed to parse api_base_url: {}", err)),
+        },
+    }
 }
 
 pub async fn get_app_config() -> Result<AppConfig> {

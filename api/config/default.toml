@@ -5,6 +5,8 @@ log_directive = "info"
 dependencies_log_directive = "error"
 api_path = ""
 front_base_url = "http://localhost:8080"
+# If `static_path` is specified, statics from `static_dir` will be served on `static_path`
+# static_path = ""
 
 # [application.authentication]
 # oidc_issuer_url = "https://oidc.provider"

@@ -55,6 +55,16 @@ pub fn current_location() -> Result<Url> {
     )?)
 }
 
+pub fn current_origin() -> Result<Url> {
+    let window = web_sys::window().context("Unable to load `window`")?;
+    Ok(Url::parse(
+        &window
+            .location()
+            .origin()
+            .map_err(|err| JsError::try_from(err).unwrap())?,
+    )?)
+}
+
 pub fn get_local_storage() -> Result<web_sys::Storage> {
     let window = web_sys::window().context("Unable to get the window object")?;
     window
