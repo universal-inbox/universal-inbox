@@ -146,27 +146,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "actix-redis"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38446dc11c743f4f0023b1067c7cfb8f2548f24418e31a193b324e35fa059279"
-dependencies = [
- "actix",
- "actix-rt",
- "actix-service",
- "actix-tls",
- "actix-web",
- "backoff",
- "derive_more",
- "futures-core",
- "log",
- "redis-async",
- "time 0.3.20",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
 name = "actix-router"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -225,34 +204,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "43da8b818ae1f11049a4d218975345fe8e56ce5a5f92c11f972abcff5ff80e87"
 dependencies = [
  "actix",
- "actix-redis",
  "actix-service",
  "actix-utils",
  "actix-web",
  "anyhow",
  "async-trait",
  "derive_more",
- "futures-core",
  "rand",
+ "redis",
  "serde",
  "serde_json",
  "tracing",
-]
-
-[[package]]
-name = "actix-tls"
-version = "3.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9fde0cf292f7cdc7f070803cb9a0d45c018441321a78b1042ffbbb81ec333297"
-dependencies = [
- "actix-codec",
- "actix-rt",
- "actix-service",
- "actix-utils",
- "futures-core",
- "log",
- "pin-project-lite",
- "tokio-util",
 ]
 
 [[package]]
@@ -771,17 +733,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 
 [[package]]
-name = "backoff"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b62ddb9cb1ec0a098ad4bbf9344d0713fa193ae1a80af55febcff2627b6a00c1"
-dependencies = [
- "getrandom",
- "instant",
- "rand",
-]
-
-[[package]]
 name = "backtrace"
 version = "0.3.67"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1216,6 +1167,20 @@ dependencies = [
  "atty",
  "lazy_static",
  "winapi",
+]
+
+[[package]]
+name = "combine"
+version = "4.6.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "35ed6e9d84f0b51a7f52daf1c7d71dd136fd7a3f41a8462b8cdb8c78d920fad4"
+dependencies = [
+ "bytes",
+ "futures-core",
+ "memchr",
+ "pin-project-lite",
+ "tokio",
+ "tokio-util",
 ]
 
 [[package]]
@@ -3921,18 +3886,24 @@ dependencies = [
 ]
 
 [[package]]
-name = "redis-async"
-version = "0.13.0"
+name = "redis"
+version = "0.21.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2777130e406c74c28b6cddc0194fcdc2553b5a8795eef9f6384bd3b70a07ba3f"
+checksum = "152f3863635cbb76b73bc247845781098302c6c9ad2060e1a9a7de56840346b6"
 dependencies = [
+ "arc-swap",
+ "async-trait",
  "bytes",
- "futures-channel",
- "futures-sink",
+ "combine",
+ "futures",
  "futures-util",
- "log",
+ "itoa",
+ "percent-encoding 2.2.0",
+ "pin-project-lite",
+ "ryu",
  "tokio",
  "tokio-util",
+ "url 2.3.1",
 ]
 
 [[package]]
