@@ -10,7 +10,7 @@ use actix_cors::Cors;
 use actix_identity::IdentityMiddleware;
 use actix_session::{
     config::{CookieContentSecurity, PersistentSession},
-    storage::RedisActorSessionStore,
+    storage::RedisSessionStore,
     SessionMiddleware,
 };
 use actix_web::{
@@ -70,6 +70,9 @@ pub async fn run(
     let max_age_inactive_days = settings.application.http_session.max_age_inactive_days;
     let settings_web_data = web::Data::new(settings);
 
+    info!("Connecting to Redis on {}", redis_connection_string);
+    let redis_store = RedisSessionStore::new(redis_connection_string.clone()).await?;
+
     info!("Listening on {}", listen_address);
 
     let server = HttpServer::new(move || {
@@ -113,15 +116,12 @@ pub async fn run(
                     .build(),
             )
             .wrap(
-                SessionMiddleware::builder(
-                    RedisActorSessionStore::new(redis_connection_string.clone()),
-                    session_secret_key.clone(),
-                )
-                .session_lifecycle(
-                    PersistentSession::default().session_ttl(Duration::days(max_age_days)),
-                )
-                .cookie_content_security(CookieContentSecurity::Signed)
-                .build(),
+                SessionMiddleware::builder(redis_store.clone(), session_secret_key.clone())
+                    .session_lifecycle(
+                        PersistentSession::default().session_ttl(Duration::days(max_age_days)),
+                    )
+                    .cookie_content_security(CookieContentSecurity::Signed)
+                    .build(),
             )
             .route("/ping", web::get().to(routes::health_check::ping))
             .service(api_scope)

@@ -56,6 +56,8 @@ pub struct DatabaseSettings {
 pub struct RedisSettings {
     pub port: u16,
     pub host: String,
+    pub user: Option<String>,
+    pub password: Option<String>,
 }
 
 #[derive(Deserialize, Clone)]
@@ -103,7 +105,16 @@ impl DatabaseSettings {
 
 impl RedisSettings {
     pub fn connection_string(&self) -> String {
-        format!("{}:{}", self.host, self.port)
+        if let Some(password) = &self.password {
+            format!(
+                "redis://{}:{password}@{}:{}",
+                self.user.clone().unwrap_or_default(),
+                self.host,
+                self.port
+            )
+        } else {
+            format!("redis://{}:{}", self.host, self.port)
+        }
     }
 }
 
