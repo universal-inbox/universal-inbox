@@ -16,6 +16,7 @@ use crate::{
     repository::Repository, universal_inbox::UniversalInboxError,
 };
 
+#[derive(Debug)]
 pub struct UserService {
     repository: Arc<Repository>,
     authentication_settings: AuthenticationSettings,

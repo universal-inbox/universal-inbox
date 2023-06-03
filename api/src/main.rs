@@ -104,15 +104,10 @@ async fn main() -> std::io::Result<()> {
 
     let result = match &cli.command {
         Commands::SyncNotifications { source } => {
-            commands::sync::sync_notifications_for_all_users(
-                user_service,
-                notification_service,
-                source,
-            )
-            .await
+            commands::sync::sync_notifications_for_all_users(notification_service, *source).await
         }
         Commands::SyncTasks { source } => {
-            commands::sync::sync_tasks_for_all_users(user_service, task_service, source).await
+            commands::sync::sync_tasks_for_all_users(task_service, *source).await
         }
         Commands::Serve => {
             let listener = TcpListener::bind(format!("0.0.0.0:{}", settings.application.port))

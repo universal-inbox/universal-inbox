@@ -18,6 +18,8 @@ pub struct IntegrationConnection {
     pub failure_message: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub last_sync_started_at: Option<DateTime<Utc>>,
+    pub last_sync_failure_message: Option<String>,
 }
 
 impl IntegrationConnection {
@@ -31,6 +33,8 @@ impl IntegrationConnection {
             failure_message: None,
             created_at: Utc::now().with_nanosecond(0).unwrap(),
             updated_at: Utc::now().with_nanosecond(0).unwrap(),
+            last_sync_started_at: None,
+            last_sync_failure_message: None,
         }
     }
 }
