@@ -53,13 +53,14 @@ pub async fn sync_tasks_response(
     client: &Client,
     app_address: &str,
     source: Option<TaskSourceKind>,
+    asynchronous: bool,
 ) -> Response {
     client
         .post(&format!("{}/tasks/sync", &app_address))
         .json(
             &source
-                .map(|src| json!({"source": src.to_string()}))
-                .unwrap_or_else(|| json!({})),
+                .map(|src| json!({"source": src.to_string(), "asynchronous": asynchronous}))
+                .unwrap_or_else(|| json!({ "asynchronous": asynchronous })),
         )
         .send()
         .await
@@ -70,8 +71,9 @@ pub async fn sync_tasks(
     client: &Client,
     app_address: &str,
     source: Option<TaskSourceKind>,
+    asynchronous: bool,
 ) -> Vec<TaskCreationResult> {
-    sync_tasks_response(client, app_address, source)
+    sync_tasks_response(client, app_address, source, asynchronous)
         .await
         .json()
         .await

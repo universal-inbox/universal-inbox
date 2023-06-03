@@ -5,8 +5,10 @@ use std::{
 };
 
 use anyhow::{anyhow, Context};
+use chrono::{Duration, Utc};
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
+use tracing::{error, info};
 
 use universal_inbox::{
     integration_connection::IntegrationProviderKind,
@@ -24,7 +26,8 @@ use crate::{
     repository::{task::TaskRepository, Repository},
     universal_inbox::{
         integration_connection::service::IntegrationConnectionService,
-        notification::service::NotificationService, UniversalInboxError, UpdateStatus,
+        notification::service::NotificationService, user::service::UserService,
+        UniversalInboxError, UpdateStatus,
     },
 };
 
@@ -36,6 +39,8 @@ pub struct TaskService {
     todoist_service: TodoistService,
     notification_service: Weak<RwLock<NotificationService>>,
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
+    user_service: Arc<RwLock<UserService>>,
+    min_sync_tasks_interval_in_minutes: i64,
 }
 
 impl TaskService {
@@ -44,12 +49,16 @@ impl TaskService {
         todoist_service: TodoistService,
         notification_service: Weak<RwLock<NotificationService>>,
         integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
+        user_service: Arc<RwLock<UserService>>,
+        min_sync_tasks_interval_in_minutes: i64,
     ) -> TaskService {
         TaskService {
             repository,
             todoist_service,
             notification_service,
             integration_connection_service,
+            user_service,
+            min_sync_tasks_interval_in_minutes,
         }
     }
 
@@ -61,7 +70,7 @@ impl TaskService {
     pub async fn apply_updated_task_side_effect<'a, T>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        task_source_service: &dyn TaskSourceService<T>,
+        task_source_service: &(dyn TaskSourceService<T> + Send + Sync),
         patch: &TaskPatch,
         task: Box<Task>,
         user_id: UserId,
@@ -73,6 +82,7 @@ impl TaskService {
             .get_access_token(
                 executor,
                 task_source_service.get_integration_provider_kind(),
+                None,
                 user_id,
             )
             .await?
@@ -200,7 +210,12 @@ impl TaskService {
             .integration_connection_service
             .read()
             .await
-            .get_access_token(executor, IntegrationProviderKind::Todoist, for_user_id)
+            .get_access_token(
+                executor,
+                IntegrationProviderKind::Todoist,
+                None,
+                for_user_id,
+            )
             .await?
             .ok_or_else(|| anyhow!("Cannot create a Todoist task without an access token"))?;
 
@@ -231,7 +246,7 @@ impl TaskService {
         Ok(created_task)
     }
 
-    async fn sync_source_tasks_and_notifications<'a, T: Debug, U>(
+    async fn sync_source_tasks_and_notifications<'a, T: Debug, U: Send + Sync>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
         task_source_service: &U,
@@ -240,58 +255,94 @@ impl TaskService {
     where
         U: TaskSourceService<T> + NotificationSource,
     {
+        let integration_provider_kind = task_source_service.get_integration_provider_kind();
         let access_token = self
             .integration_connection_service
             .read()
             .await
             .get_access_token(
                 executor,
-                task_source_service.get_integration_provider_kind(),
+                integration_provider_kind,
+                Some(Utc::now() - Duration::minutes(self.min_sync_tasks_interval_in_minutes)),
                 user_id,
             )
             .await?;
 
         if let Some(access_token) = access_token {
-            let source_tasks = task_source_service.fetch_all_tasks(&access_token).await?;
-            let tasks = self
-                .save_tasks_from_source(executor, task_source_service, &source_tasks, user_id)
-                .await?;
-
-            let tasks_in_inbox: Vec<Task> = tasks
-                .iter()
-                .filter(|task| task.is_in_inbox())
-                .cloned()
-                .collect();
-
-            let notifications = self
-                .notification_service
-                .upgrade()
-                .context("Unable to access notification_service from task_service")?
+            self.integration_connection_service
                 .read()
                 .await
-                .save_notifications_from_source(
+                .update_integration_connection_sync_status(
                     executor,
-                    task_source_service.get_notification_source_kind(),
-                    tasks_in_inbox,
                     user_id,
+                    integration_provider_kind,
+                    None,
                 )
                 .await?;
+            match task_source_service.fetch_all_tasks(&access_token).await {
+                Ok(source_tasks) => {
+                    let tasks = self
+                        .save_tasks_from_source(
+                            executor,
+                            task_source_service,
+                            &source_tasks,
+                            user_id,
+                        )
+                        .await?;
 
-            let mut notifications_by_task_id: HashMap<Option<TaskId>, Notification> = notifications
-                .into_iter()
-                .map(|notification| (notification.task_id, notification))
-                .collect();
+                    let tasks_in_inbox: Vec<Task> = tasks
+                        .iter()
+                        .filter(|task| task.is_in_inbox())
+                        .cloned()
+                        .collect();
 
-            Ok(tasks
-                .into_iter()
-                .map(move |task| {
-                    let task_id = task.id;
-                    TaskCreationResult {
-                        task,
-                        notification: notifications_by_task_id.remove(&Some(task_id)),
-                    }
-                })
-                .collect())
+                    let notifications = self
+                        .notification_service
+                        .upgrade()
+                        .context("Unable to access notification_service from task_service")?
+                        .read()
+                        .await
+                        .save_notifications_from_source(
+                            executor,
+                            task_source_service.get_notification_source_kind(),
+                            tasks_in_inbox,
+                            user_id,
+                        )
+                        .await?;
+
+                    let mut notifications_by_task_id: HashMap<Option<TaskId>, Notification> =
+                        notifications
+                            .into_iter()
+                            .map(|notification| (notification.task_id, notification))
+                            .collect();
+
+                    Ok(tasks
+                        .into_iter()
+                        .map(move |task| {
+                            let task_id = task.id;
+                            TaskCreationResult {
+                                task,
+                                notification: notifications_by_task_id.remove(&Some(task_id)),
+                            }
+                        })
+                        .collect())
+                }
+                Err(e) => {
+                    self.integration_connection_service
+                        .read()
+                        .await
+                        .update_integration_connection_sync_status(
+                            executor,
+                            user_id,
+                            integration_provider_kind,
+                            Some(format!(
+                                "Failed to fetch tasks from {integration_provider_kind}"
+                            )),
+                        )
+                        .await?;
+                    Err(UniversalInboxError::Recoverable(e.into()))
+                }
+            }
         } else {
             Ok(vec![])
         }
@@ -311,7 +362,7 @@ impl TaskService {
     pub async fn save_tasks_from_source<'a, T: Debug>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        task_source_service: &dyn TaskSourceService<T>,
+        task_source_service: &(dyn TaskSourceService<T> + Send + Sync),
         source_tasks: &[T],
         user_id: UserId,
     ) -> Result<Vec<Task>, UniversalInboxError> {
@@ -322,6 +373,7 @@ impl TaskService {
             .get_access_token(
                 executor,
                 task_source_service.get_integration_provider_kind(),
+                None,
                 user_id,
             )
             .await?
@@ -359,7 +411,7 @@ impl TaskService {
     pub async fn sync_tasks<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        source: &Option<TaskSyncSourceKind>,
+        source: Option<TaskSyncSourceKind>,
         user_id: UserId,
     ) -> Result<Vec<TaskCreationResult>, UniversalInboxError> {
         match source {
@@ -377,6 +429,65 @@ impl TaskService {
         }
     }
 
+    #[tracing::instrument(level = "debug", skip(self))]
+    pub async fn sync_tasks_with_transaction<'a>(
+        &self,
+        source: Option<TaskSyncSourceKind>,
+        user_id: UserId,
+    ) -> Result<Vec<TaskCreationResult>, UniversalInboxError> {
+        let mut transaction = self.begin().await.context(format!(
+            "Failed to create new transaction while syncing {source:?}"
+        ))?;
+
+        match self.sync_tasks(&mut transaction, source, user_id).await {
+            Ok(tasks) => {
+                transaction
+                    .commit()
+                    .await
+                    .context(format!("Failed to commit while syncing {source:?}"))?;
+                Ok(tasks)
+            }
+            Err(error @ UniversalInboxError::Recoverable(_)) => {
+                transaction
+                    .commit()
+                    .await
+                    .context(format!("Failed to commit while syncing {source:?}"))?;
+                Err(error)
+            }
+            Err(error) => {
+                transaction
+                    .rollback()
+                    .await
+                    .context(format!("Failed to rollback while syncing {source:?}"))?;
+                Err(error)
+            }
+        }
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    pub async fn sync_tasks_for_all_users<'a>(
+        &self,
+        source: Option<TaskSyncSourceKind>,
+    ) -> Result<(), UniversalInboxError> {
+        let service = self.user_service.read().await;
+        let mut transaction = service
+            .begin()
+            .await
+            .context("Failed to create new transaction while syncing tasks for all users")?;
+        let users = service.fetch_all_users(&mut transaction).await?;
+        for user in users {
+            let user_id = user.id;
+            info!("Syncing tasks for user {user_id}");
+            match self.sync_tasks_with_transaction(source, user_id).await {
+                Ok(tasks) => info!(
+                    "{} tasks successfully synced for user {user_id}",
+                    tasks.len()
+                ),
+                Err(err) => error!("Failed to sync tasks for user {user_id}: {err:?}"),
+            };
+        }
+        Ok(())
+    }
     #[tracing::instrument(level = "debug", skip(self))]
     pub async fn patch_task<'a>(
         &self,

@@ -7,6 +7,7 @@ use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::sync::RwLock;
+use tracing::{error, info};
 
 use universal_inbox::{
     task::{Task, TaskId, TaskPatch, TaskStatus, TaskSummary},
@@ -15,10 +16,7 @@ use universal_inbox::{
 
 use crate::{
     integrations::task::TaskSyncSourceKind,
-    universal_inbox::{
-        task::{service::TaskService, TaskCreationResult},
-        UniversalInboxError, UpdateStatus,
-    },
+    universal_inbox::{task::service::TaskService, UniversalInboxError, UpdateStatus},
 };
 
 use super::option_wildcard;
@@ -168,38 +166,77 @@ pub async fn create_task(
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SyncTasksParameters {
     source: Option<TaskSyncSourceKind>,
+    asynchronous: Option<bool>,
 }
 
 #[tracing::instrument(level = "debug", skip(task_service, identity))]
 pub async fn sync_tasks(
     params: web::Json<SyncTasksParameters>,
     task_service: web::Data<Arc<RwLock<TaskService>>>,
-    identity: Identity,
+    identity: Option<Identity>,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    let user_id = identity
-        .id()
-        .context("No user ID found in identity")?
-        .parse::<UserId>()
-        .context("User ID has wrong format")?;
+    let source = params.source;
 
-    let service = task_service.read().await;
-    let mut transaction = service.begin().await.context(format!(
-        "Failed to create new transaction while syncing {:?}",
-        &params.source
-    ))?;
+    if let Some(identity) = identity {
+        let user_id = identity
+            .id()
+            .context("No user ID found in identity")?
+            .parse::<UserId>()
+            .context("User ID has wrong format")?;
 
-    let tasks: Vec<TaskCreationResult> = service
-        .sync_tasks(&mut transaction, &params.source, user_id)
-        .await?;
+        if params.asynchronous.unwrap_or(true) {
+            let task_service = task_service.get_ref().clone();
+            tokio::spawn(async move {
+                let source_kind_string = source
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| "all types of".to_string());
+                info!("Syncing {source_kind_string} tasks for user {user_id}");
+                let service = task_service.read().await;
 
-    transaction.commit().await.context(format!(
-        "Failed to commit while syncing {:?}",
-        &params.source
-    ))?;
+                let tasks = service.sync_tasks_with_transaction(source, user_id).await;
 
-    Ok(HttpResponse::Ok()
-        .content_type("application/json")
-        .body(serde_json::to_string(&tasks).context("Cannot serialize task creation results")?))
+                match tasks {
+                    Ok(tasks) => info!(
+                        "{} {source_kind_string} tasks successfully synced for user {user_id}",
+                        tasks.len()
+                    ),
+                    Err(err) => {
+                        error!(
+                            "Failed to sync {source_kind_string} tasks for user {user_id}: {err:?}"
+                        )
+                    }
+                };
+            });
+            Ok(HttpResponse::Created().finish())
+        } else {
+            let service = task_service.read().await;
+
+            let tasks = service.sync_tasks_with_transaction(source, user_id).await?;
+            Ok(HttpResponse::Ok()
+                .content_type("application/json")
+                .body(serde_json::to_string(&tasks).context("Cannot serialize tasks")?))
+        }
+    } else {
+        let task_service = task_service.get_ref().clone();
+
+        tokio::spawn(async move {
+            let source_kind_string = source
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| "all types of".to_string());
+            info!("Syncing {source_kind_string} tasks for all users");
+            let service = task_service.read().await;
+
+            let result = service.sync_tasks_for_all_users(source).await;
+
+            match result {
+                Ok(_) => info!("{source_kind_string} tasks successfully synced"),
+                Err(err) => {
+                    error!("Failed to sync {source_kind_string} tasks: {err:?}")
+                }
+            };
+        });
+        Ok(HttpResponse::Created().finish())
+    }
 }
 
 #[tracing::instrument(level = "debug", skip(task_service, identity))]

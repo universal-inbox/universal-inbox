@@ -1,6 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use anyhow::Context;
+use chrono::{DateTime, Utc};
 use sqlx::{Postgres, Transaction};
 
 use universal_inbox::{
@@ -178,6 +179,7 @@ impl IntegrationConnectionService {
         &self,
         executor: &mut Transaction<'a, Postgres>,
         integration_provider_kind: IntegrationProviderKind,
+        synced_before: Option<DateTime<Utc>>,
         for_user_id: UserId,
     ) -> Result<Option<AccessToken>, UniversalInboxError> {
         let integration_connection = self
@@ -186,6 +188,7 @@ impl IntegrationConnectionService {
                 executor,
                 for_user_id,
                 integration_provider_kind,
+                synced_before,
             )
             .await?;
 
@@ -222,5 +225,23 @@ impl IntegrationConnectionService {
         }
 
         Ok(None)
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    pub async fn update_integration_connection_sync_status<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        user_id: UserId,
+        integration_provider_kind: IntegrationProviderKind,
+        failure_message: Option<String>,
+    ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
+        self.repository
+            .update_integration_connection_sync_status(
+                executor,
+                user_id,
+                integration_provider_kind,
+                failure_message,
+            )
+            .await
     }
 }

@@ -1,13 +1,18 @@
+use chrono::{DateTime, Utc};
 use httpmock::{
     Method::{DELETE, GET},
     Mock, MockServer,
 };
 use reqwest::{Client, Response};
-
 use rstest::fixture;
-use universal_inbox::integration_connection::{
-    IntegrationConnection, IntegrationConnectionId, IntegrationConnectionStatus,
-    IntegrationProviderKind, NangoProviderKey,
+use tracing::debug;
+
+use universal_inbox::{
+    integration_connection::{
+        IntegrationConnection, IntegrationConnectionId, IntegrationConnectionStatus,
+        IntegrationProviderKind, NangoProviderKey,
+    },
+    user::UserId,
 };
 
 use universal_inbox_api::{
@@ -15,9 +20,7 @@ use universal_inbox_api::{
     repository::integration_connection::IntegrationConnectionRepository,
 };
 
-use crate::helpers::load_json_fixture_file;
-
-use super::auth::AuthenticatedApp;
+use crate::helpers::{auth::AuthenticatedApp, load_json_fixture_file};
 
 pub async fn list_integration_connections_response(client: &Client, app_address: &str) -> Response {
     client
@@ -123,6 +126,29 @@ pub async fn create_validated_integration_connection(
     transaction.commit().await.unwrap();
 
     update_result.result.unwrap()
+}
+
+pub async fn get_integration_connection_per_provider(
+    app: &AuthenticatedApp,
+    user_id: UserId,
+    provider_kind: IntegrationProviderKind,
+    synced_before: Option<DateTime<Utc>>,
+) -> Option<IntegrationConnection> {
+    let mut transaction = app.repository.begin().await.unwrap();
+    let integration_connection = app
+        .repository
+        .get_integration_connection_per_provider(
+            &mut transaction,
+            user_id,
+            provider_kind,
+            synced_before,
+        )
+        .await
+        .unwrap();
+    debug!("Integration connection: {:?}", integration_connection);
+    transaction.commit().await.unwrap();
+
+    integration_connection
 }
 
 pub async fn create_and_mock_integration_connection(

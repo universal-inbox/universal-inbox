@@ -181,6 +181,10 @@ pub async fn build_services(
         github_service,
         Weak::new(),
         integration_connection_service.clone(),
+        user_service.clone(),
+        settings
+            .application
+            .min_sync_notifications_interval_in_minutes,
     )));
 
     let task_service = Arc::new(RwLock::new(TaskService::new(
@@ -188,6 +192,8 @@ pub async fn build_services(
         todoist_service,
         Arc::downgrade(&notification_service),
         integration_connection_service.clone(),
+        user_service.clone(),
+        settings.application.min_sync_tasks_interval_in_minutes,
     )));
 
     notification_service
