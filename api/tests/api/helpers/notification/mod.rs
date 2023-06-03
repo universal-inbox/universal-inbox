@@ -81,13 +81,19 @@ pub async fn sync_notifications_response(
     client: &Client,
     app_address: &str,
     source: Option<NotificationSourceKind>,
+    asynchronous: bool,
 ) -> Response {
     client
         .post(&format!("{}/notifications/sync", &app_address))
         .json(
             &source
-                .map(|src| json!({"source": src.to_string()}))
-                .unwrap_or_else(|| json!({})),
+                .map(|src| {
+                    json!({
+                        "source": src.to_string(),
+                        "asynchronous": asynchronous,
+                    })
+                })
+                .unwrap_or_else(|| json!({ "asynchronous": asynchronous })),
         )
         .send()
         .await
@@ -98,8 +104,9 @@ pub async fn sync_notifications(
     client: &Client,
     app_address: &str,
     source: Option<NotificationSourceKind>,
+    asynchronous: bool,
 ) -> Vec<Notification> {
-    sync_notifications_response(client, app_address, source)
+    sync_notifications_response(client, app_address, source, asynchronous)
         .await
         .json()
         .await

@@ -7,6 +7,7 @@ use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::sync::RwLock;
+use tracing::{error, info};
 
 use universal_inbox::{
     notification::{
@@ -155,37 +156,79 @@ pub async fn create_notification(
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SyncNotificationsParameters {
     source: Option<NotificationSyncSourceKind>,
+    asynchronous: Option<bool>,
 }
 
 #[tracing::instrument(level = "debug", skip(notification_service, identity))]
 pub async fn sync_notifications(
     params: web::Json<SyncNotificationsParameters>,
     notification_service: web::Data<Arc<RwLock<NotificationService>>>,
-    identity: Identity,
+    identity: Option<Identity>,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    let user_id = identity
-        .id()
-        .context("No user ID found in identity")?
-        .parse::<UserId>()
-        .context("User ID has wrong format")?;
-    let service = notification_service.read().await;
-    let mut transaction = service.begin().await.context(format!(
-        "Failed to create new transaction while syncing {:?}",
-        &params.source
-    ))?;
+    let source = params.source;
 
-    let notifications: Vec<Notification> = service
-        .sync_notifications(&mut transaction, &params.source, user_id)
-        .await?;
+    if let Some(identity) = identity {
+        let user_id = identity
+            .id()
+            .context("No user ID found in identity")?
+            .parse::<UserId>()
+            .context("User ID has wrong format")?;
 
-    transaction.commit().await.context(format!(
-        "Failed to commit while syncing {:?}",
-        &params.source
-    ))?;
+        if params.asynchronous.unwrap_or(true) {
+            let notification_service = notification_service.get_ref().clone();
+            tokio::spawn(async move {
+                let source_kind_string = source
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| "all types of".to_string());
+                info!("Syncing {source_kind_string} notifications for user {user_id}");
+                let service = notification_service.read().await;
 
-    Ok(HttpResponse::Ok()
-        .content_type("application/json")
-        .body(serde_json::to_string(&notifications).context("Cannot serialize notifications")?))
+                let notifications = service
+                    .sync_notifications_with_transaction(source, user_id)
+                    .await;
+
+                match notifications {
+                    Ok(notifications) => info!(
+                        "{} {source_kind_string} notifications successfully synced for user {user_id}",
+                        notifications.len()
+                    ),
+                    Err(err) => {
+                        error!("Failed to sync {source_kind_string} notifications for user {user_id}: {err:?}")
+                    }
+                };
+            });
+            Ok(HttpResponse::Created().finish())
+        } else {
+            let service = notification_service.read().await;
+
+            let notifications = service
+                .sync_notifications_with_transaction(source, user_id)
+                .await?;
+            Ok(HttpResponse::Ok().content_type("application/json").body(
+                serde_json::to_string(&notifications).context("Cannot serialize notifications")?,
+            ))
+        }
+    } else {
+        let notification_service = notification_service.get_ref().clone();
+
+        tokio::spawn(async move {
+            let source_kind_string = source
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| "all types of".to_string());
+            info!("Syncing {source_kind_string} notifications for all users");
+            let service = notification_service.read().await;
+
+            let result = service.sync_notifications_for_all_users(source).await;
+
+            match result {
+                Ok(_) => info!("{source_kind_string} notifications successfully synced"),
+                Err(err) => {
+                    error!("Failed to sync {source_kind_string} notifications: {err:?}")
+                }
+            };
+        });
+        Ok(HttpResponse::Created().finish())
+    }
 }
 
 #[tracing::instrument(level = "debug", skip(notification_service, identity))]

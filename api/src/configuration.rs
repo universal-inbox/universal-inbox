@@ -25,9 +25,11 @@ pub struct ApplicationSettings {
     pub static_dir: Option<String>,
     pub authentication: AuthenticationSettings,
     pub http_session: HttpSessionSettings,
+    pub min_sync_notifications_interval_in_minutes: i64,
+    pub min_sync_tasks_interval_in_minutes: i64,
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct AuthenticationSettings {
     pub oidc_issuer_url: IssuerUrl,
     pub oidc_introspection_url: IntrospectionUrl,

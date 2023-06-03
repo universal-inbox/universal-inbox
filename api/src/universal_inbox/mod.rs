@@ -62,6 +62,8 @@ pub enum UniversalInboxError {
     Forbidden(String),
     #[error("Unknown Nango connection: {0}")]
     UnknownNangoConnectionError(ConnectionId),
+    #[error("An error occured but transaction was still committed: {0}")]
+    Recoverable(anyhow::Error),
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
 }

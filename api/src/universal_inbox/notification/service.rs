@@ -4,8 +4,10 @@ use std::{
 };
 
 use anyhow::{anyhow, Context};
+use chrono::{Duration, Utc};
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
+use tracing::{error, info};
 
 use universal_inbox::{
     notification::{
@@ -26,7 +28,7 @@ use crate::{
     repository::{notification::NotificationRepository, Repository},
     universal_inbox::{
         integration_connection::service::IntegrationConnectionService, task::service::TaskService,
-        UniversalInboxError, UpdateStatus,
+        user::service::UserService, UniversalInboxError, UpdateStatus,
     },
 };
 
@@ -36,6 +38,8 @@ pub struct NotificationService {
     github_service: GithubService,
     task_service: Weak<RwLock<TaskService>>,
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
+    user_service: Arc<RwLock<UserService>>,
+    min_sync_notifications_interval_in_minutes: i64,
 }
 
 impl NotificationService {
@@ -44,12 +48,16 @@ impl NotificationService {
         github_service: GithubService,
         task_service: Weak<RwLock<TaskService>>,
         integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
+        user_service: Arc<RwLock<UserService>>,
+        min_sync_notifications_interval_in_minutes: i64,
     ) -> NotificationService {
         NotificationService {
             repository,
             github_service,
             task_service,
             integration_connection_service,
+            user_service,
+            min_sync_notifications_interval_in_minutes,
         }
     }
 
@@ -77,6 +85,7 @@ impl NotificationService {
             .get_access_token(
                 executor,
                 notification_source_service.get_integration_provider_kind(),
+                None,
                 user_id,
             )
             .await?;
@@ -171,7 +180,7 @@ impl NotificationService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self), err)]
     pub async fn create_or_update_notification<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -186,31 +195,64 @@ impl NotificationService {
     async fn sync_source_notifications<'a, T: Debug + IntoNotification>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        notification_source_service: &dyn NotificationSourceService<T>,
+        notification_source_service: &(dyn NotificationSourceService<T> + Send + Sync),
         user_id: UserId,
     ) -> Result<Vec<Notification>, UniversalInboxError> {
+        let integration_provider_kind = notification_source_service.get_integration_provider_kind();
         let access_token = self
             .integration_connection_service
             .read()
             .await
             .get_access_token(
                 executor,
-                notification_source_service.get_integration_provider_kind(),
+                integration_provider_kind,
+                Some(
+                    Utc::now() - Duration::minutes(self.min_sync_notifications_interval_in_minutes),
+                ),
                 user_id,
             )
             .await?;
 
         if let Some(access_token) = access_token {
-            let source_notifications = notification_source_service
-                .fetch_all_notifications(&access_token)
+            self.integration_connection_service
+                .read()
+                .await
+                .update_integration_connection_sync_status(
+                    executor,
+                    user_id,
+                    integration_provider_kind,
+                    None,
+                )
                 .await?;
-            self.save_notifications_from_source(
-                executor,
-                notification_source_service.get_notification_source_kind(),
-                source_notifications,
-                user_id,
-            )
-            .await
+            match notification_source_service
+                .fetch_all_notifications(&access_token)
+                .await
+            {
+                Ok(source_notifications) => {
+                    self.save_notifications_from_source(
+                        executor,
+                        notification_source_service.get_notification_source_kind(),
+                        source_notifications,
+                        user_id,
+                    )
+                    .await
+                }
+                Err(e) => {
+                    self.integration_connection_service
+                        .read()
+                        .await
+                        .update_integration_connection_sync_status(
+                            executor,
+                            user_id,
+                            integration_provider_kind,
+                            Some(format!(
+                                "Failed to fetch notifications from {integration_provider_kind}"
+                            )),
+                        )
+                        .await?;
+                    Err(UniversalInboxError::Recoverable(e.into()))
+                }
+            }
         } else {
             Ok(vec![])
         }
@@ -255,7 +297,7 @@ impl NotificationService {
     pub async fn sync_notifications<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        source: &Option<NotificationSyncSourceKind>,
+        source: Option<NotificationSyncSourceKind>,
         user_id: UserId,
     ) -> Result<Vec<Notification>, UniversalInboxError> {
         match source {
@@ -270,6 +312,71 @@ impl NotificationService {
                 Ok(notifications_from_github)
             }
         }
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    pub async fn sync_notifications_with_transaction<'a>(
+        &self,
+        source: Option<NotificationSyncSourceKind>,
+        user_id: UserId,
+    ) -> Result<Vec<Notification>, UniversalInboxError> {
+        let mut transaction = self.begin().await.context(format!(
+            "Failed to create new transaction while syncing {source:?}"
+        ))?;
+
+        match self
+            .sync_notifications(&mut transaction, source, user_id)
+            .await
+        {
+            Ok(notifications) => {
+                transaction
+                    .commit()
+                    .await
+                    .context(format!("Failed to commit while syncing {source:?}"))?;
+                Ok(notifications)
+            }
+            Err(error @ UniversalInboxError::Recoverable(_)) => {
+                transaction
+                    .commit()
+                    .await
+                    .context(format!("Failed to commit while syncing {source:?}"))?;
+                Err(error)
+            }
+            Err(error) => {
+                transaction
+                    .rollback()
+                    .await
+                    .context(format!("Failed to rollback while syncing {source:?}"))?;
+                Err(error)
+            }
+        }
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    pub async fn sync_notifications_for_all_users<'a>(
+        &self,
+        source: Option<NotificationSyncSourceKind>,
+    ) -> Result<(), UniversalInboxError> {
+        let service = self.user_service.read().await;
+        let mut transaction = service.begin().await.context(
+            "Failed to create new transaction while syncing notifications for all users",
+        )?;
+        let users = service.fetch_all_users(&mut transaction).await?;
+        for user in users {
+            let user_id = user.id;
+            info!("Syncing notifications for user {user_id}");
+            match self
+                .sync_notifications_with_transaction(source, user_id)
+                .await
+            {
+                Ok(notifications) => info!(
+                    "{} notifications successfully synced for user {user_id}",
+                    notifications.len()
+                ),
+                Err(err) => error!("Failed to sync notifications for user {user_id}: {err:?}"),
+            };
+        }
+        Ok(())
     }
 
     #[tracing::instrument(level = "debug", skip(self))]

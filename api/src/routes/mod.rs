@@ -22,6 +22,7 @@ impl ResponseError for UniversalInboxError {
             UniversalInboxError::InvalidInputData { .. } => StatusCode::BAD_REQUEST,
             UniversalInboxError::TaskNotFound { .. } => StatusCode::BAD_REQUEST,
             UniversalInboxError::AlreadyExists { .. } => StatusCode::BAD_REQUEST,
+            UniversalInboxError::Recoverable(_) => StatusCode::INTERNAL_SERVER_ERROR,
             UniversalInboxError::Unexpected(_) => StatusCode::INTERNAL_SERVER_ERROR,
             UniversalInboxError::Unauthorized(_) => StatusCode::UNAUTHORIZED,
             UniversalInboxError::Forbidden(_) => StatusCode::FORBIDDEN,

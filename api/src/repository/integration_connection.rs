@@ -30,6 +30,7 @@ pub trait IntegrationConnectionRepository {
         executor: &mut Transaction<'a, Postgres>,
         for_user_id: UserId,
         integration_provider_kind: IntegrationProviderKind,
+        synced_before: Option<DateTime<Utc>>,
     ) -> Result<Option<IntegrationConnection>, UniversalInboxError>;
 
     async fn update_integration_connection_status<'a>(
@@ -39,6 +40,14 @@ pub trait IntegrationConnectionRepository {
         new_status: IntegrationConnectionStatus,
         failure_message: Option<String>,
         for_user_id: UserId,
+    ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError>;
+
+    async fn update_integration_connection_sync_status<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        user_id: UserId,
+        integration_provider_kind: IntegrationProviderKind,
+        failure_message: Option<String>,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError>;
 
     async fn fetch_all_integration_connections<'a>(
@@ -73,7 +82,9 @@ impl IntegrationConnectionRepository for Repository {
                   status as "status: _",
                   failure_message,
                   created_at,
-                  updated_at
+                  updated_at,
+                  last_sync_started_at,
+                  last_sync_failure_message
                 FROM integration_connection
                 WHERE id = $1
             "#,
@@ -81,9 +92,11 @@ impl IntegrationConnectionRepository for Repository {
         )
         .fetch_optional(executor)
         .await
-        .context(
-            "Failed to fetch integration connection {integration_connection_id} from storage",
-        )?;
+        .with_context(|| {
+            format!(
+                "Failed to fetch integration connection {integration_connection_id} from storage"
+            )
+        })?;
 
         row.map(|r| r.try_into()).transpose()
     }
@@ -94,31 +107,47 @@ impl IntegrationConnectionRepository for Repository {
         executor: &mut Transaction<'a, Postgres>,
         user_id: UserId,
         integration_provider_kind: IntegrationProviderKind,
+        synced_before: Option<DateTime<Utc>>,
     ) -> Result<Option<IntegrationConnection>, UniversalInboxError> {
-        let row = sqlx::query_as!(
-            IntegrationConnectionRow,
+        let mut query_builder = QueryBuilder::new(
             r#"
                 SELECT
                   id,
                   user_id,
                   connection_id,
-                  provider_kind as "provider_kind: _",
-                  status as "status: _",
+                  provider_kind,
+                  status,
                   failure_message,
                   created_at,
-                  updated_at
+                  updated_at,
+                  last_sync_started_at,
+                  last_sync_failure_message
                 FROM integration_connection
                 WHERE
-                  user_id = $1 AND provider_kind::TEXT = $2
             "#,
-            user_id.0,
-            integration_provider_kind.to_string()
-        )
-        .fetch_optional(executor)
-        .await
-        .context(
-            "Failed to fetch integration connection for user {user_id} of kind {integration_provider_kind} from storage",
-        )?;
+        );
+        let mut separated = query_builder.separated(" AND ");
+        separated
+            .push("user_id = ")
+            .push_bind_unseparated(user_id.0);
+        separated
+            .push("provider_kind::TEXT = ")
+            .push_bind_unseparated(integration_provider_kind.to_string());
+
+        if let Some(synced_before) = synced_before {
+            separated
+                .push("(last_sync_started_at is null OR last_sync_started_at <= ")
+                .push_bind_unseparated(synced_before)
+                .push_unseparated(")");
+        }
+
+        let row: Option<IntegrationConnectionRow> = query_builder
+            .build_query_as::<IntegrationConnectionRow>()
+            .fetch_optional(executor)
+            .await
+            .with_context(|| {
+                format!("Failed to fetch integration connection for user {user_id} of kind {integration_provider_kind} from storage")
+            })?;
 
         row.map(|r| r.try_into()).transpose()
     }
@@ -161,6 +190,8 @@ impl IntegrationConnectionRepository for Repository {
                   failure_message,
                   created_at,
                   updated_at,
+                  last_sync_started_at,
+                  last_sync_failure_message,
                   (SELECT
              "#,
         );
@@ -187,9 +218,77 @@ impl IntegrationConnectionRepository for Repository {
             .build_query_as::<UpdatedIntegrationConnectionRow>()
             .fetch_optional(executor)
             .await
-            .context(format!(
-                "Failed to update integration connection {integration_connection_id} from storage"
-            ))?;
+            .with_context(|| {
+                format!("Failed to update integration connection {integration_connection_id} from storage")
+            })?;
+
+        if let Some(updated_integration_connection_row) = row {
+            Ok(UpdateStatus {
+                updated: updated_integration_connection_row.is_updated,
+                result: Some(Box::new(
+                    updated_integration_connection_row
+                        .integration_connection_row
+                        .try_into()
+                        .unwrap(),
+                )),
+            })
+        } else {
+            Ok(UpdateStatus {
+                updated: false,
+                result: None,
+            })
+        }
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    async fn update_integration_connection_sync_status<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        user_id: UserId,
+        integration_provider_kind: IntegrationProviderKind,
+        failure_message: Option<String>,
+    ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
+        let mut query_builder = QueryBuilder::new("UPDATE integration_connection SET");
+        let mut separated = query_builder.separated(", ");
+        separated
+            .push(" last_sync_started_at = ")
+            .push_bind_unseparated(Utc::now());
+        separated
+            .push(" last_sync_failure_message = ")
+            .push_bind_unseparated(failure_message.clone());
+
+        query_builder
+            .push(" WHERE ")
+            .separated(" AND ")
+            .push(" user_id = ")
+            .push_bind_unseparated(user_id.0)
+            .push(" provider_kind::TEXT = ")
+            .push_bind_unseparated(integration_provider_kind.to_string());
+
+        query_builder.push(
+            r#"
+                RETURNING
+                  id,
+                  user_id,
+                  connection_id,
+                  provider_kind,
+                  status,
+                  failure_message,
+                  created_at,
+                  updated_at,
+                  last_sync_started_at,
+                  last_sync_failure_message,
+                  true as "is_updated"
+             "#,
+        );
+
+        let row: Option<UpdatedIntegrationConnectionRow> = query_builder
+            .build_query_as::<UpdatedIntegrationConnectionRow>()
+            .fetch_optional(executor)
+            .await
+            .with_context(|| {
+                format!("Failed to update integration connection {integration_provider_kind} for user {user_id} from storage")
+            })?;
 
         if let Some(updated_integration_connection_row) = row {
             Ok(UpdateStatus {
@@ -226,7 +325,9 @@ impl IntegrationConnectionRepository for Repository {
                   status as "status: _",
                   failure_message,
                   created_at,
-                  updated_at
+                  updated_at,
+                  last_sync_started_at,
+                  last_sync_failure_message
                 FROM integration_connection
                 WHERE user_id = $1
             "#,
@@ -327,6 +428,8 @@ pub struct IntegrationConnectionRow {
     failure_message: Option<String>,
     created_at: NaiveDateTime,
     updated_at: NaiveDateTime,
+    last_sync_started_at: Option<NaiveDateTime>,
+    last_sync_failure_message: Option<String>,
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -379,6 +482,10 @@ impl TryFrom<IntegrationConnectionRow> for IntegrationConnection {
             failure_message: row.failure_message,
             created_at: DateTime::<Utc>::from_utc(row.created_at, Utc),
             updated_at: DateTime::<Utc>::from_utc(row.updated_at, Utc),
+            last_sync_started_at: row
+                .last_sync_started_at
+                .map(|started_at| DateTime::<Utc>::from_utc(started_at, Utc)),
+            last_sync_failure_message: row.last_sync_failure_message,
         })
     }
 }

@@ -7,6 +7,8 @@ api_path = ""
 front_base_url = "http://localhost:8080"
 # If `static_path` is specified, statics from `static_dir` will be served on `static_path`
 # static_path = ""
+min_sync_notifications_interval_in_minutes = 5
+min_sync_tasks_interval_in_minutes = 5
 
 # [application.authentication]
 # oidc_issuer_url = "https://oidc.provider"
