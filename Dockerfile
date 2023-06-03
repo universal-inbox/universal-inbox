@@ -1,4 +1,4 @@
-FROM lukemathwalker/cargo-chef:latest-rust-1.69.0 as chef
+FROM lukemathwalker/cargo-chef:latest-rust-1.70.0-bookworm as chef
 WORKDIR /app
 
 FROM chef as planner
@@ -6,12 +6,12 @@ COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef as dep-builder
-RUN cargo install cargo-binstall --version 0.22.0
-RUN cargo binstall -y cargo-make
+RUN cargo install cargo-binstall --version 1.3.0
+RUN cargo binstall -y cargo-make --version 0.36.8
 
 FROM dep-builder as dep-web-builder
 RUN cargo binstall -y trunk --version 0.16.0
-RUN cargo binstall -y rtx-cli
+RUN cargo binstall -y rtx-cli --version 1.32.0
 RUN rustup target add wasm32-unknown-unknown
 RUN rtx install nodejs@lts
 RUN rtx global nodejs@lts
@@ -22,7 +22,7 @@ COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook -p universal-inbox-web --release --recipe-path recipe.json --target wasm32-unknown-unknown
 
 FROM dep-builder as dep-api-builder
-RUN cargo binstall -y sqlx-cli --version 0.6.2
+RUN cargo install sqlx-cli --version 0.6.2
 COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook -p universal-inbox-api --release --recipe-path recipe.json
 
@@ -40,7 +40,7 @@ COPY src src
 COPY api api
 RUN cargo make --cwd api build-release
 
-FROM debian:bullseye-slim AS runtime
+FROM debian:bookworm-slim AS runtime
 WORKDIR /app
 RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
 RUN mkdir /data

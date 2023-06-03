@@ -52,16 +52,6 @@ thiserror = { version = "1.0" }
 url = { version = "2.3.0" }
 uuid = { version = "1.0", features = ["v4"] }
 
-[patch.crates-io]
-# Patch Dioxus to access use_memo, use_effect seems buggy as of 0.3.1
-dioxus = { git = "https://github.com/DioxusLabs/dioxus.git", rev = "9a053a0b51b1f38a190c4e9a56b32e0f667301c8" }
-dioxus-core = { git = "https://github.com/DioxusLabs/dioxus.git", rev = "9a053a0b51b1f38a190c4e9a56b32e0f667301c8" }
-dioxus-hooks = { git = "https://github.com/DioxusLabs/dioxus.git", rev = "9a053a0b51b1f38a190c4e9a56b32e0f667301c8" }
-dioxus-html = { git = "https://github.com/DioxusLabs/dioxus.git", rev = "9a053a0b51b1f38a190c4e9a56b32e0f667301c8" }
-dioxus-router = { git = "https://github.com/DioxusLabs/dioxus.git", rev = "9a053a0b51b1f38a190c4e9a56b32e0f667301c8" }
-dioxus-web = { git = "https://github.com/DioxusLabs/dioxus.git", rev = "9a053a0b51b1f38a190c4e9a56b32e0f667301c8" }
-fermi = { git = "https://github.com/DioxusLabs/dioxus.git", rev = "9a053a0b51b1f38a190c4e9a56b32e0f667301c8" }
-
 [dev-dependencies]
 pretty_assertions = { workspace = true }
 rstest = { workspace = true }

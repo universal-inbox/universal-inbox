@@ -24,7 +24,7 @@ pub fn integrations_panel<'a>(
         div {
             class: "flex flex-col w-auto p-8",
 
-            for (kind, config) in &*integration_providers {
+            for (kind, config) in (&*integration_providers) {
                 integration_settings {
                     kind: *kind,
                     config: config.clone(),
