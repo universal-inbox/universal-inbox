@@ -28,7 +28,7 @@ pub fn toggle_dark_mode(toggle: bool) -> Result<bool> {
     debug!("Switching dark mode {switch_to_dark_mode}");
     if switch_to_dark_mode {
         document_element
-            .set_attribute("data-theme", "dark")
+            .set_attribute("data-theme", "uidark")
             .map_err(|err| JsError::try_from(err).unwrap())?;
         document_element
             .class_list()
@@ -39,7 +39,7 @@ pub fn toggle_dark_mode(toggle: bool) -> Result<bool> {
             .map_err(|err| JsError::try_from(err).unwrap())?;
     } else {
         document_element
-            .set_attribute("data-theme", "light")
+            .set_attribute("data-theme", "uilight")
             .map_err(|err| JsError::try_from(err).unwrap())?;
         document_element
             .class_list()

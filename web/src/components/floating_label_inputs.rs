@@ -348,15 +348,15 @@ pub fn floating_label_input_search_select<'a>(cx: Scope<'a, InputSearchProps<'a>
                 class: "input-group h-10 group",
                 tabindex: -1,
 
-                span {
-                    class: "block py-2 bg-transparent border-0 border-b-2",
+                div {
+                    class: "block py-2 px-4 bg-transparent border-0 border-b-2",
                     icon
                 }
                 button {
                     tabindex: 1,
                     id: "associated-task",
                     name: "associated-task",
-                    class: "{button_style} truncate block py-2 px-0 w-full bg-transparent border-0 border-b-2 focus:outline-none focus:ring-0 peer",
+                    class: "{button_style} grow truncate block bg-transparent text-left border-0 border-b-2 focus:outline-none focus:ring-0 peer",
                     onclick: |_| {
                         let value = !*dropdown_opened.current();
                         let id = cx.props.name.clone();

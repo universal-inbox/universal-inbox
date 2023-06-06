@@ -58,7 +58,7 @@ pub fn task_planning_modal<'a>(
         dialog {
             id: "task-planning-modal",
             tabindex: "-1",
-            class: "modal modal-open backdrop-blur-sm fixed top-0 left-0 w-full h-full",
+            class: "modal modal-open text-base-content backdrop-blur-sm fixed top-0 left-0 w-full h-full",
             open: true,
 
             div {
