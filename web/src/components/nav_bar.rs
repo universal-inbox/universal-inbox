@@ -52,6 +52,11 @@ pub fn nav_bar(cx: Scope) -> Element {
             div {
                 class: "navbar-start",
 
+                img {
+                    class: "rounded-full w-12 h-12",
+                    src: "images/ui-logo-transparent.png",
+                    alt: "Universal Inbox logo",
+                }
                 Link {
                     class: "btn btn-ghost gap-2",
                     active_class: "btn-active",

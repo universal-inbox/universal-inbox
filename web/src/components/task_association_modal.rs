@@ -56,7 +56,7 @@ pub fn task_association_modal<'a>(
         dialog {
             id: "task-association-modal",
             tabindex: "-1",
-            class: "modal modal-open backdrop-blur-sm fixed top-0 left-0 w-full h-full",
+            class: "modal modal-open text-base-content backdrop-blur-sm fixed top-0 left-0 w-full h-full",
             open: true,
 
             div {
@@ -88,8 +88,8 @@ pub fn task_association_modal<'a>(
                         },
 
                         div {
-                            class: "flex flex-none items-center gap-2 py-2",
-                            div { class: "h-5 w-5 flex-none px-4", notification_icon }
+                            class: "flex flex-none items-center",
+                            div { class: "block py-2 px-4 bg-transparent", notification_icon }
                             div {
                                 id: "notification-to-associate",
                                 class: "grow truncate block",
@@ -145,7 +145,7 @@ async fn search_tasks(
     let search_result = call_api(
         Method::GET,
         api_base_url,
-        &format!("/tasks/search?matches={search}"),
+        &format!("tasks/search?matches={search}"),
         None::<i32>,
         Some(ui_model_ref),
     )
