@@ -27,7 +27,7 @@ pub fn notifications_list<'a>(
     let selected_notification_index = ui_model_ref.read().selected_notification_index;
 
     cx.render(rsx!(table {
-        class: "table w-full",
+        class: "table w-full h-max-full",
 
         tbody {
             notifications.iter().enumerate().map(|(i, notif)| {

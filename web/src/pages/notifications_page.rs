@@ -49,34 +49,46 @@ pub fn notifications_page(cx: Scope) -> Element {
 
     cx.render(rsx!(
         div {
-            class: "w-full flex-1 overflow-auto",
+            class: "w-full h-full flex-1 overflow-auto",
 
             div {
-                class: "container mx-auto",
+                class: "container h-full mx-auto",
 
-                self::notifications_list {
-                    notifications: notifications_ref.read().clone(),
-                    ui_model_ref: ui_model_ref.clone(),
-                    on_delete: |notification: &NotificationWithTask| {
-                        notification_service.send(NotificationCommand::DeleteFromNotification(notification.clone()));
-                    },
-                    on_unsubscribe: |notification: &NotificationWithTask| {
-                        notification_service.send(NotificationCommand::Unsubscribe(notification.id))
-                    },
-                    on_snooze: |notification: &NotificationWithTask| {
-                        notification_service.send(NotificationCommand::Snooze(notification.id))
-                    },
-                    on_complete_task: |notification: &NotificationWithTask| {
-                        notification_service.send(NotificationCommand::CompleteTaskFromNotification(notification.clone()));
-                    }
-                    on_plan: |notification: &NotificationWithTask| {
-                        notification_to_plan.set(Some(notification.clone()));
-                        ui_model_ref.write().task_planning_modal_opened = true;
-                    }
-                    on_associate: |notification: &NotificationWithTask| {
-                        notification_to_associate.set(Some(notification.clone()));
-                        ui_model_ref.write().task_association_modal_opened = true;
-                    }
+                if notifications_ref.read().is_empty() {
+                    rsx!(
+                        img {
+                            class: "w-screen h-full object-contain object-center object-top opacity-30 dark:opacity-10",
+                            src: "images/ui-logo-symbol-transparent.svg",
+                            alt: "No notifications"
+                        }
+                    )
+                } else {
+                    rsx!(
+                        self::notifications_list {
+                            notifications: notifications_ref.read().clone(),
+                            ui_model_ref: ui_model_ref.clone(),
+                            on_delete: |notification: &NotificationWithTask| {
+                                notification_service.send(NotificationCommand::DeleteFromNotification(notification.clone()));
+                            },
+                            on_unsubscribe: |notification: &NotificationWithTask| {
+                                notification_service.send(NotificationCommand::Unsubscribe(notification.id))
+                            },
+                            on_snooze: |notification: &NotificationWithTask| {
+                                notification_service.send(NotificationCommand::Snooze(notification.id))
+                            },
+                            on_complete_task: |notification: &NotificationWithTask| {
+                                notification_service.send(NotificationCommand::CompleteTaskFromNotification(notification.clone()));
+                            },
+                            on_plan: |notification: &NotificationWithTask| {
+                                notification_to_plan.set(Some(notification.clone()));
+                                ui_model_ref.write().task_planning_modal_opened = true;
+                            },
+                            on_associate: |notification: &NotificationWithTask| {
+                                notification_to_associate.set(Some(notification.clone()));
+                                ui_model_ref.write().task_association_modal_opened = true;
+                            }
+                        }
+                    )
                 }
             }
         }
