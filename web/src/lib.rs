@@ -1,10 +1,12 @@
 #[macro_use]
 extern crate lazy_static;
 
+use anyhow::{anyhow, Context, Result};
 use dioxus::prelude::*;
 use dioxus_router::{Route, Router};
 use fermi::{use_atom_ref, use_init_atom_root, UseAtomRef};
 use log::debug;
+use utils::get_element_by_id;
 use wasm_bindgen::{prelude::Closure, JsCast};
 use web_sys::KeyboardEvent;
 
@@ -175,10 +177,24 @@ fn setup_key_bindings(
                 "ArrowDown"
                     if ui_model_ref.read().selected_notification_index < (list_length - 1) =>
                 {
-                    ui_model_ref.write().selected_notification_index += 1
+                    let mut ui_model = ui_model_ref.write();
+                    let new_selected_notification_index = ui_model.selected_notification_index + 1;
+                    select_notification(&mut ui_model, new_selected_notification_index)
+                        .unwrap_or_else(|_| {
+                            panic!(
+                                "Failed to select notification {new_selected_notification_index}"
+                            )
+                        });
                 }
                 "ArrowUp" if ui_model_ref.read().selected_notification_index > 0 => {
-                    ui_model_ref.write().selected_notification_index -= 1
+                    let mut ui_model = ui_model_ref.write();
+                    let new_selected_notification_index = ui_model.selected_notification_index - 1;
+                    select_notification(&mut ui_model, new_selected_notification_index)
+                        .unwrap_or_else(|_| {
+                            panic!(
+                                "Failed to select notification {new_selected_notification_index}"
+                            )
+                        });
                 }
                 "d" => {
                     if let Some(notification) = selected_notification {
@@ -225,4 +241,18 @@ fn setup_key_bindings(
     handler.forget();
 
     Some(())
+}
+
+fn select_notification(ui_model: &mut UniversalInboxUIModel, index: usize) -> Result<()> {
+    ui_model.selected_notification_index = index;
+    let notification_page = get_element_by_id("notifications-page")
+        .context("Unable to find `notifications-page` element")?;
+    let row_height = notification_page
+        .query_selector("tr")
+        .map_err(|_| anyhow!("Unable to find a `tr` element in the notification page"))?
+        .context("Unable to find a `tr` element in the notification page")?
+        .client_height();
+    let target_scroll = row_height * index as i32;
+    notification_page.set_scroll_top(target_scroll);
+    Ok(())
 }

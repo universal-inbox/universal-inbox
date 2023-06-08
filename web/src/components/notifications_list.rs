@@ -136,7 +136,7 @@ fn notification<'a>(
 
     cx.render(rsx!(
         tr {
-            class: "hover py-1 {style} group",
+            class: "hover py-1 {style} group snap-start",
             key: "{notif.id}",
             onmousemove: |_| {
                 if ui_model_ref.write_silent().set_unhover_element(false) {
