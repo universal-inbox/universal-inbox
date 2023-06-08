@@ -15,6 +15,7 @@ min_sync_tasks_interval_in_minutes = 5
 # oidc_front_client_id = "1234@universal_inbox"
 # oidc_api_client_id = "5678@universal_inbox"
 # oidc_api_client_secret = "secret"
+# user_profile_url = "https://oidc.provider/user
 
 [application.http_session]
 # secret_key = ""

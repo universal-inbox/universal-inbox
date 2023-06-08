@@ -6,6 +6,7 @@ use fermi::use_atom_ref;
 use gravatar::{Gravatar, Rating};
 
 use crate::{
+    config::APP_CONFIG,
     services::user_service::{UserCommand, CONNECTED_USER},
     theme::toggle_dark_mode,
 };
@@ -33,6 +34,13 @@ pub fn nav_bar(cx: Scope) -> Element {
             .map(|user| user.first_name)
             .unwrap_or_else(|| NOT_CONNECTED_USER_NAME.to_string())
     });
+
+    let app_config_ref = use_atom_ref(cx, APP_CONFIG);
+    // Howto use use_memo with an Option?
+    let user_profile_url = app_config_ref
+        .read()
+        .as_ref()
+        .map(|config| config.user_profile_url.clone());
 
     let is_dark_mode = use_state(cx, || {
         toggle_dark_mode(false).expect("Failed to initialize the theme")
@@ -93,14 +101,35 @@ pub fn nav_bar(cx: Scope) -> Element {
                     Icon { class: "w-5 h-5", icon: BsGear }
                 }
 
-                p {
-                    class: "btn btn-ghost btn-square",
-                    title: "{user_name}",
+                div {
+                    class: "dropdown dropdown-end",
 
-                    img {
-                        class: "rounded-full w-8 h-8",
-                        src: "{user_avatar}",
-                        alt: "{user_name}",
+                    label {
+                        class: "btn btn-ghost btn-square avatar",
+                        tabindex: 0,
+
+                        div {
+                            class: "rounded-full w-8 h-8",
+                            title: "{user_name}",
+
+                            img {
+                                class: "",
+                                src: "{user_avatar}",
+                                alt: "{user_name}",
+                            }
+                        }
+                    }
+
+                    ul {
+                        class: "mt-3 p-2 shadow menu dropdown-content bg-base-100 rounded-box w-52",
+                        tabindex: 0,
+
+                        if let Some(user_profile_url) = user_profile_url {
+                            rsx!(li {
+                                a { href: "{user_profile_url}", target: "_blank", "Profile" }
+                            })
+                        }
+                        li { a { "Logout" } }
                     }
                 }
             }

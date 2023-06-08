@@ -36,6 +36,7 @@ pub struct AuthenticationSettings {
     pub oidc_front_client_id: ClientId,
     pub oidc_api_client_id: ClientId,
     pub oidc_api_client_secret: ClientSecret,
+    pub user_profile_url: Url,
 }
 
 #[derive(Deserialize, Clone)]
