@@ -17,6 +17,7 @@ use uuid::Uuid;
 
 use universal_inbox::{
     integration_connection::{IntegrationProvider, IntegrationProviderKind},
+    notification::{NotificationSource, NotificationSourceKind},
     task::{
         integrations::todoist::{
             self, TodoistItem, TodoistItemDue, TodoistItemPriority, TodoistProject,
@@ -28,7 +29,6 @@ use universal_inbox::{
 
 use crate::{
     integrations::{
-        notification::{NotificationSource, NotificationSourceKind},
         oauth2::AccessToken,
         task::{TaskSource, TaskSourceKind, TaskSourceService},
     },

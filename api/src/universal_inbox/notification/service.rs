@@ -11,20 +11,16 @@ use tracing::{error, info};
 
 use universal_inbox::{
     notification::{
-        IntoNotification, Notification, NotificationId, NotificationMetadata, NotificationPatch,
-        NotificationStatus, NotificationWithTask,
+        service::NotificationPatch, IntoNotification, Notification, NotificationId,
+        NotificationMetadata, NotificationSourceKind, NotificationStatus,
+        NotificationSyncSourceKind, NotificationWithTask,
     },
     task::{TaskCreation, TaskId, TaskPatch, TaskStatus},
     user::UserId,
 };
 
 use crate::{
-    integrations::{
-        github::GithubService,
-        notification::{
-            NotificationSourceKind, NotificationSourceService, NotificationSyncSourceKind,
-        },
-    },
+    integrations::{github::GithubService, notification::NotificationSourceService},
     repository::{notification::NotificationRepository, Repository},
     universal_inbox::{
         integration_connection::service::IntegrationConnectionService, task::service::TaskService,

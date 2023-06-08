@@ -7,15 +7,14 @@ use uuid::Uuid;
 
 use universal_inbox::{
     notification::{
-        Notification, NotificationId, NotificationMetadata, NotificationPatch, NotificationStatus,
-        NotificationWithTask,
+        service::NotificationPatch, Notification, NotificationId, NotificationMetadata,
+        NotificationSourceKind, NotificationStatus, NotificationWithTask,
     },
     task::TaskId,
     user::UserId,
 };
 
 use crate::{
-    integrations::notification::NotificationSourceKind,
     repository::{task::TaskRow, Repository},
     universal_inbox::{UniversalInboxError, UpdateStatus},
 };

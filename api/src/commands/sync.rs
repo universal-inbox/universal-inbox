@@ -3,8 +3,10 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{error, info};
 
+use universal_inbox::notification::NotificationSyncSourceKind;
+
 use crate::{
-    integrations::{notification::NotificationSyncSourceKind, task::TaskSyncSourceKind},
+    integrations::task::TaskSyncSourceKind,
     universal_inbox::{
         notification::service::NotificationService, task::service::TaskService, UniversalInboxError,
     },

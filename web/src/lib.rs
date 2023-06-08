@@ -88,6 +88,7 @@ pub fn app(cx: Scope) -> Element {
             integration_connections_ref.clone(),
             ui_model_ref.clone(),
             toast_service_handle.clone(),
+            notification_service_handle.clone(),
         )
     });
 
