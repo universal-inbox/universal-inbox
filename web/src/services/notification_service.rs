@@ -1,5 +1,3 @@
-use log::debug;
-
 use anyhow::Result;
 use chrono::{DateTime, Duration, Local, TimeZone, Timelike, Utc};
 use dioxus::prelude::*;
@@ -17,7 +15,11 @@ use universal_inbox::{
 
 use crate::{
     model::UniversalInboxUIModel,
-    services::{api::call_api_and_notify, task_service::TaskCommand, toast_service::ToastCommand},
+    services::{
+        api::{call_api, call_api_and_notify},
+        task_service::TaskCommand,
+        toast_service::ToastCommand,
+    },
 };
 
 #[derive(Debug)]
@@ -46,21 +48,17 @@ pub async fn notification_service<'a>(
         let msg = rx.next().await;
         match msg {
             Some(NotificationCommand::Refresh) => {
-                let result: Result<Vec<NotificationWithTask>> = call_api_and_notify(
+                let result: Result<Vec<NotificationWithTask>> = call_api(
                     Method::GET,
                     &api_base_url,
                     "notifications?status=Unread&with_tasks=true",
                     // random type as we don't care about the body's type
                     None::<i32>,
                     Some(ui_model_ref.clone()),
-                    &toast_service,
-                    "Loading notifications...",
-                    "Successfully loaded notifications",
                 )
                 .await;
 
                 if let Ok(new_notifications) = result {
-                    debug!("{} notifications loaded", new_notifications.len());
                     let mut notifications = notifications.write();
                     notifications.clear();
                     notifications.extend(new_notifications);
