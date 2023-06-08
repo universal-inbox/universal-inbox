@@ -8,7 +8,9 @@ use url::Url;
 
 use universal_inbox::{
     notification::{
-        Notification, NotificationId, NotificationPatch, NotificationStatus, NotificationWithTask,
+        service::{NotificationPatch, SyncNotificationsParameters},
+        Notification, NotificationId, NotificationStatus, NotificationSyncSourceKind,
+        NotificationWithTask,
     },
     task::{TaskCreation, TaskId, TaskPlanning},
 };
@@ -25,6 +27,7 @@ use crate::{
 #[derive(Debug)]
 pub enum NotificationCommand {
     Refresh,
+    Sync(Option<NotificationSyncSourceKind>),
     DeleteFromNotification(NotificationWithTask),
     Unsubscribe(NotificationId),
     Snooze(NotificationId),
@@ -48,21 +51,26 @@ pub async fn notification_service<'a>(
         let msg = rx.next().await;
         match msg {
             Some(NotificationCommand::Refresh) => {
-                let result: Result<Vec<NotificationWithTask>> = call_api(
-                    Method::GET,
+                refresh_notifications(&api_base_url, &notifications, &ui_model_ref).await;
+            }
+            Some(NotificationCommand::Sync(source)) => {
+                let result: Result<Vec<Notification>> = call_api_and_notify(
+                    Method::POST,
                     &api_base_url,
-                    "notifications?status=Unread&with_tasks=true",
-                    // random type as we don't care about the body's type
-                    None::<i32>,
+                    "notifications/sync",
+                    Some(SyncNotificationsParameters {
+                        source,
+                        asynchronous: Some(false),
+                    }),
                     Some(ui_model_ref.clone()),
+                    &toast_service,
+                    "Syncing notifications...",
+                    "Successfully synced notifications",
                 )
                 .await;
-
-                if let Ok(new_notifications) = result {
-                    let mut notifications = notifications.write();
-                    notifications.clear();
-                    notifications.extend(new_notifications);
-                };
+                if result.is_ok() {
+                    refresh_notifications(&api_base_url, &notifications, &ui_model_ref).await;
+                }
             }
             Some(NotificationCommand::DeleteFromNotification(notification)) => {
                 if let Some(ref task) = notification.task {
@@ -190,6 +198,28 @@ pub async fn notification_service<'a>(
             None => {}
         }
     }
+}
+
+async fn refresh_notifications(
+    api_base_url: &Url,
+    notifications: &UseAtomRef<Vec<NotificationWithTask>>,
+    ui_model_ref: &UseAtomRef<UniversalInboxUIModel>,
+) {
+    let result: Result<Vec<NotificationWithTask>> = call_api(
+        Method::GET,
+        api_base_url,
+        "notifications?status=Unread&with_tasks=true",
+        // random type as we don't care about the body's type
+        None::<i32>,
+        Some(ui_model_ref.clone()),
+    )
+    .await;
+
+    if let Ok(new_notifications) = result {
+        let mut notifications = notifications.write();
+        notifications.clear();
+        notifications.extend(new_notifications);
+    };
 }
 
 async fn delete_notification(

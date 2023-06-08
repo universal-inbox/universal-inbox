@@ -12,14 +12,16 @@ use tracing::{error, info};
 
 use universal_inbox::{
     integration_connection::IntegrationProviderKind,
-    notification::{Notification, NotificationPatch, NotificationStatus},
+    notification::{
+        service::NotificationPatch, Notification, NotificationSource, NotificationSourceKind,
+        NotificationStatus,
+    },
     task::{Task, TaskCreation, TaskId, TaskMetadata, TaskPatch, TaskStatus, TaskSummary},
     user::UserId,
 };
 
 use crate::{
     integrations::{
-        notification::{NotificationSource, NotificationSourceKind},
         task::{TaskSourceService, TaskSyncSourceKind},
         todoist::TodoistService,
     },

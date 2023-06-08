@@ -5,8 +5,8 @@ use serde_json::json;
 use uuid::Uuid;
 
 use universal_inbox::notification::{
-    integrations::github::GithubNotification, Notification, NotificationMetadata,
-    NotificationPatch, NotificationStatus,
+    integrations::github::GithubNotification, service::NotificationPatch, Notification,
+    NotificationMetadata, NotificationStatus,
 };
 use universal_inbox_api::integrations::github;
 

@@ -4,12 +4,14 @@ use clap::{Parser, Subcommand};
 use sqlx::{postgres::PgConnectOptions, ConnectOptions, PgPool};
 use tracing::{error, info};
 
+use universal_inbox::notification::NotificationSyncSourceKind;
+
 use universal_inbox_api::{
     build_services, commands,
     configuration::Settings,
     integrations::{
-        github::GithubService, notification::NotificationSyncSourceKind, oauth2::NangoService,
-        task::TaskSyncSourceKind, todoist::TodoistService,
+        github::GithubService, oauth2::NangoService, task::TaskSyncSourceKind,
+        todoist::TodoistService,
     },
     observability::{get_subscriber, init_subscriber},
     run,

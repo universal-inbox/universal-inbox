@@ -5268,6 +5268,7 @@ name = "universal-inbox"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "clap",
  "enum_derive",
  "git-url-parse",
  "http",

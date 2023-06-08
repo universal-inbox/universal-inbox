@@ -8,7 +8,7 @@ use universal_inbox::{
     task::{TaskCreation, TaskId},
 };
 
-use universal_inbox_api::integrations::notification::NotificationSourceKind;
+use universal_inbox::notification::NotificationSourceKind;
 
 pub mod github;
 

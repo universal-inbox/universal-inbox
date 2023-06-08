@@ -4,7 +4,7 @@ use rstest::*;
 use universal_inbox::{
     integration_connection::IntegrationProviderKind,
     notification::{
-        integrations::github::GithubNotification, Notification, NotificationPatch,
+        integrations::github::GithubNotification, service::NotificationPatch, Notification,
         NotificationStatus, NotificationWithTask,
     },
     task::{

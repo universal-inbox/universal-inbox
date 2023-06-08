@@ -4,21 +4,21 @@ use actix_http::body::BoxBody;
 use actix_identity::Identity;
 use actix_web::{web, HttpResponse, Scope};
 use anyhow::Context;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::json;
 use tokio::sync::RwLock;
 use tracing::{error, info};
 
 use universal_inbox::{
     notification::{
-        Notification, NotificationId, NotificationPatch, NotificationStatus, NotificationWithTask,
+        service::{NotificationPatch, SyncNotificationsParameters},
+        Notification, NotificationId, NotificationStatus, NotificationWithTask,
     },
     task::{TaskCreation, TaskId},
     user::UserId,
 };
 
 use crate::{
-    integrations::notification::NotificationSyncSourceKind,
     routes::option_wildcard,
     universal_inbox::{
         notification::service::NotificationService, UniversalInboxError, UpdateStatus,
@@ -151,12 +151,6 @@ pub async fn create_notification(
     Ok(HttpResponse::Ok().content_type("application/json").body(
         serde_json::to_string(&created_notification).context("Cannot serialize notification")?,
     ))
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct SyncNotificationsParameters {
-    source: Option<NotificationSyncSourceKind>,
-    asynchronous: Option<bool>,
 }
 
 #[tracing::instrument(level = "debug", skip(notification_service, identity))]

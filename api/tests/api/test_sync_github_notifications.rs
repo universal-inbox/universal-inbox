@@ -8,13 +8,13 @@ use universal_inbox::{
     integration_connection::IntegrationProviderKind,
     notification::{
         integrations::github::GithubNotification, Notification, NotificationMetadata,
-        NotificationStatus,
+        NotificationSourceKind, NotificationStatus,
     },
 };
 
 use universal_inbox_api::{
     configuration::Settings,
-    integrations::{github, notification::NotificationSourceKind, oauth2::NangoConnection},
+    integrations::{github, oauth2::NangoConnection},
 };
 
 use crate::helpers::{
