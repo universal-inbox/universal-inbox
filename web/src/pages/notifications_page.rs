@@ -49,7 +49,8 @@ pub fn notifications_page(cx: Scope) -> Element {
 
     cx.render(rsx!(
         div {
-            class: "w-full h-full flex-1 overflow-auto",
+            id: "notifications-page",
+            class: "w-full h-full flex-1 overflow-auto snap-y snap-mandatory",
 
             div {
                 class: "container h-full mx-auto",
