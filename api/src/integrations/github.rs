@@ -7,14 +7,13 @@ use http::{HeaderMap, HeaderValue, Uri};
 
 use universal_inbox::{
     integration_connection::{IntegrationProvider, IntegrationProviderKind},
-    notification::integrations::github::GithubNotification,
+    notification::{
+        integrations::github::GithubNotification, NotificationSource, NotificationSourceKind,
+    },
 };
 
 use crate::{
-    integrations::{
-        notification::{NotificationSource, NotificationSourceKind, NotificationSourceService},
-        APP_USER_AGENT,
-    },
+    integrations::{notification::NotificationSourceService, APP_USER_AGENT},
     universal_inbox::UniversalInboxError,
 };
 

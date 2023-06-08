@@ -1,6 +1,7 @@
 use std::fmt;
 
 use chrono::{DateTime, Utc};
+use clap::ValueEnum;
 use http::Uri;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
@@ -9,11 +10,13 @@ use uuid::Uuid;
 use integrations::github::GithubNotification;
 
 use crate::{
+    integration_connection::IntegrationProvider,
     task::{Task, TaskId},
     user::UserId,
 };
 
 pub mod integrations;
+pub mod service;
 
 #[serde_as]
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
@@ -137,15 +140,29 @@ macro_attr! {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Default, PartialEq, Eq)]
-pub struct NotificationPatch {
-    pub status: Option<NotificationStatus>,
-    pub snoozed_until: Option<DateTime<Utc>>,
-    pub task_id: Option<TaskId>,
-}
-
 impl NotificationWithTask {
     pub fn is_built_from_task(&self) -> bool {
         matches!(self.metadata, NotificationMetadata::Todoist)
     }
+}
+
+macro_attr! {
+    // Synchronization sources for notifications
+    #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!)]
+    pub enum NotificationSyncSourceKind {
+        Github
+    }
+}
+
+macro_attr! {
+    // notification sources, either direct or from tasks
+    #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!)]
+    pub enum NotificationSourceKind {
+        Github,
+        Todoist
+    }
+}
+
+pub trait NotificationSource: IntegrationProvider {
+    fn get_notification_source_kind(&self) -> NotificationSourceKind;
 }

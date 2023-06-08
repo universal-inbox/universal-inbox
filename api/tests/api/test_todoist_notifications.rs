@@ -5,7 +5,9 @@ use uuid::Uuid;
 
 use universal_inbox::{
     integration_connection::IntegrationProviderKind,
-    notification::{Notification, NotificationMetadata, NotificationPatch, NotificationStatus},
+    notification::{
+        service::NotificationPatch, Notification, NotificationMetadata, NotificationStatus,
+    },
     task::{
         integrations::todoist::{get_task_html_url, TodoistItem},
         Task, TaskStatus,

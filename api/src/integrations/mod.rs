@@ -4,6 +4,7 @@ use macro_attr::macro_attr;
 use serde::{Deserialize, Serialize};
 
 use universal_inbox::{
+    notification::NotificationSource,
     task::{Task, TaskCreation, TaskPatch},
     user::UserId,
 };
@@ -20,30 +21,7 @@ pub mod oauth2;
 pub mod todoist;
 
 pub mod notification {
-    use universal_inbox::integration_connection::IntegrationProvider;
-
-    use super::{oauth2::AccessToken, *};
-
-    macro_attr! {
-        // Synchronization sources for notifications
-        #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!)]
-        pub enum NotificationSyncSourceKind {
-            Github
-        }
-    }
-
-    macro_attr! {
-        // notification sources, either direct or from tasks
-        #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!)]
-        pub enum NotificationSourceKind {
-            Github,
-            Todoist
-        }
-    }
-
-    pub trait NotificationSource: IntegrationProvider {
-        fn get_notification_source_kind(&self) -> NotificationSourceKind;
-    }
+    use super::*;
 
     #[async_trait]
     pub trait NotificationSourceService<T>: NotificationSource {

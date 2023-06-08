@@ -11,6 +11,7 @@ use universal_inbox::{
         IntegrationConnection, IntegrationConnectionCreation, IntegrationConnectionId,
         IntegrationConnectionStatus, IntegrationProviderKind,
     },
+    notification::NotificationSyncSourceKind,
     IntegrationProviderConfig,
 };
 
@@ -18,7 +19,10 @@ use crate::{
     components::toast_zone::{Toast, ToastKind},
     config::AppConfig,
     model::UniversalInboxUIModel,
-    services::{api::call_api, nango::nango_auth, toast_service::ToastCommand},
+    services::{
+        api::call_api, nango::nango_auth, notification_service::NotificationCommand,
+        toast_service::ToastCommand,
+    },
 };
 
 #[derive(Debug)]
@@ -38,6 +42,7 @@ pub async fn integration_connnection_service<'a>(
     integration_connections_ref: UseAtomRef<Vec<IntegrationConnection>>,
     ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
     toast_service: Coroutine<ToastCommand>,
+    notification_service: Coroutine<NotificationCommand>,
 ) {
     loop {
         let msg = rx.next().await;
@@ -62,7 +67,7 @@ pub async fn integration_connnection_service<'a>(
             Some(IntegrationConnectionCommand::CreateIntegrationConnection(
                 integration_provider_kind,
             )) => {
-                if let Err(error) = create_integration_connection(
+                match create_integration_connection(
                     integration_provider_kind,
                     &integration_connections_ref,
                     &app_config_ref,
@@ -70,19 +75,28 @@ pub async fn integration_connnection_service<'a>(
                 )
                 .await
                 {
-                    error!("An error occurred while connecting with {integration_provider_kind}: {error:?}");
-                    toast_service.send(ToastCommand::Push(Toast {
-                        kind: ToastKind::Failure,
-                        message: "An error occurred while connecting with {integration_provider_kind}. Please, retry 🙏 If the issue keeps happening, please contact our support.".to_string(),
-                        timeout: Some(5_000),
-                        ..Default::default()
-                    }));
+                    Ok(integration_connection) => {
+                        if integration_connection.status == IntegrationConnectionStatus::Validated {
+                            notification_service.send(NotificationCommand::Sync(Some(
+                                NotificationSyncSourceKind::Github,
+                            )));
+                        }
+                    }
+                    Err(error) => {
+                        error!("An error occurred while connecting with {integration_provider_kind}: {error:?}");
+                        toast_service.send(ToastCommand::Push(Toast {
+                            kind: ToastKind::Failure,
+                            message: "An error occurred while connecting with {integration_provider_kind}. Please, retry 🙏 If the issue keeps happening, please contact our support.".to_string(),
+                            timeout: Some(5_000),
+                            ..Default::default()
+                        }));
+                    }
                 }
             }
             Some(IntegrationConnectionCommand::AuthenticateIntegrationConnection(
                 integration_connection,
             )) => {
-                if let Err(error) = authenticate_integration_connection(
+                match authenticate_integration_connection(
                     &integration_connection,
                     &integration_connections_ref,
                     &app_config_ref,
@@ -90,19 +104,28 @@ pub async fn integration_connnection_service<'a>(
                 )
                 .await
                 {
-                    error!(
-                        "An error occurred while authenticating with {}: {error:?}",
-                        integration_connection.provider_kind
-                    );
-                    toast_service.send(ToastCommand::Push(Toast {
-                        kind: ToastKind::Failure,
-                        message: format!(
-                            "An error occurred while authenticating with {}. Please, retry 🙏 If the issue keeps happening, please contact our support.",
+                    Ok(integration_connection) => {
+                        if integration_connection.status == IntegrationConnectionStatus::Validated {
+                            notification_service.send(NotificationCommand::Sync(Some(
+                                NotificationSyncSourceKind::Github,
+                            )));
+                        }
+                    }
+                    Err(error) => {
+                        error!(
+                            "An error occurred while authenticating with {}: {error:?}",
                             integration_connection.provider_kind
-                        ),
-                        timeout: Some(5_000),
-                        ..Default::default()
-                    }));
+                        );
+                        toast_service.send(ToastCommand::Push(Toast {
+                            kind: ToastKind::Failure,
+                            message: format!(
+                                "An error occurred while authenticating with {}. Please, retry 🙏 If the issue keeps happening, please contact our support.",
+                                integration_connection.provider_kind
+                            ),
+                            timeout: Some(5_000),
+                            ..Default::default()
+                        }));
+                    }
                 }
             }
             Some(IntegrationConnectionCommand::DisconnectIntegrationConnection(
@@ -119,7 +142,7 @@ pub async fn integration_connnection_service<'a>(
             Some(IntegrationConnectionCommand::ReconnectIntegrationConnection(
                 integration_connection,
             )) => {
-                if let Err(error) = reconnect_integration_connection(
+                match reconnect_integration_connection(
                     &integration_connection,
                     &integration_connections_ref,
                     &app_config_ref,
@@ -127,19 +150,28 @@ pub async fn integration_connnection_service<'a>(
                 )
                 .await
                 {
-                    error!(
-                        "An error occurred while reconnecting with {}: {error:?}",
-                        integration_connection.provider_kind
-                    );
-                    toast_service.send(ToastCommand::Push(Toast {
-                        kind: ToastKind::Failure,
-                        message: format!(
-                            "An error occurred while reconnecting with {}. Please, retry 🙏 If the issue keeps happening, please contact our support.",
+                    Ok(integration_connection) => {
+                        if integration_connection.status == IntegrationConnectionStatus::Validated {
+                            notification_service.send(NotificationCommand::Sync(Some(
+                                NotificationSyncSourceKind::Github,
+                            )));
+                        }
+                    }
+                    Err(error) => {
+                        error!(
+                            "An error occurred while reconnecting with {}: {error:?}",
                             integration_connection.provider_kind
-                        ),
-                        timeout: Some(5_000),
-                        ..Default::default()
-                    }));
+                        );
+                        toast_service.send(ToastCommand::Push(Toast {
+                            kind: ToastKind::Failure,
+                            message: format!(
+                                "An error occurred while reconnecting with {}. Please, retry 🙏 If the issue keeps happening, please contact our support.",
+                                integration_connection.provider_kind
+                            ),
+                            timeout: Some(5_000),
+                            ..Default::default()
+                        }));
+                    }
                 }
             }
             None => {}
@@ -176,7 +208,7 @@ async fn create_integration_connection(
     integration_connections_ref: &UseAtomRef<Vec<IntegrationConnection>>,
     app_config_ref: &UseAtomRef<Option<AppConfig>>,
     ui_model_ref: &UseAtomRef<UniversalInboxUIModel>,
-) -> Result<()> {
+) -> Result<IntegrationConnection> {
     let api_base_url = get_api_base_url(app_config_ref)?;
 
     let new_connection: IntegrationConnection = call_api(
@@ -209,7 +241,7 @@ async fn authenticate_integration_connection(
     integration_connections_ref: &UseAtomRef<Vec<IntegrationConnection>>,
     app_config_ref: &UseAtomRef<Option<AppConfig>>,
     ui_model_ref: &UseAtomRef<UniversalInboxUIModel>,
-) -> Result<()> {
+) -> Result<IntegrationConnection> {
     let (nango_base_url, provider_config) =
         get_configs(app_config_ref, integration_connection.provider_kind)?;
 
@@ -234,7 +266,7 @@ async fn verify_integration_connection(
     integration_connections_ref: &UseAtomRef<Vec<IntegrationConnection>>,
     app_config_ref: &UseAtomRef<Option<AppConfig>>,
     ui_model_ref: &UseAtomRef<UniversalInboxUIModel>,
-) -> Result<()> {
+) -> Result<IntegrationConnection> {
     let api_base_url = get_api_base_url(app_config_ref)?;
 
     let result: IntegrationConnection = call_api(
@@ -250,11 +282,11 @@ async fn verify_integration_connection(
     update_integration_connection_status(
         result.id,
         result.status,
-        result.failure_message,
+        result.failure_message.clone(),
         integration_connections_ref,
     );
 
-    Ok(())
+    Ok(result)
 }
 
 async fn disconnect_integration_connection(
@@ -290,7 +322,7 @@ async fn reconnect_integration_connection(
     integration_connections_ref: &UseAtomRef<Vec<IntegrationConnection>>,
     app_config_ref: &UseAtomRef<Option<AppConfig>>,
     ui_model_ref: &UseAtomRef<UniversalInboxUIModel>,
-) -> Result<()> {
+) -> Result<IntegrationConnection> {
     disconnect_integration_connection(
         integration_connection.id,
         integration_connections_ref,
