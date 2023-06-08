@@ -21,6 +21,7 @@ pub struct FrontConfig {
     pub oidc_issuer_url: Url,
     pub oidc_client_id: String,
     pub oidc_redirect_url: Url,
+    pub user_profile_url: Url,
     pub nango_base_url: Url,
     pub integration_providers: HashMap<IntegrationProviderKind, IntegrationProviderConfig>,
 }

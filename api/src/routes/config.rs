@@ -32,6 +32,7 @@ pub async fn front_config(
             .front_base_url
             .join("auth-oidc-callback")
             .context("Failed to parse OIDC redirect URL")?,
+        user_profile_url: settings.application.authentication.user_profile_url.clone(),
         nango_base_url: settings.integrations.oauth2.nango_base_url.clone(),
         integration_providers: HashMap::from([
             (
