@@ -10,7 +10,7 @@ use uuid::Uuid;
 use integrations::github::GithubNotification;
 
 use crate::{
-    integration_connection::IntegrationProvider,
+    integration_connection::{IntegrationProvider, IntegrationProviderKind},
     task::{Task, TaskId},
     user::UserId,
 };
@@ -160,6 +160,17 @@ macro_attr! {
     pub enum NotificationSourceKind {
         Github,
         Todoist
+    }
+}
+
+impl TryFrom<IntegrationProviderKind> for NotificationSyncSourceKind {
+    type Error = ();
+
+    fn try_from(provider_kind: IntegrationProviderKind) -> Result<Self, Self::Error> {
+        match provider_kind {
+            IntegrationProviderKind::Github => Ok(Self::Github),
+            _ => Err(()),
+        }
     }
 }
 

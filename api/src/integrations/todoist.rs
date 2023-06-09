@@ -22,16 +22,14 @@ use universal_inbox::{
         integrations::todoist::{
             self, TodoistItem, TodoistItemDue, TodoistItemPriority, TodoistProject,
         },
-        Task, TaskCreation, TaskMetadata, TaskPatch, TaskStatus,
+        service::TaskPatch,
+        Task, TaskCreation, TaskMetadata, TaskSource, TaskSourceKind, TaskStatus,
     },
     user::UserId,
 };
 
 use crate::{
-    integrations::{
-        oauth2::AccessToken,
-        task::{TaskSource, TaskSourceKind, TaskSourceService},
-    },
+    integrations::{oauth2::AccessToken, task::TaskSourceService},
     universal_inbox::UniversalInboxError,
 };
 

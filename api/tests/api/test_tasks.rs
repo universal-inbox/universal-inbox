@@ -7,7 +7,8 @@ use uuid::Uuid;
 use universal_inbox::{
     notification::{NotificationStatus, NotificationWithTask},
     task::{
-        integrations::todoist::TodoistItem, Task, TaskMetadata, TaskPatch, TaskPriority, TaskStatus,
+        integrations::todoist::TodoistItem, service::TaskPatch, Task, TaskMetadata, TaskPriority,
+        TaskStatus,
     },
 };
 

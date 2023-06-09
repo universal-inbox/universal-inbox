@@ -9,11 +9,11 @@ use uuid::Uuid;
 use universal_inbox::{
     integration_connection::IntegrationProviderKind,
     notification::{Notification, NotificationStatus},
-    task::{integrations::todoist, Task, TaskMetadata, TaskPriority, TaskStatus},
+    task::{integrations::todoist, Task, TaskMetadata, TaskPriority, TaskSourceKind, TaskStatus},
 };
 use universal_inbox_api::{
     configuration::Settings,
-    integrations::{oauth2::NangoConnection, task::TaskSourceKind, todoist::TodoistSyncResponse},
+    integrations::{oauth2::NangoConnection, todoist::TodoistSyncResponse},
     universal_inbox::task::TaskCreationResult,
 };
 
