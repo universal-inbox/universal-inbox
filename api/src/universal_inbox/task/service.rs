@@ -16,15 +16,15 @@ use universal_inbox::{
         service::NotificationPatch, Notification, NotificationSource, NotificationSourceKind,
         NotificationStatus,
     },
-    task::{Task, TaskCreation, TaskId, TaskMetadata, TaskPatch, TaskStatus, TaskSummary},
+    task::{
+        service::TaskPatch, Task, TaskCreation, TaskId, TaskMetadata, TaskStatus, TaskSummary,
+        TaskSyncSourceKind,
+    },
     user::UserId,
 };
 
 use crate::{
-    integrations::{
-        task::{TaskSourceService, TaskSyncSourceKind},
-        todoist::TodoistService,
-    },
+    integrations::{task::TaskSourceService, todoist::TodoistService},
     repository::{task::TaskRepository, Repository},
     universal_inbox::{
         integration_connection::service::IntegrationConnectionService,

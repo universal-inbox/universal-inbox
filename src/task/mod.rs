@@ -4,6 +4,7 @@ use std::{
 };
 
 use chrono::{DateTime, NaiveDate, NaiveDateTime, ParseError, Utc};
+use clap::ValueEnum;
 use http::Uri;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use serde::{Deserialize, Serialize};
@@ -12,6 +13,7 @@ use serde_with::{serde_as, DisplayFromStr};
 use uuid::Uuid;
 
 use crate::{
+    integration_connection::{IntegrationProvider, IntegrationProviderKind},
     notification::{
         IntoNotification, Notification, NotificationMetadata, NotificationStatus,
         NotificationWithTask,
@@ -22,6 +24,7 @@ use crate::{
 use self::integrations::todoist::TodoistItem;
 
 pub mod integrations;
+pub mod service;
 
 #[serde_as]
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
@@ -146,15 +149,6 @@ macro_attr! {
         Done,
         Deleted
     }
-}
-
-#[derive(Serialize, Deserialize, Debug, Default, PartialEq, Eq)]
-pub struct TaskPatch {
-    pub status: Option<TaskStatus>,
-    pub project: Option<String>,
-    pub due_at: Option<Option<DueDate>>,
-    pub priority: Option<TaskPriority>,
-    pub body: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default, PartialEq, Eq, Clone)]
@@ -282,6 +276,35 @@ impl From<Task> for NotificationWithTask {
             task: Some(task),
         }
     }
+}
+
+macro_attr! {
+    #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!)]
+    pub enum TaskSyncSourceKind {
+        Todoist
+    }
+}
+
+macro_attr! {
+    #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!)]
+    pub enum TaskSourceKind {
+        Todoist
+    }
+}
+
+impl TryFrom<IntegrationProviderKind> for TaskSyncSourceKind {
+    type Error = ();
+
+    fn try_from(provider_kind: IntegrationProviderKind) -> Result<Self, Self::Error> {
+        match provider_kind {
+            IntegrationProviderKind::Todoist => Ok(Self::Todoist),
+            _ => Err(()),
+        }
+    }
+}
+
+pub trait TaskSource: IntegrationProvider {
+    fn get_task_source_kind(&self) -> TaskSourceKind;
 }
 
 #[cfg(test)]

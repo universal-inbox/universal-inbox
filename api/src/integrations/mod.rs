@@ -1,11 +1,8 @@
 use async_trait::async_trait;
-use clap::ValueEnum;
-use macro_attr::macro_attr;
-use serde::{Deserialize, Serialize};
 
 use universal_inbox::{
     notification::NotificationSource,
-    task::{Task, TaskCreation, TaskPatch},
+    task::{service::TaskPatch, Task, TaskCreation, TaskSource},
     user::UserId,
 };
 
@@ -43,27 +40,7 @@ pub mod notification {
 }
 
 pub mod task {
-    use universal_inbox::integration_connection::IntegrationProvider;
-
     use super::*;
-
-    macro_attr! {
-        #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!)]
-        pub enum TaskSyncSourceKind {
-            Todoist
-        }
-    }
-
-    macro_attr! {
-        #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!)]
-        pub enum TaskSourceKind {
-            Todoist
-        }
-    }
-
-    pub trait TaskSource: IntegrationProvider {
-        fn get_task_source_kind(&self) -> TaskSourceKind;
-    }
 
     #[async_trait]
     pub trait TaskSourceService<T>: TaskSource {

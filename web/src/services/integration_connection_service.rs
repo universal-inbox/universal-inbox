@@ -21,7 +21,7 @@ use crate::{
     model::UniversalInboxUIModel,
     services::{
         api::call_api, nango::nango_auth, notification_service::NotificationCommand,
-        toast_service::ToastCommand,
+        task_service::TaskCommand, toast_service::ToastCommand,
     },
 };
 
@@ -43,6 +43,7 @@ pub async fn integration_connnection_service<'a>(
     ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
     toast_service: Coroutine<ToastCommand>,
     notification_service: Coroutine<NotificationCommand>,
+    task_service: Coroutine<TaskCommand>,
 ) {
     loop {
         let msg = rx.next().await;
@@ -77,9 +78,12 @@ pub async fn integration_connnection_service<'a>(
                 {
                     Ok(integration_connection) => {
                         if integration_connection.status == IntegrationConnectionStatus::Validated {
-                            notification_service.send(NotificationCommand::Sync(Some(
-                                NotificationSyncSourceKind::Github,
-                            )));
+                            if let Ok(source) = integration_connection.provider_kind.try_into() {
+                                notification_service.send(NotificationCommand::Sync(Some(source)));
+                            }
+                            if let Ok(source) = integration_connection.provider_kind.try_into() {
+                                task_service.send(TaskCommand::Sync(Some(source)));
+                            }
                         }
                     }
                     Err(error) => {

@@ -3,8 +3,12 @@ use dioxus::prelude::*;
 use fermi::UseAtomRef;
 use futures_util::StreamExt;
 use reqwest::Method;
-use universal_inbox::task::{Task, TaskId, TaskPatch, TaskPlanning, TaskStatus};
 use url::Url;
+
+use universal_inbox::task::{
+    service::SyncTasksParameters, service::TaskPatch, Task, TaskId, TaskPlanning, TaskStatus,
+    TaskSyncSourceKind,
+};
 
 use crate::{
     model::UniversalInboxUIModel,
@@ -16,6 +20,7 @@ pub enum TaskCommand {
     Delete(TaskId),
     Complete(TaskId),
     Plan(TaskId, TaskPlanning),
+    Sync(Option<TaskSyncSourceKind>),
 }
 
 pub async fn task_service(
@@ -75,6 +80,22 @@ pub async fn task_service(
                     &toast_service,
                     "Planning task...",
                     "Successfully planned task",
+                )
+                .await;
+            }
+            Some(TaskCommand::Sync(source)) => {
+                let _result: Result<Vec<Task>> = call_api_and_notify(
+                    Method::POST,
+                    &api_base_url,
+                    "tasks/sync",
+                    Some(SyncTasksParameters {
+                        source,
+                        asynchronous: Some(false),
+                    }),
+                    Some(ui_model_ref.clone()),
+                    &toast_service,
+                    "Syncing tasks...",
+                    "Successfully synced tasks",
                 )
                 .await;
             }

@@ -15,7 +15,7 @@ use universal_inbox::{
         NotificationMetadata, NotificationSourceKind, NotificationStatus,
         NotificationSyncSourceKind, NotificationWithTask,
     },
-    task::{TaskCreation, TaskId, TaskPatch, TaskStatus},
+    task::{service::TaskPatch, TaskCreation, TaskId, TaskStatus},
     user::UserId,
 };
 
