@@ -9,7 +9,8 @@ use universal_inbox::{
     },
     task::{
         integrations::todoist::{TodoistItem, TodoistItemDue, TodoistItemPriority},
-        DueDate, Task, TaskCreation, TaskPatch, TaskPriority, TaskProject, TaskStatus,
+        service::TaskPatch,
+        DueDate, Task, TaskCreation, TaskPriority, TaskProject, TaskStatus,
     },
 };
 

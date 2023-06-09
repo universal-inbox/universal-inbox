@@ -1,11 +1,9 @@
 use reqwest::{Client, Response};
 use serde_json::json;
 
-use universal_inbox::task::{Task, TaskStatus, TaskSummary};
+use universal_inbox::task::{Task, TaskSourceKind, TaskStatus, TaskSummary};
 
-use universal_inbox_api::{
-    integrations::task::TaskSourceKind, universal_inbox::task::TaskCreationResult,
-};
+use universal_inbox_api::universal_inbox::task::TaskCreationResult;
 
 pub mod todoist;
 

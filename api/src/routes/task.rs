@@ -4,20 +4,19 @@ use actix_http::body::BoxBody;
 use actix_identity::Identity;
 use actix_web::{web, HttpResponse, Scope};
 use anyhow::Context;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::json;
 use tokio::sync::RwLock;
 use tracing::{error, info};
 
 use universal_inbox::{
-    task::{Task, TaskId, TaskPatch, TaskStatus, TaskSummary},
+    task::{
+        service::SyncTasksParameters, service::TaskPatch, Task, TaskId, TaskStatus, TaskSummary,
+    },
     user::UserId,
 };
 
-use crate::{
-    integrations::task::TaskSyncSourceKind,
-    universal_inbox::{task::service::TaskService, UniversalInboxError, UpdateStatus},
-};
+use crate::universal_inbox::{task::service::TaskService, UniversalInboxError, UpdateStatus};
 
 use super::option_wildcard;
 
@@ -161,12 +160,6 @@ pub async fn create_task(
     Ok(HttpResponse::Ok().content_type("application/json").body(
         serde_json::to_string(&created_task).context("Cannot serialize task creation result")?,
     ))
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct SyncTasksParameters {
-    source: Option<TaskSyncSourceKind>,
-    asynchronous: Option<bool>,
 }
 
 #[tracing::instrument(level = "debug", skip(task_service, identity))]

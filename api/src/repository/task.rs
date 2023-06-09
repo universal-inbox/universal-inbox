@@ -6,14 +6,14 @@ use sqlx::{types::Json, Postgres, QueryBuilder, Transaction};
 use uuid::Uuid;
 
 use universal_inbox::{
-    task::{DueDate, Task, TaskId, TaskMetadata, TaskPatch, TaskPriority, TaskStatus, TaskSummary},
+    task::{
+        service::TaskPatch, DueDate, Task, TaskId, TaskMetadata, TaskPriority, TaskSourceKind,
+        TaskStatus, TaskSummary,
+    },
     user::UserId,
 };
 
-use crate::{
-    integrations::task::TaskSourceKind,
-    universal_inbox::{UniversalInboxError, UpdateStatus},
-};
+use crate::universal_inbox::{UniversalInboxError, UpdateStatus};
 
 use super::Repository;
 
