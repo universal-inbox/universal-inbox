@@ -40,30 +40,35 @@ pub fn notifications_list<'a>(
 
                             self::notification_button {
                                 title: "Delete notification",
+                                shortcut: "d",
                                 onclick: |_| on_delete.call(notif),
                                 Icon { class: "w-5 h-5" icon: BsTrash }
                             }
 
                             self::notification_button {
                                 title: "Unsubscribe from the notification",
+                                shortcut: "u",
                                 onclick: |_| on_unsubscribe.call(notif),
                                 Icon { class: "w-5 h-5" icon: BsBellSlash }
                             }
 
                             self::notification_button {
                                 title: "Snooze notification",
+                                shortcut: "s",
                                 onclick: |_| on_snooze.call(notif),
                                 Icon { class: "w-5 h-5" icon: BsClockHistory }
                             }
 
                             self::notification_button {
                                 title: "Create task",
+                                shortcut: "p",
                                 onclick: |_| on_plan.call(notif),
                                 Icon { class: "w-5 h-5" icon: BsBookmark }
                             }
 
                             self::notification_button {
                                 title: "Associate to task",
+                                shortcut: "a",
                                 onclick: |_| on_associate.call(notif),
                                 Icon { class: "w-5 h-5" icon: BsLink45deg }
                             }
@@ -78,24 +83,28 @@ pub fn notifications_list<'a>(
 
                             self::notification_button {
                                 title: "Delete task",
+                                shortcut: "d",
                                 onclick: |_| on_delete.call(notif),
                                 Icon { class: "w-5 h-5" icon: BsTrash }
                             }
 
                             self::notification_button {
                                 title: "Complete task",
+                                shortcut: "c",
                                 onclick: |_| on_complete_task.call(notif),
                                 Icon { class: "w-5 h-5" icon: BsCheck2 }
                             }
 
                             self::notification_button {
                                 title: "Snooze notification",
+                                shortcut: "s",
                                 onclick: |_| on_snooze.call(notif),
                                 Icon { class: "w-5 h-5" icon: BsClockHistory }
                             }
 
                             self::notification_button {
                                 title: "Plan task",
+                                shortcut: "p",
                                 onclick: |_| on_plan.call(notif),
                                 Icon { class: "w-5 h-5" icon: BsBookmark }
                             }
@@ -184,22 +193,28 @@ fn notification_display<'a>(cx: Scope, notif: &'a NotificationWithTask) -> Eleme
 struct NotificationButtonProps<'a> {
     children: Element<'a>,
     title: &'a str,
+    shortcut: &'a str,
     #[props(optional)]
     onclick: Option<EventHandler<'a, MouseEvent>>,
 }
 
 fn notification_button<'a>(cx: Scope<'a, NotificationButtonProps<'a>>) -> Element {
     cx.render(rsx!(
-        button {
-            class: "btn btn-ghost btn-square",
-            title: "{cx.props.title}",
-            onclick: move |evt| {
-                if let Some(handler) = &cx.props.onclick {
-                    handler.call(evt)
-                }
-            },
+        div {
+            class: "tooltip tooltip-left",
+            "data-tip": "{cx.props.shortcut}",
 
-            &cx.props.children
+            button {
+                class: "btn btn-ghost btn-square",
+                title: "{cx.props.title}",
+                onclick: move |evt| {
+                    if let Some(handler) = &cx.props.onclick {
+                        handler.call(evt)
+                    }
+                },
+
+                &cx.props.children
+            }
         }
     ))
 }
