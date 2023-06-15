@@ -1,12 +1,15 @@
 use anyhow::Context;
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
-use sqlx::{Postgres, Transaction};
+use sqlx::{Postgres, QueryBuilder, Transaction};
 use uuid::Uuid;
 
-use universal_inbox::user::{AuthUserId, User, UserId};
+use universal_inbox::{
+    auth::AuthIdToken,
+    user::{AuthUserId, User, UserId},
+};
 
-use crate::universal_inbox::UniversalInboxError;
+use crate::universal_inbox::{UniversalInboxError, UpdateStatus};
 
 use super::Repository;
 
@@ -34,6 +37,12 @@ pub trait UserRepository {
         executor: &mut Transaction<'a, Postgres>,
         user: User,
     ) -> Result<User, UniversalInboxError>;
+    async fn update_user_auth_id_token<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        auth_user_id: &AuthUserId,
+        auth_id_token: &AuthIdToken,
+    ) -> Result<UpdateStatus<User>, UniversalInboxError>;
 }
 
 #[async_trait]
@@ -50,6 +59,7 @@ impl UserRepository for Repository {
                 SELECT
                   id,
                   auth_user_id,
+                  auth_id_token,
                   first_name,
                   last_name,
                   email,
@@ -77,6 +87,7 @@ impl UserRepository for Repository {
                 SELECT
                   id,
                   auth_user_id,
+                  auth_id_token,
                   first_name,
                   last_name,
                   email,
@@ -104,6 +115,7 @@ impl UserRepository for Repository {
                 SELECT
                   id,
                   auth_user_id,
+                  auth_id_token,
                   first_name,
                   last_name,
                   email,
@@ -136,18 +148,20 @@ impl UserRepository for Repository {
                   (
                     id,
                     auth_user_id,
+                    auth_id_token,
                     first_name,
                     last_name,
                     email,
                     created_at,
                     updated_at
                   )
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                 RETURNING
                   id
             "#,
                 user.id.0,
                 user.auth_user_id.0,
+                user.auth_id_token.0,
                 user.first_name,
                 user.last_name,
                 user.email,
@@ -166,17 +180,79 @@ impl UserRepository for Repository {
 
         Ok(User { id, ..user })
     }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    async fn update_user_auth_id_token<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        auth_user_id: &AuthUserId,
+        auth_id_token: &AuthIdToken,
+    ) -> Result<UpdateStatus<User>, UniversalInboxError> {
+        let mut query_builder = QueryBuilder::new(r#"UPDATE "user" SET"#);
+        query_builder
+            .push(" auth_id_token = ")
+            .push_bind(auth_id_token.to_string())
+            .push(" WHERE ")
+            .push(" auth_user_id = ")
+            .push_bind(auth_user_id.to_string())
+            .push(
+                r#"
+                RETURNING
+                  id,
+                  auth_user_id,
+                  auth_id_token,
+                  first_name,
+                  last_name,
+                  email,
+                  created_at,
+                  updated_at,
+                  (SELECT"#,
+            )
+            .push(" auth_id_token != ")
+            .push_bind(auth_id_token.to_string())
+            .push(r#" FROM "user" WHERE auth_user_id = "#)
+            .push_bind(auth_user_id.to_string())
+            .push(r#") as "is_updated""#);
+
+        let record: Option<UpdatedUserRow> = query_builder
+            .build_query_as::<UpdatedUserRow>()
+            .fetch_optional(executor)
+            .await
+            .context(format!(
+                "Failed to update user with auth ID {auth_user_id} from storage"
+            ))?;
+
+        if let Some(updated_user_row) = record {
+            Ok(UpdateStatus {
+                updated: updated_user_row.is_updated,
+                result: Some(updated_user_row.user_row.try_into().unwrap()),
+            })
+        } else {
+            Ok(UpdateStatus {
+                updated: false,
+                result: None,
+            })
+        }
+    }
 }
 
 #[derive(Debug, sqlx::FromRow)]
 pub struct UserRow {
     id: Uuid,
     auth_user_id: String,
+    auth_id_token: String,
     first_name: String,
     last_name: String,
     email: String,
     created_at: NaiveDateTime,
     updated_at: NaiveDateTime,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct UpdatedUserRow {
+    #[sqlx(flatten)]
+    pub user_row: UserRow,
+    pub is_updated: bool,
 }
 
 impl From<UserRow> for User {
@@ -190,6 +266,7 @@ impl From<&UserRow> for User {
         User {
             id: row.id.into(),
             auth_user_id: row.auth_user_id.clone().into(),
+            auth_id_token: row.auth_id_token.clone().into(),
             first_name: row.first_name.clone(),
             last_name: row.last_name.clone(),
             email: row.email.clone(),

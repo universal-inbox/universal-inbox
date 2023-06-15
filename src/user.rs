@@ -5,11 +5,14 @@ use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use uuid::Uuid;
 
+use crate::auth::AuthIdToken;
+
 #[serde_as]
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
 pub struct User {
     pub id: UserId,
     pub auth_user_id: AuthUserId,
+    pub auth_id_token: AuthIdToken,
     pub first_name: String,
     pub last_name: String,
     pub email: String,
@@ -20,6 +23,7 @@ pub struct User {
 impl User {
     pub fn new(
         auth_user_id: AuthUserId,
+        auth_id_token: AuthIdToken,
         first_name: String,
         last_name: String,
         email: String,
@@ -27,6 +31,7 @@ impl User {
         Self {
             id: Uuid::new_v4().into(),
             auth_user_id,
+            auth_id_token,
             first_name,
             last_name,
             email,

@@ -129,7 +129,13 @@ pub fn nav_bar(cx: Scope) -> Element {
                                 a { href: "{user_profile_url}", target: "_blank", "Profile" }
                             })
                         }
-                        li { a { "Logout" } }
+                        li {
+                            a {
+                                onclick: |_| { user_service.send(UserCommand::Logout); },
+
+                                "Logout"
+                            }
+                        }
                     }
                 }
             }
