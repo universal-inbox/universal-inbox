@@ -1,6 +1,8 @@
 use dioxus::{events::MouseEvent, prelude::*};
 use dioxus_free_icons::{
-    icons::bs_icons::{BsBellSlash, BsBookmark, BsCheck2, BsClockHistory, BsLink45deg, BsTrash},
+    icons::bs_icons::{
+        BsBellSlash, BsCalendar2Check, BsCheck2, BsClockHistory, BsLink45deg, BsTrash,
+    },
     Icon,
 };
 use fermi::UseAtomRef;
@@ -63,7 +65,7 @@ pub fn notifications_list<'a>(
                                 title: "Create task",
                                 shortcut: "p",
                                 onclick: |_| on_plan.call(notif),
-                                Icon { class: "w-5 h-5" icon: BsBookmark }
+                                Icon { class: "w-5 h-5" icon: BsCalendar2Check }
                             }
 
                             self::notification_button {
@@ -106,7 +108,7 @@ pub fn notifications_list<'a>(
                                 title: "Plan task",
                                 shortcut: "p",
                                 onclick: |_| on_plan.call(notif),
-                                Icon { class: "w-5 h-5" icon: BsBookmark }
+                                Icon { class: "w-5 h-5" icon: BsCalendar2Check }
                             }
                         }
                     ))
