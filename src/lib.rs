@@ -11,6 +11,7 @@ extern crate macro_attr;
 #[macro_use]
 extern crate enum_derive;
 
+pub mod auth;
 pub mod integration_connection;
 pub mod notification;
 pub mod task;

@@ -1,35 +1,42 @@
-use std::sync::Arc;
+use std::{str::FromStr, sync::Arc};
 
 use anyhow::{anyhow, Context};
 use openidconnect::{
-    core::{CoreClient, CoreProviderMetadata, CoreUserInfoClaims},
+    core::{CoreClient, CoreIdToken, CoreProviderMetadata, CoreUserInfoClaims},
     reqwest::async_http_client,
-    AccessToken, SubjectIdentifier, TokenIntrospectionResponse,
+    AccessToken, EndSessionUrl, LogoutRequest, PostLogoutRedirectUrl, ProviderMetadataWithLogout,
+    SubjectIdentifier, TokenIntrospectionResponse,
 };
 use sqlx::{Postgres, Transaction};
 use tracing::info;
 
-use universal_inbox::user::{AuthUserId, User, UserId};
+use universal_inbox::{
+    auth::AuthIdToken,
+    user::{AuthUserId, User, UserId},
+};
+use url::Url;
 
 use crate::{
-    configuration::AuthenticationSettings, repository::user::UserRepository,
-    repository::Repository, universal_inbox::UniversalInboxError,
+    configuration::ApplicationSettings,
+    repository::user::UserRepository,
+    repository::Repository,
+    universal_inbox::{UniversalInboxError, UpdateStatus},
 };
 
 #[derive(Debug)]
 pub struct UserService {
     repository: Arc<Repository>,
-    authentication_settings: AuthenticationSettings,
+    application_settings: ApplicationSettings,
 }
 
 impl UserService {
     pub fn new(
         repository: Arc<Repository>,
-        authentication_settings: AuthenticationSettings,
+        application_settings: ApplicationSettings,
     ) -> UserService {
         UserService {
             repository,
-            authentication_settings,
+            application_settings,
         }
     }
 
@@ -59,9 +66,13 @@ impl UserService {
         &self,
         executor: &mut Transaction<'a, Postgres>,
         access_token: &str,
+        auth_id_token: AuthIdToken,
     ) -> Result<User, UniversalInboxError> {
         let provider_metadata = CoreProviderMetadata::discover_async(
-            self.authentication_settings.oidc_issuer_url.clone(),
+            self.application_settings
+                .authentication
+                .oidc_issuer_url
+                .clone(),
             async_http_client,
         )
         .await
@@ -70,10 +81,23 @@ impl UserService {
         // Create an OpenID Connect client by specifying the client ID
         let client = CoreClient::from_provider_metadata(
             provider_metadata,
-            self.authentication_settings.oidc_api_client_id.clone(),
-            Some(self.authentication_settings.oidc_api_client_secret.clone()),
+            self.application_settings
+                .authentication
+                .oidc_api_client_id
+                .clone(),
+            Some(
+                self.application_settings
+                    .authentication
+                    .oidc_api_client_secret
+                    .clone(),
+            ),
         )
-        .set_introspection_uri(self.authentication_settings.oidc_introspection_url.clone());
+        .set_introspection_uri(
+            self.application_settings
+                .authentication
+                .oidc_introspection_url
+                .clone(),
+        );
 
         let access_token = AccessToken::new(access_token.to_string());
         let introspection_result = client
@@ -98,11 +122,17 @@ impl UserService {
 
         match self
             .repository
-            .get_user_by_auth_id(executor, auth_user_id.clone())
+            .update_user_auth_id_token(executor, &auth_user_id, &auth_id_token)
             .await?
         {
-            Some(user) => Ok(user),
-            None => {
+            UpdateStatus {
+                updated: _,
+                result: Some(user),
+            } => Ok(user),
+            UpdateStatus {
+                updated: _,
+                result: None,
+            } => {
                 info!("User with auth provider user ID {auth_user_id} does not exists, creating a new one");
                 let user_infos: CoreUserInfoClaims = client
                     .user_info(
@@ -134,10 +164,49 @@ impl UserService {
                 self.repository
                     .create_user(
                         executor,
-                        User::new(auth_user_id, first_name, last_name, email),
+                        User::new(auth_user_id, auth_id_token, first_name, last_name, email),
                     )
                     .await
             }
         }
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    pub async fn close_session<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        user_id: UserId,
+    ) -> Result<Url, UniversalInboxError> {
+        let provider_metadata = ProviderMetadataWithLogout::discover_async(
+            self.application_settings
+                .authentication
+                .oidc_issuer_url
+                .clone(),
+            async_http_client,
+        )
+        .await
+        .context("metadata provider error")?;
+        let end_session_url: EndSessionUrl = provider_metadata
+            .additional_metadata()
+            .end_session_endpoint
+            .as_ref()
+            .ok_or_else(|| anyhow!("No end session endpoint found in provider metadata"))?
+            .clone();
+        let logout_request: LogoutRequest = end_session_url.into();
+
+        let user = self
+            .repository
+            .get_user(executor, user_id)
+            .await?
+            .ok_or_else(|| anyhow!("User with ID {user_id} not found"))?;
+        let id_token = CoreIdToken::from_str(&user.auth_id_token.to_string())
+            .context("Could not parse stored OIDC ID token, this should not happen")?;
+
+        Ok(logout_request
+            .set_id_token_hint(&id_token)
+            .set_post_logout_redirect_uri(PostLogoutRedirectUrl::from_url(
+                self.application_settings.front_base_url.clone(),
+            ))
+            .http_get_url())
     }
 }

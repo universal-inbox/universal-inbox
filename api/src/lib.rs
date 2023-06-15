@@ -161,7 +161,7 @@ pub async fn build_services(
     let repository = Arc::new(Repository::new(pool.clone()));
     let user_service = Arc::new(RwLock::new(UserService::new(
         repository.clone(),
-        settings.application.authentication.clone(),
+        settings.application.clone(),
     )));
 
     let integration_connection_service = Arc::new(RwLock::new(IntegrationConnectionService::new(

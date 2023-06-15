@@ -1,15 +1,19 @@
 use std::sync::Arc;
 
-use chrono::{TimeZone, Utc};
+use chrono::{Duration, TimeZone, Utc};
 use httpmock::{
     Method::{GET, POST},
     MockServer,
+};
+use openidconnect::{
+    core::{CoreHmacKey, CoreIdToken, CoreIdTokenClaims, CoreJwsSigningAlgorithm},
+    Audience, EmptyAdditionalClaims, EndUserEmail, IssuerUrl, StandardClaims, SubjectIdentifier,
 };
 use reqwest::Client;
 use rstest::fixture;
 use serde_json::json;
 
-use universal_inbox::user::User;
+use universal_inbox::{auth::SessionAuthValidationParameters, user::User};
 use universal_inbox_api::repository::Repository;
 
 use super::{tested_app, TestedApp};
@@ -39,9 +43,30 @@ pub async fn authenticate_user(
 
     let client = Client::builder().cookie_store(true).build().unwrap();
 
+    let signing_key = CoreHmacKey::new("secret".as_bytes());
+    let oidc_issuer_mock_server_uri = &app.oidc_issuer_mock_server.base_url();
+    let id_token = CoreIdToken::new(
+        CoreIdTokenClaims::new(
+            IssuerUrl::new(oidc_issuer_mock_server_uri.to_string()).unwrap(),
+            vec![Audience::new("client-id-123".to_string())],
+            Utc::now() + Duration::seconds(120),
+            Utc::now(),
+            StandardClaims::new(SubjectIdentifier::new("1234-abcd".to_string()))
+                .set_email(Some(EndUserEmail::new("foo@bar.com".to_string()))),
+            EmptyAdditionalClaims {},
+        ),
+        &signing_key,
+        CoreJwsSigningAlgorithm::HmacSha256,
+        None,
+        None,
+    )
+    .unwrap();
     let response = client
-        .get(&format!("{}/auth/session", app.app_address))
+        .post(&format!("{}/auth/session", app.app_address))
         .bearer_auth("fake_token")
+        .json(&SessionAuthValidationParameters {
+            auth_id_token: id_token.to_string().into(),
+        })
         .send()
         .await
         .unwrap();
@@ -107,7 +132,8 @@ pub fn mock_oidc_openid_configuration(app: &TestedApp) {
                 "id_token_signing_alg_values_supported": [
                     "RS256"
                 ],
-                "userinfo_endpoint": format!("{oidc_issuer_mock_server_uri}/userinfo")
+                "userinfo_endpoint": format!("{oidc_issuer_mock_server_uri}/userinfo"),
+                "end_session_endpoint": format!("{oidc_issuer_mock_server_uri}/end_session")
             }));
     });
 }

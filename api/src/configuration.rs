@@ -6,7 +6,7 @@ use serde::Deserialize;
 use universal_inbox::integration_connection::{IntegrationProviderKind, NangoProviderKey};
 use url::Url;
 
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct Settings {
     pub application: ApplicationSettings,
     pub database: DatabaseSettings,
@@ -14,7 +14,7 @@ pub struct Settings {
     pub integrations: IntegrationsSettings,
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct ApplicationSettings {
     pub port: u16,
     pub log_directive: String,
@@ -39,14 +39,14 @@ pub struct AuthenticationSettings {
     pub user_profile_url: Url,
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct HttpSessionSettings {
     pub secret_key: String,
     pub max_age_days: i64,
     pub max_age_inactive_days: i64,
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct DatabaseSettings {
     pub username: String,
     pub password: String,
@@ -55,7 +55,7 @@ pub struct DatabaseSettings {
     pub database_name: String,
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct RedisSettings {
     pub port: u16,
     pub host: String,
@@ -63,28 +63,28 @@ pub struct RedisSettings {
     pub password: Option<String>,
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct IntegrationsSettings {
     pub oauth2: Oauth2Settings,
     pub github: GithubIntegrationSettings,
     pub todoist: TodoistIntegrationSettings,
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct Oauth2Settings {
     pub nango_base_url: Url,
     pub nango_secret_key: String,
     pub nango_provider_keys: HashMap<IntegrationProviderKind, NangoProviderKey>,
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct GithubIntegrationSettings {
     pub name: String,
     pub comment: Option<String>,
     pub page_size: usize,
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct TodoistIntegrationSettings {
     pub name: String,
     pub comment: Option<String>,
