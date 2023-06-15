@@ -246,10 +246,10 @@ where
                 onfocusout: |_| validate.set(true),
                 value: "{cx.props.value}",
                 autofocus: cx.props.autofocus.unwrap_or_default(),
-                option { value: "1", "Priority 1" }
-                option { value: "2", "Priority 2" }
-                option { value: "3", "Priority 3" }
-                option { value: "4", "Priority 4" }
+                option { value: "1", "🔴 Priority 1" }
+                option { value: "2", "🟠 Priority 2" }
+                option { value: "3", "🟡 Priority 3" }
+                option { value: "4", "🔵 Priority 4" }
             }
             label {
                 "for": "{cx.props.name}",
