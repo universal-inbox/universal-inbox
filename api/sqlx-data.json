@@ -181,7 +181,7 @@
     },
     "query": "\n                UPDATE\n                  task\n                SET\n                  status = $1::task_status,\n                  completed_at = $2\n                WHERE\n                  NOT source_id = ANY($3)\n                  AND kind::TEXT = $4\n                  AND (status = 'Active')\n                RETURNING\n                  id,\n                  source_id,\n                  title,\n                  body,\n                  status as \"status: _\",\n                  completed_at,\n                  priority,\n                  due_at as \"due_at: Json<Option<DueDate>>\",\n                  source_html_url,\n                  tags,\n                  parent_id,\n                  project,\n                  is_recurring,\n                  created_at,\n                  metadata as \"metadata: Json<TaskMetadata>\",\n                  user_id\n            "
   },
-  "31dbf09e62c05c62ce7ca610689b4e4988c987cd2f6e17f1c0671f624753925f": {
+  "47df543f7ed999fc4834dfed89fc9ebf23773ae70ab57799ee801c12508a7c4d": {
     "describe": {
       "columns": [
         {
@@ -195,32 +195,38 @@
           "type_info": "Text"
         },
         {
-          "name": "first_name",
+          "name": "auth_id_token",
           "ordinal": 2,
           "type_info": "Text"
         },
         {
-          "name": "last_name",
+          "name": "first_name",
           "ordinal": 3,
           "type_info": "Text"
         },
         {
-          "name": "email",
+          "name": "last_name",
           "ordinal": 4,
           "type_info": "Text"
         },
         {
-          "name": "created_at",
+          "name": "email",
           "ordinal": 5,
+          "type_info": "Text"
+        },
+        {
+          "name": "created_at",
+          "ordinal": 6,
           "type_info": "Timestamp"
         },
         {
           "name": "updated_at",
-          "ordinal": 6,
+          "ordinal": 7,
           "type_info": "Timestamp"
         }
       ],
       "nullable": [
+        false,
         false,
         false,
         false,
@@ -235,7 +241,7 @@
         ]
       }
     },
-    "query": "\n                SELECT\n                  id,\n                  auth_user_id,\n                  first_name,\n                  last_name,\n                  email,\n                  created_at,\n                  updated_at\n                FROM \"user\"\n                WHERE id = $1\n            "
+    "query": "\n                SELECT\n                  id,\n                  auth_user_id,\n                  auth_id_token,\n                  first_name,\n                  last_name,\n                  email,\n                  created_at,\n                  updated_at\n                FROM \"user\"\n                WHERE id = $1\n            "
   },
   "488782ca370d306f43a500e43d668f639d0b3568807f5da0b6b05d9f95dfc653": {
     "describe": {
@@ -471,6 +477,68 @@
     },
     "query": "\n                INSERT INTO notification\n                  (\n                    id,\n                    title,\n                    status,\n                    source_id,\n                    source_html_url,\n                    metadata,\n                    updated_at,\n                    last_read_at,\n                    snoozed_until,\n                    user_id,\n                    task_id\n                  )\n                VALUES\n                  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)\n                ON CONFLICT (source_id, kind) DO UPDATE\n                SET\n                  title = $2,\n                  status = $3,\n                  source_html_url = $5,\n                  metadata = $6,\n                  updated_at = $7,\n                  last_read_at = $8,\n                  snoozed_until = $9,\n                  user_id = $10,\n                  task_id = $11\n                RETURNING\n                  id\n            "
   },
+  "79d85fdf5764f3ad6a547383330d688bcf9456362dd67d107cbc5866e3ab14a5": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "auth_user_id",
+          "ordinal": 1,
+          "type_info": "Text"
+        },
+        {
+          "name": "auth_id_token",
+          "ordinal": 2,
+          "type_info": "Text"
+        },
+        {
+          "name": "first_name",
+          "ordinal": 3,
+          "type_info": "Text"
+        },
+        {
+          "name": "last_name",
+          "ordinal": 4,
+          "type_info": "Text"
+        },
+        {
+          "name": "email",
+          "ordinal": 5,
+          "type_info": "Text"
+        },
+        {
+          "name": "created_at",
+          "ordinal": 6,
+          "type_info": "Timestamp"
+        },
+        {
+          "name": "updated_at",
+          "ordinal": 7,
+          "type_info": "Timestamp"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      }
+    },
+    "query": "\n                SELECT\n                  id,\n                  auth_user_id,\n                  auth_id_token,\n                  first_name,\n                  last_name,\n                  email,\n                  created_at,\n                  updated_at\n                FROM \"user\"\n                WHERE auth_user_id = $1\n            "
+  },
   "916aeaeeb80e5052378e0fbc0657ee4a5d6497a70fec28025f0d2add76657deb": {
     "describe": {
       "columns": [
@@ -565,62 +633,6 @@
       }
     },
     "query": "\n                SELECT\n                  id,\n                  user_id,\n                  connection_id,\n                  provider_kind as \"provider_kind: _\",\n                  status as \"status: _\",\n                  failure_message,\n                  created_at,\n                  updated_at,\n                  last_sync_started_at,\n                  last_sync_failure_message\n                FROM integration_connection\n                WHERE user_id = $1\n            "
-  },
-  "b00a99b78a230197095fe11540ad4b18192fd0627ce5289423bf4cb4fa6751f4": {
-    "describe": {
-      "columns": [
-        {
-          "name": "id",
-          "ordinal": 0,
-          "type_info": "Uuid"
-        },
-        {
-          "name": "auth_user_id",
-          "ordinal": 1,
-          "type_info": "Text"
-        },
-        {
-          "name": "first_name",
-          "ordinal": 2,
-          "type_info": "Text"
-        },
-        {
-          "name": "last_name",
-          "ordinal": 3,
-          "type_info": "Text"
-        },
-        {
-          "name": "email",
-          "ordinal": 4,
-          "type_info": "Text"
-        },
-        {
-          "name": "created_at",
-          "ordinal": 5,
-          "type_info": "Timestamp"
-        },
-        {
-          "name": "updated_at",
-          "ordinal": 6,
-          "type_info": "Timestamp"
-        }
-      ],
-      "nullable": [
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false
-      ],
-      "parameters": {
-        "Left": [
-          "Text"
-        ]
-      }
-    },
-    "query": "\n                SELECT\n                  id,\n                  auth_user_id,\n                  first_name,\n                  last_name,\n                  email,\n                  created_at,\n                  updated_at\n                FROM \"user\"\n                WHERE auth_user_id = $1\n            "
   },
   "b59b83dc26fe2569ee78c8b6d524f11e3095f1d6659bb595e97816129b5a2a7b": {
     "describe": {
@@ -720,7 +732,7 @@
     },
     "query": "SELECT count(*) FROM task WHERE id = $1"
   },
-  "d9d42078fe4b74b281c9dc0e990c40866fbcdf88c3bcc280c18803df2d090d35": {
+  "c36011f15b0778008dbdafa6d87b491160cd776ef6d58c1357bf3f6b7f1e9661": {
     "describe": {
       "columns": [
         {
@@ -734,32 +746,38 @@
           "type_info": "Text"
         },
         {
-          "name": "first_name",
+          "name": "auth_id_token",
           "ordinal": 2,
           "type_info": "Text"
         },
         {
-          "name": "last_name",
+          "name": "first_name",
           "ordinal": 3,
           "type_info": "Text"
         },
         {
-          "name": "email",
+          "name": "last_name",
           "ordinal": 4,
           "type_info": "Text"
         },
         {
-          "name": "created_at",
+          "name": "email",
           "ordinal": 5,
+          "type_info": "Text"
+        },
+        {
+          "name": "created_at",
+          "ordinal": 6,
           "type_info": "Timestamp"
         },
         {
           "name": "updated_at",
-          "ordinal": 6,
+          "ordinal": 7,
           "type_info": "Timestamp"
         }
       ],
       "nullable": [
+        false,
         false,
         false,
         false,
@@ -772,7 +790,34 @@
         "Left": []
       }
     },
-    "query": "\n                SELECT\n                  id,\n                  auth_user_id,\n                  first_name,\n                  last_name,\n                  email,\n                  created_at,\n                  updated_at\n                FROM \"user\"\n            "
+    "query": "\n                SELECT\n                  id,\n                  auth_user_id,\n                  auth_id_token,\n                  first_name,\n                  last_name,\n                  email,\n                  created_at,\n                  updated_at\n                FROM \"user\"\n            "
+  },
+  "d10dd13689222d7b0ea174bab3ea0f319dbe52a5a585c78b5b1b7711dc4e460b": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        }
+      ],
+      "nullable": [
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Uuid",
+          "Text",
+          "Text",
+          "Text",
+          "Text",
+          "Text",
+          "Timestamp",
+          "Timestamp"
+        ]
+      }
+    },
+    "query": "\n                INSERT INTO \"user\"\n                  (\n                    id,\n                    auth_user_id,\n                    auth_id_token,\n                    first_name,\n                    last_name,\n                    email,\n                    created_at,\n                    updated_at\n                  )\n                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)\n                RETURNING\n                  id\n            "
   },
   "e3a1ced9ef14a49bafc91cbd0d830b5f98c4e69745c69fb48832bfb7626ae7ea": {
     "describe": {
@@ -989,32 +1034,6 @@
       }
     },
     "query": "\n                SELECT\n                  id,\n                  user_id,\n                  connection_id,\n                  provider_kind as \"provider_kind: _\",\n                  status as \"status: _\",\n                  failure_message,\n                  created_at,\n                  updated_at,\n                  last_sync_started_at,\n                  last_sync_failure_message\n                FROM integration_connection\n                WHERE id = $1\n            "
-  },
-  "f77a6136db4975055d51aac6d2614f0f6cc8c6061956340216a5298e43381089": {
-    "describe": {
-      "columns": [
-        {
-          "name": "id",
-          "ordinal": 0,
-          "type_info": "Uuid"
-        }
-      ],
-      "nullable": [
-        false
-      ],
-      "parameters": {
-        "Left": [
-          "Uuid",
-          "Text",
-          "Text",
-          "Text",
-          "Text",
-          "Timestamp",
-          "Timestamp"
-        ]
-      }
-    },
-    "query": "\n                INSERT INTO \"user\"\n                  (\n                    id,\n                    auth_user_id,\n                    first_name,\n                    last_name,\n                    email,\n                    created_at,\n                    updated_at\n                  )\n                VALUES ($1, $2, $3, $4, $5, $6, $7)\n                RETURNING\n                  id\n            "
   },
   "fe79de7587edba6557200743607adc6f9fbb37b4a8c845a496086a0ad0d97521": {
     "describe": {

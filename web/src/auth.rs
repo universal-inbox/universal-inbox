@@ -17,6 +17,8 @@ use openidconnect::{
 };
 use reqwest::{Client, Method};
 
+use universal_inbox::auth::{AuthIdToken, SessionAuthValidationParameters};
+
 use crate::{
     components::spinner::spinner,
     model::{AuthenticationState, UniversalInboxUIModel},
@@ -148,8 +150,15 @@ async fn authenticate(
     if let Some(auth_code) = auth_code {
         // We are on the auth callback URL with a code from the auth provider, so we can fetch the access token
         ui_model_ref.write_silent().authentication_state = AuthenticationState::FetchingAccessToken;
-        let access_token = fetch_access_token(client, AuthorizationCode::new(auth_code)).await?;
-        create_authenticated_session(session_url, &access_token, ui_model_ref.clone()).await
+        let (access_token, auth_id_token) =
+            fetch_access_token(client, AuthorizationCode::new(auth_code)).await?;
+        create_authenticated_session(
+            session_url,
+            &access_token,
+            &auth_id_token,
+            ui_model_ref.clone(),
+        )
+        .await
     } else {
         debug!("auth: Not authenticated, redirecting to login");
         ui_model_ref.write_silent().authentication_state =
@@ -212,7 +221,7 @@ where
 async fn fetch_access_token<AC, AD, GC, JE, JS, JT, JU, K, P, TE, TR, TT, TIR, RT, TRE>(
     client: openidconnect::Client<AC, AD, GC, JE, JS, JT, JU, K, P, TE, TR, TT, TIR, RT, TRE>,
     auth_code: AuthorizationCode,
-) -> Result<AccessToken>
+) -> Result<(AccessToken, AuthIdToken)>
 where
     AC: AdditionalClaims,
     AD: AuthDisplay,
@@ -282,14 +291,29 @@ where
         .remove_item("auth-oidc-nonce")
         .map_err(|err| JsError::try_from(err).unwrap())?;
 
-    Ok(token_response.access_token().clone())
+    Ok((
+        token_response.access_token().clone(),
+        token_response
+            .id_token()
+            .context("No token ID found")?
+            .to_string()
+            .into(),
+    ))
 }
 
-async fn is_session_authenticated(session_url: &Url, access_token: &AccessToken) -> Result<bool> {
+async fn is_session_authenticated(
+    session_url: &Url,
+    access_token: &AccessToken,
+    auth_id_token: &AuthIdToken,
+) -> Result<bool> {
+    let body = SessionAuthValidationParameters {
+        auth_id_token: auth_id_token.clone(),
+    };
     let response = Client::new()
-        .request(Method::GET, session_url.clone())
+        .request(Method::POST, session_url.clone())
         .bearer_auth(access_token.secret())
         .fetch_credentials_include()
+        .json(&body)
         .send()
         .await?;
     Ok(response.status().is_success())
@@ -298,11 +322,13 @@ async fn is_session_authenticated(session_url: &Url, access_token: &AccessToken)
 async fn create_authenticated_session(
     session_url: &Url,
     access_token: &AccessToken,
+    auth_id_token: &AuthIdToken,
     ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
 ) -> Result<()> {
     debug!("auth: Creating authenticated session");
     ui_model_ref.write_silent().authentication_state = AuthenticationState::VerifyingAccessToken;
-    let is_authenticated = is_session_authenticated(session_url, access_token).await?;
+    let is_authenticated =
+        is_session_authenticated(session_url, access_token, auth_id_token).await?;
     ui_model_ref.write().authentication_state = if is_authenticated {
         AuthenticationState::Authenticated
     } else {

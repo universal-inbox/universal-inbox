@@ -5,13 +5,14 @@ use futures_util::StreamExt;
 use reqwest::Method;
 use url::Url;
 
-use universal_inbox::user::User;
+use universal_inbox::{auth::CloseSessionResponse, user::User};
 
-use crate::{model::UniversalInboxUIModel, services::api::call_api};
+use crate::{model::UniversalInboxUIModel, services::api::call_api, utils::redirect_to};
 
 #[derive(Debug)]
 pub enum UserCommand {
     GetUser,
+    Logout,
 }
 
 pub static CONNECTED_USER: AtomRef<Option<User>> = |_| None;
@@ -24,19 +25,36 @@ pub async fn user_service<'a>(
 ) {
     loop {
         let msg = rx.next().await;
-        if let Some(UserCommand::GetUser) = msg {
-            let result: Result<User> = call_api(
-                Method::GET,
-                &api_base_url,
-                "auth/user",
-                None::<i32>,
-                Some(ui_model_ref.clone()),
-            )
-            .await;
+        match msg {
+            Some(UserCommand::GetUser) => {
+                let result: Result<User> = call_api(
+                    Method::GET,
+                    &api_base_url,
+                    "auth/user",
+                    None::<i32>,
+                    Some(ui_model_ref.clone()),
+                )
+                .await;
 
-            if let Ok(user) = result {
-                connected_user.write().replace(user);
-            };
+                if let Ok(user) = result {
+                    connected_user.write().replace(user);
+                };
+            }
+            Some(UserCommand::Logout) => {
+                let result: Result<CloseSessionResponse> = call_api(
+                    Method::DELETE,
+                    &api_base_url,
+                    "auth/session",
+                    None::<i32>,
+                    Some(ui_model_ref.clone()),
+                )
+                .await;
+
+                if let Ok(CloseSessionResponse { logout_url }) = result {
+                    let _ = redirect_to(logout_url.as_str());
+                };
+            }
+            None => {}
         }
     }
 }
