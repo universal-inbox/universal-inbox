@@ -483,7 +483,7 @@ impl TaskRepository for Repository {
         Ok(Task { id, ..*task })
     }
 
-    #[tracing::instrument(level = "debug", skip(self), ret)]
+    #[tracing::instrument(level = "debug", skip(self))]
     async fn update_task<'a, 'b>(
         &self,
         executor: &mut Transaction<'a, Postgres>,

@@ -44,7 +44,6 @@ pub struct ListTaskRequest {
     status: TaskStatus,
 }
 
-#[tracing::instrument(level = "debug", skip(task_service, identity))]
 pub async fn list_tasks(
     list_task_request: web::Query<ListTaskRequest>,
     task_service: web::Data<Arc<RwLock<TaskService>>>,
@@ -75,7 +74,6 @@ pub struct SearchTaskRequest {
     matches: String,
 }
 
-#[tracing::instrument(level = "debug", skip(task_service, identity))]
 pub async fn search_tasks(
     search_task_request: web::Query<SearchTaskRequest>,
     task_service: web::Data<Arc<RwLock<TaskService>>>,
@@ -101,7 +99,6 @@ pub async fn search_tasks(
         .body(serde_json::to_string(&tasks).context("Cannot serialize tasks")?))
 }
 
-#[tracing::instrument(level = "debug", skip(task_service, identity))]
 pub async fn get_task(
     path: web::Path<TaskId>,
     task_service: web::Data<Arc<RwLock<TaskService>>>,
@@ -131,7 +128,6 @@ pub async fn get_task(
     }
 }
 
-#[tracing::instrument(level = "debug", skip(task_service, identity))]
 pub async fn create_task(
     task: web::Json<Box<Task>>,
     task_service: web::Data<Arc<RwLock<TaskService>>>,
@@ -162,7 +158,6 @@ pub async fn create_task(
     ))
 }
 
-#[tracing::instrument(level = "debug", skip(task_service, identity))]
 pub async fn sync_tasks(
     params: web::Json<SyncTasksParameters>,
     task_service: web::Data<Arc<RwLock<TaskService>>>,
@@ -232,7 +227,6 @@ pub async fn sync_tasks(
     }
 }
 
-#[tracing::instrument(level = "debug", skip(task_service, identity))]
 pub async fn patch_task(
     path: web::Path<TaskId>,
     patch: web::Json<TaskPatch>,

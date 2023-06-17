@@ -38,7 +38,6 @@ impl GithubService {
         })
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn fetch_notifications(
         &self,
         page: u32,
@@ -66,7 +65,6 @@ impl GithubService {
         Ok(notifications)
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn mark_thread_as_read(
         &self,
         thread_id: &str,
@@ -94,7 +92,6 @@ impl GithubService {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn unsubscribe_from_thread(
         &self,
         thread_id: &str,
@@ -143,7 +140,6 @@ fn build_github_client(access_token: &AccessToken) -> Result<reqwest::Client, re
         .build()
 }
 
-#[tracing::instrument(level = "debug")]
 pub fn get_html_url_from_api_url(api_url: &Option<Uri>) -> Option<Uri> {
     api_url.as_ref().and_then(|uri| {
         if uri.host() == Some("api.github.com") && uri.path().starts_with("/repos") {
@@ -160,6 +156,7 @@ pub fn get_html_url_from_api_url(api_url: &Option<Uri>) -> Option<Uri> {
 
 #[async_trait]
 impl NotificationSourceService<GithubNotification> for GithubService {
+    #[tracing::instrument(level = "debug", skip(self), err)]
     async fn fetch_all_notifications(
         &self,
         access_token: &AccessToken,
@@ -186,6 +183,7 @@ impl NotificationSourceService<GithubNotification> for GithubService {
         .collect::<Vec<GithubNotification>>())
     }
 
+    #[tracing::instrument(level = "debug", skip(self), err)]
     async fn delete_notification_from_source(
         &self,
         source_id: &str,
@@ -194,6 +192,7 @@ impl NotificationSourceService<GithubNotification> for GithubService {
         self.mark_thread_as_read(source_id, access_token).await
     }
 
+    #[tracing::instrument(level = "debug", skip(self), err)]
     async fn unsubscribe_notification_from_source(
         &self,
         source_id: &str,
