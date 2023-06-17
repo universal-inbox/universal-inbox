@@ -43,7 +43,6 @@ pub fn scope() -> Scope {
         )
 }
 
-#[tracing::instrument(level = "debug", skip(integration_connection_service, identity))]
 pub async fn list_integration_connections(
     integration_connection_service: web::Data<Arc<RwLock<IntegrationConnectionService>>>,
     identity: Identity,
@@ -68,7 +67,6 @@ pub async fn list_integration_connections(
     ))
 }
 
-#[tracing::instrument(level = "debug", skip(integration_connection_service, identity))]
 pub async fn create_integration_connection(
     integration_connection_creation: web::Json<IntegrationConnectionCreation>,
     integration_connection_service: web::Data<Arc<RwLock<IntegrationConnectionService>>>,
@@ -104,7 +102,6 @@ pub async fn create_integration_connection(
     ))
 }
 
-#[tracing::instrument(level = "debug", skip(integration_connection_service, identity))]
 pub async fn verify_integration_connection(
     path: web::Path<IntegrationConnectionId>,
     integration_connection_service: web::Data<Arc<RwLock<IntegrationConnectionService>>>,
@@ -154,7 +151,6 @@ pub async fn verify_integration_connection(
     }
 }
 
-#[tracing::instrument(level = "debug", skip(integration_connection_service, identity))]
 pub async fn disconnect_integration_connection(
     path: web::Path<IntegrationConnectionId>,
     integration_connection_service: web::Data<Arc<RwLock<IntegrationConnectionService>>>,

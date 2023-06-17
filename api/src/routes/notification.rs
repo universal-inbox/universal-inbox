@@ -55,7 +55,6 @@ pub struct ListNotificationRequest {
     task_id: Option<TaskId>,
 }
 
-#[tracing::instrument(level = "debug", skip(notification_service, identity))]
 pub async fn list_notifications(
     list_notification_request: web::Query<ListNotificationRequest>,
     notification_service: web::Data<Arc<RwLock<NotificationService>>>,
@@ -88,7 +87,6 @@ pub async fn list_notifications(
     ))
 }
 
-#[tracing::instrument(level = "debug", skip(notification_service, identity))]
 pub async fn get_notification(
     path: web::Path<NotificationId>,
     notification_service: web::Data<Arc<RwLock<NotificationService>>>,
@@ -122,7 +120,6 @@ pub async fn get_notification(
     }
 }
 
-#[tracing::instrument(level = "debug", skip(notification_service, identity))]
 pub async fn create_notification(
     notification: web::Json<Box<Notification>>,
     notification_service: web::Data<Arc<RwLock<NotificationService>>>,
@@ -153,7 +150,6 @@ pub async fn create_notification(
     ))
 }
 
-#[tracing::instrument(level = "debug", skip(notification_service, identity))]
 pub async fn sync_notifications(
     params: web::Json<SyncNotificationsParameters>,
     notification_service: web::Data<Arc<RwLock<NotificationService>>>,
@@ -225,7 +221,6 @@ pub async fn sync_notifications(
     }
 }
 
-#[tracing::instrument(level = "debug", skip(notification_service, identity))]
 pub async fn patch_notification(
     path: web::Path<NotificationId>,
     patch: web::Json<NotificationPatch>,
@@ -283,7 +278,6 @@ pub async fn patch_notification(
     }
 }
 
-#[tracing::instrument(level = "debug", skip(notification_service, identity))]
 pub async fn create_task_from_notification(
     path: web::Path<NotificationId>,
     task_creation: web::Json<TaskCreation>,

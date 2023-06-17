@@ -47,7 +47,6 @@ impl ResponseError for UniversalInboxError {
     }
 }
 
-#[tracing::instrument(level = "debug")]
 pub async fn option_wildcard() -> HttpResponse {
     HttpResponse::Ok().finish()
 }

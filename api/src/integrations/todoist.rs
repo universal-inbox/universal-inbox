@@ -160,7 +160,7 @@ impl TodoistService {
         })
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self), err)]
     pub async fn sync_resources(
         &self,
         resource_name: &str,
@@ -186,7 +186,7 @@ impl TodoistService {
             .context("Failed to parse response from Todoist")?)
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self), err)]
     pub async fn sync_items(
         &self,
         access_token: &AccessToken,
@@ -198,7 +198,7 @@ impl TodoistService {
         })
     }
 
-    #[tracing::instrument(level = "debug", skip(self), ret)]
+    #[tracing::instrument(level = "debug", skip(self), err)]
     pub async fn get_item(
         &self,
         id: &str,
@@ -232,7 +232,7 @@ impl TodoistService {
         Ok(Some(item_info.item))
     }
 
-    #[tracing::instrument(level = "debug", skip(self), ret)]
+    #[tracing::instrument(level = "debug", skip(self), err)]
     pub async fn send_sync_commands(
         &self,
         commands: Vec<TodoistSyncCommand>,
@@ -277,7 +277,7 @@ impl TodoistService {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self), ret)]
+    #[tracing::instrument(level = "debug", skip(self), err)]
     pub async fn fetch_all_projects(
         &self,
         access_token: &AccessToken,
@@ -391,7 +391,7 @@ fn build_todoist_client(access_token: &AccessToken) -> Result<reqwest::Client, r
 
 #[async_trait]
 impl TaskSourceService<TodoistItem> for TodoistService {
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self), err)]
     async fn fetch_all_tasks(
         &self,
         access_token: &AccessToken,
@@ -399,7 +399,7 @@ impl TaskSourceService<TodoistItem> for TodoistService {
         self.sync_items(access_token).await
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self), err)]
     async fn fetch_task(
         &self,
         source_id: &str,
@@ -408,7 +408,7 @@ impl TaskSourceService<TodoistItem> for TodoistService {
         self.get_item(source_id, access_token).await
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self), err)]
     async fn build_task(
         &self,
         source: &TodoistItem,
@@ -430,7 +430,7 @@ impl TaskSourceService<TodoistItem> for TodoistService {
         Ok(TodoistService::build_task_with_project_name(source, project_name, user_id).await)
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self), err)]
     async fn create_task(
         &self,
         task: &TaskCreation,
@@ -473,7 +473,7 @@ impl TaskSourceService<TodoistItem> for TodoistService {
         })
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self), err)]
     async fn delete_task(
         &self,
         id: &str,
@@ -489,7 +489,7 @@ impl TaskSourceService<TodoistItem> for TodoistService {
         .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self), err)]
     async fn complete_task(
         &self,
         id: &str,
@@ -505,7 +505,7 @@ impl TaskSourceService<TodoistItem> for TodoistService {
         .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self), err)]
     async fn update_task(
         &self,
         id: &str,

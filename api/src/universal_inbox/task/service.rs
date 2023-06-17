@@ -68,7 +68,7 @@ impl TaskService {
         self.repository.begin().await
     }
 
-    #[tracing::instrument(level = "debug", skip(task_source_service))]
+    #[tracing::instrument(level = "debug", skip(task_source_service), err)]
     pub async fn apply_updated_task_side_effect<'a, T>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -110,10 +110,8 @@ impl TaskService {
 
         Ok(())
     }
-}
 
-impl TaskService {
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self), err)]
     pub async fn list_tasks<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -125,7 +123,7 @@ impl TaskService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self), err)]
     pub async fn search_tasks<'a, 'b>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -137,7 +135,7 @@ impl TaskService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self), err)]
     pub async fn get_task<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -157,7 +155,7 @@ impl TaskService {
         Ok(task)
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self), err)]
     pub async fn get_tasks<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -166,7 +164,7 @@ impl TaskService {
         self.repository.get_tasks(executor, task_ids).await
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self), err)]
     pub async fn create_task<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -200,7 +198,7 @@ impl TaskService {
         }))
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self), err)]
     pub async fn create_task_from_notification<'a, 'b>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -409,7 +407,7 @@ impl TaskService {
         Ok(tasks)
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self), err)]
     pub async fn sync_tasks<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -431,7 +429,7 @@ impl TaskService {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self), err)]
     pub async fn sync_tasks_with_transaction<'a>(
         &self,
         source: Option<TaskSyncSourceKind>,
@@ -466,7 +464,7 @@ impl TaskService {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self), err)]
     pub async fn sync_tasks_for_all_users<'a>(
         &self,
         source: Option<TaskSyncSourceKind>,
@@ -490,7 +488,7 @@ impl TaskService {
         }
         Ok(())
     }
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self), err)]
     pub async fn patch_task<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -558,7 +556,7 @@ impl TaskService {
         Ok(updated_task)
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self), err)]
     pub async fn associate_notification_with_task<'a, 'b>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
