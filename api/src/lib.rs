@@ -22,10 +22,13 @@ use tokio::sync::RwLock;
 use tracing::info;
 use tracing_actix_web::TracingLogger;
 
-use crate::universal_inbox::{
-    integration_connection::service::IntegrationConnectionService,
-    notification::service::NotificationService, task::service::TaskService,
-    user::service::UserService, UniversalInboxError,
+use crate::{
+    observability::AuthenticatedRootSpanBuilder,
+    universal_inbox::{
+        integration_connection::service::IntegrationConnectionService,
+        notification::service::NotificationService, task::service::TaskService,
+        user::service::UserService, UniversalInboxError,
+    },
 };
 
 pub mod commands;
@@ -99,7 +102,7 @@ pub async fn run(
 
         let mut app = App::new()
             .wrap(cors)
-            .wrap(TracingLogger::default())
+            .wrap(TracingLogger::<AuthenticatedRootSpanBuilder>::new())
             .wrap(middleware::Compress::default())
             .wrap(
                 IdentityMiddleware::builder()
