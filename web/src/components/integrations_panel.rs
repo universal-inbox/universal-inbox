@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use chrono::{Local, SecondsFormat};
 use dioxus::prelude::*;
 
 use universal_inbox::{
@@ -54,29 +55,46 @@ pub fn integration_settings<'a>(
         IntegrationProviderKind::Todoist => rsx!(self::todoist { class: "w-8 h-8" }),
     };
 
-    let connection_button_label =
+    let (connection_button_label, connection_button_style, sync_message) =
         use_memo(cx, &connection.clone(), |connection| match connection {
             Some(Some(IntegrationConnection {
                 status: IntegrationConnectionStatus::Validated,
+                last_sync_started_at: Some(started_at),
+                last_sync_failure_message: None,
                 ..
-            })) => "Disconnect",
-            Some(Some(IntegrationConnection {
-                status: IntegrationConnectionStatus::Failing,
-                ..
-            })) => "Reconnect",
-            _ => "Connect",
-        });
-    let connection_button_style =
-        use_memo(cx, &connection.clone(), |connection| match connection {
+            })) => (
+                "Disconnect",
+                "btn-success",
+                Some(format!(
+                    "🟢 Last successfully synced at {}",
+                    started_at
+                        .with_timezone(&Local)
+                        .to_rfc3339_opts(SecondsFormat::Secs, true)
+                )),
+            ),
             Some(Some(IntegrationConnection {
                 status: IntegrationConnectionStatus::Validated,
+                last_sync_failure_message: Some(message),
                 ..
-            })) => "btn-success",
+            })) => (
+                "Disconnect",
+                "btn-success",
+                Some(format!("🔴 Last sync failed: {message}")),
+            ),
+            Some(Some(IntegrationConnection {
+                status: IntegrationConnectionStatus::Validated,
+                last_sync_started_at: None,
+                ..
+            })) => (
+                "Disconnect",
+                "btn-success",
+                Some("🟠 Not yet synced".to_string()),
+            ),
             Some(Some(IntegrationConnection {
                 status: IntegrationConnectionStatus::Failing,
                 ..
-            })) => "btn-error",
-            _ => "btn-primary",
+            })) => ("Reconnect", "btn-error", None),
+            _ => ("Connect", "btn-primary", None),
         });
 
     cx.render(rsx!(
@@ -87,7 +105,7 @@ pub fn integration_settings<'a>(
                 class: "card-body",
 
                 div {
-                    class: "flex flex-row",
+                    class: "flex flex-row gap-4",
 
                     div {
                         class: "card-title",
@@ -95,8 +113,12 @@ pub fn integration_settings<'a>(
                         "{config.name}"
                     }
                     div {
-                        class: "flex grow items-center",
-                        span {}
+                        class: "flex grow justify-start items-center",
+                        if let Some(sync_message) = sync_message {
+                            rsx!(span { "{sync_message}" })
+                        } else {
+                            rsx!(span {})
+                        }
                     }
                     div {
                         class: "card-actions justify-end",
@@ -122,7 +144,7 @@ pub fn integration_settings<'a>(
                         div {
                             class: "alert alert-error shadow-lg",
 
-                            span { "{failure_message}" }
+                            span { "⚠️ {failure_message}" }
                         }
                     )
                 }
