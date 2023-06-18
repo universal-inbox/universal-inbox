@@ -1,5 +1,7 @@
 use dioxus::prelude::*;
-use dioxus_free_icons::icons::bs_icons::{BsGear, BsInbox, BsMoon, BsSun};
+use dioxus_free_icons::icons::bs_icons::{
+    BsBoxArrowInLeft, BsGear, BsInbox, BsMoon, BsPerson, BsSun,
+};
 use dioxus_free_icons::Icon;
 use dioxus_router::Link;
 use fermi::use_atom_ref;
@@ -126,14 +128,19 @@ pub fn nav_bar(cx: Scope) -> Element {
 
                         if let Some(user_profile_url) = user_profile_url {
                             rsx!(li {
-                                a { href: "{user_profile_url}", target: "_blank", "Profile" }
+                                a {
+                                    href: "{user_profile_url}",
+                                    target: "_blank",
+                                    Icon { class: "w-5 h-5", icon: BsPerson }
+                                    p { "Profile" }
+                                }
                             })
                         }
                         li {
                             a {
-                                onclick: |_| { user_service.send(UserCommand::Logout); },
-
-                                "Logout"
+                                onclick: |_| user_service.send(UserCommand::Logout),
+                                Icon { class: "w-5 h-5", icon: BsBoxArrowInLeft }
+                                p { "Logout" }
                             }
                         }
                     }

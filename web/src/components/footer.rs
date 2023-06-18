@@ -1,109 +1,140 @@
+use chrono::{Local, SecondsFormat};
 use dioxus::prelude::*;
-use dioxus_free_icons::{
-    icons::bs_icons::{BsArrowDownShort, BsArrowUpShort, BsKeyboard, BsQuestionCircle},
-    Icon,
-};
+use dioxus_router::Link;
 use fermi::use_atom_ref;
 
-use crate::{model::UI_MODEL, services::notification_service::NOTIFICATIONS};
+use universal_inbox::integration_connection::{
+    IntegrationConnection, IntegrationConnectionStatus, IntegrationProviderKind,
+};
+
+use crate::{
+    components::icons::{github, todoist},
+    model::UI_MODEL,
+    services::{
+        integration_connection_service::INTEGRATION_CONNECTIONS,
+        notification_service::NotificationCommand,
+    },
+};
 
 pub fn footer(cx: Scope) -> Element {
-    let notifications_ref = use_atom_ref(cx, NOTIFICATIONS);
-    let notifications = notifications_ref.read();
-
+    let integration_connections_ref = use_atom_ref(cx, INTEGRATION_CONNECTIONS);
     let ui_model_ref = use_atom_ref(cx, UI_MODEL);
-    let ui_model = ui_model_ref.read();
-    let selected_notification_index = ui_model.selected_notification_index;
-
-    let is_selected_notification_built_from_task = use_memo(
-        cx,
-        &(selected_notification_index, notifications.clone()),
-        |(selected_notification_index, notifications)| {
-            let selected_notification = notifications.get(selected_notification_index);
-            selected_notification
-                .map(|notif| notif.is_built_from_task())
-                .unwrap_or(false)
-        },
-    );
+    let notification_service = use_coroutine_handle::<NotificationCommand>(cx).unwrap();
 
     cx.render(rsx! {
-        div {
-            class: "w-full drop-shadow-lg",
-            hr {}
-            button {
-                class: "flex w-full items-center h-5",
-                onclick: |_| {
-                    let mut ui_model = ui_model_ref.write();
-                    ui_model.footer_help_opened = !ui_model.footer_help_opened;
-                },
+        footer {
+            class: "w-full",
 
-                if ui_model.footer_help_opened {
-                    rsx! {
-                        Icon { class: "w-3 h-3", icon: BsArrowDownShort }
-                        div {
-                            class: "grow flex items-center justify-center btn btn-ghost h-auto min-h-fit",
-                            title: "Help",
-                            Icon { class: "w-3 h-3", icon: BsQuestionCircle }
+            hr {}
+            div {
+                class: "w-full flex gap-2 p-2 justify-end items-center",
+
+                rsx!(integration_connections_status {
+                    integration_connections: integration_connections_ref.read().clone(),
+                })
+
+                match &ui_model_ref.read().loaded_notifications {
+                    Some(Ok(count)) => rsx!(div {
+                        class: "tooltip tooltip-left",
+                        "data-tip": "{count} notifications loaded",
+                        button {
+                            class: "badge badge-success text-xs",
+                            onclick: |_| notification_service.send(NotificationCommand::Refresh),
+                            "{count}"
                         }
-                        Icon { class: "w-3 h-3", icon: BsArrowDownShort }
-                    }
-                } else {
-                    rsx! {
-                        Icon { class: "w-3 h-3", icon: BsArrowUpShort }
-                        div {
-                            class: "grow flex items-center justify-center btn btn-ghost h-auto min-h-fit",
-                            title: "Help",
-                            Icon { class: "w-3 h-3", icon: BsQuestionCircle }
+                    }),
+                    Some(Err(error)) => rsx!(div {
+                        class: "tooltip tooltip-left tooltip-error",
+                        "data-tip": "{error}",
+                        button {
+                            class: "badge badge-error text-xs",
+                            onclick: |_| notification_service.send(NotificationCommand::Refresh),
+                            "0"
                         }
-                        Icon { class: "w-3 h-3", icon: BsArrowUpShort }
-                    }
+                    }),
+                    None => rsx!(span { class: "loading loading-ring loading-xs" }),
                 }
             }
-            ui_model.footer_help_opened.then(|| rsx! {
-                div {
-                    class: "flex flex-col px-2 pb-2 text-xs gap-2",
-
-                    div {
-                        class: "flex items-center gap-2 pb-2",
-
-                        Icon { class: "w-4 h-4", icon: BsKeyboard }
-                        div { "Keyboard shortcuts" }
-                    }
-                    div {
-                        class: "grid grid-cols-4",
-
-                        self::shortcut_text { shortcut: "h", text: "help" }
-                        (!is_selected_notification_built_from_task).then(|| rsx!(
-                            self::shortcut_text { shortcut: "▼", text: "next notification" }
-                            self::shortcut_text { shortcut: "▲", text: "previous notification" }
-                            self::shortcut_text { shortcut: "d", text: "delete notification" }
-                            self::shortcut_text { shortcut: "u", text: "unsubscribe from notification" }
-                            self::shortcut_text { shortcut: "s", text: "snooze notification" }
-                            self::shortcut_text { shortcut: "t", text: "add notification to todo task" }
-                        )),
-
-                        (is_selected_notification_built_from_task).then(|| rsx!(
-                            self::shortcut_text { shortcut: "▼", text: "next task" }
-                            self::shortcut_text { shortcut: "▲", text: "previous task" }
-                            self::shortcut_text { shortcut: "d", text: "delete task" }
-                            self::shortcut_text { shortcut: "c", text: "complete task" }
-                            self::shortcut_text { shortcut: "s", text: "snooze notification" }
-                        )),
-                    }
-                }
-            })
         }
     })
 }
 
 #[inline_props]
-pub fn shortcut_text<'a>(cx: Scope, text: &'a str, shortcut: &'a str) -> Element {
+pub fn integration_connections_status(
+    cx: Scope,
+    integration_connections: Vec<IntegrationConnection>,
+) -> Element {
+    cx.render(rsx!(
+        for integration_connection in (&*integration_connections) {
+            integration_connection_status {
+                connection: integration_connection.clone(),
+            }
+        }
+    ))
+}
+
+#[inline_props]
+pub fn integration_connection_status(cx: Scope, connection: IntegrationConnection) -> Element {
+    let (connection_style, tooltip) =
+        use_memo(cx, &connection.clone(), |connection| match connection {
+            IntegrationConnection {
+                status: IntegrationConnectionStatus::Validated,
+                last_sync_started_at: started_at,
+                ..
+            } => (
+                "text-success",
+                started_at
+                    .map(|started_at| {
+                        format!(
+                            "{} successfully synced at {}",
+                            connection.provider_kind,
+                            started_at
+                                .with_timezone(&Local)
+                                .to_rfc3339_opts(SecondsFormat::Secs, true)
+                        )
+                    })
+                    .unwrap_or_else(|| format!("{} successfully synced", connection.provider_kind)),
+            ),
+            IntegrationConnection {
+                status: IntegrationConnectionStatus::Failing,
+                failure_message: message,
+                ..
+            } => (
+                "text-error",
+                message
+                    .map(|message| format!("Connection failed: {message}"))
+                    .unwrap_or_else(|| "Connection failed".to_string()),
+            ),
+            IntegrationConnection {
+                last_sync_failure_message: message,
+                ..
+            } => (
+                "text-error",
+                message
+                    .map(|message| format!("Failed to sync: {message}"))
+                    .unwrap_or_else(|| "Failed to sync".to_string()),
+            ),
+        });
+
+    let icon = match connection.provider_kind {
+        IntegrationProviderKind::Github => rsx!(self::github {
+            class: "w-4 h-4 {connection_style}"
+        }),
+        IntegrationProviderKind::Todoist => rsx!(self::todoist {
+            class: "w-4 h-4 {connection_style}"
+        }),
+    };
+
     cx.render(rsx! {
         div {
-            class: "flex items-center gap-2",
+            class: "tooltip tooltip-left text-xs",
+            "data-tip": "{tooltip}",
 
-            kbd { class: "kbd kbd-sm", "{shortcut}" }
-            span { "{text}" }
+            Link {
+                to: "/settings",
+                title: "Sync status",
+                icon
+            }
         }
     })
 }
