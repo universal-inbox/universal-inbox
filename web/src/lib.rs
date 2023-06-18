@@ -106,7 +106,7 @@ pub fn app(cx: Scope) -> Element {
         async move {
             setup_key_bindings(
                 ui_model_ref,
-                notification_service_handle,
+                notification_service_handle.clone(),
                 task_service_handle,
                 notifications_ref,
             );
@@ -114,7 +114,15 @@ pub fn app(cx: Scope) -> Element {
             let app_config = get_app_config().await.unwrap();
             app_config_ref.write().replace(app_config);
 
+            // Load integration connections status
             integration_connection_service_handle.send(IntegrationConnectionCommand::Refresh);
+
+            notification_service_handle.send(NotificationCommand::Refresh);
+            // Refresh notifications every minute
+            gloo_timers::callback::Interval::new(60_000, move || {
+                notification_service_handle.send(NotificationCommand::Refresh);
+            })
+            .forget();
         }
     });
 
