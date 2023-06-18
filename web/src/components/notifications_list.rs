@@ -27,22 +27,27 @@ pub fn notifications_list<'a>(
     on_associate: EventHandler<'a, &'a NotificationWithTask>,
 ) -> Element {
     let selected_notification_index = ui_model_ref.read().selected_notification_index;
+    let is_help_enabled = ui_model_ref.read().is_help_enabled;
 
     cx.render(rsx!(table {
         class: "table w-full h-max-full",
 
         tbody {
             notifications.iter().enumerate().map(|(i, notif)| {
+                let is_selected = i == selected_notification_index;
+
                 rsx!{
                     (!notif.is_built_from_task()).then(|| rsx!(
                         self::notification {
                             notif: notif,
-                            selected: i == selected_notification_index,
+                            selected: is_selected,
                             ui_model_ref: ui_model_ref,
 
                             self::notification_button {
                                 title: "Delete notification",
                                 shortcut: "d",
+                                selected: is_selected,
+                                show_shortcut: is_help_enabled,
                                 onclick: |_| on_delete.call(notif),
                                 Icon { class: "w-5 h-5" icon: BsTrash }
                             }
@@ -50,6 +55,8 @@ pub fn notifications_list<'a>(
                             self::notification_button {
                                 title: "Unsubscribe from the notification",
                                 shortcut: "u",
+                                selected: is_selected,
+                                show_shortcut: is_help_enabled,
                                 onclick: |_| on_unsubscribe.call(notif),
                                 Icon { class: "w-5 h-5" icon: BsBellSlash }
                             }
@@ -57,6 +64,8 @@ pub fn notifications_list<'a>(
                             self::notification_button {
                                 title: "Snooze notification",
                                 shortcut: "s",
+                                selected: is_selected,
+                                show_shortcut: is_help_enabled,
                                 onclick: |_| on_snooze.call(notif),
                                 Icon { class: "w-5 h-5" icon: BsClockHistory }
                             }
@@ -64,6 +73,8 @@ pub fn notifications_list<'a>(
                             self::notification_button {
                                 title: "Create task",
                                 shortcut: "p",
+                                selected: is_selected,
+                                show_shortcut: is_help_enabled,
                                 onclick: |_| on_plan.call(notif),
                                 Icon { class: "w-5 h-5" icon: BsCalendar2Check }
                             }
@@ -71,6 +82,8 @@ pub fn notifications_list<'a>(
                             self::notification_button {
                                 title: "Associate to task",
                                 shortcut: "a",
+                                selected: is_selected,
+                                show_shortcut: is_help_enabled,
                                 onclick: |_| on_associate.call(notif),
                                 Icon { class: "w-5 h-5" icon: BsLink45deg }
                             }
@@ -80,12 +93,14 @@ pub fn notifications_list<'a>(
                     (notif.is_built_from_task()).then(|| rsx!(
                         self::notification {
                             notif: notif,
-                            selected: i == selected_notification_index,
+                            selected: is_selected,
                             ui_model_ref: ui_model_ref,
 
                             self::notification_button {
                                 title: "Delete task",
                                 shortcut: "d",
+                                selected: is_selected,
+                                show_shortcut: is_help_enabled,
                                 onclick: |_| on_delete.call(notif),
                                 Icon { class: "w-5 h-5" icon: BsTrash }
                             }
@@ -93,6 +108,8 @@ pub fn notifications_list<'a>(
                             self::notification_button {
                                 title: "Complete task",
                                 shortcut: "c",
+                                selected: is_selected,
+                                show_shortcut: is_help_enabled,
                                 onclick: |_| on_complete_task.call(notif),
                                 Icon { class: "w-5 h-5" icon: BsCheck2 }
                             }
@@ -100,6 +117,8 @@ pub fn notifications_list<'a>(
                             self::notification_button {
                                 title: "Snooze notification",
                                 shortcut: "s",
+                                selected: is_selected,
+                                show_shortcut: is_help_enabled,
                                 onclick: |_| on_snooze.call(notif),
                                 Icon { class: "w-5 h-5" icon: BsClockHistory }
                             }
@@ -107,6 +126,8 @@ pub fn notifications_list<'a>(
                             self::notification_button {
                                 title: "Plan task",
                                 shortcut: "p",
+                                selected: is_selected,
+                                show_shortcut: is_help_enabled,
                                 onclick: |_| on_plan.call(notif),
                                 Icon { class: "w-5 h-5" icon: BsCalendar2Check }
                             }
@@ -196,16 +217,36 @@ struct NotificationButtonProps<'a> {
     children: Element<'a>,
     title: &'a str,
     shortcut: &'a str,
+    selected: bool,
+    show_shortcut: bool,
     #[props(optional)]
     onclick: Option<EventHandler<'a, MouseEvent>>,
 }
 
 fn notification_button<'a>(cx: Scope<'a, NotificationButtonProps<'a>>) -> Element {
+    let shortcut_visibility_style = use_memo(
+        cx,
+        &(cx.props.selected, cx.props.show_shortcut),
+        |(selected, show_shortcut)| {
+            if selected {
+                if show_shortcut {
+                    "visible"
+                } else {
+                    "invisible group-hover/notification-button:visible"
+                }
+            } else {
+                "invisible"
+            }
+        },
+    );
+
     cx.render(rsx!(
         div {
-            class: "tooltip tooltip-left",
-            "data-tip": "{cx.props.shortcut}",
-
+            class: "indicator group/notification-button",
+            span {
+                class: "{shortcut_visibility_style} indicator-item badge",
+                "{cx.props.shortcut}"
+            }
             button {
                 class: "btn btn-ghost btn-square",
                 title: "{cx.props.title}",

@@ -205,6 +205,8 @@ async fn refresh_notifications(
     notifications: &UseAtomRef<Vec<NotificationWithTask>>,
     ui_model_ref: &UseAtomRef<UniversalInboxUIModel>,
 ) {
+    ui_model_ref.write().loaded_notifications = None;
+
     let result: Result<Vec<NotificationWithTask>> = call_api(
         Method::GET,
         api_base_url,
@@ -215,11 +217,18 @@ async fn refresh_notifications(
     )
     .await;
 
-    if let Ok(new_notifications) = result {
-        let mut notifications = notifications.write();
-        notifications.clear();
-        notifications.extend(new_notifications);
-    };
+    match result {
+        Ok(new_notifications) => {
+            let mut notifications = notifications.write();
+            notifications.clear();
+            notifications.extend(new_notifications);
+            ui_model_ref.write().loaded_notifications = Some(Ok(notifications.len()));
+        }
+        Err(err) => {
+            ui_model_ref.write().loaded_notifications =
+                Some(Err(format!("Failed to load notifications: {err}")));
+        }
+    }
 }
 
 async fn delete_notification(

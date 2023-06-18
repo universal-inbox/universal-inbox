@@ -105,7 +105,7 @@ pub fn authenticated<'a>(cx: Scope<'a, AuthenticatedProps<'a>>) -> Element<'a> {
             rsx!(&cx.props.children)
         }
         value => rsx!(div {
-            class: "h-full flex justify-center items-center",
+            class: "h-full flex justify-center items-center overflow-hidden",
 
             self::spinner {}
             "{value.label()}"

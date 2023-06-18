@@ -5,16 +5,17 @@ pub static UI_MODEL: AtomRef<UniversalInboxUIModel> = |_| Default::default();
 #[derive(Debug, Default)]
 pub struct UniversalInboxUIModel {
     pub selected_notification_index: usize,
-    pub footer_help_opened: bool,
+    pub is_help_enabled: bool,
     pub task_planning_modal_opened: bool,
     pub task_association_modal_opened: bool,
     pub unhover_element: bool,
     pub authentication_state: AuthenticationState,
+    pub loaded_notifications: Option<Result<usize, String>>,
 }
 
 impl UniversalInboxUIModel {
     pub fn toggle_help(&mut self) {
-        self.footer_help_opened = !self.footer_help_opened;
+        self.is_help_enabled = !self.is_help_enabled;
     }
 
     pub fn set_unhover_element(&mut self, unhover_element: bool) -> bool {

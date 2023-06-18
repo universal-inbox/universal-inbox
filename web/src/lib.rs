@@ -20,7 +20,9 @@ use pages::{
     settings_page::settings_page,
 };
 use services::{
-    integration_connection_service::{integration_connnection_service, INTEGRATION_CONNECTIONS},
+    integration_connection_service::{
+        integration_connnection_service, IntegrationConnectionCommand, INTEGRATION_CONNECTIONS,
+    },
     notification_service::{notification_service, NotificationCommand, NOTIFICATIONS},
     task_service::{task_service, TaskCommand},
     toast_service::{toast_service, TOASTS},
@@ -81,7 +83,7 @@ pub fn app(cx: Scope) -> Element {
             ui_model_ref.clone(),
         )
     });
-    let _integration_connection_service_handle = use_coroutine(cx, |rx| {
+    let integration_connection_service_handle = use_coroutine(cx, |rx| {
         integration_connnection_service(
             rx,
             app_config_ref.clone(),
@@ -99,6 +101,7 @@ pub fn app(cx: Scope) -> Element {
         to_owned![task_service_handle];
         to_owned![notifications_ref];
         to_owned![app_config_ref];
+        to_owned![integration_connection_service_handle];
 
         async move {
             setup_key_bindings(
@@ -110,6 +113,8 @@ pub fn app(cx: Scope) -> Element {
 
             let app_config = get_app_config().await.unwrap();
             app_config_ref.write().replace(app_config);
+
+            integration_connection_service_handle.send(IntegrationConnectionCommand::Refresh);
         }
     });
 
@@ -118,7 +123,7 @@ pub fn app(cx: Scope) -> Element {
         cx.render(rsx!(
             // Router + Route == 300KB (release) !!!
             div {
-                class: "h-full flex flex-col text-sm",
+                class: "h-full flex flex-col text-sm overflow-hidden",
 
                 Router {
                    auth::authenticated {
@@ -226,7 +231,7 @@ fn setup_key_bindings(
                 }
                 "p" => ui_model_ref.write().task_planning_modal_opened = true,
                 "a" => ui_model_ref.write().task_association_modal_opened = true,
-                "h" => ui_model_ref.write().toggle_help(),
+                "h" | "?" => ui_model_ref.write().toggle_help(),
                 _ => handled = false,
             }
         }
