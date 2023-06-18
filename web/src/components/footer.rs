@@ -80,6 +80,7 @@ pub fn integration_connection_status(cx: Scope, connection: IntegrationConnectio
             IntegrationConnection {
                 status: IntegrationConnectionStatus::Validated,
                 last_sync_started_at: started_at,
+                last_sync_failure_message: None,
                 ..
             } => (
                 "text-success",
