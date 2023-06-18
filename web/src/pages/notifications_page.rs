@@ -26,13 +26,6 @@ pub fn notifications_page(cx: Scope) -> Element {
     let notification_to_associate: &UseState<Option<NotificationWithTask>> = use_state(cx, || None);
 
     debug!("Rendering notifications page");
-    use_future(cx, (), |()| {
-        to_owned![notification_service];
-        async move {
-            notification_service.send(NotificationCommand::Refresh);
-        }
-    });
-
     use_memo(
         cx,
         &(
