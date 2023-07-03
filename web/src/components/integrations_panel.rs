@@ -3,6 +3,10 @@ use std::collections::HashMap;
 use chrono::{Local, SecondsFormat};
 use dioxus::prelude::*;
 
+use dioxus_free_icons::{
+    icons::bs_icons::{BsExclamationTriangle, BsPlug},
+    Icon,
+};
 use universal_inbox::{
     integration_connection::{
         IntegrationConnection, IntegrationConnectionStatus, IntegrationProviderKind,
@@ -24,6 +28,26 @@ pub fn integrations_panel<'a>(
     cx.render(rsx!(
         div {
             class: "flex flex-col w-auto p-8",
+
+            if !integration_connections.iter().any(|c| c.is_connected()) {
+                rsx!(
+                    div {
+                        class: "alert alert-info shadow-lg my-4",
+
+                        Icon { class: "w-5 h-5" icon: BsPlug }
+                        "You have no integrations connected. Connect an integration to get started."
+                    }
+                )
+            } else if !integration_connections.iter().any(|c| c.is_connected_task_service()) {
+                rsx!(
+                    div {
+                        class: "alert alert-warning shadow-lg my-4",
+
+                        Icon { class: "w-5 h-5" icon: BsExclamationTriangle }
+                        "To fully use Universal Inbox, you need to connect at least one task management service."
+                    }
+                )
+            }
 
             for (kind, config) in (&*integration_providers) {
                 integration_settings {
@@ -144,7 +168,8 @@ pub fn integration_settings<'a>(
                         div {
                             class: "alert alert-error shadow-lg",
 
-                            span { "⚠️ {failure_message}" }
+                            Icon { class: "w-5 h-5" icon: BsExclamationTriangle }
+                            span { "{failure_message}" }
                         }
                     )
                 }

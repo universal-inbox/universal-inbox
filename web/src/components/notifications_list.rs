@@ -28,6 +28,7 @@ pub fn notifications_list<'a>(
 ) -> Element {
     let selected_notification_index = ui_model_ref.read().selected_notification_index;
     let is_help_enabled = ui_model_ref.read().is_help_enabled;
+    let is_task_actions_disabled = !ui_model_ref.read().is_task_actions_enabled;
 
     cx.render(rsx!(table {
         class: "table w-full h-max-full",
@@ -74,6 +75,7 @@ pub fn notifications_list<'a>(
                                 title: "Create task",
                                 shortcut: "p",
                                 selected: is_selected,
+                                disabled_label: is_task_actions_disabled.then_some("No task management service connected"),
                                 show_shortcut: is_help_enabled,
                                 onclick: |_| on_plan.call(notif),
                                 Icon { class: "w-5 h-5" icon: BsCalendar2Check }
@@ -83,6 +85,7 @@ pub fn notifications_list<'a>(
                                 title: "Associate to task",
                                 shortcut: "a",
                                 selected: is_selected,
+                                disabled_label: is_task_actions_disabled.then_some("No task management service connected"),
                                 show_shortcut: is_help_enabled,
                                 onclick: |_| on_associate.call(notif),
                                 Icon { class: "w-5 h-5" icon: BsLink45deg }
@@ -100,6 +103,7 @@ pub fn notifications_list<'a>(
                                 title: "Delete task",
                                 shortcut: "d",
                                 selected: is_selected,
+                                disabled_label: is_task_actions_disabled.then_some("No task management service connected"),
                                 show_shortcut: is_help_enabled,
                                 onclick: |_| on_delete.call(notif),
                                 Icon { class: "w-5 h-5" icon: BsTrash }
@@ -109,6 +113,7 @@ pub fn notifications_list<'a>(
                                 title: "Complete task",
                                 shortcut: "c",
                                 selected: is_selected,
+                                disabled_label: is_task_actions_disabled.then_some("No task management service connected"),
                                 show_shortcut: is_help_enabled,
                                 onclick: |_| on_complete_task.call(notif),
                                 Icon { class: "w-5 h-5" icon: BsCheck2 }
@@ -127,6 +132,7 @@ pub fn notifications_list<'a>(
                                 title: "Plan task",
                                 shortcut: "p",
                                 selected: is_selected,
+                                disabled_label: is_task_actions_disabled.then_some("No task management service connected"),
                                 show_shortcut: is_help_enabled,
                                 onclick: |_| on_plan.call(notif),
                                 Icon { class: "w-5 h-5" icon: BsCalendar2Check }
@@ -218,6 +224,7 @@ struct NotificationButtonProps<'a> {
     title: &'a str,
     shortcut: &'a str,
     selected: bool,
+    disabled_label: Option<Option<&'a str>>,
     show_shortcut: bool,
     #[props(optional)]
     onclick: Option<EventHandler<'a, MouseEvent>>,
@@ -240,24 +247,42 @@ fn notification_button<'a>(cx: Scope<'a, NotificationButtonProps<'a>>) -> Elemen
         },
     );
 
-    cx.render(rsx!(
-        div {
-            class: "indicator group/notification-button",
-            span {
-                class: "{shortcut_visibility_style} indicator-item badge",
-                "{cx.props.shortcut}"
-            }
-            button {
-                class: "btn btn-ghost btn-square",
-                title: "{cx.props.title}",
-                onclick: move |evt| {
-                    if let Some(handler) = &cx.props.onclick {
-                        handler.call(evt)
-                    }
-                },
+    cx.render(rsx!(if let Some(Some(label)) = cx.props.disabled_label {
+        rsx!(
+            div {
+                class: "tooltip tooltip-left text-xs text-gray-400",
+                "data-tip": "{label}",
 
-                &cx.props.children
+                button {
+                    class: "btn btn-ghost btn-square btn-disabled",
+                    title: "{cx.props.title}",
+
+                    &cx.props.children
+                }
             }
-        }
-    ))
+        )
+    } else {
+        rsx!(
+            div {
+                class: "indicator group/notification-button",
+
+                span {
+                    class: "{shortcut_visibility_style} indicator-item badge",
+                    "{cx.props.shortcut}"
+                }
+
+                button {
+                    class: "btn btn-ghost btn-square",
+                    title: "{cx.props.title}",
+                    onclick: move |evt| {
+                        if let Some(handler) = &cx.props.onclick {
+                            handler.call(evt)
+                        }
+                    },
+
+                    &cx.props.children
+                }
+            }
+        )
+    }))
 }

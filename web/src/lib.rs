@@ -3,7 +3,7 @@ extern crate lazy_static;
 
 use anyhow::{anyhow, Context, Result};
 use dioxus::prelude::*;
-use dioxus_router::{Route, Router};
+use dioxus_router::{Redirect, Route, Router};
 use fermi::{use_atom_ref, use_init_atom_root, UseAtomRef};
 use log::debug;
 use utils::get_element_by_id;
@@ -128,37 +128,43 @@ pub fn app(cx: Scope) -> Element {
 
     debug!("Rendering app");
     if let Some(app_config) = app_config_ref.read().as_ref() {
-        cx.render(rsx!(
-            // Router + Route == 300KB (release) !!!
-            div {
-                class: "h-full flex flex-col text-sm overflow-hidden",
+        if let Some(integration_connections) = integration_connections_ref.read().as_ref() {
+            return cx.render(rsx!(
+                // Router + Route == 300KB (release) !!!
+                div {
+                    class: "h-full flex flex-col text-sm overflow-hidden",
 
-                Router {
-                   auth::authenticated {
-                       issuer_url: app_config.oidc_issuer_url.clone(),
-                       client_id: app_config.oidc_client_id.clone(),
-                       redirect_url: app_config.oidc_redirect_url.clone(),
-                       session_url: session_url.clone(),
-                       ui_model_ref: ui_model_ref.clone(),
+                    Router {
+                        auth::authenticated {
+                            issuer_url: app_config.oidc_issuer_url.clone(),
+                            client_id: app_config.oidc_client_id.clone(),
+                            redirect_url: app_config.oidc_redirect_url.clone(),
+                            session_url: session_url.clone(),
+                            ui_model_ref: ui_model_ref.clone(),
 
-                       self::nav_bar {}
-                       Route { to: "/", self::notifications_page {} }
-                       Route { to: "/settings", self::settings_page {} }
-                       Route { to: "", self::page_not_found {} }
-                       self::footer {}
-                       self::toast_zone {}
-                   }
+                            self::nav_bar {}
+                            Route { to: "/", self::notifications_page {} }
+                            Route { to: "/settings", self::settings_page {} }
+                            Route { to: "", self::page_not_found {} }
+                            self::footer {}
+                            self::toast_zone {}
+
+                            if integration_connections.is_empty() {
+                                rsx!(Redirect { to: "/settings" })
+                            }
+                        }
+                    }
                 }
-            }
-        ))
-    } else {
-        cx.render(rsx!(div {
-            class: "h-full flex justify-center items-center",
-
-            self::spinner {}
-            "Loading Universal Inbox..."
-        }))
+            ));
+        }
     }
+
+    cx.render(rsx!(div {
+        class: "h-full flex justify-center items-center",
+
+        self::spinner {}
+        "Loading Universal Inbox..."
+    }))
 }
 
 fn setup_key_bindings(

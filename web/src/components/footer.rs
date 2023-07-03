@@ -1,5 +1,6 @@
 use chrono::{Local, SecondsFormat};
 use dioxus::prelude::*;
+use dioxus_free_icons::{icons::bs_icons::BsPlug, Icon};
 use dioxus_router::Link;
 use fermi::use_atom_ref;
 
@@ -29,9 +30,9 @@ pub fn footer(cx: Scope) -> Element {
             div {
                 class: "w-full flex gap-2 p-2 justify-end items-center",
 
-                rsx!(integration_connections_status {
-                    integration_connections: integration_connections_ref.read().clone(),
-                })
+                if let Some(integration_connections) = integration_connections_ref.read().as_ref() {
+                    rsx!(integration_connections_status { integration_connections: integration_connections.clone() })
+                }
 
                 match &ui_model_ref.read().loaded_notifications {
                     Some(Ok(count)) => rsx!(div {
@@ -64,7 +65,33 @@ pub fn integration_connections_status(
     cx: Scope,
     integration_connections: Vec<IntegrationConnection>,
 ) -> Element {
+    let connection_issue_tooltip = if !integration_connections.iter().any(|c| c.is_connected()) {
+        Some("No integration connected")
+    } else if !integration_connections
+        .iter()
+        .any(|c| c.is_connected_task_service())
+    {
+        Some("No task management integration connected")
+    } else {
+        None
+    };
+
     cx.render(rsx!(
+        if let Some(tooltip) = connection_issue_tooltip {
+            rsx!(
+                div {
+                    class: "tooltip tooltip-left text-xs text-error",
+                    "data-tip": "{tooltip}",
+
+                    Link {
+                        to: "/settings",
+                        title: "Sync status",
+                        Icon { class: "w-5 h-5" icon: BsPlug }
+                    }
+                }
+            )
+        }
+
         for integration_connection in (&*integration_connections) {
             integration_connection_status {
                 connection: integration_connection.clone(),

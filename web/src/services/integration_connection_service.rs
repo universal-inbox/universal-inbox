@@ -11,7 +11,6 @@ use universal_inbox::{
         IntegrationConnection, IntegrationConnectionCreation, IntegrationConnectionId,
         IntegrationConnectionStatus, IntegrationProviderKind,
     },
-    notification::NotificationSyncSourceKind,
     IntegrationProviderConfig,
 };
 
@@ -34,12 +33,12 @@ pub enum IntegrationConnectionCommand {
     ReconnectIntegrationConnection(IntegrationConnection),
 }
 
-pub static INTEGRATION_CONNECTIONS: AtomRef<Vec<IntegrationConnection>> = |_| vec![];
+pub static INTEGRATION_CONNECTIONS: AtomRef<Option<Vec<IntegrationConnection>>> = |_| None;
 
 pub async fn integration_connnection_service<'a>(
     mut rx: UnboundedReceiver<IntegrationConnectionCommand>,
     app_config_ref: UseAtomRef<Option<AppConfig>>,
-    integration_connections_ref: UseAtomRef<Vec<IntegrationConnection>>,
+    integration_connections_ref: UseAtomRef<Option<Vec<IntegrationConnection>>>,
     ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
     toast_service: Coroutine<ToastCommand>,
     notification_service: Coroutine<NotificationCommand>,
@@ -76,16 +75,11 @@ pub async fn integration_connnection_service<'a>(
                 )
                 .await
                 {
-                    Ok(integration_connection) => {
-                        if integration_connection.status == IntegrationConnectionStatus::Validated {
-                            if let Ok(source) = integration_connection.provider_kind.try_into() {
-                                notification_service.send(NotificationCommand::Sync(Some(source)));
-                            }
-                            if let Ok(source) = integration_connection.provider_kind.try_into() {
-                                task_service.send(TaskCommand::Sync(Some(source)));
-                            }
-                        }
-                    }
+                    Ok(integration_connection) => sync_integration_connection(
+                        &integration_connection,
+                        &notification_service,
+                        &task_service,
+                    ),
                     Err(error) => {
                         error!("An error occurred while connecting with {integration_provider_kind}: {error:?}");
                         toast_service.send(ToastCommand::Push(Toast {
@@ -108,13 +102,11 @@ pub async fn integration_connnection_service<'a>(
                 )
                 .await
                 {
-                    Ok(integration_connection) => {
-                        if integration_connection.status == IntegrationConnectionStatus::Validated {
-                            notification_service.send(NotificationCommand::Sync(Some(
-                                NotificationSyncSourceKind::Github,
-                            )));
-                        }
-                    }
+                    Ok(integration_connection) => sync_integration_connection(
+                        &integration_connection,
+                        &notification_service,
+                        &task_service,
+                    ),
                     Err(error) => {
                         error!(
                             "An error occurred while authenticating with {}: {error:?}",
@@ -154,13 +146,11 @@ pub async fn integration_connnection_service<'a>(
                 )
                 .await
                 {
-                    Ok(integration_connection) => {
-                        if integration_connection.status == IntegrationConnectionStatus::Validated {
-                            notification_service.send(NotificationCommand::Sync(Some(
-                                NotificationSyncSourceKind::Github,
-                            )));
-                        }
-                    }
+                    Ok(integration_connection) => sync_integration_connection(
+                        &integration_connection,
+                        &notification_service,
+                        &task_service,
+                    ),
                     Err(error) => {
                         error!(
                             "An error occurred while reconnecting with {}: {error:?}",
@@ -184,7 +174,7 @@ pub async fn integration_connnection_service<'a>(
 }
 
 async fn refresh_integration_connection(
-    integration_connections_ref: &UseAtomRef<Vec<IntegrationConnection>>,
+    integration_connections_ref: &UseAtomRef<Option<Vec<IntegrationConnection>>>,
     app_config_ref: &UseAtomRef<Option<AppConfig>>,
     ui_model_ref: &UseAtomRef<UniversalInboxUIModel>,
 ) -> Result<()> {
@@ -200,16 +190,20 @@ async fn refresh_integration_connection(
     )
     .await?;
 
-    let mut integration_connections = integration_connections_ref.write();
-    integration_connections.clear();
-    integration_connections.extend(new_integration_connections);
+    ui_model_ref.write().is_task_actions_enabled = new_integration_connections
+        .iter()
+        .any(|c| c.is_connected_task_service());
+
+    integration_connections_ref
+        .write()
+        .replace(new_integration_connections);
 
     Ok(())
 }
 
 async fn create_integration_connection(
     integration_provider_kind: IntegrationProviderKind,
-    integration_connections_ref: &UseAtomRef<Vec<IntegrationConnection>>,
+    integration_connections_ref: &UseAtomRef<Option<Vec<IntegrationConnection>>>,
     app_config_ref: &UseAtomRef<Option<AppConfig>>,
     ui_model_ref: &UseAtomRef<UniversalInboxUIModel>,
 ) -> Result<IntegrationConnection> {
@@ -228,7 +222,11 @@ async fn create_integration_connection(
 
     {
         let mut integration_connections = integration_connections_ref.write();
-        integration_connections.push(new_connection.clone());
+        if let Some(integration_connections) = integration_connections.as_mut() {
+            integration_connections.push(new_connection.clone());
+        } else {
+            *integration_connections = Some(vec![new_connection.clone()]);
+        }
     }
 
     authenticate_integration_connection(
@@ -242,7 +240,7 @@ async fn create_integration_connection(
 
 async fn authenticate_integration_connection(
     integration_connection: &IntegrationConnection,
-    integration_connections_ref: &UseAtomRef<Vec<IntegrationConnection>>,
+    integration_connections_ref: &UseAtomRef<Option<Vec<IntegrationConnection>>>,
     app_config_ref: &UseAtomRef<Option<AppConfig>>,
     ui_model_ref: &UseAtomRef<UniversalInboxUIModel>,
 ) -> Result<IntegrationConnection> {
@@ -267,7 +265,7 @@ async fn authenticate_integration_connection(
 
 async fn verify_integration_connection(
     integration_connection_id: IntegrationConnectionId,
-    integration_connections_ref: &UseAtomRef<Vec<IntegrationConnection>>,
+    integration_connections_ref: &UseAtomRef<Option<Vec<IntegrationConnection>>>,
     app_config_ref: &UseAtomRef<Option<AppConfig>>,
     ui_model_ref: &UseAtomRef<UniversalInboxUIModel>,
 ) -> Result<IntegrationConnection> {
@@ -290,12 +288,15 @@ async fn verify_integration_connection(
         integration_connections_ref,
     );
 
+    refresh_integration_connection(integration_connections_ref, app_config_ref, ui_model_ref)
+        .await?;
+
     Ok(result)
 }
 
 async fn disconnect_integration_connection(
     integration_connection_id: IntegrationConnectionId,
-    integration_connections_ref: &UseAtomRef<Vec<IntegrationConnection>>,
+    integration_connections_ref: &UseAtomRef<Option<Vec<IntegrationConnection>>>,
     app_config_ref: &UseAtomRef<Option<AppConfig>>,
     ui_model_ref: &UseAtomRef<UniversalInboxUIModel>,
 ) -> Result<()> {
@@ -318,12 +319,12 @@ async fn disconnect_integration_connection(
         integration_connections_ref,
     );
 
-    Ok(())
+    refresh_integration_connection(integration_connections_ref, app_config_ref, ui_model_ref).await
 }
 
 async fn reconnect_integration_connection(
     integration_connection: &IntegrationConnection,
-    integration_connections_ref: &UseAtomRef<Vec<IntegrationConnection>>,
+    integration_connections_ref: &UseAtomRef<Option<Vec<IntegrationConnection>>>,
     app_config_ref: &UseAtomRef<Option<AppConfig>>,
     ui_model_ref: &UseAtomRef<UniversalInboxUIModel>,
 ) -> Result<IntegrationConnection> {
@@ -348,15 +349,31 @@ fn update_integration_connection_status(
     integration_connection_id: IntegrationConnectionId,
     status: IntegrationConnectionStatus,
     failure_message: Option<String>,
-    integration_connections_ref: &UseAtomRef<Vec<IntegrationConnection>>,
+    integration_connections_ref: &UseAtomRef<Option<Vec<IntegrationConnection>>>,
 ) {
-    let mut integration_connections = integration_connections_ref.write();
-    if let Some(integration_connection) = integration_connections
-        .iter_mut()
-        .find(|integration_connection| integration_connection.id == integration_connection_id)
-    {
-        integration_connection.status = status;
-        integration_connection.failure_message = failure_message;
+    if let Some(integration_connections) = integration_connections_ref.write().as_mut() {
+        if let Some(integration_connection) = integration_connections
+            .iter_mut()
+            .find(|integration_connection| integration_connection.id == integration_connection_id)
+        {
+            integration_connection.status = status;
+            integration_connection.failure_message = failure_message;
+        }
+    }
+}
+
+fn sync_integration_connection(
+    integration_connection: &IntegrationConnection,
+    notification_service: &Coroutine<NotificationCommand>,
+    task_service: &Coroutine<TaskCommand>,
+) {
+    if integration_connection.is_connected() {
+        if let Ok(source) = integration_connection.provider_kind.try_into() {
+            notification_service.send(NotificationCommand::Sync(Some(source)));
+        }
+        if let Ok(source) = integration_connection.provider_kind.try_into() {
+            task_service.send(TaskCommand::Sync(Some(source)));
+        }
     }
 }
 
