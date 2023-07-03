@@ -37,6 +37,18 @@ impl IntegrationConnection {
             last_sync_failure_message: None,
         }
     }
+
+    pub fn is_connected(&self) -> bool {
+        self.status == IntegrationConnectionStatus::Validated
+    }
+
+    pub fn is_task_service(&self) -> bool {
+        self.provider_kind == IntegrationProviderKind::Todoist
+    }
+
+    pub fn is_connected_task_service(&self) -> bool {
+        self.is_connected() && self.is_task_service()
+    }
 }
 
 #[serde_as]

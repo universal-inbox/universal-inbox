@@ -6,6 +6,7 @@ pub static UI_MODEL: AtomRef<UniversalInboxUIModel> = |_| Default::default();
 pub struct UniversalInboxUIModel {
     pub selected_notification_index: usize,
     pub is_help_enabled: bool,
+    pub is_task_actions_enabled: bool,
     pub task_planning_modal_opened: bool,
     pub task_association_modal_opened: bool,
     pub unhover_element: bool,
