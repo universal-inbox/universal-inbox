@@ -83,7 +83,7 @@ pub fn app(cx: Scope) -> Element {
             ui_model_ref.clone(),
         )
     });
-    let integration_connection_service_handle = use_coroutine(cx, |rx| {
+    let _integration_connection_service_handle = use_coroutine(cx, |rx| {
         integration_connnection_service(
             rx,
             app_config_ref.clone(),
@@ -101,7 +101,6 @@ pub fn app(cx: Scope) -> Element {
         to_owned![task_service_handle];
         to_owned![notifications_ref];
         to_owned![app_config_ref];
-        to_owned![integration_connection_service_handle];
 
         async move {
             setup_key_bindings(
@@ -114,9 +113,6 @@ pub fn app(cx: Scope) -> Element {
             let app_config = get_app_config().await.unwrap();
             app_config_ref.write().replace(app_config);
 
-            // Load integration connections status
-            integration_connection_service_handle.send(IntegrationConnectionCommand::Refresh);
-
             notification_service_handle.send(NotificationCommand::Refresh);
             // Refresh notifications every minute
             gloo_timers::callback::Interval::new(60_000, move || {
@@ -128,35 +124,24 @@ pub fn app(cx: Scope) -> Element {
 
     debug!("Rendering app");
     if let Some(app_config) = app_config_ref.read().as_ref() {
-        if let Some(integration_connections) = integration_connections_ref.read().as_ref() {
-            return cx.render(rsx!(
-                // Router + Route == 300KB (release) !!!
-                div {
-                    class: "h-full flex flex-col text-sm overflow-hidden",
+        return cx.render(rsx!(
+            // Router + Route == 300KB (release) !!!
+            div {
+                class: "h-full flex flex-col text-sm overflow-hidden",
 
-                    Router {
-                        auth::authenticated {
-                            issuer_url: app_config.oidc_issuer_url.clone(),
-                            client_id: app_config.oidc_client_id.clone(),
-                            redirect_url: app_config.oidc_redirect_url.clone(),
-                            session_url: session_url.clone(),
-                            ui_model_ref: ui_model_ref.clone(),
+                Router {
+                    auth::authenticated {
+                        issuer_url: app_config.oidc_issuer_url.clone(),
+                        client_id: app_config.oidc_client_id.clone(),
+                        redirect_url: app_config.oidc_redirect_url.clone(),
+                        session_url: session_url.clone(),
+                        ui_model_ref: ui_model_ref.clone(),
 
-                            self::nav_bar {}
-                            Route { to: "/", self::notifications_page {} }
-                            Route { to: "/settings", self::settings_page {} }
-                            Route { to: "", self::page_not_found {} }
-                            self::footer {}
-                            self::toast_zone {}
-
-                            if integration_connections.is_empty() {
-                                rsx!(Redirect { to: "/settings" })
-                            }
-                        }
+                        authenticated_app {}
                     }
                 }
-            ));
-        }
+            }
+        ));
     }
 
     cx.render(rsx!(div {
@@ -165,6 +150,44 @@ pub fn app(cx: Scope) -> Element {
         self::spinner {}
         "Loading Universal Inbox..."
     }))
+}
+
+#[inline_props]
+pub fn authenticated_app(cx: Scope) -> Element {
+    let integration_connections_ref = use_atom_ref(cx, INTEGRATION_CONNECTIONS);
+    let integration_connection_service =
+        use_coroutine_handle::<IntegrationConnectionCommand>(cx).unwrap();
+
+    use_future(cx, (), |()| {
+        to_owned![integration_connection_service];
+
+        async move {
+            // Load integration connections status
+            integration_connection_service.send(IntegrationConnectionCommand::Refresh);
+        }
+    });
+
+    if let Some(integration_connections) = integration_connections_ref.read().as_ref() {
+        cx.render(rsx!(
+            self::nav_bar {}
+            Route { to: "/", self::notifications_page {} }
+            Route { to: "/settings", self::settings_page {} }
+            Route { to: "", self::page_not_found {} }
+            self::footer {}
+            self::toast_zone {}
+
+            if integration_connections.is_empty() {
+                rsx!(Redirect { to: "/settings" })
+            }
+        ))
+    } else {
+        cx.render(rsx!(div {
+            class: "h-full flex justify-center items-center",
+
+            self::spinner {}
+            "Loading Universal Inbox..."
+        }))
+    }
 }
 
 fn setup_key_bindings(
