@@ -7,7 +7,7 @@ use universal_inbox::notification::NotificationWithTask;
 
 use crate::{
     components::{
-        notifications_list::notifications_list, task_association_modal::task_association_modal,
+        notifications_list::notifications_list, task_link_modal::task_link_modal,
         task_planning_modal::task_planning_modal,
     },
     config::get_api_base_url,
@@ -23,7 +23,7 @@ pub fn notifications_page(cx: Scope) -> Element {
     let notification_service = use_coroutine_handle::<NotificationCommand>(cx).unwrap();
 
     let notification_to_plan: &UseState<Option<NotificationWithTask>> = use_state(cx, || None);
-    let notification_to_associate: &UseState<Option<NotificationWithTask>> = use_state(cx, || None);
+    let notification_to_link: &UseState<Option<NotificationWithTask>> = use_state(cx, || None);
 
     debug!("Rendering notifications page");
     use_memo(
@@ -35,7 +35,7 @@ pub fn notifications_page(cx: Scope) -> Element {
         |(selected_notification_index, notifications)| {
             if let Some(notification) = notifications.get(selected_notification_index) {
                 notification_to_plan.set(Some(notification.clone()));
-                notification_to_associate.set(Some(notification.clone()));
+                notification_to_link.set(Some(notification.clone()));
             }
         },
     );
@@ -77,9 +77,9 @@ pub fn notifications_page(cx: Scope) -> Element {
                                 notification_to_plan.set(Some(notification.clone()));
                                 ui_model_ref.write().task_planning_modal_opened = true;
                             },
-                            on_associate: |notification: &NotificationWithTask| {
-                                notification_to_associate.set(Some(notification.clone()));
-                                ui_model_ref.write().task_association_modal_opened = true;
+                            on_link: |notification: &NotificationWithTask| {
+                                notification_to_link.set(Some(notification.clone()));
+                                ui_model_ref.write().task_link_modal_opened = true;
                             }
                         }
                     )
@@ -112,18 +112,18 @@ pub fn notifications_page(cx: Scope) -> Element {
             })
         })
 
-        ui_model_ref.read().task_association_modal_opened.then(|| {
-            notification_to_associate.as_ref().map(|notification_to_associate| {
+        ui_model_ref.read().task_link_modal_opened.then(|| {
+            notification_to_link.as_ref().map(|notification_to_link| {
                 rsx!{
-                    task_association_modal {
+                    task_link_modal {
                         api_base_url: api_base_url.clone(),
-                        notification_to_associate: notification_to_associate.clone(),
+                        notification_to_link: notification_to_link.clone(),
                         ui_model_ref: ui_model_ref.clone(),
-                        on_close: |_| { ui_model_ref.write().task_association_modal_opened = false; },
-                        on_task_association: |task_id| {
-                            ui_model_ref.write().task_association_modal_opened = false;
-                            notification_service.send(NotificationCommand::AssociateNotificationWithTask(
-                                notification_to_associate.id,
+                        on_close: |_| { ui_model_ref.write().task_link_modal_opened = false; },
+                        on_task_link: |task_id| {
+                            ui_model_ref.write().task_link_modal_opened = false;
+                            notification_service.send(NotificationCommand::LinkNotificationWithTask(
+                                notification_to_link.id,
                                 task_id,
                             ));
                         },

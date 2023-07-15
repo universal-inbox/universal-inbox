@@ -354,8 +354,8 @@ pub fn floating_label_input_search_select<'a>(cx: Scope<'a, InputSearchProps<'a>
                 }
                 button {
                     tabindex: 1,
-                    id: "associated-task",
-                    name: "associated-task",
+                    id: "linked-task",
+                    name: "linked-task",
                     class: "{button_style} grow truncate block bg-transparent text-left border-0 border-b-2 focus:outline-none focus:ring-0 peer",
                     onclick: |_| {
                         let value = !*dropdown_opened.current();
@@ -377,7 +377,7 @@ pub fn floating_label_input_search_select<'a>(cx: Scope<'a, InputSearchProps<'a>
                     arrow_down { class: "h-5 w-5 group-hover:visible invisible" }
                 }
                 label {
-                    "for": "associated-task",
+                    "for": "linked-task",
                     class: "absolute duration-300 transform -translate-y-0 scale-100 top-2 z-10 origin-[0] peer-[.isnotempty]:scale-75 peer-[.isnotempty]:-translate-y-6 peer-[.issearching]:scale-75 peer-[.issearching]:-translate-y-6 peer-focus:scale-75 peer-focus:-translate-y-6",
                     "{cx.props.label}"
                 }

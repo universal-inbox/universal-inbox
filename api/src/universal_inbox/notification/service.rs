@@ -441,12 +441,7 @@ impl NotificationService {
                         .context("Unable to access task_service from notification_service")?
                         .read()
                         .await
-                        .associate_notification_with_task(
-                            executor,
-                            notification,
-                            task_id,
-                            for_user_id,
-                        )
+                        .link_notification_with_task(executor, notification, task_id, for_user_id)
                         .await?;
                 }
             }

@@ -557,7 +557,7 @@ impl TaskService {
     }
 
     #[tracing::instrument(level = "debug", skip(self), err)]
-    pub async fn associate_notification_with_task<'a, 'b>(
+    pub async fn link_notification_with_task<'a, 'b>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
         notification: &'b Notification,
@@ -569,7 +569,7 @@ impl TaskService {
             .await?
             .ok_or_else(|| {
                 UniversalInboxError::Unexpected(anyhow!(
-                    "Cannot associate notification {} with unknown task {task_id}",
+                    "Cannot link notification {} with unknown task {task_id}",
                     notification.id
                 ))
             })?;
@@ -599,7 +599,7 @@ impl TaskService {
             Ok(task)
         } else {
             Err(UniversalInboxError::Unexpected(anyhow!(
-                "Cannot update task {task_id} body while associating notification {} to it",
+                "Cannot update task {task_id} body while linking notification {} to it",
                 notification.id
             )))
         }

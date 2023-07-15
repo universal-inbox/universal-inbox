@@ -45,9 +45,9 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
     nango_todoist_connection: Box<NangoConnection>,
 ) {
     // existing task will be updated
-    // the associated notification will be marked as deleted as the task's project will not be Inbox anymore
+    // the linked notification will be marked as deleted as the task's project will not be Inbox anymore
     // a new task will be created
-    // with an associated notification as the new task's project is Inbox
+    // with an linked notification as the new task's project is Inbox
     let app = authenticated_app.await;
     let todoist_items = sync_todoist_items_response.items.clone().unwrap();
     let existing_todoist_task_creation: Box<TaskCreationResult> = create_resource(
