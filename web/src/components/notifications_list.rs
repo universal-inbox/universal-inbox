@@ -474,7 +474,7 @@ fn notification_button<'a>(cx: Scope<'a, NotificationButtonProps<'a>>) -> Elemen
                 class: "indicator group/notification-button",
 
                 span {
-                    class: "{shortcut_visibility_style} indicator-item badge",
+                    class: "{shortcut_visibility_style} indicator-item indicator-bottom indicator-center badge z-50",
                     "{cx.props.shortcut}"
                 }
 
