@@ -79,14 +79,16 @@ pub fn integration_settings<'a>(
         IntegrationProviderKind::Todoist => rsx!(self::todoist { class: "w-8 h-8" }),
     };
 
-    let (connection_button_label, connection_button_style, sync_message) =
+    let (connection_button_label, connection_button_style, sync_message, feature_label) =
         use_memo(cx, &connection.clone(), |connection| match connection {
-            Some(Some(IntegrationConnection {
-                status: IntegrationConnectionStatus::Validated,
-                last_sync_started_at: Some(started_at),
-                last_sync_failure_message: None,
-                ..
-            })) => (
+            Some(Some(
+                ref connection @ IntegrationConnection {
+                    status: IntegrationConnectionStatus::Validated,
+                    last_sync_started_at: Some(ref started_at),
+                    last_sync_failure_message: None,
+                    ..
+                },
+            )) => (
                 "Disconnect",
                 "btn-success",
                 Some(format!(
@@ -95,6 +97,13 @@ pub fn integration_settings<'a>(
                         .with_timezone(&Local)
                         .to_rfc3339_opts(SecondsFormat::Secs, true)
                 )),
+                if connection.is_notification_service() {
+                    Some("Synchronize notifications")
+                } else if connection.is_task_service() {
+                    Some("Synchronize tasks from the inbox as notifications")
+                } else {
+                    None
+                },
             ),
             Some(Some(IntegrationConnection {
                 status: IntegrationConnectionStatus::Validated,
@@ -104,6 +113,7 @@ pub fn integration_settings<'a>(
                 "Disconnect",
                 "btn-success",
                 Some(format!("🔴 Last sync failed: {message}")),
+                None,
             ),
             Some(Some(IntegrationConnection {
                 status: IntegrationConnectionStatus::Validated,
@@ -113,12 +123,13 @@ pub fn integration_settings<'a>(
                 "Disconnect",
                 "btn-success",
                 Some("🟠 Not yet synced".to_string()),
+                None,
             ),
             Some(Some(IntegrationConnection {
                 status: IntegrationConnectionStatus::Failing,
                 ..
-            })) => ("Reconnect", "btn-error", None),
-            _ => ("Connect", "btn-primary", None),
+            })) => ("Reconnect", "btn-error", None, None),
+            _ => ("Connect", "btn-primary", None, None),
         });
 
     cx.render(rsx!(
@@ -173,6 +184,20 @@ pub fn integration_settings<'a>(
                         }
                     )
                 }
+
+                if let Some(feature_label) = feature_label {
+                    rsx!(
+                        div {
+                            class: "form-control",
+                            label {
+                                class: "cursor-pointer label",
+                                span { class: "label-text, text-neutral-content", "{feature_label}" }
+                                input { r#type: "checkbox", class: "toggle toggle-primary", disabled: true, checked: true }
+                            }
+                        }
+                    )
+                }
+
                 if let Some(comment) = &config.comment {
                     rsx!(
                         div {

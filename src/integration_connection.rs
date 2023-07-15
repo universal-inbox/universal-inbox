@@ -46,6 +46,10 @@ impl IntegrationConnection {
         self.provider_kind == IntegrationProviderKind::Todoist
     }
 
+    pub fn is_notification_service(&self) -> bool {
+        self.provider_kind == IntegrationProviderKind::Github
+    }
+
     pub fn is_connected_task_service(&self) -> bool {
         self.is_connected() && self.is_task_service()
     }
