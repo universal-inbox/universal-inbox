@@ -419,7 +419,7 @@ mod patch_notification {
 
     #[rstest]
     #[tokio::test]
-    async fn test_patch_notification_to_associate_with_task(
+    async fn test_patch_notification_to_link_with_task(
         settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,

@@ -21,15 +21,15 @@ use crate::{
 };
 
 #[inline_props]
-pub fn task_association_modal<'a>(
+pub fn task_link_modal<'a>(
     cx: Scope,
     api_base_url: Url,
-    notification_to_associate: NotificationWithTask,
+    notification_to_link: NotificationWithTask,
     ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
     on_close: EventHandler<'a, ()>,
-    on_task_association: EventHandler<'a, TaskId>,
+    on_task_link: EventHandler<'a, TaskId>,
 ) -> Element {
-    let notification_icon = match notification_to_associate.metadata {
+    let notification_icon = match notification_to_link.metadata {
         NotificationMetadata::Github(_) => cx.render(rsx!(self::github { class: "h-5 w-5" })),
         NotificationMetadata::Todoist => cx.render(rsx!(self::todoist { class: "h-5 w-5" })),
     };
@@ -54,7 +54,7 @@ pub fn task_association_modal<'a>(
 
     cx.render(rsx!(
         dialog {
-            id: "task-association-modal",
+            id: "task-link-modal",
             tabindex: "-1",
             class: "modal modal-open text-base-content backdrop-blur-sm fixed top-0 left-0 w-full h-full",
             open: true,
@@ -75,7 +75,7 @@ pub fn task_association_modal<'a>(
                 div {
                     h3 {
                         class: "mb-4 text-xl font-medium",
-                        "Associate notification with task"
+                        "Link notification with task"
                     }
 
                     form {
@@ -83,7 +83,7 @@ pub fn task_association_modal<'a>(
                         method: "dialog",
                         onsubmit: |_| {
                             if let Some(task) = &*selected_task.current() {
-                                on_task_association.call(task.id);
+                                on_task_link.call(task.id);
                             }
                         },
 
@@ -91,14 +91,14 @@ pub fn task_association_modal<'a>(
                             class: "flex flex-none items-center",
                             div { class: "block py-2 px-4 bg-transparent", notification_icon }
                             div {
-                                id: "notification-to-associate",
+                                id: "notification-to-link",
                                 class: "grow truncate block",
-                                "{notification_to_associate.title}"
+                                "{notification_to_link.title}"
                             }
                             label {
-                                "for": "notification-to-associate",
+                                "for": "notification-to-link",
                                 class: "absolute transform top-2 z-10 origin-[0] scale-75 -translate-y-6",
-                                "Associate"
+                                "Link"
                             }
                         }
 
@@ -112,8 +112,8 @@ pub fn task_association_modal<'a>(
                             on_select: |_task| {
                                 cx.spawn({
                                     async move {
-                                        if let Err(error) = focus_element("task-modal-association-submit").await {
-                                            error!("Error focusing element task-modal-association-submit: {error:?}");
+                                        if let Err(error) = focus_element("task-modal-link-submit").await {
+                                            error!("Error focusing element task-modal-link-submit: {error:?}");
                                         }
                                     }
                                 });
@@ -123,11 +123,11 @@ pub fn task_association_modal<'a>(
                         div {
                             class: "modal-action",
                             button {
-                                id: "task-modal-association-submit",
+                                id: "task-modal-link-submit",
                                 tabindex: 0,
                                 "type": "submit",
                                 class: "btn btn-primary w-full",
-                                "Associate with task"
+                                "Link with task"
                             }
                         }
                     }

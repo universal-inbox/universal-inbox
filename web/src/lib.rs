@@ -207,12 +207,12 @@ fn setup_key_bindings(
         let mut handled = true;
 
         if ui_model_ref.read().task_planning_modal_opened
-            || ui_model_ref.read().task_association_modal_opened
+            || ui_model_ref.read().task_link_modal_opened
         {
             match evt.key().as_ref() {
                 "Escape" => {
                     ui_model_ref.write().task_planning_modal_opened = false;
-                    ui_model_ref.write().task_association_modal_opened = false;
+                    ui_model_ref.write().task_link_modal_opened = false;
                 }
                 _ => handled = false,
             }
@@ -267,7 +267,7 @@ fn setup_key_bindings(
                     }
                 }
                 "p" => ui_model_ref.write().task_planning_modal_opened = true,
-                "a" => ui_model_ref.write().task_association_modal_opened = true,
+                "l" => ui_model_ref.write().task_link_modal_opened = true,
                 "h" | "?" => ui_model_ref.write().toggle_help(),
                 _ => handled = false,
             }

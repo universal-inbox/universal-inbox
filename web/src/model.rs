@@ -8,7 +8,7 @@ pub struct UniversalInboxUIModel {
     pub is_help_enabled: bool,
     pub is_task_actions_enabled: bool,
     pub task_planning_modal_opened: bool,
-    pub task_association_modal_opened: bool,
+    pub task_link_modal_opened: bool,
     pub unhover_element: bool,
     pub authentication_state: AuthenticationState,
     pub loaded_notifications: Option<Result<usize, String>>,

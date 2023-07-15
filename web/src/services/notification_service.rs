@@ -34,7 +34,7 @@ pub enum NotificationCommand {
     CompleteTaskFromNotification(NotificationWithTask),
     PlanTask(NotificationWithTask, TaskId, TaskPlanning),
     CreateTaskFromNotification(NotificationWithTask, TaskCreation),
-    AssociateNotificationWithTask(NotificationId, TaskId),
+    LinkNotificationWithTask(NotificationId, TaskId),
 }
 
 pub static NOTIFICATIONS: AtomRef<Vec<NotificationWithTask>> = |_| vec![];
@@ -174,7 +174,7 @@ pub async fn notification_service<'a>(
                 )
                 .await;
             }
-            Some(NotificationCommand::AssociateNotificationWithTask(notification_id, task_id)) => {
+            Some(NotificationCommand::LinkNotificationWithTask(notification_id, task_id)) => {
                 notifications
                     .write()
                     .retain(|notif| notif.id != notification_id);
@@ -190,8 +190,8 @@ pub async fn notification_service<'a>(
                     }),
                     Some(ui_model_ref.clone()),
                     &toast_service,
-                    "Associating notification...",
-                    "Notification successfully associated",
+                    "Linking notification...",
+                    "Notification successfully linked",
                 )
                 .await;
             }

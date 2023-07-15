@@ -38,7 +38,7 @@ pub fn notifications_list<'a>(
     on_snooze: EventHandler<'a, &'a NotificationWithTask>,
     on_complete_task: EventHandler<'a, &'a NotificationWithTask>,
     on_plan: EventHandler<'a, &'a NotificationWithTask>,
-    on_associate: EventHandler<'a, &'a NotificationWithTask>,
+    on_link: EventHandler<'a, &'a NotificationWithTask>,
 ) -> Element {
     let selected_notification_index = ui_model_ref.read().selected_notification_index;
     let is_help_enabled = ui_model_ref.read().is_help_enabled;
@@ -96,12 +96,12 @@ pub fn notifications_list<'a>(
                             }
 
                             self::notification_button {
-                                title: "Associate to task",
+                                title: "Link to task",
                                 shortcut: "a",
                                 selected: is_selected,
                                 disabled_label: is_task_actions_disabled.then_some("No task management service connected"),
                                 show_shortcut: is_help_enabled,
-                                onclick: |_| on_associate.call(notif),
+                                onclick: |_| on_link.call(notif),
                                 Icon { class: "w-5 h-5" icon: BsLink45deg }
                             }
                         }
