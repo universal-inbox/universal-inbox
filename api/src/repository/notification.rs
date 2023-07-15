@@ -190,7 +190,7 @@ impl NotificationRepository for Repository {
                 .push_bind(id.0);
         }
 
-        query_builder.push(" ORDER BY notification.updated_at ASC");
+        query_builder.push(" ORDER BY notification.updated_at ASC LIMIT 100");
 
         let records = query_builder
             .build_query_as::<NotificationWithTaskRow>()
