@@ -86,7 +86,7 @@ impl NotificationRepository for Repository {
                 SELECT
                   id,
                   title,
-                  status,
+                  status as "status: _",
                   source_id,
                   source_html_url,
                   metadata as "metadata: Json<NotificationMetadata>",
@@ -168,7 +168,7 @@ impl NotificationRepository for Repository {
                   notification
                 LEFT JOIN task ON task.id = notification.task_id
                 WHERE
-                  notification.status =
+                  notification.status::TEXT =
             "#,
         );
 
@@ -226,11 +226,11 @@ impl NotificationRepository for Repository {
                     task_id
                   )
                 VALUES
-                  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                  ($1, $2, $3::notification_status, $4, $5, $6, $7, $8, $9, $10, $11)
             "#,
             notification.id.0,
             notification.title,
-            notification.status.to_string(),
+            notification.status.to_string() as _,
             notification.source_id,
             notification
                 .source_html_url
@@ -281,15 +281,15 @@ impl NotificationRepository for Repository {
                 UPDATE
                   notification
                 SET
-                  status = $1
+                  status = $1::notification_status
                 WHERE
                   NOT source_id = ANY($2)
                   AND kind = $3
-                  AND (status = 'Read' OR status = 'Unread')
+                  AND (status::TEXT = 'Read' OR status::TEXT = 'Unread')
                 RETURNING
                   id,
                   title,
-                  status,
+                  status as "status: _",
                   source_id,
                   source_html_url,
                   metadata as "metadata: Json<NotificationMetadata>",
@@ -299,7 +299,7 @@ impl NotificationRepository for Repository {
                   user_id,
                   task_id
             "#,
-            status.to_string(),
+            status.to_string() as _,
             &active_source_notification_ids[..],
             kind.to_string(),
         )
@@ -339,11 +339,11 @@ impl NotificationRepository for Repository {
                     task_id
                   )
                 VALUES
-                  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                  ($1, $2, $3::notification_status, $4, $5, $6, $7, $8, $9, $10, $11)
                 ON CONFLICT (source_id, kind) DO UPDATE
                 SET
                   title = $2,
-                  status = $3,
+                  status = $3::notification_status,
                   source_html_url = $5,
                   metadata = $6,
                   updated_at = $7,
@@ -356,7 +356,7 @@ impl NotificationRepository for Repository {
             "#,
                 notification.id.0,
                 notification.title,
-                notification.status.to_string(),
+                notification.status.to_string() as _,
                 notification.source_id,
                 notification
                     .source_html_url
@@ -411,7 +411,8 @@ impl NotificationRepository for Repository {
         if let Some(status) = patch.status {
             separated
                 .push(" status = ")
-                .push_bind_unseparated(status.to_string());
+                .push_bind_unseparated(status.to_string())
+                .push_unseparated("::notification_status");
         }
         if let Some(snoozed_until) = patch.snoozed_until {
             separated
@@ -452,7 +453,7 @@ impl NotificationRepository for Repository {
         let mut separated = query_builder.separated(" OR ");
         if let Some(status) = patch.status {
             separated
-                .push(" status != ")
+                .push(" status::TEXT != ")
                 .push_bind_unseparated(status.to_string());
         }
         if let Some(snoozed_until) = patch.snoozed_until {
@@ -521,7 +522,8 @@ impl NotificationRepository for Repository {
         if let Some(status) = patch.status {
             separated
                 .push(" status = ")
-                .push_bind_unseparated(status.to_string());
+                .push_bind_unseparated(status.to_string())
+                .push_unseparated("::notification_status");
         }
         if let Some(snoozed_until) = patch.snoozed_until {
             separated
@@ -557,7 +559,7 @@ impl NotificationRepository for Repository {
         let mut separated = query_builder.separated(" OR ");
         if let Some(status) = patch.status {
             separated
-                .push(" status != ")
+                .push(" status::TEXT != ")
                 .push_bind_unseparated(status.to_string());
         }
         if let Some(snoozed_until) = patch.snoozed_until {
@@ -601,11 +603,34 @@ impl NotificationRepository for Repository {
     }
 }
 
+#[derive(sqlx::Type, Debug)]
+#[sqlx(type_name = "notification_status")]
+enum PgNotificationStatus {
+    Unread,
+    Read,
+    Deleted,
+    Unsubscribed,
+}
+
+impl TryFrom<&PgNotificationStatus> for NotificationStatus {
+    type Error = UniversalInboxError;
+
+    fn try_from(status: &PgNotificationStatus) -> Result<Self, Self::Error> {
+        let status_str = format!("{status:?}");
+        status_str
+            .parse()
+            .map_err(|e| UniversalInboxError::InvalidEnumData {
+                source: e,
+                output: status_str,
+            })
+    }
+}
+
 #[derive(Debug, sqlx::FromRow)]
 struct NotificationRow {
     id: Uuid,
     title: String,
-    status: String,
+    status: PgNotificationStatus,
     source_id: String,
     source_html_url: Option<String>,
     metadata: Json<NotificationMetadata>,
@@ -620,7 +645,7 @@ struct NotificationRow {
 struct NotificationWithTaskRow {
     notification_id: Uuid,
     notification_title: String,
-    notification_status: String,
+    notification_status: PgNotificationStatus,
     notification_source_id: String,
     notification_source_html_url: Option<String>,
     notification_metadata: Json<NotificationMetadata>,
@@ -636,7 +661,8 @@ impl FromRow<'_, PgRow> for NotificationWithTaskRow {
         Ok(NotificationWithTaskRow {
             notification_id: row.try_get("notification_id")?,
             notification_title: row.try_get("notification_title")?,
-            notification_status: row.try_get("notification_status")?,
+            notification_status: row
+                .try_get::<PgNotificationStatus, &str>("notification_status")?,
             notification_source_id: row.try_get("notification_source_id")?,
             notification_source_html_url: row.try_get("notification_source_html_url")?,
             notification_metadata: row.try_get("notification_metadata")?,
@@ -671,13 +697,7 @@ impl TryFrom<&NotificationRow> for Notification {
     type Error = UniversalInboxError;
 
     fn try_from(row: &NotificationRow) -> Result<Self, Self::Error> {
-        let status = row
-            .status
-            .parse()
-            .map_err(|e| UniversalInboxError::InvalidEnumData {
-                source: e,
-                output: row.status.clone(),
-            })?;
+        let status = (&row.status).try_into()?;
         let source_html_url = row
             .source_html_url
             .as_ref()
@@ -714,13 +734,7 @@ impl TryFrom<&NotificationWithTaskRow> for NotificationWithTask {
     type Error = UniversalInboxError;
 
     fn try_from(row: &NotificationWithTaskRow) -> Result<Self, Self::Error> {
-        let status =
-            row.notification_status
-                .parse()
-                .map_err(|e| UniversalInboxError::InvalidEnumData {
-                    source: e,
-                    output: row.notification_status.clone(),
-                })?;
+        let status = (&row.notification_status).try_into()?;
         let source_html_url = row
             .notification_source_html_url
             .as_ref()
