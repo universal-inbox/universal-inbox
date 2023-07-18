@@ -117,6 +117,13 @@ mod patch_resource {
         .await;
 
         let github_mark_thread_as_read_mock = app.github_mock_server.mock(|when, then| {
+            when.method(PATCH)
+                .path("/notifications/threads/1234")
+                .header("accept", "application/vnd.github.v3+json")
+                .header("authorization", "Bearer github_test_access_token");
+            then.status(github_status_code);
+        });
+        let github_unsubscribed_mock = app.github_mock_server.mock(|when, then| {
             when.method(PUT)
                 .path("/notifications/threads/1234/subscription")
                 .header("accept", "application/vnd.github.v3+json")
@@ -124,6 +131,7 @@ mod patch_resource {
                 .json_body(json!({"ignored": true}));
             then.status(github_status_code);
         });
+
         let expected_notification = Box::new(Notification {
             id: Uuid::new_v4().into(),
             title: "notif1".to_string(),
@@ -167,6 +175,7 @@ mod patch_resource {
             })
         );
         github_mark_thread_as_read_mock.assert();
+        github_unsubscribed_mock.assert();
     }
 
     #[rstest]
