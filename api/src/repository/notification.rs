@@ -348,7 +348,6 @@ impl NotificationRepository for Repository {
                   metadata = $6,
                   updated_at = $7,
                   last_read_at = $8,
-                  snoozed_until = $9,
                   user_id = $10,
                   task_id = $11
                 RETURNING
