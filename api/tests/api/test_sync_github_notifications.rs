@@ -60,7 +60,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
             metadata: NotificationMetadata::Github(sync_github_notifications[1].clone()),
             updated_at: Utc.with_ymd_and_hms(2014, 11, 6, 0, 0, 0).unwrap(),
             last_read_at: None,
-            snoozed_until: None,
+            snoozed_until: Some(Utc.with_ymd_and_hms(2064, 1, 1, 0, 0, 0).unwrap()),
             task_id: None,
         }),
     )
@@ -116,6 +116,11 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     assert_eq!(
         updated_notification.metadata,
         NotificationMetadata::Github(sync_github_notifications[1].clone())
+    );
+    // `snoozed_until` should not be reset
+    assert_eq!(
+        updated_notification.snoozed_until,
+        Some(Utc.with_ymd_and_hms(2064, 1, 1, 0, 0, 0).unwrap())
     );
 }
 
