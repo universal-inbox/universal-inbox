@@ -198,6 +198,7 @@ impl NotificationSourceService<GithubNotification> for GithubService {
         source_id: &str,
         access_token: &AccessToken,
     ) -> Result<(), UniversalInboxError> {
+        self.mark_thread_as_read(source_id, access_token).await?;
         self.unsubscribe_from_thread(source_id, access_token).await
     }
 }
