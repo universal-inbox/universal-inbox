@@ -379,6 +379,7 @@ impl NotificationService {
         executor: &mut Transaction<'a, Postgres>,
         notification_id: NotificationId,
         patch: &'b NotificationPatch,
+        apply_task_side_effects: bool,
         for_user_id: UserId,
     ) -> Result<UpdateStatus<Box<Notification>>, UniversalInboxError> {
         let updated_notification = self
@@ -405,10 +406,11 @@ impl NotificationService {
                     NotificationMetadata::Todoist => {
                         if let Some(NotificationStatus::Deleted) = patch.status {
                             if let Some(task_id) = notification.task_id {
-                                self.task_service
-                                    .upgrade()
-                                    .context(
-                                        "Unable to access task_service from notification_service",
+                                if apply_task_side_effects {
+                                    self.task_service
+                                        .upgrade()
+                                        .context(
+                                            "Unable to access task_service from notification_service",
                                     )?
                                     .read()
                                     .await
@@ -422,6 +424,7 @@ impl NotificationService {
                                         for_user_id,
                                     )
                                     .await?;
+                                }
                             } else {
                                 return Err(UniversalInboxError::Unexpected(anyhow!(
                                 "Todoist notification {notification_id} is expected to be linked to a task"
@@ -436,13 +439,20 @@ impl NotificationService {
                 };
 
                 if let Some(task_id) = patch.task_id {
-                    self.task_service
-                        .upgrade()
-                        .context("Unable to access task_service from notification_service")?
-                        .read()
-                        .await
-                        .link_notification_with_task(executor, notification, task_id, for_user_id)
-                        .await?;
+                    if apply_task_side_effects {
+                        self.task_service
+                            .upgrade()
+                            .context("Unable to access task_service from notification_service")?
+                            .read()
+                            .await
+                            .link_notification_with_task(
+                                executor,
+                                notification,
+                                task_id,
+                                for_user_id,
+                            )
+                            .await?;
+                    }
                 }
             }
             UpdateStatus {
@@ -486,12 +496,28 @@ impl NotificationService {
         task_creation: &'b TaskCreation,
         for_user_id: UserId,
     ) -> Result<Option<NotificationWithTask>, UniversalInboxError> {
+        let notification = self
+            .get_notification(executor, notification_id, for_user_id)
+            .await?
+            .ok_or_else(|| {
+                anyhow!("Cannot create task from unknown notification {notification_id}")
+            })?;
+        let task = self
+            .task_service
+            .upgrade()
+            .context("Unable to access task_service from notification_service")?
+            .read()
+            .await
+            .create_task_from_notification(executor, task_creation, &notification, for_user_id)
+            .await?;
+
         let delete_patch = NotificationPatch {
             status: Some(NotificationStatus::Deleted),
+            task_id: Some(task.id),
             ..Default::default()
         };
         let updated_notification = self
-            .patch_notification(executor, notification_id, &delete_patch, for_user_id)
+            .patch_notification(executor, notification_id, &delete_patch, false, for_user_id)
             .await?;
 
         if let UpdateStatus {
@@ -499,15 +525,6 @@ impl NotificationService {
             result: Some(ref notification),
         } = updated_notification
         {
-            let task = self
-                .task_service
-                .upgrade()
-                .context("Unable to access task_service from notification_service")?
-                .read()
-                .await
-                .create_task_from_notification(executor, task_creation, notification, for_user_id)
-                .await?;
-
             return Ok(Some(NotificationWithTask::build(notification, Some(*task))));
         }
 

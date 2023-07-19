@@ -1,4 +1,5 @@
 use chrono::NaiveDate;
+use httpmock::Method::PATCH;
 use rstest::*;
 
 use universal_inbox::{
@@ -341,6 +342,13 @@ mod patch_task {
         )
         .await;
 
+        let github_mark_thread_as_read_mock = app.github_mock_server.mock(|when, then| {
+            when.method(PATCH)
+                .path("/notifications/threads/1")
+                .header("accept", "application/vnd.github.v3+json")
+                .header("authorization", "Bearer github_test_access_token");
+            then.status(205);
+        });
         let todoist_projects_mock = mock_todoist_sync_resources_service(
             &app.todoist_mock_server,
             "projects",
@@ -375,6 +383,7 @@ mod patch_task {
         todoist_projects_mock.assert();
         todoist_item_add_mock.assert();
         todoist_get_item_mock.assert();
+        github_mark_thread_as_read_mock.assert();
 
         let new_task_id = notification_with_task
             .as_ref()
@@ -410,6 +419,7 @@ mod patch_task {
         )
         .await;
         assert_eq!(deleted_notification.status, NotificationStatus::Deleted);
+        assert_eq!(deleted_notification.task_id, Some(new_task_id));
     }
 }
 
@@ -480,6 +490,22 @@ mod patch_notification {
         todoist_sync_mock.assert();
         assert_eq!(
             patched_notification,
+            Box::new(Notification {
+                task_id: Some(existing_todoist_task.task.id),
+                ..*notification.clone()
+            })
+        );
+
+        let updated_notification = get_resource(
+            &app.client,
+            &app.app_address,
+            "notifications",
+            notification.id.into(),
+        )
+        .await;
+
+        assert_eq!(
+            updated_notification,
             Box::new(Notification {
                 task_id: Some(existing_todoist_task.task.id),
                 ..*notification
