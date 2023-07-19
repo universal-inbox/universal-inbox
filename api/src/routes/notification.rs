@@ -245,6 +245,7 @@ pub async fn patch_notification(
             &mut transaction,
             notification_id,
             &notification_patch,
+            true,
             user_id,
         )
         .await?;
