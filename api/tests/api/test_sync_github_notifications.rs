@@ -10,6 +10,7 @@ use universal_inbox::{
         integrations::github::GithubNotification, Notification, NotificationMetadata,
         NotificationSourceKind, NotificationStatus,
     },
+    task::integrations::todoist::TodoistItem,
 };
 
 use universal_inbox_api::{
@@ -32,6 +33,7 @@ use crate::helpers::{
     },
     rest::{create_resource, get_resource},
     settings,
+    task::todoist::{create_task_from_todoist_item, todoist_item},
 };
 
 #[rstest]
@@ -41,9 +43,18 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     #[future] authenticated_app: AuthenticatedApp,
     // Vec[GithubNotification { source_id: "123", ... }, GithubNotification { source_id: "456", ... } ]
     sync_github_notifications: Vec<GithubNotification>,
+    todoist_item: Box<TodoistItem>,
     nango_github_connection: Box<NangoConnection>,
 ) {
     let app = authenticated_app.await;
+    let existing_todoist_task = create_task_from_todoist_item(
+        &app.client,
+        &app.app_address,
+        &todoist_item,
+        "Project2".to_string(),
+        app.user.id,
+    )
+    .await;
     let existing_notification: Box<Notification> = create_resource(
         &app.client,
         &app.app_address,
@@ -61,7 +72,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
             updated_at: Utc.with_ymd_and_hms(2014, 11, 6, 0, 0, 0).unwrap(),
             last_read_at: None,
             snoozed_until: Some(Utc.with_ymd_and_hms(2064, 1, 1, 0, 0, 0).unwrap()),
-            task_id: None,
+            task_id: Some(existing_todoist_task.task.id),
         }),
     )
     .await;
@@ -117,10 +128,14 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         updated_notification.metadata,
         NotificationMetadata::Github(sync_github_notifications[1].clone())
     );
-    // `snoozed_until` should not be reset
+    // `snoozed_until` and `task_id` should not be reset
     assert_eq!(
         updated_notification.snoozed_until,
         Some(Utc.with_ymd_and_hms(2064, 1, 1, 0, 0, 0).unwrap())
+    );
+    assert_eq!(
+        updated_notification.task_id,
+        Some(existing_todoist_task.task.id)
     );
 }
 
