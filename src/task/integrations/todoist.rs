@@ -5,6 +5,8 @@ use serde_repr::{Deserialize_repr, Serialize_repr};
 
 use crate::task::{DueDate, TaskPriority};
 
+pub static DEFAULT_TODOIST_HTML_URL: &str = "https://todoist.com/app/";
+
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct TodoistItem {
     pub id: String,

@@ -2,8 +2,8 @@ use dioxus::{events::MouseEvent, prelude::*};
 use dioxus_free_icons::{
     icons::{
         bs_icons::{
-            BsArrowRepeat, BsBellSlash, BsCalendar2Check, BsCardChecklist, BsChat, BsCheck2,
-            BsCheckCircle, BsClockHistory, BsLink45deg, BsRecordCircle, BsTrash,
+            BsArrowRepeat, BsBellSlash, BsBookmarkCheck, BsCalendar2Check, BsCardChecklist, BsChat,
+            BsCheck2, BsCheckCircle, BsClockHistory, BsLink45deg, BsRecordCircle, BsTrash,
         },
         io_icons::IoGitPullRequest,
     },
@@ -19,7 +19,7 @@ use universal_inbox::{
     },
     task::{
         integrations::todoist::{TodoistItem, TodoistItemPriority},
-        TaskMetadata,
+        Task, TaskMetadata,
     },
 };
 
@@ -67,6 +67,20 @@ pub fn notifications_list<'a>(
                                 Icon { class: "w-5 h-5" icon: BsTrash }
                             }
 
+                            if notif.task.is_some() {
+                                rsx!(
+                                    self::notification_button {
+                                        title: "Complete task",
+                                        shortcut: "c",
+                                        selected: is_selected,
+                                        disabled_label: is_task_actions_disabled.then_some("No task management service connected"),
+                                        show_shortcut: is_help_enabled,
+                                        onclick: |_| on_complete_task.call(notif),
+                                        Icon { class: "w-5 h-5" icon: BsCheck2 }
+                                    }
+                                )
+                            }
+
                             self::notification_button {
                                 title: "Unsubscribe from the notification",
                                 shortcut: "u",
@@ -85,24 +99,28 @@ pub fn notifications_list<'a>(
                                 Icon { class: "w-5 h-5" icon: BsClockHistory }
                             }
 
-                            self::notification_button {
-                                title: "Create task",
-                                shortcut: "p",
-                                selected: is_selected,
-                                disabled_label: is_task_actions_disabled.then_some("No task management service connected"),
-                                show_shortcut: is_help_enabled,
-                                onclick: |_| on_plan.call(notif),
-                                Icon { class: "w-5 h-5" icon: BsCalendar2Check }
-                            }
+                            if notif.task.is_none() {
+                                rsx!(
+                                    self::notification_button {
+                                        title: "Create task",
+                                        shortcut: "p",
+                                        selected: is_selected,
+                                        disabled_label: is_task_actions_disabled.then_some("No task management service connected"),
+                                        show_shortcut: is_help_enabled,
+                                        onclick: |_| on_plan.call(notif),
+                                        Icon { class: "w-5 h-5" icon: BsCalendar2Check }
+                                    }
 
-                            self::notification_button {
-                                title: "Link to task",
-                                shortcut: "a",
-                                selected: is_selected,
-                                disabled_label: is_task_actions_disabled.then_some("No task management service connected"),
-                                show_shortcut: is_help_enabled,
-                                onclick: |_| on_link.call(notif),
-                                Icon { class: "w-5 h-5" icon: BsLink45deg }
+                                    self::notification_button {
+                                        title: "Link to task",
+                                        shortcut: "a",
+                                        selected: is_selected,
+                                        disabled_label: is_task_actions_disabled.then_some("No task management service connected"),
+                                        show_shortcut: is_help_enabled,
+                                        onclick: |_| on_link.call(notif),
+                                        Icon { class: "w-5 h-5" icon: BsLink45deg }
+                                    }
+                                )
                             }
                         }
                     )),
@@ -218,8 +236,12 @@ fn notification_display<'a>(
 
     cx.render(rsx!(
         td {
-             class: "px-2 py-0 rounded-none",
-             div { class: "flex justify-center", icon } }
+            class: "px-2 py-0 rounded-none relative",
+            div { class: "flex justify-center", icon }
+            if let Some(ref task) = notif.task {
+                rsx!(self::task_hint { task: task })
+            }
+        }
         td {
             class: "px-2 py-0",
 
@@ -492,4 +514,23 @@ fn notification_button<'a>(cx: Scope<'a, NotificationButtonProps<'a>>) -> Elemen
             }
         )
     }))
+}
+
+#[inline_props]
+fn task_hint<'a>(cx: Scope, task: &'a Task) -> Element {
+    let kind = task.get_task_source_kind();
+    let html_url = task.get_html_url();
+
+    cx.render(rsx!(
+        div {
+            class: "absolute top-0 right-0 tooltip tooltip-right text-xs text-gray-400",
+            "data-tip": "Linked to a {kind} task",
+
+            a {
+                href: "{html_url}",
+                target: "_blank",
+                Icon { class: "w-4 h-4", icon: BsBookmarkCheck }
+            }
+        }
+    ))
 }
