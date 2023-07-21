@@ -18,10 +18,9 @@ use crate::{
         IntoNotification, Notification, NotificationMetadata, NotificationStatus,
         NotificationWithTask,
     },
+    task::integrations::todoist::{TodoistItem, DEFAULT_TODOIST_HTML_URL},
     user::UserId,
 };
-
-use self::integrations::todoist::TodoistItem;
 
 pub mod integrations;
 pub mod service;
@@ -71,6 +70,20 @@ impl fmt::Display for TaskSummary {
 impl Task {
     pub fn is_in_inbox(&self) -> bool {
         self.project == "Inbox"
+    }
+
+    pub fn get_task_source_kind(&self) -> TaskSourceKind {
+        match self.metadata {
+            TaskMetadata::Todoist(_) => TaskSourceKind::Todoist,
+        }
+    }
+
+    pub fn get_html_url(&self) -> Uri {
+        self.source_html_url
+            .clone()
+            .unwrap_or_else(|| match self.metadata {
+                TaskMetadata::Todoist(_) => DEFAULT_TODOIST_HTML_URL.parse::<Uri>().unwrap(),
+            })
     }
 }
 
@@ -279,6 +292,7 @@ impl From<Task> for NotificationWithTask {
 }
 
 macro_attr! {
+    // Synchronization sources for tasks
     #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!)]
     pub enum TaskSyncSourceKind {
         Todoist
