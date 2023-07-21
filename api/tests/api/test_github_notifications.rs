@@ -5,27 +5,29 @@ use rstest::*;
 use serde_json::json;
 use uuid::Uuid;
 
-use universal_inbox::notification::{
-    integrations::github::GithubNotification, service::NotificationPatch, Notification,
-    NotificationMetadata, NotificationStatus,
+use universal_inbox::{
+    integration_connection::IntegrationProviderKind,
+    notification::{
+        integrations::github::GithubNotification, service::NotificationPatch, Notification,
+        NotificationMetadata, NotificationStatus,
+    },
+    task::{integrations::todoist::TodoistItem, Task},
 };
-use universal_inbox_api::integrations::github;
+use universal_inbox_api::{
+    configuration::Settings,
+    integrations::{github, oauth2::NangoConnection},
+};
 
 use crate::helpers::{
     auth::{authenticated_app, AuthenticatedApp},
+    integration_connection::{create_and_mock_integration_connection, nango_github_connection},
     notification::github::github_notification,
     rest::{create_resource, get_resource, patch_resource, patch_resource_response},
+    settings,
+    task::todoist::{create_task_from_todoist_item, todoist_item},
 };
 
 mod patch_resource {
-    use universal_inbox::integration_connection::IntegrationProviderKind;
-    use universal_inbox_api::{configuration::Settings, integrations::oauth2::NangoConnection};
-
-    use crate::helpers::{
-        integration_connection::{create_and_mock_integration_connection, nango_github_connection},
-        settings,
-    };
-
     use super::*;
 
     #[rstest]
@@ -35,6 +37,7 @@ mod patch_resource {
         #[future] authenticated_app: AuthenticatedApp,
         nango_github_connection: Box<NangoConnection>,
         github_notification: Box<GithubNotification>,
+        todoist_item: Box<TodoistItem>,
         #[values(205, 304, 404)] github_status_code: u16,
     ) {
         let app = authenticated_app.await;
@@ -53,6 +56,14 @@ mod patch_resource {
                 .header("authorization", "Bearer github_test_access_token");
             then.status(github_status_code);
         });
+        let existing_todoist_task = create_task_from_todoist_item(
+            &app.client,
+            &app.app_address,
+            &todoist_item,
+            "Project2".to_string(),
+            app.user.id,
+        )
+        .await;
         let expected_notification = Box::new(Notification {
             id: Uuid::new_v4().into(),
             title: "notif1".to_string(),
@@ -64,7 +75,7 @@ mod patch_resource {
             last_read_at: None,
             snoozed_until: None,
             user_id: app.user.id,
-            task_id: None,
+            task_id: Some(existing_todoist_task.task.id),
         });
         let created_notification: Box<Notification> = create_resource(
             &app.client,
@@ -96,6 +107,15 @@ mod patch_resource {
             })
         );
         github_mark_thread_as_read_mock.assert();
+
+        let task: Box<Task> = get_resource(
+            &app.client,
+            &app.app_address,
+            "tasks",
+            existing_todoist_task.task.id.into(),
+        )
+        .await;
+        assert_eq!(task.status, existing_todoist_task.task.status);
     }
 
     #[rstest]

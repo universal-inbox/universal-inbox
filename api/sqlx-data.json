@@ -1,5 +1,47 @@
 {
   "db": "PostgreSQL",
+  "0b19e5e3ad5bbf693e20274d9787ce969acb4b5996b680be0bf86fd33a8c4abd": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        }
+      ],
+      "nullable": [
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Uuid",
+          "Text",
+          {
+            "Custom": {
+              "kind": {
+                "Enum": [
+                  "Unread",
+                  "Read",
+                  "Deleted",
+                  "Unsubscribed"
+                ]
+              },
+              "name": "notification_status"
+            }
+          },
+          "Text",
+          "Text",
+          "Json",
+          "Timestamp",
+          "Timestamp",
+          "Timestamp",
+          "Uuid",
+          "Uuid"
+        ]
+      }
+    },
+    "query": "\n                INSERT INTO notification\n                  (\n                    id,\n                    title,\n                    status,\n                    source_id,\n                    source_html_url,\n                    metadata,\n                    updated_at,\n                    last_read_at,\n                    snoozed_until,\n                    user_id,\n                    task_id\n                  )\n                VALUES\n                  ($1, $2, $3::notification_status, $4, $5, $6, $7, $8, $9, $10, $11)\n                ON CONFLICT (source_id, kind) DO UPDATE\n                SET\n                  title = $2,\n                  status = $3::notification_status,\n                  source_html_url = $5,\n                  metadata = $6,\n                  updated_at = $7,\n                  last_read_at = $8,\n                  user_id = $10\n                RETURNING\n                  id\n            "
+  },
   "1091a399ca9f61668d50f7da2c6c69e96d6dcc3f4f5f36873862e2b099b3a63f": {
     "describe": {
       "columns": [
@@ -637,48 +679,6 @@
       }
     },
     "query": "\n                INSERT INTO task\n                  (\n                    id,\n                    source_id,\n                    title,\n                    body,\n                    status,\n                    completed_at,\n                    priority,\n                    due_at,\n                    source_html_url,\n                    tags,\n                    parent_id,\n                    project,\n                    is_recurring,\n                    created_at,\n                    metadata,\n                    user_id\n                  )\n                VALUES\n                  ($1, $2, $3, $4, $5::task_status, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)\n            "
-  },
-  "bcc908e42b2604437777c68d7dee612e4b429e61776a4bff1e1c417b81427782": {
-    "describe": {
-      "columns": [
-        {
-          "name": "id",
-          "ordinal": 0,
-          "type_info": "Uuid"
-        }
-      ],
-      "nullable": [
-        false
-      ],
-      "parameters": {
-        "Left": [
-          "Uuid",
-          "Text",
-          {
-            "Custom": {
-              "kind": {
-                "Enum": [
-                  "Unread",
-                  "Read",
-                  "Deleted",
-                  "Unsubscribed"
-                ]
-              },
-              "name": "notification_status"
-            }
-          },
-          "Text",
-          "Text",
-          "Json",
-          "Timestamp",
-          "Timestamp",
-          "Timestamp",
-          "Uuid",
-          "Uuid"
-        ]
-      }
-    },
-    "query": "\n                INSERT INTO notification\n                  (\n                    id,\n                    title,\n                    status,\n                    source_id,\n                    source_html_url,\n                    metadata,\n                    updated_at,\n                    last_read_at,\n                    snoozed_until,\n                    user_id,\n                    task_id\n                  )\n                VALUES\n                  ($1, $2, $3::notification_status, $4, $5, $6, $7, $8, $9, $10, $11)\n                ON CONFLICT (source_id, kind) DO UPDATE\n                SET\n                  title = $2,\n                  status = $3::notification_status,\n                  source_html_url = $5,\n                  metadata = $6,\n                  updated_at = $7,\n                  last_read_at = $8,\n                  user_id = $10,\n                  task_id = $11\n                RETURNING\n                  id\n            "
   },
   "c1dcf17e0ffc5766a0cc1db35145fd22ef9f9c37101da4a79b94c186e0750b10": {
     "describe": {
