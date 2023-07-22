@@ -11,8 +11,9 @@ use integrations::github::GithubNotification;
 
 use crate::{
     integration_connection::{IntegrationProvider, IntegrationProviderKind},
-    task::{Task, TaskId},
+    task::{integrations::todoist::DEFAULT_TODOIST_HTML_URL, Task, TaskId},
     user::UserId,
+    HasHtmlUrl,
 };
 
 pub mod integrations;
@@ -36,6 +37,19 @@ pub struct Notification {
     pub task_id: Option<TaskId>,
 }
 
+impl HasHtmlUrl for Notification {
+    fn get_html_url(&self) -> Uri {
+        self.source_html_url
+            .clone()
+            .unwrap_or_else(|| match &self.metadata {
+                NotificationMetadata::Github(github_notification) => {
+                    github_notification.get_html_url_from_metadata()
+                }
+                NotificationMetadata::Todoist => DEFAULT_TODOIST_HTML_URL.parse::<Uri>().unwrap(),
+            })
+    }
+}
+
 #[serde_as]
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
 pub struct NotificationWithTask {
@@ -52,6 +66,12 @@ pub struct NotificationWithTask {
     pub snoozed_until: Option<DateTime<Utc>>,
     pub user_id: UserId,
     pub task: Option<Task>,
+}
+
+impl HasHtmlUrl for NotificationWithTask {
+    fn get_html_url(&self) -> Uri {
+        Notification::from(self.clone()).get_html_url()
+    }
 }
 
 pub trait IntoNotification {
@@ -99,6 +119,10 @@ impl NotificationWithTask {
             task,
         }
     }
+
+    pub fn is_built_from_task(&self) -> bool {
+        matches!(self.metadata, NotificationMetadata::Todoist)
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
@@ -140,12 +164,6 @@ macro_attr! {
     }
 }
 
-impl NotificationWithTask {
-    pub fn is_built_from_task(&self) -> bool {
-        matches!(self.metadata, NotificationMetadata::Todoist)
-    }
-}
-
 macro_attr! {
     // Synchronization sources for notifications
     #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!)]
@@ -176,4 +194,172 @@ impl TryFrom<IntegrationProviderKind> for NotificationSyncSourceKind {
 
 pub trait NotificationSource: IntegrationProvider {
     fn get_notification_source_kind(&self) -> NotificationSourceKind;
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{env, fs};
+
+    use chrono::{TimeZone, Utc};
+    use format_serde_error::SerdeError;
+
+    use super::*;
+    use rstest::*;
+
+    mod get_html_url {
+        use pretty_assertions::assert_eq;
+
+        use super::*;
+
+        #[fixture]
+        pub fn github_notification() -> Box<GithubNotification> {
+            let fixture_path = format!(
+                "{}/tests/fixtures/github_notification.json",
+                env::var("CARGO_MANIFEST_DIR").unwrap(),
+            );
+            let input_str = fs::read_to_string(fixture_path).unwrap();
+            serde_json::from_str(&input_str)
+                .map_err(|err| SerdeError::new(input_str, err))
+                .unwrap()
+        }
+
+        #[rstest]
+        fn test_get_html_url_for_github_pr_notification(
+            github_notification: Box<GithubNotification>,
+        ) {
+            let expected_url: Uri = "https://github.com/octokit/octokit.rb/issues/123"
+                .parse()
+                .unwrap();
+            let notification = Notification {
+                id: Uuid::new_v4().into(),
+                title: "notif1".to_string(),
+                status: NotificationStatus::Unread,
+                source_id: "1234".to_string(),
+                source_html_url: Some(expected_url.clone()),
+                metadata: NotificationMetadata::Github(*github_notification),
+                updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
+                last_read_at: None,
+                snoozed_until: None,
+                user_id: Uuid::new_v4().into(),
+                task_id: None,
+            };
+
+            assert_eq!(notification.get_html_url(), expected_url);
+        }
+
+        #[rstest]
+        fn test_get_html_url_for_github_ci_notification(
+            mut github_notification: Box<GithubNotification>,
+        ) {
+            github_notification.subject.r#type = "CheckSuite".to_string();
+            let expected_url: Uri = "https://github.com/octocat/Hello-World/actions"
+                .parse()
+                .unwrap();
+            let notification = Notification {
+                id: Uuid::new_v4().into(),
+                title: "notif1".to_string(),
+                status: NotificationStatus::Unread,
+                source_id: "1234".to_string(),
+                source_html_url: None,
+                metadata: NotificationMetadata::Github(*github_notification),
+                updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
+                last_read_at: None,
+                snoozed_until: None,
+                user_id: Uuid::new_v4().into(),
+                task_id: None,
+            };
+
+            assert_eq!(notification.get_html_url(), expected_url);
+        }
+
+        #[rstest]
+        fn test_get_html_url_for_github_discussion_notification(
+            mut github_notification: Box<GithubNotification>,
+        ) {
+            github_notification.subject.r#type = "Discussion".to_string();
+            let expected_url: Uri =
+                "https://github.com/octocat/Hello-World/discussions?discussions_q=Greetings"
+                    .parse()
+                    .unwrap();
+            let notification = Notification {
+                id: Uuid::new_v4().into(),
+                title: "notif1".to_string(),
+                status: NotificationStatus::Unread,
+                source_id: "1234".to_string(),
+                source_html_url: None,
+                metadata: NotificationMetadata::Github(*github_notification),
+                updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
+                last_read_at: None,
+                snoozed_until: None,
+                user_id: Uuid::new_v4().into(),
+                task_id: None,
+            };
+
+            assert_eq!(notification.get_html_url(), expected_url);
+        }
+
+        #[rstest]
+        fn test_get_html_url_for_github_notification_with_no_source_html_url(
+            github_notification: Box<GithubNotification>,
+        ) {
+            let expected_url: Uri = "https://github.com/octocat/Hello-World".parse().unwrap();
+            let notification = Notification {
+                id: Uuid::new_v4().into(),
+                title: "notif1".to_string(),
+                status: NotificationStatus::Unread,
+                source_id: "1234".to_string(),
+                source_html_url: None,
+                metadata: NotificationMetadata::Github(*github_notification),
+                updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
+                last_read_at: None,
+                snoozed_until: None,
+                user_id: Uuid::new_v4().into(),
+                task_id: None,
+            };
+
+            assert_eq!(notification.get_html_url(), expected_url);
+        }
+
+        #[rstest]
+        fn test_get_html_url_for_todoist_notification() {
+            let expected_url: Uri = "https://todoist.com/app/project/123/task/456"
+                .parse()
+                .unwrap();
+            let notification = Notification {
+                id: Uuid::new_v4().into(),
+                title: "notif1".to_string(),
+                status: NotificationStatus::Unread,
+                source_id: "1234".to_string(),
+                source_html_url: Some(expected_url.clone()),
+                metadata: NotificationMetadata::Todoist,
+                updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
+                last_read_at: None,
+                snoozed_until: None,
+                user_id: Uuid::new_v4().into(),
+                task_id: None,
+            };
+
+            assert_eq!(notification.get_html_url(), expected_url);
+        }
+
+        #[rstest]
+        fn test_get_html_url_for_todoist_notification_with_no_source_html_url() {
+            let expected_url: Uri = "https://todoist.com/app/".parse().unwrap();
+            let notification = Notification {
+                id: Uuid::new_v4().into(),
+                title: "notif1".to_string(),
+                status: NotificationStatus::Unread,
+                source_id: "1234".to_string(),
+                source_html_url: None,
+                metadata: NotificationMetadata::Todoist,
+                updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
+                last_read_at: None,
+                snoozed_until: None,
+                user_id: Uuid::new_v4().into(),
+                task_id: None,
+            };
+
+            assert_eq!(notification.get_html_url(), expected_url);
+        }
+    }
 }

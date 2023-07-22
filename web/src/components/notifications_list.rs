@@ -12,7 +12,6 @@ use dioxus_free_icons::{
 use fermi::UseAtomRef;
 use http::Uri;
 
-use log::debug;
 use universal_inbox::{
     notification::{
         integrations::github::GithubNotification, NotificationMetadata, NotificationWithTask,
@@ -21,6 +20,7 @@ use universal_inbox::{
         integrations::todoist::{TodoistItem, TodoistItemPriority},
         Task, TaskMetadata,
     },
+    HasHtmlUrl,
 };
 
 use crate::{
@@ -287,11 +287,8 @@ fn notification_display<'a>(
 
 #[inline_props]
 fn default_notification_display<'a>(cx: Scope, notif: &'a NotificationWithTask) -> Element {
-    if let Some(link) = &notif.source_html_url {
-        cx.render(rsx!(a { href: "{link}", target: "_blank", "{notif.title}" }))
-    } else {
-        cx.render(rsx!("{notif.title}"))
-    }
+    let link = notif.get_html_url();
+    cx.render(rsx!(a { href: "{link}", target: "_blank", "{notif.title}" }))
 }
 
 #[inline_props]
@@ -301,27 +298,7 @@ fn github_notification_display<'a>(
     github_notification: GithubNotification,
 ) -> Element {
     let github_notification_id = extract_github_notification_id(&notif.source_html_url);
-    let notification_source_url = notif
-        .source_html_url
-        .as_ref()
-        .map(|url| url.to_string())
-        .unwrap_or_else(|| {
-            debug!(
-                "No source url for notification with Github notification reason: {:?}",
-                github_notification.reason
-            );
-            match github_notification.subject.r#type.as_str() {
-                // There is no enough information in the notification to link to the source
-                "CheckSuite" => format!("{}/actions", github_notification.repository.html_url),
-                "Discussion" => format!(
-                    "{}/discussions?{}",
-                    github_notification.repository.html_url,
-                    serde_urlencoded::to_string([("discussions_q", notif.title.clone())])
-                        .unwrap_or_default()
-                ),
-                _ => github_notification.repository.html_url.to_string(),
-            }
-        });
+    let notification_source_url = notif.get_html_url();
     let type_icon = match github_notification.subject.r#type.as_str() {
         "PullRequest" => cx.render(rsx!(Icon {
             class: "h-5 w-5",

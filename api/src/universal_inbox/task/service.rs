@@ -21,6 +21,7 @@ use universal_inbox::{
         TaskSyncSourceKind,
     },
     user::UserId,
+    HasHtmlUrl,
 };
 
 use crate::{
@@ -226,11 +227,7 @@ impl TaskService {
                     body: Some(format!(
                         "- [{}]({})",
                         notification.title,
-                        notification
-                            .source_html_url
-                            .as_ref()
-                            .map(|url| url.to_string())
-                            .unwrap_or_default()
+                        notification.get_html_url()
                     )),
                     ..(*task_creation).clone()
                 },
@@ -583,11 +580,7 @@ impl TaskService {
                         "{}\n- [{}]({})",
                         task.body,
                         notification.title,
-                        notification
-                            .source_html_url
-                            .as_ref()
-                            .map(|url| url.to_string())
-                            .unwrap_or_default()
+                        notification.get_html_url()
                     )),
                     ..Default::default()
                 },
