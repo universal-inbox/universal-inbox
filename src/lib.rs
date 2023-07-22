@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use http::Uri;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -32,4 +33,8 @@ pub struct IntegrationProviderConfig {
     pub name: String,
     pub nango_config_key: NangoProviderKey,
     pub comment: Option<String>,
+}
+
+pub trait HasHtmlUrl {
+    fn get_html_url(&self) -> Uri;
 }

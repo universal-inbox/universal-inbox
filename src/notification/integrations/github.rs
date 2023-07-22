@@ -411,6 +411,33 @@ impl GithubNotification {
             None
         })
     }
+
+    pub fn get_html_url_from_metadata(&self) -> Uri {
+        match self.subject.r#type.as_str() {
+            // There is no enough information in the notification to link to the source
+            "CheckSuite" => {
+                let mut uri_parts = self.repository.html_url.clone().into_parts();
+                uri_parts.path_and_query = uri_parts
+                    .path_and_query
+                    .and_then(|pq| format!("{}/actions", pq.as_str()).parse().ok());
+                Uri::from_parts(uri_parts).unwrap()
+            }
+            "Discussion" => {
+                let mut uri_parts = self.repository.html_url.clone().into_parts();
+                uri_parts.path_and_query = uri_parts.path_and_query.and_then(|pq| {
+                    format!(
+                        "{}/discussions?discussions_q={}",
+                        pq.as_str(),
+                        self.subject.title
+                    )
+                    .parse()
+                    .ok()
+                });
+                Uri::from_parts(uri_parts).unwrap()
+            }
+            _ => self.repository.html_url.clone(),
+        }
+    }
 }
 
 impl IntoNotification for GithubNotification {
@@ -442,36 +469,39 @@ mod tests {
     use super::*;
     use rstest::*;
 
-    #[rstest]
-    fn test_uri_serialization_config() {
-        assert_eq!(
-            r#"{"key":"key1","name":"name1","url":"https://api.github.com/1","body":"body1"}"#,
-            serde_json::to_string(&GithubCodeOfConduct {
-                key: "key1".to_string(),
-                name: "name1".to_string(),
-                url: "https://api.github.com/1".try_into().unwrap(),
-                body: "body1".to_string(),
-                html_url: None,
-            })
-            .unwrap()
-        );
+    mod url_serialization {
+        use super::*;
 
-        assert_eq!(
-            r#"{"key":"key1","name":"name1","url":"https://api.github.com/1","body":"body1","html_url":"https://api.github.com/1.html"}"#,
-            serde_json::to_string(&GithubCodeOfConduct {
-                key: "key1".to_string(),
-                name: "name1".to_string(),
-                url: "https://api.github.com/1".try_into().unwrap(),
-                body: "body1".to_string(),
-                html_url: Some("https://api.github.com/1.html".try_into().unwrap()),
-            })
-            .unwrap()
-        );
-    }
+        #[rstest]
+        fn test_uri_serialization_config() {
+            assert_eq!(
+                r#"{"key":"key1","name":"name1","url":"https://api.github.com/1","body":"body1"}"#,
+                serde_json::to_string(&GithubCodeOfConduct {
+                    key: "key1".to_string(),
+                    name: "name1".to_string(),
+                    url: "https://api.github.com/1".try_into().unwrap(),
+                    body: "body1".to_string(),
+                    html_url: None,
+                })
+                .unwrap()
+            );
 
-    #[rstest]
-    fn test_uri_deserialization_config() {
-        assert_eq!(
+            assert_eq!(
+                r#"{"key":"key1","name":"name1","url":"https://api.github.com/1","body":"body1","html_url":"https://api.github.com/1.html"}"#,
+                serde_json::to_string(&GithubCodeOfConduct {
+                    key: "key1".to_string(),
+                    name: "name1".to_string(),
+                    url: "https://api.github.com/1".try_into().unwrap(),
+                    body: "body1".to_string(),
+                    html_url: Some("https://api.github.com/1.html".try_into().unwrap()),
+                })
+                .unwrap()
+            );
+        }
+
+        #[rstest]
+        fn test_uri_deserialization_config() {
+            assert_eq!(
             GithubCodeOfConduct {
                 key: "key1".to_string(),
                 name: "name1".to_string(),
@@ -485,7 +515,7 @@ mod tests {
             .unwrap()
         );
 
-        assert_eq!(
+            assert_eq!(
             GithubCodeOfConduct {
                 key: "key1".to_string(),
                 name: "name1".to_string(),
@@ -495,6 +525,51 @@ mod tests {
             },
             serde_json::from_str(r#"{"key":"key1","name":"name1","url":"https://api.github.com/1","body":"body1","html_url":"https://api.github.com/1.html"}"#)
             .unwrap()
-        );
+            );
+        }
+    }
+
+    mod get_html_url_from_api_url {
+        use super::*;
+
+        #[rstest]
+        #[case(
+            "https://api.github.com/repos/octokit/octokit.rb/issues/123",
+            "https://github.com/octokit/octokit.rb/issues/123"
+        )]
+        #[case(
+            "https://api.github.com/repos/octokit/octokit.rb/pulls/123",
+            "https://github.com/octokit/octokit.rb/pulls/123"
+        )]
+        fn test_get_html_url_from_api_url_with_valid_api_url(
+            #[case] api_url: &str,
+            #[case] expected_html_url: &str,
+        ) {
+            assert_eq!(
+                GithubNotification::get_html_url_from_api_url(&Some(
+                    api_url.parse::<Uri>().unwrap()
+                )),
+                Some(expected_html_url.parse::<Uri>().unwrap())
+            );
+        }
+
+        #[rstest]
+        fn test_get_html_url_from_api_url_with_invalid_github_api_url(
+            #[values(
+                None,
+                Some("https://api.github.com/octokit/octokit.rb/issues/123"),
+                Some("https://github.com/repos/octokit/octokit.rb/issues/123"),
+                Some("https://github.com/octokit/octokit.rb/issues/123"),
+                Some("https://google.com")
+            )]
+            api_url: Option<&str>,
+        ) {
+            assert_eq!(
+                GithubNotification::get_html_url_from_api_url(
+                    &api_url.map(|url| url.parse::<Uri>().unwrap())
+                ),
+                None
+            );
+        }
     }
 }

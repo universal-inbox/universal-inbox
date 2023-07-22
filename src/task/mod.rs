@@ -20,6 +20,7 @@ use crate::{
     },
     task::integrations::todoist::{TodoistItem, DEFAULT_TODOIST_HTML_URL},
     user::UserId,
+    HasHtmlUrl,
 };
 
 pub mod integrations;
@@ -77,8 +78,10 @@ impl Task {
             TaskMetadata::Todoist(_) => TaskSourceKind::Todoist,
         }
     }
+}
 
-    pub fn get_html_url(&self) -> Uri {
+impl HasHtmlUrl for Task {
+    fn get_html_url(&self) -> Uri {
         self.source_html_url
             .clone()
             .unwrap_or_else(|| match self.metadata {
