@@ -10,13 +10,6 @@ repos:
         files: \.rs$
         args: []
         stages: [commit]
-      - id: format-toml
-        name: format-toml
-        language: system
-        pass_filenames: false
-        entry: cargo make format-toml-flow
-        files: \.toml$
-        stages: [commit]
       - id: clippy
         name: clippy
         language: system
