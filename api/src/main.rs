@@ -9,7 +9,7 @@ use universal_inbox::{notification::NotificationSyncSourceKind, task::TaskSyncSo
 use universal_inbox_api::{
     build_services, commands,
     configuration::Settings,
-    integrations::{github::GithubService, oauth2::NangoService, todoist::TodoistService},
+    integrations::oauth2::NangoService,
     observability::{get_subscriber, init_subscriber},
     run,
 };
@@ -82,9 +82,6 @@ async fn main() -> std::io::Result<()> {
             .expect("Failed to connect to Postgresql"),
     );
 
-    let todoist_service = TodoistService::new(None).expect("Failed to create new TodoistService");
-    let github_service = GithubService::new(None, settings.integrations.github.page_size)
-        .expect("Failed to create new GithubService");
     let nango_service = NangoService::new(
         settings.integrations.oauth2.nango_base_url.clone(),
         &settings.integrations.oauth2.nango_secret_key,
@@ -92,14 +89,7 @@ async fn main() -> std::io::Result<()> {
     .expect("Failed to create new GithubService");
 
     let (notification_service, task_service, user_service, integration_connection_service) =
-        build_services(
-            pool,
-            &settings,
-            github_service,
-            todoist_service,
-            nango_service,
-        )
-        .await;
+        build_services(pool, &settings, None, None, nango_service).await;
 
     let result = match &cli.command {
         Commands::SyncNotifications { source } => {

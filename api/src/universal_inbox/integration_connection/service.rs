@@ -6,8 +6,8 @@ use sqlx::{Postgres, Transaction};
 
 use universal_inbox::{
     integration_connection::{
-        IntegrationConnection, IntegrationConnectionId, IntegrationConnectionStatus,
-        IntegrationProviderKind, NangoProviderKey,
+        IntegrationConnection, IntegrationConnectionContext, IntegrationConnectionId,
+        IntegrationConnectionStatus, IntegrationProviderKind, NangoProviderKey,
     },
     user::UserId,
 };
@@ -175,13 +175,13 @@ impl IntegrationConnectionService {
     }
 
     #[tracing::instrument(level = "debug", skip(self), ret, err)]
-    pub async fn get_access_token<'a>(
+    pub async fn find_access_token<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
         integration_provider_kind: IntegrationProviderKind,
         synced_before: Option<DateTime<Utc>>,
         for_user_id: UserId,
-    ) -> Result<Option<AccessToken>, UniversalInboxError> {
+    ) -> Result<Option<(AccessToken, IntegrationConnection)>, UniversalInboxError> {
         let integration_connection = self
             .repository
             .get_integration_connection_per_provider(
@@ -206,7 +206,10 @@ impl IntegrationConnectionService {
                 .get_connection(integration_connection.connection_id, provider_config_key)
                 .await?
             {
-                return Ok(Some(nango_connection.credentials.access_token));
+                return Ok(Some((
+                    nango_connection.credentials.access_token,
+                    integration_connection,
+                )));
             }
 
             self.repository
@@ -242,6 +245,18 @@ impl IntegrationConnectionService {
                 integration_provider_kind,
                 failure_message,
             )
+            .await
+    }
+
+    #[tracing::instrument(level = "debug", skip(self), ret, err)]
+    pub async fn update_integration_connection_context<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        integration_connection_id: IntegrationConnectionId,
+        context: IntegrationConnectionContext,
+    ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
+        self.repository
+            .update_integration_connection_context(executor, integration_connection_id, context)
             .await
     }
 }

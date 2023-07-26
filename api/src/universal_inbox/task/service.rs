@@ -11,7 +11,6 @@ use tokio::sync::RwLock;
 use tracing::{error, info};
 
 use universal_inbox::{
-    integration_connection::IntegrationProviderKind,
     notification::{
         service::NotificationPatch, Notification, NotificationSource, NotificationSourceKind,
         NotificationStatus,
@@ -78,35 +77,22 @@ impl TaskService {
         task: Box<Task>,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
-        let access_token = self
-            .integration_connection_service
-            .read()
-            .await
-            .get_access_token(
-                executor,
-                task_source_service.get_integration_provider_kind(),
-                None,
-                user_id,
-            )
-            .await?
-            .ok_or_else(|| anyhow!("Cannot update a Todoist task without an access token"))?;
-
         match patch.status {
             Some(TaskStatus::Deleted) => {
                 task_source_service
-                    .delete_task(&task.source_id, &access_token)
+                    .delete_task(executor, &task.source_id, user_id)
                     .await?;
             }
             Some(TaskStatus::Done) => {
                 task_source_service
-                    .complete_task(&task.source_id, &access_token)
+                    .complete_task(executor, &task.source_id, user_id)
                     .await?;
             }
             _ => (),
         }
 
         task_source_service
-            .update_task(&task.source_id, patch, &access_token)
+            .update_task(executor, &task.source_id, patch, user_id)
             .await?;
 
         Ok(())
@@ -207,22 +193,10 @@ impl TaskService {
         notification: &'b Notification,
         for_user_id: UserId,
     ) -> Result<Box<Task>, UniversalInboxError> {
-        let access_token = self
-            .integration_connection_service
-            .read()
-            .await
-            .get_access_token(
-                executor,
-                IntegrationProviderKind::Todoist,
-                None,
-                for_user_id,
-            )
-            .await?
-            .ok_or_else(|| anyhow!("Cannot create a Todoist task without an access token"))?;
-
         let source_task = self
             .todoist_service
             .create_task(
+                executor,
                 &TaskCreation {
                     body: Some(format!(
                         "- [{}]({})",
@@ -231,12 +205,12 @@ impl TaskService {
                     )),
                     ..(*task_creation).clone()
                 },
-                &access_token,
+                for_user_id,
             )
             .await?;
         let task = self
             .todoist_service
-            .build_task(&source_task, notification.user_id, &access_token)
+            .build_task(executor, &source_task, notification.user_id)
             .await?;
         let created_task = self.repository.create_task(executor, task).await?;
 
@@ -253,11 +227,11 @@ impl TaskService {
         U: TaskSourceService<T> + NotificationSource,
     {
         let integration_provider_kind = task_source_service.get_integration_provider_kind();
-        let access_token = self
+        let result = self
             .integration_connection_service
             .read()
             .await
-            .get_access_token(
+            .find_access_token(
                 executor,
                 integration_provider_kind,
                 Some(Utc::now() - Duration::minutes(self.min_sync_tasks_interval_in_minutes)),
@@ -265,83 +239,78 @@ impl TaskService {
             )
             .await?;
 
-        if let Some(access_token) = access_token {
-            self.integration_connection_service
-                .read()
-                .await
-                .update_integration_connection_sync_status(
-                    executor,
-                    user_id,
-                    integration_provider_kind,
-                    None,
-                )
-                .await?;
-            match task_source_service.fetch_all_tasks(&access_token).await {
-                Ok(source_tasks) => {
-                    let tasks = self
-                        .save_tasks_from_source(
-                            executor,
-                            task_source_service,
-                            &source_tasks,
-                            user_id,
-                        )
-                        .await?;
+        if result.is_none() {
+            return Ok(vec![]);
+        }
 
-                    let tasks_in_inbox: Vec<Task> = tasks
-                        .iter()
-                        .filter(|task| task.is_in_inbox())
-                        .cloned()
+        self.integration_connection_service
+            .read()
+            .await
+            .update_integration_connection_sync_status(
+                executor,
+                user_id,
+                integration_provider_kind,
+                None,
+            )
+            .await?;
+        match task_source_service.fetch_all_tasks(executor, user_id).await {
+            Ok(source_tasks) => {
+                let tasks = self
+                    .save_tasks_from_source(executor, task_source_service, &source_tasks, user_id)
+                    .await?;
+
+                let tasks_in_inbox: Vec<Task> = tasks
+                    .iter()
+                    .filter(|task| task.is_in_inbox())
+                    .cloned()
+                    .collect();
+
+                let notifications = self
+                    .notification_service
+                    .upgrade()
+                    .context("Unable to access notification_service from task_service")?
+                    .read()
+                    .await
+                    .save_notifications_from_source(
+                        executor,
+                        task_source_service.get_notification_source_kind(),
+                        tasks_in_inbox,
+                        user_id,
+                    )
+                    .await?;
+
+                let mut notifications_by_task_id: HashMap<Option<TaskId>, Notification> =
+                    notifications
+                        .into_iter()
+                        .map(|notification| (notification.task_id, notification))
                         .collect();
 
-                    let notifications = self
-                        .notification_service
-                        .upgrade()
-                        .context("Unable to access notification_service from task_service")?
-                        .read()
-                        .await
-                        .save_notifications_from_source(
-                            executor,
-                            task_source_service.get_notification_source_kind(),
-                            tasks_in_inbox,
-                            user_id,
-                        )
-                        .await?;
-
-                    let mut notifications_by_task_id: HashMap<Option<TaskId>, Notification> =
-                        notifications
-                            .into_iter()
-                            .map(|notification| (notification.task_id, notification))
-                            .collect();
-
-                    Ok(tasks
-                        .into_iter()
-                        .map(move |task| {
-                            let task_id = task.id;
-                            TaskCreationResult {
-                                task,
-                                notification: notifications_by_task_id.remove(&Some(task_id)),
-                            }
-                        })
-                        .collect())
-                }
-                Err(e) => {
-                    self.integration_connection_service
-                        .read()
-                        .await
-                        .update_integration_connection_sync_status(
-                            executor,
-                            user_id,
-                            integration_provider_kind,
-                            Some(format!(
-                                "Failed to fetch tasks from {integration_provider_kind}"
-                            )),
-                        )
-                        .await?;
-                    Err(UniversalInboxError::Recoverable(e.into()))
-                }
+                Ok(tasks
+                    .into_iter()
+                    .map(move |task| {
+                        let task_id = task.id;
+                        TaskCreationResult {
+                            task,
+                            notification: notifications_by_task_id.remove(&Some(task_id)),
+                        }
+                    })
+                    .collect())
             }
-        } else {
-            Ok(vec![])
+            Err(e) => {
+                self.integration_connection_service
+                    .read()
+                    .await
+                    .update_integration_connection_sync_status(
+                        executor,
+                        user_id,
+                        integration_provider_kind,
+                        Some(format!(
+                            "Failed to fetch tasks from {integration_provider_kind}"
+                        )),
+                    )
+                    .await?;
+                Err(UniversalInboxError::Recoverable(e.into()))
+            }
         }
     }
 
@@ -363,22 +332,10 @@ impl TaskService {
         source_tasks: &[T],
         user_id: UserId,
     ) -> Result<Vec<Task>, UniversalInboxError> {
-        let access_token = self
-            .integration_connection_service
-            .read()
-            .await
-            .get_access_token(
-                executor,
-                task_source_service.get_integration_provider_kind(),
-                None,
-                user_id,
-            )
-            .await?
-            .ok_or_else(|| anyhow!("Cannot update a Todoist task without an access token"))?;
         let mut tasks = vec![];
         for source_task in source_tasks {
             let task = task_source_service
-                .build_task(source_task, user_id, &access_token)
+                .build_task(executor, source_task, user_id)
                 .await?;
             let uptodate_task = self
                 .repository

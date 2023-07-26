@@ -1,13 +1,13 @@
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
-use sqlx::{Postgres, QueryBuilder, Transaction};
+use sqlx::{types::Json, Postgres, QueryBuilder, Transaction};
 use uuid::Uuid;
 
 use universal_inbox::{
     integration_connection::{
-        IntegrationConnection, IntegrationConnectionId, IntegrationConnectionStatus,
-        IntegrationProviderKind,
+        IntegrationConnection, IntegrationConnectionContext, IntegrationConnectionId,
+        IntegrationConnectionStatus, IntegrationProviderKind,
     },
     user::UserId,
 };
@@ -61,6 +61,13 @@ pub trait IntegrationConnectionRepository {
         executor: &mut Transaction<'a, Postgres>,
         integration_connection: Box<IntegrationConnection>,
     ) -> Result<Box<IntegrationConnection>, UniversalInboxError>;
+
+    async fn update_integration_connection_context<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        integration_connection_id: IntegrationConnectionId,
+        context: IntegrationConnectionContext,
+    ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError>;
 }
 
 #[async_trait]
@@ -84,7 +91,8 @@ impl IntegrationConnectionRepository for Repository {
                   created_at,
                   updated_at,
                   last_sync_started_at,
-                  last_sync_failure_message
+                  last_sync_failure_message,
+                  context as "context: Json<IntegrationConnectionContext>"
                 FROM integration_connection
                 WHERE id = $1
             "#,
@@ -121,7 +129,8 @@ impl IntegrationConnectionRepository for Repository {
                   created_at,
                   updated_at,
                   last_sync_started_at,
-                  last_sync_failure_message
+                  last_sync_failure_message,
+                  context
                 FROM integration_connection
                 WHERE
             "#,
@@ -192,6 +201,7 @@ impl IntegrationConnectionRepository for Repository {
                   updated_at,
                   last_sync_started_at,
                   last_sync_failure_message,
+                  context,
                   (SELECT
              "#,
         );
@@ -278,6 +288,7 @@ impl IntegrationConnectionRepository for Repository {
                   updated_at,
                   last_sync_started_at,
                   last_sync_failure_message,
+                  context,
                   true as "is_updated"
              "#,
         );
@@ -288,6 +299,63 @@ impl IntegrationConnectionRepository for Repository {
             .await
             .with_context(|| {
                 format!("Failed to update integration connection {integration_provider_kind} for user {user_id} from storage")
+            })?;
+
+        if let Some(updated_integration_connection_row) = row {
+            Ok(UpdateStatus {
+                updated: updated_integration_connection_row.is_updated,
+                result: Some(Box::new(
+                    updated_integration_connection_row
+                        .integration_connection_row
+                        .try_into()
+                        .unwrap(),
+                )),
+            })
+        } else {
+            Ok(UpdateStatus {
+                updated: false,
+                result: None,
+            })
+        }
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    async fn update_integration_connection_context<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        integration_connection_id: IntegrationConnectionId,
+        context: IntegrationConnectionContext,
+    ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
+        let mut query_builder = QueryBuilder::new("UPDATE integration_connection SET context = ");
+        query_builder
+            .push_bind(Json(context))
+            .push(" WHERE ")
+            .push(" id = ")
+            .push_bind(integration_connection_id.0)
+            .push(
+                r#"
+                RETURNING
+                  id,
+                  user_id,
+                  connection_id,
+                  provider_kind,
+                  status,
+                  failure_message,
+                  created_at,
+                  updated_at,
+                  last_sync_started_at,
+                  last_sync_failure_message,
+                  context,
+                  true as "is_updated"
+               "#,
+            );
+
+        let row: Option<UpdatedIntegrationConnectionRow> = query_builder
+            .build_query_as::<UpdatedIntegrationConnectionRow>()
+            .fetch_optional(executor)
+            .await
+            .with_context(|| {
+                format!("Failed to update integration connection {integration_connection_id} context from storage")
             })?;
 
         if let Some(updated_integration_connection_row) = row {
@@ -327,7 +395,8 @@ impl IntegrationConnectionRepository for Repository {
                   created_at,
                   updated_at,
                   last_sync_started_at,
-                  last_sync_failure_message
+                  last_sync_failure_message,
+                  context as "context: Json<IntegrationConnectionContext>"
                 FROM integration_connection
                 WHERE user_id = $1
             "#,
@@ -430,6 +499,7 @@ pub struct IntegrationConnectionRow {
     updated_at: NaiveDateTime,
     last_sync_started_at: Option<NaiveDateTime>,
     last_sync_failure_message: Option<String>,
+    context: Option<Json<IntegrationConnectionContext>>,
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -486,6 +556,7 @@ impl TryFrom<IntegrationConnectionRow> for IntegrationConnection {
                 .last_sync_started_at
                 .map(|started_at| DateTime::<Utc>::from_utc(started_at, Utc)),
             last_sync_failure_message: row.last_sync_failure_message,
+            context: row.context.map(|context| context.0),
         })
     }
 }

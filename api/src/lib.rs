@@ -152,8 +152,8 @@ pub async fn run(
 pub async fn build_services(
     pool: Arc<PgPool>,
     settings: &Settings,
-    github_service: GithubService,
-    todoist_service: TodoistService,
+    github_address: Option<String>,
+    todoist_address: Option<String>,
     nango_service: NangoService,
 ) -> (
     Arc<RwLock<NotificationService>>,
@@ -172,6 +172,15 @@ pub async fn build_services(
         nango_service,
         settings.integrations.oauth2.nango_provider_keys.clone(),
     )));
+    let todoist_service =
+        TodoistService::new(todoist_address, integration_connection_service.clone())
+            .expect("Failed to create new TodoistService");
+    let github_service = GithubService::new(
+        github_address,
+        settings.integrations.github.page_size,
+        integration_connection_service.clone(),
+    )
+    .expect("Failed to create new GithubService");
 
     let notification_service = Arc::new(RwLock::new(NotificationService::new(
         repository.clone(),
@@ -186,7 +195,7 @@ pub async fn build_services(
 
     let task_service = Arc::new(RwLock::new(TaskService::new(
         repository,
-        todoist_service,
+        todoist_service.clone(),
         Arc::downgrade(&notification_service),
         integration_connection_service.clone(),
         user_service.clone(),
