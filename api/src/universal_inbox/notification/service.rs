@@ -74,39 +74,19 @@ impl NotificationService {
         notification: Box<Notification>,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
-        let access_token = self
-            .integration_connection_service
-            .read()
-            .await
-            .get_access_token(
-                executor,
-                notification_source_service.get_integration_provider_kind(),
-                None,
-                user_id,
-            )
-            .await?;
-
         match patch.status {
             Some(NotificationStatus::Deleted) => {
-                let access_token = access_token.ok_or_else(|| {
-                    anyhow!(
-                        "Cannot delete notification {} without an access token",
-                        notification.id
-                    )
-                })?;
                 notification_source_service
-                    .delete_notification_from_source(&notification.source_id, &access_token)
+                    .delete_notification_from_source(executor, &notification.source_id, user_id)
                     .await
             }
             Some(NotificationStatus::Unsubscribed) => {
-                let access_token = access_token.ok_or_else(|| {
-                    anyhow!(
-                        "Cannot unsubscribe from notification {} without an access token",
-                        notification.id
-                    )
-                })?;
                 notification_source_service
-                    .unsubscribe_notification_from_source(&notification.source_id, &access_token)
+                    .unsubscribe_notification_from_source(
+                        executor,
+                        &notification.source_id,
+                        user_id,
+                    )
                     .await
             }
             _ => Ok(()),
@@ -193,11 +173,11 @@ impl NotificationService {
         user_id: UserId,
     ) -> Result<Vec<Notification>, UniversalInboxError> {
         let integration_provider_kind = notification_source_service.get_integration_provider_kind();
-        let access_token = self
+        let result = self
             .integration_connection_service
             .read()
             .await
-            .get_access_token(
+            .find_access_token(
                 executor,
                 integration_provider_kind,
                 Some(
@@ -207,48 +187,48 @@ impl NotificationService {
             )
             .await?;
 
-        if let Some(access_token) = access_token {
-            self.integration_connection_service
-                .read()
-                .await
-                .update_integration_connection_sync_status(
+        if result.is_none() {
+            return Ok(vec![]);
+        }
+
+        self.integration_connection_service
+            .read()
+            .await
+            .update_integration_connection_sync_status(
+                executor,
+                user_id,
+                integration_provider_kind,
+                None,
+            )
+            .await?;
+        match notification_source_service
+            .fetch_all_notifications(executor, user_id)
+            .await
+        {
+            Ok(source_notifications) => {
+                self.save_notifications_from_source(
                     executor,
+                    notification_source_service.get_notification_source_kind(),
+                    source_notifications,
                     user_id,
-                    integration_provider_kind,
-                    None,
                 )
-                .await?;
-            match notification_source_service
-                .fetch_all_notifications(&access_token)
                 .await
-            {
-                Ok(source_notifications) => {
-                    self.save_notifications_from_source(
-                        executor,
-                        notification_source_service.get_notification_source_kind(),
-                        source_notifications,
-                        user_id,
-                    )
-                    .await
-                }
-                Err(e) => {
-                    self.integration_connection_service
-                        .read()
-                        .await
-                        .update_integration_connection_sync_status(
-                            executor,
-                            user_id,
-                            integration_provider_kind,
-                            Some(format!(
-                                "Failed to fetch notifications from {integration_provider_kind}"
-                            )),
-                        )
-                        .await?;
-                    Err(UniversalInboxError::Recoverable(e.into()))
-                }
             }
-        } else {
-            Ok(vec![])
+            Err(e) => {
+                self.integration_connection_service
+                    .read()
+                    .await
+                    .update_integration_connection_sync_status(
+                        executor,
+                        user_id,
+                        integration_provider_kind,
+                        Some(format!(
+                            "Failed to fetch notifications from {integration_provider_kind}"
+                        )),
+                    )
+                    .await?;
+                Err(UniversalInboxError::Recoverable(e.into()))
+            }
         }
     }
 

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use actix_http::StatusCode;
 use chrono::{TimeZone, Utc};
 use pretty_assertions::assert_eq;
@@ -7,7 +9,9 @@ use tracing::debug;
 use uuid::Uuid;
 
 use universal_inbox::{
-    integration_connection::IntegrationProviderKind,
+    integration_connection::{
+        IntegrationConnection, IntegrationConnectionContext, IntegrationProviderKind, SyncToken,
+    },
     notification::{Notification, NotificationStatus},
     task::{integrations::todoist, Task, TaskMetadata, TaskPriority, TaskSourceKind, TaskStatus},
 };
@@ -20,8 +24,9 @@ use universal_inbox_api::{
 use crate::helpers::{
     auth::{authenticated_app, AuthenticatedApp},
     integration_connection::{
-        create_and_mock_integration_connection, get_integration_connection_per_provider,
-        nango_todoist_connection,
+        create_and_mock_integration_connection, get_integration_connection,
+        get_integration_connection_per_provider, nango_todoist_connection,
+        update_integration_connection_context,
     },
     notification::list_notifications_with_tasks,
     rest::{create_resource, get_resource},
@@ -76,7 +81,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
     .await;
     let existing_todoist_task = existing_todoist_task_creation.task;
     let existing_todoist_notification = existing_todoist_task_creation.notification.unwrap();
-    create_and_mock_integration_connection(
+    let integration_connection = create_and_mock_integration_connection(
         &app,
         IntegrationProviderKind::Todoist,
         &settings,
@@ -88,11 +93,13 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
         &app.todoist_mock_server,
         "items",
         &sync_todoist_items_response,
+        None,
     );
     let todoist_projects_mock = mock_todoist_sync_resources_service(
         &app.todoist_mock_server,
         "projects",
         &sync_todoist_projects_response,
+        None,
     );
 
     let task_creations: Vec<TaskCreationResult> = sync_tasks(
@@ -187,8 +194,87 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
         Some(notifications[0].clone().into()),
         new_todoist_task_creation.notification
     );
+
+    let updated_integration_connection =
+        get_integration_connection(&app, integration_connection.id)
+            .await
+            .unwrap();
+    assert_eq!(
+        updated_integration_connection,
+        IntegrationConnection {
+            context: Some(IntegrationConnectionContext::Todoist {
+                items_sync_token: SyncToken("todoist_sync_items_token".to_string())
+            }),
+            ..updated_integration_connection.clone()
+        }
+    );
 }
 
+#[rstest]
+#[tokio::test]
+async fn test_sync_tasks_should_reuse_existing_sync_token(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    nango_todoist_connection: Box<NangoConnection>,
+) {
+    let app = authenticated_app.await;
+    let integration_connection = create_and_mock_integration_connection(
+        &app,
+        IntegrationProviderKind::Todoist,
+        &settings,
+        nango_todoist_connection,
+    )
+    .await;
+
+    let sync_token = SyncToken("previous_sync_token".to_string());
+    update_integration_connection_context(
+        &app,
+        integration_connection.id,
+        IntegrationConnectionContext::Todoist {
+            items_sync_token: sync_token.clone(),
+        },
+    )
+    .await;
+
+    let sync_todoist_items_response = TodoistSyncResponse {
+        items: Some(vec![]),
+        projects: None,
+        full_sync: false,
+        temp_id_mapping: HashMap::new(),
+        sync_token: SyncToken("new_sync_token".to_string()),
+    };
+    let todoist_tasks_mock = mock_todoist_sync_resources_service(
+        &app.todoist_mock_server,
+        "items",
+        &sync_todoist_items_response,
+        Some(sync_token),
+    );
+
+    let task_creations: Vec<TaskCreationResult> = sync_tasks(
+        &app.client,
+        &app.app_address,
+        Some(TaskSourceKind::Todoist),
+        false,
+    )
+    .await;
+
+    assert_eq!(task_creations.len(), 0);
+    todoist_tasks_mock.assert();
+
+    let updated_integration_connection =
+        get_integration_connection(&app, integration_connection.id)
+            .await
+            .unwrap();
+    assert_eq!(
+        updated_integration_connection,
+        IntegrationConnection {
+            context: Some(IntegrationConnectionContext::Todoist {
+                items_sync_token: SyncToken("new_sync_token".to_string())
+            }),
+            ..updated_integration_connection.clone()
+        },
+    );
+}
 #[rstest]
 #[tokio::test]
 async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
@@ -251,11 +337,13 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
         &app.todoist_mock_server,
         "items",
         &sync_todoist_items_response,
+        None,
     );
     let todoist_projects_mock = mock_todoist_sync_resources_service(
         &app.todoist_mock_server,
         "projects",
         &sync_todoist_projects_response,
+        None,
     );
 
     let task_creations: Vec<TaskCreationResult> = sync_tasks(
@@ -343,11 +431,13 @@ async fn test_sync_all_tasks_asynchronously(
         &app.todoist_mock_server,
         "items",
         &sync_todoist_items_response,
+        None,
     );
     let mut todoist_projects_mock = mock_todoist_sync_resources_service(
         &app.todoist_mock_server,
         "projects",
         &sync_todoist_projects_response,
+        None,
     );
 
     let unauthenticated_client = reqwest::Client::new();

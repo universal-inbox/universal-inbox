@@ -13,7 +13,7 @@ use uuid::Uuid;
 
 use universal_inbox_api::{
     configuration::Settings,
-    integrations::{github::GithubService, oauth2::NangoService, todoist::TodoistService},
+    integrations::oauth2::NangoService,
     observability::{get_subscriber, init_subscriber},
     repository::Repository,
 };
@@ -110,12 +110,6 @@ pub async fn tested_app(
 
     let pool: Arc<PgPool> = db_connection.await;
 
-    let todoist_service = TodoistService::new(Some(todoist_mock_server_uri.to_string()))
-        .unwrap_or_else(|_| {
-            panic!("Failed to setup Todoist service with mock server at {todoist_mock_server_uri}")
-        });
-    let github_service = GithubService::new(Some(github_mock_server_uri.to_string()), 2)
-        .expect("Failed to create new GithubService");
     let nango_service = NangoService::new(
         nango_mock_server_uri.parse::<Url>().unwrap(),
         &settings.integrations.oauth2.nango_secret_key,
@@ -126,8 +120,8 @@ pub async fn tested_app(
         universal_inbox_api::build_services(
             pool.clone(),
             &settings,
-            github_service,
-            todoist_service,
+            Some(github_mock_server_uri.to_string()),
+            Some(todoist_mock_server_uri.to_string()),
             nango_service,
         )
         .await;

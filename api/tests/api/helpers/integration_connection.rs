@@ -5,12 +5,11 @@ use httpmock::{
 };
 use reqwest::{Client, Response};
 use rstest::fixture;
-use tracing::debug;
 
 use universal_inbox::{
     integration_connection::{
-        IntegrationConnection, IntegrationConnectionId, IntegrationConnectionStatus,
-        IntegrationProviderKind, NangoProviderKey,
+        IntegrationConnection, IntegrationConnectionContext, IntegrationConnectionId,
+        IntegrationConnectionStatus, IntegrationProviderKind, NangoProviderKey,
     },
     user::UserId,
 };
@@ -18,6 +17,7 @@ use universal_inbox::{
 use universal_inbox_api::{
     configuration::Settings, integrations::oauth2::NangoConnection,
     repository::integration_connection::IntegrationConnectionRepository,
+    universal_inbox::UpdateStatus,
 };
 
 use crate::helpers::{auth::AuthenticatedApp, load_json_fixture_file};
@@ -145,10 +145,40 @@ pub async fn get_integration_connection_per_provider(
         )
         .await
         .unwrap();
-    debug!("Integration connection: {:?}", integration_connection);
     transaction.commit().await.unwrap();
 
     integration_connection
+}
+
+pub async fn get_integration_connection(
+    app: &AuthenticatedApp,
+    integration_connection_id: IntegrationConnectionId,
+) -> Option<IntegrationConnection> {
+    let mut transaction = app.repository.begin().await.unwrap();
+    let integration_connection = app
+        .repository
+        .get_integration_connection(&mut transaction, integration_connection_id)
+        .await
+        .unwrap();
+    transaction.commit().await.unwrap();
+
+    integration_connection
+}
+
+pub async fn update_integration_connection_context(
+    app: &AuthenticatedApp,
+    integration_connection_id: IntegrationConnectionId,
+    context: IntegrationConnectionContext,
+) -> UpdateStatus<Box<IntegrationConnection>> {
+    let mut transaction = app.repository.begin().await.unwrap();
+    let result = app
+        .repository
+        .update_integration_connection_context(&mut transaction, integration_connection_id, context)
+        .await
+        .unwrap();
+    transaction.commit().await.unwrap();
+
+    result
 }
 
 pub async fn create_and_mock_integration_connection(

@@ -13,10 +13,14 @@ use format_serde_error::SerdeError;
 use http::{HeaderMap, HeaderValue, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use sqlx::{Postgres, Transaction};
+use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use universal_inbox::{
-    integration_connection::{IntegrationProvider, IntegrationProviderKind},
+    integration_connection::{
+        IntegrationConnectionContext, IntegrationProvider, IntegrationProviderKind, SyncToken,
+    },
     notification::{NotificationSource, NotificationSourceKind},
     task::{
         integrations::todoist::{
@@ -30,13 +34,16 @@ use universal_inbox::{
 
 use crate::{
     integrations::{oauth2::AccessToken, task::TaskSourceService},
-    universal_inbox::UniversalInboxError,
+    universal_inbox::{
+        integration_connection::service::IntegrationConnectionService, UniversalInboxError,
+    },
 };
 
 #[derive(Clone, Debug)]
 pub struct TodoistService {
     pub todoist_sync_base_url: String,
     pub projects_cache_index: Arc<AtomicU64>,
+    pub integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
 }
 
 static TODOIST_SYNC_BASE_URL: &str = "https://api.todoist.com/sync/v9";
@@ -126,7 +133,7 @@ pub struct TodoistSyncResponse {
     pub projects: Option<Vec<TodoistProject>>,
     pub full_sync: bool,
     pub temp_id_mapping: HashMap<String, String>,
-    pub sync_token: String,
+    pub sync_token: SyncToken,
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
@@ -134,7 +141,7 @@ pub struct TodoistSyncStatusResponse {
     pub sync_status: HashMap<Uuid, TodoistCommandStatus>,
     pub full_sync: bool,
     pub temp_id_mapping: HashMap<String, String>,
-    pub sync_token: String,
+    pub sync_token: SyncToken,
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
@@ -152,11 +159,13 @@ pub struct TodoistItemInfoResponse {
 impl TodoistService {
     pub fn new(
         todoist_sync_base_url: Option<String>,
+        integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     ) -> Result<TodoistService, UniversalInboxError> {
         Ok(TodoistService {
             todoist_sync_base_url: todoist_sync_base_url
                 .unwrap_or_else(|| TODOIST_SYNC_BASE_URL.to_string()),
             projects_cache_index: Arc::new(AtomicU64::new(0)),
+            integration_connection_service,
         })
     }
 
@@ -165,11 +174,17 @@ impl TodoistService {
         &self,
         resource_name: &str,
         access_token: &AccessToken,
+        sync_token: Option<SyncToken>,
     ) -> Result<TodoistSyncResponse, UniversalInboxError> {
         let response = build_todoist_client(access_token)
             .context("Cannot build Todoist client")?
             .post(&format!("{}/sync", self.todoist_sync_base_url))
-            .json(&json!({ "sync_token": "*", "resource_types": [resource_name] }))
+            .json(&json!({
+                "sync_token": sync_token
+                    .map(|sync_token| sync_token.0)
+                    .unwrap_or_else(|| "*".to_string()),
+                "resource_types": [resource_name]
+            }))
             .send()
             .await
             .context(format!("Cannot sync {resource_name} from Todoist API"))?
@@ -190,12 +205,9 @@ impl TodoistService {
     pub async fn sync_items(
         &self,
         access_token: &AccessToken,
-    ) -> Result<Vec<TodoistItem>, UniversalInboxError> {
-        let sync_response = self.sync_resources("items", access_token).await?;
-
-        sync_response.items.ok_or_else(|| {
-            UniversalInboxError::Unexpected(anyhow!("Todoist response should include `items`"))
-        })
+        sync_token: Option<SyncToken>,
+    ) -> Result<TodoistSyncResponse, UniversalInboxError> {
+        self.sync_resources("items", access_token, sync_token).await
     }
 
     #[tracing::instrument(level = "debug", skip(self), err)]
@@ -281,8 +293,9 @@ impl TodoistService {
     pub async fn fetch_all_projects(
         &self,
         access_token: &AccessToken,
+        sync_token: Option<SyncToken>,
     ) -> Result<Vec<TodoistProject>, UniversalInboxError> {
-        cached_fetch_all_projects(self, access_token).await
+        cached_fetch_all_projects(self, access_token, sync_token).await
     }
 
     async fn get_or_create_project_id(
@@ -290,7 +303,7 @@ impl TodoistService {
         project_name: &str,
         access_token: &AccessToken,
     ) -> Result<String, UniversalInboxError> {
-        let projects = self.fetch_all_projects(access_token).await?;
+        let projects = self.fetch_all_projects(access_token, None).await?;
         if let Some(id) = projects
             .iter()
             .find(|project| project.name == *project_name)
@@ -367,9 +380,11 @@ impl TodoistService {
 async fn cached_fetch_all_projects(
     service: &TodoistService,
     access_token: &AccessToken,
+    sync_token: Option<SyncToken>,
 ) -> Result<Vec<TodoistProject>, UniversalInboxError> {
-    let sync_response: TodoistSyncResponse =
-        service.sync_resources("projects", access_token).await?;
+    let sync_response: TodoistSyncResponse = service
+        .sync_resources("projects", access_token, sync_token)
+        .await?;
 
     sync_response.projects.ok_or_else(|| {
         UniversalInboxError::Unexpected(anyhow!("Todoist response should include `projects`"))
@@ -392,30 +407,86 @@ fn build_todoist_client(access_token: &AccessToken) -> Result<reqwest::Client, r
 #[async_trait]
 impl TaskSourceService<TodoistItem> for TodoistService {
     #[tracing::instrument(level = "debug", skip(self), err)]
-    async fn fetch_all_tasks(
+    async fn fetch_all_tasks<'a>(
         &self,
-        access_token: &AccessToken,
+        executor: &mut Transaction<'a, Postgres>,
+        user_id: UserId,
     ) -> Result<Vec<TodoistItem>, UniversalInboxError> {
-        self.sync_items(access_token).await
+        let (access_token, integration_connection) = self
+            .integration_connection_service
+            .read()
+            .await
+            .find_access_token(executor, IntegrationProviderKind::Todoist, None, user_id)
+            .await?
+            .ok_or_else(|| anyhow!("Cannot fetch Todoist task without an access token"))?;
+
+        let sync_response = self
+            .sync_items(
+                &access_token,
+                integration_connection.context.map(|context| {
+                    let IntegrationConnectionContext::Todoist {
+                        items_sync_token: sync_token,
+                    } = context;
+                    sync_token
+                }),
+            )
+            .await?;
+
+        self.integration_connection_service
+            .read()
+            .await
+            .update_integration_connection_context(
+                executor,
+                integration_connection.id,
+                IntegrationConnectionContext::Todoist {
+                    items_sync_token: sync_response.sync_token,
+                },
+            )
+            .await
+            .map_err(|_| {
+                anyhow!(
+                    "Failed to update Todoist integration connection {} context",
+                    integration_connection.id
+                )
+            })?;
+
+        sync_response.items.ok_or_else(|| {
+            UniversalInboxError::Unexpected(anyhow!("Todoist response should include `items`"))
+        })
     }
 
     #[tracing::instrument(level = "debug", skip(self), err)]
-    async fn fetch_task(
+    async fn fetch_task<'a>(
         &self,
+        executor: &mut Transaction<'a, Postgres>,
         source_id: &str,
-        access_token: &AccessToken,
+        user_id: UserId,
     ) -> Result<Option<TodoistItem>, UniversalInboxError> {
-        self.get_item(source_id, access_token).await
+        let (access_token, _) = self
+            .integration_connection_service
+            .read()
+            .await
+            .find_access_token(executor, IntegrationProviderKind::Todoist, None, user_id)
+            .await?
+            .ok_or_else(|| anyhow!("Cannot fetch a Todoist task without an access token"))?;
+        self.get_item(source_id, &access_token).await
     }
 
     #[tracing::instrument(level = "debug", skip(self), err)]
-    async fn build_task(
+    async fn build_task<'a>(
         &self,
+        executor: &mut Transaction<'a, Postgres>,
         source: &TodoistItem,
         user_id: UserId,
-        access_token: &AccessToken,
     ) -> Result<Box<Task>, UniversalInboxError> {
-        let projects = self.fetch_all_projects(access_token).await?;
+        let (access_token, _) = self
+            .integration_connection_service
+            .read()
+            .await
+            .find_access_token(executor, IntegrationProviderKind::Todoist, None, user_id)
+            .await?
+            .ok_or_else(|| anyhow!("Cannot build a Todoist task without an access token"))?;
+        let projects = self.fetch_all_projects(&access_token, None).await?;
         let project_name = projects
             .iter()
             .find(|project| project.id == source.project_id)
@@ -431,13 +502,21 @@ impl TaskSourceService<TodoistItem> for TodoistService {
     }
 
     #[tracing::instrument(level = "debug", skip(self), err)]
-    async fn create_task(
+    async fn create_task<'a>(
         &self,
+        executor: &mut Transaction<'a, Postgres>,
         task: &TaskCreation,
-        access_token: &AccessToken,
+        user_id: UserId,
     ) -> Result<TodoistItem, UniversalInboxError> {
+        let (access_token, _) = self
+            .integration_connection_service
+            .read()
+            .await
+            .find_access_token(executor, IntegrationProviderKind::Todoist, None, user_id)
+            .await?
+            .ok_or_else(|| anyhow!("Cannot create a Todoist task without an access token"))?;
         let project_id = self
-            .get_or_create_project_id(&task.project.to_string(), access_token)
+            .get_or_create_project_id(&task.project.to_string(), &access_token)
             .await?;
         let sync_result = self
             .send_sync_commands(
@@ -452,19 +531,20 @@ impl TaskSourceService<TodoistItem> for TodoistService {
                         priority: task.priority.into(),
                     },
                 }],
-                access_token,
+                &access_token,
             )
             .await?;
 
         let task = self
             .fetch_task(
+                executor,
                 &sync_result
                     .temp_id_mapping
                     .values()
                     .next()
                     .context("Cannot find newly created task's ID".to_string())?
                     .to_string(),
-                access_token,
+                user_id,
             )
             .await?;
 
@@ -474,48 +554,72 @@ impl TaskSourceService<TodoistItem> for TodoistService {
     }
 
     #[tracing::instrument(level = "debug", skip(self), err)]
-    async fn delete_task(
+    async fn delete_task<'a>(
         &self,
+        executor: &mut Transaction<'a, Postgres>,
         id: &str,
-        access_token: &AccessToken,
+        user_id: UserId,
     ) -> Result<TodoistSyncStatusResponse, UniversalInboxError> {
+        let (access_token, _) = self
+            .integration_connection_service
+            .read()
+            .await
+            .find_access_token(executor, IntegrationProviderKind::Todoist, None, user_id)
+            .await?
+            .ok_or_else(|| anyhow!("Cannot delete a Todoist task without an access token"))?;
         self.send_sync_commands(
             vec![TodoistSyncCommand::ItemDelete {
                 uuid: Uuid::new_v4(),
                 args: TodoistSyncCommandItemDeleteArgs { id: id.to_string() },
             }],
-            access_token,
+            &access_token,
         )
         .await
     }
 
     #[tracing::instrument(level = "debug", skip(self), err)]
-    async fn complete_task(
+    async fn complete_task<'a>(
         &self,
+        executor: &mut Transaction<'a, Postgres>,
         id: &str,
-        access_token: &AccessToken,
+        user_id: UserId,
     ) -> Result<TodoistSyncStatusResponse, UniversalInboxError> {
+        let (access_token, _) = self
+            .integration_connection_service
+            .read()
+            .await
+            .find_access_token(executor, IntegrationProviderKind::Todoist, None, user_id)
+            .await?
+            .ok_or_else(|| anyhow!("Cannot complete a Todoist task without an access token"))?;
         self.send_sync_commands(
             vec![TodoistSyncCommand::ItemComplete {
                 uuid: Uuid::new_v4(),
                 args: TodoistSyncCommandItemCompleteArgs { id: id.to_string() },
             }],
-            access_token,
+            &access_token,
         )
         .await
     }
 
     #[tracing::instrument(level = "debug", skip(self), err)]
-    async fn update_task(
+    async fn update_task<'a>(
         &self,
+        executor: &mut Transaction<'a, Postgres>,
         id: &str,
         patch: &TaskPatch,
-        access_token: &AccessToken,
+        user_id: UserId,
     ) -> Result<Option<TodoistSyncStatusResponse>, UniversalInboxError> {
+        let (access_token, _) = self
+            .integration_connection_service
+            .read()
+            .await
+            .find_access_token(executor, IntegrationProviderKind::Todoist, None, user_id)
+            .await?
+            .ok_or_else(|| anyhow!("Cannot update a Todoist task without an access token"))?;
         let mut commands: Vec<TodoistSyncCommand> = vec![];
         if let Some(ref project_name) = patch.project {
             let project_id = self
-                .get_or_create_project_id(project_name, access_token)
+                .get_or_create_project_id(project_name, &access_token)
                 .await?;
             commands.push(TodoistSyncCommand::ItemMove {
                 uuid: Uuid::new_v4(),
@@ -548,7 +652,9 @@ impl TaskSourceService<TodoistItem> for TodoistService {
         if commands.is_empty() {
             Ok(None)
         } else {
-            Ok(Some(self.send_sync_commands(commands, access_token).await?))
+            Ok(Some(
+                self.send_sync_commands(commands, &access_token).await?,
+            ))
         }
     }
 }
@@ -605,7 +711,7 @@ mod tests {
             ]),
             temp_id_mapping: HashMap::new(),
             full_sync: false,
-            sync_token: "abcd".to_string(),
+            sync_token: SyncToken("abcd".to_string())
         });
     }
 

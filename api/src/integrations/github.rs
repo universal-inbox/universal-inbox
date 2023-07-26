@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use actix_http::uri::Authority;
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
@@ -5,16 +7,21 @@ use format_serde_error::SerdeError;
 use futures::stream::{self, TryStreamExt};
 use http::{HeaderMap, HeaderValue, Uri};
 
+use sqlx::{Postgres, Transaction};
+use tokio::sync::RwLock;
 use universal_inbox::{
     integration_connection::{IntegrationProvider, IntegrationProviderKind},
     notification::{
         integrations::github::GithubNotification, NotificationSource, NotificationSourceKind,
     },
+    user::UserId,
 };
 
 use crate::{
     integrations::{notification::NotificationSourceService, APP_USER_AGENT},
-    universal_inbox::UniversalInboxError,
+    universal_inbox::{
+        integration_connection::service::IntegrationConnectionService, UniversalInboxError,
+    },
 };
 
 use super::oauth2::AccessToken;
@@ -23,6 +30,7 @@ use super::oauth2::AccessToken;
 pub struct GithubService {
     github_base_url: String,
     page_size: usize,
+    integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
 }
 
 static GITHUB_BASE_URL: &str = "https://api.github.com";
@@ -31,10 +39,12 @@ impl GithubService {
     pub fn new(
         github_base_url: Option<String>,
         page_size: usize,
+        integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     ) -> Result<GithubService, UniversalInboxError> {
         Ok(GithubService {
             github_base_url: github_base_url.unwrap_or_else(|| GITHUB_BASE_URL.to_string()),
             page_size,
+            integration_connection_service,
         })
     }
 
@@ -157,25 +167,37 @@ pub fn get_html_url_from_api_url(api_url: &Option<Uri>) -> Option<Uri> {
 #[async_trait]
 impl NotificationSourceService<GithubNotification> for GithubService {
     #[tracing::instrument(level = "debug", skip(self), err)]
-    async fn fetch_all_notifications(
+    async fn fetch_all_notifications<'a>(
         &self,
-        access_token: &AccessToken,
+        executor: &mut Transaction<'a, Postgres>,
+        user_id: UserId,
     ) -> Result<Vec<GithubNotification>, UniversalInboxError> {
-        Ok(stream::try_unfold((1, false), |(page, stop)| async move {
-            if stop {
-                return Ok(None);
-            }
+        let (access_token, _) = self
+            .integration_connection_service
+            .read()
+            .await
+            .find_access_token(executor, IntegrationProviderKind::Github, None, user_id)
+            .await?
+            .ok_or_else(|| anyhow!("Cannot fetch Github notifications without an access token"))?;
 
-            let response = self
-                .fetch_notifications(page, self.page_size, access_token)
-                .await;
+        Ok(stream::try_unfold(
+            (1, false, access_token),
+            |(page, stop, access_token)| async move {
+                if stop {
+                    return Ok(None);
+                }
 
-            response.map(|github_notifs| {
-                let notifs_count = github_notifs.len();
-                let is_last_page = notifs_count < self.page_size;
-                Some((github_notifs, (page + 1, is_last_page)))
-            })
-        })
+                let response = self
+                    .fetch_notifications(page, self.page_size, &access_token)
+                    .await;
+
+                response.map(|github_notifs| {
+                    let notifs_count = github_notifs.len();
+                    let is_last_page = notifs_count < self.page_size;
+                    Some((github_notifs, (page + 1, is_last_page, access_token)))
+                })
+            },
+        )
         .try_collect::<Vec<Vec<GithubNotification>>>()
         .await?
         .into_iter()
@@ -184,22 +206,42 @@ impl NotificationSourceService<GithubNotification> for GithubService {
     }
 
     #[tracing::instrument(level = "debug", skip(self), err)]
-    async fn delete_notification_from_source(
+    async fn delete_notification_from_source<'a>(
         &self,
+        executor: &mut Transaction<'a, Postgres>,
         source_id: &str,
-        access_token: &AccessToken,
+        user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
-        self.mark_thread_as_read(source_id, access_token).await
+        let (access_token, _) = self
+            .integration_connection_service
+            .read()
+            .await
+            .find_access_token(executor, IntegrationProviderKind::Github, None, user_id)
+            .await?
+            .ok_or_else(|| anyhow!("Cannot delete Github notification without an access token"))?;
+
+        self.mark_thread_as_read(source_id, &access_token).await
     }
 
     #[tracing::instrument(level = "debug", skip(self), err)]
-    async fn unsubscribe_notification_from_source(
+    async fn unsubscribe_notification_from_source<'a>(
         &self,
+        executor: &mut Transaction<'a, Postgres>,
         source_id: &str,
-        access_token: &AccessToken,
+        user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
-        self.mark_thread_as_read(source_id, access_token).await?;
-        self.unsubscribe_from_thread(source_id, access_token).await
+        let (access_token, _) = self
+            .integration_connection_service
+            .read()
+            .await
+            .find_access_token(executor, IntegrationProviderKind::Github, None, user_id)
+            .await?
+            .ok_or_else(|| {
+                anyhow!("Cannot unsubscribe from Github notifications without an access token")
+            })?;
+
+        self.mark_thread_as_read(source_id, &access_token).await?;
+        self.unsubscribe_from_thread(source_id, &access_token).await
     }
 }
 

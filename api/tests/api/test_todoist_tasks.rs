@@ -224,6 +224,7 @@ mod patch_task {
             &app.todoist_mock_server,
             "projects",
             &sync_todoist_projects_response,
+            None,
         );
         let todoist_project_add_mock =
             mock_todoist_sync_project_add(&app.todoist_mock_server, &new_project, &new_project_id);
@@ -353,6 +354,7 @@ mod patch_task {
             &app.todoist_mock_server,
             "projects",
             &sync_todoist_projects_response,
+            None,
         );
         let todoist_item_add_mock = mock_todoist_item_add_service(
             &app.todoist_mock_server,

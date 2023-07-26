@@ -15,3 +15,6 @@ oidc_front_client_id = "12345"
 oidc_api_client_id = "67890"
 oidc_api_client_secret = "azerty"
 user_profile_url = "https://oidcprovider.com/users/me"
+
+[integrations.github]
+page_size = 2

@@ -12,6 +12,7 @@ use tracing::debug;
 use uuid::Uuid;
 
 use universal_inbox::{
+    integration_connection::SyncToken,
     notification::{NotificationMetadata, NotificationStatus},
     task::{
         integrations::todoist::{self, TodoistItem, TodoistItemDue, TodoistItemPriority},
@@ -55,7 +56,7 @@ pub fn mock_todoist_item_add_service<'a>(
         sync_status: HashMap::from([(Uuid::new_v4(), TodoistCommandStatus::Ok("ok".to_string()))]),
         full_sync: false,
         temp_id_mapping: HashMap::from([(Uuid::new_v4().to_string(), new_item_id.to_string())]),
-        sync_token: "sync token".to_string(),
+        sync_token: SyncToken("sync token".to_string()),
     };
 
     mock_todoist_sync_service(
@@ -130,7 +131,7 @@ pub fn mock_todoist_sync_project_add<'a>(
         sync_status: HashMap::from([(Uuid::new_v4(), TodoistCommandStatus::Ok("ok".to_string()))]),
         full_sync: false,
         temp_id_mapping: HashMap::from([(Uuid::new_v4().to_string(), new_project_id.to_string())]),
-        sync_token: "sync token".to_string(),
+        sync_token: SyncToken("sync token".to_string()),
     };
 
     mock_todoist_sync_service(
@@ -161,7 +162,7 @@ pub fn mock_todoist_sync_service(
             sync_status: status,
             full_sync: false,
             temp_id_mapping: HashMap::new(),
-            sync_token: "sync token".to_string(),
+            sync_token: SyncToken("sync token".to_string()),
         }
     });
 
@@ -180,11 +181,17 @@ pub fn mock_todoist_sync_resources_service<'a>(
     todoist_mock_server: &'a MockServer,
     resource_name: &str,
     result: &TodoistSyncResponse,
+    sync_token: Option<SyncToken>,
 ) -> Mock<'a> {
     todoist_mock_server.mock(|when, then| {
         when.method(POST)
             .path("/sync")
-            .json_body(json!({ "sync_token": "*", "resource_types": [resource_name] }))
+            .json_body(json!({
+                "sync_token": sync_token
+                    .map(|sync_token| sync_token.0)
+                    .unwrap_or_else(|| "*".to_string()),
+                "resource_types": [resource_name]
+            }))
             .header("authorization", "Bearer todoist_test_access_token");
         then.status(200)
             .header("content-type", "application/json")

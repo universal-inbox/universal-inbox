@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use sqlx::{Postgres, Transaction};
 
 use universal_inbox::{
     notification::NotificationSource,
@@ -7,8 +8,7 @@ use universal_inbox::{
 };
 
 use crate::{
-    integrations::{oauth2::AccessToken, todoist::TodoistSyncStatusResponse},
-    universal_inbox::UniversalInboxError,
+    integrations::todoist::TodoistSyncStatusResponse, universal_inbox::UniversalInboxError,
 };
 
 static APP_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
@@ -22,19 +22,22 @@ pub mod notification {
 
     #[async_trait]
     pub trait NotificationSourceService<T>: NotificationSource {
-        async fn fetch_all_notifications(
+        async fn fetch_all_notifications<'a>(
             &self,
-            access_token: &AccessToken,
+            executor: &mut Transaction<'a, Postgres>,
+            user_id: UserId,
         ) -> Result<Vec<T>, UniversalInboxError>;
-        async fn delete_notification_from_source(
+        async fn delete_notification_from_source<'a>(
             &self,
+            executor: &mut Transaction<'a, Postgres>,
             source_id: &str,
-            access_token: &AccessToken,
+            user_id: UserId,
         ) -> Result<(), UniversalInboxError>;
-        async fn unsubscribe_notification_from_source(
+        async fn unsubscribe_notification_from_source<'a>(
             &self,
+            executor: &mut Transaction<'a, Postgres>,
             source_id: &str,
-            access_token: &AccessToken,
+            user_id: UserId,
         ) -> Result<(), UniversalInboxError>;
     }
 }
@@ -44,41 +47,47 @@ pub mod task {
 
     #[async_trait]
     pub trait TaskSourceService<T>: TaskSource {
-        async fn fetch_all_tasks(
+        async fn fetch_all_tasks<'a>(
             &self,
-            access_token: &AccessToken,
+            executor: &mut Transaction<'a, Postgres>,
+            user_id: UserId,
         ) -> Result<Vec<T>, UniversalInboxError>;
-        async fn fetch_task(
+        async fn fetch_task<'a>(
             &self,
+            executor: &mut Transaction<'a, Postgres>,
             source_id: &str,
-            access_token: &AccessToken,
+            user_id: UserId,
         ) -> Result<Option<T>, UniversalInboxError>;
-        async fn build_task(
+        async fn build_task<'a>(
             &self,
+            executor: &mut Transaction<'a, Postgres>,
             source: &T,
             user_id: UserId,
-            access_token: &AccessToken,
         ) -> Result<Box<Task>, UniversalInboxError>;
-        async fn create_task(
+        async fn create_task<'a>(
             &self,
+            executor: &mut Transaction<'a, Postgres>,
             task: &TaskCreation,
-            access_token: &AccessToken,
+            user_id: UserId,
         ) -> Result<T, UniversalInboxError>;
-        async fn delete_task(
+        async fn delete_task<'a>(
             &self,
+            executor: &mut Transaction<'a, Postgres>,
             source_id: &str,
-            access_token: &AccessToken,
+            user_id: UserId,
         ) -> Result<TodoistSyncStatusResponse, UniversalInboxError>;
-        async fn complete_task(
+        async fn complete_task<'a>(
             &self,
+            executor: &mut Transaction<'a, Postgres>,
             source_id: &str,
-            access_token: &AccessToken,
+            user_id: UserId,
         ) -> Result<TodoistSyncStatusResponse, UniversalInboxError>;
-        async fn update_task(
+        async fn update_task<'a>(
             &self,
+            executor: &mut Transaction<'a, Postgres>,
             id: &str,
             patch: &TaskPatch,
-            access_token: &AccessToken,
+            user_id: UserId,
         ) -> Result<Option<TodoistSyncStatusResponse>, UniversalInboxError>;
     }
 }

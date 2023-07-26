@@ -20,6 +20,35 @@ pub struct IntegrationConnection {
     pub updated_at: DateTime<Utc>,
     pub last_sync_started_at: Option<DateTime<Utc>>,
     pub last_sync_failure_message: Option<String>,
+    pub context: Option<IntegrationConnectionContext>,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Hash)]
+#[serde(transparent)]
+pub struct SyncToken(pub String);
+
+impl fmt::Display for SyncToken {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<SyncToken> for String {
+    fn from(sync_token: SyncToken) -> Self {
+        sync_token.0
+    }
+}
+
+impl From<String> for SyncToken {
+    fn from(sync_token: String) -> Self {
+        Self(sync_token)
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
+#[serde(tag = "type", content = "content")]
+pub enum IntegrationConnectionContext {
+    Todoist { items_sync_token: SyncToken },
 }
 
 impl IntegrationConnection {
@@ -35,6 +64,7 @@ impl IntegrationConnection {
             updated_at: Utc::now().with_nanosecond(0).unwrap(),
             last_sync_started_at: None,
             last_sync_failure_message: None,
+            context: None,
         }
     }
 

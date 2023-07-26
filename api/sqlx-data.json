@@ -391,6 +391,208 @@
     },
     "query": "\n                UPDATE\n                  notification\n                SET\n                  status = $1::notification_status\n                WHERE\n                  NOT source_id = ANY($2)\n                  AND kind = $3\n                  AND (status::TEXT = 'Read' OR status::TEXT = 'Unread')\n                RETURNING\n                  id,\n                  title,\n                  status as \"status: _\",\n                  source_id,\n                  source_html_url,\n                  metadata as \"metadata: Json<NotificationMetadata>\",\n                  updated_at,\n                  last_read_at,\n                  snoozed_until,\n                  user_id,\n                  task_id\n            "
   },
+  "5c13ca0273a37f3fb5657dce55ab97b2dc72dd72294e1cd3583af5f259645122": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "user_id",
+          "ordinal": 1,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "connection_id",
+          "ordinal": 2,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "provider_kind: _",
+          "ordinal": 3,
+          "type_info": {
+            "Custom": {
+              "kind": {
+                "Enum": [
+                  "Github",
+                  "Todoist"
+                ]
+              },
+              "name": "integration_provider_kind"
+            }
+          }
+        },
+        {
+          "name": "status: _",
+          "ordinal": 4,
+          "type_info": {
+            "Custom": {
+              "kind": {
+                "Enum": [
+                  "Created",
+                  "Validated",
+                  "Failing"
+                ]
+              },
+              "name": "integration_connection_status"
+            }
+          }
+        },
+        {
+          "name": "failure_message",
+          "ordinal": 5,
+          "type_info": "Text"
+        },
+        {
+          "name": "created_at",
+          "ordinal": 6,
+          "type_info": "Timestamp"
+        },
+        {
+          "name": "updated_at",
+          "ordinal": 7,
+          "type_info": "Timestamp"
+        },
+        {
+          "name": "last_sync_started_at",
+          "ordinal": 8,
+          "type_info": "Timestamp"
+        },
+        {
+          "name": "last_sync_failure_message",
+          "ordinal": 9,
+          "type_info": "Text"
+        },
+        {
+          "name": "context: Json<IntegrationConnectionContext>",
+          "ordinal": 10,
+          "type_info": "Json"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        false,
+        false,
+        true,
+        true,
+        true
+      ],
+      "parameters": {
+        "Left": [
+          "Uuid"
+        ]
+      }
+    },
+    "query": "\n                SELECT\n                  id,\n                  user_id,\n                  connection_id,\n                  provider_kind as \"provider_kind: _\",\n                  status as \"status: _\",\n                  failure_message,\n                  created_at,\n                  updated_at,\n                  last_sync_started_at,\n                  last_sync_failure_message,\n                  context as \"context: Json<IntegrationConnectionContext>\"\n                FROM integration_connection\n                WHERE id = $1\n            "
+  },
+  "60bfde738140158fd8e36206a57bc315f9a528bde54eb5873d31526d20ca8019": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "user_id",
+          "ordinal": 1,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "connection_id",
+          "ordinal": 2,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "provider_kind: _",
+          "ordinal": 3,
+          "type_info": {
+            "Custom": {
+              "kind": {
+                "Enum": [
+                  "Github",
+                  "Todoist"
+                ]
+              },
+              "name": "integration_provider_kind"
+            }
+          }
+        },
+        {
+          "name": "status: _",
+          "ordinal": 4,
+          "type_info": {
+            "Custom": {
+              "kind": {
+                "Enum": [
+                  "Created",
+                  "Validated",
+                  "Failing"
+                ]
+              },
+              "name": "integration_connection_status"
+            }
+          }
+        },
+        {
+          "name": "failure_message",
+          "ordinal": 5,
+          "type_info": "Text"
+        },
+        {
+          "name": "created_at",
+          "ordinal": 6,
+          "type_info": "Timestamp"
+        },
+        {
+          "name": "updated_at",
+          "ordinal": 7,
+          "type_info": "Timestamp"
+        },
+        {
+          "name": "last_sync_started_at",
+          "ordinal": 8,
+          "type_info": "Timestamp"
+        },
+        {
+          "name": "last_sync_failure_message",
+          "ordinal": 9,
+          "type_info": "Text"
+        },
+        {
+          "name": "context: Json<IntegrationConnectionContext>",
+          "ordinal": 10,
+          "type_info": "Json"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        false,
+        false,
+        true,
+        true,
+        true
+      ],
+      "parameters": {
+        "Left": [
+          "Uuid"
+        ]
+      }
+    },
+    "query": "\n                SELECT\n                  id,\n                  user_id,\n                  connection_id,\n                  provider_kind as \"provider_kind: _\",\n                  status as \"status: _\",\n                  failure_message,\n                  created_at,\n                  updated_at,\n                  last_sync_started_at,\n                  last_sync_failure_message,\n                  context as \"context: Json<IntegrationConnectionContext>\"\n                FROM integration_connection\n                WHERE user_id = $1\n            "
+  },
   "67ac072e2efaf7d6bb79bbdc10a2ac4ebd904a7bd4d0ff635fb3578c00890a81": {
     "describe": {
       "columns": [
@@ -506,101 +708,6 @@
       }
     },
     "query": "\n                SELECT\n                  id,\n                  auth_user_id,\n                  auth_id_token,\n                  first_name,\n                  last_name,\n                  email,\n                  created_at,\n                  updated_at\n                FROM \"user\"\n                WHERE auth_user_id = $1\n            "
-  },
-  "916aeaeeb80e5052378e0fbc0657ee4a5d6497a70fec28025f0d2add76657deb": {
-    "describe": {
-      "columns": [
-        {
-          "name": "id",
-          "ordinal": 0,
-          "type_info": "Uuid"
-        },
-        {
-          "name": "user_id",
-          "ordinal": 1,
-          "type_info": "Uuid"
-        },
-        {
-          "name": "connection_id",
-          "ordinal": 2,
-          "type_info": "Uuid"
-        },
-        {
-          "name": "provider_kind: _",
-          "ordinal": 3,
-          "type_info": {
-            "Custom": {
-              "kind": {
-                "Enum": [
-                  "Github",
-                  "Todoist"
-                ]
-              },
-              "name": "integration_provider_kind"
-            }
-          }
-        },
-        {
-          "name": "status: _",
-          "ordinal": 4,
-          "type_info": {
-            "Custom": {
-              "kind": {
-                "Enum": [
-                  "Created",
-                  "Validated",
-                  "Failing"
-                ]
-              },
-              "name": "integration_connection_status"
-            }
-          }
-        },
-        {
-          "name": "failure_message",
-          "ordinal": 5,
-          "type_info": "Text"
-        },
-        {
-          "name": "created_at",
-          "ordinal": 6,
-          "type_info": "Timestamp"
-        },
-        {
-          "name": "updated_at",
-          "ordinal": 7,
-          "type_info": "Timestamp"
-        },
-        {
-          "name": "last_sync_started_at",
-          "ordinal": 8,
-          "type_info": "Timestamp"
-        },
-        {
-          "name": "last_sync_failure_message",
-          "ordinal": 9,
-          "type_info": "Text"
-        }
-      ],
-      "nullable": [
-        false,
-        false,
-        false,
-        false,
-        false,
-        true,
-        false,
-        false,
-        true,
-        true
-      ],
-      "parameters": {
-        "Left": [
-          "Uuid"
-        ]
-      }
-    },
-    "query": "\n                SELECT\n                  id,\n                  user_id,\n                  connection_id,\n                  provider_kind as \"provider_kind: _\",\n                  status as \"status: _\",\n                  failure_message,\n                  created_at,\n                  updated_at,\n                  last_sync_started_at,\n                  last_sync_failure_message\n                FROM integration_connection\n                WHERE user_id = $1\n            "
   },
   "b59b83dc26fe2569ee78c8b6d524f11e3095f1d6659bb595e97816129b5a2a7b": {
     "describe": {
@@ -907,101 +1014,6 @@
       }
     },
     "query": "\n                SELECT\n                  id,\n                  source_id,\n                  title,\n                  body,\n                  status as \"status: _\",\n                  completed_at,\n                  priority,\n                  due_at as \"due_at: Json<Option<DueDate>>\",\n                  source_html_url,\n                  tags,\n                  parent_id,\n                  project,\n                  is_recurring,\n                  created_at,\n                  metadata as \"metadata: Json<TaskMetadata>\",\n                  user_id\n                FROM task\n                WHERE id = any($1)\n            "
-  },
-  "f443067769534efeb6a36012e0d1df31c77f7dad675d9ce12ccd58a5b0b2bfe3": {
-    "describe": {
-      "columns": [
-        {
-          "name": "id",
-          "ordinal": 0,
-          "type_info": "Uuid"
-        },
-        {
-          "name": "user_id",
-          "ordinal": 1,
-          "type_info": "Uuid"
-        },
-        {
-          "name": "connection_id",
-          "ordinal": 2,
-          "type_info": "Uuid"
-        },
-        {
-          "name": "provider_kind: _",
-          "ordinal": 3,
-          "type_info": {
-            "Custom": {
-              "kind": {
-                "Enum": [
-                  "Github",
-                  "Todoist"
-                ]
-              },
-              "name": "integration_provider_kind"
-            }
-          }
-        },
-        {
-          "name": "status: _",
-          "ordinal": 4,
-          "type_info": {
-            "Custom": {
-              "kind": {
-                "Enum": [
-                  "Created",
-                  "Validated",
-                  "Failing"
-                ]
-              },
-              "name": "integration_connection_status"
-            }
-          }
-        },
-        {
-          "name": "failure_message",
-          "ordinal": 5,
-          "type_info": "Text"
-        },
-        {
-          "name": "created_at",
-          "ordinal": 6,
-          "type_info": "Timestamp"
-        },
-        {
-          "name": "updated_at",
-          "ordinal": 7,
-          "type_info": "Timestamp"
-        },
-        {
-          "name": "last_sync_started_at",
-          "ordinal": 8,
-          "type_info": "Timestamp"
-        },
-        {
-          "name": "last_sync_failure_message",
-          "ordinal": 9,
-          "type_info": "Text"
-        }
-      ],
-      "nullable": [
-        false,
-        false,
-        false,
-        false,
-        false,
-        true,
-        false,
-        false,
-        true,
-        true
-      ],
-      "parameters": {
-        "Left": [
-          "Uuid"
-        ]
-      }
-    },
-    "query": "\n                SELECT\n                  id,\n                  user_id,\n                  connection_id,\n                  provider_kind as \"provider_kind: _\",\n                  status as \"status: _\",\n                  failure_message,\n                  created_at,\n                  updated_at,\n                  last_sync_started_at,\n                  last_sync_failure_message\n                FROM integration_connection\n                WHERE id = $1\n            "
   },
   "f83bbfe0e636a92aa16d0a59f046c8d47c54d7fcabb8d73840cfe6c15753bfdc": {
     "describe": {
