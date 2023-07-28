@@ -11,7 +11,8 @@ use tracing::{error, info};
 
 use universal_inbox::{
     task::{
-        service::SyncTasksParameters, service::TaskPatch, Task, TaskId, TaskStatus, TaskSummary,
+        service::SyncTasksParameters, service::TaskPatch, ProjectSummary, Task, TaskId, TaskStatus,
+        TaskSummary,
     },
     user::UserId,
 };
@@ -37,6 +38,7 @@ pub fn scope() -> Scope {
                 .route(web::patch().to(patch_task))
                 .route(web::method(http::Method::OPTIONS).to(option_wildcard)),
         )
+        .service(web::scope("/projects").route("/search", web::get().to(search_projects)))
 }
 
 #[derive(Debug, Deserialize)]
@@ -275,4 +277,34 @@ pub async fn patch_task(
                 json!({ "message": format!("Cannot update unknown task {task_id}") }).to_string(),
             ))),
     }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SearchProjectRequest {
+    matches: String,
+}
+
+pub async fn search_projects(
+    search_project_request: web::Query<SearchProjectRequest>,
+    task_service: web::Data<Arc<RwLock<TaskService>>>,
+    identity: Identity,
+) -> Result<HttpResponse, UniversalInboxError> {
+    let user_id = identity
+        .id()
+        .context("No user ID found in identity")?
+        .parse::<UserId>()
+        .context("User ID has wrong format")?;
+
+    let service = task_service.read().await;
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while listing tasks")?;
+    let tasks: Vec<ProjectSummary> = service
+        .search_projects(&mut transaction, &search_project_request.matches, user_id)
+        .await?;
+
+    Ok(HttpResponse::Ok()
+        .content_type("application/json")
+        .body(serde_json::to_string(&tasks).context("Cannot serialize task projects")?))
 }

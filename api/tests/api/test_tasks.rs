@@ -5,25 +5,35 @@ use serde_json::json;
 use uuid::Uuid;
 
 use universal_inbox::{
+    integration_connection::IntegrationProviderKind,
     notification::{NotificationStatus, NotificationWithTask},
     task::{
-        integrations::todoist::TodoistItem, service::TaskPatch, Task, TaskMetadata, TaskPriority,
-        TaskStatus,
+        integrations::todoist::TodoistItem, service::TaskPatch, ProjectSummary, Task, TaskMetadata,
+        TaskPriority, TaskStatus,
     },
 };
 
-use universal_inbox_api::universal_inbox::task::TaskCreationResult;
+use universal_inbox_api::{
+    configuration::Settings,
+    integrations::{oauth2::NangoConnection, todoist::TodoistSyncResponse},
+    universal_inbox::task::TaskCreationResult,
+};
 
 use crate::helpers::{
     auth::{authenticate_user, authenticated_app, AuthenticatedApp},
+    integration_connection::{create_and_mock_integration_connection, nango_todoist_connection},
     notification::list_notifications_with_tasks,
     rest::{
         create_resource, create_resource_response, get_resource, get_resource_response,
         patch_resource_response,
     },
+    settings,
     task::{
-        list_tasks,
-        todoist::{create_task_from_todoist_item, todoist_item},
+        list_tasks, search_projects,
+        todoist::{
+            create_task_from_todoist_item, mock_todoist_sync_resources_service,
+            sync_todoist_projects_response, todoist_item,
+        },
     },
     tested_app, TestedApp,
 };
@@ -631,5 +641,70 @@ mod search_tasks {
         let result = search_tasks(&client, &app.app_address, "Task").await;
 
         assert_eq!(result.len(), 0);
+    }
+}
+
+mod search_projects {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_search_projects(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        sync_todoist_projects_response: TodoistSyncResponse,
+        nango_todoist_connection: Box<NangoConnection>,
+    ) {
+        let app = authenticated_app.await;
+        create_and_mock_integration_connection(
+            &app,
+            IntegrationProviderKind::Todoist,
+            &settings,
+            nango_todoist_connection,
+        )
+        .await;
+        let todoist_projects_mock = mock_todoist_sync_resources_service(
+            &app.todoist_mock_server,
+            "projects",
+            &sync_todoist_projects_response,
+            None,
+        );
+
+        let projects = search_projects(&app.client, &app.app_address, "in").await;
+
+        assert_eq!(projects.len(), 1);
+        assert_eq!(
+            projects[0],
+            ProjectSummary {
+                source_id: "1111".to_string(),
+                name: "Inbox".to_string()
+            }
+        );
+        let projects = search_projects(&app.client, &app.app_address, "box").await;
+
+        assert_eq!(projects.len(), 1);
+        assert_eq!(
+            projects[0],
+            ProjectSummary {
+                source_id: "1111".to_string(),
+                name: "Inbox".to_string()
+            }
+        );
+
+        let projects = search_projects(&app.client, &app.app_address, "jec").await;
+
+        assert_eq!(projects.len(), 1);
+        assert_eq!(
+            projects[0],
+            ProjectSummary {
+                source_id: "2222".to_string(),
+                name: "Project2".to_string()
+            }
+        );
+
+        todoist_projects_mock.assert();
+        // Todoist API calls should have been cached
+        todoist_projects_mock.assert_hits(1);
     }
 }

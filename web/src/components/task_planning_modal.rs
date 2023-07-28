@@ -1,24 +1,38 @@
 use std::collections::HashMap;
 
+use anyhow::Result;
 use dioxus::prelude::*;
 use dioxus_free_icons::{icons::bs_icons::BsX, Icon};
+use fermi::UseAtomRef;
+use gloo_timers::future::TimeoutFuture;
+use http::Method;
+use log::error;
+use url::Url;
 
 use universal_inbox::{
     notification::NotificationWithTask,
-    task::{DueDate, TaskCreation, TaskId, TaskPlanning, TaskPriority, TaskProject},
+    task::{DueDate, ProjectSummary, TaskCreation, TaskId, TaskPlanning, TaskPriority},
 };
 
-use crate::components::{
-    floating_label_inputs::{
-        floating_label_input_date, floating_label_input_text, floating_label_select,
+use crate::{
+    components::{
+        floating_label_inputs::{
+            floating_label_input_date, floating_label_input_search_select,
+            floating_label_input_text, floating_label_select, Searchable,
+        },
+        icons::todoist,
     },
-    icons::todoist,
+    model::UniversalInboxUIModel,
+    services::api::call_api,
+    utils::focus_element,
 };
 
 #[inline_props]
 pub fn task_planning_modal<'a>(
     cx: Scope,
+    api_base_url: Url,
     notification_to_plan: NotificationWithTask,
+    ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
     on_close: EventHandler<'a, ()>,
     on_task_planning: EventHandler<'a, (TaskPlanning, TaskId)>,
     on_task_creation: EventHandler<'a, TaskCreation>,
@@ -54,6 +68,23 @@ pub fn task_planning_modal<'a>(
 
     let force_validation = use_state(cx, || false);
 
+    let selected_project: &UseState<Option<ProjectSummary>> = use_state(cx, || None);
+    let search_expression = use_state(cx, || "".to_string());
+    let search_results: &UseState<Vec<ProjectSummary>> = use_state(cx, Vec::new);
+
+    use_future(cx, &search_expression.clone(), |search_expression| {
+        to_owned![search_results];
+        to_owned![api_base_url];
+        to_owned![ui_model_ref];
+
+        async move {
+            TimeoutFuture::new(500).await;
+            search_results.set(
+                search_projects(&api_base_url, &search_expression.current(), ui_model_ref).await,
+            );
+        }
+    });
+
     cx.render(rsx!(
         dialog {
             id: "task-planning-modal",
@@ -84,10 +115,14 @@ pub fn task_planning_modal<'a>(
                         method: "dialog",
                         onsubmit: |evt| {
                             if let Some(ref task) = *task_to_plan.current() {
-                                if let Some(task_planning_parameters) = validate_planning_form(&evt.data.values) {
+                                if let Some(task_planning_parameters) = validate_planning_form(
+                                    &evt.data.values, &selected_project.current()
+                                ) {
                                     on_task_planning.call((task_planning_parameters, task.id));
                                 }
-                            } else if let Some(task_creation_parameters) = validate_creation_form(&evt.data.values) {
+                            } else if let Some(task_creation_parameters) = validate_creation_form(
+                                &evt.data.values, &selected_project.current()
+                            ) {
                                 on_task_creation.call(task_creation_parameters);
                             }
                         },
@@ -113,13 +148,22 @@ pub fn task_planning_modal<'a>(
                             }
                         }
 
-                        floating_label_input_text::<TaskProject> {
-                            name: "task-project-input".to_string(),
+                        floating_label_input_search_select {
+                            name: "project-search-input".to_string(),
                             label: "Project".to_string(),
                             required: true,
-                            value: project.clone(),
-                            autofocus: task_to_plan.current().is_some(),
-                            force_validation: *force_validation.current(),
+                            value: selected_project.clone(),
+                            search_expression: search_expression.clone(),
+                            search_results: search_results.clone(),
+                            on_select: move |_project| {
+                                cx.spawn({
+                                    async move {
+                                        if let Err(error) = focus_element("task-planning-modal-submit").await {
+                                            error!("Error focusing element task-planning-modal-submit: {error:?}");
+                                        }
+                                    }
+                                });
+                            },
                         }
 
                         floating_label_input_date::<DueDate> {
@@ -141,6 +185,7 @@ pub fn task_planning_modal<'a>(
                         div {
                             class: "modal-action",
                             button {
+                                id: "task-planning-modal-submit",
                                 "type": "submit",
                                 class: "btn btn-primary w-full",
                                 "Plan"
@@ -153,8 +198,10 @@ pub fn task_planning_modal<'a>(
     ))
 }
 
-fn validate_planning_form(values: &HashMap<String, String>) -> Option<TaskPlanning> {
-    let project = values["task-project-input"].parse::<TaskProject>();
+fn validate_planning_form(
+    values: &HashMap<String, String>,
+    selected_project: &Option<ProjectSummary>,
+) -> Option<TaskPlanning> {
     let due_at = if values["task-due_at-input"].is_empty() {
         Ok(None)
     } else {
@@ -162,9 +209,9 @@ fn validate_planning_form(values: &HashMap<String, String>) -> Option<TaskPlanni
     };
     let priority = values["task-priority-input"].parse::<TaskPriority>();
 
-    if let (Ok(project), Ok(due_at), Ok(priority)) = (project, due_at, priority) {
+    if let (Some(project), Ok(due_at), Ok(priority)) = (selected_project, due_at, priority) {
         return Some(TaskPlanning {
-            project,
+            project: project.clone(),
             due_at,
             priority,
         });
@@ -173,8 +220,11 @@ fn validate_planning_form(values: &HashMap<String, String>) -> Option<TaskPlanni
     None
 }
 
-fn validate_creation_form(values: &HashMap<String, String>) -> Option<TaskCreation> {
-    if let Some(task_planning_parameters) = validate_planning_form(values) {
+fn validate_creation_form(
+    values: &HashMap<String, String>,
+    selected_project: &Option<ProjectSummary>,
+) -> Option<TaskCreation> {
+    if let Some(task_planning_parameters) = validate_planning_form(values, selected_project) {
         let title = values["task-title-input"].parse::<String>();
 
         if let Ok(title) = title {
@@ -189,4 +239,37 @@ fn validate_creation_form(values: &HashMap<String, String>) -> Option<TaskCreati
     }
 
     None
+}
+
+async fn search_projects(
+    api_base_url: &Url,
+    search: &str,
+    ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
+) -> Vec<ProjectSummary> {
+    let search_result: Result<Vec<ProjectSummary>> = call_api(
+        Method::GET,
+        api_base_url,
+        &format!("tasks/projects/search?matches={search}"),
+        None::<i32>,
+        Some(ui_model_ref),
+    )
+    .await;
+
+    match search_result {
+        Ok(projects) => projects.into_iter().filter(|p| p.name != "Inbox").collect(),
+        Err(error) => {
+            error!("Error searching projects: {error:?}");
+            Vec::new()
+        }
+    }
+}
+
+impl Searchable for ProjectSummary {
+    fn get_title(&self) -> String {
+        self.name.clone()
+    }
+
+    fn get_id(&self) -> String {
+        self.source_id.clone()
+    }
 }

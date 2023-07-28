@@ -5280,6 +5280,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_repr",
+ "serde_urlencoded",
  "serde_with 2.3.2",
  "url 2.3.1",
  "uuid",

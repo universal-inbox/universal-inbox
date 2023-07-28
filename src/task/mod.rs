@@ -1,5 +1,5 @@
 use std::{
-    fmt::{self, Display, Formatter},
+    fmt::{self, Display},
     str::FromStr,
 };
 
@@ -65,6 +65,19 @@ pub struct TaskSummary {
 impl fmt::Display for TaskSummary {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.title)
+    }
+}
+
+#[serde_as]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
+pub struct ProjectSummary {
+    pub source_id: String,
+    pub name: String,
+}
+
+impl fmt::Display for ProjectSummary {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.name)
     }
 }
 
@@ -167,49 +180,20 @@ macro_attr! {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Default, PartialEq, Eq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct TaskCreation {
     pub title: String,
     pub body: Option<String>,
-    pub project: TaskProject,
+    pub project: ProjectSummary,
     pub due_at: Option<DueDate>,
     pub priority: TaskPriority,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct TaskPlanning {
-    pub project: TaskProject,
+    pub project: ProjectSummary,
     pub due_at: Option<DueDate>,
     pub priority: TaskPriority,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-pub struct TaskProject(String);
-
-impl Display for TaskProject {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl FromStr for TaskProject {
-    type Err = String;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        if value.is_empty() {
-            Err("Task's project is required".to_string())
-        } else if value == "Inbox" {
-            Err("Task's project must be moved out of the inbox".to_string())
-        } else {
-            Ok(TaskProject(value.to_string()))
-        }
-    }
-}
-
-impl Default for TaskProject {
-    fn default() -> Self {
-        TaskProject("Inbox".to_string())
-    }
 }
 
 #[derive(

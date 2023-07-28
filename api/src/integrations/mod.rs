@@ -43,6 +43,8 @@ pub mod notification {
 }
 
 pub mod task {
+    use universal_inbox::task::ProjectSummary;
+
     use super::*;
 
     #[async_trait]
@@ -89,5 +91,11 @@ pub mod task {
             patch: &TaskPatch,
             user_id: UserId,
         ) -> Result<Option<TodoistSyncStatusResponse>, UniversalInboxError>;
+        async fn search_projects<'a, 'b>(
+            &self,
+            executor: &mut Transaction<'a, Postgres>,
+            matches: &'b str,
+            user_id: UserId,
+        ) -> Result<Vec<ProjectSummary>, UniversalInboxError>;
     }
 }

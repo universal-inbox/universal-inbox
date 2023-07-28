@@ -20,6 +20,8 @@ use crate::{
     utils::focus_element,
 };
 
+use super::floating_label_inputs::Searchable;
+
 #[inline_props]
 pub fn task_link_modal<'a>(
     cx: Scope,
@@ -118,6 +120,11 @@ pub fn task_link_modal<'a>(
                                     }
                                 });
                             },
+
+                            div {
+                                class: "block py-2 px-4 bg-transparent border-0 border-b-2",
+                                self::todoist { class: "h-5 w-5" }
+                            }
                         }
 
                         div {
@@ -157,5 +164,15 @@ async fn search_tasks(
             error!("Error searching tasks: {error:?}");
             Vec::new()
         }
+    }
+}
+
+impl Searchable for TaskSummary {
+    fn get_title(&self) -> String {
+        self.title.clone()
+    }
+
+    fn get_id(&self) -> String {
+        self.id.to_string()
     }
 }
