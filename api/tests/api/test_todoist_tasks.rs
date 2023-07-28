@@ -11,7 +11,7 @@ use universal_inbox::{
     task::{
         integrations::todoist::{TodoistItem, TodoistItemDue, TodoistItemPriority},
         service::TaskPatch,
-        DueDate, Task, TaskCreation, TaskPriority, TaskProject, TaskStatus,
+        DueDate, ProjectSummary, Task, TaskCreation, TaskPriority, TaskStatus,
     },
 };
 
@@ -375,7 +375,10 @@ mod patch_task {
             &TaskCreation {
                 title: todoist_item.content.clone(),
                 body,
-                project: project.parse::<TaskProject>().unwrap(),
+                project: ProjectSummary {
+                    source_id: "2222".to_string(),
+                    name: "Project2".to_string(),
+                },
                 due_at,
                 priority: todoist_item.priority.into(),
             },

@@ -11,6 +11,7 @@ use async_trait::async_trait;
 use cached::proc_macro::cached;
 use format_serde_error::SerdeError;
 use http::{HeaderMap, HeaderValue, StatusCode};
+use regex::RegexBuilder;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::{Postgres, Transaction};
@@ -27,7 +28,7 @@ use universal_inbox::{
             self, TodoistItem, TodoistItemDue, TodoistItemPriority, TodoistProject,
         },
         service::TaskPatch,
-        Task, TaskCreation, TaskMetadata, TaskSource, TaskSourceKind, TaskStatus,
+        ProjectSummary, Task, TaskCreation, TaskMetadata, TaskSource, TaskSourceKind, TaskStatus,
     },
     user::UserId,
 };
@@ -515,9 +516,6 @@ impl TaskSourceService<TodoistItem> for TodoistService {
             .find_access_token(executor, IntegrationProviderKind::Todoist, None, user_id)
             .await?
             .ok_or_else(|| anyhow!("Cannot create a Todoist task without an access token"))?;
-        let project_id = self
-            .get_or_create_project_id(&task.project.to_string(), &access_token)
-            .await?;
         let sync_result = self
             .send_sync_commands(
                 vec![TodoistSyncCommand::ItemAdd {
@@ -526,7 +524,7 @@ impl TaskSourceService<TodoistItem> for TodoistService {
                     args: TodoistSyncCommandItemAddArgs {
                         content: task.title.clone(),
                         description: task.body.clone(),
-                        project_id,
+                        project_id: task.project.source_id.clone(),
                         due: task.due_at.as_ref().map(|due| due.into()),
                         priority: task.priority.into(),
                     },
@@ -656,6 +654,40 @@ impl TaskSourceService<TodoistItem> for TodoistService {
                 self.send_sync_commands(commands, &access_token).await?,
             ))
         }
+    }
+
+    #[tracing::instrument(level = "debug", skip(self), err)]
+    async fn search_projects<'a, 'b>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        matches: &'b str,
+        user_id: UserId,
+    ) -> Result<Vec<ProjectSummary>, UniversalInboxError> {
+        let (access_token, _) = self
+            .integration_connection_service
+            .read()
+            .await
+            .find_access_token(executor, IntegrationProviderKind::Todoist, None, user_id)
+            .await?
+            .ok_or_else(|| anyhow!("Cannot search Todoist projects without an access token"))?;
+
+        let projects = self.fetch_all_projects(&access_token, None).await?;
+        let search_regex = RegexBuilder::new(matches)
+            .case_insensitive(true)
+            .size_limit(100_000)
+            .build()
+            .context(format!(
+                "Failed to build regular expression from `{matches}`"
+            ))?;
+
+        Ok(projects
+            .into_iter()
+            .filter(|todoist_project| search_regex.is_match(&todoist_project.name))
+            .map(|todoist_project| ProjectSummary {
+                source_id: todoist_project.id,
+                name: todoist_project.name,
+            })
+            .collect())
     }
 }
 

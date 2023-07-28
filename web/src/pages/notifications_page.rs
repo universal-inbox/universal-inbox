@@ -91,7 +91,9 @@ pub fn notifications_page(cx: Scope) -> Element {
             notification_to_plan.as_ref().map(|notification_to_plan| {
                 rsx!{
                     task_planning_modal {
+                        api_base_url: api_base_url.clone(),
                         notification_to_plan: notification_to_plan.clone(),
+                        ui_model_ref: ui_model_ref.clone(),
                         on_close: |_| { ui_model_ref.write().task_planning_modal_opened = false; },
                         on_task_planning: |(params, task_id)| {
                             ui_model_ref.write().task_planning_modal_opened = false;

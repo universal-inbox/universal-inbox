@@ -277,8 +277,9 @@ mod tests {
             mut github_notification: Box<GithubNotification>,
         ) {
             github_notification.subject.r#type = "Discussion".to_string();
+            github_notification.subject.title = "Test with spaces".to_string();
             let expected_url: Uri =
-                "https://github.com/octocat/Hello-World/discussions?discussions_q=Greetings"
+                "https://github.com/octocat/Hello-World/discussions?discussions_q=Test+with+spaces"
                     .parse()
                     .unwrap();
             let notification = Notification {

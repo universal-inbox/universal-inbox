@@ -1,12 +1,13 @@
-use log::error;
 use std::{fmt::Display, marker::PhantomData, str::FromStr};
 
 use dioxus::{html::input_data::keyboard_types::Key, prelude::*};
 use dioxus_free_icons::{icons::bs_icons::BsSearch, Icon};
+use log::error;
+use wasm_bindgen::{prelude::Closure, JsCast};
+use web_sys::KeyboardEvent;
 
-use universal_inbox::task::TaskSummary;
-
-use crate::{components::icons::todoist, utils::focus_and_select_input_element};
+use crate::utils::focus_and_select_input_element;
+use crate::utils::get_element_by_id;
 
 #[derive(PartialEq, Props)]
 pub struct InputProps<T: 'static> {
@@ -41,7 +42,7 @@ where
         error_message
             .as_ref()
             .and(Some(INPUT_INVALID_STYLE))
-            .unwrap_or_default()
+            .unwrap_or("border-base-200 focus:border-primary")
     });
     let label_style = use_memo(cx, &(error_message.clone(),), |(error_message,)| {
         error_message
@@ -144,7 +145,7 @@ where
                 error_message
                     .as_ref()
                     .and(Some(INPUT_INVALID_STYLE))
-                    .unwrap_or_default()
+                    .unwrap_or("border-base-200 focus:border-primary")
             )
         },
     );
@@ -207,7 +208,7 @@ where
         error_message
             .as_ref()
             .and(Some(INPUT_INVALID_STYLE))
-            .unwrap_or_default()
+            .unwrap_or("border-base-200 focus:border-primary")
     });
     let label_style = use_memo(cx, &(error_message.clone(),), |(error_message,)| {
         error_message
@@ -261,29 +262,58 @@ where
     ))
 }
 
-#[derive(Props)]
-pub struct InputSearchProps<'a> {
-    name: String,
-    label: String,
-    value: UseState<Option<TaskSummary>>,
-    search_expression: UseState<String>,
-    search_results: UseState<Vec<TaskSummary>>,
-    #[props(default)]
-    autofocus: Option<bool>,
-    on_select: EventHandler<'a, TaskSummary>,
+pub trait Searchable {
+    // Returns a string to be used to render the searchable object
+    fn get_title(&self) -> String;
+    // Returns a unique identifier of the searchable object
+    fn get_id(&self) -> String;
 }
 
-pub fn floating_label_input_search_select<'a>(cx: Scope<'a, InputSearchProps<'a>>) -> Element<'a> {
-    let icon = cx.render(rsx!(self::todoist { class: "h-5 w-5" }));
-    let dropdown_opened = use_state(cx, || false);
+#[derive(Props)]
+pub struct InputSearchProps<'a, T>
+where
+    T: Clone + Searchable + 'static,
+{
+    name: String,
+    label: String,
+    value: UseState<Option<T>>,
+    search_expression: UseState<String>,
+    search_results: UseState<Vec<T>>,
+    #[props(default)]
+    required: Option<bool>,
+    #[props(default)]
+    autofocus: Option<bool>,
+    on_select: EventHandler<'a, T>,
+    children: Element<'a>,
+}
 
-    let selected_task_title = use_memo(cx, &cx.props.value.clone(), |value| {
+pub fn floating_label_input_search_select<'a, T>(
+    cx: Scope<'a, InputSearchProps<'a, T>>,
+) -> Element<'a>
+where
+    T: Clone + Searchable + 'static,
+{
+    let dropdown_opened = use_state(cx, || false);
+    let required_label_style = cx
+        .props
+        .required
+        .unwrap_or_default()
+        .then_some("after:content-['*'] after:ml-0.5 after:text-error")
+        .unwrap_or_default();
+
+    let selected_index = use_state(cx, || 0);
+    use_memo(cx, (&cx.props.search_results,), |(_,)| {
+        selected_index.set(0)
+    });
+
+    let selected_result_title = use_memo(cx, &cx.props.value.clone(), |value| {
         (*value.current())
             .as_ref()
-            .map(|task| task.title.clone())
+            .map(|value| value.get_title())
             .unwrap_or_default()
     });
 
+    let error_message = use_state(cx, || None);
     let button_style = use_memo(
         cx,
         &(
@@ -307,6 +337,18 @@ pub fn floating_label_input_search_select<'a>(cx: Scope<'a, InputSearchProps<'a>
             }
         },
     );
+    let border_style = use_memo(cx, &(error_message.clone(),), |(error_message,)| {
+        error_message
+            .as_ref()
+            .and(Some(INPUT_INVALID_STYLE))
+            .unwrap_or("border-base-200 focus:border-primary")
+    });
+    let label_style = use_memo(cx, &(error_message.clone(),), |(error_message,)| {
+        error_message
+            .as_ref()
+            .and(Some(FLOATING_LABEL_INVALID_STYLE))
+            .unwrap_or_default()
+    });
 
     let dropdown_style = use_memo(
         cx,
@@ -340,6 +382,61 @@ pub fn floating_label_input_search_select<'a>(cx: Scope<'a, InputSearchProps<'a>
         },
     );
 
+    let select_result = |result: Option<T>| {
+        dropdown_opened.set(false);
+
+        match result {
+            Some(result) => {
+                error_message.set(None);
+                cx.props.value.set(Some(result.clone()));
+                cx.props.search_expression.set("".to_string());
+                cx.props.search_results.set(vec![]);
+                cx.props.on_select.call(result);
+            }
+            None => {
+                error_message.set(Some(format!("{} value required", cx.props.label)));
+            }
+        }
+    };
+
+    // Tricks to be able to prevent default Enter behavior as Dioxus does not yet support
+    // preventing an event conditionnaly (ie. in a handler).
+    // This creates a `keydown` event handler using the DOM API on the `search-list` and set the
+    // `select_value` flag to trigger the following `use_memo`.
+    // Indeed, it is not possible to do call `select_result` from the DOM event handler as it has a
+    // 'static lifetime where as `select_result` has a 'a lifetime.
+    let select_value = use_state(cx, || false);
+    use_future(cx, (), |()| {
+        to_owned![select_value];
+
+        async move {
+            let handler = Closure::wrap(Box::new(move |evt: KeyboardEvent| {
+                if &evt.key() == "Enter" {
+                    select_value.set(true);
+                    evt.prevent_default();
+                }
+            }) as Box<dyn FnMut(KeyboardEvent)>);
+
+            let search_list = get_element_by_id("search-list").unwrap();
+            search_list
+                .add_event_listener_with_callback("keydown", handler.as_ref().unchecked_ref())
+                .expect("Failed to add `keydown` event listener to search-list");
+            handler.forget();
+        }
+    });
+
+    use_memo(
+        cx,
+        &(select_value.clone(), cx.props.search_results.clone()),
+        |(select_value, search_results)| {
+            if *select_value.current() {
+                select_value.set(false);
+                let result = &search_results[*selected_index.current()];
+                select_result(Some(result.clone()));
+            }
+        },
+    );
+
     cx.render(rsx!(
         div {
             class: "dropdown bg-base-100 group",
@@ -348,16 +445,13 @@ pub fn floating_label_input_search_select<'a>(cx: Scope<'a, InputSearchProps<'a>
                 class: "input-group h-10 group",
                 tabindex: -1,
 
-                div {
-                    class: "block py-2 px-4 bg-transparent border-0 border-b-2",
-                    icon
-                }
+                &cx.props.children
+
                 button {
-                    tabindex: 1,
-                    id: "linked-task",
-                    name: "linked-task",
-                    class: "{button_style} grow truncate block bg-transparent text-left border-0 border-b-2 focus:outline-none focus:ring-0 peer",
-                    onclick: |_| {
+                    id: "selected-result",
+                    name: "selected-result",
+                    class: "{border_style} {button_style} grow truncate block bg-transparent text-left border-0 border-b-2 focus:outline-none focus:ring-0 peer",
+                    onfocus: |_| {
                         let value = !*dropdown_opened.current();
                         let id = cx.props.name.clone();
                         dropdown_opened.set(value);
@@ -370,22 +464,44 @@ pub fn floating_label_input_search_select<'a>(cx: Scope<'a, InputSearchProps<'a>
                         }
                     },
 
-                    "{selected_task_title}"
+                    "{selected_result_title}"
                 }
                 span {
-                    class: "block py-2 bg-transparent border-0 border-b-2",
+                    class: "{border_style} block py-2 bg-transparent border-0 border-b-2",
                     arrow_down { class: "h-5 w-5 group-hover:visible invisible" }
                 }
                 label {
-                    "for": "linked-task",
-                    class: "absolute duration-300 transform -translate-y-0 scale-100 top-2 z-10 origin-[0] peer-[.isnotempty]:scale-75 peer-[.isnotempty]:-translate-y-6 peer-[.issearching]:scale-75 peer-[.issearching]:-translate-y-6 peer-focus:scale-75 peer-focus:-translate-y-6",
+                    "for": "selected-result",
+                    class: "{label_style} {required_label_style} absolute duration-300 transform -translate-y-0 scale-100 top-2 z-10 origin-[0] peer-[.isnotempty]:scale-75 peer-[.isnotempty]:-translate-y-6 peer-[.issearching]:scale-75 peer-[.issearching]:-translate-y-6 peer-focus:scale-75 peer-focus:-translate-y-6",
                     "{cx.props.label}"
                 }
             }
+            self::error_message { message: error_message }
 
             ul {
+                id: "search-list",
                 tabindex: -1,
                 class: "{dropdown_style} group-focus:visible group-focus:opacity-100 w-full my-2 shadow-sm menu bg-base-200 divide-y rounded-box absolute z-50 ",
+                onkeydown: move |evt| {
+                    match evt.key() {
+                        Key::ArrowDown => {
+                            let value = *selected_index.current();
+                            if value < cx.props.search_results.len() - 1 {
+                                selected_index.set(value + 1);
+                            }
+                        }
+                        Key::ArrowUp => {
+                            let value = *selected_index.current();
+                            if value > 0 {
+                                selected_index.set(value - 1);
+                            }
+                        }
+                        Key::Tab => {
+                            select_result(None);
+                        }
+                        _ => {}
+                    }
+                },
 
                 li {
                     class: "w-full bg-base-400",
@@ -394,50 +510,29 @@ pub fn floating_label_input_search_select<'a>(cx: Scope<'a, InputSearchProps<'a>
                         "type": "text",
                         name: "{cx.props.name}",
                         id: "{cx.props.name}",
-                        class: "input bg-transparent w-full pl-12 focus:ring-0 focus:outline-none",
+                        class: "input bg-transparent w-full pl-12 focus:ring-0 focus:outline-none h-10",
                         placeholder: " ",
                         value: "{cx.props.search_expression}",
                         autocomplete: "off",
-                        tabindex: 2,
                         oninput: |evt| {
                             cx.props.search_expression.set(evt.value.clone());
                         },
                         autofocus: cx.props.autofocus.unwrap_or_default(),
                     }
                     Icon {
-                        class: "p-0 w-6 h-6 absolute my-3 ml-2 opacity-60 text-base-content",
+                        class: "p-0 w-6 h-6 absolute my-2 ml-2 opacity-60 text-base-content",
                         icon: BsSearch
                     }
 
                 }
 
-                cx.props.search_results.iter().enumerate().map(|(i, task)| {
-                    let select_task = || {
-                        dropdown_opened.set(false);
-                        cx.props.value.set(Some(task.clone()));
-                        cx.props.search_expression.set("".to_string());
-                        cx.props.search_results.set(vec![]);
-                        cx.props.on_select.call(task.clone());
-                    };
-
+                cx.props.search_results.iter().enumerate().map(|(i, result)| {
                     rsx!(
-
-                        li {
-                            class: "w-full",
-                            key: "{task.id}",
-                            tabindex: "{i + 3}",
-                            onclick: move |_| select_task(),
-                            onkeydown: move |evt| {
-                                if evt.key() == Key::Enter {
-                                    select_task();
-                                }
-                            },
-
-                            span {
-                                class: "w-full",
-
-                                p { class: "truncate", "{task.title}" }
-                            }
+                        search_result_row {
+                            key: "{result.get_id()}",
+                            title: "{result.get_title()}",
+                            selected: i == *selected_index.current(),
+                            on_select: move |_| { select_result(Some(result.clone())); },
                         }
                     )
                 })
@@ -483,13 +578,57 @@ pub fn error_message<'a>(cx: Scope, message: &'a UseState<Option<String>>) -> El
     })
 }
 
+#[inline_props]
+fn search_result_row<'a>(
+    cx: Scope,
+    selected: bool,
+    title: &'a str,
+    on_select: EventHandler<'a, ()>,
+) -> Element {
+    let style = use_memo(
+        cx,
+        (selected,),
+        |(selected,)| {
+            if selected {
+                "active"
+            } else {
+                ""
+            }
+        },
+    );
+
+    cx.render(rsx!(
+        li {
+            class: "w-full inline-block",
+            onclick: move |_| {
+                on_select.call(());
+            },
+
+            span {
+                class: "w-full {style} block",
+
+                p { class: "truncate", "{title}" }
+            }
+        }
+    ))
+}
+
 fn validate_value<T>(value: &str, error_message: UseState<Option<String>>, required: bool)
 where
     T: FromStr,
     <T as FromStr>::Err: Display,
 {
-    if !required && value.is_empty() {
-        error_message.set(None);
+    if value.is_empty() {
+        if required {
+            let msg = if let Err(error) = T::from_str(value) {
+                error.to_string()
+            } else {
+                "Value required".to_string()
+            };
+            error_message.set(Some(msg));
+        } else {
+            error_message.set(None);
+        }
     } else {
         error_message.set(T::from_str(value).err().map(|error| error.to_string()));
     }

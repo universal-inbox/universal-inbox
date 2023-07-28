@@ -426,9 +426,13 @@ impl GithubNotification {
                 let mut uri_parts = self.repository.html_url.clone().into_parts();
                 uri_parts.path_and_query = uri_parts.path_and_query.and_then(|pq| {
                     format!(
-                        "{}/discussions?discussions_q={}",
+                        "{}/discussions?{}",
                         pq.as_str(),
-                        self.subject.title
+                        serde_urlencoded::to_string([(
+                            "discussions_q",
+                            self.subject.title.clone()
+                        )])
+                        .unwrap_or_default()
                     )
                     .parse()
                     .ok()

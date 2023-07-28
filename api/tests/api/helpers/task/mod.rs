@@ -1,7 +1,7 @@
 use reqwest::{Client, Response};
 use serde_json::json;
 
-use universal_inbox::task::{Task, TaskSourceKind, TaskStatus, TaskSummary};
+use universal_inbox::task::{ProjectSummary, Task, TaskSourceKind, TaskStatus, TaskSummary};
 
 use universal_inbox_api::universal_inbox::task::TaskCreationResult;
 
@@ -72,6 +72,32 @@ pub async fn sync_tasks(
     asynchronous: bool,
 ) -> Vec<TaskCreationResult> {
     sync_tasks_response(client, app_address, source, asynchronous)
+        .await
+        .json()
+        .await
+        .expect("Cannot parse JSON result")
+}
+
+pub async fn search_projects_response(
+    client: &Client,
+    app_address: &str,
+    matches: &str,
+) -> Response {
+    client
+        .get(&format!(
+            "{app_address}/tasks/projects/search?matches={matches}"
+        ))
+        .send()
+        .await
+        .expect("Failed to execute request")
+}
+
+pub async fn search_projects(
+    client: &Client,
+    app_address: &str,
+    matches: &str,
+) -> Vec<ProjectSummary> {
+    search_projects_response(client, app_address, matches)
         .await
         .json()
         .await

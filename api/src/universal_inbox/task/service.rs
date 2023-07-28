@@ -16,8 +16,8 @@ use universal_inbox::{
         NotificationStatus,
     },
     task::{
-        service::TaskPatch, Task, TaskCreation, TaskId, TaskMetadata, TaskStatus, TaskSummary,
-        TaskSyncSourceKind,
+        service::TaskPatch, ProjectSummary, Task, TaskCreation, TaskId, TaskMetadata, TaskStatus,
+        TaskSummary, TaskSyncSourceKind,
     },
     user::UserId,
     HasHtmlUrl,
@@ -553,5 +553,17 @@ impl TaskService {
                 notification.id
             )))
         }
+    }
+
+    #[tracing::instrument(level = "debug", skip(self), err)]
+    pub async fn search_projects<'a, 'b>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        matches: &'b str,
+        user_id: UserId,
+    ) -> Result<Vec<ProjectSummary>, UniversalInboxError> {
+        self.todoist_service
+            .search_projects(executor, matches, user_id)
+            .await
     }
 }
