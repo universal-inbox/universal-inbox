@@ -256,16 +256,23 @@ impl TaskService {
         match task_source_service.fetch_all_tasks(executor, user_id).await {
             Ok(source_tasks) => {
                 let tasks = self
-                    .save_tasks_from_source(executor, task_source_service, &source_tasks, user_id)
+                    .save_tasks_from_source(
+                        executor,
+                        task_source_service,
+                        &source_tasks,
+                        true,
+                        user_id,
+                    )
                     .await?;
 
+                // Create/update notifications for tasks in the Inbox
                 let tasks_in_inbox: Vec<Task> = tasks
                     .iter()
                     .filter(|task| task.is_in_inbox())
                     .cloned()
                     .collect();
 
-                let notifications = self
+                let inbox_notifications = self
                     .notification_service
                     .upgrade()
                     .context("Unable to access notification_service from task_service")?
@@ -275,15 +282,35 @@ impl TaskService {
                         executor,
                         task_source_service.get_notification_source_kind(),
                         tasks_in_inbox,
+                        true,
                         user_id,
                     )
                     .await?;
 
                 let mut notifications_by_task_id: HashMap<Option<TaskId>, Notification> =
-                    notifications
+                    inbox_notifications
                         .into_iter()
                         .map(|notification| (notification.task_id, notification))
                         .collect();
+
+                // Update existing notifications for tasks that are not in the Inbox anymore
+                for task in tasks.iter().filter(|task| !task.is_in_inbox()) {
+                    self.notification_service
+                        .upgrade()
+                        .context("Unable to access notification_service from task_service")?
+                        .read()
+                        .await
+                        .patch_notifications_for_task(
+                            executor,
+                            task.id,
+                            Some(task_source_service.get_notification_source_kind()),
+                            &NotificationPatch {
+                                status: Some(NotificationStatus::Deleted),
+                                ..Default::default()
+                            },
+                        )
+                        .await?;
+                }
 
                 Ok(tasks
                     .into_iter()
@@ -330,6 +357,7 @@ impl TaskService {
         executor: &mut Transaction<'a, Postgres>,
         task_source_service: &(dyn TaskSourceService<T> + Send + Sync),
         source_tasks: &[T],
+        is_incremental_update: bool,
         user_id: UserId,
     ) -> Result<Vec<Task>, UniversalInboxError> {
         let mut tasks = vec![];
@@ -344,19 +372,23 @@ impl TaskService {
             tasks.push(uptodate_task);
         }
 
-        let source_task_ids = tasks
-            .iter()
-            .map(|task| task.source_id.clone())
-            .collect::<Vec<String>>();
+        // For incremental synchronization tasks services, there is no need to update stale tasks
+        // Not yet used as Todoist is incremental
+        if !is_incremental_update {
+            let source_task_ids = tasks
+                .iter()
+                .map(|task| task.source_id.clone())
+                .collect::<Vec<String>>();
 
-        self.repository
-            .update_stale_tasks_status_from_source_ids(
-                executor,
-                source_task_ids,
-                task_source_service.get_task_source_kind(),
-                TaskStatus::Done,
-            )
-            .await?;
+            self.repository
+                .update_stale_tasks_status_from_source_ids(
+                    executor,
+                    source_task_ids,
+                    task_source_service.get_task_source_kind(),
+                    TaskStatus::Done,
+                )
+                .await?;
+        }
 
         Ok(tasks)
     }

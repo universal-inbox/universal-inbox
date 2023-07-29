@@ -217,7 +217,14 @@ pub fn assert_sync_items(
         match task.source_id.as_ref() {
             "1123" => {
                 assert_eq!(task.title, "Task 1".to_string());
-                assert_eq!(task.status, TaskStatus::Active);
+                assert_eq!(
+                    task.status,
+                    if sync_todoist_items[0].checked {
+                        TaskStatus::Done
+                    } else {
+                        TaskStatus::Active
+                    }
+                );
                 assert_eq!(
                     task.due_at,
                     Some(DueDate::Date(NaiveDate::from_ymd_opt(2016, 9, 1).unwrap()))
@@ -244,7 +251,14 @@ pub fn assert_sync_items(
                 let notif = notification.unwrap();
                 assert_eq!(notif.title, task.title);
                 assert_eq!(notif.source_id, task.source_id.clone());
-                assert_eq!(notif.status, NotificationStatus::Unread);
+                assert_eq!(
+                    notif.status,
+                    if sync_todoist_items[0].checked {
+                        NotificationStatus::Deleted
+                    } else {
+                        NotificationStatus::Unread
+                    }
+                );
                 assert_eq!(notif.source_html_url, task.source_html_url);
                 assert_eq!(notif.updated_at, task.created_at);
                 assert_eq!(notif.metadata, NotificationMetadata::Todoist);

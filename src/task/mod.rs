@@ -238,7 +238,11 @@ impl IntoNotification for Task {
             title: self.title.clone(),
             source_id: self.source_id.clone(),
             source_html_url: self.source_html_url.clone(),
-            status: NotificationStatus::Unread,
+            status: if self.status != TaskStatus::Active {
+                NotificationStatus::Deleted
+            } else {
+                NotificationStatus::Unread
+            },
             metadata: match self.metadata {
                 TaskMetadata::Todoist(_) => NotificationMetadata::Todoist,
             },
