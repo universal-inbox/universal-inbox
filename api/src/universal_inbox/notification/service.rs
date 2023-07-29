@@ -210,6 +210,7 @@ impl NotificationService {
                     executor,
                     notification_source_service.get_notification_source_kind(),
                     source_notifications,
+                    false,
                     user_id,
                 )
                 .await
@@ -238,6 +239,7 @@ impl NotificationService {
         executor: &mut Transaction<'a, Postgres>,
         notification_source_kind: NotificationSourceKind,
         source_items: Vec<T>,
+        is_incremental_update: bool,
         user_id: UserId,
     ) -> Result<Vec<Notification>, UniversalInboxError> {
         let mut notifications = vec![];
@@ -250,19 +252,22 @@ impl NotificationService {
             notifications.push(uptodate_notification);
         }
 
-        let source_notification_ids = notifications
-            .iter()
-            .map(|notification| notification.source_id.clone())
-            .collect::<Vec<String>>();
+        // For incremental synchronization, there is no need to update stale notifications
+        if !is_incremental_update {
+            let source_notification_ids = notifications
+                .iter()
+                .map(|notification| notification.source_id.clone())
+                .collect::<Vec<String>>();
 
-        self.repository
-            .update_stale_notifications_status_from_source_ids(
-                executor,
-                source_notification_ids,
-                notification_source_kind,
-                NotificationStatus::Deleted,
-            )
-            .await?;
+            self.repository
+                .update_stale_notifications_status_from_source_ids(
+                    executor,
+                    source_notification_ids,
+                    notification_source_kind,
+                    NotificationStatus::Deleted,
+                )
+                .await?;
+        }
 
         Ok(notifications)
     }
