@@ -1,0 +1,25 @@
+query NotificationsQuery {
+  notifications {
+    nodes {
+      __typename
+      id
+      type
+      readAt
+      updatedAt
+      ... on IssueNotification {
+        issue {
+         	id
+         	title
+          url
+        }
+      }
+      ... on ProjectNotification {
+        project {
+          id
+          name
+          url
+        }
+      }
+    }
+  }
+}

@@ -7,10 +7,9 @@ use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use uuid::Uuid;
 
-use integrations::github::GithubNotification;
-
 use crate::{
     integration_connection::{IntegrationProvider, IntegrationProviderKind},
+    notification::integrations::{github::GithubNotification, linear::LinearNotification},
     task::{integrations::todoist::DEFAULT_TODOIST_HTML_URL, Task, TaskId},
     user::UserId,
     HasHtmlUrl,
@@ -46,6 +45,7 @@ impl HasHtmlUrl for Notification {
                     github_notification.get_html_url_from_metadata()
                 }
                 NotificationMetadata::Todoist => DEFAULT_TODOIST_HTML_URL.parse::<Uri>().unwrap(),
+                NotificationMetadata::Linear(_) => todo!(),
             })
     }
 }
@@ -130,6 +130,7 @@ impl NotificationWithTask {
 pub enum NotificationMetadata {
     Github(GithubNotification),
     Todoist,
+    Linear(LinearNotification),
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Copy, Clone, Eq, Hash)]
@@ -168,7 +169,8 @@ macro_attr! {
     // Synchronization sources for notifications
     #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!)]
     pub enum NotificationSyncSourceKind {
-        Github
+        Github,
+        Linear
     }
 }
 
@@ -177,7 +179,8 @@ macro_attr! {
     #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!)]
     pub enum NotificationSourceKind {
         Github,
-        Todoist
+        Todoist,
+        Linear
     }
 }
 
@@ -201,7 +204,6 @@ mod tests {
     use std::{env, fs};
 
     use chrono::{TimeZone, Utc};
-    use format_serde_error::SerdeError;
 
     use super::*;
     use rstest::*;
@@ -218,9 +220,7 @@ mod tests {
                 env::var("CARGO_MANIFEST_DIR").unwrap(),
             );
             let input_str = fs::read_to_string(fixture_path).unwrap();
-            serde_json::from_str(&input_str)
-                .map_err(|err| SerdeError::new(input_str, err))
-                .unwrap()
+            serde_json::from_str(&input_str).unwrap()
         }
 
         #[rstest]

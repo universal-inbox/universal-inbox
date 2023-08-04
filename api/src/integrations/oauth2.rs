@@ -1,6 +1,6 @@
 use std::fmt;
 
-use anyhow::{anyhow, Context};
+use anyhow::{anyhow, Context, Error};
 use base64::{engine::general_purpose, Engine as _};
 use chrono::{DateTime, Utc};
 use format_serde_error::SerdeError;
@@ -96,9 +96,9 @@ impl NangoService {
             .await
             .context(format!("Failed to fetch connection response for {connection_id} for provider {provider_config_key} from Nango API"))?;
 
-        let connection: NangoConnection = serde_json::from_str(&response_body)
-            .map_err(|err| SerdeError::new(response_body, err))
-            .context("Failed to parse response")?;
+        let connection: NangoConnection = serde_json::from_str(&response_body).map_err(|err| {
+            <SerdeError as Into<Error>>::into(SerdeError::new(response_body, err))
+        })?;
 
         Ok(Some(connection))
     }

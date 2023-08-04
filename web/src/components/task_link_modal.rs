@@ -14,7 +14,7 @@ use universal_inbox::{
 
 use crate::{
     components::floating_label_inputs::floating_label_input_search_select,
-    components::icons::{github, todoist},
+    components::icons::{github, linear, todoist},
     model::UniversalInboxUIModel,
     services::api::call_api,
     utils::focus_element,
@@ -33,6 +33,7 @@ pub fn task_link_modal<'a>(
 ) -> Element {
     let notification_icon = match notification_to_link.metadata {
         NotificationMetadata::Github(_) => cx.render(rsx!(self::github { class: "h-5 w-5" })),
+        NotificationMetadata::Linear(_) => cx.render(rsx!(self::linear { class: "h-5 w-5" })),
         NotificationMetadata::Todoist => cx.render(rsx!(self::todoist { class: "h-5 w-5" })),
     };
     let selected_task: &UseState<Option<TaskSummary>> = use_state(cx, || None);

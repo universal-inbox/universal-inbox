@@ -32,6 +32,7 @@ config = "0.13.0"
 enum_derive = { workspace = true }
 format_serde_error = "0.3.0"
 futures = "0.3.0"
+graphql_client = "0.13.0"
 http = { workspace = true }
 lazy_static = { workspace = true }
 log = { workspace = true }

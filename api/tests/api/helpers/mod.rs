@@ -1,6 +1,5 @@
 use std::{env, fs, net::TcpListener, str::FromStr, sync::Arc};
 
-use format_serde_error::SerdeError;
 use httpmock::MockServer;
 use openidconnect::{IntrospectionUrl, IssuerUrl};
 use rstest::*;
@@ -28,6 +27,7 @@ pub struct TestedApp {
     pub app_address: String,
     pub repository: Arc<Repository>,
     pub github_mock_server: MockServer,
+    pub linear_mock_server: MockServer,
     pub todoist_mock_server: MockServer,
     pub oidc_issuer_mock_server: MockServer,
     pub nango_mock_server: MockServer,
@@ -97,12 +97,16 @@ pub async fn tested_app(
 
     let github_mock_server = MockServer::start();
     let github_mock_server_uri = &github_mock_server.base_url();
+    let linear_mock_server = MockServer::start();
+    let linear_mock_server_uri = &linear_mock_server.base_url();
     let todoist_mock_server = MockServer::start();
     let todoist_mock_server_uri = &todoist_mock_server.base_url();
+
     let oidc_issuer_mock_server = MockServer::start();
     let oidc_issuer_mock_server_uri = &oidc_issuer_mock_server.base_url();
     let nango_mock_server = MockServer::start();
     let nango_mock_server_uri = &nango_mock_server.base_url();
+
     settings.application.authentication.oidc_issuer_url =
         IssuerUrl::new(oidc_issuer_mock_server_uri.to_string()).unwrap();
     settings.application.authentication.oidc_introspection_url =
@@ -121,6 +125,7 @@ pub async fn tested_app(
             pool.clone(),
             &settings,
             Some(github_mock_server_uri.to_string()),
+            Some(linear_mock_server_uri.to_string()),
             Some(todoist_mock_server_uri.to_string()),
             nango_service,
         )
@@ -145,6 +150,7 @@ pub async fn tested_app(
         app_address: format!("http://127.0.0.1:{port}"),
         repository,
         github_mock_server,
+        linear_mock_server,
         todoist_mock_server,
         oidc_issuer_mock_server,
         nango_mock_server,
@@ -159,7 +165,5 @@ pub fn load_json_fixture_file<T: for<'de> serde::de::Deserialize<'de>>(
         env::var("CARGO_MANIFEST_DIR").unwrap()
     );
     let input_str = fs::read_to_string(fixture_path).unwrap();
-    serde_json::from_str::<T>(&input_str)
-        .map_err(|err| SerdeError::new(input_str, err))
-        .unwrap()
+    serde_json::from_str::<T>(&input_str).unwrap()
 }

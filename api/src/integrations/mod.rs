@@ -14,6 +14,7 @@ use crate::{
 static APP_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
 
 pub mod github;
+pub mod linear;
 pub mod oauth2;
 pub mod todoist;
 

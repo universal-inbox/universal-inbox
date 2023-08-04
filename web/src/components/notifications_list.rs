@@ -24,7 +24,7 @@ use universal_inbox::{
 };
 
 use crate::{
-    components::icons::{github, todoist},
+    components::icons::{github, linear, todoist},
     model::UniversalInboxUIModel,
 };
 
@@ -221,6 +221,7 @@ fn notification_display<'a>(
 ) -> Element {
     let icon = match notif.metadata {
         NotificationMetadata::Github(_) => cx.render(rsx!(self::github { class: "h-5 w-5" })),
+        NotificationMetadata::Linear(_) => cx.render(rsx!(self::linear { class: "h-5 w-5" })),
         NotificationMetadata::Todoist => cx.render(rsx!(self::todoist { class: "h-5 w-5" })),
     };
     let button_style = use_memo(cx, (selected,), |(selected,)| {
@@ -251,6 +252,9 @@ fn notification_display<'a>(
                         notif: notif,
                         github_notification: github_notification.clone(),
                     }
+                ),
+                NotificationMetadata::Linear(_) => rsx!(
+                    self::default_notification_display { notif: notif }
                 ),
                 NotificationMetadata::Todoist => rsx!(
                     if let Some(task) = &notif.task {

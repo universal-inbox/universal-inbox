@@ -9,7 +9,7 @@ use universal_inbox::integration_connection::{
 };
 
 use crate::{
-    components::icons::{github, todoist},
+    components::icons::{github, linear, todoist},
     model::UI_MODEL,
     services::{
         integration_connection_service::INTEGRATION_CONNECTIONS,
@@ -149,6 +149,9 @@ pub fn integration_connection_status(cx: Scope, connection: IntegrationConnectio
             class: "w-4 h-4 {connection_style}"
         }),
         IntegrationProviderKind::Todoist => rsx!(self::todoist {
+            class: "w-4 h-4 {connection_style}"
+        }),
+        IntegrationProviderKind::Linear => rsx!(self::linear {
             class: "w-4 h-4 {connection_style}"
         }),
     };

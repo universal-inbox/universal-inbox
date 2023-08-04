@@ -2,11 +2,11 @@ use std::collections::HashMap;
 
 use chrono::{Local, SecondsFormat};
 use dioxus::prelude::*;
-
 use dioxus_free_icons::{
     icons::bs_icons::{BsExclamationTriangle, BsPlug},
     Icon,
 };
+
 use universal_inbox::{
     integration_connection::{
         IntegrationConnection, IntegrationConnectionStatus, IntegrationProviderKind,
@@ -14,7 +14,7 @@ use universal_inbox::{
     IntegrationProviderConfig,
 };
 
-use crate::components::icons::{github, todoist};
+use crate::components::icons::{github, linear, todoist};
 
 #[inline_props]
 pub fn integrations_panel<'a>(
@@ -76,6 +76,7 @@ pub fn integration_settings<'a>(
 ) -> Element {
     let icon = match kind {
         IntegrationProviderKind::Github => rsx!(self::github { class: "w-8 h-8" }),
+        IntegrationProviderKind::Linear => rsx!(self::linear { class: "w-8 h-8" }),
         IntegrationProviderKind::Todoist => rsx!(self::todoist { class: "w-8 h-8" }),
     };
 

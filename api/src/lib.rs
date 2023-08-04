@@ -15,7 +15,9 @@ use actix_web::{
 use actix_web_lab::web::spa;
 use anyhow::Context;
 use configuration::Settings;
-use integrations::{github::GithubService, oauth2::NangoService, todoist::TodoistService};
+use integrations::{
+    github::GithubService, linear::LinearService, oauth2::NangoService, todoist::TodoistService,
+};
 use repository::Repository;
 use sqlx::PgPool;
 use tokio::sync::RwLock;
@@ -153,6 +155,7 @@ pub async fn build_services(
     pool: Arc<PgPool>,
     settings: &Settings,
     github_address: Option<String>,
+    linear_graphql_url: Option<String>,
     todoist_address: Option<String>,
     nango_service: NangoService,
 ) -> (
@@ -172,6 +175,7 @@ pub async fn build_services(
         nango_service,
         settings.integrations.oauth2.nango_provider_keys.clone(),
     )));
+
     let todoist_service =
         TodoistService::new(todoist_address, integration_connection_service.clone())
             .expect("Failed to create new TodoistService");
@@ -181,10 +185,14 @@ pub async fn build_services(
         integration_connection_service.clone(),
     )
     .expect("Failed to create new GithubService");
+    let linear_service =
+        LinearService::new(linear_graphql_url, integration_connection_service.clone())
+            .expect("Failed to create new LinearService");
 
     let notification_service = Arc::new(RwLock::new(NotificationService::new(
         repository.clone(),
         github_service,
+        linear_service,
         Weak::new(),
         integration_connection_service.clone(),
         user_service.clone(),
