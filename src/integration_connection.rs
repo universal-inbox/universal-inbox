@@ -102,6 +102,7 @@ macro_attr! {
     pub enum IntegrationProviderKind {
         Github,
         Todoist,
+        Linear
     }
 }
 

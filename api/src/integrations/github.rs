@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use actix_http::uri::Authority;
-use anyhow::{anyhow, Context};
+use anyhow::{anyhow, Context, Error};
 use async_trait::async_trait;
 use format_serde_error::SerdeError;
 use futures::stream::{self, TryStreamExt};
@@ -18,13 +18,11 @@ use universal_inbox::{
 };
 
 use crate::{
-    integrations::{notification::NotificationSourceService, APP_USER_AGENT},
+    integrations::{notification::NotificationSourceService, oauth2::AccessToken, APP_USER_AGENT},
     universal_inbox::{
         integration_connection::service::IntegrationConnectionService, UniversalInboxError,
     },
 };
-
-use super::oauth2::AccessToken;
 
 #[derive(Clone, Debug)]
 pub struct GithubService {
@@ -69,8 +67,7 @@ impl GithubService {
             .context("Failed to fetch notifications response from Github API")?;
 
         let notifications: Vec<GithubNotification> = serde_json::from_str(&response)
-            .map_err(|err| SerdeError::new(response, err))
-            .context("Failed to parse response")?;
+            .map_err(|err| <SerdeError as Into<Error>>::into(SerdeError::new(response, err)))?;
 
         Ok(notifications)
     }

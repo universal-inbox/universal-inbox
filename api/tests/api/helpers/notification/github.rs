@@ -1,7 +1,6 @@
 use std::{env, fs};
 
 use chrono::{TimeZone, Utc};
-use format_serde_error::SerdeError;
 use http::Uri;
 use httpmock::{Method::GET, Mock, MockServer};
 use reqwest::Client;
@@ -144,7 +143,5 @@ pub fn github_notification() -> Box<GithubNotification> {
         env::var("CARGO_MANIFEST_DIR").unwrap(),
     );
     let input_str = fs::read_to_string(fixture_path).unwrap();
-    serde_json::from_str(&input_str)
-        .map_err(|err| SerdeError::new(input_str, err))
-        .unwrap()
+    serde_json::from_str(&input_str).unwrap()
 }

@@ -210,6 +210,11 @@ pub fn nango_github_connection() -> Box<NangoConnection> {
 }
 
 #[fixture]
+pub fn nango_linear_connection() -> Box<NangoConnection> {
+    load_json_fixture_file("/tests/api/fixtures/nango_linear_connection.json")
+}
+
+#[fixture]
 pub fn nango_todoist_connection() -> Box<NangoConnection> {
     load_json_fixture_file("/tests/api/fixtures/nango_todoist_connection.json")
 }

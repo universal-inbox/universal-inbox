@@ -20,7 +20,9 @@ use universal_inbox::{
 };
 
 use crate::{
-    integrations::{github::GithubService, notification::NotificationSourceService},
+    integrations::{
+        github::GithubService, linear::LinearService, notification::NotificationSourceService,
+    },
     repository::{notification::NotificationRepository, Repository},
     universal_inbox::{
         integration_connection::service::IntegrationConnectionService, task::service::TaskService,
@@ -32,6 +34,7 @@ use crate::{
 pub struct NotificationService {
     repository: Arc<Repository>,
     github_service: GithubService,
+    linear_service: LinearService,
     task_service: Weak<RwLock<TaskService>>,
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     user_service: Arc<RwLock<UserService>>,
@@ -42,6 +45,7 @@ impl NotificationService {
     pub fn new(
         repository: Arc<Repository>,
         github_service: GithubService,
+        linear_service: LinearService,
         task_service: Weak<RwLock<TaskService>>,
         integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
         user_service: Arc<RwLock<UserService>>,
@@ -50,6 +54,7 @@ impl NotificationService {
         NotificationService {
             repository,
             github_service,
+            linear_service,
             task_service,
             integration_connection_service,
             user_service,
@@ -284,11 +289,21 @@ impl NotificationService {
                 self.sync_source_notifications(executor, &self.github_service, user_id)
                     .await
             }
+            Some(NotificationSyncSourceKind::Linear) => {
+                self.sync_source_notifications(executor, &self.linear_service, user_id)
+                    .await
+            }
             None => {
                 let notifications_from_github = self
                     .sync_source_notifications(executor, &self.github_service, user_id)
                     .await?;
-                Ok(notifications_from_github)
+                let notifications_from_linear = self
+                    .sync_source_notifications(executor, &self.linear_service, user_id)
+                    .await?;
+                Ok(notifications_from_github
+                    .into_iter()
+                    .chain(notifications_from_linear.into_iter())
+                    .collect())
             }
         }
     }
@@ -388,6 +403,16 @@ impl NotificationService {
                         )
                         .await?;
                     }
+                    NotificationMetadata::Linear(_) => {
+                        self.apply_updated_notification_side_effect(
+                            executor,
+                            &self.linear_service,
+                            patch,
+                            notification.clone(),
+                            for_user_id,
+                        )
+                        .await?
+                    }
                     NotificationMetadata::Todoist => {
                         if let Some(NotificationStatus::Deleted) = patch.status {
                             if let Some(task_id) = notification.task_id {
@@ -412,13 +437,13 @@ impl NotificationService {
                                 }
                             } else {
                                 return Err(UniversalInboxError::Unexpected(anyhow!(
-                                "Todoist notification {notification_id} is expected to be linked to a task"
-                            )));
+                                    "Todoist notification {notification_id} is expected to be linked to a task"
+                                )));
                             }
                         } else {
                             return Err(UniversalInboxError::UnsupportedAction(format!(
-                        "Cannot update the status of Todoist notification {notification_id}, update task's project"
-                    )));
+                                "Cannot update the status of Todoist notification {notification_id}, update task's project"
+                            )));
                         }
                     }
                 };

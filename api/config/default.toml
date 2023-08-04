@@ -49,4 +49,5 @@ nango_base_url = "http://localhost:3003"
 # 1 key/value pair must be declared per IntegrationProviderKind enum value
 [integrations.oauth2.nango_provider_keys]
 Github = "github"
+Linear = "linear"
 Todoist = "todoist"

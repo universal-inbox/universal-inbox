@@ -89,7 +89,7 @@ async fn main() -> std::io::Result<()> {
     .expect("Failed to create new GithubService");
 
     let (notification_service, task_service, user_service, integration_connection_service) =
-        build_services(pool, &settings, None, None, nango_service).await;
+        build_services(pool, &settings, None, None, None, nango_service).await;
 
     let result = match &cli.command {
         Commands::SyncNotifications { source } => {

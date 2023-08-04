@@ -6,7 +6,7 @@ use std::{
     },
 };
 
-use anyhow::{anyhow, Context};
+use anyhow::{anyhow, Context, Error};
 use async_trait::async_trait;
 use cached::proc_macro::cached;
 use format_serde_error::SerdeError;
@@ -198,8 +198,7 @@ impl TodoistService {
             ))?;
 
         Ok(serde_json::from_str(&response)
-            .map_err(|err| SerdeError::new(response, err))
-            .context("Failed to parse response from Todoist")?)
+            .map_err(|err| <SerdeError as Into<Error>>::into(SerdeError::new(response, err)))?)
     }
 
     #[tracing::instrument(level = "debug", skip(self), err)]
@@ -239,8 +238,7 @@ impl TodoistService {
             ))?;
 
         let item_info: TodoistItemInfoResponse = serde_json::from_str(&body)
-            .map_err(|err| SerdeError::new(body.clone(), err))
-            .context(format!("Failed to parse response from Todoist: {body}"))?;
+            .map_err(|err| <SerdeError as Into<Error>>::into(SerdeError::new(body.clone(), err)))?;
 
         Ok(Some(item_info.item))
     }
@@ -269,8 +267,7 @@ impl TodoistService {
             })?;
 
         let sync_response: TodoistSyncStatusResponse = serde_json::from_str(&response)
-            .map_err(|err| SerdeError::new(response, err))
-            .context("Failed to parse response from Todoist")?;
+            .map_err(|err| <SerdeError as Into<Error>>::into(SerdeError::new(response, err)))?;
 
         // It could be simpler as the first value is actually the `command_id` but httpmock
         // does not allow to use a request value into the mocked response
