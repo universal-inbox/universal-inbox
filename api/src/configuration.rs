@@ -67,7 +67,8 @@ pub struct RedisSettings {
 pub struct IntegrationsSettings {
     pub oauth2: Oauth2Settings,
     pub github: GithubIntegrationSettings,
-    pub todoist: TodoistIntegrationSettings,
+    pub linear: DefaultIntegrationSettings,
+    pub todoist: DefaultIntegrationSettings,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -85,7 +86,7 @@ pub struct GithubIntegrationSettings {
 }
 
 #[derive(Deserialize, Clone, Debug)]
-pub struct TodoistIntegrationSettings {
+pub struct DefaultIntegrationSettings {
     pub name: String,
     pub comment: Option<String>,
 }

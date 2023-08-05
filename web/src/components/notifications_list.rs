@@ -3,7 +3,7 @@ use dioxus_free_icons::{
     icons::{
         bs_icons::{
             BsArrowRepeat, BsBellSlash, BsBookmarkCheck, BsCalendar2Check, BsCardChecklist, BsChat,
-            BsCheck2, BsCheckCircle, BsClockHistory, BsLink45deg, BsRecordCircle, BsTrash,
+            BsCheck2, BsCheckCircle, BsClockHistory, BsGrid, BsLink45deg, BsRecordCircle, BsTrash,
         },
         io_icons::IoGitPullRequest,
     },
@@ -14,7 +14,11 @@ use http::Uri;
 
 use universal_inbox::{
     notification::{
-        integrations::github::GithubNotification, NotificationMetadata, NotificationWithTask,
+        integrations::{
+            github::GithubNotification,
+            linear::{LinearIssue, LinearNotification},
+        },
+        NotificationMetadata, NotificationWithTask,
     },
     task::{
         integrations::todoist::{TodoistItem, TodoistItemPriority},
@@ -253,8 +257,11 @@ fn notification_display<'a>(
                         github_notification: github_notification.clone(),
                     }
                 ),
-                NotificationMetadata::Linear(_) => rsx!(
-                    self::default_notification_display { notif: notif }
+                NotificationMetadata::Linear(linear_notification) => rsx!(
+                    self::linear_notification_display {
+                        notif: notif,
+                        linear_notification: linear_notification.clone()
+                    }
                 ),
                 NotificationMetadata::Todoist => rsx!(
                     if let Some(task) = &notif.task {
@@ -369,6 +376,69 @@ fn extract_github_notification_id(url: &Option<Uri>) -> Option<String> {
     Some(id.to_string())
 }
 
+#[inline_props]
+fn linear_notification_display<'a>(
+    cx: Scope,
+    notif: &'a NotificationWithTask,
+    linear_notification: LinearNotification,
+) -> Element {
+    let notification_source_url = notif.get_html_url();
+    let notification_type = linear_notification.get_type();
+    let type_icon = match linear_notification {
+        LinearNotification::IssueNotification { .. } => cx.render(rsx!(Icon {
+            class: "h-5 w-5",
+            icon: BsRecordCircle
+        })),
+        LinearNotification::ProjectNotification { .. } => cx.render(rsx!(Icon {
+            class: "h-5 w-5",
+            icon: BsGrid
+        })),
+    };
+
+    cx.render(rsx!(
+        div {
+            class: "flex items-center gap-2",
+
+            type_icon
+
+            div {
+                class: "flex flex-col grow",
+
+                a {
+                    href: "{notification_source_url}",
+                    target: "_blank",
+                    "{notif.title}"
+                }
+                div {
+                    class: "flex gap-2",
+
+                    if let Some(team) = linear_notification.get_team() {
+                        rsx!(
+                            a {
+                                class: "text-xs text-gray-400",
+                                href: "{team.get_url(linear_notification.get_organization())}",
+                                target: "_blank",
+                                "{team.name}"
+                            }
+                        )
+                    }
+
+                    a {
+                        class: "text-xs text-gray-400",
+                        href: "{notification_source_url}",
+                        target: "_blank",
+                        if let LinearNotification::IssueNotification {
+                            issue: LinearIssue { identifier, .. }, ..
+                        } = linear_notification {
+                            rsx!("#{identifier} ")
+                        }
+                        "({notification_type})"
+                    }
+                }
+            }
+        }
+    ))
+}
 #[inline_props]
 fn todoist_notification_display<'a>(
     cx: Scope,

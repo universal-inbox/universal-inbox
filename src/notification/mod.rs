@@ -45,7 +45,9 @@ impl HasHtmlUrl for Notification {
                     github_notification.get_html_url_from_metadata()
                 }
                 NotificationMetadata::Todoist => DEFAULT_TODOIST_HTML_URL.parse::<Uri>().unwrap(),
-                NotificationMetadata::Linear(_) => todo!(),
+                NotificationMetadata::Linear(linear_notification) => {
+                    linear_notification.get_html_url_from_metadata()
+                }
             })
     }
 }
