@@ -102,7 +102,7 @@ impl NotificationService {
     pub async fn list_notifications<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        status: NotificationStatus,
+        status: Vec<NotificationStatus>,
         include_snoozed_notifications: bool,
         task_id: Option<TaskId>,
         user_id: UserId,

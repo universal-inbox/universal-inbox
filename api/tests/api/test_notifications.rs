@@ -33,7 +33,7 @@ mod list_notifications {
         let result = list_notifications(
             &app.client,
             &app.app_address,
-            NotificationStatus::Unread,
+            vec![NotificationStatus::Unread],
             false,
             None,
         )
@@ -82,7 +82,7 @@ mod list_notifications {
             Box::new(Notification {
                 id: Uuid::new_v4().into(),
                 title: "notif2".to_string(),
-                status: NotificationStatus::Unread,
+                status: NotificationStatus::Read,
                 source_id: "5678".to_string(),
                 source_html_url: github::get_html_url_from_api_url(
                     &github_notification2.subject.url,
@@ -146,7 +146,19 @@ mod list_notifications {
         let result = list_notifications(
             &app.client,
             &app.app_address,
-            NotificationStatus::Unread,
+            vec![NotificationStatus::Unread],
+            false,
+            None,
+        )
+        .await;
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], *expected_notification1);
+
+        let result = list_notifications(
+            &app.client,
+            &app.app_address,
+            vec![NotificationStatus::Read, NotificationStatus::Unread],
             false,
             None,
         )
@@ -159,7 +171,7 @@ mod list_notifications {
         let result = list_notifications(
             &app.client,
             &app.app_address,
-            NotificationStatus::Unread,
+            vec![NotificationStatus::Read, NotificationStatus::Unread],
             true,
             None,
         )
@@ -173,7 +185,7 @@ mod list_notifications {
         let result = list_notifications(
             &app.client,
             &app.app_address,
-            NotificationStatus::Deleted,
+            vec![NotificationStatus::Deleted],
             false,
             None,
         )
@@ -185,7 +197,7 @@ mod list_notifications {
         let result = list_notifications(
             &app.client,
             &app.app_address,
-            NotificationStatus::Unsubscribed,
+            vec![NotificationStatus::Unsubscribed],
             false,
             None,
         )
@@ -200,7 +212,7 @@ mod list_notifications {
         let result = list_notifications(
             &client,
             &app.app_address,
-            NotificationStatus::Unread,
+            vec![NotificationStatus::Unread],
             false,
             None,
         )

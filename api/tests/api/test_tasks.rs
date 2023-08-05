@@ -94,7 +94,7 @@ mod create_task {
         let result = list_notifications_with_tasks(
             &app.client,
             &app.app_address,
-            NotificationStatus::Unread,
+            vec![NotificationStatus::Unread],
             false,
             Some(creation_result.task.id),
         )
@@ -162,7 +162,7 @@ mod create_task {
         let result = list_notifications_with_tasks(
             &app.client,
             &app.app_address,
-            NotificationStatus::Unread,
+            vec![NotificationStatus::Unread],
             false,
             Some(creation_result.task.id),
         )

@@ -277,7 +277,7 @@ async fn test_sync_all_notifications_asynchronously(
     let result = list_notifications(
         &app.client,
         &app.app_address,
-        NotificationStatus::Read,
+        vec![NotificationStatus::Read],
         false,
         None,
     )
@@ -291,7 +291,7 @@ async fn test_sync_all_notifications_asynchronously(
         let result = list_notifications(
             &app.client,
             &app.app_address,
-            NotificationStatus::Read,
+            vec![NotificationStatus::Read],
             false,
             None,
         )
@@ -339,7 +339,7 @@ async fn test_sync_all_notifications_asynchronously(
     let result = list_notifications(
         &app.client,
         &app.app_address,
-        NotificationStatus::Read,
+        vec![NotificationStatus::Read],
         false,
         None,
     )
@@ -388,7 +388,7 @@ async fn test_sync_all_notifications_asynchronously_in_error(
     let result = list_notifications(
         &app.client,
         &app.app_address,
-        NotificationStatus::Read,
+        vec![NotificationStatus::Read],
         false,
         None,
     )
