@@ -11,7 +11,9 @@ use tokio::sync::RwLock;
 use universal_inbox::{
     integration_connection::{IntegrationProvider, IntegrationProviderKind},
     notification::{
-        integrations::linear::{LinearIssue, LinearNotification, LinearProject},
+        integrations::linear::{
+            LinearIssue, LinearNotification, LinearOrganization, LinearProject, LinearTeam,
+        },
         NotificationSource, NotificationSourceKind,
     },
     user::UserId,
@@ -39,6 +41,9 @@ impl TryFrom<notifications_query::ResponseData> for Vec<LinearNotification> {
     type Error = UniversalInboxError;
 
     fn try_from(value: notifications_query::ResponseData) -> Result<Self, Self::Error> {
+        let organization_name = value.organization.name.clone();
+        let organization_key = value.organization.url_key.clone();
+
         value
             .notifications
             .nodes
@@ -52,8 +57,14 @@ impl TryFrom<notifications_query::ResponseData> for Vec<LinearNotification> {
                     on: notifications_query::NotificationsQueryNotificationsNodesOn::IssueNotification(notifications_query::NotificationsQueryNotificationsNodesOnIssueNotification {
                         issue: notifications_query::NotificationsQueryNotificationsNodesOnIssueNotificationIssue {
                             id: issue_id,
+                            identifier,
                             title,
                             url,
+                            team: notifications_query::NotificationsQueryNotificationsNodesOnIssueNotificationIssueTeam {
+                                id: team_id,
+                                key,
+                                name
+                            }
                         },
                     }),
                 } => Ok(Some(LinearNotification::IssueNotification {
@@ -61,10 +72,22 @@ impl TryFrom<notifications_query::ResponseData> for Vec<LinearNotification> {
                     r#type: type_,
                     read_at,
                     updated_at,
+                    organization: LinearOrganization {
+                        name: organization_name.clone(),
+                        key: organization_key.clone(),
+                    },
                     issue: LinearIssue {
-                        id: Uuid::parse_str(&issue_id).context(format!("Failed to parse UUID from `{issue_id}`"))?,
+                        id: Uuid::parse_str(&issue_id)
+                            .context(format!("Failed to parse UUID from `{issue_id}`"))?,
+                        identifier,
                         title,
                         url: url.parse().context(format!("Failed to parse URL from `{url}`"))?,
+                        team: LinearTeam {
+                            id: Uuid::parse_str(&team_id)
+                                .context(format!("Failed to parse UUID from `{team_id}`"))?,
+                            key,
+                            name
+                        }
                     },
                 })),
                 notifications_query::NotificationsQueryNotificationsNodes {
@@ -84,6 +107,10 @@ impl TryFrom<notifications_query::ResponseData> for Vec<LinearNotification> {
                     r#type: type_,
                     read_at,
                     updated_at,
+                    organization: LinearOrganization {
+                        name: organization_name.clone(),
+                        key: organization_key.clone(),
+                    },
                     project: LinearProject {
                         id: Uuid::parse_str(&project_id).context(format!("Failed to parse UUID from `{project_id}`"))?,
                         name,

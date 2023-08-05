@@ -38,6 +38,9 @@ name = "Github"
 comment = "⚠️ The Github notification API is not fully functional and does not allow to mark as done a notification. Hence, notification marked as done in Universal Inbox will only be marked as read in Github."
 page_size = 50
 
+[integrations.linear]
+name = "Linear"
+
 [integrations.todoist]
 name = "Todoist"
 

@@ -18,6 +18,7 @@ pub enum LinearNotification {
         r#type: String, // Could be an enum, but no exhaustive list of values
         read_at: Option<DateTime<Utc>>,
         updated_at: DateTime<Utc>,
+        organization: LinearOrganization,
         issue: LinearIssue,
     },
     ProjectNotification {
@@ -25,6 +26,7 @@ pub enum LinearNotification {
         r#type: String, // Could be an enum, but no exhaustive list of values
         read_at: Option<DateTime<Utc>>,
         updated_at: DateTime<Utc>,
+        organization: LinearOrganization,
         project: LinearProject,
     },
 }
@@ -33,9 +35,19 @@ pub enum LinearNotification {
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct LinearIssue {
     pub id: Uuid,
+    pub identifier: String,
     pub title: String,
     #[serde_as(as = "DisplayFromStr")]
     pub url: Uri,
+    pub team: LinearTeam,
+}
+
+#[serde_as]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct LinearTeam {
+    pub id: Uuid,
+    pub key: String,
+    pub name: String,
 }
 
 #[serde_as]
@@ -45,6 +57,60 @@ pub struct LinearProject {
     pub name: String,
     #[serde_as(as = "DisplayFromStr")]
     pub url: Uri,
+}
+
+#[serde_as]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct LinearOrganization {
+    pub name: String,
+    pub key: String,
+}
+
+impl LinearNotification {
+    pub fn get_html_url_from_metadata(&self) -> Uri {
+        match self {
+            LinearNotification::IssueNotification {
+                issue: LinearIssue { url, .. },
+                ..
+            } => url.clone(),
+            LinearNotification::ProjectNotification {
+                project: LinearProject { url, .. },
+                ..
+            } => url.clone(),
+        }
+    }
+
+    pub fn get_type(&self) -> String {
+        match self {
+            LinearNotification::IssueNotification { r#type, .. }
+            | LinearNotification::ProjectNotification { r#type, .. } => r#type.clone(),
+        }
+    }
+
+    pub fn get_organization(&self) -> LinearOrganization {
+        match self {
+            LinearNotification::IssueNotification { organization, .. }
+            | LinearNotification::ProjectNotification { organization, .. } => organization.clone(),
+        }
+    }
+
+    pub fn get_team(&self) -> Option<LinearTeam> {
+        match self {
+            LinearNotification::IssueNotification {
+                issue: LinearIssue { team, .. },
+                ..
+            } => Some(team.clone()),
+            LinearNotification::ProjectNotification { .. } => None,
+        }
+    }
+}
+
+impl LinearTeam {
+    pub fn get_url(&self, organization: LinearOrganization) -> Uri {
+        format!("https://linear.app/{}/team/{}", organization.key, self.key)
+            .parse::<Uri>()
+            .unwrap()
+    }
 }
 
 impl IntoNotification for LinearNotification {

@@ -50,6 +50,20 @@ pub async fn front_config(
                 },
             ),
             (
+                IntegrationProviderKind::Linear,
+                IntegrationProviderConfig {
+                    name: settings.integrations.linear.name.clone(),
+                    nango_config_key: settings
+                        .integrations
+                        .oauth2
+                        .nango_provider_keys
+                        .get(&IntegrationProviderKind::Linear)
+                        .context("Missing Nango config key for Linear")?
+                        .clone(),
+                    comment: settings.integrations.linear.comment.clone(),
+                },
+            ),
+            (
                 IntegrationProviderKind::Todoist,
                 IntegrationProviderConfig {
                     name: settings.integrations.todoist.name.clone(),
