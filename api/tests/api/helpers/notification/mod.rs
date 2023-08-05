@@ -16,7 +16,7 @@ pub mod linear;
 pub async fn list_notifications_response(
     client: &Client,
     app_address: &str,
-    status_filter: NotificationStatus,
+    status_filter: Vec<NotificationStatus>,
     include_snoozed_notifications: bool,
     task_id: Option<TaskId>,
 ) -> Response {
@@ -28,10 +28,15 @@ pub async fn list_notifications_response(
     let task_id_parameter = task_id
         .map(|id| format!("&task_id={id}"))
         .unwrap_or_default();
+    let status_parameter = status_filter
+        .into_iter()
+        .map(|s| s.to_string())
+        .collect::<Vec<String>>()
+        .join(",");
 
     client
         .get(&format!(
-            "{app_address}/notifications?status={status_filter}{snoozed_notifications_parameter}{task_id_parameter}"
+            "{app_address}/notifications?status={status_parameter}{snoozed_notifications_parameter}{task_id_parameter}"
         ))
         .send()
         .await
@@ -41,7 +46,7 @@ pub async fn list_notifications_response(
 pub async fn list_notifications_with_tasks(
     client: &Client,
     app_address: &str,
-    status_filter: NotificationStatus,
+    status_filter: Vec<NotificationStatus>,
     include_snoozed_notifications: bool,
     task_id: Option<TaskId>,
 ) -> Vec<NotificationWithTask> {
@@ -61,7 +66,7 @@ pub async fn list_notifications_with_tasks(
 pub async fn list_notifications(
     client: &Client,
     app_address: &str,
-    status_filter: NotificationStatus,
+    status_filter: Vec<NotificationStatus>,
     include_snoozed_notifications: bool,
     task_id: Option<TaskId>,
 ) -> Vec<Notification> {

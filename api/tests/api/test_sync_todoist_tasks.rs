@@ -184,7 +184,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
     let notifications = list_notifications_with_tasks(
         &app.client,
         &app.app_address,
-        NotificationStatus::Unread,
+        vec![NotificationStatus::Unread],
         false,
         Some(new_task.id),
     )

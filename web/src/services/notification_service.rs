@@ -210,7 +210,7 @@ async fn refresh_notifications(
     let result: Result<Vec<NotificationWithTask>> = call_api(
         Method::GET,
         api_base_url,
-        "notifications?status=Unread&with_tasks=true",
+        "notifications?status=Unread,Read&with_tasks=true",
         // random type as we don't care about the body's type
         None::<i32>,
         Some(ui_model_ref.clone()),

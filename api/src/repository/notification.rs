@@ -34,7 +34,7 @@ pub trait NotificationRepository {
     async fn fetch_all_notifications<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        status: NotificationStatus,
+        status: Vec<NotificationStatus>,
         include_snoozed_notifications: bool,
         task_id: Option<TaskId>,
         user_id: UserId,
@@ -130,7 +130,7 @@ impl NotificationRepository for Repository {
     async fn fetch_all_notifications<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        status: NotificationStatus,
+        status: Vec<NotificationStatus>,
         include_snoozed_notifications: bool,
         task_id: Option<TaskId>,
         user_id: UserId,
@@ -168,11 +168,18 @@ impl NotificationRepository for Repository {
                   notification
                 LEFT JOIN task ON task.id = notification.task_id
                 WHERE
-                  notification.status::TEXT =
+                  notification.status::TEXT = ANY(
             "#,
         );
 
-        query_builder.push_bind(status.to_string());
+        query_builder
+            .push_bind(
+                status
+                    .into_iter()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<String>>(),
+            )
+            .push(")");
         query_builder
             .push(" AND notification.user_id = ")
             .push_bind(user_id.0);
