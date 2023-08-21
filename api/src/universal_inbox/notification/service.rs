@@ -94,7 +94,20 @@ impl NotificationService {
                     )
                     .await
             }
-            _ => Ok(()),
+            _ => {
+                if let Some(snoozed_until) = patch.snoozed_until {
+                    notification_source_service
+                        .snooze_notification_from_source(
+                            executor,
+                            &notification.source_id,
+                            snoozed_until,
+                            user_id,
+                        )
+                        .await
+                } else {
+                    Ok(())
+                }
+            }
         }
     }
 
@@ -164,9 +177,10 @@ impl NotificationService {
         &self,
         executor: &mut Transaction<'a, Postgres>,
         notification: Box<Notification>,
+        update_snoozed_until: bool,
     ) -> Result<Box<Notification>, UniversalInboxError> {
         self.repository
-            .create_or_update_notification(executor, notification)
+            .create_or_update_notification(executor, notification, update_snoozed_until)
             .await
             .map(Box::new)
     }
@@ -216,6 +230,7 @@ impl NotificationService {
                     notification_source_service.get_notification_source_kind(),
                     source_notifications,
                     false,
+                    notification_source_service.is_supporting_snoozed_notifications(),
                     user_id,
                 )
                 .await
@@ -245,6 +260,7 @@ impl NotificationService {
         notification_source_kind: NotificationSourceKind,
         source_items: Vec<T>,
         is_incremental_update: bool,
+        update_snoozed_until: bool,
         user_id: UserId,
     ) -> Result<Vec<Notification>, UniversalInboxError> {
         let mut notifications = vec![];
@@ -252,7 +268,11 @@ impl NotificationService {
             let notification = source_item.into_notification(user_id);
             let uptodate_notification = self
                 .repository
-                .create_or_update_notification(executor, Box::new(notification))
+                .create_or_update_notification(
+                    executor,
+                    Box::new(notification),
+                    update_snoozed_until,
+                )
                 .await?;
             notifications.push(uptodate_notification);
         }

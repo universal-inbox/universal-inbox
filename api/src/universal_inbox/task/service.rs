@@ -283,6 +283,7 @@ impl TaskService {
                         task_source_service.get_notification_source_kind(),
                         tasks_in_inbox,
                         true,
+                        task_source_service.is_supporting_snoozed_notifications(),
                         user_id,
                     )
                     .await?;

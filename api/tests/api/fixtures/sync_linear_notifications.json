@@ -8,6 +8,7 @@
           "type": "projectAddedAsMember",
           "readAt": null,
           "updatedAt": "2023-07-31T06:01:27.137Z",
+          "snoozedUntilAt": null,
           "project": {
             "id": "c1b0f0f8-9e16-4335-a540-bda09cc491df",
             "name": "Test project",
@@ -20,6 +21,7 @@
           "type": "projectAddedAsLead",
           "readAt": null,
           "updatedAt": "2023-07-31T06:01:27.129Z",
+          "snoozedUntilAt": null,
           "project": {
             "id": "c1b0f0f8-9e16-4335-a540-bda09cc491df",
             "name": "Test project",
@@ -32,6 +34,7 @@
           "type": "issueAssignedToYou",
           "readAt": "2023-07-31T06:01:27.112Z",
           "updatedAt": "2023-07-31T06:01:27.112Z",
+          "snoozedUntilAt": "2023-08-12T07:00:00.000Z",
           "issue": {
             "id": "c8805a87-5a65-47d6-a385-64945ce3b036",
             "identifier": "UNI-13",
@@ -50,6 +53,7 @@
           "type": "issueAssignedToYou",
           "readAt": "2023-07-31T09:49:25.495Z",
           "updatedAt": "2023-07-31T09:49:25.661Z",
+          "snoozedUntilAt": null,
           "issue": {
             "id": "7b2eb301-4e49-40b1-9524-fd0c33e4c02e",
             "identifier": "UNI-12",
@@ -68,6 +72,7 @@
           "type": "issueAssignedToYou",
           "readAt": null,
           "updatedAt": "2023-07-31T06:01:27.101Z",
+          "snoozedUntilAt": null,
           "issue": {
             "id": "4dda960e-f498-4c6e-9477-a8e0ff441ff5",
             "identifier": "UNI-11",

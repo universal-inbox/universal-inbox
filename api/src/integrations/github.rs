@@ -3,12 +3,13 @@ use std::sync::Arc;
 use actix_http::uri::Authority;
 use anyhow::{anyhow, Context, Error};
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use format_serde_error::SerdeError;
 use futures::stream::{self, TryStreamExt};
 use http::{HeaderMap, HeaderValue, Uri};
-
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
+
 use universal_inbox::{
     integration_connection::{IntegrationProvider, IntegrationProviderKind},
     notification::{
@@ -240,6 +241,17 @@ impl NotificationSourceService<GithubNotification> for GithubService {
         self.mark_thread_as_read(source_id, &access_token).await?;
         self.unsubscribe_from_thread(source_id, &access_token).await
     }
+
+    async fn snooze_notification_from_source<'a>(
+        &self,
+        _executor: &mut Transaction<'a, Postgres>,
+        _source_id: &str,
+        _snoozed_until_at: DateTime<Utc>,
+        _user_id: UserId,
+    ) -> Result<(), UniversalInboxError> {
+        // Github notifications cannot be snoozed => no-op
+        Ok(())
+    }
 }
 
 impl IntegrationProvider for GithubService {
@@ -251,6 +263,10 @@ impl IntegrationProvider for GithubService {
 impl NotificationSource for GithubService {
     fn get_notification_source_kind(&self) -> NotificationSourceKind {
         NotificationSourceKind::Github
+    }
+
+    fn is_supporting_snoozed_notifications(&self) -> bool {
+        false
     }
 }
 

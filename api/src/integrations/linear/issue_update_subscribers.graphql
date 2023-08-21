@@ -1,0 +1,6 @@
+mutation IssueUpdateSubscribers($id: String!, $subscriber_ids: [String!]!) {
+  issueUpdate(
+    id: $id,
+    input: { subscriberIds: $subscriber_ids }
+  ) { success }
+}
