@@ -55,6 +55,7 @@ pub trait NotificationRepository {
         &self,
         executor: &mut Transaction<'a, Postgres>,
         notification: Box<Notification>,
+        update_snoozed_until: bool,
     ) -> Result<Notification, UniversalInboxError>;
     async fn update_notification<'a>(
         &self,
@@ -325,10 +326,62 @@ impl NotificationRepository for Repository {
         &self,
         executor: &mut Transaction<'a, Postgres>,
         notification: Box<Notification>,
+        update_snoozed_until: bool,
     ) -> Result<Notification, UniversalInboxError> {
         let metadata = Json(notification.metadata.clone());
 
-        let id: NotificationId = NotificationId(
+        let query = if update_snoozed_until {
+            sqlx::query_scalar!(
+                r#"
+                INSERT INTO notification
+                  (
+                    id,
+                    title,
+                    status,
+                    source_id,
+                    source_html_url,
+                    metadata,
+                    updated_at,
+                    last_read_at,
+                    snoozed_until,
+                    user_id,
+                    task_id
+                  )
+                VALUES
+                  ($1, $2, $3::notification_status, $4, $5, $6, $7, $8, $9, $10, $11)
+                ON CONFLICT (source_id, kind) DO UPDATE
+                SET
+                  title = $2,
+                  status = $3::notification_status,
+                  source_html_url = $5,
+                  metadata = $6,
+                  updated_at = $7,
+                  last_read_at = $8,
+                  snoozed_until = $9,
+                  user_id = $10
+                RETURNING
+                  id
+            "#,
+                notification.id.0,
+                notification.title,
+                notification.status.to_string() as _,
+                notification.source_id,
+                notification
+                    .source_html_url
+                    .as_ref()
+                    .map(|url| url.to_string()),
+                metadata as Json<NotificationMetadata>, // force the macro to ignore type checking
+                notification.updated_at.naive_utc(),
+                notification
+                    .last_read_at
+                    .map(|last_read_at| last_read_at.naive_utc()),
+                notification
+                    .snoozed_until
+                    .map(|snoozed_until| snoozed_until.naive_utc()),
+                notification.user_id.0,
+                notification.task_id.map(|task_id| task_id.0),
+            )
+        } else {
             sqlx::query_scalar!(
                 r#"
                 INSERT INTO notification
@@ -378,15 +431,14 @@ impl NotificationRepository for Repository {
                 notification.user_id.0,
                 notification.task_id.map(|task_id| task_id.0),
             )
-            .fetch_one(executor)
-            .await
-            .with_context(|| {
+        };
+        let id: NotificationId =
+            NotificationId(query.fetch_one(executor).await.with_context(|| {
                 format!(
                     "Failed to update notification with source ID {} from storage",
                     notification.source_id
                 )
-            })?,
-        );
+            })?);
 
         Ok(Notification {
             id,

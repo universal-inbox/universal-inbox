@@ -1,0 +1,3 @@
+mutation NotificationArchive($id: String!) {
+  notificationArchive(id: $id) { success }
+}

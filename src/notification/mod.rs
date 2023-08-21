@@ -199,6 +199,7 @@ impl TryFrom<IntegrationProviderKind> for NotificationSyncSourceKind {
 
 pub trait NotificationSource: IntegrationProvider {
     fn get_notification_source_kind(&self) -> NotificationSourceKind;
+    fn is_supporting_snoozed_notifications(&self) -> bool;
 }
 
 #[cfg(test)]

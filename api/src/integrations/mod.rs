@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use sqlx::{Postgres, Transaction};
 
 use universal_inbox::{
@@ -38,6 +39,13 @@ pub mod notification {
             &self,
             executor: &mut Transaction<'a, Postgres>,
             source_id: &str,
+            user_id: UserId,
+        ) -> Result<(), UniversalInboxError>;
+        async fn snooze_notification_from_source<'a>(
+            &self,
+            executor: &mut Transaction<'a, Postgres>,
+            source_id: &str,
+            snoozed_until_at: DateTime<Utc>,
             user_id: UserId,
         ) -> Result<(), UniversalInboxError>;
     }

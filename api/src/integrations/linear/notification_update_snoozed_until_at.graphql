@@ -1,0 +1,6 @@
+mutation NotificationUpdateSnoozedUntilAt($id: String!, $snoozed_until_at: DateTime!) {
+  notificationUpdate(
+    id: $id,
+    input: { snoozedUntilAt: $snoozed_until_at }
+  ) { success }
+}

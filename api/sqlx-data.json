@@ -417,7 +417,8 @@
               "kind": {
                 "Enum": [
                   "Github",
-                  "Todoist"
+                  "Todoist",
+                  "Linear"
                 ]
               },
               "name": "integration_provider_kind"
@@ -518,7 +519,8 @@
               "kind": {
                 "Enum": [
                   "Github",
-                  "Todoist"
+                  "Todoist",
+                  "Linear"
                 ]
               },
               "name": "integration_provider_kind"
@@ -723,7 +725,8 @@
               "kind": {
                 "Enum": [
                   "Github",
-                  "Todoist"
+                  "Todoist",
+                  "Linear"
                 ]
               },
               "name": "integration_provider_kind"
@@ -893,6 +896,48 @@
       }
     },
     "query": "\n                INSERT INTO \"user\"\n                  (\n                    id,\n                    auth_user_id,\n                    auth_id_token,\n                    first_name,\n                    last_name,\n                    email,\n                    created_at,\n                    updated_at\n                  )\n                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)\n                RETURNING\n                  id\n            "
+  },
+  "d286b03eb2197a7b43ef67555420619cb4f179ab31dfd03febe8fb0779cae1d6": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        }
+      ],
+      "nullable": [
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Uuid",
+          "Text",
+          {
+            "Custom": {
+              "kind": {
+                "Enum": [
+                  "Unread",
+                  "Read",
+                  "Deleted",
+                  "Unsubscribed"
+                ]
+              },
+              "name": "notification_status"
+            }
+          },
+          "Text",
+          "Text",
+          "Json",
+          "Timestamp",
+          "Timestamp",
+          "Timestamp",
+          "Uuid",
+          "Uuid"
+        ]
+      }
+    },
+    "query": "\n                INSERT INTO notification\n                  (\n                    id,\n                    title,\n                    status,\n                    source_id,\n                    source_html_url,\n                    metadata,\n                    updated_at,\n                    last_read_at,\n                    snoozed_until,\n                    user_id,\n                    task_id\n                  )\n                VALUES\n                  ($1, $2, $3::notification_status, $4, $5, $6, $7, $8, $9, $10, $11)\n                ON CONFLICT (source_id, kind) DO UPDATE\n                SET\n                  title = $2,\n                  status = $3::notification_status,\n                  source_html_url = $5,\n                  metadata = $6,\n                  updated_at = $7,\n                  last_read_at = $8,\n                  snoozed_until = $9,\n                  user_id = $10\n                RETURNING\n                  id\n            "
   },
   "e3a1ced9ef14a49bafc91cbd0d830b5f98c4e69745c69fb48832bfb7626ae7ea": {
     "describe": {

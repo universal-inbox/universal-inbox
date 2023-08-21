@@ -704,6 +704,10 @@ impl NotificationSource for TodoistService {
     fn get_notification_source_kind(&self) -> NotificationSourceKind {
         NotificationSourceKind::Todoist
     }
+
+    fn is_supporting_snoozed_notifications(&self) -> bool {
+        false
+    }
 }
 
 #[cfg(test)]

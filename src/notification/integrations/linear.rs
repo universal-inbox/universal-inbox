@@ -18,6 +18,7 @@ pub enum LinearNotification {
         r#type: String, // Could be an enum, but no exhaustive list of values
         read_at: Option<DateTime<Utc>>,
         updated_at: DateTime<Utc>,
+        snoozed_until_at: Option<DateTime<Utc>>,
         organization: LinearOrganization,
         issue: LinearIssue,
     },
@@ -26,6 +27,7 @@ pub enum LinearNotification {
         r#type: String, // Could be an enum, but no exhaustive list of values
         read_at: Option<DateTime<Utc>>,
         updated_at: DateTime<Utc>,
+        snoozed_until_at: Option<DateTime<Utc>>,
         organization: LinearOrganization,
         project: LinearProject,
     },
@@ -120,6 +122,7 @@ impl IntoNotification for LinearNotification {
                 id,
                 read_at,
                 updated_at,
+                snoozed_until_at,
                 issue,
                 ..
             } => Notification {
@@ -135,7 +138,7 @@ impl IntoNotification for LinearNotification {
                 metadata: NotificationMetadata::Linear(self.clone()),
                 updated_at: *updated_at,
                 last_read_at: *read_at,
-                snoozed_until: None,
+                snoozed_until: *snoozed_until_at,
                 user_id,
                 task_id: None,
             },
@@ -143,6 +146,7 @@ impl IntoNotification for LinearNotification {
                 id,
                 read_at,
                 updated_at,
+                snoozed_until_at,
                 project,
                 ..
             } => Notification {
@@ -158,7 +162,7 @@ impl IntoNotification for LinearNotification {
                 metadata: NotificationMetadata::Linear(self.clone()),
                 updated_at: *updated_at,
                 last_read_at: *read_at,
-                snoozed_until: None,
+                snoozed_until: *snoozed_until_at,
                 user_id,
                 task_id: None,
             },
