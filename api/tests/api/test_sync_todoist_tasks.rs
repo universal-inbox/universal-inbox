@@ -215,6 +215,96 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
 
 #[rstest]
 #[tokio::test]
+async fn test_sync_tasks_should_add_new_empty_task(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    nango_todoist_connection: Box<NangoConnection>,
+) {
+    // Somehow, Todoist may return empty TodoistItems not attached to any project
+    let app = authenticated_app.await;
+    create_and_mock_integration_connection(
+        &app,
+        IntegrationProviderKind::Todoist,
+        &settings,
+        nango_todoist_connection,
+    )
+    .await;
+
+    let todoist_tasks_mock = mock_todoist_sync_resources_service(
+        &app.todoist_mock_server,
+        "items",
+        &TodoistSyncResponse {
+            items: Some(vec![TodoistItem {
+                id: "id1".to_string(),
+                parent_id: None,
+                project_id: "0".to_string(),
+                sync_id: None,
+                section_id: None,
+                content: "".to_string(),
+                description: "".to_string(),
+                labels: vec![],
+                child_order: 0,
+                day_order: Some(-1),
+                priority: todoist::TodoistItemPriority::P1,
+                checked: false,
+                is_deleted: true,
+                collapsed: false,
+                completed_at: None,
+                added_at: Utc.with_ymd_and_hms(1970, 1, 1, 0, 0, 0).unwrap(),
+                due: None,
+                user_id: "11".to_string(),
+                added_by_uid: None,
+                assigned_by_uid: None,
+                responsible_uid: None,
+            }]),
+            projects: None,
+            full_sync: true,
+            temp_id_mapping: HashMap::new(),
+            sync_token: SyncToken("sync_token".to_string()),
+        },
+        None,
+    );
+    let todoist_projects_mock = mock_todoist_sync_resources_service(
+        &app.todoist_mock_server,
+        "projects",
+        &TodoistSyncResponse {
+            items: None,
+            projects: Some(vec![]),
+            full_sync: true,
+            temp_id_mapping: HashMap::new(),
+            sync_token: SyncToken("project_sync_token".to_string()),
+        },
+        None,
+    );
+
+    let task_creations: Vec<TaskCreationResult> = sync_tasks(
+        &app.client,
+        &app.app_address,
+        Some(TaskSourceKind::Todoist),
+        false,
+    )
+    .await;
+
+    assert_eq!(task_creations.len(), 1);
+    assert!(task_creations[0].notification.is_none());
+    assert_eq!(task_creations[0].task.body, "".to_string());
+    assert!(task_creations[0].task.completed_at.is_none());
+    assert!(task_creations[0].task.due_at.is_none());
+    assert!(!task_creations[0].task.is_recurring);
+    assert!(task_creations[0].task.parent_id.is_none());
+    assert_eq!(task_creations[0].task.priority, TaskPriority::P4);
+    assert_eq!(task_creations[0].task.project, "No project".to_string());
+    assert_eq!(task_creations[0].task.source_id, "id1".to_string());
+    assert_eq!(task_creations[0].task.status, TaskStatus::Deleted);
+    assert!(task_creations[0].task.tags.is_empty());
+    assert_eq!(task_creations[0].task.title, "".to_string());
+    //assert_sync_items(&task_creations, &todoist_items, app.user.id);
+    todoist_tasks_mock.assert();
+    todoist_projects_mock.assert();
+}
+
+#[rstest]
+#[tokio::test]
 async fn test_sync_tasks_should_reuse_existing_sync_token(
     settings: Settings,
     #[future] authenticated_app: AuthenticatedApp,
