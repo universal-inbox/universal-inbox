@@ -112,13 +112,6 @@ pub fn app(cx: Scope) -> Element {
 
             let app_config = get_app_config().await.unwrap();
             app_config_ref.write().replace(app_config);
-
-            notification_service_handle.send(NotificationCommand::Refresh);
-            // Refresh notifications every minute
-            gloo_timers::callback::Interval::new(60_000, move || {
-                notification_service_handle.send(NotificationCommand::Refresh);
-            })
-            .forget();
         }
     });
 
@@ -157,13 +150,22 @@ pub fn authenticated_app(cx: Scope) -> Element {
     let integration_connections_ref = use_atom_ref(cx, INTEGRATION_CONNECTIONS);
     let integration_connection_service =
         use_coroutine_handle::<IntegrationConnectionCommand>(cx).unwrap();
+    let notification_service = use_coroutine_handle::<NotificationCommand>(cx).unwrap();
 
     use_future(cx, (), |()| {
         to_owned![integration_connection_service];
+        to_owned![notification_service];
 
         async move {
             // Load integration connections status
             integration_connection_service.send(IntegrationConnectionCommand::Refresh);
+
+            notification_service.send(NotificationCommand::Refresh);
+            // Refresh notifications every minute
+            gloo_timers::callback::Interval::new(60_000, move || {
+                notification_service.send(NotificationCommand::Refresh);
+            })
+            .forget();
         }
     });
 
