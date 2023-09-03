@@ -27,7 +27,7 @@ pub struct TodoistItem {
     pub added_at: DateTime<Utc>,
     pub due: Option<TodoistItemDue>,
     pub user_id: String,
-    pub added_by_uid: String,
+    pub added_by_uid: Option<String>,
     pub assigned_by_uid: Option<String>,
     pub responsible_uid: Option<String>,
 }
@@ -202,7 +202,7 @@ mod tests {
                     timezone: Some("Europe/Moscow".to_string()),
                 }),
                 user_id: "2671355".to_string(),
-                added_by_uid: "2671355".to_string(),
+                added_by_uid: Some("2671355".to_string()),
                 assigned_by_uid: Some("2671362".to_string()),
                 responsible_uid: Some("2671355".to_string()),
             })
@@ -272,7 +272,7 @@ mod tests {
                     timezone: Some("Europe/Moscow".to_string()),
                 }),
                 user_id: "2671355".to_string(),
-                added_by_uid: "2671355".to_string(),
+                added_by_uid: Some("2671355".to_string()),
                 assigned_by_uid: Some("2671362".to_string()),
                 responsible_uid: Some("2671355".to_string()),
             }

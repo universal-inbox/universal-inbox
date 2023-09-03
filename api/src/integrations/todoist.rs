@@ -345,6 +345,8 @@ impl TodoistService {
             body: source.description.clone(),
             status: if source.checked {
                 TaskStatus::Done
+            } else if source.is_deleted {
+                TaskStatus::Deleted
             } else {
                 TaskStatus::Active
             },
@@ -489,12 +491,7 @@ impl TaskSourceService<TodoistItem> for TodoistService {
             .iter()
             .find(|project| project.id == source.project_id)
             .map(|project| project.name.clone())
-            .ok_or_else(|| {
-                UniversalInboxError::Unexpected(anyhow!(
-                    "Failed to find Todoist project with ID {}",
-                    source.project_id
-                ))
-            })?;
+            .unwrap_or_else(|| "No project".to_string());
 
         Ok(TodoistService::build_task_with_project_name(source, project_name, user_id).await)
     }
