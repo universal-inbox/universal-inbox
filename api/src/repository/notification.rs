@@ -75,7 +75,7 @@ pub trait NotificationRepository {
 
 #[async_trait]
 impl NotificationRepository for Repository {
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn get_one_notification<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -109,7 +109,7 @@ impl NotificationRepository for Repository {
             .transpose()
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn does_notification_exist<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -127,7 +127,7 @@ impl NotificationRepository for Repository {
         return Ok(false);
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn fetch_all_notifications<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -209,7 +209,7 @@ impl NotificationRepository for Repository {
         records.iter().map(|r| r.try_into()).collect()
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.to_string()))]
     async fn create_notification<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -275,7 +275,7 @@ impl NotificationRepository for Repository {
         Ok(notification)
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn update_stale_notifications_status_from_source_ids<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -321,7 +321,7 @@ impl NotificationRepository for Repository {
             .collect::<Result<Vec<Notification>, UniversalInboxError>>()
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.to_string()))]
     async fn create_or_update_notification<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -446,7 +446,7 @@ impl NotificationRepository for Repository {
         })
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn update_notification<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -557,7 +557,7 @@ impl NotificationRepository for Repository {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn update_notifications_for_task<'a, 'b>(
         &self,
         executor: &mut Transaction<'a, Postgres>,

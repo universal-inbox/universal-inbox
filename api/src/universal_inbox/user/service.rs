@@ -44,7 +44,7 @@ impl UserService {
         self.repository.begin().await
     }
 
-    #[tracing::instrument(level = "debug", skip(self), ret, err)]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     pub async fn get_user<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -53,7 +53,7 @@ impl UserService {
         self.repository.get_user(executor, id).await
     }
 
-    #[tracing::instrument(level = "debug", skip(self), ret, err)]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     pub async fn fetch_all_users<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -61,7 +61,7 @@ impl UserService {
         self.repository.fetch_all_users(executor).await
     }
 
-    #[tracing::instrument(level = "debug", skip(self), ret, err)]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     pub async fn authenticate_and_create_user_if_not_exists<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -171,7 +171,7 @@ impl UserService {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self), ret, err)]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     pub async fn close_session<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,

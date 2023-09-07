@@ -1,27 +1,78 @@
+use std::{str::FromStr, time::Duration};
+
 use actix_http::body::MessageBody;
 use actix_identity::IdentityExt;
 use actix_web::dev::{ServiceRequest, ServiceResponse};
 use anyhow::Context;
 use log;
+use opentelemetry_api::KeyValue;
+use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_sdk::{
+    trace::{self, RandomIdGenerator, Sampler},
+    Resource,
+};
+use tonic::metadata::{AsciiMetadataKey, MetadataMap};
 use tracing::{subscriber::set_global_default, Span, Subscriber};
 use tracing_actix_web::{DefaultRootSpanBuilder, RootSpanBuilder};
-use tracing_bunyan_formatter::{BunyanFormattingLayer, JsonStorageLayer};
 use tracing_log::LogTracer;
-use tracing_subscriber::{fmt::TestWriter, layer::SubscriberExt, EnvFilter};
+use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Registry};
 
 use universal_inbox::user::UserId;
 
-pub fn get_subscriber(env_filter_str: &str) -> impl Subscriber + Send + Sync {
-    let formatting_layer =
-        BunyanFormattingLayer::new("universal-inbox-api".into(), TestWriter::new);
+use crate::configuration::TracingSettings;
 
+pub fn get_subscriber_with_telemetry(
+    env_filter_str: &str,
+    config: &TracingSettings,
+) -> impl Subscriber + Send + Sync {
     let env_filter =
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(env_filter_str));
 
-    tracing_subscriber::registry()
+    let mut map = MetadataMap::with_capacity(config.otlp_exporter_headers.len());
+    for (header_name, header_value) in config.otlp_exporter_headers.clone() {
+        map.insert(
+            AsciiMetadataKey::from_str(header_name.as_str()).unwrap(),
+            header_value.parse().unwrap(),
+        );
+    }
+
+    let tracer = opentelemetry_otlp::new_pipeline()
+        .tracing()
+        .with_trace_config(
+            trace::config()
+                .with_sampler(Sampler::AlwaysOn)
+                .with_id_generator(RandomIdGenerator::default())
+                .with_max_events_per_span(256)
+                .with_max_attributes_per_span(64)
+                .with_resource(Resource::new(vec![KeyValue::new(
+                    "service.name",
+                    "universal-inbox-api",
+                )])),
+        )
+        .with_exporter(
+            opentelemetry_otlp::new_exporter()
+                .tonic()
+                .with_endpoint(config.otlp_exporter_endpoint.to_string())
+                .with_timeout(Duration::from_secs(3))
+                .with_metadata(map),
+        );
+    let telemetry = tracing_opentelemetry::layer()
+        .with_tracer(tracer.install_batch(opentelemetry::runtime::Tokio).unwrap());
+
+    let fmt = tracing_subscriber::fmt::layer().compact();
+
+    Registry::default()
         .with(env_filter)
-        .with(JsonStorageLayer)
-        .with(formatting_layer)
+        .with(fmt)
+        .with(telemetry)
+}
+
+pub fn get_subscriber(env_filter_str: &str) -> impl Subscriber + Send + Sync {
+    let env_filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(env_filter_str));
+    let fmt = tracing_subscriber::fmt::layer().compact();
+
+    Registry::default().with(env_filter).with(fmt)
 }
 
 pub fn init_subscriber(

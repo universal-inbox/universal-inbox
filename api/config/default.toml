@@ -1,8 +1,5 @@
 [application]
 port = 8000
-# See https://docs.rs/tracing-subscriber/latest/tracing_subscriber/struct.EnvFilter.html
-log_directive = "info"
-dependencies_log_directive = "error"
 api_path = ""
 front_base_url = "http://localhost:8080"
 # If `static_path` is specified, statics from `static_dir` will be served on `static_path`
@@ -21,6 +18,19 @@ min_sync_tasks_interval_in_minutes = 5
 # secret_key = ""
 max_age_days = 30
 max_age_inactive_days = 7
+
+[application.observability.logging]
+# See https://docs.rs/tracing-subscriber/latest/tracing_subscriber/struct.EnvFilter.html
+log_directive = "info"
+dependencies_log_directive = "error"
+
+# [application.observability.tracing]
+# otlp_exporter_endpoint = "https://otlp.host"
+
+# Depending on the OTLP provider, the header may be different or may not be
+# required
+# [application.observability.tracing.otlp_exporter_headers]
+# api-key = "12345"
 
 [database]
 host = "127.0.0.1"

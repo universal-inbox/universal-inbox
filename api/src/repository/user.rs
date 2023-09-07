@@ -47,7 +47,7 @@ pub trait UserRepository {
 
 #[async_trait]
 impl UserRepository for Repository {
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn get_user<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -77,6 +77,7 @@ impl UserRepository for Repository {
         Ok(row.map(|user_row| user_row.into()))
     }
 
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn fetch_all_users<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -103,7 +104,7 @@ impl UserRepository for Repository {
         Ok(rows.iter().map(|r| r.into()).collect())
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn get_user_by_auth_id<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -135,7 +136,7 @@ impl UserRepository for Repository {
         Ok(row.map(|user_row| user_row.into()))
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn create_user<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -181,7 +182,7 @@ impl UserRepository for Repository {
         Ok(User { id, ..user })
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn update_user_auth_id_token<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,

@@ -68,7 +68,7 @@ impl TaskService {
         self.repository.begin().await
     }
 
-    #[tracing::instrument(level = "debug", skip(task_source_service), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor, task_source_service, task), fields(task_id = task.id.to_string()), err)]
     pub async fn apply_updated_task_side_effect<'a, T>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -98,7 +98,7 @@ impl TaskService {
         Ok(())
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     pub async fn list_tasks<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -110,7 +110,7 @@ impl TaskService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     pub async fn search_tasks<'a, 'b>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -122,7 +122,7 @@ impl TaskService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     pub async fn get_task<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -142,7 +142,7 @@ impl TaskService {
         Ok(task)
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     pub async fn get_tasks<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -151,7 +151,7 @@ impl TaskService {
         self.repository.get_tasks(executor, task_ids).await
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor, task), fields(task_id = task.id.to_string()), err)]
     pub async fn create_task<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -185,7 +185,7 @@ impl TaskService {
         }))
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.to_string()), err)]
     pub async fn create_task_from_notification<'a, 'b>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -352,7 +352,10 @@ impl TaskService {
     //         .await
     // }
 
-    #[tracing::instrument(level = "debug", skip(self, task_source_service))]
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, executor, task_source_service, source_tasks)
+    )]
     pub async fn save_tasks_from_source<'a, T: Debug>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -394,7 +397,7 @@ impl TaskService {
         Ok(tasks)
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     pub async fn sync_tasks<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -475,7 +478,8 @@ impl TaskService {
         }
         Ok(())
     }
-    #[tracing::instrument(level = "debug", skip(self), err)]
+
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     pub async fn patch_task<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -543,7 +547,7 @@ impl TaskService {
         Ok(updated_task)
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.to_string()), err)]
     pub async fn link_notification_with_task<'a, 'b>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -588,7 +592,7 @@ impl TaskService {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     pub async fn search_projects<'a, 'b>(
         &self,
         executor: &mut Transaction<'a, Postgres>,

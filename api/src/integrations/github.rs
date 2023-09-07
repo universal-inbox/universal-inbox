@@ -7,6 +7,8 @@ use chrono::{DateTime, Utc};
 use format_serde_error::SerdeError;
 use futures::stream::{self, TryStreamExt};
 use http::{HeaderMap, HeaderValue, Uri};
+use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
+use reqwest_tracing::{SpanBackendWithUrl, TracingMiddleware};
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
 
@@ -131,7 +133,7 @@ impl GithubService {
     }
 }
 
-fn build_github_client(access_token: &AccessToken) -> Result<reqwest::Client, reqwest::Error> {
+fn build_github_client(access_token: &AccessToken) -> Result<ClientWithMiddleware, reqwest::Error> {
     let mut headers = HeaderMap::new();
 
     headers.insert(
@@ -142,10 +144,13 @@ fn build_github_client(access_token: &AccessToken) -> Result<reqwest::Client, re
     auth_header_value.set_sensitive(true);
     headers.insert("Authorization", auth_header_value);
 
-    reqwest::Client::builder()
+    let reqwest_client = reqwest::Client::builder()
         .default_headers(headers)
         .user_agent(APP_USER_AGENT)
-        .build()
+        .build()?;
+    Ok(ClientBuilder::new(reqwest_client)
+        .with(TracingMiddleware::<SpanBackendWithUrl>::new())
+        .build())
 }
 
 pub fn get_html_url_from_api_url(api_url: &Option<Uri>) -> Option<Uri> {
@@ -164,7 +169,7 @@ pub fn get_html_url_from_api_url(api_url: &Option<Uri>) -> Option<Uri> {
 
 #[async_trait]
 impl NotificationSourceService<GithubNotification> for GithubService {
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     async fn fetch_all_notifications<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -203,7 +208,7 @@ impl NotificationSourceService<GithubNotification> for GithubService {
         .collect::<Vec<GithubNotification>>())
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     async fn delete_notification_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -221,7 +226,7 @@ impl NotificationSourceService<GithubNotification> for GithubService {
         self.mark_thread_as_read(source_id, &access_token).await
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     async fn unsubscribe_notification_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,

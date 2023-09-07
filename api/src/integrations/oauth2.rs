@@ -5,6 +5,8 @@ use base64::{engine::general_purpose, Engine as _};
 use chrono::{DateTime, Utc};
 use format_serde_error::SerdeError;
 use http::{HeaderMap, HeaderValue};
+use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
+use reqwest_tracing::{SpanBackendWithUrl, TracingMiddleware};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_with::serde_as;
@@ -15,7 +17,7 @@ use crate::{integrations::APP_USER_AGENT, universal_inbox::UniversalInboxError};
 
 #[derive(Clone, Debug)]
 pub struct NangoService {
-    client: reqwest::Client,
+    client: ClientWithMiddleware,
     nango_base_url: Url,
 }
 
@@ -71,7 +73,7 @@ impl NangoService {
         })
     }
 
-    #[tracing::instrument(level = "debug", skip(self), ret, err)]
+    #[tracing::instrument(level = "debug", skip(self), err)]
     pub async fn get_connection(
         &self,
         connection_id: ConnectionId,
@@ -103,7 +105,7 @@ impl NangoService {
         Ok(Some(connection))
     }
 
-    #[tracing::instrument(level = "debug", skip(self), ret, err)]
+    #[tracing::instrument(level = "debug", skip(self), err)]
     pub async fn delete_connection(
         &self,
         connection_id: ConnectionId,
@@ -136,7 +138,7 @@ impl NangoService {
     }
 }
 
-fn build_nango_client(secret_key: &str) -> Result<reqwest::Client, reqwest::Error> {
+fn build_nango_client(secret_key: &str) -> Result<ClientWithMiddleware, reqwest::Error> {
     let mut headers = HeaderMap::new();
 
     let base64_secret_key = general_purpose::STANDARD.encode(secret_key);
@@ -144,8 +146,11 @@ fn build_nango_client(secret_key: &str) -> Result<reqwest::Client, reqwest::Erro
     auth_header_value.set_sensitive(true);
     headers.insert("Authorization", auth_header_value);
 
-    reqwest::Client::builder()
+    let reqwest_client = reqwest::Client::builder()
         .default_headers(headers)
         .user_agent(APP_USER_AGENT)
-        .build()
+        .build()?;
+    Ok(ClientBuilder::new(reqwest_client)
+        .with(TracingMiddleware::<SpanBackendWithUrl>::new())
+        .build())
 }
