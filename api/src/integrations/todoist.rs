@@ -12,6 +12,8 @@ use cached::proc_macro::cached;
 use format_serde_error::SerdeError;
 use http::{HeaderMap, HeaderValue, StatusCode};
 use regex::RegexBuilder;
+use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
+use reqwest_tracing::{SpanBackendWithUrl, TracingMiddleware};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::{Postgres, Transaction};
@@ -296,6 +298,7 @@ impl TodoistService {
         cached_fetch_all_projects(self, access_token, sync_token).await
     }
 
+    #[tracing::instrument(level = "debug", skip(self), err)]
     async fn get_or_create_project_id(
         &self,
         project_name: &str,
@@ -391,22 +394,27 @@ async fn cached_fetch_all_projects(
     })
 }
 
-fn build_todoist_client(access_token: &AccessToken) -> Result<reqwest::Client, reqwest::Error> {
+fn build_todoist_client(
+    access_token: &AccessToken,
+) -> Result<ClientWithMiddleware, reqwest::Error> {
     let mut headers = HeaderMap::new();
 
     let mut auth_header_value: HeaderValue = format!("Bearer {access_token}").parse().unwrap();
     auth_header_value.set_sensitive(true);
     headers.insert("Authorization", auth_header_value);
 
-    reqwest::Client::builder()
+    let reqwest_client = reqwest::Client::builder()
         .default_headers(headers)
         .user_agent(APP_USER_AGENT)
-        .build()
+        .build()?;
+    Ok(ClientBuilder::new(reqwest_client)
+        .with(TracingMiddleware::<SpanBackendWithUrl>::new())
+        .build())
 }
 
 #[async_trait]
 impl TaskSourceService<TodoistItem> for TodoistService {
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     async fn fetch_all_tasks<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -455,7 +463,7 @@ impl TaskSourceService<TodoistItem> for TodoistService {
         })
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     async fn fetch_task<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -472,7 +480,7 @@ impl TaskSourceService<TodoistItem> for TodoistService {
         self.get_item(source_id, &access_token).await
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor, source), fields(source_id = source.id), err)]
     async fn build_task<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -496,7 +504,7 @@ impl TaskSourceService<TodoistItem> for TodoistService {
         Ok(TodoistService::build_task_with_project_name(source, project_name, user_id).await)
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     async fn create_task<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -545,7 +553,7 @@ impl TaskSourceService<TodoistItem> for TodoistService {
         })
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     async fn delete_task<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -569,7 +577,7 @@ impl TaskSourceService<TodoistItem> for TodoistService {
         .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     async fn complete_task<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -593,7 +601,7 @@ impl TaskSourceService<TodoistItem> for TodoistService {
         .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     async fn update_task<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -650,7 +658,7 @@ impl TaskSourceService<TodoistItem> for TodoistService {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     async fn search_projects<'a, 'b>(
         &self,
         executor: &mut Transaction<'a, Postgres>,

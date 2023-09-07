@@ -1,10 +1,12 @@
 [application]
-log_directive = "debug"
-dependencies_log_directive = "debug"
 static_dir = "../web/dist"
 api_path = "/api"
 min_sync_tasks_interval_in_minutes = 0
 min_sync_notifications_interval_in_minutes = 0
+
+[application.observability.logging]
+log_directive = "debug"
+dependencies_log_directive = "debug"
 
 [application.http_session]
 secret_key = "1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF"

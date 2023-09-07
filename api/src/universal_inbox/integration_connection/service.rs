@@ -45,7 +45,7 @@ impl IntegrationConnectionService {
         self.repository.begin().await
     }
 
-    #[tracing::instrument(level = "debug", skip(self), ret, err)]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     pub async fn fetch_all_integration_connections<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -56,7 +56,7 @@ impl IntegrationConnectionService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self), ret, err)]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     pub async fn create_integration_connection<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -73,7 +73,7 @@ impl IntegrationConnectionService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self), ret, err)]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     pub async fn verify_integration_connection<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -128,7 +128,7 @@ impl IntegrationConnectionService {
         })
     }
 
-    #[tracing::instrument(level = "debug", skip(self), ret, err)]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     pub async fn disconnect_integration_connection<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -174,7 +174,7 @@ impl IntegrationConnectionService {
         })
     }
 
-    #[tracing::instrument(level = "debug", skip(self), ret, err)]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     pub async fn find_access_token<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -230,7 +230,7 @@ impl IntegrationConnectionService {
         Ok(None)
     }
 
-    #[tracing::instrument(level = "debug", skip(self), ret, err)]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     pub async fn update_integration_connection_sync_status<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -248,7 +248,7 @@ impl IntegrationConnectionService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self), ret, err)]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     pub async fn update_integration_connection_context<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,

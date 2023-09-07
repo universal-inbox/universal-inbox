@@ -2,7 +2,6 @@ extend = "../Makefile.toml"
 
 [tasks.run]
 clear = true
-install_crate = { crate_name = "bunyan", binary = "bunyan" }
 env = { "TASKRC" = "$PWD/taskrc" }
 command = "bash"
-args = ["-c", "cargo run -- serve | bunyan"]
+args = ["-c", "cargo run -- serve"]

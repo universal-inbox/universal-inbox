@@ -6,6 +6,8 @@ use chrono::{DateTime as ChronoDateTime, Utc};
 use format_serde_error::SerdeError;
 use graphql_client::{GraphQLQuery, Response};
 use http::{HeaderMap, HeaderValue};
+use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
+use reqwest_tracing::{SpanBackendWithUrl, TracingMiddleware};
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
 use universal_inbox::{
@@ -371,17 +373,20 @@ impl LinearService {
     }
 }
 
-fn build_linear_client(access_token: &AccessToken) -> Result<reqwest::Client, reqwest::Error> {
+fn build_linear_client(access_token: &AccessToken) -> Result<ClientWithMiddleware, reqwest::Error> {
     let mut headers = HeaderMap::new();
 
     let mut auth_header_value: HeaderValue = format!("Bearer {access_token}").parse().unwrap();
     auth_header_value.set_sensitive(true);
     headers.insert("Authorization", auth_header_value);
 
-    reqwest::Client::builder()
+    let reqwest_client = reqwest::Client::builder()
         .default_headers(headers)
         .user_agent(APP_USER_AGENT)
-        .build()
+        .build()?;
+    Ok(ClientBuilder::new(reqwest_client)
+        .with(TracingMiddleware::<SpanBackendWithUrl>::new())
+        .build())
 }
 
 fn assert_no_error_in_response<T>(response: &Response<T>) -> Result<(), UniversalInboxError> {
@@ -404,7 +409,7 @@ fn assert_no_error_in_response<T>(response: &Response<T>) -> Result<(), Universa
 
 #[async_trait]
 impl NotificationSourceService<LinearNotification> for LinearService {
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     async fn fetch_all_notifications<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -423,7 +428,7 @@ impl NotificationSourceService<LinearNotification> for LinearService {
         notifications_response.try_into()
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     async fn delete_notification_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -444,7 +449,7 @@ impl NotificationSourceService<LinearNotification> for LinearService {
         Ok(())
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     async fn unsubscribe_notification_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -497,7 +502,7 @@ impl NotificationSourceService<LinearNotification> for LinearService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     async fn snooze_notification_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,

@@ -74,7 +74,7 @@ pub trait TaskRepository {
 
 #[async_trait]
 impl TaskRepository for Repository {
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn get_one_task<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -112,7 +112,7 @@ impl TaskRepository for Repository {
         row.map(|task_row| task_row.try_into()).transpose()
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn does_task_exist<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -130,7 +130,7 @@ impl TaskRepository for Repository {
         return Ok(false);
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn get_tasks<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -171,7 +171,7 @@ impl TaskRepository for Repository {
             .collect::<Result<Vec<Task>, UniversalInboxError>>()
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn fetch_all_tasks<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -217,7 +217,7 @@ impl TaskRepository for Repository {
         rows.iter().map(|r| r.try_into()).collect()
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn search_tasks<'a, 'b>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -265,7 +265,7 @@ impl TaskRepository for Repository {
             .collect::<Result<Vec<TaskSummary>, UniversalInboxError>>()
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self, executor, task), fields(task_id = task.id.to_string()))]
     async fn create_task<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -342,7 +342,7 @@ impl TaskRepository for Repository {
         Ok(task)
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn update_stale_tasks_status_from_source_ids<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -400,7 +400,7 @@ impl TaskRepository for Repository {
             .collect::<Result<Vec<Task>, UniversalInboxError>>()
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self, executor, task), fields(task_id = task.id.to_string()))]
     async fn create_or_update_task<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -483,7 +483,7 @@ impl TaskRepository for Repository {
         Ok(Task { id, ..*task })
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn update_task<'a, 'b>(
         &self,
         executor: &mut Transaction<'a, Postgres>,

@@ -39,11 +39,17 @@ fn tracing_setup(settings: Settings) {
     info!("Setting up tracing");
     color_backtrace::install();
 
-    let subscriber = get_subscriber(&settings.application.log_directive);
+    let subscriber = get_subscriber(&settings.application.observability.logging.log_directive);
     init_subscriber(
         subscriber,
-        log::LevelFilter::from_str(&settings.application.dependencies_log_directive)
-            .unwrap_or(log::LevelFilter::Error),
+        log::LevelFilter::from_str(
+            &settings
+                .application
+                .observability
+                .logging
+                .dependencies_log_directive,
+        )
+        .unwrap_or(log::LevelFilter::Error),
     );
 }
 

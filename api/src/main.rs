@@ -1,6 +1,7 @@
 use std::{net::TcpListener, str::FromStr, sync::Arc};
 
 use clap::{Parser, Subcommand};
+use opentelemetry::global;
 use sqlx::{postgres::PgConnectOptions, ConnectOptions, PgPool};
 use tracing::{error, info};
 
@@ -10,7 +11,7 @@ use universal_inbox_api::{
     build_services, commands,
     configuration::Settings,
     integrations::oauth2::NangoService,
-    observability::{get_subscriber, init_subscriber},
+    observability::{get_subscriber, get_subscriber_with_telemetry, init_subscriber},
     run,
 };
 
@@ -56,14 +57,25 @@ async fn main() -> std::io::Result<()> {
         2 => (log::LevelFilter::Debug, log::LevelFilter::Debug),
         _ if cli.verbose > 1 => (log::LevelFilter::Trace, log::LevelFilter::Trace),
         _ => (
-            log::LevelFilter::from_str(&settings.application.log_directive)
+            log::LevelFilter::from_str(&settings.application.observability.logging.log_directive)
                 .unwrap_or(log::LevelFilter::Info),
-            log::LevelFilter::from_str(&settings.application.dependencies_log_directive)
-                .unwrap_or(log::LevelFilter::Error),
+            log::LevelFilter::from_str(
+                &settings
+                    .application
+                    .observability
+                    .logging
+                    .dependencies_log_directive,
+            )
+            .unwrap_or(log::LevelFilter::Error),
         ),
     };
-    let subscriber = get_subscriber(log_level_filter.as_str());
-    init_subscriber(subscriber, dep_log_level_filter);
+    if let Some(tracing_settings) = &settings.application.observability.tracing {
+        let subscriber = get_subscriber_with_telemetry(log_level_filter.as_str(), tracing_settings);
+        init_subscriber(subscriber, dep_log_level_filter);
+    } else {
+        let subscriber = get_subscriber(log_level_filter.as_str());
+        init_subscriber(subscriber, dep_log_level_filter);
+    };
 
     info!(
         "Connecting to PostgreSQL on {}",
@@ -116,6 +128,7 @@ async fn main() -> std::io::Result<()> {
             Ok(())
         }
     };
+    global::shutdown_tracer_provider();
 
     match result {
         Err(err) => {

@@ -72,7 +72,7 @@ pub trait IntegrationConnectionRepository {
 
 #[async_trait]
 impl IntegrationConnectionRepository for Repository {
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn get_integration_connection<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -109,7 +109,7 @@ impl IntegrationConnectionRepository for Repository {
         row.map(|r| r.try_into()).transpose()
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn get_integration_connection_per_provider<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -161,7 +161,7 @@ impl IntegrationConnectionRepository for Repository {
         row.map(|r| r.try_into()).transpose()
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn update_integration_connection_status<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -250,7 +250,7 @@ impl IntegrationConnectionRepository for Repository {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn update_integration_connection_sync_status<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -319,7 +319,7 @@ impl IntegrationConnectionRepository for Repository {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn update_integration_connection_context<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -376,7 +376,7 @@ impl IntegrationConnectionRepository for Repository {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn fetch_all_integration_connections<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -411,7 +411,7 @@ impl IntegrationConnectionRepository for Repository {
             .collect::<Result<Vec<IntegrationConnection>, UniversalInboxError>>()
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self, executor, integration_connection), fields(integration_connection_id = integration_connection.id.to_string()))]
     async fn create_integration_connection<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,

@@ -17,8 +17,6 @@ pub struct Settings {
 #[derive(Deserialize, Clone, Debug)]
 pub struct ApplicationSettings {
     pub port: u16,
-    pub log_directive: String,
-    pub dependencies_log_directive: String,
     pub front_base_url: Url,
     pub api_path: String,
     pub static_path: Option<String>,
@@ -27,6 +25,25 @@ pub struct ApplicationSettings {
     pub http_session: HttpSessionSettings,
     pub min_sync_notifications_interval_in_minutes: i64,
     pub min_sync_tasks_interval_in_minutes: i64,
+    pub observability: ObservabilitySettings,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct ObservabilitySettings {
+    pub tracing: Option<TracingSettings>,
+    pub logging: LoggingSettings,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct TracingSettings {
+    pub otlp_exporter_endpoint: Url,
+    pub otlp_exporter_headers: HashMap<String, String>,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct LoggingSettings {
+    pub log_directive: String,
+    pub dependencies_log_directive: String,
 }
 
 #[derive(Deserialize, Clone, Debug)]
