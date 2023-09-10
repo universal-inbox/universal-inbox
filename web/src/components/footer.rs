@@ -30,6 +30,13 @@ pub fn footer(cx: Scope) -> Element {
             div {
                 class: "w-full flex gap-2 p-2 justify-end items-center",
 
+                div {
+                    class: "grow text-xs text-gray-400",
+                    "Press "
+                    kbd { class: "kbd kbd-xs", "?" }
+                    " to display keyboard shortcuts"
+                }
+
                 if let Some(integration_connections) = integration_connections_ref.read().as_ref() {
                     rsx!(integration_connections_status { integration_connections: integration_connections.clone() })
                 }
