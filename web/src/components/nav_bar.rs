@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 use dioxus_free_icons::icons::bs_icons::{
-    BsBoxArrowInLeft, BsGear, BsInbox, BsMoon, BsPerson, BsSun,
+    BsBoxArrowInLeft, BsGear, BsInbox, BsMoon, BsPerson, BsQuestionLg, BsSun,
 };
 use dioxus_free_icons::Icon;
 use dioxus_router::Link;
@@ -79,6 +79,13 @@ pub fn nav_bar(cx: Scope) -> Element {
             div {
                 class: "navbar-end",
 
+                a {
+                    class: "btn btn-ghost btn-square",
+                    href: "mailto:support@universal-inbox.com",
+                    title: "Contact support",
+                    Icon { class: "w-5 h-5", icon: BsQuestionLg }
+                }
+
                 label {
                     class: "btn btn-ghost btn-square swap swap-rotate",
                     input {
@@ -95,6 +102,7 @@ pub fn nav_bar(cx: Scope) -> Element {
                     Icon { class: "swap-on w-5 h-5", icon: BsSun }
                     Icon { class: "swap-off w-5 h-5", icon: BsMoon }
                 }
+
                 Link {
                     class: "btn btn-ghost btn-square",
                     active_class: "btn-active",
