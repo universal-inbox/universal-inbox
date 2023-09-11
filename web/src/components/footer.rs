@@ -41,6 +41,8 @@ pub fn footer(cx: Scope) -> Element {
                     rsx!(integration_connections_status { integration_connections: integration_connections.clone() })
                 }
 
+                div { class: "divider divider-horizontal" }
+
                 match &ui_model_ref.read().loaded_notifications {
                     Some(Ok(count)) => rsx!(div {
                         class: "tooltip tooltip-left",
@@ -62,6 +64,8 @@ pub fn footer(cx: Scope) -> Element {
                     }),
                     None => rsx!(span { class: "loading loading-ring loading-xs" }),
                 }
+
+                div { class: "w-2" }
             }
         }
     })
@@ -99,7 +103,15 @@ pub fn integration_connections_status(
             )
         }
 
-        for integration_connection in (&*integration_connections) {
+        for integration_connection in (integration_connections.iter().filter(|c| c.provider_kind.is_notification_service() )) {
+            integration_connection_status {
+                connection: integration_connection.clone(),
+            }
+        }
+
+        div { class: "divider divider-horizontal" }
+
+        for integration_connection in (integration_connections.iter().filter(|c| c.provider_kind.is_task_service() )) {
             integration_connection_status {
                 connection: integration_connection.clone(),
             }
