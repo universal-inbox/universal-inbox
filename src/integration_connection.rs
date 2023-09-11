@@ -72,17 +72,8 @@ impl IntegrationConnection {
         self.status == IntegrationConnectionStatus::Validated
     }
 
-    pub fn is_task_service(&self) -> bool {
-        self.provider_kind == IntegrationProviderKind::Todoist
-    }
-
-    pub fn is_notification_service(&self) -> bool {
-        self.provider_kind == IntegrationProviderKind::Github
-            || self.provider_kind == IntegrationProviderKind::Linear
-    }
-
     pub fn is_connected_task_service(&self) -> bool {
-        self.is_connected() && self.is_task_service()
+        self.is_connected() && self.provider_kind.is_task_service()
     }
 }
 
@@ -104,6 +95,16 @@ macro_attr! {
         Github,
         Todoist,
         Linear
+    }
+}
+
+impl IntegrationProviderKind {
+    pub fn is_task_service(&self) -> bool {
+        *self == IntegrationProviderKind::Todoist
+    }
+
+    pub fn is_notification_service(&self) -> bool {
+        *self == IntegrationProviderKind::Github || *self == IntegrationProviderKind::Linear
     }
 }
 

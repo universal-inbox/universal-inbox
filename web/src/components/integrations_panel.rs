@@ -27,7 +27,7 @@ pub fn integrations_panel<'a>(
 ) -> Element {
     cx.render(rsx!(
         div {
-            class: "flex flex-col w-auto p-8",
+            class: "flex flex-col w-auto gap-4 p-8",
 
             if !integration_connections.iter().any(|c| c.is_connected()) {
                 rsx!(
@@ -49,16 +49,54 @@ pub fn integrations_panel<'a>(
                 )
             }
 
-            for (kind, config) in (&*integration_providers) {
-                integration_settings {
-                    kind: *kind,
-                    config: config.clone(),
-                    connection: integration_connections.iter().find(|c| c.provider_kind == *kind).cloned(),
-                    on_connect: |c| on_connect.call((*kind, c)),
-                    on_disconnect: |c| on_disconnect.call(c),
-                    on_reconnect: |c| on_reconnect.call(c),
+            div {
+                class: "flex gap-4 w-full",
+                div {
+                    class: "leading-none relative",
+                    span { class: "w-0 h-12 inline-block align-middle" }
+                    span { class: "relative text-2xl text-gray-600", "Notifications source services" }
                 }
-                div { class: "divider" }
+                div { class: "divider grow" }
+            }
+
+            for (kind, config) in (&*integration_providers) {
+                if kind.is_notification_service() {
+                    rsx!(
+                        integration_settings {
+                            kind: *kind,
+                            config: config.clone(),
+                            connection: integration_connections.iter().find(|c| c.provider_kind == *kind).cloned(),
+                            on_connect: |c| on_connect.call((*kind, c)),
+                            on_disconnect: |c| on_disconnect.call(c),
+                            on_reconnect: |c| on_reconnect.call(c),
+                        }
+                    )
+                }
+            }
+
+            div {
+                class: "flex gap-4 w-full",
+                div {
+                    class: "leading-none relative",
+                    span { class: "w-0 h-12 inline-block align-middle" }
+                    span { class: "relative text-2xl text-gray-600", "Todo list services" }
+                }
+                div { class: "divider grow" }
+            }
+
+            for (kind, config) in (&*integration_providers) {
+                if kind.is_task_service() {
+                    rsx!(
+                        integration_settings {
+                            kind: *kind,
+                            config: config.clone(),
+                            connection: integration_connections.iter().find(|c| c.provider_kind == *kind).cloned(),
+                            on_connect: |c| on_connect.call((*kind, c)),
+                            on_disconnect: |c| on_disconnect.call(c),
+                            on_reconnect: |c| on_reconnect.call(c),
+                        }
+                    )
+                }
             }
         }
     ))
@@ -82,14 +120,12 @@ pub fn integration_settings<'a>(
 
     let (connection_button_label, connection_button_style, sync_message, feature_label) =
         use_memo(cx, &connection.clone(), |connection| match connection {
-            Some(Some(
-                ref connection @ IntegrationConnection {
-                    status: IntegrationConnectionStatus::Validated,
-                    last_sync_started_at: Some(ref started_at),
-                    last_sync_failure_message: None,
-                    ..
-                },
-            )) => (
+            Some(Some(IntegrationConnection {
+                status: IntegrationConnectionStatus::Validated,
+                last_sync_started_at: Some(ref started_at),
+                last_sync_failure_message: None,
+                ..
+            })) => (
                 "Disconnect",
                 "btn-success",
                 Some(format!(
@@ -98,9 +134,9 @@ pub fn integration_settings<'a>(
                         .with_timezone(&Local)
                         .to_rfc3339_opts(SecondsFormat::Secs, true)
                 )),
-                if connection.is_notification_service() {
+                if kind.is_notification_service() {
                     Some("Synchronize notifications")
-                } else if connection.is_task_service() {
+                } else if kind.is_task_service() {
                     Some("Synchronize tasks from the inbox as notifications")
                 } else {
                     None
