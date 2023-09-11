@@ -78,6 +78,7 @@ impl IntegrationConnection {
 
     pub fn is_notification_service(&self) -> bool {
         self.provider_kind == IntegrationProviderKind::Github
+            || self.provider_kind == IntegrationProviderKind::Linear
     }
 
     pub fn is_connected_task_service(&self) -> bool {
