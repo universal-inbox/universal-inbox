@@ -1,4 +1,5 @@
 [application]
+environment = "default"
 port = 8000
 api_path = ""
 front_base_url = "http://localhost:8080"

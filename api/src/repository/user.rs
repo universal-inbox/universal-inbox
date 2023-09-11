@@ -182,7 +182,7 @@ impl UserRepository for Repository {
         Ok(User { id, ..user })
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(level = "debug", skip(self, executor, auth_id_token))]
     async fn update_user_auth_id_token<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,

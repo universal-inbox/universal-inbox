@@ -1,3 +1,6 @@
+[application]
+environment = "test"
+
 [application.observability.logging]
 log_directive = "debug"
 dependencies_log_directive = "debug"
