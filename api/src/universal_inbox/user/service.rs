@@ -61,7 +61,7 @@ impl UserService {
         self.repository.fetch_all_users(executor).await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor, auth_id_token), err)]
     pub async fn authenticate_and_create_user_if_not_exists<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,

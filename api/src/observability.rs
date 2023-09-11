@@ -22,6 +22,7 @@ use universal_inbox::user::UserId;
 use crate::configuration::TracingSettings;
 
 pub fn get_subscriber_with_telemetry(
+    environment: &str,
     env_filter_str: &str,
     config: &TracingSettings,
 ) -> impl Subscriber + Send + Sync {
@@ -36,6 +37,7 @@ pub fn get_subscriber_with_telemetry(
         );
     }
 
+    let hostname = hostname::get().unwrap();
     let tracer = opentelemetry_otlp::new_pipeline()
         .tracing()
         .with_trace_config(
@@ -44,10 +46,11 @@ pub fn get_subscriber_with_telemetry(
                 .with_id_generator(RandomIdGenerator::default())
                 .with_max_events_per_span(256)
                 .with_max_attributes_per_span(64)
-                .with_resource(Resource::new(vec![KeyValue::new(
-                    "service.name",
-                    "universal-inbox-api",
-                )])),
+                .with_resource(Resource::new(vec![
+                    KeyValue::new("service.name", "universal-inbox-api"),
+                    KeyValue::new("hostname", hostname.into_string().unwrap()),
+                    KeyValue::new("environment", environment.to_string()),
+                ])),
         )
         .with_exporter(
             opentelemetry_otlp::new_exporter()

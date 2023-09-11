@@ -70,7 +70,11 @@ async fn main() -> std::io::Result<()> {
         ),
     };
     if let Some(tracing_settings) = &settings.application.observability.tracing {
-        let subscriber = get_subscriber_with_telemetry(log_level_filter.as_str(), tracing_settings);
+        let subscriber = get_subscriber_with_telemetry(
+            &settings.application.environment,
+            log_level_filter.as_str(),
+            tracing_settings,
+        );
         init_subscriber(subscriber, dep_log_level_filter);
     } else {
         let subscriber = get_subscriber(log_level_filter.as_str());

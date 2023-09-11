@@ -1,4 +1,5 @@
 [application]
+environment = "dev"
 static_dir = "../web/dist"
 api_path = "/api"
 min_sync_tasks_interval_in_minutes = 0
