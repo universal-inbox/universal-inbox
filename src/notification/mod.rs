@@ -192,6 +192,7 @@ impl TryFrom<IntegrationProviderKind> for NotificationSyncSourceKind {
     fn try_from(provider_kind: IntegrationProviderKind) -> Result<Self, Self::Error> {
         match provider_kind {
             IntegrationProviderKind::Github => Ok(Self::Github),
+            IntegrationProviderKind::Linear => Ok(Self::Linear),
             _ => Err(()),
         }
     }
