@@ -93,21 +93,26 @@ macro_attr! {
     #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy, Eq, EnumFromStr!, EnumDisplay!, Hash)]
     pub enum IntegrationProviderKind {
         Github,
-        Todoist,
         Linear,
         Notion,
+        GoogleDocs,
+        Slack,
+        Todoist,
+        TickTick
     }
 }
 
 impl IntegrationProviderKind {
     pub fn is_task_service(&self) -> bool {
-        *self == IntegrationProviderKind::Todoist
+        *self == IntegrationProviderKind::Todoist || *self == IntegrationProviderKind::TickTick
     }
 
     pub fn is_notification_service(&self) -> bool {
         *self == IntegrationProviderKind::Github
             || *self == IntegrationProviderKind::Linear
             || *self == IntegrationProviderKind::Notion
+            || *self == IntegrationProviderKind::GoogleDocs
+            || *self == IntegrationProviderKind::Slack
     }
 }
 

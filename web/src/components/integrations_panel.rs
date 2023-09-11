@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use chrono::{Local, SecondsFormat};
 use dioxus::prelude::*;
 use dioxus_free_icons::{
-    icons::bs_icons::{BsExclamationTriangle, BsPlug},
+    icons::bs_icons::{BsExclamationTriangle, BsPlug, BsSlack},
     Icon,
 };
 
@@ -14,7 +14,7 @@ use universal_inbox::{
     IntegrationProviderConfig,
 };
 
-use crate::components::icons::{github, linear, notion, todoist};
+use crate::components::icons::{github, googledocs, linear, notion, ticktick, todoist};
 
 #[inline_props]
 pub fn integrations_panel<'a>(
@@ -146,7 +146,13 @@ pub fn integration_settings<'a>(
         IntegrationProviderKind::Github => rsx!(self::github { class: "w-8 h-8" }),
         IntegrationProviderKind::Linear => rsx!(self::linear { class: "w-8 h-8" }),
         IntegrationProviderKind::Notion => rsx!(self::notion { class: "w-8 h-8" }),
+        IntegrationProviderKind::GoogleDocs => rsx!(self::googledocs { class: "w-8 h-8" }),
+        IntegrationProviderKind::Slack => rsx!(Icon {
+            class: "w-8 h-8",
+            icon: BsSlack
+        }),
         IntegrationProviderKind::Todoist => rsx!(self::todoist { class: "w-8 h-8" }),
+        IntegrationProviderKind::TickTick => rsx!(self::ticktick { class: "w-8 h-8" }),
     };
 
     let (connection_button_label, connection_button_style, sync_message, feature_label) =
