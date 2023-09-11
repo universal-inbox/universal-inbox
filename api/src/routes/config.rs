@@ -66,10 +66,28 @@ pub async fn front_config(
                 },
             ),
             (
+                IntegrationProviderKind::Slack,
+                IntegrationProviderConfig {
+                    name: "Slack".to_string(),
+                    nango_config_key: "slack".to_string().into(),
+                    comment: None,
+                    is_implemented: false,
+                },
+            ),
+            (
                 IntegrationProviderKind::Notion,
                 IntegrationProviderConfig {
                     name: "Notion".to_string(),
                     nango_config_key: "notion".to_string().into(),
+                    comment: None,
+                    is_implemented: false,
+                },
+            ),
+            (
+                IntegrationProviderKind::GoogleDocs,
+                IntegrationProviderConfig {
+                    name: "Google Docs".to_string(),
+                    nango_config_key: "googledocs".to_string().into(),
                     comment: None,
                     is_implemented: false,
                 },
@@ -87,6 +105,15 @@ pub async fn front_config(
                         .clone(),
                     comment: settings.integrations.todoist.comment.clone(),
                     is_implemented: true,
+                },
+            ),
+            (
+                IntegrationProviderKind::TickTick,
+                IntegrationProviderConfig {
+                    name: "Tick Tick".to_string(),
+                    nango_config_key: "ticktick".to_string().into(),
+                    comment: None,
+                    is_implemented: false,
                 },
             ),
         ]),
