@@ -94,7 +94,8 @@ macro_attr! {
     pub enum IntegrationProviderKind {
         Github,
         Todoist,
-        Linear
+        Linear,
+        Notion,
     }
 }
 
@@ -104,7 +105,9 @@ impl IntegrationProviderKind {
     }
 
     pub fn is_notification_service(&self) -> bool {
-        *self == IntegrationProviderKind::Github || *self == IntegrationProviderKind::Linear
+        *self == IntegrationProviderKind::Github
+            || *self == IntegrationProviderKind::Linear
+            || *self == IntegrationProviderKind::Notion
     }
 }
 

@@ -47,6 +47,7 @@ pub async fn front_config(
                         .context("Missing Nango config key for Github")?
                         .clone(),
                     comment: settings.integrations.github.comment.clone(),
+                    is_implemented: true,
                 },
             ),
             (
@@ -61,6 +62,16 @@ pub async fn front_config(
                         .context("Missing Nango config key for Linear")?
                         .clone(),
                     comment: settings.integrations.linear.comment.clone(),
+                    is_implemented: true,
+                },
+            ),
+            (
+                IntegrationProviderKind::Notion,
+                IntegrationProviderConfig {
+                    name: "Notion".to_string(),
+                    nango_config_key: "notion".to_string().into(),
+                    comment: None,
+                    is_implemented: false,
                 },
             ),
             (
@@ -75,6 +86,7 @@ pub async fn front_config(
                         .context("Missing Nango config key for Todoist")?
                         .clone(),
                     comment: settings.integrations.todoist.comment.clone(),
+                    is_implemented: true,
                 },
             ),
         ]),

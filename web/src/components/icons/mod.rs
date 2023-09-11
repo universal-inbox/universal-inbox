@@ -53,3 +53,11 @@ pub fn linear<'a>(cx: Scope, class: Option<&'a str>) -> Element {
         }
   ))
 }
+
+#[inline_props]
+pub fn notion<'a>(cx: Scope, class: Option<&'a str>) -> Element {
+    cx.render(rsx!(img {
+        class: "{class.unwrap_or_default()}",
+        src: "images/notion-logo.svg"
+    }))
+}
