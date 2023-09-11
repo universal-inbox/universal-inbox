@@ -14,7 +14,7 @@ use universal_inbox::{
     IntegrationProviderConfig,
 };
 
-use crate::components::icons::{github, linear, todoist};
+use crate::components::icons::{github, linear, notion, todoist};
 
 #[inline_props]
 pub fn integrations_panel<'a>(
@@ -60,7 +60,22 @@ pub fn integrations_panel<'a>(
             }
 
             for (kind, config) in (&*integration_providers) {
-                if kind.is_notification_service() {
+                if kind.is_notification_service() && config.is_implemented {
+                    rsx!(
+                        integration_settings {
+                            kind: *kind,
+                            config: config.clone(),
+                            connection: integration_connections.iter().find(|c| c.provider_kind == *kind).cloned(),
+                            on_connect: |c| on_connect.call((*kind, c)),
+                            on_disconnect: |c| on_disconnect.call(c),
+                            on_reconnect: |c| on_reconnect.call(c),
+                        }
+                    )
+                }
+            }
+
+            for (kind, config) in (&*integration_providers) {
+                if kind.is_notification_service() && !config.is_implemented {
                     rsx!(
                         integration_settings {
                             kind: *kind,
@@ -85,7 +100,22 @@ pub fn integrations_panel<'a>(
             }
 
             for (kind, config) in (&*integration_providers) {
-                if kind.is_task_service() {
+                if kind.is_task_service() && config.is_implemented {
+                    rsx!(
+                        integration_settings {
+                            kind: *kind,
+                            config: config.clone(),
+                            connection: integration_connections.iter().find(|c| c.provider_kind == *kind).cloned(),
+                            on_connect: |c| on_connect.call((*kind, c)),
+                            on_disconnect: |c| on_disconnect.call(c),
+                            on_reconnect: |c| on_reconnect.call(c),
+                        }
+                    )
+                }
+            }
+
+            for (kind, config) in (&*integration_providers) {
+                if kind.is_task_service() && !config.is_implemented {
                     rsx!(
                         integration_settings {
                             kind: *kind,
@@ -115,6 +145,7 @@ pub fn integration_settings<'a>(
     let icon = match kind {
         IntegrationProviderKind::Github => rsx!(self::github { class: "w-8 h-8" }),
         IntegrationProviderKind::Linear => rsx!(self::linear { class: "w-8 h-8" }),
+        IntegrationProviderKind::Notion => rsx!(self::notion { class: "w-8 h-8" }),
         IntegrationProviderKind::Todoist => rsx!(self::todoist { class: "w-8 h-8" }),
     };
 
@@ -166,7 +197,13 @@ pub fn integration_settings<'a>(
                 status: IntegrationConnectionStatus::Failing,
                 ..
             })) => ("Reconnect", "btn-error", None, None),
-            _ => ("Connect", "btn-primary", None, None),
+            _ => {
+                if config.is_implemented {
+                    ("Connect", "btn-primary", None, None)
+                } else {
+                    ("Not yet implemented", "btn-disabled btn-ghost", None, None)
+                }
+            }
         });
 
     cx.render(rsx!(

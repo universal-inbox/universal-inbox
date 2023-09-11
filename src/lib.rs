@@ -33,6 +33,7 @@ pub struct IntegrationProviderConfig {
     pub name: String,
     pub nango_config_key: NangoProviderKey,
     pub comment: Option<String>,
+    pub is_implemented: bool,
 }
 
 pub trait HasHtmlUrl {

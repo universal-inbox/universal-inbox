@@ -164,27 +164,32 @@ pub fn integration_connection_status(cx: Scope, connection: IntegrationConnectio
         });
 
     let icon = match connection.provider_kind {
-        IntegrationProviderKind::Github => rsx!(self::github {
+        IntegrationProviderKind::Github => Some(rsx!(self::github {
             class: "w-4 h-4 {connection_style}"
-        }),
-        IntegrationProviderKind::Todoist => rsx!(self::todoist {
+        })),
+        IntegrationProviderKind::Todoist => Some(rsx!(self::todoist {
             class: "w-4 h-4 {connection_style}"
-        }),
-        IntegrationProviderKind::Linear => rsx!(self::linear {
+        })),
+        IntegrationProviderKind::Linear => Some(rsx!(self::linear {
             class: "w-4 h-4 {connection_style}"
-        }),
+        })),
+        _ => None,
     };
 
-    cx.render(rsx! {
-        div {
-            class: "tooltip tooltip-left text-xs",
-            "data-tip": "{tooltip}",
+    if let Some(icon) = icon {
+        cx.render(rsx! {
+            div {
+                class: "tooltip tooltip-left text-xs",
+                "data-tip": "{tooltip}",
 
-            Link {
-                to: "/settings",
-                title: "Sync status",
-                icon
+                Link {
+                    to: "/settings",
+                    title: "Sync status",
+                    icon
+                }
             }
-        }
-    })
+        })
+    } else {
+        cx.render(rsx!(div {}))
+    }
 }
