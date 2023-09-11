@@ -1,3 +1,4 @@
+use chrono::{DateTime, Local};
 use dioxus::{events::MouseEvent, prelude::*};
 use dioxus_free_icons::{
     icons::{
@@ -236,7 +237,7 @@ fn notification_display<'a>(
         }
     });
     let notif_updated_at = use_memo(cx, &(notif.updated_at,), |(updated_at,)| {
-        updated_at.format("%Y-%m-%d %H:%M")
+        Into::<DateTime<Local>>::into(updated_at).format("%Y-%m-%d %H:%M")
     });
 
     cx.render(rsx!(
