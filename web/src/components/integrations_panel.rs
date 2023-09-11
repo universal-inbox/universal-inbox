@@ -54,7 +54,7 @@ pub fn integrations_panel<'a>(
                 div {
                     class: "leading-none relative",
                     span { class: "w-0 h-12 inline-block align-middle" }
-                    span { class: "relative text-2xl text-gray-600", "Notifications source services" }
+                    span { class: "relative text-2xl", "Notifications source services" }
                 }
                 div { class: "divider grow" }
             }
@@ -94,7 +94,7 @@ pub fn integrations_panel<'a>(
                 div {
                     class: "leading-none relative",
                     span { class: "w-0 h-12 inline-block align-middle" }
-                    span { class: "relative text-2xl text-gray-600", "Todo list services" }
+                    span { class: "relative text-2xl", "Todo list services" }
                 }
                 div { class: "divider grow" }
             }
