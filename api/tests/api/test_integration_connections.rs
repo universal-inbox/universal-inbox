@@ -303,7 +303,7 @@ mod verify_integration_connections {
 mod disconnect_integration_connections {
     use crate::helpers::{
         integration_connection::{
-            create_validated_integration_connection, mock_nango_delete_connection_service,
+            create_integration_connection, mock_nango_delete_connection_service,
         },
         rest::delete_resource,
     };
@@ -319,8 +319,12 @@ mod disconnect_integration_connections {
         #[future] authenticated_app: AuthenticatedApp,
     ) {
         let app = authenticated_app.await;
-        let integration_connection =
-            create_validated_integration_connection(&app, IntegrationProviderKind::Github).await;
+        let integration_connection = create_integration_connection(
+            &app,
+            IntegrationProviderKind::Github,
+            IntegrationConnectionStatus::Validated,
+        )
+        .await;
         let github_config_key = settings
             .integrations
             .oauth2
@@ -356,8 +360,12 @@ mod disconnect_integration_connections {
         #[future] authenticated_app: AuthenticatedApp,
     ) {
         let app = authenticated_app.await;
-        let integration_connection =
-            create_validated_integration_connection(&app, IntegrationProviderKind::Github).await;
+        let integration_connection = create_integration_connection(
+            &app,
+            IntegrationProviderKind::Github,
+            IntegrationConnectionStatus::Validated,
+        )
+        .await;
 
         let nango_mock = app.nango_mock_server.mock(|when, then| {
             when.method(DELETE)

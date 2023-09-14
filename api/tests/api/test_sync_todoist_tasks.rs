@@ -734,6 +734,7 @@ async fn test_sync_all_tasks_asynchronously_in_error(
         app.user.id,
         IntegrationProviderKind::Todoist,
         None,
+        None,
     )
     .await
     .unwrap();

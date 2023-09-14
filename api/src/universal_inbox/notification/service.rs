@@ -7,7 +7,7 @@ use anyhow::{anyhow, Context};
 use chrono::{Duration, Utc};
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 use universal_inbox::{
     notification::{
@@ -207,9 +207,11 @@ impl NotificationService {
             .await?;
 
         if result.is_none() {
+            debug!("No validated {integration_provider_kind} integration found for user {user_id}, skipping sync.");
             return Ok(vec![]);
         }
 
+        info!("Syncing {integration_provider_kind} integration for user {user_id}.");
         self.integration_connection_service
             .read()
             .await

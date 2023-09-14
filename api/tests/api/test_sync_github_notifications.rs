@@ -5,7 +5,7 @@ use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
 use universal_inbox::{
-    integration_connection::IntegrationProviderKind,
+    integration_connection::{IntegrationConnectionStatus, IntegrationProviderKind},
     notification::{
         integrations::github::GithubNotification, Notification, NotificationMetadata,
         NotificationSourceKind, NotificationStatus,
@@ -21,8 +21,8 @@ use universal_inbox_api::{
 use crate::helpers::{
     auth::{authenticated_app, AuthenticatedApp},
     integration_connection::{
-        create_and_mock_integration_connection, get_integration_connection_per_provider,
-        nango_github_connection,
+        create_and_mock_integration_connection, create_integration_connection,
+        get_integration_connection_per_provider, nango_github_connection,
     },
     notification::{
         github::{
@@ -353,6 +353,36 @@ async fn test_sync_all_notifications_asynchronously(
 
 #[rstest]
 #[tokio::test]
+async fn test_sync_all_notifications_with_no_validated_integration_connections(
+    #[future] authenticated_app: AuthenticatedApp,
+) {
+    let app = authenticated_app.await;
+    create_integration_connection(
+        &app,
+        IntegrationProviderKind::Github,
+        IntegrationConnectionStatus::Created,
+    )
+    .await;
+
+    let github_notifications_mock = app.github_mock_server.mock(|when, then| {
+        when.any_request();
+        then.status(200);
+    });
+
+    let response = sync_notifications_response(
+        &app.client,
+        &app.app_address,
+        Some(NotificationSourceKind::Github),
+        false, // synchronously
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    github_notifications_mock.assert_hits(0);
+}
+
+#[rstest]
+#[tokio::test]
 async fn test_sync_all_notifications_asynchronously_in_error(
     settings: Settings,
     #[future] authenticated_app: AuthenticatedApp,
@@ -403,6 +433,7 @@ async fn test_sync_all_notifications_asynchronously_in_error(
         &app,
         app.user.id,
         IntegrationProviderKind::Github,
+        None,
         None,
     )
     .await
