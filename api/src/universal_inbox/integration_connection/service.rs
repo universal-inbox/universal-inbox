@@ -189,6 +189,7 @@ impl IntegrationConnectionService {
                 for_user_id,
                 integration_provider_kind,
                 synced_before,
+                Some(IntegrationConnectionStatus::Validated),
             )
             .await?;
 

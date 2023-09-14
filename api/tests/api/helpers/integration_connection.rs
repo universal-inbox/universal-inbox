@@ -98,9 +98,10 @@ pub fn mock_nango_delete_connection_service<'a>(
     })
 }
 
-pub async fn create_validated_integration_connection(
+pub async fn create_integration_connection(
     app: &AuthenticatedApp,
     provider_kind: IntegrationProviderKind,
+    status: IntegrationConnectionStatus,
 ) -> Box<IntegrationConnection> {
     let mut transaction = app.repository.begin().await.unwrap();
     let integration_connection = app
@@ -117,7 +118,7 @@ pub async fn create_validated_integration_connection(
         .update_integration_connection_status(
             &mut transaction,
             integration_connection.id,
-            IntegrationConnectionStatus::Validated,
+            status,
             None,
             app.user.id,
         )
@@ -133,6 +134,7 @@ pub async fn get_integration_connection_per_provider(
     user_id: UserId,
     provider_kind: IntegrationProviderKind,
     synced_before: Option<DateTime<Utc>>,
+    with_status: Option<IntegrationConnectionStatus>,
 ) -> Option<IntegrationConnection> {
     let mut transaction = app.repository.begin().await.unwrap();
     let integration_connection = app
@@ -142,6 +144,7 @@ pub async fn get_integration_connection_per_provider(
             user_id,
             provider_kind,
             synced_before,
+            with_status,
         )
         .await
         .unwrap();
@@ -187,7 +190,9 @@ pub async fn create_and_mock_integration_connection(
     settings: &Settings,
     nango_connection: Box<NangoConnection>,
 ) -> Box<IntegrationConnection> {
-    let integration_connection = create_validated_integration_connection(app, provider_kind).await;
+    let integration_connection =
+        create_integration_connection(app, provider_kind, IntegrationConnectionStatus::Validated)
+            .await;
     let github_config_key = settings
         .integrations
         .oauth2

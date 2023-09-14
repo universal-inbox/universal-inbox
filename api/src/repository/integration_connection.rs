@@ -31,6 +31,7 @@ pub trait IntegrationConnectionRepository {
         for_user_id: UserId,
         integration_provider_kind: IntegrationProviderKind,
         synced_before: Option<DateTime<Utc>>,
+        with_status: Option<IntegrationConnectionStatus>,
     ) -> Result<Option<IntegrationConnection>, UniversalInboxError>;
 
     async fn update_integration_connection_status<'a>(
@@ -116,6 +117,7 @@ impl IntegrationConnectionRepository for Repository {
         user_id: UserId,
         integration_provider_kind: IntegrationProviderKind,
         synced_before: Option<DateTime<Utc>>,
+        with_status: Option<IntegrationConnectionStatus>,
     ) -> Result<Option<IntegrationConnection>, UniversalInboxError> {
         let mut query_builder = QueryBuilder::new(
             r#"
@@ -147,6 +149,13 @@ impl IntegrationConnectionRepository for Repository {
             separated
                 .push("(last_sync_started_at is null OR last_sync_started_at <= ")
                 .push_bind_unseparated(synced_before)
+                .push_unseparated(")");
+        }
+
+        if let Some(status) = with_status {
+            separated
+                .push("(status::TEXT = ")
+                .push_bind_unseparated(status.to_string())
                 .push_unseparated(")");
         }
 
