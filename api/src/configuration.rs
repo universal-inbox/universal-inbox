@@ -99,14 +99,14 @@ pub struct Oauth2Settings {
 #[derive(Deserialize, Clone, Debug)]
 pub struct GithubIntegrationSettings {
     pub name: String,
-    pub comment: Option<String>,
     pub page_size: usize,
+    pub doc_for_actions: HashMap<String, String>,
 }
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct DefaultIntegrationSettings {
     pub name: String,
-    pub comment: Option<String>,
+    pub doc_for_actions: HashMap<String, String>,
 }
 
 impl DatabaseSettings {

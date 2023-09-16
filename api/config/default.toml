@@ -46,14 +46,28 @@ port = 6379
 
 [integrations.github]
 name = "Github"
-comment = "⚠️ The Github notification API is not fully functional and does not allow to mark as done a notification. Hence, notification marked as done in Universal Inbox will only be marked as read in Github."
 page_size = 50
+
+[integrations.github.doc_for_actions]
+delete = "The Github notification will only be marked as read. ⚠️ The Github notification API is not fully functional and does not allow to mark it as done."
+unsubscribe = "Unsubscribe from the Github notification. No new update will be received until pinged again."
+snooze = "The Github notification will not be modified. The notification in Universal Inbox will only reappear the next day."
 
 [integrations.linear]
 name = "Linear"
 
+[integrations.linear.doc_for_actions]
+delete = "The Linear notification will be deleted."
+unsubscribe = "Unsubscribe from the Linear notification. No new update will be received until pinged again. Only issue notifications can be unsubscribed, project notifications cannot be unsubscribed."
+snooze = "The Linear notification will be snoozed and will only reappear the next day."
+
 [integrations.todoist]
 name = "Todoist"
+
+[integrations.todoist.doc_for_actions]
+delete = "The Todoist task will be deleted."
+complete = "The task associated with the notification (or the task from the Todoist inbox) will be marked as complete."
+snooze = "The Todoist task will not be modified. The notification in Universal Inbox will only reappear the next day."
 
 [integrations.oauth2]
 nango_base_url = "http://localhost:3003"

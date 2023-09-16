@@ -69,7 +69,7 @@ pub fn notifications_list<'a>(
                                 selected: is_selected,
                                 show_shortcut: is_help_enabled,
                                 onclick: |_| on_delete.call(notif),
-                                Icon { class: "w-5 h-5" icon: BsTrash }
+                                Icon { class: "w-5 h-5", icon: BsTrash }
                             }
 
                             if notif.task.is_some() {
@@ -81,7 +81,7 @@ pub fn notifications_list<'a>(
                                         disabled_label: is_task_actions_disabled.then_some("No task management service connected"),
                                         show_shortcut: is_help_enabled,
                                         onclick: |_| on_complete_task.call(notif),
-                                        Icon { class: "w-5 h-5" icon: BsCheck2 }
+                                        Icon { class: "w-5 h-5", icon: BsCheck2 }
                                     }
                                 )
                             }
@@ -92,7 +92,7 @@ pub fn notifications_list<'a>(
                                 selected: is_selected,
                                 show_shortcut: is_help_enabled,
                                 onclick: |_| on_unsubscribe.call(notif),
-                                Icon { class: "w-5 h-5" icon: BsBellSlash }
+                                Icon { class: "w-5 h-5", icon: BsBellSlash }
                             }
 
                             self::notification_button {
@@ -101,7 +101,7 @@ pub fn notifications_list<'a>(
                                 selected: is_selected,
                                 show_shortcut: is_help_enabled,
                                 onclick: |_| on_snooze.call(notif),
-                                Icon { class: "w-5 h-5" icon: BsClockHistory }
+                                Icon { class: "w-5 h-5", icon: BsClockHistory }
                             }
 
                             if notif.task.is_none() {
@@ -113,7 +113,7 @@ pub fn notifications_list<'a>(
                                         disabled_label: is_task_actions_disabled.then_some("No task management service connected"),
                                         show_shortcut: is_help_enabled,
                                         onclick: |_| on_plan.call(notif),
-                                        Icon { class: "w-5 h-5" icon: BsCalendar2Check }
+                                        Icon { class: "w-5 h-5", icon: BsCalendar2Check }
                                     }
 
                                     self::notification_button {
@@ -123,7 +123,7 @@ pub fn notifications_list<'a>(
                                         disabled_label: is_task_actions_disabled.then_some("No task management service connected"),
                                         show_shortcut: is_help_enabled,
                                         onclick: |_| on_link.call(notif),
-                                        Icon { class: "w-5 h-5" icon: BsLink45deg }
+                                        Icon { class: "w-5 h-5", icon: BsLink45deg }
                                     }
                                 )
                             }
@@ -143,7 +143,7 @@ pub fn notifications_list<'a>(
                                 disabled_label: is_task_actions_disabled.then_some("No task management service connected"),
                                 show_shortcut: is_help_enabled,
                                 onclick: |_| on_delete.call(notif),
-                                Icon { class: "w-5 h-5" icon: BsTrash }
+                                Icon { class: "w-5 h-5", icon: BsTrash }
                             }
 
                             self::notification_button {
@@ -153,7 +153,7 @@ pub fn notifications_list<'a>(
                                 disabled_label: is_task_actions_disabled.then_some("No task management service connected"),
                                 show_shortcut: is_help_enabled,
                                 onclick: |_| on_complete_task.call(notif),
-                                Icon { class: "w-5 h-5" icon: BsCheck2 }
+                                Icon { class: "w-5 h-5", icon: BsCheck2 }
                             }
 
                             self::notification_button {
@@ -162,7 +162,7 @@ pub fn notifications_list<'a>(
                                 selected: is_selected,
                                 show_shortcut: is_help_enabled,
                                 onclick: |_| on_snooze.call(notif),
-                                Icon { class: "w-5 h-5" icon: BsClockHistory }
+                                Icon { class: "w-5 h-5", icon: BsClockHistory }
                             }
 
                             self::notification_button {
@@ -172,7 +172,7 @@ pub fn notifications_list<'a>(
                                 disabled_label: is_task_actions_disabled.then_some("No task management service connected"),
                                 show_shortcut: is_help_enabled,
                                 onclick: |_| on_plan.call(notif),
-                                Icon { class: "w-5 h-5" icon: BsCalendar2Check }
+                                Icon { class: "w-5 h-5", icon: BsCalendar2Check }
                             }
                         }
                     ))
