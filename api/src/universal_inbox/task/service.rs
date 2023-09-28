@@ -281,7 +281,10 @@ impl TaskService {
                     .save_notifications_from_source(
                         executor,
                         task_source_service.get_notification_source_kind(),
-                        tasks_in_inbox,
+                        tasks_in_inbox
+                            .into_iter()
+                            .map(|task| task.into_notification(user_id))
+                            .collect(),
                         true,
                         task_source_service.is_supporting_snoozed_notifications(),
                         user_id,

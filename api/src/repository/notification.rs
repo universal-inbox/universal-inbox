@@ -26,6 +26,12 @@ pub trait NotificationRepository {
         executor: &mut Transaction<'a, Postgres>,
         id: NotificationId,
     ) -> Result<Option<Notification>, UniversalInboxError>;
+    async fn get_notification_for_source_id<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        source_id: &str,
+        user_id: UserId,
+    ) -> Result<Option<Notification>, UniversalInboxError>;
     async fn does_notification_exist<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -104,6 +110,42 @@ impl NotificationRepository for Repository {
         .fetch_optional(executor)
         .await
         .with_context(|| format!("Failed to fetch notification {id} from storage"))?;
+
+        row.map(|notification_row| notification_row.try_into())
+            .transpose()
+    }
+
+    async fn get_notification_for_source_id<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        source_id: &str,
+        user_id: UserId,
+    ) -> Result<Option<Notification>, UniversalInboxError> {
+        let row = sqlx::query_as!(
+            NotificationRow,
+            r#"
+                SELECT
+                  id,
+                  title,
+                  status as "status: _",
+                  source_id,
+                  source_html_url,
+                  metadata as "metadata: Json<NotificationMetadata>",
+                  updated_at,
+                  last_read_at,
+                  snoozed_until,
+                  task_id,
+                  user_id
+                FROM notification
+                WHERE source_id = $1
+                AND user_id = $2
+            "#,
+            source_id,
+            user_id.0
+        )
+            .fetch_optional(executor)
+            .await
+            .with_context(|| format!("Failed to fetch notification with source ID {source_id} and user ID {user_id} from storage"))?;
 
         row.map(|notification_row| notification_row.try_into())
             .transpose()

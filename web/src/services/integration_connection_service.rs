@@ -2,7 +2,7 @@ use anyhow::{anyhow, Context, Result};
 use dioxus::prelude::*;
 use fermi::{AtomRef, UseAtomRef};
 use futures_util::StreamExt;
-use log::error;
+use log::{debug, error};
 use reqwest::Method;
 use url::Url;
 
@@ -84,7 +84,7 @@ pub async fn integration_connnection_service<'a>(
                         error!("An error occurred while connecting with {integration_provider_kind}: {error:?}");
                         toast_service.send(ToastCommand::Push(Toast {
                             kind: ToastKind::Failure,
-                            message: "An error occurred while connecting with {integration_provider_kind}. Please, retry 🙏 If the issue keeps happening, please contact our support.".to_string(),
+                            message: format!("An error occurred while connecting with {integration_provider_kind}. Please, retry 🙏 If the issue keeps happening, please contact our support."),
                             timeout: Some(5_000),
                             ..Default::default()
                         }));
@@ -209,6 +209,7 @@ async fn create_integration_connection(
 ) -> Result<IntegrationConnection> {
     let api_base_url = get_api_base_url(app_config_ref)?;
 
+    debug!("Creating new integration connection for {integration_provider_kind}");
     let new_connection: IntegrationConnection = call_api(
         Method::POST,
         &api_base_url,
@@ -247,6 +248,10 @@ async fn authenticate_integration_connection(
     let (nango_base_url, provider_config) =
         get_configs(app_config_ref, integration_connection.provider_kind)?;
 
+    debug!(
+        "Authenticating integration_connection {} for {}",
+        integration_connection.id, integration_connection.provider_kind
+    );
     nango_auth(
         &nango_base_url,
         &provider_config.nango_config_key,
@@ -271,6 +276,7 @@ async fn verify_integration_connection(
 ) -> Result<IntegrationConnection> {
     let api_base_url = get_api_base_url(app_config_ref)?;
 
+    debug!("Verifying integration connection {integration_connection_id}");
     let result: IntegrationConnection = call_api(
         Method::PATCH,
         &api_base_url,
@@ -302,6 +308,7 @@ async fn disconnect_integration_connection(
 ) -> Result<()> {
     let api_base_url = get_api_base_url(app_config_ref)?;
 
+    debug!("Disconnecting integration connection {integration_connection_id}");
     let result: IntegrationConnection = call_api(
         Method::DELETE,
         &api_base_url,
@@ -351,6 +358,7 @@ fn update_integration_connection_status(
     failure_message: Option<String>,
     integration_connections_ref: &UseAtomRef<Option<Vec<IntegrationConnection>>>,
 ) {
+    debug!("Updating integration connection {integration_connection_id} status with {status}");
     if let Some(integration_connections) = integration_connections_ref.write().as_mut() {
         if let Some(integration_connection) = integration_connections
             .iter_mut()

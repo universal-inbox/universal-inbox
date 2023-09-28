@@ -1,0 +1,72 @@
+{
+  "id": "456",
+  "historyId": "222",
+  "messages": [
+    {
+      "id": "456",
+      "threadId": "456",
+      "labelIds": [
+        "STARRED",
+        "INBOX"
+      ],
+      "snippet": "test 456",
+      "payload": {
+        "mimeType": "multipart/mixed",
+        "headers": [
+          {
+            "name": "Date",
+            "value": "Wed, 13 Sep 2023 22:19:32 +0200"
+          },
+          {
+            "name": "From",
+            "value": "from2@example.com"
+          },
+          {
+            "name": "To",
+            "value": "test2@example.com"
+          },
+          {
+            "name": "Subject",
+            "value": "test 456"
+          }
+        ]
+      },
+      "sizeEstimate": 1,
+      "historyId": "222",
+      "internalDate": "1694636372000"
+    },
+    {
+      "id": "789",
+      "threadId": "456",
+      "labelIds": [
+        "STARRED",
+        "INBOX"
+      ],
+      "snippet": "response 456",
+      "payload": {
+        "mimeType": "text/plain",
+        "headers": [
+          {
+            "name": "Date",
+            "value": "Wed, 13 Sep 2023 22:27:16 +0200"
+          },
+          {
+            "name": "Subject",
+            "value": "Re: test 456"
+          },
+          {
+            "name": "From",
+            "value": "test2@example.com"
+          },
+          {
+            "name": "To",
+            "value": "from2@example.com"
+          }
+        ]
+      },
+      "sizeEstimate": 2,
+      "historyId": "222",
+      "internalDate": "1694636836000"
+    }
+  ]
+}

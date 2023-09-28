@@ -9,7 +9,9 @@ use uuid::Uuid;
 
 use crate::{
     integration_connection::{IntegrationProvider, IntegrationProviderKind},
-    notification::integrations::{github::GithubNotification, linear::LinearNotification},
+    notification::integrations::{
+        github::GithubNotification, google_mail::GoogleMailThread, linear::LinearNotification,
+    },
     task::{integrations::todoist::DEFAULT_TODOIST_HTML_URL, Task, TaskId},
     user::UserId,
     HasHtmlUrl,
@@ -37,6 +39,7 @@ pub struct Notification {
 }
 
 impl HasHtmlUrl for Notification {
+    // tag: New notification integration
     fn get_html_url(&self) -> Uri {
         self.source_html_url
             .clone()
@@ -47,6 +50,9 @@ impl HasHtmlUrl for Notification {
                 NotificationMetadata::Todoist => DEFAULT_TODOIST_HTML_URL.parse::<Uri>().unwrap(),
                 NotificationMetadata::Linear(linear_notification) => {
                     linear_notification.get_html_url_from_metadata()
+                }
+                NotificationMetadata::GoogleMail(google_mail_thread) => {
+                    google_mail_thread.get_html_url_from_metadata()
                 }
             })
     }
@@ -73,28 +79,6 @@ pub struct NotificationWithTask {
 impl HasHtmlUrl for NotificationWithTask {
     fn get_html_url(&self) -> Uri {
         Notification::from(self.clone()).get_html_url()
-    }
-}
-
-pub trait IntoNotification {
-    fn into_notification(self, user_id: UserId) -> Notification;
-}
-
-impl IntoNotification for NotificationWithTask {
-    fn into_notification(self, user_id: UserId) -> Notification {
-        Notification {
-            id: self.id,
-            title: self.title.clone(),
-            source_id: self.source_id.clone(),
-            source_html_url: self.source_html_url.clone(),
-            status: self.status,
-            metadata: self.metadata.clone(),
-            updated_at: self.updated_at,
-            last_read_at: self.last_read_at,
-            snoozed_until: self.snoozed_until,
-            user_id,
-            task_id: self.task.as_ref().map(|task| task.id),
-        }
     }
 }
 
@@ -125,14 +109,32 @@ impl NotificationWithTask {
     pub fn is_built_from_task(&self) -> bool {
         matches!(self.metadata, NotificationMetadata::Todoist)
     }
+
+    pub fn into_notification(self, user_id: UserId) -> Notification {
+        Notification {
+            id: self.id,
+            title: self.title.clone(),
+            source_id: self.source_id.clone(),
+            source_html_url: self.source_html_url.clone(),
+            status: self.status,
+            metadata: self.metadata.clone(),
+            updated_at: self.updated_at,
+            last_read_at: self.last_read_at,
+            snoozed_until: self.snoozed_until,
+            user_id,
+            task_id: self.task.as_ref().map(|task| task.id),
+        }
+    }
 }
 
+// tag: New notification integration
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
 #[serde(tag = "type", content = "content")]
 pub enum NotificationMetadata {
     Github(GithubNotification),
     Todoist,
     Linear(LinearNotification),
+    GoogleMail(GoogleMailThread),
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Copy, Clone, Eq, Hash)]
@@ -168,31 +170,37 @@ macro_attr! {
 }
 
 macro_attr! {
+    // tag: New notification integration
     // Synchronization sources for notifications
     #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!)]
     pub enum NotificationSyncSourceKind {
         Github,
-        Linear
+        Linear,
+        GoogleMail
     }
 }
 
 macro_attr! {
+    // tag: New notification integration
     // notification sources, either direct or from tasks
     #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!)]
     pub enum NotificationSourceKind {
         Github,
         Todoist,
-        Linear
+        Linear,
+        GoogleMail
     }
 }
 
 impl TryFrom<IntegrationProviderKind> for NotificationSyncSourceKind {
     type Error = ();
 
+    // tag: New notification integration
     fn try_from(provider_kind: IntegrationProviderKind) -> Result<Self, Self::Error> {
         match provider_kind {
             IntegrationProviderKind::Github => Ok(Self::Github),
             IntegrationProviderKind::Linear => Ok(Self::Linear),
+            IntegrationProviderKind::GoogleMail => Ok(Self::GoogleMail),
             _ => Err(()),
         }
     }

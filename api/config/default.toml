@@ -44,6 +44,7 @@ database_name = "universal-inbox"
 host = "127.0.0.1"
 port = 6379
 
+# tag: New notification integration
 [integrations.github]
 name = "Github"
 page_size = 50
@@ -60,6 +61,15 @@ name = "Linear"
 delete = "The Linear notification will be deleted."
 unsubscribe = "Unsubscribe from the Linear notification. No new update will be received until pinged again. Only issue notifications can be unsubscribed, project notifications cannot be unsubscribed."
 snooze = "The Linear notification will be snoozed and will only reappear the next day."
+
+[integrations.google_mail]
+name = "Google Mail"
+page_size = 500
+
+[integrations.google_mail.doc_for_actions]
+delete = "The Google Mail thread will be archived."
+unsubscribe = "The Google Mail thread will be archived. New messages in the thread will be ignored and automatically archived unless one unread message is directly addressed to your email address."
+snooze = "Snoozing a notification will only be reflected in Universal Inbox. ⚠️ Google Mail has no public API to snooze a thread."
 
 [integrations.todoist]
 name = "Todoist"
@@ -78,4 +88,5 @@ nango_base_url = "http://localhost:3003"
 [integrations.oauth2.nango_provider_keys]
 Github = "github"
 Linear = "linear"
+GoogleMail = "google-mail"
 Todoist = "todoist"

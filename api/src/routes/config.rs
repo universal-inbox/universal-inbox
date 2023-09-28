@@ -34,6 +34,7 @@ pub async fn front_config(
             .context("Failed to parse OIDC redirect URL")?,
         user_profile_url: settings.application.authentication.user_profile_url.clone(),
         nango_base_url: settings.integrations.oauth2.nango_base_url.clone(),
+        // tag: New notification integration
         integration_providers: HashMap::from([
             (
                 IntegrationProviderKind::Github,
@@ -62,6 +63,21 @@ pub async fn front_config(
                         .context("Missing Nango config key for Linear")?
                         .clone(),
                     doc_for_actions: settings.integrations.linear.doc_for_actions.clone(),
+                    is_implemented: true,
+                },
+            ),
+            (
+                IntegrationProviderKind::GoogleMail,
+                IntegrationProviderConfig {
+                    name: settings.integrations.google_mail.name.clone(),
+                    nango_config_key: settings
+                        .integrations
+                        .oauth2
+                        .nango_provider_keys
+                        .get(&IntegrationProviderKind::GoogleMail)
+                        .context("Missing Nango config key for Google Mail")?
+                        .clone(),
+                    doc_for_actions: settings.integrations.google_mail.doc_for_actions.clone(),
                     is_implemented: true,
                 },
             ),

@@ -489,11 +489,13 @@ enum PgIntegrationConnectionStatus {
     Failing,
 }
 
+// tag: New notification integration
 #[derive(sqlx::Type, Debug)]
 #[sqlx(type_name = "integration_provider_kind")]
 enum PgIntegrationProviderKind {
     Github,
     Linear,
+    GoogleMail,
     Todoist,
 }
 

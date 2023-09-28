@@ -9,7 +9,7 @@ use universal_inbox::integration_connection::{
 };
 
 use crate::{
-    components::icons::{github, linear, todoist},
+    components::icons::{github, google_mail, linear, todoist},
     model::UI_MODEL,
     services::{
         integration_connection_service::INTEGRATION_CONNECTIONS,
@@ -163,6 +163,7 @@ pub fn integration_connection_status(cx: Scope, connection: IntegrationConnectio
             ),
         });
 
+    // tag: New notification integration
     let icon = match connection.provider_kind {
         IntegrationProviderKind::Github => Some(rsx!(self::github {
             class: "w-4 h-4 {connection_style}"
@@ -171,6 +172,9 @@ pub fn integration_connection_status(cx: Scope, connection: IntegrationConnectio
             class: "w-4 h-4 {connection_style}"
         })),
         IntegrationProviderKind::Linear => Some(rsx!(self::linear {
+            class: "w-4 h-4 {connection_style}"
+        })),
+        IntegrationProviderKind::GoogleMail => Some(rsx!(self::google_mail {
             class: "w-4 h-4 {connection_style}"
         })),
         _ => None,

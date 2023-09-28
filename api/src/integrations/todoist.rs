@@ -431,11 +431,15 @@ impl TaskSourceService<TodoistItem> for TodoistService {
         let sync_response = self
             .sync_items(
                 &access_token,
-                integration_connection.context.map(|context| {
-                    let IntegrationConnectionContext::Todoist {
+                integration_connection.context.and_then(|context| {
+                    if let IntegrationConnectionContext::Todoist {
                         items_sync_token: sync_token,
-                    } = context;
-                    sync_token
+                    } = context
+                    {
+                        Some(sync_token)
+                    } else {
+                        None
+                    }
                 }),
             )
             .await?;

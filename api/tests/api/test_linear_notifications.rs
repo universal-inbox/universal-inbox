@@ -5,8 +5,8 @@ use rstest::*;
 use universal_inbox::{
     integration_connection::IntegrationProviderKind,
     notification::{
-        integrations::linear::LinearNotification, service::NotificationPatch, IntoNotification,
-        Notification, NotificationStatus,
+        integrations::linear::LinearNotification, service::NotificationPatch, Notification,
+        NotificationStatus,
     },
     task::{integrations::todoist::TodoistItem, Task},
 };

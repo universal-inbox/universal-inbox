@@ -14,10 +14,7 @@ use uuid::Uuid;
 
 use crate::{
     integration_connection::{IntegrationProvider, IntegrationProviderKind},
-    notification::{
-        IntoNotification, Notification, NotificationMetadata, NotificationStatus,
-        NotificationWithTask,
-    },
+    notification::{Notification, NotificationMetadata, NotificationStatus, NotificationWithTask},
     task::integrations::todoist::{TodoistItem, DEFAULT_TODOIST_HTML_URL},
     user::UserId,
     HasHtmlUrl,
@@ -89,6 +86,28 @@ impl Task {
     pub fn get_task_source_kind(&self) -> TaskSourceKind {
         match self.metadata {
             TaskMetadata::Todoist(_) => TaskSourceKind::Todoist,
+        }
+    }
+
+    pub fn into_notification(self, user_id: UserId) -> Notification {
+        Notification {
+            id: Uuid::new_v4().into(),
+            title: self.title.clone(),
+            source_id: self.source_id.clone(),
+            source_html_url: self.source_html_url.clone(),
+            status: if self.status != TaskStatus::Active {
+                NotificationStatus::Deleted
+            } else {
+                NotificationStatus::Unread
+            },
+            metadata: match self.metadata {
+                TaskMetadata::Todoist(_) => NotificationMetadata::Todoist,
+            },
+            updated_at: self.created_at,
+            last_read_at: None,
+            snoozed_until: None,
+            user_id,
+            task_id: Some(self.id),
         }
     }
 }
@@ -227,30 +246,6 @@ impl FromStr for TaskPriority {
             "3" => Ok(TaskPriority::P3),
             "4" => Ok(TaskPriority::P4),
             _ => Err(format!("Invalid task priority: {s}")),
-        }
-    }
-}
-
-impl IntoNotification for Task {
-    fn into_notification(self, user_id: UserId) -> Notification {
-        Notification {
-            id: Uuid::new_v4().into(),
-            title: self.title.clone(),
-            source_id: self.source_id.clone(),
-            source_html_url: self.source_html_url.clone(),
-            status: if self.status != TaskStatus::Active {
-                NotificationStatus::Deleted
-            } else {
-                NotificationStatus::Unread
-            },
-            metadata: match self.metadata {
-                TaskMetadata::Todoist(_) => NotificationMetadata::Todoist,
-            },
-            updated_at: self.created_at,
-            last_read_at: None,
-            snoozed_until: None,
-            user_id,
-            task_id: Some(self.id),
         }
     }
 }

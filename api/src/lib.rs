@@ -16,7 +16,8 @@ use actix_web_lab::web::spa;
 use anyhow::Context;
 use configuration::Settings;
 use integrations::{
-    github::GithubService, linear::LinearService, oauth2::NangoService, todoist::TodoistService,
+    github::GithubService, google_mail::GoogleMailService, linear::LinearService,
+    oauth2::NangoService, todoist::TodoistService,
 };
 use repository::Repository;
 use sqlx::PgPool;
@@ -156,6 +157,7 @@ pub async fn build_services(
     settings: &Settings,
     github_address: Option<String>,
     linear_graphql_url: Option<String>,
+    google_mail_base_url: Option<String>,
     todoist_address: Option<String>,
     nango_service: NangoService,
 ) -> (
@@ -179,6 +181,7 @@ pub async fn build_services(
     let todoist_service =
         TodoistService::new(todoist_address, integration_connection_service.clone())
             .expect("Failed to create new TodoistService");
+    // tag: New notification integration
     let github_service = GithubService::new(
         github_address,
         settings.integrations.github.page_size,
@@ -189,10 +192,22 @@ pub async fn build_services(
         LinearService::new(linear_graphql_url, integration_connection_service.clone())
             .expect("Failed to create new LinearService");
 
+    let google_mail_service = Arc::new(RwLock::new(
+        GoogleMailService::new(
+            google_mail_base_url,
+            settings.integrations.google_mail.page_size,
+            integration_connection_service.clone(),
+            Weak::new(),
+        )
+        .expect("Failed to create new GoogleMailService"),
+    ));
+
+    // tag: New notification integration
     let notification_service = Arc::new(RwLock::new(NotificationService::new(
         repository.clone(),
         github_service,
         linear_service,
+        google_mail_service.clone(),
         Weak::new(),
         integration_connection_service.clone(),
         user_service.clone(),
@@ -200,6 +215,11 @@ pub async fn build_services(
             .application
             .min_sync_notifications_interval_in_minutes,
     )));
+
+    google_mail_service
+        .write()
+        .await
+        .set_notification_service(Arc::downgrade(&notification_service));
 
     let task_service = Arc::new(RwLock::new(TaskService::new(
         repository,

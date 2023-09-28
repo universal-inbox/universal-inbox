@@ -17,7 +17,9 @@ use universal_inbox::{
     IntegrationProviderConfig,
 };
 
-use crate::components::icons::{github, googledocs, linear, notion, ticktick, todoist};
+use crate::components::icons::{
+    github, google_mail, googledocs, linear, notion, ticktick, todoist,
+};
 
 #[inline_props]
 pub fn integrations_panel<'a>(
@@ -145,9 +147,11 @@ pub fn integration_settings<'a>(
     on_disconnect: EventHandler<'a, &'a IntegrationConnection>,
     on_reconnect: EventHandler<'a, &'a IntegrationConnection>,
 ) -> Element {
+    // tag: New notification integration
     let icon = match kind {
         IntegrationProviderKind::Github => rsx!(self::github { class: "w-8 h-8" }),
         IntegrationProviderKind::Linear => rsx!(self::linear { class: "w-8 h-8" }),
+        IntegrationProviderKind::GoogleMail => rsx!(self::google_mail { class: "w-8 h-8" }),
         IntegrationProviderKind::Notion => rsx!(self::notion { class: "w-8 h-8" }),
         IntegrationProviderKind::GoogleDocs => rsx!(self::googledocs { class: "w-8 h-8" }),
         IntegrationProviderKind::Slack => rsx!(Icon {

@@ -5,7 +5,7 @@ use serde_with::{serde_as, DisplayFromStr};
 use uuid::Uuid;
 
 use crate::{
-    notification::{IntoNotification, Notification, NotificationMetadata, NotificationStatus},
+    notification::{Notification, NotificationMetadata, NotificationStatus},
     user::UserId,
 };
 
@@ -105,18 +105,8 @@ impl LinearNotification {
             LinearNotification::ProjectNotification { .. } => None,
         }
     }
-}
 
-impl LinearTeam {
-    pub fn get_url(&self, organization: LinearOrganization) -> Uri {
-        format!("https://linear.app/{}/team/{}", organization.key, self.key)
-            .parse::<Uri>()
-            .unwrap()
-    }
-}
-
-impl IntoNotification for LinearNotification {
-    fn into_notification(self, user_id: UserId) -> Notification {
+    pub fn into_notification(self, user_id: UserId) -> Notification {
         match &self {
             LinearNotification::IssueNotification {
                 id,
@@ -167,5 +157,13 @@ impl IntoNotification for LinearNotification {
                 task_id: None,
             },
         }
+    }
+}
+
+impl LinearTeam {
+    pub fn get_url(&self, organization: LinearOrganization) -> Uri {
+        format!("https://linear.app/{}/team/{}", organization.key, self.key)
+            .parse::<Uri>()
+            .unwrap()
     }
 }

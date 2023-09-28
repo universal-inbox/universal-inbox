@@ -81,11 +81,13 @@ pub struct RedisSettings {
     pub password: Option<String>,
 }
 
+// tag: New notification integration
 #[derive(Deserialize, Clone, Debug)]
 pub struct IntegrationsSettings {
     pub oauth2: Oauth2Settings,
     pub github: GithubIntegrationSettings,
     pub linear: DefaultIntegrationSettings,
+    pub google_mail: GoogleMailIntegrationSettings,
     pub todoist: DefaultIntegrationSettings,
 }
 
@@ -98,6 +100,13 @@ pub struct Oauth2Settings {
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct GithubIntegrationSettings {
+    pub name: String,
+    pub page_size: usize,
+    pub doc_for_actions: HashMap<String, String>,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct GoogleMailIntegrationSettings {
     pub name: String,
     pub page_size: usize,
     pub doc_for_actions: HashMap<String, String>,
