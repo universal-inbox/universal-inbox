@@ -193,7 +193,7 @@ pub async fn create_and_mock_integration_connection(
     let integration_connection =
         create_integration_connection(app, provider_kind, IntegrationConnectionStatus::Validated)
             .await;
-    let github_config_key = settings
+    let config_key = settings
         .integrations
         .oauth2
         .nango_provider_keys
@@ -202,7 +202,7 @@ pub async fn create_and_mock_integration_connection(
     mock_nango_connection_service(
         &app.nango_mock_server,
         &integration_connection.connection_id.to_string(),
-        github_config_key,
+        config_key,
         nango_connection,
     );
 
@@ -217,6 +217,11 @@ pub fn nango_github_connection() -> Box<NangoConnection> {
 #[fixture]
 pub fn nango_linear_connection() -> Box<NangoConnection> {
     load_json_fixture_file("/tests/api/fixtures/nango_linear_connection.json")
+}
+
+#[fixture]
+pub fn nango_google_mail_connection() -> Box<NangoConnection> {
+    load_json_fixture_file("/tests/api/fixtures/nango_google_mail_connection.json")
 }
 
 #[fixture]

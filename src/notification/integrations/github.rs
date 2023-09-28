@@ -6,7 +6,7 @@ use serde_with::{serde_as, DisplayFromStr};
 use uuid::Uuid;
 
 use crate::{
-    notification::{IntoNotification, Notification, NotificationMetadata, NotificationStatus},
+    notification::{Notification, NotificationMetadata, NotificationStatus},
     user::UserId,
 };
 
@@ -442,10 +442,8 @@ impl GithubNotification {
             _ => self.repository.html_url.clone(),
         }
     }
-}
 
-impl IntoNotification for GithubNotification {
-    fn into_notification(self, user_id: UserId) -> Notification {
+    pub fn into_notification(self, user_id: UserId) -> Notification {
         let source_html_url = GithubNotification::get_html_url_from_api_url(&self.subject.url);
 
         Notification {

@@ -11,6 +11,7 @@ use universal_inbox::{
 use universal_inbox::notification::NotificationSourceKind;
 
 pub mod github;
+pub mod google_mail;
 pub mod linear;
 
 pub async fn list_notifications_response(

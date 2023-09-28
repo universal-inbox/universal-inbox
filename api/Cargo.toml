@@ -27,13 +27,15 @@ base64 = "0.21.0"
 cached = { version = "0.43.0", features = ["async_tokio_rt_multi_thread"] }
 chrono = { workspace = true, features = ["serde"] }
 clap = { workspace = true }
-color-backtrace = "0.5"
+color-backtrace = "0.6"
 config = "0.13.0"
 enum_derive = { workspace = true }
 format_serde_error = "0.3.0"
 futures = "0.3.0"
 graphql_client = "0.13.0"
+hostname = "0.3.0"
 http = { workspace = true }
+itertools = "0.11.0"
 lazy_static = { workspace = true }
 log = { workspace = true }
 macro-attr = { workspace = true }
@@ -75,7 +77,6 @@ tracing-subscriber = { version = "0.3.0", features = [
 universal-inbox = { path = ".." }
 url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true, features = ["serde"] }
-hostname = "0.3.1"
 
 [dev-dependencies]
 httpmock = "0.6.0"

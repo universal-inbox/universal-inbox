@@ -15,7 +15,8 @@ use tokio::sync::RwLock;
 use universal_inbox::{
     integration_connection::{IntegrationProvider, IntegrationProviderKind},
     notification::{
-        integrations::github::GithubNotification, NotificationSource, NotificationSourceKind,
+        integrations::github::GithubNotification, Notification, NotificationSource,
+        NotificationSourceKind,
     },
     user::UserId,
 };
@@ -168,13 +169,13 @@ pub fn get_html_url_from_api_url(api_url: &Option<Uri>) -> Option<Uri> {
 }
 
 #[async_trait]
-impl NotificationSourceService<GithubNotification> for GithubService {
+impl NotificationSourceService for GithubService {
     #[tracing::instrument(level = "debug", skip(self, executor), err)]
     async fn fetch_all_notifications<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
         user_id: UserId,
-    ) -> Result<Vec<GithubNotification>, UniversalInboxError> {
+    ) -> Result<Vec<Notification>, UniversalInboxError> {
         let (access_token, _) = self
             .integration_connection_service
             .read()
@@ -205,7 +206,8 @@ impl NotificationSourceService<GithubNotification> for GithubService {
         .await?
         .into_iter()
         .flatten()
-        .collect::<Vec<GithubNotification>>())
+        .map(|github_notif| github_notif.into_notification(user_id))
+        .collect())
     }
 
     #[tracing::instrument(level = "debug", skip(self, executor), err)]

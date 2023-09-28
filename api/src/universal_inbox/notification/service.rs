@@ -11,9 +11,9 @@ use tracing::{debug, error, info};
 
 use universal_inbox::{
     notification::{
-        service::NotificationPatch, IntoNotification, Notification, NotificationId,
-        NotificationMetadata, NotificationSourceKind, NotificationStatus,
-        NotificationSyncSourceKind, NotificationWithTask,
+        service::NotificationPatch, Notification, NotificationId, NotificationMetadata,
+        NotificationSourceKind, NotificationStatus, NotificationSyncSourceKind,
+        NotificationWithTask,
     },
     task::{service::TaskPatch, TaskCreation, TaskId, TaskStatus},
     user::UserId,
@@ -21,7 +21,8 @@ use universal_inbox::{
 
 use crate::{
     integrations::{
-        github::GithubService, linear::LinearService, notification::NotificationSourceService,
+        github::GithubService, google_mail::GoogleMailService, linear::LinearService,
+        notification::NotificationSourceService,
     },
     repository::{notification::NotificationRepository, Repository},
     universal_inbox::{
@@ -30,11 +31,13 @@ use crate::{
     },
 };
 
+// tag: New notification integration
 #[derive(Debug)]
 pub struct NotificationService {
     repository: Arc<Repository>,
     github_service: GithubService,
     linear_service: LinearService,
+    google_mail_service: Arc<RwLock<GoogleMailService>>,
     task_service: Weak<RwLock<TaskService>>,
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     user_service: Arc<RwLock<UserService>>,
@@ -42,10 +45,12 @@ pub struct NotificationService {
 }
 
 impl NotificationService {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         repository: Arc<Repository>,
         github_service: GithubService,
         linear_service: LinearService,
+        google_mail_service: Arc<RwLock<GoogleMailService>>,
         task_service: Weak<RwLock<TaskService>>,
         integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
         user_service: Arc<RwLock<UserService>>,
@@ -55,6 +60,7 @@ impl NotificationService {
             repository,
             github_service,
             linear_service,
+            google_mail_service,
             task_service,
             integration_connection_service,
             user_service,
@@ -71,10 +77,10 @@ impl NotificationService {
     }
 
     #[tracing::instrument(level = "debug", skip(self, executor, notification_source_service, notification), fields(notification_id = notification.id.to_string()), err)]
-    pub async fn apply_updated_notification_side_effect<'a, T>(
+    pub async fn apply_updated_notification_side_effect<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        notification_source_service: &dyn NotificationSourceService<T>,
+        notification_source_service: &dyn NotificationSourceService,
         patch: &NotificationPatch,
         notification: Box<Notification>,
         user_id: UserId,
@@ -154,6 +160,18 @@ impl NotificationService {
         Ok(notification)
     }
 
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    pub async fn get_notification_for_source_id<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        source_id: &str,
+        for_user_id: UserId,
+    ) -> Result<Option<Notification>, UniversalInboxError> {
+        self.repository
+            .get_notification_for_source_id(executor, source_id, for_user_id)
+            .await
+    }
+
     #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.to_string()), err)]
     pub async fn create_notification<'a>(
         &self,
@@ -185,10 +203,10 @@ impl NotificationService {
             .map(Box::new)
     }
 
-    async fn sync_source_notifications<'a, T: Debug + IntoNotification>(
+    async fn sync_source_notifications<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        notification_source_service: &(dyn NotificationSourceService<T> + Send + Sync),
+        notification_source_service: &(dyn NotificationSourceService + Send + Sync),
         user_id: UserId,
     ) -> Result<Vec<Notification>, UniversalInboxError> {
         let integration_provider_kind = notification_source_service.get_integration_provider_kind();
@@ -255,19 +273,18 @@ impl NotificationService {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor, source_items), err)]
-    pub async fn save_notifications_from_source<'a, T: Debug + IntoNotification>(
+    #[tracing::instrument(level = "debug", skip(self, executor, source_notifications), err)]
+    pub async fn save_notifications_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
         notification_source_kind: NotificationSourceKind,
-        source_items: Vec<T>,
+        source_notifications: Vec<Notification>,
         is_incremental_update: bool,
         update_snoozed_until: bool,
         user_id: UserId,
     ) -> Result<Vec<Notification>, UniversalInboxError> {
         let mut notifications = vec![];
-        for source_item in source_items {
-            let notification = source_item.into_notification(user_id);
+        for notification in source_notifications {
             let uptodate_notification = self
                 .repository
                 .create_or_update_notification(
@@ -278,6 +295,10 @@ impl NotificationService {
                 .await?;
             notifications.push(uptodate_notification);
         }
+        info!(
+            "{} {notification_source_kind} notifications successfully synced for user {user_id}.",
+            notifications.len()
+        );
 
         // For incremental synchronization, there is no need to update stale notifications
         if !is_incremental_update {
@@ -286,7 +307,8 @@ impl NotificationService {
                 .map(|notification| notification.source_id.clone())
                 .collect::<Vec<String>>();
 
-            self.repository
+            let deleted_notifications = self
+                .repository
                 .update_stale_notifications_status_from_source_ids(
                     executor,
                     source_notification_ids,
@@ -294,6 +316,10 @@ impl NotificationService {
                     NotificationStatus::Deleted,
                 )
                 .await?;
+            info!(
+                "{} {notification_source_kind} notifications marked as deleted for user {user_id}.",
+                deleted_notifications.len()
+            );
         }
 
         Ok(notifications)
@@ -306,6 +332,7 @@ impl NotificationService {
         source: Option<NotificationSyncSourceKind>,
         user_id: UserId,
     ) -> Result<Vec<Notification>, UniversalInboxError> {
+        // tag: New notification integration
         match source {
             Some(NotificationSyncSourceKind::Github) => {
                 self.sync_source_notifications(executor, &self.github_service, user_id)
@@ -315,6 +342,14 @@ impl NotificationService {
                 self.sync_source_notifications(executor, &self.linear_service, user_id)
                     .await
             }
+            Some(NotificationSyncSourceKind::GoogleMail) => {
+                self.sync_source_notifications(
+                    executor,
+                    &*self.google_mail_service.read().await,
+                    user_id,
+                )
+                .await
+            }
             None => {
                 let notifications_from_github = self
                     .sync_source_notifications(executor, &self.github_service, user_id)
@@ -322,9 +357,17 @@ impl NotificationService {
                 let notifications_from_linear = self
                     .sync_source_notifications(executor, &self.linear_service, user_id)
                     .await?;
+                let notifications_from_google_mail = self
+                    .sync_source_notifications(
+                        executor,
+                        &*self.google_mail_service.read().await,
+                        user_id,
+                    )
+                    .await?;
                 Ok(notifications_from_github
                     .into_iter()
                     .chain(notifications_from_linear.into_iter())
+                    .chain(notifications_from_google_mail.into_iter())
                     .collect())
             }
         }
@@ -414,6 +457,7 @@ impl NotificationService {
                 updated: true,
                 result: Some(ref notification),
             } => {
+                // tag: New notification integration
                 match notification.metadata {
                     NotificationMetadata::Github(_) => {
                         self.apply_updated_notification_side_effect(
@@ -429,6 +473,16 @@ impl NotificationService {
                         self.apply_updated_notification_side_effect(
                             executor,
                             &self.linear_service,
+                            patch,
+                            notification.clone(),
+                            for_user_id,
+                        )
+                        .await?
+                    }
+                    NotificationMetadata::GoogleMail(_) => {
+                        self.apply_updated_notification_side_effect(
+                            executor,
+                            &*self.google_mail_service.read().await,
                             patch,
                             notification.clone(),
                             for_user_id,

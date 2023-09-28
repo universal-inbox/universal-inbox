@@ -28,6 +28,7 @@ pub struct TestedApp {
     pub repository: Arc<Repository>,
     pub github_mock_server: MockServer,
     pub linear_mock_server: MockServer,
+    pub google_mail_mock_server: MockServer,
     pub todoist_mock_server: MockServer,
     pub oidc_issuer_mock_server: MockServer,
     pub nango_mock_server: MockServer,
@@ -37,7 +38,6 @@ pub struct TestedApp {
 #[once]
 fn tracing_setup(settings: Settings) {
     info!("Setting up tracing");
-    color_backtrace::install();
 
     let subscriber = get_subscriber(&settings.application.observability.logging.log_directive);
     init_subscriber(
@@ -51,6 +51,7 @@ fn tracing_setup(settings: Settings) {
         )
         .unwrap_or(log::LevelFilter::Error),
     );
+    color_backtrace::install();
 }
 
 #[fixture]
@@ -101,10 +102,13 @@ pub async fn tested_app(
     let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
     let port = listener.local_addr().unwrap().port();
 
+    // tag: New notification integration
     let github_mock_server = MockServer::start();
     let github_mock_server_uri = &github_mock_server.base_url();
     let linear_mock_server = MockServer::start();
     let linear_mock_server_uri = &linear_mock_server.base_url();
+    let google_mail_mock_server = MockServer::start();
+    let google_mail_mock_server_uri = &google_mail_mock_server.base_url();
     let todoist_mock_server = MockServer::start();
     let todoist_mock_server_uri = &todoist_mock_server.base_url();
 
@@ -132,6 +136,7 @@ pub async fn tested_app(
             &settings,
             Some(github_mock_server_uri.to_string()),
             Some(linear_mock_server_uri.to_string()),
+            Some(google_mail_mock_server_uri.to_string()),
             Some(todoist_mock_server_uri.to_string()),
             nango_service,
         )
@@ -157,6 +162,7 @@ pub async fn tested_app(
         repository,
         github_mock_server,
         linear_mock_server,
+        google_mail_mock_server,
         todoist_mock_server,
         oidc_issuer_mock_server,
         nango_mock_server,

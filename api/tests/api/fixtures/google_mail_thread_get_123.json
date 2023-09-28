@@ -1,0 +1,39 @@
+{
+  "id": "123",
+  "historyId": "111",
+  "messages": [
+    {
+      "id": "123",
+      "threadId": "123",
+      "labelIds": [
+        "INBOX",
+        "UNREAD"
+      ],
+      "snippet": "test",
+      "payload": {
+        "mimeType": "multipart/alternative",
+        "headers": [
+          {
+            "name": "Date",
+            "value": "Sat, 16 Sep 2023 21:11:28 GMT"
+          },
+          {
+            "name": "Subject",
+            "value": "test subject 123"
+          },
+          {
+            "name": "From",
+            "value": "from@example.com"
+          },
+          {
+            "name": "To",
+            "value": "test@example.com"
+          }
+        ]
+      },
+      "sizeEstimate": 2222,
+      "historyId": "111",
+      "internalDate": "1694898688000"
+    }
+  ]
+}

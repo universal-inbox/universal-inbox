@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use uuid::Uuid;
 
-use crate::user::UserId;
+use crate::{notification::integrations::google_mail::EmailAddress, user::UserId};
 
 #[serde_as]
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
@@ -49,6 +49,7 @@ impl From<String> for SyncToken {
 #[serde(tag = "type", content = "content")]
 pub enum IntegrationConnectionContext {
     Todoist { items_sync_token: SyncToken },
+    GoogleMail { user_email_address: EmailAddress },
 }
 
 impl IntegrationConnection {
@@ -90,10 +91,12 @@ pub trait IntegrationProvider {
 }
 
 macro_attr! {
+    // tag: New notification integration
     #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy, Eq, EnumFromStr!, EnumDisplay!, Hash)]
     pub enum IntegrationProviderKind {
         Github,
         Linear,
+        GoogleMail,
         Notion,
         GoogleDocs,
         Slack,
@@ -107,9 +110,11 @@ impl IntegrationProviderKind {
         *self == IntegrationProviderKind::Todoist || *self == IntegrationProviderKind::TickTick
     }
 
+    // tag: New notification integration
     pub fn is_notification_service(&self) -> bool {
         *self == IntegrationProviderKind::Github
             || *self == IntegrationProviderKind::Linear
+            || *self == IntegrationProviderKind::GoogleMail
             || *self == IntegrationProviderKind::Notion
             || *self == IntegrationProviderKind::GoogleDocs
             || *self == IntegrationProviderKind::Slack

@@ -1,11 +1,13 @@
 mod helpers;
 mod test_auth;
 mod test_github_notifications;
+mod test_google_mail_notifications;
 mod test_health_check;
 mod test_integration_connections;
 mod test_linear_notifications;
 mod test_notifications;
 mod test_sync_github_notifications;
+mod test_sync_google_mail_threads;
 mod test_sync_linear_notifications;
 mod test_sync_todoist_tasks;
 mod test_tasks;

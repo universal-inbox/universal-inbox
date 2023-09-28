@@ -16,7 +16,7 @@ use universal_inbox::{
         integrations::linear::{
             LinearIssue, LinearNotification, LinearOrganization, LinearProject, LinearTeam,
         },
-        NotificationSource, NotificationSourceKind,
+        Notification, NotificationSource, NotificationSourceKind,
     },
     user::UserId,
 };
@@ -408,13 +408,13 @@ fn assert_no_error_in_response<T>(response: &Response<T>) -> Result<(), Universa
 }
 
 #[async_trait]
-impl NotificationSourceService<LinearNotification> for LinearService {
+impl NotificationSourceService for LinearService {
     #[tracing::instrument(level = "debug", skip(self, executor), err)]
     async fn fetch_all_notifications<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
         user_id: UserId,
-    ) -> Result<Vec<LinearNotification>, UniversalInboxError> {
+    ) -> Result<Vec<Notification>, UniversalInboxError> {
         let (access_token, _) = self
             .integration_connection_service
             .read()
@@ -425,7 +425,12 @@ impl NotificationSourceService<LinearNotification> for LinearService {
 
         let notifications_response = self.query_notifications(&access_token).await?;
 
-        notifications_response.try_into()
+        TryInto::<Vec<LinearNotification>>::try_into(notifications_response).map(|linear_notifs| {
+            linear_notifs
+                .into_iter()
+                .map(|linear_notif| linear_notif.into_notification(user_id))
+                .collect()
+        })
     }
 
     #[tracing::instrument(level = "debug", skip(self, executor), err)]

@@ -1,10 +1,13 @@
+use std::collections::HashSet;
+
 use chrono::{DateTime, Local};
 use dioxus::{events::MouseEvent, prelude::*};
 use dioxus_free_icons::{
     icons::{
         bs_icons::{
             BsArrowRepeat, BsBellSlash, BsBookmarkCheck, BsCalendar2Check, BsCardChecklist, BsChat,
-            BsCheck2, BsCheckCircle, BsClockHistory, BsGrid, BsLink45deg, BsRecordCircle, BsTrash,
+            BsCheck2, BsCheckCircle, BsClockHistory, BsExclamationCircle, BsGrid, BsLink45deg,
+            BsRecordCircle, BsStar, BsTrash,
         },
         io_icons::IoGitPullRequest,
     },
@@ -17,6 +20,10 @@ use universal_inbox::{
     notification::{
         integrations::{
             github::GithubNotification,
+            google_mail::{
+                GoogleMailThread, MessageSelection, GOOGLE_MAIL_IMPORTANT_LABEL,
+                GOOGLE_MAIL_STARRED_LABEL,
+            },
             linear::{LinearIssue, LinearNotification},
         },
         NotificationMetadata, NotificationWithTask,
@@ -29,7 +36,7 @@ use universal_inbox::{
 };
 
 use crate::{
-    components::icons::{github, linear, todoist},
+    components::icons::{github, google_mail, linear, mail, todoist},
     model::UniversalInboxUIModel,
 };
 
@@ -224,9 +231,13 @@ fn notification_display<'a>(
     selected: bool,
     children: Element<'a>,
 ) -> Element {
+    // tag: New notification integration
     let icon = match notif.metadata {
         NotificationMetadata::Github(_) => cx.render(rsx!(self::github { class: "h-5 w-5" })),
         NotificationMetadata::Linear(_) => cx.render(rsx!(self::linear { class: "h-5 w-5" })),
+        NotificationMetadata::GoogleMail(_) => {
+            cx.render(rsx!(self::google_mail { class: "h-5 w-5" }))
+        }
         NotificationMetadata::Todoist => cx.render(rsx!(self::todoist { class: "h-5 w-5" })),
     };
     let button_style = use_memo(cx, (selected,), |(selected,)| {
@@ -251,6 +262,7 @@ fn notification_display<'a>(
         td {
             class: "px-2 py-0",
 
+            // tag: New notification integration
             match &notif.metadata {
                 NotificationMetadata::Github(github_notification) => rsx!(
                     self::github_notification_display {
@@ -262,6 +274,12 @@ fn notification_display<'a>(
                     self::linear_notification_display {
                         notif: notif,
                         linear_notification: linear_notification.clone()
+                    }
+                ),
+                NotificationMetadata::GoogleMail(google_mail_thread) => rsx!(
+                    self::google_mail_thread_display {
+                        notif: notif,
+                        google_mail_thread: google_mail_thread.clone()
                     }
                 ),
                 NotificationMetadata::Todoist => rsx!(
@@ -300,7 +318,18 @@ fn notification_display<'a>(
 #[inline_props]
 fn default_notification_display<'a>(cx: Scope, notif: &'a NotificationWithTask) -> Element {
     let link = notif.get_html_url();
-    cx.render(rsx!(a { href: "{link}", target: "_blank", "{notif.title}" }))
+    cx.render(rsx!(
+        div {
+            class: "flex items-center gap-2",
+
+            div { class: "flex flex-col h-5 w-5" }
+
+            div {
+                class: "flex flex-col grow",
+                a { href: "{link}", target: "_blank", "{notif.title}" }
+            }
+        }
+    ))
 }
 
 #[inline_props]
@@ -440,6 +469,71 @@ fn linear_notification_display<'a>(
         }
     ))
 }
+
+#[inline_props]
+fn google_mail_thread_display<'a>(
+    cx: Scope,
+    notif: &'a NotificationWithTask,
+    google_mail_thread: GoogleMailThread,
+) -> Element {
+    let notification_source_url = notif.get_html_url();
+    let is_starred = google_mail_thread.is_tagged_with(GOOGLE_MAIL_STARRED_LABEL, None);
+    let is_important = google_mail_thread.is_tagged_with(GOOGLE_MAIL_IMPORTANT_LABEL, None);
+    let from_address = google_mail_thread.get_message_header(MessageSelection::First, "From");
+    let interlocutors_count = google_mail_thread
+        .messages
+        .iter()
+        .fold(HashSet::new(), |mut acc, msg| {
+            if let Some(from_address) = msg.get_header("From") {
+                acc.insert(from_address);
+            }
+            acc
+        })
+        .len();
+    let mail_icon_style = match (is_starred, is_important) {
+        (_, true) => "text-red-500",
+        (true, false) => "text-yellow-500",
+        _ => "",
+    };
+
+    cx.render(rsx!(
+        div {
+            class: "flex items-center gap-2",
+
+            self::mail { class: "h-5 w-5 {mail_icon_style}" }
+
+            div {
+                class: "flex flex-col grow",
+
+                div {
+                    class: "flex flex-row items-center",
+                    a {
+                        class: "mx-0.5",
+                        href: "{notification_source_url}",
+                        target: "_blank",
+                        "{notif.title}"
+                    }
+                    if is_starred {
+                        rsx!(Icon { class: "mx-0.5 h-3 w-3 text-yellow-500", icon: BsStar })
+                    }
+                    if is_important {
+                        rsx!(Icon { class: "mx-0.5 h-3 w-3 text-red-500", icon: BsExclamationCircle })
+                    }
+                }
+
+                div {
+                    class: "flex gap-2",
+
+                    if let Some(from_address) = from_address {
+                        rsx!(span { class: "text-xs text-gray-400", "{from_address}" })
+                    }
+                    span { class: "text-xs text-gray-400", "({interlocutors_count})" }
+                }
+            }
+        }
+    ))
+}
+
 #[inline_props]
 fn todoist_notification_display<'a>(
     cx: Scope,
@@ -464,7 +558,7 @@ fn todoist_notification_display<'a>(
 
             Icon { class: "h-5 w-5 {task_icon_style}", icon: BsCardChecklist }
 
-             div {
+            div {
                 class: "flex flex-col grow",
 
                 a {

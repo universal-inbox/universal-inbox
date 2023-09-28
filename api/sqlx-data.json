@@ -418,7 +418,8 @@
                 "Enum": [
                   "Github",
                   "Todoist",
-                  "Linear"
+                  "Linear",
+                  "GoogleMail"
                 ]
               },
               "name": "integration_provider_kind"
@@ -520,7 +521,8 @@
                 "Enum": [
                   "Github",
                   "Todoist",
-                  "Linear"
+                  "Linear",
+                  "GoogleMail"
                 ]
               },
               "name": "integration_provider_kind"
@@ -711,6 +713,99 @@
     },
     "query": "\n                SELECT\n                  id,\n                  auth_user_id,\n                  auth_id_token,\n                  first_name,\n                  last_name,\n                  email,\n                  created_at,\n                  updated_at\n                FROM \"user\"\n                WHERE auth_user_id = $1\n            "
   },
+  "9cea5a084ae3eb71d2613b626ff01e7f2ea28f956a984eb863709b448f2144f8": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "title",
+          "ordinal": 1,
+          "type_info": "Text"
+        },
+        {
+          "name": "status: _",
+          "ordinal": 2,
+          "type_info": {
+            "Custom": {
+              "kind": {
+                "Enum": [
+                  "Unread",
+                  "Read",
+                  "Deleted",
+                  "Unsubscribed"
+                ]
+              },
+              "name": "notification_status"
+            }
+          }
+        },
+        {
+          "name": "source_id",
+          "ordinal": 3,
+          "type_info": "Text"
+        },
+        {
+          "name": "source_html_url",
+          "ordinal": 4,
+          "type_info": "Text"
+        },
+        {
+          "name": "metadata: Json<NotificationMetadata>",
+          "ordinal": 5,
+          "type_info": "Json"
+        },
+        {
+          "name": "updated_at",
+          "ordinal": 6,
+          "type_info": "Timestamp"
+        },
+        {
+          "name": "last_read_at",
+          "ordinal": 7,
+          "type_info": "Timestamp"
+        },
+        {
+          "name": "snoozed_until",
+          "ordinal": 8,
+          "type_info": "Timestamp"
+        },
+        {
+          "name": "task_id",
+          "ordinal": 9,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "user_id",
+          "ordinal": 10,
+          "type_info": "Uuid"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        false,
+        false,
+        true,
+        true,
+        true,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Text",
+          "Uuid"
+        ]
+      }
+    },
+    "query": "\n                SELECT\n                  id,\n                  title,\n                  status as \"status: _\",\n                  source_id,\n                  source_html_url,\n                  metadata as \"metadata: Json<NotificationMetadata>\",\n                  updated_at,\n                  last_read_at,\n                  snoozed_until,\n                  task_id,\n                  user_id\n                FROM notification\n                WHERE source_id = $1\n                AND user_id = $2\n            "
+  },
   "b59b83dc26fe2569ee78c8b6d524f11e3095f1d6659bb595e97816129b5a2a7b": {
     "describe": {
       "columns": [],
@@ -726,7 +821,8 @@
                 "Enum": [
                   "Github",
                   "Todoist",
-                  "Linear"
+                  "Linear",
+                  "GoogleMail"
                 ]
               },
               "name": "integration_provider_kind"
