@@ -1,0 +1,27 @@
+set fallback
+
+default:
+    @just --choose
+
+## Build recipes
+build:
+    trunk build
+
+build-release:
+    trunk build --release
+
+## Dev recipes
+check:
+    cargo clippy --tests -- -D warnings
+
+install:
+    npm install --dev
+
+## Test recipes
+test test-filter="" $RUST_LOG="info":
+    cargo test {{test-filter}}
+
+## Run recipes
+run:
+    trunk serve
+

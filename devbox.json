@@ -1,0 +1,46 @@
+{
+  "packages": {
+    "sqlx-cli": "0.6.2",
+    "wasm-bindgen-cli": "0.2.87",
+    "trunk": "latest",
+    "pre-commit": "latest",
+    "rustup": "latest",
+    "cargo-watch": "latest",
+    "cargo-audit": "latest",
+    "cargo-expand": "latest",
+    "cargo-nextest": "latest",
+    "cargo-outdated": "latest",
+    "just": "latest",
+    "watchexec": "latest",
+    "postgresql_15": "latest",
+    "redis": "latest",
+    "iconv": "latest",
+    "nodejs": "latest",
+    "pkg-config": "latest",
+    "taplo": "latest",
+    "darwin.apple_sdk.frameworks.SystemConfiguration": {
+      "platforms": [
+        "x86_64-darwin",
+        "aarch64-darwin"
+      ]
+    },
+    "fzf": "latest",
+    "process-compose": "latest",
+    "binaryen": "latest",
+    "cargo-llvm-cov": "latest",
+    "cargo-chef": "latest",
+    "openssl.dev": ""
+  },
+  "shell": {
+    "init_hook": [
+      "bash -c '[ -d .devbox/virtenv/postgresql_15/data ] || initdb --username=postgres --pwfile=<(echo password)'",
+      "rustup show active-toolchain | grep -q '^1.70-' || rustup default 1.70",
+      "rustup target list --installed | grep -q '^wasm32-unknown-unknown$' || rustup target add wasm32-unknown-unknown",
+      "rustup component list --installed | grep -q '^rust-analyzer-' || rustup component add rust-analyzer",
+      "rustup component list --installed | grep -q '^llvm-tools-' || rustup component add llvm-tools-preview"
+    ]
+  },
+  "nixpkgs": {
+    "commit": "57695599bdc4f7bfe5d28cfa23f14b3d8bdf8a5f"
+  }
+}
