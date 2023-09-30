@@ -8,48 +8,47 @@ on:
 
 jobs:
 
+  base:
+    name: Base
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Install Devbox
+        uses: jetpack-io/devbox-install-action@v0.7.0
+        with:
+          enable-cache: 'true'
+
   rustfmt:
+    needs: base
     name: Rustfmt
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+      - name: Install Devbox
+        uses: jetpack-io/devbox-install-action@v0.7.0
         with:
-          toolchain: stable
-          profile: minimal
-          components: rustfmt
+          enable-cache: 'true'
       - name: Check formatting
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
+        run: devbox run -- just check-format
 
   build:
+    needs: base
     name: Build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+      - name: Install Devbox
+        uses: jetpack-io/devbox-install-action@v0.7.0
         with:
-          toolchain: stable
-          profile: minimal
-          components: clippy
-      - name: Install Wasm Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
-          target: wasm32-unknown-unknown
-      - uses: davidB/rust-cargo-make@v1
+          enable-cache: 'true'
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci
       - name: Clippy check
-        run: cargo make clippy-ci-flow
+        run: devbox run -- just check-all
 
   test-ui:
     needs: build
@@ -58,30 +57,24 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+      - name: Install Devbox
+        uses: jetpack-io/devbox-install-action@v0.7.0
         with:
-          toolchain: stable
-          components: llvm-tools-preview
-          profile: minimal
+          enable-cache: 'true'
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci
-      - name: Install latest nextest release
-        uses: taiki-e/install-action@nextest
-      - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
       - name: Collect shared package coverage data
         env:
           RUST_MIN_STACK: 4194304
-        run: cargo llvm-cov nextest --all-features --package universal-inbox --lcov --output-path lcov-ui.info
+        run: devbox run -- just test-coverage
       - name: Upload to Coveralls
         # upload only if push
         if: ${{ github.event_name == 'push' }}
         uses: coverallsapp/github-action@master
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          path-to-lcov: './lcov-ui.info'
+          path-to-lcov: './lcov.info'
 
   test-ui-web:
     needs: build
@@ -90,23 +83,17 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+      - name: Install Devbox
+        uses: jetpack-io/devbox-install-action@v0.7.0
         with:
-          toolchain: stable
-          profile: minimal
-          target: wasm32-unknown-unknown
-      - uses: jetli/wasm-bindgen-action@v0.2.0
-        with:
-          version: '0.2.87'
+          enable-cache: 'true'
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci
       - name: Collect API coverage data
         env:
           RUST_MIN_STACK: 4194304
-        run: cargo test
-        working-directory: ./web
+        run: devbox run -- just web/test
 
   test-api:
     needs: build
@@ -136,27 +123,21 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+      - name: Install Devbox
+        uses: jetpack-io/devbox-install-action@v0.7.0
         with:
-          toolchain: stable
-          components: llvm-tools-preview
-          profile: minimal
+          enable-cache: 'true'
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci
-      - name: Install latest nextest release
-        uses: taiki-e/install-action@nextest
-      - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
       - name: Collect API coverage data
         env:
           RUST_MIN_STACK: 4194304
-        run: cargo llvm-cov nextest --all-features --package universal-inbox-api --lcov --output-path lcov-ui-api.info
+        run: devbox run -- just api/test-coverage
       - name: Upload to Coveralls
         # upload only if push
         if: ${{ github.event_name == 'push' }}
         uses: coverallsapp/github-action@master
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          path-to-lcov: './lcov-ui-api.info'
+          path-to-lcov: './api/lcov.info'

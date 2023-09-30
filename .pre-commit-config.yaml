@@ -5,16 +5,17 @@ repos:
       - id: fmt
         name: fmt
         description: Format files with cargo fmt
-        entry: cargo fmt --
+        entry: just format
         language: system
         files: \.rs$
+        pass_filenames: false
         args: []
         stages: [commit]
       - id: clippy
         name: clippy
         language: system
         pass_filenames: false
-        entry: cargo make clippy-flow
+        entry: just check-all
         files: \.rs$
         stages: [commit]
       - id: todo

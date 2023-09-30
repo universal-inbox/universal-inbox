@@ -1,0 +1,65 @@
+version: "0.5"
+
+processes:
+  ui-api:
+    command: "just run-api"
+    depends_on:
+      postgresql:
+        condition: process_started
+      redis:
+        condition: process_started
+    readiness_probe:
+      http_get:
+        host: 127.0.0.1
+        scheme: http
+        path: "/ping"
+        port: 8000
+    availability:
+      restart: no
+    namespace: "universal-inbox"
+
+  ui-web:
+    command: "just run-web"
+    depends_on:
+      ui-api:
+        condition: process_healthy
+    readiness_probe:
+      http_get:
+        host: 127.0.0.1
+        scheme: http
+        path: "/"
+        port: 8080
+    availability:
+      restart: no
+    namespace: "universal-inbox"
+
+  sync-notifications:
+    command: "just sync-notifications"
+    disabled: true
+    namespace: "universal-inbox"
+
+  sync-tasks:
+    command: "just sync-tasks"
+    disabled: true
+    namespace: "universal-inbox"
+
+  nango-db:
+    command: "just run-nango-db"
+    shutdown:
+      command: "docker stop nango-db"
+    namespace: "nango"
+
+  nango-server:
+    command: "just run-nango-server"
+    shutdown:
+      command: "docker stop nango-server"
+    depends_on:
+      nango-db:
+        condition: process_started
+    readiness_probe:
+      http_get:
+        host: 127.0.0.1
+        scheme: http
+        path: "/"
+        port: 3003
+    namespace: "nango"
