@@ -1,7 +1,0 @@
-extend = "../Makefile.toml"
-
-[tasks.run]
-clear = true
-env = { "TASKRC" = "$PWD/taskrc" }
-command = "bash"
-args = ["-c", "cargo run -- serve"]

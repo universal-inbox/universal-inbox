@@ -1,0 +1,36 @@
+set fallback
+
+default:
+    @just --choose
+
+## Build recipes
+build:
+    cargo build
+
+build-release:
+    cargo build --release
+
+## Dev recipes
+check:
+    cargo clippy --tests -- -D warnings
+
+check-db:
+    cargo sqlx prepare -- --bin universal-inbox-api
+    cargo check --tests
+
+## Test recipes
+test test-filter="" $RUST_LOG="info":
+    cargo nextest run --color always {{test-filter}}
+
+test-coverage:
+    cargo llvm-cov nextest --all-features --lcov --output-path lcov.info
+
+## Run recipes
+run:
+    watchexec -r cargo run -- serve
+
+sync-tasks $RUST_LOG="info":
+    cargo run -- sync-tasks
+
+sync-notifications $RUST_LOG="info":
+    cargo run -- sync-notifications
