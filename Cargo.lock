@@ -5836,6 +5836,7 @@ dependencies = [
  "gloo-utils",
  "gravatar",
  "http",
+ "itertools 0.11.0",
  "js-sys",
  "lazy_static",
  "log",
