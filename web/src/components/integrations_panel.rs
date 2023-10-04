@@ -9,6 +9,7 @@ use dioxus_free_icons::{
     },
     Icon,
 };
+use itertools::Itertools;
 
 use universal_inbox::{
     integration_connection::{
@@ -30,6 +31,12 @@ pub fn integrations_panel<'a>(
     on_disconnect: EventHandler<'a, &'a IntegrationConnection>,
     on_reconnect: EventHandler<'a, &'a IntegrationConnection>,
 ) -> Element {
+    let sorted_integration_providers: Vec<(&IntegrationProviderKind, &IntegrationProviderConfig)> =
+        integration_providers
+            .into_iter()
+            .sorted_by(|(k1, _), (k2, _)| Ord::cmp(&k1.to_string(), &k2.to_string()))
+            .collect();
+
     cx.render(rsx!(
         div {
             class: "flex flex-col w-auto gap-4 p-8",
@@ -64,14 +71,14 @@ pub fn integrations_panel<'a>(
                 div { class: "divider grow" }
             }
 
-            for (kind, config) in (&*integration_providers) {
+            for (kind, config) in (&sorted_integration_providers) {
                 if kind.is_notification_service() && config.is_implemented {
                     rsx!(
                         integration_settings {
-                            kind: *kind,
-                            config: config.clone(),
-                            connection: integration_connections.iter().find(|c| c.provider_kind == *kind).cloned(),
-                            on_connect: |c| on_connect.call((*kind, c)),
+                            kind: **kind,
+                            config: (*config).clone(),
+                            connection: integration_connections.iter().find(|c| c.provider_kind == **kind).cloned(),
+                            on_connect: |c| on_connect.call((**kind, c)),
                             on_disconnect: |c| on_disconnect.call(c),
                             on_reconnect: |c| on_reconnect.call(c),
                         }
@@ -79,14 +86,14 @@ pub fn integrations_panel<'a>(
                 }
             }
 
-            for (kind, config) in (&*integration_providers) {
+            for (kind, config) in (&sorted_integration_providers) {
                 if kind.is_notification_service() && !config.is_implemented {
                     rsx!(
                         integration_settings {
-                            kind: *kind,
-                            config: config.clone(),
-                            connection: integration_connections.iter().find(|c| c.provider_kind == *kind).cloned(),
-                            on_connect: |c| on_connect.call((*kind, c)),
+                            kind: **kind,
+                            config: (*config).clone(),
+                            connection: integration_connections.iter().find(|c| c.provider_kind == **kind).cloned(),
+                            on_connect: |c| on_connect.call((**kind, c)),
                             on_disconnect: |c| on_disconnect.call(c),
                             on_reconnect: |c| on_reconnect.call(c),
                         }
@@ -104,14 +111,14 @@ pub fn integrations_panel<'a>(
                 div { class: "divider grow" }
             }
 
-            for (kind, config) in (&*integration_providers) {
+            for (kind, config) in (&sorted_integration_providers) {
                 if kind.is_task_service() && config.is_implemented {
                     rsx!(
                         integration_settings {
-                            kind: *kind,
-                            config: config.clone(),
-                            connection: integration_connections.iter().find(|c| c.provider_kind == *kind).cloned(),
-                            on_connect: |c| on_connect.call((*kind, c)),
+                            kind: **kind,
+                            config: (*config).clone(),
+                            connection: integration_connections.iter().find(|c| c.provider_kind == **kind).cloned(),
+                            on_connect: |c| on_connect.call((**kind, c)),
                             on_disconnect: |c| on_disconnect.call(c),
                             on_reconnect: |c| on_reconnect.call(c),
                         }
@@ -119,14 +126,14 @@ pub fn integrations_panel<'a>(
                 }
             }
 
-            for (kind, config) in (&*integration_providers) {
+            for (kind, config) in (&sorted_integration_providers) {
                 if kind.is_task_service() && !config.is_implemented {
                     rsx!(
                         integration_settings {
-                            kind: *kind,
-                            config: config.clone(),
-                            connection: integration_connections.iter().find(|c| c.provider_kind == *kind).cloned(),
-                            on_connect: |c| on_connect.call((*kind, c)),
+                            kind: **kind,
+                            config: (*config).clone(),
+                            connection: integration_connections.iter().find(|c| c.provider_kind == **kind).cloned(),
+                            on_connect: |c| on_connect.call((**kind, c)),
                             on_disconnect: |c| on_disconnect.call(c),
                             on_reconnect: |c| on_reconnect.call(c),
                         }
@@ -194,7 +201,13 @@ pub fn integration_settings<'a>(
                 "Disconnect",
                 "btn-success",
                 Some(format!("🔴 Last sync failed: {message}")),
-                None,
+                if kind.is_notification_service() {
+                    Some("Synchronize notifications")
+                } else if kind.is_task_service() {
+                    Some("Synchronize tasks from the inbox as notifications")
+                } else {
+                    None
+                },
             ),
             Some(Some(IntegrationConnection {
                 status: IntegrationConnectionStatus::Validated,
@@ -204,7 +217,13 @@ pub fn integration_settings<'a>(
                 "Disconnect",
                 "btn-success",
                 Some("🟠 Not yet synced".to_string()),
-                None,
+                if kind.is_notification_service() {
+                    Some("Synchronize notifications")
+                } else if kind.is_task_service() {
+                    Some("Synchronize tasks from the inbox as notifications")
+                } else {
+                    None
+                },
             ),
             Some(Some(IntegrationConnection {
                 status: IntegrationConnectionStatus::Failing,
@@ -357,7 +376,7 @@ pub fn icon_for_action(cx: Scope, action: String) -> Element {
     };
 
     cx.render(rsx!(button {
-        class: "btn btn-ghost btn-square btn-disabled",
+        class: "btn btn-ghost btn-square pointer-events-none",
         icon
     }))
 }

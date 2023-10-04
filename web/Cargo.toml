@@ -27,6 +27,7 @@ gloo-timers = "0.2.0"
 gloo-utils = "0.1.0"
 gravatar = "0.2.0"
 http = { workspace = true }
+itertools = { workspace = true }
 js-sys = "0.3"
 lazy_static = { workspace = true }
 log = { workspace = true }
