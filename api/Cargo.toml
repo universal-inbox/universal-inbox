@@ -35,7 +35,7 @@ futures = "0.3.0"
 graphql_client = "0.13.0"
 hostname = "0.3.0"
 http = { workspace = true }
-itertools = "0.11.0"
+itertools = { workspace = true }
 lazy_static = { workspace = true }
 log = { workspace = true }
 macro-attr = { workspace = true }
