@@ -659,6 +659,7 @@ mod search_projects {
         let app = authenticated_app.await;
         create_and_mock_integration_connection(
             &app,
+            &settings.integrations.oauth2.nango_secret_key,
             IntegrationProviderKind::Todoist,
             &settings,
             nango_todoist_connection,

@@ -4,7 +4,7 @@ use http::Uri;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use integration_connection::{IntegrationProviderKind, NangoProviderKey};
+use integration_connection::{IntegrationProviderKind, NangoProviderKey, NangoPublicKey};
 
 #[macro_use]
 extern crate macro_attr;
@@ -25,6 +25,7 @@ pub struct FrontConfig {
     pub oidc_redirect_url: Url,
     pub user_profile_url: Url,
     pub nango_base_url: Url,
+    pub nango_public_key: NangoPublicKey,
     pub integration_providers: HashMap<IntegrationProviderKind, IntegrationProviderConfig>,
 }
 

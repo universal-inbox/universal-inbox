@@ -213,3 +213,19 @@ impl From<String> for NangoProviderKey {
         Self(s)
     }
 }
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Hash)]
+#[serde(transparent)]
+pub struct NangoPublicKey(pub String);
+
+impl fmt::Display for NangoPublicKey {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<String> for NangoPublicKey {
+    fn from(s: String) -> Self {
+        Self(s)
+    }
+}

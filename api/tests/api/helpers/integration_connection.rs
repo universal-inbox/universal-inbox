@@ -69,6 +69,7 @@ pub async fn verify_integration_connection(
 
 pub fn mock_nango_connection_service<'a>(
     nango_mock_server: &'a MockServer,
+    nango_secret_key: &str,
     connection_id: &str,
     provider_config_key: &NangoProviderKey,
     result: Box<NangoConnection>,
@@ -76,7 +77,7 @@ pub fn mock_nango_connection_service<'a>(
     nango_mock_server.mock(|when, then| {
         when.method(GET)
             .path(format!("/connection/{connection_id}"))
-            .header("authorization", "Basic bmFuZ29fdGVzdF9rZXk=:") // = base64("nango_test_key")
+            .header("authorization", format!("Bearer {nango_secret_key}"))
             .query_param("provider_config_key", provider_config_key.to_string());
         then.status(200)
             .header("content-type", "application/json")
@@ -86,15 +87,16 @@ pub fn mock_nango_connection_service<'a>(
 
 pub fn mock_nango_delete_connection_service<'a>(
     nango_mock_server: &'a MockServer,
+    nango_secret_key: &str,
     connection_id: &str,
     provider_config_key: &NangoProviderKey,
 ) -> Mock<'a> {
     nango_mock_server.mock(|when, then| {
         when.method(DELETE)
             .path(format!("/connection/{connection_id}"))
-            .header("authorization", "Basic bmFuZ29fdGVzdF9rZXk=:") // = base64("nango_test_key")
+            .header("authorization", format!("Bearer {nango_secret_key}"))
             .query_param("provider_config_key", provider_config_key.to_string());
-        then.status(200).header("content-type", "application/json");
+        then.status(204).header("content-type", "application/json");
     })
 }
 
@@ -186,6 +188,7 @@ pub async fn update_integration_connection_context(
 
 pub async fn create_and_mock_integration_connection(
     app: &AuthenticatedApp,
+    nango_secret_key: &str,
     provider_kind: IntegrationProviderKind,
     settings: &Settings,
     nango_connection: Box<NangoConnection>,
@@ -201,6 +204,7 @@ pub async fn create_and_mock_integration_connection(
         .unwrap();
     mock_nango_connection_service(
         &app.nango_mock_server,
+        nango_secret_key,
         &integration_connection.connection_id.to_string(),
         config_key,
         nango_connection,

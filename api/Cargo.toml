@@ -23,7 +23,6 @@ actix-session = { version = "0.7.0", features = ["actix", "redis-rs-session"] }
 actix-web = "4.0.0"
 actix-web-lab = { version = "0.19.0", features = ["spa"] }
 async-trait = "0.1.0"
-base64 = "0.21.0"
 cached = { version = "0.43.0", features = ["async_tokio_rt_multi_thread"] }
 chrono = { workspace = true, features = ["serde"] }
 clap = { workspace = true }

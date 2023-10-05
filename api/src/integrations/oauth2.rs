@@ -1,7 +1,6 @@
 use std::fmt;
 
 use anyhow::{anyhow, Context, Error};
-use base64::{engine::general_purpose, Engine as _};
 use chrono::{DateTime, Utc};
 use format_serde_error::SerdeError;
 use http::{HeaderMap, HeaderValue};
@@ -25,14 +24,19 @@ pub struct NangoService {
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct NangoConnection {
     pub id: u32,
-    pub account_id: u32,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub deleted_at: Option<DateTime<Utc>>,
+    pub deleted: bool,
+    pub environment_id: u32,
+    pub last_fetched_at: Option<DateTime<Utc>>,
     pub provider_config_key: NangoProviderKey,
     pub connection_id: ConnectionId,
     pub credentials: NangoConnectionCredentials,
     pub connection_config: Value,
     pub metadata: Value,
+    pub credentials_iv: Value,
+    pub credentials_tag: Value,
 }
 
 #[serde_as]
@@ -123,7 +127,8 @@ impl NangoService {
 
         let status_code = response.status();
         // We consider the connection already deleted even when receiving a BAD_REQUEST response
-        if status_code != reqwest::StatusCode::BAD_REQUEST && status_code != reqwest::StatusCode::OK
+        if status_code != reqwest::StatusCode::BAD_REQUEST
+            && status_code != reqwest::StatusCode::NO_CONTENT
         {
             return Err(
                 UniversalInboxError::Unexpected(
@@ -141,8 +146,7 @@ impl NangoService {
 fn build_nango_client(secret_key: &str) -> Result<ClientWithMiddleware, reqwest::Error> {
     let mut headers = HeaderMap::new();
 
-    let base64_secret_key = general_purpose::STANDARD.encode(secret_key);
-    let mut auth_header_value: HeaderValue = format!("Basic {base64_secret_key}:").parse().unwrap();
+    let mut auth_header_value: HeaderValue = format!("Bearer {secret_key}").parse().unwrap();
     auth_header_value.set_sensitive(true);
     headers.insert("Authorization", auth_header_value);
 

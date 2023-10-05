@@ -51,6 +51,7 @@ mod patch_resource {
         let linear_notification = linear_notifications[2].clone(); // Get an IssueNotification
         create_and_mock_integration_connection(
             &app,
+            &settings.integrations.oauth2.nango_secret_key,
             IntegrationProviderKind::Linear,
             &settings,
             nango_linear_connection,
@@ -131,6 +132,7 @@ mod patch_resource {
         let linear_notification = linear_notifications[2].clone(); // Get an IssueNotification
         create_and_mock_integration_connection(
             &app,
+            &settings.integrations.oauth2.nango_secret_key,
             IntegrationProviderKind::Linear,
             &settings,
             nango_linear_connection,
@@ -198,6 +200,7 @@ mod patch_resource {
         let linear_notification = linear_notifications[2].clone(); // Get an IssueNotification
         create_and_mock_integration_connection(
             &app,
+            &settings.integrations.oauth2.nango_secret_key,
             IntegrationProviderKind::Linear,
             &settings,
             nango_linear_connection,
@@ -260,6 +263,7 @@ mod patch_resource {
         let linear_notification = linear_notifications[2].clone(); // Get an IssueNotification
         create_and_mock_integration_connection(
             &app,
+            &settings.integrations.oauth2.nango_secret_key,
             IntegrationProviderKind::Linear,
             &settings,
             nango_linear_connection,
@@ -344,6 +348,7 @@ mod patch_resource {
         let linear_notification = linear_notifications[0].clone(); // Get a ProjectNotification
         create_and_mock_integration_connection(
             &app,
+            &settings.integrations.oauth2.nango_secret_key,
             IntegrationProviderKind::Linear,
             &settings,
             nango_linear_connection,
@@ -416,6 +421,7 @@ mod patch_resource {
         let linear_notification = linear_notifications[0].clone(); // Get a ProjectNotification
         create_and_mock_integration_connection(
             &app,
+            &settings.integrations.oauth2.nango_secret_key,
             IntegrationProviderKind::Linear,
             &settings,
             nango_linear_connection,
