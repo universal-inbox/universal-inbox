@@ -73,6 +73,7 @@ mod patch_task {
         let existing_todoist_notification = existing_todoist_task_creation.notification.unwrap();
         create_and_mock_integration_connection(
             &app,
+            &settings.integrations.oauth2.nango_secret_key,
             IntegrationProviderKind::Todoist,
             &settings,
             nango_todoist_connection,
@@ -137,6 +138,7 @@ mod patch_task {
         let existing_todoist_notification = existing_todoist_task_creation.notification.unwrap();
         create_and_mock_integration_connection(
             &app,
+            &settings.integrations.oauth2.nango_secret_key,
             IntegrationProviderKind::Todoist,
             &settings,
             nango_todoist_connection,
@@ -214,6 +216,7 @@ mod patch_task {
         let new_project_id = "3333".to_string();
         create_and_mock_integration_connection(
             &app,
+            &settings.integrations.oauth2.nango_secret_key,
             IntegrationProviderKind::Todoist,
             &settings,
             nango_todoist_connection,
@@ -330,6 +333,7 @@ mod patch_task {
         ));
         create_and_mock_integration_connection(
             &app,
+            &settings.integrations.oauth2.nango_secret_key,
             IntegrationProviderKind::Todoist,
             &settings,
             nango_todoist_connection,
@@ -337,6 +341,7 @@ mod patch_task {
         .await;
         create_and_mock_integration_connection(
             &app,
+            &settings.integrations.oauth2.nango_secret_key,
             IntegrationProviderKind::Github,
             &settings,
             nango_github_connection,
@@ -459,6 +464,7 @@ mod patch_notification {
         .await;
         create_and_mock_integration_connection(
             &app,
+            &settings.integrations.oauth2.nango_secret_key,
             IntegrationProviderKind::Todoist,
             &settings,
             nango_todoist_connection,

@@ -78,6 +78,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     .await;
     create_and_mock_integration_connection(
         &app,
+        &settings.integrations.oauth2.nango_secret_key,
         IntegrationProviderKind::Github,
         &settings,
         nango_github_connection,
@@ -182,6 +183,7 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
     .await;
     create_and_mock_integration_connection(
         &app,
+        &settings.integrations.oauth2.nango_secret_key,
         IntegrationProviderKind::Github,
         &settings,
         nango_github_connection,
@@ -251,6 +253,7 @@ async fn test_sync_all_notifications_asynchronously(
     .await;
     create_and_mock_integration_connection(
         &app,
+        &settings.integrations.oauth2.nango_secret_key,
         IntegrationProviderKind::Github,
         &settings,
         nango_github_connection,
@@ -391,6 +394,7 @@ async fn test_sync_all_notifications_asynchronously_in_error(
     let app = authenticated_app.await;
     create_and_mock_integration_connection(
         &app,
+        &settings.integrations.oauth2.nango_secret_key,
         IntegrationProviderKind::Github,
         &settings,
         nango_github_connection,

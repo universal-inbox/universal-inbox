@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use universal_inbox::integration_connection::{ConnectionId, NangoProviderKey};
+use universal_inbox::integration_connection::{ConnectionId, NangoProviderKey, NangoPublicKey};
 use url::Url;
 use wasm_bindgen::prelude::*;
 
@@ -9,6 +9,7 @@ extern "C" {
     #[wasm_bindgen(catch)]
     async fn auth_provider(
         nango_host: &str,
+        public_key: &str,
         config_key: &str,
         connection_id: &str,
     ) -> Result<JsValue, JsValue>;
@@ -23,11 +24,13 @@ pub struct NangoAuthResult {
 
 pub async fn nango_auth(
     nango_base_url: &Url,
+    nango_public_key: &NangoPublicKey,
     nango_provider_key: &NangoProviderKey,
     nango_connection_id: &ConnectionId,
 ) -> Result<NangoAuthResult> {
     let result = auth_provider(
         nango_base_url.as_ref(),
+        nango_public_key.to_string().as_str(),
         nango_provider_key.to_string().as_str(),
         nango_connection_id.to_string().as_str(),
     )

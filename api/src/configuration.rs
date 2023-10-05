@@ -3,7 +3,9 @@ use std::{collections::HashMap, env};
 use config::{Config, ConfigError, Environment, File};
 use openidconnect::{ClientId, ClientSecret, IntrospectionUrl, IssuerUrl};
 use serde::Deserialize;
-use universal_inbox::integration_connection::{IntegrationProviderKind, NangoProviderKey};
+use universal_inbox::integration_connection::{
+    IntegrationProviderKind, NangoProviderKey, NangoPublicKey,
+};
 use url::Url;
 
 #[derive(Deserialize, Clone, Debug)]
@@ -95,6 +97,7 @@ pub struct IntegrationsSettings {
 pub struct Oauth2Settings {
     pub nango_base_url: Url,
     pub nango_secret_key: String,
+    pub nango_public_key: NangoPublicKey,
     pub nango_provider_keys: HashMap<IntegrationProviderKind, NangoProviderKey>,
 }
 

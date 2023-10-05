@@ -105,6 +105,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     .await;
     let integration_connection = create_and_mock_integration_connection(
         &app,
+        &settings.integrations.oauth2.nango_secret_key,
         IntegrationProviderKind::GoogleMail,
         &settings,
         nango_google_mail_connection,
@@ -301,6 +302,7 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
 
     create_and_mock_integration_connection(
         &app,
+        &settings.integrations.oauth2.nango_secret_key,
         IntegrationProviderKind::GoogleMail,
         &settings,
         nango_google_mail_connection,

@@ -43,6 +43,7 @@ mod patch_resource {
         let app = authenticated_app.await;
         create_and_mock_integration_connection(
             &app,
+            &settings.integrations.oauth2.nango_secret_key,
             IntegrationProviderKind::GoogleMail,
             &settings,
             nango_google_mail_connection,
@@ -118,6 +119,7 @@ mod patch_resource {
         let app = authenticated_app.await;
         create_and_mock_integration_connection(
             &app,
+            &settings.integrations.oauth2.nango_secret_key,
             IntegrationProviderKind::GoogleMail,
             &settings,
             nango_google_mail_connection,
@@ -185,6 +187,7 @@ mod patch_resource {
         let app = authenticated_app.await;
         create_and_mock_integration_connection(
             &app,
+            &settings.integrations.oauth2.nango_secret_key,
             IntegrationProviderKind::GoogleMail,
             &settings,
             nango_google_mail_connection,

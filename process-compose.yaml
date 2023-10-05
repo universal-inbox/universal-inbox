@@ -29,6 +29,7 @@ processes:
         scheme: http
         path: "/"
         port: 8080
+      failure_threshold: 10
     availability:
       restart: no
     namespace: "universal-inbox"

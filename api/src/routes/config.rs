@@ -34,6 +34,7 @@ pub async fn front_config(
             .context("Failed to parse OIDC redirect URL")?,
         user_profile_url: settings.application.authentication.user_profile_url.clone(),
         nango_base_url: settings.integrations.oauth2.nango_base_url.clone(),
+        nango_public_key: settings.integrations.oauth2.nango_public_key.clone(),
         // tag: New notification integration
         integration_providers: HashMap::from([
             (

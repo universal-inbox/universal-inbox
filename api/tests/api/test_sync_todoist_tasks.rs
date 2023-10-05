@@ -86,6 +86,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
     let existing_todoist_notification = existing_todoist_task_creation.notification.unwrap();
     let integration_connection = create_and_mock_integration_connection(
         &app,
+        &settings.integrations.oauth2.nango_secret_key,
         IntegrationProviderKind::Todoist,
         &settings,
         nango_todoist_connection,
@@ -224,6 +225,7 @@ async fn test_sync_tasks_should_add_new_empty_task(
     let app = authenticated_app.await;
     create_and_mock_integration_connection(
         &app,
+        &settings.integrations.oauth2.nango_secret_key,
         IntegrationProviderKind::Todoist,
         &settings,
         nango_todoist_connection,
@@ -313,6 +315,7 @@ async fn test_sync_tasks_should_reuse_existing_sync_token(
     let app = authenticated_app.await;
     let integration_connection = create_and_mock_integration_connection(
         &app,
+        &settings.integrations.oauth2.nango_secret_key,
         IntegrationProviderKind::Todoist,
         &settings,
         nango_todoist_connection,
@@ -407,6 +410,7 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
 
     create_and_mock_integration_connection(
         &app,
+        &settings.integrations.oauth2.nango_secret_key,
         IntegrationProviderKind::Todoist,
         &settings,
         nango_todoist_connection,
@@ -498,6 +502,7 @@ async fn test_sync_tasks_should_not_update_tasks_and_notifications_with_empty_in
 
     create_and_mock_integration_connection(
         &app,
+        &settings.integrations.oauth2.nango_secret_key,
         IntegrationProviderKind::Todoist,
         &settings,
         nango_todoist_connection,
@@ -600,6 +605,7 @@ async fn test_sync_all_tasks_asynchronously(
     .await;
     create_and_mock_integration_connection(
         &app,
+        &settings.integrations.oauth2.nango_secret_key,
         IntegrationProviderKind::Todoist,
         &settings,
         nango_todoist_connection,
@@ -698,6 +704,7 @@ async fn test_sync_all_tasks_asynchronously_in_error(
     let app = authenticated_app.await;
     create_and_mock_integration_connection(
         &app,
+        &settings.integrations.oauth2.nango_secret_key,
         IntegrationProviderKind::Todoist,
         &settings,
         nango_todoist_connection,

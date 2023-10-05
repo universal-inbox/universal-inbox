@@ -81,6 +81,7 @@ snooze = "The Todoist task will not be modified. The notification in Universal I
 
 [integrations.oauth2]
 nango_base_url = "http://localhost:3003"
+# nango_public_key = "get it from Nango/project-settings page"
 # nango_secret_key = "To be generated"
 
 # Integration provider to be created on Nango

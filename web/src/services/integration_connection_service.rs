@@ -9,7 +9,7 @@ use url::Url;
 use universal_inbox::{
     integration_connection::{
         IntegrationConnection, IntegrationConnectionCreation, IntegrationConnectionId,
-        IntegrationConnectionStatus, IntegrationProviderKind,
+        IntegrationConnectionStatus, IntegrationProviderKind, NangoPublicKey,
     },
     IntegrationProviderConfig,
 };
@@ -245,7 +245,7 @@ async fn authenticate_integration_connection(
     app_config_ref: &UseAtomRef<Option<AppConfig>>,
     ui_model_ref: &UseAtomRef<UniversalInboxUIModel>,
 ) -> Result<IntegrationConnection> {
-    let (nango_base_url, provider_config) =
+    let (nango_base_url, nango_public_key, provider_config) =
         get_configs(app_config_ref, integration_connection.provider_kind)?;
 
     debug!(
@@ -254,6 +254,7 @@ async fn authenticate_integration_connection(
     );
     nango_auth(
         &nango_base_url,
+        &nango_public_key,
         &provider_config.nango_config_key,
         &integration_connection.connection_id,
     )
@@ -388,10 +389,11 @@ fn sync_integration_connection(
 fn get_configs(
     app_config_ref: &UseAtomRef<Option<AppConfig>>,
     integration_provider_kind: IntegrationProviderKind,
-) -> Result<(Url, IntegrationProviderConfig)> {
+) -> Result<(Url, NangoPublicKey, IntegrationProviderConfig)> {
     if let Some(app_config) = app_config_ref.read().as_ref() {
         Ok((
             app_config.nango_base_url.clone(),
+            app_config.nango_public_key.clone(),
             app_config
                 .integration_providers
                 .get(&integration_provider_kind)

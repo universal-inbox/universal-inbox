@@ -141,6 +141,7 @@ mod verify_integration_connections {
             .unwrap();
         let nango_mock = mock_nango_connection_service(
             &app.nango_mock_server,
+            &settings.integrations.oauth2.nango_secret_key,
             &integration_connection.connection_id.to_string(),
             github_config_key,
             nango_github_connection.clone(),
@@ -208,6 +209,7 @@ mod verify_integration_connections {
             .unwrap();
         let mut nango_mock = mock_nango_connection_service(
             &app.nango_mock_server,
+            &settings.integrations.oauth2.nango_secret_key,
             &integration_connection.connection_id.to_string(),
             github_config_key,
             nango_github_connection.clone(),
@@ -225,7 +227,7 @@ mod verify_integration_connections {
         let mut nango_mock = app.nango_mock_server.mock(|when, then| {
             when.method(GET)
                 .path(format!("/connection/{}", integration_connection.connection_id))
-                .header("authorization", "Basic bmFuZ29fdGVzdF9rZXk=:")  // = base64("nango_test_key")
+                .header("authorization", format!("Bearer {}", settings.integrations.oauth2.nango_secret_key))
                 .query_param("provider_config_key", "github");
             then.status(400).header("content-type", "application/json")
                 .json_body(json!({
@@ -256,6 +258,7 @@ mod verify_integration_connections {
             .unwrap();
         let nango_mock = mock_nango_connection_service(
             &app.nango_mock_server,
+            &settings.integrations.oauth2.nango_secret_key,
             &integration_connection.connection_id.to_string(),
             github_config_key,
             nango_github_connection.clone(),
@@ -334,6 +337,7 @@ mod disconnect_integration_connections {
 
         let nango_mock = mock_nango_delete_connection_service(
             &app.nango_mock_server,
+            &settings.integrations.oauth2.nango_secret_key,
             &integration_connection.connection_id.to_string(),
             github_config_key,
         );
@@ -357,6 +361,7 @@ mod disconnect_integration_connections {
     #[rstest]
     #[tokio::test]
     async fn test_disconnect_unknown_integration_connection_by_nango(
+        settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
     ) {
         let app = authenticated_app.await;
@@ -370,7 +375,7 @@ mod disconnect_integration_connections {
         let nango_mock = app.nango_mock_server.mock(|when, then| {
             when.method(DELETE)
                 .path(format!("/connection/{}", integration_connection.connection_id))
-                .header("authorization", "Basic bmFuZ29fdGVzdF9rZXk=:")  // = base64("nango_test_key")
+                .header("authorization", format!("Bearer {}", settings.integrations.oauth2.nango_secret_key))
                 .query_param("provider_config_key", "github");
             then.status(400).header("content-type", "application/json")
                 .json_body(json!({

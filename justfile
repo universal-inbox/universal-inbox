@@ -90,7 +90,7 @@ run-nango-server: create-docker-network
         -e SERVER_PORT=3003 \
         -e NANGO_SERVER_URL="https://oauth-dev.universal-inbox.com" \
         -e LOG_LEVEL="info" \
-        -e NANGO_SECRET_KEY="tySQlETIO2j2LVUC2APgQHgMMVaA1Fe6OtnMGMdYwWw=" \
+        -e NANGO_SECRET_KEY="c9c9d3bb-4a08-4dcd-a674-09b3781b7d05" \
         -e NANGO_ENCRYPTION_KEY="ITbLZfSOuTaqglhgh9tZROu0GUBMRoEwAmGK9K7x56Q=" \
         -e NANGO_DASHBOARD_USERNAME=nango \
         -e NANGO_DASHBOARD_PASSWORD=nango \
@@ -98,7 +98,7 @@ run-nango-server: create-docker-network
         --rm \
         -p 3003:3003 \
         --name nango-server \
-        nangohq/nango-server
+        nangohq/nango-server:0.32.10
 
 run-all:
     process-compose -f .devbox/virtenv/redis/process-compose.yaml -f .devbox/virtenv/postgresql_15/process-compose.yaml -f process-compose.yaml -p 9999
