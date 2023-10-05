@@ -48,6 +48,7 @@ port = 6379
 [integrations.github]
 name = "Github"
 page_size = 50
+doc = "Github notifications are synchronized 1 for 1 with Universal Inbox notifications."
 
 [integrations.github.doc_for_actions]
 delete = "The Github notification will only be marked as read. ⚠️ The Github notification API is not fully functional and does not allow to mark it as done."
@@ -56,6 +57,7 @@ snooze = "The Github notification will not be modified. The notification in Univ
 
 [integrations.linear]
 name = "Linear"
+doc = "Linear notifications (issue and project notifications) are synchronized 1 for 1 with Universal Inbox notifications. Linear notifications for the same Linear issue are not (yet) merged as one like Linear does."
 
 [integrations.linear.doc_for_actions]
 delete = "The Linear notification will be deleted."
@@ -65,6 +67,8 @@ snooze = "The Linear notification will be snoozed and will only reappear the nex
 [integrations.google_mail]
 name = "Google Mail"
 page_size = 500
+doc = "Google Mail threads from your Inbox are considered as Universal Inbox notifications. More flexible configuration is coming."
+warning_message = "Google Mail integration is not yet public, it requires your email address to be whitelisted and you will see a warning message from Google while connecting. If you still want to connect it, please send the Google email address you want to use to the <a href='mailto:support@universal-inbox.com' title='Contact support'>support</a>"
 
 [integrations.google_mail.doc_for_actions]
 delete = "The Google Mail thread will be archived."
@@ -73,6 +77,7 @@ snooze = "Snoozing a notification will only be reflected in Universal Inbox. ⚠
 
 [integrations.todoist]
 name = "Todoist"
+doc = "Task from the Todoist Inbox are considered as Universal Inbox notifications."
 
 [integrations.todoist.doc_for_actions]
 delete = "The Todoist task will be deleted."

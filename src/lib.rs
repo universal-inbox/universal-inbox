@@ -33,6 +33,8 @@ pub struct FrontConfig {
 pub struct IntegrationProviderConfig {
     pub name: String,
     pub nango_config_key: NangoProviderKey,
+    pub doc: String,
+    pub warning_message: Option<String>,
     pub doc_for_actions: HashMap<String, String>,
     pub is_implemented: bool,
 }
