@@ -315,42 +315,60 @@ pub fn documentation(cx: Scope, config: IntegrationProviderConfig) -> Element {
     let mut doc_for_actions: Vec<(&String, &String)> = config.doc_for_actions.iter().collect();
     doc_for_actions.sort_by(|e1, e2| e1.0.cmp(e2.0));
 
-    cx.render(rsx!(if !doc_for_actions.is_empty() {
-        rsx!(
-            details {
-                class: "collapse collapse-arrow bg-neutral-focus",
-                summary {
-                    class: "collapse-title text-lg font-medium min-h-min",
-                    div {
-                        class: "flex gap-2 items-center",
-                        Icon { class: "w-5 h-5 text-info", icon: BsInfoCircle }
-                        "Documentation"
-                    }
-                }
-
+    cx.render(rsx!(
+        if let Some(ref warning_message) = config.warning_message {
+            rsx!(
                 div {
-                    class: "collapse-content flex flex-col gap-2",
+                    class: "alert alert-warning shadow-lg my-4 py-2",
+                    Icon { class: "w-5 h-5" icon: BsExclamationTriangle }
+                    p { class: "max-w-full prose prose-sm", dangerous_inner_html: "{warning_message}" }
+                }
+            )
+        }
 
-                    div { class: "text-base", "Actions on notifications" }
-                    table {
-                        class: "table-auto",
+        if !config.doc.is_empty() {
+            rsx!(
+                details {
+                    class: "collapse collapse-arrow bg-neutral-focus",
+                    summary {
+                        class: "collapse-title text-lg font-medium min-h-min",
+                        div {
+                            class: "flex gap-2 items-center",
+                            Icon { class: "w-5 h-5 text-info", icon: BsInfoCircle }
+                            "Documentation"
+                        }
+                    }
 
-                        tbody {
-                            for (action, doc) in doc_for_actions.iter() {
-                                rsx!(
-                                    tr {
-                                        td { icon_for_action { action: action.to_string() } }
-                                        td { class: "pr-4 font-semibold", "{action}" }
-                                        td { "{doc}" }
+                    div {
+                        class: "collapse-content flex flex-col gap-2",
+
+                        p { class: "py-2", "{config.doc}"}
+
+                        div { class: "text-base", "Actions on notifications" }
+                        if !doc_for_actions.is_empty() {
+                            rsx!(
+                                table {
+                                    class: "table-auto",
+
+                                    tbody {
+                                        for (action, doc) in doc_for_actions.iter() {
+                                            rsx!(
+                                                tr {
+                                                    td { icon_for_action { action: action.to_string() } }
+                                                    td { class: "pr-4 font-semibold", "{action}" }
+                                                    td { "{doc}" }
+                                                }
+                                            )
+                                        }
                                     }
-                                )
-                            }
+                                }
+                            )
                         }
                     }
                 }
-            }
-        )
-    }))
+            )
+        }
+    ))
 }
 
 #[inline_props]

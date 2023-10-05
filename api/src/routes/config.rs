@@ -48,6 +48,8 @@ pub async fn front_config(
                         .get(&IntegrationProviderKind::Github)
                         .context("Missing Nango config key for Github")?
                         .clone(),
+                    doc: settings.integrations.github.doc.clone(),
+                    warning_message: settings.integrations.github.warning_message.clone(),
                     doc_for_actions: settings.integrations.github.doc_for_actions.clone(),
                     is_implemented: true,
                 },
@@ -63,6 +65,8 @@ pub async fn front_config(
                         .get(&IntegrationProviderKind::Linear)
                         .context("Missing Nango config key for Linear")?
                         .clone(),
+                    doc: settings.integrations.linear.doc.clone(),
+                    warning_message: settings.integrations.linear.warning_message.clone(),
                     doc_for_actions: settings.integrations.linear.doc_for_actions.clone(),
                     is_implemented: true,
                 },
@@ -78,6 +82,8 @@ pub async fn front_config(
                         .get(&IntegrationProviderKind::GoogleMail)
                         .context("Missing Nango config key for Google Mail")?
                         .clone(),
+                    doc: settings.integrations.google_mail.doc.clone(),
+                    warning_message: settings.integrations.google_mail.warning_message.clone(),
                     doc_for_actions: settings.integrations.google_mail.doc_for_actions.clone(),
                     is_implemented: true,
                 },
@@ -87,6 +93,8 @@ pub async fn front_config(
                 IntegrationProviderConfig {
                     name: "Slack".to_string(),
                     nango_config_key: "slack".to_string().into(),
+                    doc: "".to_string(),
+                    warning_message: None,
                     doc_for_actions: HashMap::new(),
                     is_implemented: false,
                 },
@@ -96,6 +104,8 @@ pub async fn front_config(
                 IntegrationProviderConfig {
                     name: "Notion".to_string(),
                     nango_config_key: "notion".to_string().into(),
+                    doc: "".to_string(),
+                    warning_message: None,
                     doc_for_actions: HashMap::new(),
                     is_implemented: false,
                 },
@@ -105,6 +115,8 @@ pub async fn front_config(
                 IntegrationProviderConfig {
                     name: "Google Docs".to_string(),
                     nango_config_key: "googledocs".to_string().into(),
+                    doc: "".to_string(),
+                    warning_message: None,
                     doc_for_actions: HashMap::new(),
                     is_implemented: false,
                 },
@@ -120,6 +132,8 @@ pub async fn front_config(
                         .get(&IntegrationProviderKind::Todoist)
                         .context("Missing Nango config key for Todoist")?
                         .clone(),
+                    doc: settings.integrations.todoist.doc.clone(),
+                    warning_message: settings.integrations.todoist.warning_message.clone(),
                     doc_for_actions: settings.integrations.todoist.doc_for_actions.clone(),
                     is_implemented: true,
                 },
@@ -129,6 +143,8 @@ pub async fn front_config(
                 IntegrationProviderConfig {
                     name: "Tick Tick".to_string(),
                     nango_config_key: "ticktick".to_string().into(),
+                    doc: "".to_string(),
+                    warning_message: None,
                     doc_for_actions: HashMap::new(),
                     is_implemented: false,
                 },

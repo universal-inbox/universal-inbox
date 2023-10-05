@@ -105,6 +105,8 @@ pub struct Oauth2Settings {
 pub struct GithubIntegrationSettings {
     pub name: String,
     pub page_size: usize,
+    pub doc: String,
+    pub warning_message: Option<String>,
     pub doc_for_actions: HashMap<String, String>,
 }
 
@@ -112,12 +114,16 @@ pub struct GithubIntegrationSettings {
 pub struct GoogleMailIntegrationSettings {
     pub name: String,
     pub page_size: usize,
+    pub doc: String,
+    pub warning_message: Option<String>,
     pub doc_for_actions: HashMap<String, String>,
 }
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct DefaultIntegrationSettings {
     pub name: String,
+    pub doc: String,
+    pub warning_message: Option<String>,
     pub doc_for_actions: HashMap<String, String>,
 }
 
