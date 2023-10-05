@@ -61,7 +61,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     let app = authenticated_app.await;
     let user_email_address = EmailAddress(google_mail_user_profile.email_address.clone());
     let google_mail_threads_list = GoogleMailThreadList {
-        threads: vec![
+        threads: Some(vec![
             GoogleMailThreadMinimal {
                 id: google_mail_thread_get_123.id.clone(),
                 snippet: google_mail_thread_get_123.messages[0].snippet.clone(),
@@ -72,7 +72,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
                 snippet: google_mail_thread_get_456.messages[0].snippet.clone(),
                 history_id: google_mail_thread_get_456.history_id.clone(),
             },
-        ],
+        ]),
         result_size_estimate: 1,
         next_page_token: Some("next_token".to_string()),
     };
@@ -124,7 +124,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         &google_mail_threads_list,
     );
     let empty_result = GoogleMailThreadList {
-        threads: vec![],
+        threads: None,
         result_size_estimate: 1,
         next_page_token: None,
     };
@@ -156,7 +156,10 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     )
     .await;
 
-    assert_eq!(notifications.len(), google_mail_threads_list.threads.len());
+    assert_eq!(
+        notifications.len(),
+        google_mail_threads_list.threads.clone().unwrap().len()
+    );
     assert_sync_notifications(
         &notifications,
         &google_mail_thread_get_123,
@@ -291,11 +294,11 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
     .await;
 
     let google_mail_threads_list = GoogleMailThreadList {
-        threads: vec![GoogleMailThreadMinimal {
+        threads: Some(vec![GoogleMailThreadMinimal {
             id: google_mail_thread_get_456.id.clone(),
             snippet: google_mail_thread_get_456.messages[0].snippet.clone(),
             history_id: google_mail_thread_get_456.history_id.clone(),
-        }],
+        }]),
         result_size_estimate: 1,
         next_page_token: None,
     };

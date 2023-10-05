@@ -47,7 +47,7 @@ static GOOGLE_MAIL_BASE_URL: &str = "https://gmail.googleapis.com/gmail/v1";
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct GoogleMailThreadList {
-    pub threads: Vec<GoogleMailThreadMinimal>,
+    pub threads: Option<Vec<GoogleMailThreadMinimal>>,
     #[serde(rename = "resultSizeEstimate")]
     pub result_size_estimate: usize,
     #[serde(rename = "nextPageToken")]
@@ -352,7 +352,7 @@ impl NotificationSourceService for GoogleMailService {
 
             // Tips: The batch API can be used to for better performance
             // https://developers.google.com/gmail/api/guides/batch
-            for thread in &google_mail_thread_list.threads {
+            for thread in &google_mail_thread_list.threads.unwrap_or_default() {
                 let google_mail_thread = self
                     .get_thread(&thread.id, &access_token)
                     .await?
