@@ -5,7 +5,6 @@
     "trunk": "latest",
     "pre-commit": "latest",
     "rustup": "latest",
-    "cargo-watch": "latest",
     "cargo-audit": "latest",
     "cargo-expand": "latest",
     "cargo-nextest": "latest",
