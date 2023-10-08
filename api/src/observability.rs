@@ -31,10 +31,12 @@ pub fn get_subscriber_with_telemetry(
 
     let mut map = MetadataMap::with_capacity(config.otlp_exporter_headers.len());
     for (header_name, header_value) in config.otlp_exporter_headers.clone() {
-        map.insert(
-            AsciiMetadataKey::from_str(header_name.as_str()).unwrap(),
-            header_value.parse().unwrap(),
-        );
+        if !header_value.is_empty() {
+            map.insert(
+                AsciiMetadataKey::from_str(header_name.as_str()).unwrap(),
+                header_value.parse().unwrap(),
+            );
+        }
     }
 
     let hostname = hostname::get().unwrap();
