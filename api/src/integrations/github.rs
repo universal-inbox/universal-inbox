@@ -1,10 +1,9 @@
 use std::sync::Arc;
 
 use actix_http::uri::Authority;
-use anyhow::{anyhow, Context, Error};
+use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use format_serde_error::SerdeError;
 use futures::stream::{self, TryStreamExt};
 use http::{HeaderMap, HeaderValue, Uri};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
@@ -71,7 +70,7 @@ impl GithubService {
             .context("Failed to fetch notifications response from Github API")?;
 
         let notifications: Vec<GithubNotification> = serde_json::from_str(&response)
-            .map_err(|err| <SerdeError as Into<Error>>::into(SerdeError::new(response, err)))?;
+            .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
 
         Ok(notifications)
     }

@@ -1,3 +1,5 @@
+use anyhow::{anyhow, Error};
+use format_serde_error::SerdeError;
 use http::uri::InvalidUri;
 use universal_inbox::{integration_connection::ConnectionId, task::TaskId};
 use uuid::Uuid;
@@ -66,6 +68,19 @@ pub enum UniversalInboxError {
     Recoverable(anyhow::Error),
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
+}
+
+impl UniversalInboxError {
+    pub fn from_json_serde_error(serde_error: serde_json::Error, input: String) -> Self {
+        if serde_error.to_string().starts_with("missing field") {
+            UniversalInboxError::Unexpected(anyhow!("{serde_error}: {input}"))
+        } else {
+            UniversalInboxError::Unexpected(<SerdeError as Into<Error>>::into(SerdeError::new(
+                input,
+                serde_error,
+            )))
+        }
+    }
 }
 
 #[derive(Debug)]

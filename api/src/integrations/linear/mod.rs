@@ -1,9 +1,8 @@
 use std::sync::Arc;
 
-use anyhow::{anyhow, Context, Error};
+use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use chrono::{DateTime as ChronoDateTime, Utc};
-use format_serde_error::SerdeError;
 use graphql_client::{GraphQLQuery, Response};
 use http::{HeaderMap, HeaderValue};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
@@ -207,7 +206,7 @@ impl LinearService {
 
         let notifications_response: Response<notifications_query::ResponseData> =
             serde_json::from_str(&response)
-                .map_err(|err| <SerdeError as Into<Error>>::into(SerdeError::new(response, err)))?;
+                .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
 
         assert_no_error_in_response(&notifications_response)?;
 
@@ -239,7 +238,7 @@ impl LinearService {
 
         let notification_response: Response<notification_subscribers_query::ResponseData> =
             serde_json::from_str(&response)
-                .map_err(|err| <SerdeError as Into<Error>>::into(SerdeError::new(response, err)))?;
+                .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
 
         assert_no_error_in_response(&notification_response)?;
 
@@ -270,7 +269,7 @@ impl LinearService {
 
         let archive_response: Response<notification_archive::ResponseData> =
             serde_json::from_str(&response)
-                .map_err(|err| <SerdeError as Into<Error>>::into(SerdeError::new(response, err)))?;
+                .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
 
         assert_no_error_in_response(&archive_response)?;
 
@@ -312,7 +311,7 @@ impl LinearService {
 
         let update_response: Response<issue_update_subscribers::ResponseData> =
             serde_json::from_str(&response)
-                .map_err(|err| <SerdeError as Into<Error>>::into(SerdeError::new(response, err)))?;
+                .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
 
         assert_no_error_in_response(&update_response)?;
 
@@ -355,7 +354,7 @@ impl LinearService {
 
         let update_response: Response<notification_update_snoozed_until_at::ResponseData> =
             serde_json::from_str(&response)
-                .map_err(|err| <SerdeError as Into<Error>>::into(SerdeError::new(response, err)))?;
+                .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
 
         assert_no_error_in_response(&update_response)?;
 

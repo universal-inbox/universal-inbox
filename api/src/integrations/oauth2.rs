@@ -1,8 +1,7 @@
 use std::fmt;
 
-use anyhow::{anyhow, Context, Error};
+use anyhow::{anyhow, Context};
 use chrono::{DateTime, Utc};
-use format_serde_error::SerdeError;
 use http::{HeaderMap, HeaderValue};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_tracing::{SpanBackendWithUrl, TracingMiddleware};
@@ -102,9 +101,8 @@ impl NangoService {
             .await
             .context(format!("Failed to fetch connection response for {connection_id} for provider {provider_config_key} from Nango API"))?;
 
-        let connection: NangoConnection = serde_json::from_str(&response_body).map_err(|err| {
-            <SerdeError as Into<Error>>::into(SerdeError::new(response_body, err))
-        })?;
+        let connection: NangoConnection = serde_json::from_str(&response_body)
+            .map_err(|err| UniversalInboxError::from_json_serde_error(err, response_body))?;
 
         Ok(Some(connection))
     }
