@@ -1,9 +1,8 @@
 use std::sync::{Arc, Weak};
 
-use anyhow::{anyhow, Context, Error};
+use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use format_serde_error::SerdeError;
 use http::{HeaderMap, HeaderValue};
 use itertools::Itertools;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
@@ -144,7 +143,7 @@ impl GoogleMailService {
             .context("Failed to fetch user profile response from GoogleMail API".to_string())?;
 
         let user_profile: GoogleMailUserProfile = serde_json::from_str(&response)
-            .map_err(|err| <SerdeError as Into<Error>>::into(SerdeError::new(response, err)))?;
+            .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
 
         Ok(user_profile)
     }
@@ -178,7 +177,7 @@ impl GoogleMailService {
             ))?;
 
         let thread: RawGoogleMailThread = serde_json::from_str(&response)
-            .map_err(|err| <SerdeError as Into<Error>>::into(SerdeError::new(response, err)))?;
+            .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
 
         Ok(thread)
     }
@@ -213,7 +212,7 @@ impl GoogleMailService {
             .context("Failed to fetch threads response from GoogleMail API")?;
 
         let thread_list: GoogleMailThreadList = serde_json::from_str(&response)
-            .map_err(|err| <SerdeError as Into<Error>>::into(SerdeError::new(response, err)))?;
+            .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
 
         Ok(thread_list)
     }

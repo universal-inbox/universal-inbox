@@ -6,10 +6,9 @@ use std::{
     },
 };
 
-use anyhow::{anyhow, Context, Error};
+use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use cached::proc_macro::cached;
-use format_serde_error::SerdeError;
 use http::{HeaderMap, HeaderValue, StatusCode};
 use regex::RegexBuilder;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
@@ -200,7 +199,7 @@ impl TodoistService {
             ))?;
 
         Ok(serde_json::from_str(&response)
-            .map_err(|err| <SerdeError as Into<Error>>::into(SerdeError::new(response, err)))?)
+            .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?)
     }
 
     #[tracing::instrument(level = "debug", skip(self), err)]
@@ -240,7 +239,7 @@ impl TodoistService {
             ))?;
 
         let item_info: TodoistItemInfoResponse = serde_json::from_str(&body)
-            .map_err(|err| <SerdeError as Into<Error>>::into(SerdeError::new(body.clone(), err)))?;
+            .map_err(|err| UniversalInboxError::from_json_serde_error(err, body.clone()))?;
 
         Ok(Some(item_info.item))
     }
@@ -269,7 +268,7 @@ impl TodoistService {
             })?;
 
         let sync_response: TodoistSyncStatusResponse = serde_json::from_str(&response)
-            .map_err(|err| <SerdeError as Into<Error>>::into(SerdeError::new(response, err)))?;
+            .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
 
         // It could be simpler as the first value is actually the `command_id` but httpmock
         // does not allow to use a request value into the mocked response
