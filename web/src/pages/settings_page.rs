@@ -20,6 +20,14 @@ pub fn settings_page(cx: Scope) -> Element {
 
     debug!("Rendering settings page");
 
+    use_future(cx, (), |()| {
+        to_owned![integration_connection_service];
+
+        async move {
+            integration_connection_service.send(IntegrationConnectionCommand::Refresh);
+        }
+    });
+
     if let Some(app_config) = app_config_ref.read().as_ref() {
         if let Some(integration_connections) = integration_connections_ref.read().as_ref() {
             return cx.render(rsx!(
