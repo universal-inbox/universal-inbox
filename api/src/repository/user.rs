@@ -70,7 +70,7 @@ impl UserRepository for Repository {
             "#,
             id.0
         )
-        .fetch_optional(executor)
+        .fetch_optional(&mut **executor)
         .await
         .with_context(|| format!("Failed to fetch user {id} from storage"))?;
 
@@ -97,7 +97,7 @@ impl UserRepository for Repository {
                 FROM "user"
             "#
         )
-        .fetch_all(executor)
+        .fetch_all(&mut **executor)
         .await
         .context("Failed to fetch all users from storage")?;
 
@@ -127,7 +127,7 @@ impl UserRepository for Repository {
             "#,
             auth_user_id.0
         )
-        .fetch_optional(executor)
+        .fetch_optional(&mut **executor)
         .await
         .with_context(|| {
             format!("Failed to fetch user with auth provider user ID {auth_user_id} from storage")
@@ -169,7 +169,7 @@ impl UserRepository for Repository {
                 user.created_at.naive_utc(),
                 user.updated_at.naive_utc()
             )
-            .fetch_one(executor)
+            .fetch_one(&mut **executor)
             .await
             .with_context(|| {
                 format!(
@@ -217,7 +217,7 @@ impl UserRepository for Repository {
 
         let record: Option<UpdatedUserRow> = query_builder
             .build_query_as::<UpdatedUserRow>()
-            .fetch_optional(executor)
+            .fetch_optional(&mut **executor)
             .await
             .context(format!(
                 "Failed to update user with auth ID {auth_user_id} from storage"
@@ -271,8 +271,8 @@ impl From<&UserRow> for User {
             first_name: row.first_name.clone(),
             last_name: row.last_name.clone(),
             email: row.email.clone(),
-            created_at: DateTime::<Utc>::from_utc(row.created_at, Utc),
-            updated_at: DateTime::<Utc>::from_utc(row.updated_at, Utc),
+            created_at: DateTime::from_naive_utc_and_offset(row.created_at, Utc),
+            updated_at: DateTime::from_naive_utc_and_offset(row.updated_at, Utc),
         }
     }
 }

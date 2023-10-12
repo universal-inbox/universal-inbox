@@ -1,0 +1,65 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                SELECT\n                  id,\n                  source_id,\n                  title,\n                  body,\n                  priority,\n                  due_at as \"due_at: Json<Option<DueDate>>\",\n                  tags,\n                  project\n                FROM\n                  task,\n                  to_tsquery('english', $1) query\n                WHERE\n                  query @@ title_body_project_tags_tsv\n                  AND status::TEXT = 'Active'\n                  AND user_id = $2\n                ORDER BY ts_rank_cd(title_body_project_tags_tsv, query) DESC\n                LIMIT 10;\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "source_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "body",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "priority",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "due_at: Json<Option<DueDate>>",
+        "type_info": "Json"
+      },
+      {
+        "ordinal": 6,
+        "name": "tags",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 7,
+        "name": "project",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "fe79de7587edba6557200743607adc6f9fbb37b4a8c845a496086a0ad0d97521"
+}

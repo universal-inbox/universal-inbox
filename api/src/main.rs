@@ -85,13 +85,13 @@ async fn main() -> std::io::Result<()> {
         "Connecting to PostgreSQL on {}",
         &settings.database.connection_string()
     );
-    let mut options = PgConnectOptions::new()
+    let options = PgConnectOptions::new()
         .username(&settings.database.username)
         .password(&settings.database.password)
         .host(&settings.database.host)
         .port(settings.database.port)
-        .database(&settings.database.database_name);
-    options.log_statements(log::LevelFilter::Debug);
+        .database(&settings.database.database_name)
+        .log_statements(log::LevelFilter::Debug);
     let pool = Arc::new(
         PgPool::connect_with(options)
             .await

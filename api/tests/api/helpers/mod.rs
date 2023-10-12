@@ -69,13 +69,13 @@ async fn db_connection(mut settings: Settings) -> Arc<PgPool> {
         .await
         .expect("Failed to create database.");
 
-    let mut options = PgConnectOptions::new()
+    let options = PgConnectOptions::new()
         .username(&settings.database.username)
         .password(&settings.database.password)
         .host(&settings.database.host)
         .port(settings.database.port)
-        .database(&settings.database.database_name);
-    options.log_statements(log::LevelFilter::Info);
+        .database(&settings.database.database_name)
+        .log_statements(log::LevelFilter::Info);
     let db_connection = PgPool::connect_with(options).await.expect("error");
 
     sqlx::migrate!("./migrations")

@@ -33,7 +33,7 @@ pub fn integrations_panel<'a>(
 ) -> Element {
     let sorted_integration_providers: Vec<(&IntegrationProviderKind, &IntegrationProviderConfig)> =
         integration_providers
-            .into_iter()
+            .iter()
             .sorted_by(|(k1, _), (k2, _)| Ord::cmp(&k1.to_string(), &k2.to_string()))
             .collect();
 

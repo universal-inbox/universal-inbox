@@ -198,8 +198,8 @@ impl TodoistService {
                 "Failed to fetch {resource_name} response from Todoist API"
             ))?;
 
-        Ok(serde_json::from_str(&response)
-            .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?)
+        serde_json::from_str(&response)
+            .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))
     }
 
     #[tracing::instrument(level = "debug", skip(self), err)]

@@ -66,7 +66,8 @@ pub async fn authenticate_session(
         .await
         .context("Failed to commit while authenticating user")?;
 
-    Identity::login(&request.extensions(), user.id.to_string())?;
+    Identity::login(&request.extensions(), user.id.to_string())
+        .map_err(|err| UniversalInboxError::Unauthorized(err.to_string()))?;
 
     Ok(HttpResponse::Ok().finish())
 }

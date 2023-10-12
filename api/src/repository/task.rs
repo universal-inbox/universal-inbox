@@ -105,7 +105,7 @@ impl TaskRepository for Repository {
             "#,
             id.0
         )
-        .fetch_optional(executor)
+        .fetch_optional(&mut **executor)
         .await
         .with_context(|| format!("Failed to fetch task {id} from storage"))?;
 
@@ -120,7 +120,7 @@ impl TaskRepository for Repository {
     ) -> Result<bool, UniversalInboxError> {
         let count: Option<i64> =
             sqlx::query_scalar!(r#"SELECT count(*) FROM task WHERE id = $1"#, id.0)
-                .fetch_one(executor)
+                .fetch_one(&mut **executor)
                 .await
                 .with_context(|| format!("Failed to check if task {id} exists",))?;
 
@@ -162,7 +162,7 @@ impl TaskRepository for Repository {
             "#,
             &uuids[..]
         )
-        .fetch_all(executor)
+        .fetch_all(&mut **executor)
         .await
         .with_context(|| format!("Failed to fetch tasks {uuids:?} from storage"))?;
 
@@ -210,7 +210,7 @@ impl TaskRepository for Repository {
 
         let rows = query_builder
             .build_query_as::<TaskRow>()
-            .fetch_all(executor)
+            .fetch_all(&mut **executor)
             .await
             .context("Failed to fetch tasks from storage")?;
 
@@ -256,7 +256,7 @@ impl TaskRepository for Repository {
             ts_query,
             user_id.0
         )
-        .fetch_all(executor)
+        .fetch_all(&mut **executor)
         .await
         .context("Failed to search tasks from storage")?;
 
@@ -316,7 +316,7 @@ impl TaskRepository for Repository {
             metadata as Json<TaskMetadata>,
             task.user_id.0
         )
-        .execute(executor)
+        .execute(&mut **executor)
         .await
         .map_err(|e| {
             let error_code = e
@@ -391,7 +391,7 @@ impl TaskRepository for Repository {
             &active_source_task_ids[..],
             kind.to_string(),
         )
-        .fetch_all(executor)
+        .fetch_all(&mut **executor)
         .await
         .context("Failed to update stale task status from storage")?;
 
@@ -470,7 +470,7 @@ impl TaskRepository for Repository {
                 metadata as Json<TaskMetadata>,
                 task.user_id.0
             )
-            .fetch_one(executor)
+            .fetch_one(&mut **executor)
             .await
             .with_context(|| {
                 format!(
@@ -604,7 +604,7 @@ impl TaskRepository for Repository {
 
         let row: Option<UpdatedTaskRow> = query_builder
             .build_query_as::<UpdatedTaskRow>()
-            .fetch_optional(executor)
+            .fetch_optional(&mut **executor)
             .await
             .context(format!("Failed to update task {task_id} from storage"))?;
 
@@ -706,7 +706,7 @@ impl TryFrom<&TaskRow> for Task {
             status,
             completed_at: row
                 .completed_at
-                .map(|completed_at| DateTime::<Utc>::from_utc(completed_at, Utc)),
+                .map(|completed_at| DateTime::from_naive_utc_and_offset(completed_at, Utc)),
             priority,
             due_at: row.due_at.0.clone(),
             source_html_url,
@@ -714,7 +714,7 @@ impl TryFrom<&TaskRow> for Task {
             parent_id: row.parent_id.map(|id| id.into()),
             project: row.project.to_string(),
             is_recurring: row.is_recurring,
-            created_at: DateTime::<Utc>::from_utc(row.created_at, Utc),
+            created_at: DateTime::from_naive_utc_and_offset(row.created_at, Utc),
             metadata: row.metadata.0.clone(),
             user_id: row.user_id.into(),
         })

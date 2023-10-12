@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                INSERT INTO \"user\"\n                  (\n                    id,\n                    auth_user_id,\n                    auth_id_token,\n                    first_name,\n                    last_name,\n                    email,\n                    created_at,\n                    updated_at\n                  )\n                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)\n                RETURNING\n                  id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Timestamp",
+        "Timestamp"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d10dd13689222d7b0ea174bab3ea0f319dbe52a5a585c78b5b1b7711dc4e460b"
+}

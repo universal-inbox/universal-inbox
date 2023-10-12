@@ -1,6 +1,6 @@
 {
   "packages": {
-    "sqlx-cli": "0.6.2",
+    "sqlx-cli": "0.7.1",
     "wasm-bindgen-cli": "0.2.87",
     "trunk": "latest",
     "pre-commit": "latest",
@@ -17,7 +17,7 @@
     "nodejs": "latest",
     "pkg-config": "latest",
     "taplo": "latest",
-    "darwin.apple_sdk.frameworks.SystemConfiguration": {
+    "darwin.apple_sdk.frameworks.Foundation": {
       "platforms": [
         "x86_64-darwin",
         "aarch64-darwin"
