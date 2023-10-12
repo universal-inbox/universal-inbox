@@ -23,7 +23,7 @@ enum_derive = { workspace = true }
 git-url-parse = "0.4.0"
 http = { workspace = true }
 macro-attr = { workspace = true }
-num_enum = "0.6.0"
+num_enum = "0.7.0"
 serde = { workspace = true }
 serde_json = { workspace = true, features = ["preserve_order"] }
 serde_repr = "0.1.0"
@@ -58,6 +58,5 @@ url = { version = "2.3.0" }
 uuid = { version = "1.0", features = ["v4"] }
 
 [dev-dependencies]
-format_serde_error = "0.3.0"
 pretty_assertions = { workspace = true }
 rstest = { workspace = true }

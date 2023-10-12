@@ -43,8 +43,8 @@
       "source": "devbox-search",
       "version": "0.13.1"
     },
-    "darwin.apple_sdk.frameworks.SystemConfiguration": {
-      "resolved": "github:NixOS/nixpkgs/57695599bdc4f7bfe5d28cfa23f14b3d8bdf8a5f#darwin.apple_sdk.frameworks.SystemConfiguration",
+    "darwin.apple_sdk.frameworks.Foundation": {
+      "resolved": "github:NixOS/nixpkgs/57695599bdc4f7bfe5d28cfa23f14b3d8bdf8a5f#darwin.apple_sdk.frameworks.Foundation",
       "source": "nixpkg"
     },
     "fzf@latest": {
@@ -107,11 +107,25 @@
       "resolved": "github:NixOS/nixpkgs/3c614fbc76fc152f3e1bc4b2263da6d90adf80fb#rustup",
       "version": "1.26.0"
     },
-    "sqlx-cli@0.6.2": {
-      "last_modified": "2023-05-06T16:57:53Z",
-      "resolved": "github:NixOS/nixpkgs/16b3b0c53b1ee8936739f8c588544e7fcec3fc60#sqlx-cli",
+    "sqlx-cli@0.7.1": {
+      "last_modified": "2023-09-27T18:02:17Z",
+      "resolved": "github:NixOS/nixpkgs/517501bcf14ae6ec47efd6a17dda0ca8e6d866f9#sqlx-cli",
       "source": "devbox-search",
-      "version": "0.6.2"
+      "version": "0.7.1",
+      "systems": {
+        "aarch64-darwin": {
+          "store_path": "/nix/store/9mniqqyxv939wsjr7l3lpskfymqhb8lm-sqlx-cli-0.7.1"
+        },
+        "aarch64-linux": {
+          "store_path": "/nix/store/l08fhi1xsf7n5qr4qy226w9q3cp517mn-sqlx-cli-0.7.1"
+        },
+        "x86_64-darwin": {
+          "store_path": "/nix/store/bcxdf9mys9a56q8bbzy3wl9pzcpv7d9c-sqlx-cli-0.7.1"
+        },
+        "x86_64-linux": {
+          "store_path": "/nix/store/8273l73pd4b8kmi8dn5iqpayd6bby61f-sqlx-cli-0.7.1"
+        }
+      }
     },
     "taplo@latest": {
       "last_modified": "2023-05-06T16:57:53Z",

@@ -17,13 +17,13 @@ test = false
 [dependencies]
 anyhow = { workspace = true }
 actix-cors = "0.6.0"
-actix-identity = "0.5.0"
+actix-identity = "0.6.0"
 actix-http = "3.0.0"
-actix-session = { version = "0.7.0", features = ["actix", "redis-rs-session"] }
+actix-session = { version = "0.8.0", features = ["actix", "redis-rs-session"] }
 actix-web = "4.0.0"
 actix-web-lab = { version = "0.19.0", features = ["spa"] }
 async-trait = "0.1.0"
-cached = { version = "0.43.0", features = ["async_tokio_rt_multi_thread"] }
+cached = { version = "0.46.0", features = ["async_tokio_rt_multi_thread"] }
 chrono = { workspace = true, features = ["serde"] }
 clap = { workspace = true }
 color-backtrace = "0.6"
@@ -47,21 +47,20 @@ regex = "1.5.0"
 reqwest = { workspace = true, features = ["tokio-rustls", "gzip"] }
 reqwest-middleware = "0.2.0"
 reqwest-tracing = { version = "0.4.0", features = ["opentelemetry_0_20"] }
-tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
 serde = { workspace = true }
 serde_json = { workspace = true, features = ["unbounded_depth"] }
 serde_with = { workspace = true }
-sqlx = { version = "0.6.2", default-features = false, features = [
+sqlx = { version = "0.7.0", default-features = false, features = [
   "runtime-tokio-rustls",
   "macros",
   "postgres",
   "uuid",
   "chrono",
   "migrate",
-  "offline",
   "json",
 ] }
 thiserror = { workspace = true }
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
 tonic = { version = "0.9.0", features = ["tls", "tls-roots", "gzip"] }
 tracing = { version = "0.1.0", features = ["log"] }
 tracing-actix-web = "0.7.0"

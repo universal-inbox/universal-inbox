@@ -3,7 +3,7 @@ use std::{str::FromStr, time::Duration};
 use actix_http::body::MessageBody;
 use actix_identity::IdentityExt;
 use actix_web::dev::{ServiceRequest, ServiceResponse};
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use log;
 use opentelemetry_api::KeyValue;
 use opentelemetry_otlp::WithExportConfig;
@@ -97,6 +97,7 @@ impl RootSpanBuilder for AuthenticatedRootSpanBuilder {
         let identity = request.get_identity();
         match identity
             .and_then(|id| id.id())
+            .map_err(|err| anyhow!("Failed to fetch identity from request: {}", err))
             .and_then(|id| {
                 id.parse::<UserId>()
                     .context("Unable to parse user ID from {id}")

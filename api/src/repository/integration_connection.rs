@@ -99,7 +99,7 @@ impl IntegrationConnectionRepository for Repository {
             "#,
             integration_connection_id.0
         )
-        .fetch_optional(executor)
+        .fetch_optional(&mut **executor)
         .await
         .with_context(|| {
             format!(
@@ -161,7 +161,7 @@ impl IntegrationConnectionRepository for Repository {
 
         let row: Option<IntegrationConnectionRow> = query_builder
             .build_query_as::<IntegrationConnectionRow>()
-            .fetch_optional(executor)
+            .fetch_optional(&mut **executor)
             .await
             .with_context(|| {
                 format!("Failed to fetch integration connection for user {user_id} of kind {integration_provider_kind} from storage")
@@ -235,7 +235,7 @@ impl IntegrationConnectionRepository for Repository {
 
         let row: Option<UpdatedIntegrationConnectionRow> = query_builder
             .build_query_as::<UpdatedIntegrationConnectionRow>()
-            .fetch_optional(executor)
+            .fetch_optional(&mut **executor)
             .await
             .with_context(|| {
                 format!("Failed to update integration connection {integration_connection_id} from storage")
@@ -304,7 +304,7 @@ impl IntegrationConnectionRepository for Repository {
 
         let row: Option<UpdatedIntegrationConnectionRow> = query_builder
             .build_query_as::<UpdatedIntegrationConnectionRow>()
-            .fetch_optional(executor)
+            .fetch_optional(&mut **executor)
             .await
             .with_context(|| {
                 format!("Failed to update integration connection {integration_provider_kind} for user {user_id} from storage")
@@ -361,7 +361,7 @@ impl IntegrationConnectionRepository for Repository {
 
         let row: Option<UpdatedIntegrationConnectionRow> = query_builder
             .build_query_as::<UpdatedIntegrationConnectionRow>()
-            .fetch_optional(executor)
+            .fetch_optional(&mut **executor)
             .await
             .with_context(|| {
                 format!("Failed to update integration connection {integration_connection_id} context from storage")
@@ -411,7 +411,7 @@ impl IntegrationConnectionRepository for Repository {
             "#,
             for_user_id.0
         )
-        .fetch_all(executor)
+        .fetch_all(&mut **executor)
         .await
         .context("Failed to fetch all integration connections from storage")?;
 
@@ -460,7 +460,7 @@ impl IntegrationConnectionRepository for Repository {
             integration_connection.created_at.naive_utc(),
             integration_connection.updated_at.naive_utc()
         )
-        .execute(executor)
+        .execute(&mut **executor)
         .await
         .map_err(|e| {
             match e
@@ -562,11 +562,11 @@ impl TryFrom<IntegrationConnectionRow> for IntegrationConnection {
             provider_kind,
             status,
             failure_message: row.failure_message,
-            created_at: DateTime::<Utc>::from_utc(row.created_at, Utc),
-            updated_at: DateTime::<Utc>::from_utc(row.updated_at, Utc),
+            created_at: DateTime::from_naive_utc_and_offset(row.created_at, Utc),
+            updated_at: DateTime::from_naive_utc_and_offset(row.updated_at, Utc),
             last_sync_started_at: row
                 .last_sync_started_at
-                .map(|started_at| DateTime::<Utc>::from_utc(started_at, Utc)),
+                .map(|started_at| DateTime::from_naive_utc_and_offset(started_at, Utc)),
             last_sync_failure_message: row.last_sync_failure_message,
             context: row.context.map(|context| context.0),
         })

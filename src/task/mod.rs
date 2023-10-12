@@ -353,7 +353,7 @@ mod tests {
         fn test_parse_due_date_for_datetime_with_timezone() {
             assert_eq!(
                 "2022-01-02T11:43:02.000000Z".parse::<DueDate>().unwrap(),
-                DueDate::DateTimeWithTz(DateTime::<Utc>::from_utc(
+                DueDate::DateTimeWithTz(DateTime::from_naive_utc_and_offset(
                     NaiveDate::from_ymd_opt(2022, 1, 2)
                         .unwrap()
                         .and_hms_opt(11, 43, 2)

@@ -107,7 +107,7 @@ impl NotificationRepository for Repository {
             "#,
             id.0
         )
-        .fetch_optional(executor)
+        .fetch_optional(&mut **executor)
         .await
         .with_context(|| format!("Failed to fetch notification {id} from storage"))?;
 
@@ -143,7 +143,7 @@ impl NotificationRepository for Repository {
             source_id,
             user_id.0
         )
-            .fetch_optional(executor)
+            .fetch_optional(&mut **executor)
             .await
             .with_context(|| format!("Failed to fetch notification with source ID {source_id} and user ID {user_id} from storage"))?;
 
@@ -159,7 +159,7 @@ impl NotificationRepository for Repository {
     ) -> Result<bool, UniversalInboxError> {
         let count: Option<i64> =
             sqlx::query_scalar!(r#"SELECT count(*) FROM notification WHERE id = $1"#, id.0)
-                .fetch_one(executor)
+                .fetch_one(&mut **executor)
                 .await
                 .with_context(|| format!("Failed to check if notification {id} exists",))?;
 
@@ -244,7 +244,7 @@ impl NotificationRepository for Repository {
 
         let records = query_builder
             .build_query_as::<NotificationWithTaskRow>()
-            .fetch_all(executor)
+            .fetch_all(&mut **executor)
             .await
             .context("Failed to fetch notifications from storage")?;
 
@@ -297,7 +297,7 @@ impl NotificationRepository for Repository {
             notification.user_id.0,
             notification.task_id.map(|task_id| task_id.0),
         )
-        .execute(executor)
+        .execute(&mut **executor)
         .await
         .map_err(|e| {
             match e
@@ -353,7 +353,7 @@ impl NotificationRepository for Repository {
             &active_source_notification_ids[..],
             kind.to_string(),
         )
-        .fetch_all(executor)
+        .fetch_all(&mut **executor)
         .await
         .context("Failed to update stale notification status from storage")?;
 
@@ -475,7 +475,7 @@ impl NotificationRepository for Repository {
             )
         };
         let id: NotificationId =
-            NotificationId(query.fetch_one(executor).await.with_context(|| {
+            NotificationId(query.fetch_one(&mut **executor).await.with_context(|| {
                 format!(
                     "Failed to update notification with source ID {} from storage",
                     notification.source_id
@@ -575,7 +575,7 @@ impl NotificationRepository for Repository {
 
         let record: Option<UpdatedNotificationRow> = query_builder
             .build_query_as::<UpdatedNotificationRow>()
-            .fetch_optional(executor)
+            .fetch_optional(&mut **executor)
             .await
             .context(format!(
                 "Failed to update notification {notification_id} from storage"
@@ -680,7 +680,7 @@ impl NotificationRepository for Repository {
 
         let records: Vec<UpdatedNotificationRow> = query_builder
             .build_query_as::<UpdatedNotificationRow>()
-            .fetch_all(executor)
+            .fetch_all(&mut **executor)
             .await
             .context(format!(
                 "Failed to update notifications for task {task_id} from storage"
@@ -816,13 +816,13 @@ impl TryFrom<&NotificationRow> for Notification {
             source_id: row.source_id.clone(),
             source_html_url,
             metadata: row.metadata.0.clone(),
-            updated_at: DateTime::<Utc>::from_utc(row.updated_at, Utc),
+            updated_at: DateTime::from_naive_utc_and_offset(row.updated_at, Utc),
             last_read_at: row
                 .last_read_at
-                .map(|last_read_at| DateTime::<Utc>::from_utc(last_read_at, Utc)),
+                .map(|last_read_at| DateTime::from_naive_utc_and_offset(last_read_at, Utc)),
             snoozed_until: row
                 .snoozed_until
-                .map(|snoozed_until| DateTime::<Utc>::from_utc(snoozed_until, Utc)),
+                .map(|snoozed_until| DateTime::from_naive_utc_and_offset(snoozed_until, Utc)),
             user_id: row.user_id.into(),
             task_id: row.task_id.map(|task_id| task_id.into()),
         })
@@ -853,13 +853,13 @@ impl TryFrom<&NotificationWithTaskRow> for NotificationWithTask {
             source_id: row.notification_source_id.clone(),
             source_html_url,
             metadata: row.notification_metadata.0.clone(),
-            updated_at: DateTime::<Utc>::from_utc(row.notification_updated_at, Utc),
+            updated_at: DateTime::from_naive_utc_and_offset(row.notification_updated_at, Utc),
             last_read_at: row
                 .notification_last_read_at
-                .map(|last_read_at| DateTime::<Utc>::from_utc(last_read_at, Utc)),
+                .map(|last_read_at| DateTime::from_naive_utc_and_offset(last_read_at, Utc)),
             snoozed_until: row
                 .notification_snoozed_until
-                .map(|snoozed_until| DateTime::<Utc>::from_utc(snoozed_until, Utc)),
+                .map(|snoozed_until| DateTime::from_naive_utc_and_offset(snoozed_until, Utc)),
             user_id: row.notification_user_id.into(),
             task: row
                 .task_row

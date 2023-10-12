@@ -112,7 +112,7 @@ mod message_date_format {
                 let Some(naive_datetime) = NaiveDateTime::from_timestamp_opt(timestamp / 1000, 0) else {
                     return Err(format!("Invalid timestamp {timestamp}"))
                 };
-                Ok(DateTime::<Utc>::from_utc(naive_datetime, Utc))
+                Ok(DateTime::from_naive_utc_and_offset(naive_datetime, Utc))
             })
             .map_err(serde::de::Error::custom)
     }
