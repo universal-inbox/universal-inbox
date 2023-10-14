@@ -1,3 +1,5 @@
+#![allow(non_snake_case)]
+
 use std::collections::HashSet;
 
 use chrono::{DateTime, Local};
@@ -36,12 +38,12 @@ use universal_inbox::{
 };
 
 use crate::{
-    components::icons::{github, google_mail, linear, mail, todoist},
+    components::icons::{Github, GoogleMail, Linear, Mail, Todoist},
     model::UniversalInboxUIModel,
 };
 
 #[inline_props]
-pub fn notifications_list<'a>(
+pub fn NotificationsList<'a>(
     cx: Scope,
     notifications: Vec<NotificationWithTask>,
     ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
@@ -56,21 +58,21 @@ pub fn notifications_list<'a>(
     let is_help_enabled = ui_model_ref.read().is_help_enabled;
     let is_task_actions_disabled = !ui_model_ref.read().is_task_actions_enabled;
 
-    cx.render(rsx!(table {
+    render! { table {
         class: "table w-full h-max-full",
 
         tbody {
             notifications.iter().enumerate().map(|(i, notif)| {
                 let is_selected = i == selected_notification_index;
 
-                rsx!{
-                    (!notif.is_built_from_task()).then(|| rsx!(
-                        self::notification {
+                render! {
+                    (!notif.is_built_from_task()).then(|| render! {
+                        Notification {
                             notif: notif,
                             selected: is_selected,
                             ui_model_ref: ui_model_ref,
 
-                            self::notification_button {
+                            NotificationButton {
                                 title: "Delete notification",
                                 shortcut: "d",
                                 selected: is_selected,
@@ -80,8 +82,8 @@ pub fn notifications_list<'a>(
                             }
 
                             if notif.task.is_some() {
-                                rsx!(
-                                    self::notification_button {
+                                render! {
+                                    NotificationButton {
                                         title: "Complete task",
                                         shortcut: "c",
                                         selected: is_selected,
@@ -90,10 +92,10 @@ pub fn notifications_list<'a>(
                                         onclick: |_| on_complete_task.call(notif),
                                         Icon { class: "w-5 h-5", icon: BsCheck2 }
                                     }
-                                )
+                                }
                             }
 
-                            self::notification_button {
+                            NotificationButton {
                                 title: "Unsubscribe from the notification",
                                 shortcut: "u",
                                 selected: is_selected,
@@ -102,7 +104,7 @@ pub fn notifications_list<'a>(
                                 Icon { class: "w-5 h-5", icon: BsBellSlash }
                             }
 
-                            self::notification_button {
+                            NotificationButton {
                                 title: "Snooze notification",
                                 shortcut: "s",
                                 selected: is_selected,
@@ -112,8 +114,8 @@ pub fn notifications_list<'a>(
                             }
 
                             if notif.task.is_none() {
-                                rsx!(
-                                    self::notification_button {
+                                render! {
+                                    NotificationButton {
                                         title: "Create task",
                                         shortcut: "p",
                                         selected: is_selected,
@@ -123,7 +125,7 @@ pub fn notifications_list<'a>(
                                         Icon { class: "w-5 h-5", icon: BsCalendar2Check }
                                     }
 
-                                    self::notification_button {
+                                    NotificationButton {
                                         title: "Link to task",
                                         shortcut: "a",
                                         selected: is_selected,
@@ -132,18 +134,18 @@ pub fn notifications_list<'a>(
                                         onclick: |_| on_link.call(notif),
                                         Icon { class: "w-5 h-5", icon: BsLink45deg }
                                     }
-                                )
+                                }
                             }
                         }
-                    )),
+                    }),
 
-                    (notif.is_built_from_task()).then(|| rsx!(
-                        self::notification {
+                    (notif.is_built_from_task()).then(|| render! {
+                        Notification {
                             notif: notif,
                             selected: is_selected,
                             ui_model_ref: ui_model_ref,
 
-                            self::notification_button {
+                            NotificationButton {
                                 title: "Delete task",
                                 shortcut: "d",
                                 selected: is_selected,
@@ -153,7 +155,7 @@ pub fn notifications_list<'a>(
                                 Icon { class: "w-5 h-5", icon: BsTrash }
                             }
 
-                            self::notification_button {
+                            NotificationButton {
                                 title: "Complete task",
                                 shortcut: "c",
                                 selected: is_selected,
@@ -163,7 +165,7 @@ pub fn notifications_list<'a>(
                                 Icon { class: "w-5 h-5", icon: BsCheck2 }
                             }
 
-                            self::notification_button {
+                            NotificationButton {
                                 title: "Snooze notification",
                                 shortcut: "s",
                                 selected: is_selected,
@@ -172,7 +174,7 @@ pub fn notifications_list<'a>(
                                 Icon { class: "w-5 h-5", icon: BsClockHistory }
                             }
 
-                            self::notification_button {
+                            NotificationButton {
                                 title: "Plan task",
                                 shortcut: "p",
                                 selected: is_selected,
@@ -182,15 +184,15 @@ pub fn notifications_list<'a>(
                                 Icon { class: "w-5 h-5", icon: BsCalendar2Check }
                             }
                         }
-                    ))
+                    })
                 }
             })
         }
-    }))
+    } }
 }
 
 #[inline_props]
-fn notification<'a>(
+fn Notification<'a>(
     cx: Scope,
     notif: &'a NotificationWithTask,
     selected: bool,
@@ -209,7 +211,7 @@ fn notification<'a>(
         },
     );
 
-    cx.render(rsx!(
+    render! {
         tr {
             class: "hover py-1 {style} group snap-start",
             key: "{notif.id}",
@@ -219,13 +221,13 @@ fn notification<'a>(
                 }
             },
 
-            self::notification_display { notif: notif, selected: *selected, children }
+            NotificationDisplay { notif: notif, selected: *selected, children }
         }
-    ))
+    }
 }
 
 #[inline_props]
-fn notification_display<'a>(
+fn NotificationDisplay<'a>(
     cx: Scope,
     notif: &'a NotificationWithTask,
     selected: bool,
@@ -233,12 +235,10 @@ fn notification_display<'a>(
 ) -> Element {
     // tag: New notification integration
     let icon = match notif.metadata {
-        NotificationMetadata::Github(_) => cx.render(rsx!(self::github { class: "h-5 w-5" })),
-        NotificationMetadata::Linear(_) => cx.render(rsx!(self::linear { class: "h-5 w-5" })),
-        NotificationMetadata::GoogleMail(_) => {
-            cx.render(rsx!(self::google_mail { class: "h-5 w-5" }))
-        }
-        NotificationMetadata::Todoist => cx.render(rsx!(self::todoist { class: "h-5 w-5" })),
+        NotificationMetadata::Github(_) => render! { Github { class: "h-5 w-5" } },
+        NotificationMetadata::Linear(_) => render! { Linear { class: "h-5 w-5" } },
+        NotificationMetadata::GoogleMail(_) => render! { GoogleMail { class: "h-5 w-5" } },
+        NotificationMetadata::Todoist => render! { Todoist { class: "h-5 w-5" } },
     };
     let button_style = use_memo(cx, (selected,), |(selected,)| {
         if selected {
@@ -251,12 +251,12 @@ fn notification_display<'a>(
         Into::<DateTime<Local>>::into(updated_at).format("%Y-%m-%d %H:%M")
     });
 
-    cx.render(rsx!(
+    render! {
         td {
             class: "px-2 py-0 rounded-none relative",
             div { class: "flex justify-center", icon }
             if let Some(ref task) = notif.task {
-                rsx!(self::task_hint { task: task })
+                render! { TaskHint { task: task } }
             }
         }
         td {
@@ -264,38 +264,36 @@ fn notification_display<'a>(
 
             // tag: New notification integration
             match &notif.metadata {
-                NotificationMetadata::Github(github_notification) => rsx!(
-                    self::github_notification_display {
+                NotificationMetadata::Github(github_notification) => render! {
+                    GithubNotificationDisplay {
                         notif: notif,
                         github_notification: github_notification.clone(),
                     }
-                ),
-                NotificationMetadata::Linear(linear_notification) => rsx!(
-                    self::linear_notification_display {
+                },
+                NotificationMetadata::Linear(linear_notification) => render! {
+                    LinearNotificationDisplay {
                         notif: notif,
                         linear_notification: linear_notification.clone()
                     }
-                ),
-                NotificationMetadata::GoogleMail(google_mail_thread) => rsx!(
-                    self::google_mail_thread_display {
+                },
+                NotificationMetadata::GoogleMail(google_mail_thread) => render! {
+                    GoogleMailThreadDisplay {
                         notif: notif,
                         google_mail_thread: google_mail_thread.clone()
                     }
-                ),
-                NotificationMetadata::Todoist => rsx!(
-                    if let Some(task) = &notif.task {
-                        match &task.metadata {
-                            TaskMetadata::Todoist(todoist_task) => rsx!(
-                                self::todoist_notification_display {
-                                    notif: notif,
-                                    todoist_task: todoist_task.clone(),
-                                }
-                            )
+                },
+                NotificationMetadata::Todoist => if let Some(task) = &notif.task {
+                    match &task.metadata {
+                        TaskMetadata::Todoist(todoist_task) => render! {
+                            TodoistNotificationDisplay {
+                                notif: notif,
+                                todoist_task: todoist_task.clone(),
+                            }
                         }
-                    } else {
-                        rsx!(self::default_notification_display { notif: notif })
                     }
-                )
+                } else {
+                    render! { DefaultNotificationDisplay { notif: notif } }
+                }
             }
         }
         td {
@@ -312,13 +310,14 @@ fn notification_display<'a>(
                 }
             }
         }
-    ))
+    }
 }
 
 #[inline_props]
-fn default_notification_display<'a>(cx: Scope, notif: &'a NotificationWithTask) -> Element {
+fn DefaultNotificationDisplay<'a>(cx: Scope, notif: &'a NotificationWithTask) -> Element {
     let link = notif.get_html_url();
-    cx.render(rsx!(
+
+    render! {
         div {
             class: "flex items-center gap-2",
 
@@ -329,11 +328,11 @@ fn default_notification_display<'a>(cx: Scope, notif: &'a NotificationWithTask) 
                 a { href: "{link}", target: "_blank", "{notif.title}" }
             }
         }
-    ))
+    }
 }
 
 #[inline_props]
-fn github_notification_display<'a>(
+fn GithubNotificationDisplay<'a>(
     cx: Scope,
     notif: &'a NotificationWithTask,
     github_notification: GithubNotification,
@@ -341,26 +340,14 @@ fn github_notification_display<'a>(
     let github_notification_id = extract_github_notification_id(&notif.source_html_url);
     let notification_source_url = notif.get_html_url();
     let type_icon = match github_notification.subject.r#type.as_str() {
-        "PullRequest" => cx.render(rsx!(Icon {
-            class: "h-5 w-5",
-            icon: IoGitPullRequest
-        })),
-        "Issue" => cx.render(rsx!(Icon {
-            class: "h-5 w-5",
-            icon: BsRecordCircle
-        })),
-        "Discussion" => cx.render(rsx!(Icon {
-            class: "h-5 w-5",
-            icon: BsChat
-        })),
-        "CheckSuite" => cx.render(rsx!(Icon {
-            class: "h-5 w-5",
-            icon: BsCheckCircle
-        })),
+        "PullRequest" => render! { Icon { class: "h-5 w-5", icon: IoGitPullRequest } },
+        "Issue" => render! { Icon { class: "h-5 w-5", icon: BsRecordCircle } },
+        "Discussion" => render! { Icon { class: "h-5 w-5", icon: BsChat } },
+        "CheckSuite" => render! { Icon { class: "h-5 w-5", icon: BsCheckCircle } },
         _ => None,
     };
 
-    cx.render(rsx!(
+    render! {
         div {
             class: "flex items-center gap-2",
 
@@ -389,14 +376,14 @@ fn github_notification_display<'a>(
                         href: "{notification_source_url}",
                         target: "_blank",
                         if let Some(github_notification_id) = github_notification_id {
-                            rsx!("#{github_notification_id} ")
+                            render! { "#{github_notification_id} " }
                         }
                         "({github_notification.reason})"
                     }
                 }
             }
         }
-    ))
+    }
 }
 
 fn extract_github_notification_id(url: &Option<Uri>) -> Option<String> {
@@ -407,7 +394,7 @@ fn extract_github_notification_id(url: &Option<Uri>) -> Option<String> {
 }
 
 #[inline_props]
-fn linear_notification_display<'a>(
+fn LinearNotificationDisplay<'a>(
     cx: Scope,
     notif: &'a NotificationWithTask,
     linear_notification: LinearNotification,
@@ -415,17 +402,15 @@ fn linear_notification_display<'a>(
     let notification_source_url = notif.get_html_url();
     let notification_type = linear_notification.get_type();
     let type_icon = match linear_notification {
-        LinearNotification::IssueNotification { .. } => cx.render(rsx!(Icon {
-            class: "h-5 w-5",
-            icon: BsRecordCircle
-        })),
-        LinearNotification::ProjectNotification { .. } => cx.render(rsx!(Icon {
-            class: "h-5 w-5",
-            icon: BsGrid
-        })),
+        LinearNotification::IssueNotification { .. } => render! {
+            Icon { class: "h-5 w-5", icon: BsRecordCircle }
+        },
+        LinearNotification::ProjectNotification { .. } => render! {
+            Icon { class: "h-5 w-5", icon: BsGrid }
+        },
     };
 
-    cx.render(rsx!(
+    render! {
         div {
             class: "flex items-center gap-2",
 
@@ -443,14 +428,14 @@ fn linear_notification_display<'a>(
                     class: "flex gap-2",
 
                     if let Some(team) = linear_notification.get_team() {
-                        rsx!(
+                        render! {
                             a {
                                 class: "text-xs text-gray-400",
                                 href: "{team.get_url(linear_notification.get_organization())}",
                                 target: "_blank",
                                 "{team.name}"
                             }
-                        )
+                        }
                     }
 
                     a {
@@ -460,18 +445,18 @@ fn linear_notification_display<'a>(
                         if let LinearNotification::IssueNotification {
                             issue: LinearIssue { identifier, .. }, ..
                         } = linear_notification {
-                            rsx!("#{identifier} ")
+                            render! { "#{identifier} " }
                         }
                         "({notification_type})"
                     }
                 }
             }
         }
-    ))
+    }
 }
 
 #[inline_props]
-fn google_mail_thread_display<'a>(
+fn GoogleMailThreadDisplay<'a>(
     cx: Scope,
     notif: &'a NotificationWithTask,
     google_mail_thread: GoogleMailThread,
@@ -496,11 +481,11 @@ fn google_mail_thread_display<'a>(
         _ => "",
     };
 
-    cx.render(rsx!(
+    render! {
         div {
             class: "flex items-center gap-2",
 
-            self::mail { class: "h-5 w-5 {mail_icon_style}" }
+            Mail { class: "h-5 w-5 {mail_icon_style}" }
 
             div {
                 class: "flex flex-col grow",
@@ -514,10 +499,10 @@ fn google_mail_thread_display<'a>(
                         "{notif.title}"
                     }
                     if is_starred {
-                        rsx!(Icon { class: "mx-0.5 h-3 w-3 text-yellow-500", icon: BsStar })
+                        render! { Icon { class: "mx-0.5 h-3 w-3 text-yellow-500", icon: BsStar } }
                     }
                     if is_important {
-                        rsx!(Icon { class: "mx-0.5 h-3 w-3 text-red-500", icon: BsExclamationCircle })
+                        render! { Icon { class: "mx-0.5 h-3 w-3 text-red-500", icon: BsExclamationCircle } }
                     }
                 }
 
@@ -525,17 +510,17 @@ fn google_mail_thread_display<'a>(
                     class: "flex gap-2",
 
                     if let Some(from_address) = from_address {
-                        rsx!(span { class: "text-xs text-gray-400", "{from_address}" })
+                        render! { span { class: "text-xs text-gray-400", "{from_address}" } }
                     }
                     span { class: "text-xs text-gray-400", "({interlocutors_count})" }
                 }
             }
         }
-    ))
+    }
 }
 
 #[inline_props]
-fn todoist_notification_display<'a>(
+fn TodoistNotificationDisplay<'a>(
     cx: Scope,
     notif: &'a NotificationWithTask,
     todoist_task: TodoistItem,
@@ -552,7 +537,7 @@ fn todoist_notification_display<'a>(
         TodoistItemPriority::P4 => "text-red-500",
     };
 
-    cx.render(rsx!(
+    render! {
         div {
             class: "flex items-center gap-2",
 
@@ -570,27 +555,29 @@ fn todoist_notification_display<'a>(
                     class: "flex gap-2",
 
                     if let Some(due) = &todoist_task.due {
-                        rsx!(div {
-                            class: "flex items-center text-xs text-gray-400 gap-1",
+                        render! {
+                            div {
+                                class: "flex items-center text-xs text-gray-400 gap-1",
 
-                            Icon { class: "h-3 w-3", icon: BsCalendar2Check }
-                            "{due.date}"
-                            if due.is_recurring {
-                                rsx!(Icon { class: "h-3 w-3", icon: BsArrowRepeat })
+                                Icon { class: "h-3 w-3", icon: BsCalendar2Check }
+                                "{due.date}"
+                                if due.is_recurring {
+                                    render! { Icon { class: "h-3 w-3", icon: BsArrowRepeat } }
+                                }
                             }
-                        })
+                        }
                     }
 
                     div {
                         class: "flex gap-2",
                         for label in &todoist_task.labels {
-                            rsx!(span { class: "text-xs text-gray-400", "@{label}" })
+                            render! { span { class: "text-xs text-gray-400", "@{label}" } }
                         }
                     }
                 }
             }
         }
-    ))
+    }
 }
 
 #[derive(Props)]
@@ -605,7 +592,7 @@ struct NotificationButtonProps<'a> {
     onclick: Option<EventHandler<'a, MouseEvent>>,
 }
 
-fn notification_button<'a>(cx: Scope<'a, NotificationButtonProps<'a>>) -> Element {
+fn NotificationButton<'a>(cx: Scope<'a, NotificationButtonProps<'a>>) -> Element {
     let shortcut_visibility_style = use_memo(
         cx,
         &(cx.props.selected, cx.props.show_shortcut),
@@ -622,8 +609,8 @@ fn notification_button<'a>(cx: Scope<'a, NotificationButtonProps<'a>>) -> Elemen
         },
     );
 
-    cx.render(rsx!(if let Some(Some(label)) = cx.props.disabled_label {
-        rsx!(
+    if let Some(Some(label)) = cx.props.disabled_label {
+        render! {
             div {
                 class: "tooltip tooltip-left text-xs text-gray-400",
                 "data-tip": "{label}",
@@ -635,9 +622,9 @@ fn notification_button<'a>(cx: Scope<'a, NotificationButtonProps<'a>>) -> Elemen
                     &cx.props.children
                 }
             }
-        )
+        }
     } else {
-        rsx!(
+        render! {
             div {
                 class: "indicator group/notification-button",
 
@@ -658,19 +645,19 @@ fn notification_button<'a>(cx: Scope<'a, NotificationButtonProps<'a>>) -> Elemen
                     &cx.props.children
                 }
             }
-        )
-    }))
+        }
+    }
 }
 
 #[inline_props]
-fn task_hint<'a>(cx: Scope, task: &'a Task) -> Element {
+fn TaskHint<'a>(cx: Scope, task: &'a Task) -> Element {
     let kind = task.get_task_source_kind();
     let html_url = task.get_html_url();
 
-    cx.render(rsx!(
+    render! {
         div {
             class: "absolute top-0 right-0 tooltip tooltip-right text-xs text-gray-400",
-            "data-tip": "Linked to a {kind} task",
+           "data-tip": "Linked to a {kind} task",
 
             a {
                 href: "{html_url}",
@@ -678,5 +665,5 @@ fn task_hint<'a>(cx: Scope, task: &'a Task) -> Element {
                 Icon { class: "w-4 h-4", icon: BsBookmarkCheck }
             }
         }
-    ))
+    }
 }

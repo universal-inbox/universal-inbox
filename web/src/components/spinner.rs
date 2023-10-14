@@ -1,12 +1,14 @@
+#![allow(non_snake_case)]
+
 use dioxus::prelude::*;
 
-pub fn spinner(cx: Scope) -> Element {
-    cx.render(rsx!(
+pub fn Spinner(cx: Scope) -> Element {
+    render! {
         div {
             role: "status",
 
             span { class: "loading loading-ring loading-lg text-secondary" }
             span { class: "sr-only", "Loading..." }
         }
-    ))
+    }
 }

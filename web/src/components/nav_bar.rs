@@ -1,14 +1,17 @@
+#![allow(non_snake_case)]
+
 use dioxus::prelude::*;
 use dioxus_free_icons::icons::bs_icons::{
     BsBoxArrowInLeft, BsGear, BsInbox, BsMoon, BsPerson, BsQuestionLg, BsSun,
 };
 use dioxus_free_icons::Icon;
-use dioxus_router::Link;
+use dioxus_router::prelude::*;
 use fermi::use_atom_ref;
 use gravatar::{Gravatar, Rating};
 
 use crate::{
     config::APP_CONFIG,
+    route::Route,
     services::user_service::{UserCommand, CONNECTED_USER},
     theme::toggle_dark_mode,
 };
@@ -16,9 +19,9 @@ use crate::{
 const DEFAULT_USER_AVATAR: &str = "https://avatars.githubusercontent.com/u/1062408?v=4";
 const NOT_CONNECTED_USER_NAME: &str = "Not connected";
 
-pub fn nav_bar(cx: Scope) -> Element {
+pub fn NavBar(cx: Scope) -> Element {
     let user_service = use_coroutine_handle::<UserCommand>(cx).unwrap();
-    let connected_user_ref = use_atom_ref(cx, CONNECTED_USER);
+    let connected_user_ref = use_atom_ref(cx, &CONNECTED_USER);
     let user_avatar = use_memo(cx, &connected_user_ref.read().clone(), |connected_user| {
         connected_user
             .map(|user| {
@@ -37,7 +40,7 @@ pub fn nav_bar(cx: Scope) -> Element {
             .unwrap_or_else(|| NOT_CONNECTED_USER_NAME.to_string())
     });
 
-    let app_config_ref = use_atom_ref(cx, APP_CONFIG);
+    let app_config_ref = use_atom_ref(cx, &APP_CONFIG);
     // Howto use use_memo with an Option?
     let user_profile_url = app_config_ref
         .read()
@@ -55,7 +58,7 @@ pub fn nav_bar(cx: Scope) -> Element {
         }
     });
 
-    cx.render(rsx! {
+    render! {
         div {
             class: "navbar shadow-lg z-10",
 
@@ -70,7 +73,7 @@ pub fn nav_bar(cx: Scope) -> Element {
                 Link {
                     class: "btn btn-ghost gap-2",
                     active_class: "btn-active",
-                    to: "/",
+                    to: Route::NotificationsPage {},
                     Icon { class: "w-5 h-5", icon: BsInbox }
                     p { "Inbox" }
                 }
@@ -106,8 +109,7 @@ pub fn nav_bar(cx: Scope) -> Element {
                 Link {
                     class: "btn btn-ghost btn-square",
                     active_class: "btn-active",
-                    to: "/settings",
-                    title: "Settings",
+                    to: Route::SettingsPage {},
                     Icon { class: "w-5 h-5", icon: BsGear }
                 }
 
@@ -135,14 +137,16 @@ pub fn nav_bar(cx: Scope) -> Element {
                         tabindex: 0,
 
                         if let Some(user_profile_url) = user_profile_url {
-                            rsx!(li {
-                                a {
-                                    href: "{user_profile_url}",
-                                    target: "_blank",
-                                    Icon { class: "w-5 h-5", icon: BsPerson }
-                                    p { "Profile" }
+                            render! {
+                                li {
+                                    a {
+                                        href: "{user_profile_url}",
+                                        target: "_blank",
+                                        Icon { class: "w-5 h-5", icon: BsPerson }
+                                        p { "Profile" }
+                                    }
                                 }
-                            })
+                            }
                         }
                         li {
                             a {
@@ -155,5 +159,5 @@ pub fn nav_bar(cx: Scope) -> Element {
                 }
             }
         }
-    })
+    }
 }

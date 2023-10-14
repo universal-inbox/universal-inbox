@@ -1,8 +1,10 @@
+#![allow(non_snake_case)]
+
 use log::{debug, error};
 
 use anyhow::{anyhow, Context, Result};
 use dioxus::prelude::*;
-use dioxus_router::Redirect;
+use dioxus_router::prelude::*;
 use fermi::UseAtomRef;
 use gloo_utils::errors::JsError;
 use openidconnect::{
@@ -20,8 +22,9 @@ use reqwest::{Client, Method};
 use universal_inbox::auth::{AuthIdToken, SessionAuthValidationParameters};
 
 use crate::{
-    components::spinner::spinner,
+    components::spinner::Spinner,
     model::{AuthenticationState, UniversalInboxUIModel},
+    route::Route,
     utils::{current_location, get_local_storage, redirect_to},
 };
 
@@ -35,7 +38,18 @@ pub struct AuthenticatedProps<'a> {
     children: Element<'a>,
 }
 
-pub fn authenticated<'a>(cx: Scope<'a, AuthenticatedProps<'a>>) -> Element<'a> {
+#[inline_props]
+#[allow(unused_variables)]
+pub fn AuthPage(cx: Scope, query: String) -> Element {
+    render!(div {
+        class: "h-full flex justify-center items-center overflow-hidden",
+
+        Spinner {}
+        "Authenticating..."
+    })
+}
+
+pub fn Authenticated<'a>(cx: Scope<'a, AuthenticatedProps<'a>>) -> Element<'a> {
     let ui_model_ref = cx.props.ui_model_ref.clone();
     let error = use_state(cx, || None::<anyhow::Error>);
     let current_url = current_location().unwrap();
@@ -43,14 +57,19 @@ pub fn authenticated<'a>(cx: Scope<'a, AuthenticatedProps<'a>>) -> Element<'a> {
     let issuer_url = &cx.props.issuer_url;
     let client_id = &cx.props.client_id;
     let redirect_url = &cx.props.redirect_url;
-    let auth_code = (current_url.path() == redirect_url.path())
-        .then(|| {
-            current_url
-                .query_pairs()
-                .find(|(k, _)| k == "code")
-                .map(|(_, v)| v.to_string())
-        })
-        .flatten();
+    // Workaround for Dioxus 0.4.1 bug: https://github.com/DioxusLabs/dioxus/issues/1511
+    let local_storage = get_local_storage().unwrap();
+    let auth_code = if current_url.path() == redirect_url.path() {
+        local_storage
+            .get_item("auth-oidc-callback-code")
+            .unwrap()
+            .and_then(|code| (!code.is_empty()).then_some(code))
+    } else {
+        None
+    };
+    debug!("auth: Got auth-oidc-callback-code {auth_code:?}");
+    // end workaround
+    let nav = use_navigator(cx);
 
     // If we are on the authentication redirection URL with an authentication code,
     // we should exchange it for an access token and authentication state is not unknown anymore
@@ -88,29 +107,30 @@ pub fn authenticated<'a>(cx: Scope<'a, AuthenticatedProps<'a>>) -> Element<'a> {
 
     if let Some(error) = error.current().as_ref() {
         error!("An error occured while authenticating: {:?}", error);
-        return cx.render(rsx!(
+        return render! {
             "The authentication has failed, please contact the support"
-        ));
+        };
     }
 
-    cx.render(match authentication_state {
+    match authentication_state {
         AuthenticationState::Authenticated
             if current_url.path() == cx.props.redirect_url.path() =>
         {
             debug!("auth: Authenticated, redirecting to /");
             cx.needs_update();
-            rsx!(Redirect { to: "/" })
+            nav.replace(Route::NotificationsPage {});
+            None
         }
         AuthenticationState::Authenticated | AuthenticationState::Unknown => {
-            rsx!(&cx.props.children)
+            render!(&cx.props.children)
         }
-        value => rsx!(div {
+        value => render!(div {
             class: "h-full flex justify-center items-center overflow-hidden",
 
-            self::spinner {}
+            Spinner {}
             "{value.label()}"
         }),
-    })
+    }
 }
 
 // - Assert the session is currently authenticated or unknown

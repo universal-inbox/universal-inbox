@@ -1,23 +1,24 @@
-use log::debug;
+#![allow(non_snake_case)]
 
 use dioxus::prelude::*;
 use fermi::use_atom_ref;
+use log::debug;
 
 use universal_inbox::notification::NotificationWithTask;
 
 use crate::{
     components::{
-        notifications_list::notifications_list, task_link_modal::task_link_modal,
-        task_planning_modal::task_planning_modal,
+        notifications_list::NotificationsList, task_link_modal::TaskLinkModal,
+        task_planning_modal::TaskPlanningModal,
     },
     config::get_api_base_url,
     model::UI_MODEL,
     services::notification_service::{NotificationCommand, NOTIFICATIONS},
 };
 
-pub fn notifications_page(cx: Scope) -> Element {
-    let notifications_ref = use_atom_ref(cx, NOTIFICATIONS);
-    let ui_model_ref = use_atom_ref(cx, UI_MODEL);
+pub fn NotificationsPage(cx: Scope) -> Element {
+    let notifications_ref = use_atom_ref(cx, &NOTIFICATIONS);
+    let ui_model_ref = use_atom_ref(cx, &UI_MODEL);
     let api_base_url = use_memo(cx, (), |()| get_api_base_url().unwrap());
 
     let notification_service = use_coroutine_handle::<NotificationCommand>(cx).unwrap();
@@ -49,7 +50,7 @@ pub fn notifications_page(cx: Scope) -> Element {
         },
     );
 
-    cx.render(rsx!(
+    render! {
         div {
             id: "notifications-page",
             class: "w-full h-full flex-1 overflow-auto snap-y snap-mandatory",
@@ -58,16 +59,16 @@ pub fn notifications_page(cx: Scope) -> Element {
                 class: "container h-full mx-auto",
 
                 if notifications_ref.read().is_empty() {
-                    rsx!(
+                    render! {
                         img {
                             class: "w-screen h-full object-contain object-center object-top opacity-30 dark:opacity-10",
                             src: "images/ui-logo-symbol-transparent.svg",
                             alt: "No notifications"
                         }
-                    )
+                    }
                 } else {
-                    rsx!(
-                        self::notifications_list {
+                    render! {
+                        NotificationsList {
                             notifications: notifications_ref.read().clone(),
                             ui_model_ref: ui_model_ref.clone(),
                             on_delete: |notification: &NotificationWithTask| {
@@ -91,15 +92,15 @@ pub fn notifications_page(cx: Scope) -> Element {
                                 ui_model_ref.write().task_link_modal_opened = true;
                             }
                         }
-                    )
+                    }
                 }
             }
         }
 
         ui_model_ref.read().task_planning_modal_opened.then(|| {
             notification_to_plan.as_ref().map(|notification_to_plan| {
-                rsx!{
-                    task_planning_modal {
+                render! {
+                    TaskPlanningModal {
                         api_base_url: api_base_url.clone(),
                         notification_to_plan: notification_to_plan.clone(),
                         ui_model_ref: ui_model_ref.clone(),
@@ -125,8 +126,8 @@ pub fn notifications_page(cx: Scope) -> Element {
 
         ui_model_ref.read().task_link_modal_opened.then(|| {
             notification_to_link.as_ref().map(|notification_to_link| {
-                rsx!{
-                    task_link_modal {
+                render! {
+                    TaskLinkModal {
                         api_base_url: api_base_url.clone(),
                         notification_to_link: notification_to_link.clone(),
                         ui_model_ref: ui_model_ref.clone(),
@@ -142,5 +143,5 @@ pub fn notifications_page(cx: Scope) -> Element {
                 }
             })
         })
-    ))
+    }
 }

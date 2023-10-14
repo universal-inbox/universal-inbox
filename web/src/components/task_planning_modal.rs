@@ -1,3 +1,5 @@
+#![allow(non_snake_case)]
+
 use std::collections::HashMap;
 
 use anyhow::Result;
@@ -17,10 +19,10 @@ use universal_inbox::{
 use crate::{
     components::{
         floating_label_inputs::{
-            floating_label_input_date, floating_label_input_search_select,
-            floating_label_input_text, floating_label_select, Searchable,
+            FloatingLabelInputDate, FloatingLabelInputSearchSelect, FloatingLabelInputText,
+            FloatingLabelSelect, Searchable,
         },
-        icons::todoist,
+        icons::Todoist,
     },
     model::UniversalInboxUIModel,
     services::api::call_api,
@@ -28,7 +30,7 @@ use crate::{
 };
 
 #[inline_props]
-pub fn task_planning_modal<'a>(
+pub fn TaskPlanningModal<'a>(
     cx: Scope,
     api_base_url: Url,
     notification_to_plan: NotificationWithTask,
@@ -37,7 +39,7 @@ pub fn task_planning_modal<'a>(
     on_task_planning: EventHandler<'a, (TaskPlanning, TaskId)>,
     on_task_creation: EventHandler<'a, TaskCreation>,
 ) -> Element {
-    let icon = cx.render(rsx!(self::todoist {}));
+    let icon = render! { Todoist {} };
     let project = use_state(cx, || "".to_string());
     let due_at = use_state(cx, || "".to_string()); // TODO Set today as default
     let priority = use_state(cx, || "4".to_string());
@@ -85,7 +87,7 @@ pub fn task_planning_modal<'a>(
         }
     });
 
-    cx.render(rsx!(
+    render! {
         dialog {
             id: "task-planning-modal",
             tabindex: "-1",
@@ -132,23 +134,24 @@ pub fn task_planning_modal<'a>(
                             div { class: "h-5 w-5 flex-none", icon }
                             div {
                                 class: "grow",
-                                (task_to_plan.current().is_some()).then(|| rsx!(
-                                    "{task_title}"
-                                )),
-                                (task_to_plan.current().is_none()).then(|| rsx!(
-                                    floating_label_input_text::<String> {
-                                        name: "task-title-input".to_string(),
-                                        label: "Task's title".to_string(),
-                                        required: true,
-                                        value: task_title.clone(),
-                                        autofocus: true,
-                                        force_validation: *force_validation.current(),
+                                if task_to_plan.current().is_some() {
+                                    render! { "{task_title}" }
+                                } else {
+                                    render! {
+                                        FloatingLabelInputText::<String> {
+                                            name: "task-title-input".to_string(),
+                                            label: "Task's title".to_string(),
+                                            required: true,
+                                            value: task_title.clone(),
+                                            autofocus: true,
+                                            force_validation: *force_validation.current(),
+                                        }
                                     }
-                                ))
+                                }
                             }
                         }
 
-                        floating_label_input_search_select {
+                        FloatingLabelInputSearchSelect {
                             name: "project-search-input".to_string(),
                             label: "Project".to_string(),
                             required: true,
@@ -166,7 +169,7 @@ pub fn task_planning_modal<'a>(
                             },
                         }
 
-                        floating_label_input_date::<DueDate> {
+                        FloatingLabelInputDate::<DueDate> {
                             name: "task-due_at-input".to_string(),
                             label: "Due at".to_string(),
                             required: false,
@@ -174,7 +177,7 @@ pub fn task_planning_modal<'a>(
                             force_validation: *force_validation.current(),
                         }
 
-                        floating_label_select::<TaskPriority> {
+                        FloatingLabelSelect::<TaskPriority> {
                             name: "task-priority-input".to_string(),
                             label: "Priority".to_string(),
                             required: false,
@@ -195,19 +198,20 @@ pub fn task_planning_modal<'a>(
                 }
             }
         }
-    ))
+    }
 }
 
 fn validate_planning_form(
-    values: &HashMap<String, String>,
+    values: &HashMap<String, Vec<String>>,
     selected_project: &Option<ProjectSummary>,
 ) -> Option<TaskPlanning> {
-    let due_at = if values["task-due_at-input"].is_empty() {
-        Ok(None)
-    } else {
-        values["task-due_at-input"].parse::<DueDate>().map(Some)
-    };
-    let priority = values["task-priority-input"].parse::<TaskPriority>();
+    let due_at = values["task-due_at-input"]
+        .first()
+        .map_or(Ok(None), |value| value.parse::<DueDate>().map(Some));
+    let priority = values["task-priority-input"].first().map_or(
+        Err("Task priority value is required".to_string()),
+        |value| value.parse::<TaskPriority>(),
+    );
 
     if let (Some(project), Ok(due_at), Ok(priority)) = (selected_project, due_at, priority) {
         return Some(TaskPlanning {
@@ -221,15 +225,17 @@ fn validate_planning_form(
 }
 
 fn validate_creation_form(
-    values: &HashMap<String, String>,
+    values: &HashMap<String, Vec<String>>,
     selected_project: &Option<ProjectSummary>,
 ) -> Option<TaskCreation> {
     if let Some(task_planning_parameters) = validate_planning_form(values, selected_project) {
-        let title = values["task-title-input"].parse::<String>();
+        let title = values["task-title-input"]
+            .first()
+            .ok_or("Task title is required".to_string());
 
         if let Ok(title) = title {
             return Some(TaskCreation {
-                title,
+                title: title.to_string(),
                 body: None,
                 project: task_planning_parameters.project,
                 due_at: task_planning_parameters.due_at,

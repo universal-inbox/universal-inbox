@@ -1,4 +1,5 @@
-#![allow(clippy::derive_partial_eq_without_eq)]
+#![allow(non_snake_case, clippy::derive_partial_eq_without_eq)]
+
 use dioxus::prelude::*;
 use dioxus_free_icons::{
     icons::bs_icons::{BsCheckCircle, BsExclamationTriangle, BsX},
@@ -10,7 +11,7 @@ use js_sys::Date;
 use uuid::Uuid;
 
 use crate::{
-    components::spinner::spinner,
+    components::spinner::Spinner,
     services::toast_service::{ToastCommand, TOASTS},
 };
 
@@ -43,17 +44,17 @@ pub enum ToastKind {
 }
 
 #[inline_props]
-pub fn toast_zone(cx: Scope) -> Element {
-    let toasts_ref = use_atom_ref(cx, TOASTS);
+pub fn ToastZone(cx: Scope) -> Element {
+    let toasts_ref = use_atom_ref(cx, &TOASTS);
     let toast_service = use_coroutine_handle::<ToastCommand>(cx).unwrap();
 
-    cx.render(rsx! {
+    render! {
         div {
             class: "toast",
 
             toasts_ref.read().clone().into_iter().map(move |(id, toast)| {
-                rsx!(
-                    self::toast {
+                render! {
+                    Toast {
                         key: "{id}",
                         message: toast.message.clone(),
                         kind: toast.kind.clone(),
@@ -62,14 +63,14 @@ pub fn toast_zone(cx: Scope) -> Element {
                             toast_service.send(ToastCommand::Close(id))
                         }
                     }
-                )
+                }
             })
         }
-    })
+    }
 }
 
 #[inline_props]
-fn toast<'a>(
+fn Toast<'a>(
     cx: Scope,
     message: String,
     kind: ToastKind,
@@ -108,31 +109,35 @@ fn toast<'a>(
     }
 
     let has_callback = on_undo.is_some();
-    cx.render(rsx! {
+    render! {
         div {
             id: "toast-undo",
             class: "alert {alert_style} shadow-lg p-0 flex flex-col gap-0",
             role: "alert",
 
-            (timeout.flatten().is_some() && (**timeout_progress > 0.0)).then(|| rsx!(
+            (timeout.flatten().is_some() && (**timeout_progress > 0.0)).then(|| render! {
                 progress {
                     class: "progress progress-accent w-full h-1",
                     value: "{timeout_progress}",
                     max: "100"
                 }
-            ))
+            })
             div {
                 class: "w-full flex items-center divide-x p-2",
 
                 match kind {
                     ToastKind::Message => None,
-                    ToastKind::Loading => cx.render(rsx!(self::spinner {})),
-                    ToastKind::Success => cx.render(rsx!(Icon {
-                        class: "w-12 h-12 px-4", icon: BsCheckCircle
-                    })),
-                    ToastKind::Failure => cx.render(rsx!(Icon {
-                        class: "w-12 h-12 px-4", icon: BsExclamationTriangle
-                    })),
+                    ToastKind::Loading => render! { Spinner {} },
+                    ToastKind::Success => render! {
+                        Icon {
+                            class: "w-12 h-12 px-4", icon: BsCheckCircle
+                        }
+                    },
+                    ToastKind::Failure => render! {
+                        Icon {
+                            class: "w-12 h-12 px-4", icon: BsExclamationTriangle
+                        }
+                    },
                 }
                 div {
                     class: "py-1.5 grow px-2",
@@ -141,17 +146,19 @@ fn toast<'a>(
                 div {
                     class: "flex items-center",
 
-                    has_callback.then(|| rsx!(
-                        a {
-                            class: "px-2 py-1.5",
-                            onclick: move |_| {
-                                if let Some(handler) = on_undo.as_ref() {
-                                    handler.call(())
-                                };
-                            },
-                            "Undo"
+                    if has_callback {
+                        render! {
+                            a {
+                                class: "px-2 py-1.5",
+                                onclick: move |_| {
+                                    if let Some(handler) = on_undo.as_ref() {
+                                        handler.call(())
+                                    };
+                                },
+                                "Undo"
+                            }
                         }
-                    ))
+                    }
 
                     button {
                         "type": "button",
@@ -163,5 +170,5 @@ fn toast<'a>(
                 }
             }
         }
-    })
+    }
 }

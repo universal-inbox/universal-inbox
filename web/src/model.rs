@@ -1,6 +1,6 @@
 use fermi::AtomRef;
 
-pub static UI_MODEL: AtomRef<UniversalInboxUIModel> = |_| Default::default();
+pub static UI_MODEL: AtomRef<UniversalInboxUIModel> = AtomRef(|_| Default::default());
 
 #[derive(Debug, Default)]
 pub struct UniversalInboxUIModel {

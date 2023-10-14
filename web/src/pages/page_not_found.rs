@@ -1,7 +1,14 @@
+#![allow(non_snake_case)]
+
 use dioxus::prelude::*;
 
-pub fn page_not_found(cx: Scope) -> Element {
-    cx.render(rsx!(
-        div { "Not Found" }
-    ))
+#[inline_props]
+#[allow(unused_variables)]
+pub fn PageNotFound(cx: Scope, route: Vec<String>) -> Element {
+    render! {
+        div {
+            class: "h-full flex justify-center items-center",
+            h1 { "Page not found" }
+        }
+    }
 }

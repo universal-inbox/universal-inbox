@@ -1,3 +1,5 @@
+#![allow(non_snake_case)]
+
 use dioxus::prelude::*;
 use fermi::use_atom_ref;
 use log::debug;
@@ -5,16 +7,16 @@ use log::debug;
 use universal_inbox::integration_connection::{IntegrationConnection, IntegrationProviderKind};
 
 use crate::{
-    components::{integrations_panel::integrations_panel, spinner::spinner},
+    components::{integrations_panel::IntegrationsPanel, spinner::Spinner},
     config::APP_CONFIG,
     services::integration_connection_service::{
         IntegrationConnectionCommand, INTEGRATION_CONNECTIONS,
     },
 };
 
-pub fn settings_page(cx: Scope) -> Element {
-    let app_config_ref = use_atom_ref(cx, APP_CONFIG);
-    let integration_connections_ref = use_atom_ref(cx, INTEGRATION_CONNECTIONS);
+pub fn SettingsPage(cx: Scope) -> Element {
+    let app_config_ref = use_atom_ref(cx, &APP_CONFIG);
+    let integration_connections_ref = use_atom_ref(cx, &INTEGRATION_CONNECTIONS);
     let integration_connection_service =
         use_coroutine_handle::<IntegrationConnectionCommand>(cx).unwrap();
 
@@ -30,14 +32,14 @@ pub fn settings_page(cx: Scope) -> Element {
 
     if let Some(app_config) = app_config_ref.read().as_ref() {
         if let Some(integration_connections) = integration_connections_ref.read().as_ref() {
-            return cx.render(rsx!(
+            return render! {
                 div {
                     class: "w-full flex-1 overflow-auto",
 
                     div {
                         class: "container mx-auto",
 
-                        integrations_panel {
+                        IntegrationsPanel {
                             integration_providers: app_config.integration_providers.clone(),
                             integration_connections: integration_connections.clone(),
                             on_connect: |(provider_kind, connection): (IntegrationProviderKind, Option<&IntegrationConnection>)| {
@@ -64,14 +66,16 @@ pub fn settings_page(cx: Scope) -> Element {
                         }
                     }
                 }
-            ));
+            };
         }
     }
 
-    cx.render(rsx!(div {
-        class: "h-full flex justify-center items-center",
+    render! {
+        div {
+            class: "h-full flex justify-center items-center",
 
-        self::spinner {}
-        "Loading Universal Inbox settings..."
-    }))
+            Spinner {}
+            "Loading Universal Inbox settings..."
+        }
+    }
 }
