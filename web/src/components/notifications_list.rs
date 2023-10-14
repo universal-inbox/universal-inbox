@@ -337,7 +337,7 @@ fn GithubNotificationDisplay<'a>(
     notif: &'a NotificationWithTask,
     github_notification: GithubNotification,
 ) -> Element {
-    let github_notification_id = extract_github_notification_id(&notif.source_html_url);
+    let github_notification_id = extract_github_notification_id(notif.source_html_url.clone());
     let notification_source_url = notif.get_html_url();
     let type_icon = match github_notification.subject.r#type.as_str() {
         "PullRequest" => render! { Icon { class: "h-5 w-5", icon: IoGitPullRequest } },
@@ -386,8 +386,8 @@ fn GithubNotificationDisplay<'a>(
     }
 }
 
-fn extract_github_notification_id(url: &Option<Uri>) -> Option<String> {
-    let Some(url) = url else { return None };
+fn extract_github_notification_id(url: Option<Uri>) -> Option<String> {
+    let url = url?;
     let mut url_parts = url.path().split('/').collect::<Vec<_>>();
     let id = url_parts.pop()?;
     Some(id.to_string())

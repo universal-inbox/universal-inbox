@@ -401,7 +401,7 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
             }
         }
         // Mark task `1123` as completed in the sync response
-        let mut task: &mut TodoistItem = todoist_items.iter_mut().find(|i| i.id == "1123").unwrap();
+        let task: &mut TodoistItem = todoist_items.iter_mut().find(|i| i.id == "1123").unwrap();
         task.checked = true;
         task.completed_at = Some(Utc::now());
     }

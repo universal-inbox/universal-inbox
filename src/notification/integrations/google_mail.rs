@@ -162,7 +162,7 @@ impl GoogleMailThread {
     }
 
     pub fn remove_labels(&mut self, labels_to_remove: Vec<&str>) {
-        for mut msg in &mut self.messages {
+        for msg in &mut self.messages {
             msg.label_ids = msg.label_ids.as_ref().map(|label_ids| {
                 label_ids
                     .iter()

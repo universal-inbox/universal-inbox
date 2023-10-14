@@ -156,7 +156,7 @@ impl GoogleMailService {
         let url = format!(
             "{}/users/me/threads/{thread_id}?prettyPrint=false&format=metadata{}",
             self.google_mail_base_url,
-            vec!["To", "Date", "Subject", "From"]
+            ["To", "Date", "Subject", "From"]
                 .iter()
                 .map(|header| format!("&metadataHeaders={header}"))
                 .join(""),
