@@ -33,7 +33,7 @@ pub enum IntegrationConnectionCommand {
     ReconnectIntegrationConnection(IntegrationConnection),
 }
 
-pub static INTEGRATION_CONNECTIONS: AtomRef<Option<Vec<IntegrationConnection>>> = |_| None;
+pub static INTEGRATION_CONNECTIONS: AtomRef<Option<Vec<IntegrationConnection>>> = AtomRef(|_| None);
 
 pub async fn integration_connnection_service<'a>(
     mut rx: UnboundedReceiver<IntegrationConnectionCommand>,

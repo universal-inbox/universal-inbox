@@ -37,7 +37,7 @@ pub enum NotificationCommand {
     LinkNotificationWithTask(NotificationId, TaskId),
 }
 
-pub static NOTIFICATIONS: AtomRef<Vec<NotificationWithTask>> = |_| vec![];
+pub static NOTIFICATIONS: AtomRef<Vec<NotificationWithTask>> = AtomRef(|_| vec![]);
 
 pub async fn notification_service<'a>(
     mut rx: UnboundedReceiver<NotificationCommand>,

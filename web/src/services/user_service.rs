@@ -15,7 +15,7 @@ pub enum UserCommand {
     Logout,
 }
 
-pub static CONNECTED_USER: AtomRef<Option<User>> = |_| None;
+pub static CONNECTED_USER: AtomRef<Option<User>> = AtomRef(|_| None);
 
 pub async fn user_service<'a>(
     mut rx: UnboundedReceiver<UserCommand>,

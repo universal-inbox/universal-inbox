@@ -1,10 +1,13 @@
+#![allow(non_snake_case)]
+
 #[macro_use]
 extern crate lazy_static;
 
 use anyhow::{anyhow, Context, Result};
 use dioxus::prelude::*;
-use dioxus_router::{Redirect, Route, Router};
+use dioxus_router::prelude::*;
 use fermi::{use_atom_ref, use_init_atom_root, UseAtomRef};
+use gloo_utils::errors::JsError;
 use log::debug;
 use utils::get_element_by_id;
 use wasm_bindgen::{prelude::Closure, JsCast};
@@ -12,44 +15,39 @@ use web_sys::KeyboardEvent;
 
 use universal_inbox::notification::NotificationWithTask;
 
-use components::{footer::footer, nav_bar::nav_bar, spinner::spinner, toast_zone::toast_zone};
 use config::{get_api_base_url, get_app_config, APP_CONFIG};
 use model::{UniversalInboxUIModel, UI_MODEL};
-use pages::{
-    notifications_page::notifications_page, page_not_found::page_not_found,
-    settings_page::settings_page,
-};
+use route::Route;
 use services::{
-    integration_connection_service::{
-        integration_connnection_service, IntegrationConnectionCommand, INTEGRATION_CONNECTIONS,
-    },
+    integration_connection_service::{integration_connnection_service, INTEGRATION_CONNECTIONS},
     notification_service::{notification_service, NotificationCommand, NOTIFICATIONS},
     task_service::{task_service, TaskCommand},
     toast_service::{toast_service, TOASTS},
     user_service::{user_service, CONNECTED_USER},
 };
 
+use crate::utils::{current_location, get_local_storage};
+
 mod auth;
 mod components;
 mod config;
+mod layouts;
 mod model;
 mod pages;
+mod route;
 mod services;
 mod theme;
 mod utils;
 
-pub fn app(cx: Scope) -> Element {
+pub fn App(cx: Scope) -> Element {
     use_init_atom_root(cx);
-    let notifications_ref = use_atom_ref(cx, NOTIFICATIONS);
-    let ui_model_ref = use_atom_ref(cx, UI_MODEL);
-    let toasts_ref = use_atom_ref(cx, TOASTS);
-    let app_config_ref = use_atom_ref(cx, APP_CONFIG);
-    let connected_user_ref = use_atom_ref(cx, CONNECTED_USER);
-    let integration_connections_ref = use_atom_ref(cx, INTEGRATION_CONNECTIONS);
+    let notifications_ref = use_atom_ref(cx, &NOTIFICATIONS);
+    let ui_model_ref = use_atom_ref(cx, &UI_MODEL);
+    let toasts_ref = use_atom_ref(cx, &TOASTS);
+    let app_config_ref = use_atom_ref(cx, &APP_CONFIG);
+    let connected_user_ref = use_atom_ref(cx, &CONNECTED_USER);
+    let integration_connections_ref = use_atom_ref(cx, &INTEGRATION_CONNECTIONS);
     let api_base_url = use_memo(cx, (), |()| get_api_base_url().unwrap());
-    let session_url = use_memo(cx, &(api_base_url.clone(),), |(api_base_url,)| {
-        api_base_url.join("auth/session").unwrap()
-    });
 
     let toast_service_handle = use_coroutine(cx, |rx| toast_service(rx, toasts_ref.clone()));
     let task_service_handle = use_coroutine(cx, |rx| {
@@ -115,80 +113,25 @@ pub fn app(cx: Scope) -> Element {
         }
     });
 
-    debug!("Rendering app");
-    if let Some(app_config) = app_config_ref.read().as_ref() {
-        return cx.render(rsx!(
-            // Router + Route == 300KB (release) !!!
-            div {
-                class: "h-full flex flex-col text-sm overflow-hidden",
-
-                Router {
-                    auth::authenticated {
-                        issuer_url: app_config.oidc_issuer_url.clone(),
-                        client_id: app_config.oidc_client_id.clone(),
-                        redirect_url: app_config.oidc_redirect_url.clone(),
-                        session_url: session_url.clone(),
-                        ui_model_ref: ui_model_ref.clone(),
-
-                        authenticated_app {}
-                    }
-                }
-            }
-        ));
+    // Dioxus 0.4.1 bug workaround: https://github.com/DioxusLabs/dioxus/issues/1511
+    let current_url = current_location().unwrap();
+    let auth_code = current_url
+        .query_pairs()
+        .find(|(k, _)| k == "code")
+        .map(|(_, v)| v.to_string());
+    let local_storage = get_local_storage().unwrap();
+    if let Some(auth_code) = auth_code {
+        debug!("auth: Storing auth-oidc-callback-code {auth_code:?}");
+        local_storage
+            .set_item("auth-oidc-callback-code", &auth_code)
+            .map_err(|err| JsError::try_from(err).unwrap())
+            .unwrap();
     }
+    // end workaround
 
-    cx.render(rsx!(div {
-        class: "h-full flex justify-center items-center",
-
-        self::spinner {}
-        "Loading Universal Inbox..."
-    }))
-}
-
-#[inline_props]
-pub fn authenticated_app(cx: Scope) -> Element {
-    let integration_connections_ref = use_atom_ref(cx, INTEGRATION_CONNECTIONS);
-    let integration_connection_service =
-        use_coroutine_handle::<IntegrationConnectionCommand>(cx).unwrap();
-    let notification_service = use_coroutine_handle::<NotificationCommand>(cx).unwrap();
-
-    use_future(cx, (), |()| {
-        to_owned![integration_connection_service];
-        to_owned![notification_service];
-
-        async move {
-            // Load integration connections status
-            integration_connection_service.send(IntegrationConnectionCommand::Refresh);
-
-            notification_service.send(NotificationCommand::Refresh);
-            // Refresh notifications every minute
-            gloo_timers::callback::Interval::new(60_000, move || {
-                notification_service.send(NotificationCommand::Refresh);
-            })
-            .forget();
-        }
-    });
-
-    if let Some(integration_connections) = integration_connections_ref.read().as_ref() {
-        cx.render(rsx!(
-            self::nav_bar {}
-            Route { to: "/", self::notifications_page {} }
-            Route { to: "/settings", self::settings_page {} }
-            Route { to: "", self::page_not_found {} }
-            self::footer {}
-            self::toast_zone {}
-
-            if integration_connections.is_empty() {
-                rsx!(Redirect { to: "/settings" })
-            }
-        ))
-    } else {
-        cx.render(rsx!(div {
-            class: "h-full flex justify-center items-center",
-
-            self::spinner {}
-            "Loading Universal Inbox..."
-        }))
+    debug!("Rendering app");
+    render! {
+        Router::<Route> {}
     }
 }
 

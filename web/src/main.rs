@@ -3,7 +3,7 @@ extern crate console_error_panic_hook;
 use cfg_if::cfg_if;
 use log::{info, Level};
 use std::panic;
-use universal_inbox_web::app;
+use universal_inbox_web::App;
 
 cfg_if! {
     if #[cfg(debug_assertions)] {
@@ -27,5 +27,5 @@ cfg_if! {
 fn main() {
     panic::set_hook(Box::new(console_error_panic_hook::hook));
     init_log();
-    dioxus_web::launch(app);
+    dioxus_web::launch(App);
 }

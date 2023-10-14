@@ -13,8 +13,8 @@ use universal_inbox::{
 };
 
 use crate::{
-    components::floating_label_inputs::floating_label_input_search_select,
-    components::icons::{github, google_mail, linear, todoist},
+    components::floating_label_inputs::FloatingLabelInputSearchSelect,
+    components::icons::{Github, GoogleMail, Linear, Todoist},
     model::UniversalInboxUIModel,
     services::api::call_api,
     utils::focus_element,
@@ -23,7 +23,7 @@ use crate::{
 use super::floating_label_inputs::Searchable;
 
 #[inline_props]
-pub fn task_link_modal<'a>(
+pub fn TaskLinkModal<'a>(
     cx: Scope,
     api_base_url: Url,
     notification_to_link: NotificationWithTask,
@@ -33,12 +33,10 @@ pub fn task_link_modal<'a>(
 ) -> Element {
     // tag: New notification integration
     let notification_icon = match notification_to_link.metadata {
-        NotificationMetadata::Github(_) => cx.render(rsx!(self::github { class: "h-5 w-5" })),
-        NotificationMetadata::Linear(_) => cx.render(rsx!(self::linear { class: "h-5 w-5" })),
-        NotificationMetadata::GoogleMail(_) => {
-            cx.render(rsx!(self::google_mail { class: "h-5 w-5" }))
-        }
-        NotificationMetadata::Todoist => cx.render(rsx!(self::todoist { class: "h-5 w-5" })),
+        NotificationMetadata::Github(_) => render! { Github { class: "h-5 w-5" } },
+        NotificationMetadata::Linear(_) => render! { Linear { class: "h-5 w-5" } },
+        NotificationMetadata::GoogleMail(_) => render! { GoogleMail { class: "h-5 w-5" } },
+        NotificationMetadata::Todoist => render! { Todoist { class: "h-5 w-5" } },
     };
     let selected_task: &UseState<Option<TaskSummary>> = use_state(cx, || None);
     let search_expression = use_state(cx, || "".to_string());
@@ -59,7 +57,7 @@ pub fn task_link_modal<'a>(
         }
     });
 
-    cx.render(rsx!(
+    render! {
         dialog {
             id: "task-link-modal",
             tabindex: "-1",
@@ -109,7 +107,7 @@ pub fn task_link_modal<'a>(
                             }
                         }
 
-                        floating_label_input_search_select {
+                        FloatingLabelInputSearchSelect {
                             name: "task-search-input".to_string(),
                             label: "with".to_string(),
                             value: selected_task.clone(),
@@ -128,7 +126,7 @@ pub fn task_link_modal<'a>(
 
                             div {
                                 class: "block py-2 px-4 bg-transparent border-0 border-b-2",
-                                self::todoist { class: "h-5 w-5" }
+                                Todoist { class: "h-5 w-5" }
                             }
                         }
 
@@ -146,7 +144,7 @@ pub fn task_link_modal<'a>(
                 }
             }
         }
-    ))
+    }
 }
 
 async fn search_tasks(

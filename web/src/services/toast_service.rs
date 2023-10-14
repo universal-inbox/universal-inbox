@@ -22,7 +22,7 @@ pub enum ToastCommand {
     Update(ToastUpdate),
 }
 
-pub static TOASTS: AtomRef<HashMap<Uuid, Toast>> = |_| HashMap::new();
+pub static TOASTS: AtomRef<HashMap<Uuid, Toast>> = AtomRef(|_| HashMap::new());
 
 pub async fn toast_service(
     mut rx: UnboundedReceiver<ToastCommand>,

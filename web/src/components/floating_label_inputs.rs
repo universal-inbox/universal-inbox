@@ -1,3 +1,5 @@
+#![allow(non_snake_case)]
+
 use std::{fmt::Display, marker::PhantomData, str::FromStr};
 
 use dioxus::{html::input_data::keyboard_types::Key, prelude::*};
@@ -26,7 +28,7 @@ pub struct InputProps<T: 'static> {
 const INPUT_INVALID_STYLE: &str = "border-error focus:border-error";
 const FLOATING_LABEL_INVALID_STYLE: &str = "text-error peer-focus:text-error";
 
-pub fn floating_label_input_text<T>(cx: Scope<InputProps<T>>) -> Element
+pub fn FloatingLabelInputText<T>(cx: Scope<InputProps<T>>) -> Element
 where
     T: FromStr,
     <T as FromStr>::Err: Display,
@@ -79,7 +81,7 @@ where
         },
     );
 
-    cx.render(rsx!(
+    render! {
         div {
             class: "relative",
             input {
@@ -102,12 +104,12 @@ where
                 class: "{label_style} {required_label_style} absolute duration-300 transform -translate-y-6 scale-75 top-3 -z-10 origin-[0] peer-focus:left-0 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-6",
                 "{cx.props.label}"
             }
-            self::error_message { message: error_message }
+            ErrorMessage { message: error_message }
         }
-    ))
+    }
 }
 
-pub fn floating_label_input_date<T>(cx: Scope<InputProps<T>>) -> Element
+pub fn FloatingLabelInputDate<T>(cx: Scope<InputProps<T>>) -> Element
 where
     T: FromStr,
     <T as FromStr>::Err: Display,
@@ -166,7 +168,7 @@ where
         },
     );
 
-    cx.render(rsx!(
+    render! {
         div {
             class: "relative",
             input {
@@ -187,12 +189,12 @@ where
                 class: "{label_style} {required_label_style} absolute duration-300 transform -translate-y-0 scale-100 top-3 -z-10 origin-[0] peer-focus:left-0 peer-[.isnotempty]:left-0 peer-[.isnotempty]:scale-75 peer-[.isnotempty]:-translate-y-6 peer-focus:scale-75 peer-focus:-translate-y-6",
                 "{cx.props.label}"
             }
-            self::error_message { message: error_message }
+            ErrorMessage { message: error_message }
         }
-    ))
+    }
 }
 
-pub fn floating_label_select<T>(cx: Scope<InputProps<T>>) -> Element
+pub fn FloatingLabelSelect<T>(cx: Scope<InputProps<T>>) -> Element
 where
     T: FromStr,
     <T as FromStr>::Err: Display,
@@ -233,7 +235,7 @@ where
         },
     );
 
-    cx.render(rsx!(
+    render! {
         div {
             class: "relative",
             select {
@@ -257,9 +259,9 @@ where
                 class: "{label_style} {required_label_style} absolute duration-300 transform -translate-y-6 scale-75 top-3 -z-10 origin-[0]",
                 "{cx.props.label}"
             }
-            self::error_message { message: error_message }
+            ErrorMessage { message: error_message }
         }
-    ))
+    }
 }
 
 pub trait Searchable {
@@ -287,9 +289,7 @@ where
     children: Element<'a>,
 }
 
-pub fn floating_label_input_search_select<'a, T>(
-    cx: Scope<'a, InputSearchProps<'a, T>>,
-) -> Element<'a>
+pub fn FloatingLabelInputSearchSelect<'a, T>(cx: Scope<'a, InputSearchProps<'a, T>>) -> Element<'a>
 where
     T: Clone + Searchable + 'static,
 {
@@ -437,7 +437,7 @@ where
         },
     );
 
-    cx.render(rsx!(
+    render! {
         div {
             class: "dropdown bg-base-100 group",
 
@@ -468,7 +468,7 @@ where
                 }
                 span {
                     class: "{border_style} block py-2 bg-transparent border-0 border-b-2",
-                    arrow_down { class: "h-5 w-5 group-hover:visible invisible" }
+                    ArrowDown { class: "h-5 w-5 group-hover:visible invisible" }
                 }
                 label {
                     "for": "selected-result",
@@ -476,7 +476,7 @@ where
                     "{cx.props.label}"
                 }
             }
-            self::error_message { message: error_message }
+            ErrorMessage { message: error_message }
 
             ul {
                 id: "search-list",
@@ -527,23 +527,23 @@ where
                 }
 
                 cx.props.search_results.iter().enumerate().map(|(i, result)| {
-                    rsx!(
-                        search_result_row {
+                    render! {
+                        SearchResultRow {
                             key: "{result.get_id()}",
                             title: "{result.get_title()}",
                             selected: i == *selected_index.current(),
                             on_select: move |_| { select_result(Some(result.clone())); },
                         }
-                    )
+                    }
                 })
             }
         }
-    ))
+    }
 }
 
 #[inline_props]
-fn arrow_down<'a>(cx: Scope, class: Option<&'a str>) -> Element {
-    cx.render(rsx!(
+fn ArrowDown<'a>(cx: Scope, class: Option<&'a str>) -> Element {
+    render! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
             class: "{class.unwrap_or_default()}",
@@ -559,7 +559,7 @@ fn arrow_down<'a>(cx: Scope, class: Option<&'a str>) -> Element {
                 d: "M16 10l-4 4-4-4"
             }
         }
-    ))
+    }
 }
 
 fn is_dropdown_opened(has_value: bool, autofocus: bool, dropdown_opened: bool) -> bool {
@@ -567,19 +567,21 @@ fn is_dropdown_opened(has_value: bool, autofocus: bool, dropdown_opened: bool) -
 }
 
 #[inline_props]
-pub fn error_message<'a>(cx: Scope, message: &'a UseState<Option<String>>) -> Element {
-    message.as_ref().and_then(|error| {
-        cx.render(rsx!(
+pub fn ErrorMessage<'a>(cx: Scope, message: &'a UseState<Option<String>>) -> Element {
+    if let Some(error) = message.as_ref() {
+        render! {
             p {
                 class: "mt-2 text-error dark:text-error",
                 span { class: "font-medium", "{error}" }
             }
-        ))
-    })
+        }
+    } else {
+        None
+    }
 }
 
 #[inline_props]
-fn search_result_row<'a>(
+fn SearchResultRow<'a>(
     cx: Scope,
     selected: bool,
     title: &'a str,
@@ -597,7 +599,7 @@ fn search_result_row<'a>(
         },
     );
 
-    cx.render(rsx!(
+    render! {
         li {
             class: "w-full inline-block",
             onclick: move |_| {
@@ -610,7 +612,7 @@ fn search_result_row<'a>(
                 p { class: "truncate", "{title}" }
             }
         }
-    ))
+    }
 }
 
 fn validate_value<T>(value: &str, error_message: UseState<Option<String>>, required: bool)

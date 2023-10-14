@@ -1,7 +1,9 @@
+#![allow(non_snake_case)]
+
 use chrono::{Local, SecondsFormat};
 use dioxus::prelude::*;
 use dioxus_free_icons::{icons::bs_icons::BsPlug, Icon};
-use dioxus_router::Link;
+use dioxus_router::prelude::*;
 use fermi::use_atom_ref;
 
 use universal_inbox::integration_connection::{
@@ -9,20 +11,21 @@ use universal_inbox::integration_connection::{
 };
 
 use crate::{
-    components::icons::{github, google_mail, linear, todoist},
+    components::icons::{Github, GoogleMail, Linear, Todoist},
     model::UI_MODEL,
+    route::Route,
     services::{
         integration_connection_service::INTEGRATION_CONNECTIONS,
         notification_service::NotificationCommand,
     },
 };
 
-pub fn footer(cx: Scope) -> Element {
-    let integration_connections_ref = use_atom_ref(cx, INTEGRATION_CONNECTIONS);
-    let ui_model_ref = use_atom_ref(cx, UI_MODEL);
+pub fn Footer(cx: Scope) -> Element {
+    let integration_connections_ref = use_atom_ref(cx, &INTEGRATION_CONNECTIONS);
+    let ui_model_ref = use_atom_ref(cx, &UI_MODEL);
     let notification_service = use_coroutine_handle::<NotificationCommand>(cx).unwrap();
 
-    cx.render(rsx! {
+    render! {
         footer {
             class: "w-full",
 
@@ -38,41 +41,49 @@ pub fn footer(cx: Scope) -> Element {
                 }
 
                 if let Some(integration_connections) = integration_connections_ref.read().as_ref() {
-                    rsx!(integration_connections_status { integration_connections: integration_connections.clone() })
+                    render! {
+                        IntegrationConnectionsStatus {
+                            integration_connections: integration_connections.clone()
+                        }
+                    }
                 }
 
                 div { class: "divider divider-horizontal" }
 
                 match &ui_model_ref.read().loaded_notifications {
-                    Some(Ok(count)) => rsx!(div {
-                        class: "tooltip tooltip-left",
-                        "data-tip": "{count} notifications loaded",
-                        button {
-                            class: "badge badge-success text-xs",
-                            onclick: |_| notification_service.send(NotificationCommand::Refresh),
-                            "{count}"
+                    Some(Ok(count)) => render! {
+                        div {
+                            class: "tooltip tooltip-left",
+                            "data-tip": "{count} notifications loaded",
+                            button {
+                                class: "badge badge-success text-xs",
+                                onclick: |_| notification_service.send(NotificationCommand::Refresh),
+                                "{count}"
+                            }
                         }
-                    }),
-                    Some(Err(error)) => rsx!(div {
-                        class: "tooltip tooltip-left tooltip-error",
-                        "data-tip": "{error}",
-                        button {
-                            class: "badge badge-error text-xs",
-                            onclick: |_| notification_service.send(NotificationCommand::Refresh),
-                            "0"
+                    },
+                    Some(Err(error)) => render! {
+                        div {
+                            class: "tooltip tooltip-left tooltip-error",
+                            "data-tip": "{error}",
+                            button {
+                                class: "badge badge-error text-xs",
+                                onclick: |_| notification_service.send(NotificationCommand::Refresh),
+                                "0"
+                            }
                         }
-                    }),
-                    None => rsx!(span { class: "loading loading-ring loading-xs" }),
+                    },
+                    None => render! { span { class: "loading loading-ring loading-xs" } },
                 }
 
                 div { class: "w-2" }
             }
         }
-    })
+    }
 }
 
 #[inline_props]
-pub fn integration_connections_status(
+pub fn IntegrationConnectionsStatus(
     cx: Scope,
     integration_connections: Vec<IntegrationConnection>,
 ) -> Element {
@@ -87,24 +98,23 @@ pub fn integration_connections_status(
         None
     };
 
-    cx.render(rsx!(
+    render! {
         if let Some(tooltip) = connection_issue_tooltip {
-            rsx!(
+            render! {
                 div {
                     class: "tooltip tooltip-left text-xs text-error",
                     "data-tip": "{tooltip}",
 
                     Link {
-                        to: "/settings",
-                        title: "Sync status",
-                        Icon { class: "w-5 h-5" icon: BsPlug }
+                        to: Route::SettingsPage {},
+                        Icon { class: "w-5 h-5", icon: BsPlug }
                     }
                 }
-            )
+            }
         }
 
         for integration_connection in (integration_connections.iter().filter(|c| c.provider_kind.is_notification_service() )) {
-            integration_connection_status {
+            IntegrationConnectionStatus {
                 connection: integration_connection.clone(),
             }
         }
@@ -112,15 +122,15 @@ pub fn integration_connections_status(
         div { class: "divider divider-horizontal" }
 
         for integration_connection in (integration_connections.iter().filter(|c| c.provider_kind.is_task_service() )) {
-            integration_connection_status {
+            IntegrationConnectionStatus {
                 connection: integration_connection.clone(),
             }
         }
-    ))
+    }
 }
 
 #[inline_props]
-pub fn integration_connection_status(cx: Scope, connection: IntegrationConnection) -> Element {
+pub fn IntegrationConnectionStatus(cx: Scope, connection: IntegrationConnection) -> Element {
     let (connection_style, tooltip) =
         use_memo(cx, &connection.clone(), |connection| match connection {
             IntegrationConnection {
@@ -165,35 +175,34 @@ pub fn integration_connection_status(cx: Scope, connection: IntegrationConnectio
 
     // tag: New notification integration
     let icon = match connection.provider_kind {
-        IntegrationProviderKind::Github => Some(rsx!(self::github {
-            class: "w-4 h-4 {connection_style}"
-        })),
-        IntegrationProviderKind::Todoist => Some(rsx!(self::todoist {
-            class: "w-4 h-4 {connection_style}"
-        })),
-        IntegrationProviderKind::Linear => Some(rsx!(self::linear {
-            class: "w-4 h-4 {connection_style}"
-        })),
-        IntegrationProviderKind::GoogleMail => Some(rsx!(self::google_mail {
-            class: "w-4 h-4 {connection_style}"
-        })),
+        IntegrationProviderKind::Github => Some(render! {
+            Github { class: "w-4 h-4 {connection_style}" }
+        }),
+        IntegrationProviderKind::Todoist => Some(render! {
+            Todoist { class: "w-4 h-4 {connection_style}" }
+        }),
+        IntegrationProviderKind::Linear => Some(render! {
+            Linear { class: "w-4 h-4 {connection_style}" }
+        }),
+        IntegrationProviderKind::GoogleMail => Some(render! {
+            GoogleMail { class: "w-4 h-4 {connection_style}" }
+        }),
         _ => None,
     };
 
     if let Some(icon) = icon {
-        cx.render(rsx! {
+        return render! {
             div {
                 class: "tooltip tooltip-left text-xs",
                 "data-tip": "{tooltip}",
 
                 Link {
-                    to: "/settings",
-                    title: "Sync status",
+                    to: Route::SettingsPage {},
                     icon
                 }
             }
-        })
-    } else {
-        cx.render(rsx!(div {}))
+        };
     }
+
+    render! { div {} }
 }
