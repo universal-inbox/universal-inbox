@@ -95,7 +95,7 @@ pub fn settings() -> Settings {
 #[fixture]
 pub async fn tested_app(
     mut settings: Settings,
-    #[allow(unused)] tracing_setup: (),
+    #[allow(unused, clippy::let_unit_value)] tracing_setup: (),
     #[future] db_connection: Arc<PgPool>,
 ) -> TestedApp {
     info!("Setting up server");

@@ -6,6 +6,9 @@ default:
     @just --choose
 
 ## Build recipes
+clean:
+    cargo clean
+
 build:
     cargo build
 
