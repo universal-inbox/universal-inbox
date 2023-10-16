@@ -31,6 +31,7 @@ itertools = { workspace = true }
 js-sys = "0.3"
 lazy_static = { workspace = true }
 log = { workspace = true }
+markdown = "0.3.0"
 openidconnect = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }

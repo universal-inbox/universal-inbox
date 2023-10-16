@@ -110,6 +110,17 @@ impl Task {
             task_id: Some(self.id),
         }
     }
+
+    pub fn get_html_project_url(&self) -> Uri {
+        match &self.metadata {
+            TaskMetadata::Todoist(todoist_task) => format!(
+                "{DEFAULT_TODOIST_HTML_URL}project/{}",
+                todoist_task.project_id
+            )
+            .parse::<Uri>()
+            .unwrap(),
+        }
+    }
 }
 
 impl HasHtmlUrl for Task {

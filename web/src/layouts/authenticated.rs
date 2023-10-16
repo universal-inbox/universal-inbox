@@ -28,18 +28,14 @@ pub fn AuthenticatedLayout(cx: Scope) -> Element {
     if let Some(app_config) = app_config_ref.read().as_ref() {
         return render! {
             // Router + Route == 300KB (release) !!!
-            div {
-                class: "h-full flex flex-col text-sm overflow-hidden",
+            Authenticated {
+                issuer_url: app_config.oidc_issuer_url.clone(),
+                client_id: app_config.oidc_client_id.clone(),
+                redirect_url: app_config.oidc_redirect_url.clone(),
+                session_url: session_url.clone(),
+                ui_model_ref: ui_model_ref.clone(),
 
-                Authenticated {
-                    issuer_url: app_config.oidc_issuer_url.clone(),
-                    client_id: app_config.oidc_client_id.clone(),
-                    redirect_url: app_config.oidc_redirect_url.clone(),
-                    session_url: session_url.clone(),
-                    ui_model_ref: ui_model_ref.clone(),
-
-                    AuthenticatedApp {}
-                }
+                AuthenticatedApp {}
             }
         };
     }
