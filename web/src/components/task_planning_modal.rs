@@ -207,7 +207,13 @@ fn validate_planning_form(
 ) -> Option<TaskPlanning> {
     let due_at = values["task-due_at-input"]
         .first()
-        .map_or(Ok(None), |value| value.parse::<DueDate>().map(Some));
+        .map_or(Ok(None), |value| {
+            if value.is_empty() {
+                Ok(None)
+            } else {
+                value.parse::<DueDate>().map(Some)
+            }
+        });
     let priority = values["task-priority-input"].first().map_or(
         Err("Task priority value is required".to_string()),
         |value| value.parse::<TaskPriority>(),
