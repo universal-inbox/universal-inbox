@@ -398,6 +398,13 @@ pub struct GithubNotification {
 }
 
 impl GithubNotification {
+    pub fn extract_id(&self) -> Option<String> {
+        let url = self.subject.url.clone()?;
+        let mut url_parts = url.path().split('/').collect::<Vec<_>>();
+        let id = url_parts.pop()?;
+        Some(id.to_string())
+    }
+
     pub fn get_html_url_from_api_url(api_url: &Option<Uri>) -> Option<Uri> {
         api_url.as_ref().and_then(|uri| {
             if uri.host() == Some("api.github.com") && uri.path().starts_with("/repos") {

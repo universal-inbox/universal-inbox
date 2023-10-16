@@ -8,8 +8,8 @@ use universal_inbox::notification::NotificationWithTask;
 
 use crate::{
     components::{
-        notifications_list::NotificationsList, task_link_modal::TaskLinkModal,
-        task_planning_modal::TaskPlanningModal,
+        notification_preview::NotificationPreview, notifications_list::NotificationsList,
+        task_link_modal::TaskLinkModal, task_planning_modal::TaskPlanningModal,
     },
     config::get_api_base_url,
     model::UI_MODEL,
@@ -36,38 +36,41 @@ pub fn NotificationsPage(cx: Scope) -> Element {
         }
     });
 
-    use_memo(
+    let selected_notification = use_memo(
         cx,
         &(
             ui_model_ref.read().selected_notification_index,
             notifications_ref.read().clone(),
         ),
         |(selected_notification_index, notifications)| {
-            if let Some(notification) = notifications.get(selected_notification_index) {
+            let selected_notification = notifications.get(selected_notification_index);
+            if let Some(notification) = selected_notification {
                 notification_to_plan.set(Some(notification.clone()));
                 notification_to_link.set(Some(notification.clone()));
             }
+            selected_notification.cloned()
         },
     );
 
     render! {
         div {
             id: "notifications-page",
-            class: "w-full h-full flex-1 overflow-auto snap-y snap-mandatory",
+            class: "h-full mx-auto flex flex-row px-4 divide-x divide-base-200",
 
-            div {
-                class: "container h-full mx-auto",
-
-                if notifications_ref.read().is_empty() {
-                    render! {
-                        img {
-                            class: "w-screen h-full object-contain object-center object-top opacity-30 dark:opacity-10",
-                            src: "images/ui-logo-symbol-transparent.svg",
-                            alt: "No notifications"
-                        }
+            if notifications_ref.read().is_empty() {
+                render! {
+                    img {
+                        class: "w-screen h-full object-contain object-center object-top opacity-30 dark:opacity-10",
+                        src: "images/ui-logo-symbol-transparent.svg",
+                        alt: "No notifications"
                     }
-                } else {
-                    render! {
+                }
+            } else {
+                render! {
+                    div {
+                        id: "notifications-list",
+                        class: "h-full basis-2/3 overflow-auto scroll-auto px-2 snap-y snap-mandatory",
+
                         NotificationsList {
                             notifications: notifications_ref.read().clone(),
                             ui_model_ref: ui_model_ref.clone(),
@@ -90,6 +93,16 @@ pub fn NotificationsPage(cx: Scope) -> Element {
                             on_link: |notification: &NotificationWithTask| {
                                 notification_to_link.set(Some(notification.clone()));
                                 ui_model_ref.write().task_link_modal_opened = true;
+                            }
+                        }
+                    }
+
+                    if let Some(ref notification) = selected_notification {
+                        render! {
+                            div {
+                                class: "h-full basis-1/3 overflow-auto scroll-auto px-2 py-2 flex flex-row",
+
+                                NotificationPreview { notification: notification }
                             }
                         }
                     }

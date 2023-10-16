@@ -16,7 +16,6 @@ use dioxus_free_icons::{
     Icon,
 };
 use fermi::UseAtomRef;
-use http::Uri;
 
 use universal_inbox::{
     notification::{
@@ -70,6 +69,7 @@ pub fn NotificationsList<'a>(
                         Notification {
                             notif: notif,
                             selected: is_selected,
+                            notification_index: i,
                             ui_model_ref: ui_model_ref,
 
                             NotificationButton {
@@ -143,6 +143,7 @@ pub fn NotificationsList<'a>(
                         Notification {
                             notif: notif,
                             selected: is_selected,
+                            notification_index: i,
                             ui_model_ref: ui_model_ref,
 
                             NotificationButton {
@@ -195,6 +196,7 @@ pub fn NotificationsList<'a>(
 fn Notification<'a>(
     cx: Scope,
     notif: &'a NotificationWithTask,
+    notification_index: usize,
     selected: bool,
     ui_model_ref: &'a UseAtomRef<UniversalInboxUIModel>,
     children: Element<'a>,
@@ -213,11 +215,16 @@ fn Notification<'a>(
 
     render! {
         tr {
-            class: "hover py-1 {style} group snap-start",
+            class: "hover py-1 {style} group snap-start cursor-pointer",
             key: "{notif.id}",
             onmousemove: |_| {
                 if ui_model_ref.write_silent().set_unhover_element(false) {
                     cx.needs_update();
+                }
+            },
+            onclick: move |_| {
+                if !selected {
+                    ui_model_ref.write().selected_notification_index = *notification_index;
                 }
             },
 
@@ -315,8 +322,6 @@ fn NotificationDisplay<'a>(
 
 #[inline_props]
 fn DefaultNotificationDisplay<'a>(cx: Scope, notif: &'a NotificationWithTask) -> Element {
-    let link = notif.get_html_url();
-
     render! {
         div {
             class: "flex items-center gap-2",
@@ -325,7 +330,7 @@ fn DefaultNotificationDisplay<'a>(cx: Scope, notif: &'a NotificationWithTask) ->
 
             div {
                 class: "flex flex-col grow",
-                a { href: "{link}", target: "_blank", "{notif.title}" }
+                span { "{notif.title}" }
             }
         }
     }
@@ -337,8 +342,7 @@ fn GithubNotificationDisplay<'a>(
     notif: &'a NotificationWithTask,
     github_notification: GithubNotification,
 ) -> Element {
-    let github_notification_id = extract_github_notification_id(notif.source_html_url.clone());
-    let notification_source_url = notif.get_html_url();
+    let github_notification_id = github_notification.extract_id();
     let type_icon = match github_notification.subject.r#type.as_str() {
         "PullRequest" => render! { Icon { class: "h-5 w-5", icon: IoGitPullRequest } },
         "Issue" => render! { Icon { class: "h-5 w-5", icon: BsRecordCircle } },
@@ -356,41 +360,20 @@ fn GithubNotificationDisplay<'a>(
             div {
                 class: "flex flex-col grow",
 
-                a {
-                    href: "{notification_source_url}",
-                    target: "_blank",
-                    "{notif.title}"
-                }
+                span { "{notif.title}" }
                 div {
-                    class: "flex gap-2",
+                    class: "flex gap-2 text-xs text-gray-400",
 
-                    a {
-                        class: "text-xs text-gray-400",
-                        href: "{github_notification.repository.html_url.clone()}",
-                        target: "_blank",
-                        "{github_notification.repository.full_name}"
-                    }
-
-                    a {
-                        class: "text-xs text-gray-400",
-                        href: "{notification_source_url}",
-                        target: "_blank",
-                        if let Some(github_notification_id) = github_notification_id {
-                            render! { "#{github_notification_id} " }
+                    span { "{github_notification.repository.full_name}" }
+                    if let Some(github_notification_id) = github_notification_id {
+                        render! {
+                            span { "#{github_notification_id}" }
                         }
-                        "({github_notification.reason})"
                     }
                 }
             }
         }
     }
-}
-
-fn extract_github_notification_id(url: Option<Uri>) -> Option<String> {
-    let url = url?;
-    let mut url_parts = url.path().split('/').collect::<Vec<_>>();
-    let id = url_parts.pop()?;
-    Some(id.to_string())
 }
 
 #[inline_props]
@@ -399,8 +382,6 @@ fn LinearNotificationDisplay<'a>(
     notif: &'a NotificationWithTask,
     linear_notification: LinearNotification,
 ) -> Element {
-    let notification_source_url = notif.get_html_url();
-    let notification_type = linear_notification.get_type();
     let type_icon = match linear_notification {
         LinearNotification::IssueNotification { .. } => render! {
             Icon { class: "h-5 w-5", icon: BsRecordCircle }
@@ -419,35 +400,22 @@ fn LinearNotificationDisplay<'a>(
             div {
                 class: "flex flex-col grow",
 
-                a {
-                    href: "{notification_source_url}",
-                    target: "_blank",
-                    "{notif.title}"
-                }
+                span { "{notif.title}" }
                 div {
                     class: "flex gap-2",
 
                     if let Some(team) = linear_notification.get_team() {
                         render! {
-                            a {
-                                class: "text-xs text-gray-400",
-                                href: "{team.get_url(linear_notification.get_organization())}",
-                                target: "_blank",
-                                "{team.name}"
-                            }
+                            span { class: "text-xs text-gray-400", "{team.name}" }
                         }
                     }
 
-                    a {
-                        class: "text-xs text-gray-400",
-                        href: "{notification_source_url}",
-                        target: "_blank",
-                        if let LinearNotification::IssueNotification {
-                            issue: LinearIssue { identifier, .. }, ..
-                        } = linear_notification {
-                            render! { "#{identifier} " }
+                    if let LinearNotification::IssueNotification {
+                        issue: LinearIssue { identifier, .. }, ..
+                    } = linear_notification {
+                        render! {
+                            span { class: "text-xs text-gray-400", "#{identifier}" }
                         }
-                        "({notification_type})"
                     }
                 }
             }
@@ -461,7 +429,6 @@ fn GoogleMailThreadDisplay<'a>(
     notif: &'a NotificationWithTask,
     google_mail_thread: GoogleMailThread,
 ) -> Element {
-    let notification_source_url = notif.get_html_url();
     let is_starred = google_mail_thread.is_tagged_with(GOOGLE_MAIL_STARRED_LABEL, None);
     let is_important = google_mail_thread.is_tagged_with(GOOGLE_MAIL_IMPORTANT_LABEL, None);
     let from_address = google_mail_thread.get_message_header(MessageSelection::First, "From");
@@ -492,12 +459,7 @@ fn GoogleMailThreadDisplay<'a>(
 
                 div {
                     class: "flex flex-row items-center",
-                    a {
-                        class: "mx-0.5",
-                        href: "{notification_source_url}",
-                        target: "_blank",
-                        "{notif.title}"
-                    }
+                    span { class: "mx-0.5", "{notif.title}" }
                     if is_starred {
                         render! { Icon { class: "mx-0.5 h-3 w-3 text-yellow-500", icon: BsStar } }
                     }
@@ -525,11 +487,7 @@ fn TodoistNotificationDisplay<'a>(
     notif: &'a NotificationWithTask,
     todoist_task: TodoistItem,
 ) -> Element {
-    let notification_source_url = notif
-        .source_html_url
-        .as_ref()
-        .map(|url| url.to_string())
-        .unwrap_or_else(|| "https://todoist.com/app".to_string());
+    let title = markdown::to_html(&notif.title);
     let task_icon_style = match todoist_task.priority {
         TodoistItemPriority::P1 => "",
         TodoistItemPriority::P2 => "text-yellow-500",
@@ -546,11 +504,7 @@ fn TodoistNotificationDisplay<'a>(
             div {
                 class: "flex flex-col grow",
 
-                a {
-                    href: "{notification_source_url}",
-                    target: "_blank",
-                    "{notif.title}"
-                }
+                span { dangerous_inner_html: "{title}" }
                 div {
                     class: "flex gap-2",
 

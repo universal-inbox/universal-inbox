@@ -60,7 +60,7 @@ pub fn NavBar(cx: Scope) -> Element {
 
     render! {
         div {
-            class: "navbar shadow-lg z-10",
+            class: "navbar shadow-lg z-10 h-12",
 
             div {
                 class: "navbar-start",

@@ -234,14 +234,14 @@ fn setup_key_bindings(
 
 fn select_notification(ui_model: &mut UniversalInboxUIModel, index: usize) -> Result<()> {
     ui_model.selected_notification_index = index;
-    let notification_page = get_element_by_id("notifications-page")
-        .context("Unable to find `notifications-page` element")?;
-    let row_height = notification_page
+    let notifications_list = get_element_by_id("notifications-list")
+        .context("Unable to find `notifications-list` element")?;
+    let row_height = notifications_list
         .query_selector("tr")
         .map_err(|_| anyhow!("Unable to find a `tr` element in the notification page"))?
         .context("Unable to find a `tr` element in the notification page")?
         .client_height();
     let target_scroll = row_height * index as i32;
-    notification_page.set_scroll_top(target_scroll);
+    notifications_list.set_scroll_top(target_scroll);
     Ok(())
 }
