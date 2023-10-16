@@ -102,7 +102,10 @@ pub fn NotificationsPage(cx: Scope) -> Element {
                             div {
                                 class: "h-full basis-1/3 overflow-auto scroll-auto px-2 py-2 flex flex-row",
 
-                                NotificationPreview { notification: notification }
+                                NotificationPreview {
+                                    notification: notification,
+                                    ui_model_ref: ui_model_ref.clone()
+                                }
                             }
                         }
                     }

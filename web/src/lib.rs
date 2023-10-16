@@ -16,7 +16,7 @@ use web_sys::KeyboardEvent;
 use universal_inbox::notification::NotificationWithTask;
 
 use config::{get_api_base_url, get_app_config, APP_CONFIG};
-use model::{UniversalInboxUIModel, UI_MODEL};
+use model::{PreviewPane, UniversalInboxUIModel, UI_MODEL};
 use route::Route;
 use services::{
     integration_connection_service::{integration_connnection_service, INTEGRATION_CONNECTIONS},
@@ -184,6 +184,22 @@ fn setup_key_bindings(
                                 "Failed to select notification {new_selected_notification_index}"
                             )
                         });
+                }
+                "ArrowRight"
+                    if ui_model_ref.read().selected_preview_pane == PreviewPane::Notification
+                        && selected_notification
+                            .map(|notif| notif.task.is_some())
+                            .unwrap_or_default() =>
+                {
+                    ui_model_ref.write().selected_preview_pane = PreviewPane::Task;
+                }
+                "ArrowLeft"
+                    if ui_model_ref.read().selected_preview_pane == PreviewPane::Task
+                        && !selected_notification
+                            .map(|notif| notif.is_built_from_task())
+                            .unwrap_or_default() =>
+                {
+                    ui_model_ref.write().selected_preview_pane = PreviewPane::Notification;
                 }
                 "d" => {
                     if let Some(notification) = selected_notification {

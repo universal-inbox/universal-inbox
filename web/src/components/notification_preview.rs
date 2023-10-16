@@ -14,6 +14,7 @@ use dioxus_free_icons::{
     Icon,
 };
 
+use fermi::UseAtomRef;
 use universal_inbox::{
     notification::{
         integrations::{
@@ -24,7 +25,7 @@ use universal_inbox::{
             },
             linear::{LinearIssue, LinearNotification},
         },
-        NotificationMetadata, NotificationWithTask,
+        NotificationId, NotificationMetadata, NotificationWithTask,
     },
     task::{
         integrations::todoist::{TodoistItem, TodoistItemPriority},
@@ -33,70 +34,139 @@ use universal_inbox::{
     HasHtmlUrl,
 };
 
-use crate::components::icons::Mail;
+use crate::{
+    components::icons::{Github, GoogleMail, Linear, Mail, Todoist},
+    model::{PreviewPane, UniversalInboxUIModel},
+};
 
 #[inline_props]
-pub fn NotificationPreview<'a>(cx: Scope, notification: &'a NotificationWithTask) -> Element {
-    match &notification.metadata {
-        NotificationMetadata::Github(github_notification) => render! {
-            GithubNotificationPreview {
-                notification: notification,
-                github_notification: github_notification.clone(),
-            }
-        },
-        NotificationMetadata::Linear(linear_notification) => render! {
-            LinearNotificationPreview {
-                notification: notification,
-                linear_notification: linear_notification.clone()
-            }
-        },
-        NotificationMetadata::GoogleMail(google_mail_thread) => render! {
-            GoogleMailThreadPreview {
-                notification: notification,
-                google_mail_thread: google_mail_thread.clone()
-            }
-        },
-        NotificationMetadata::Todoist => {
-            if let Some(task) = &notification.task {
-                match &task.metadata {
-                    TaskMetadata::Todoist(todoist_task) => render! {
-                        TodoistTaskPreview {
-                            notification: notification,
-                            task: task,
-                            todoist_task: todoist_task.clone(),
-                        }
-                    },
+pub fn NotificationPreview<'a>(
+    cx: Scope,
+    ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
+    notification: &'a NotificationWithTask,
+) -> Element {
+    let is_help_enabled = ui_model_ref.read().is_help_enabled;
+    let (notification_preview, notification_icon) = match &notification.metadata {
+        NotificationMetadata::Github(github_notification) => (
+            render! {
+                GithubNotificationPreview {
+                    notification: notification,
+                    github_notification: github_notification.clone(),
                 }
-            } else {
-                render! { DefaultNotificationPreview { notification: notification } }
-            }
-        }
-    }
-}
+            },
+            render! { Github { class: "h-5 w-5" } },
+        ),
+        NotificationMetadata::Linear(linear_notification) => (
+            render! {
+                LinearNotificationPreview {
+                    notification: notification,
+                    linear_notification: linear_notification.clone()
+                }
+            },
+            render! { Linear { class: "h-5 w-5" } },
+        ),
+        NotificationMetadata::GoogleMail(google_mail_thread) => (
+            render! {
+                GoogleMailThreadPreview {
+                    notification: notification,
+                    google_mail_thread: google_mail_thread.clone()
+                }
+            },
+            render! { GoogleMail { class: "h-5 w-5" } },
+        ),
+        _ => (None, None),
+    };
 
-#[inline_props]
-fn DefaultNotificationPreview<'a>(cx: Scope, notification: &'a NotificationWithTask) -> Element {
-    let link = notification.get_html_url();
+    let (task_preview, task_icon) = if let Some(task) = &notification.task {
+        match &task.metadata {
+            TaskMetadata::Todoist(todoist_task) => (
+                render! {
+                    TodoistTaskPreview {
+                        notification: notification,
+                        task: task,
+                        todoist_task: todoist_task.clone(),
+                    }
+                },
+                render! { Todoist { class: "h-5 w-5" } },
+            ),
+        }
+    } else {
+        (None, None)
+    };
+
+    let latest_shown_notification_id = use_state(cx, || None::<NotificationId>);
+    // reset selected_preview_pane when showing another notification
+    if *latest_shown_notification_id != Some(notification.id) {
+        ui_model_ref.write().selected_preview_pane = if notification_preview.is_some() {
+            PreviewPane::Notification
+        } else {
+            PreviewPane::Task
+        };
+        latest_shown_notification_id.set(Some(notification.id));
+    }
+
+    let tab_width_style = if notification_preview.is_some() && task_preview.is_some() {
+        "w-1/2"
+    } else {
+        "w-full"
+    };
+    let (notification_tab_style, task_tab_style) =
+        if ui_model_ref.read().selected_preview_pane == PreviewPane::Notification {
+            ("tab-active", "")
+        } else {
+            ("", "tab-active")
+        };
+    let (notification_shortcut_visibility_style, task_shortcut_visibility_style) =
+        if is_help_enabled && notification_preview.is_some() && task_preview.is_some() {
+            if ui_model_ref.read().selected_preview_pane == PreviewPane::Notification {
+                ("invisible", "visible")
+            } else {
+                ("visible", "invisible")
+            }
+        } else {
+            ("invisible", "invisible")
+        };
 
     render! {
         div {
-            class: "flex flex-row gap-2 w-full divide-y divide-base-200",
+            class: "flex flex-col gap-4 w-full",
 
-            h2 {
-                class: "flex items-center gap-2 text-lg",
+            div {
+                class: "tabs w-full",
 
-                a {
-                    class: "flex",
-                    href: "{link}",
-                    target: "_blank",
-                    "{notification.title}"
+                if notification_preview.is_some() {
+                    render! {
+                        button {
+                            class: "tab tab-bordered {tab_width_style} {notification_tab_style} flex gap-2",
+                            onclick: move |_| { ui_model_ref.write().selected_preview_pane = PreviewPane::Notification },
+                            notification_icon
+                            "Notification"
+                        }
+                    }
                 }
-                a {
-                    class: "flex-none",
-                    href: "{link}",
-                    target: "_blank",
-                    Icon { class: "h-5 w-5 text-gray-400 p-1", icon: BsArrowUpRightSquare }
+                if task_preview.is_some() {
+                    render! {
+                        button {
+                            class: "tab tab-bordered {tab_width_style} {task_tab_style} flex gap-2 indicator",
+                            onclick: move |_| { ui_model_ref.write().selected_preview_pane = PreviewPane::Task },
+                            span {
+                                class: "{task_shortcut_visibility_style} indicator-item indicator-top indicator-start badge text-xs text-gray-400 z-50",
+                                "▶︎"
+                            }
+                            span {
+                                class: "{notification_shortcut_visibility_style} indicator-item indicator-top indicator-start badge text-xs text-gray-400 z-50",
+                                "◀︎"
+                            }
+                            task_icon
+                            "Task"
+                        }
+                    }
                 }
+            }
+
+            match ui_model_ref.read().selected_preview_pane {
+                PreviewPane::Notification => notification_preview,
+                PreviewPane::Task => task_preview,
             }
         }
     }
