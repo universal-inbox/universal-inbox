@@ -69,6 +69,7 @@ pub fn NotificationsList<'a>(
                         Notification {
                             notif: notif,
                             selected: is_selected,
+                            show_shortcut: is_help_enabled,
                             notification_index: i,
                             ui_model_ref: ui_model_ref,
 
@@ -143,6 +144,7 @@ pub fn NotificationsList<'a>(
                         Notification {
                             notif: notif,
                             selected: is_selected,
+                            show_shortcut: is_help_enabled,
                             notification_index: i,
                             ui_model_ref: ui_model_ref,
 
@@ -198,6 +200,7 @@ fn Notification<'a>(
     notif: &'a NotificationWithTask,
     notification_index: usize,
     selected: bool,
+    show_shortcut: bool,
     ui_model_ref: &'a UseAtomRef<UniversalInboxUIModel>,
     children: Element<'a>,
 ) -> Element {
@@ -228,7 +231,7 @@ fn Notification<'a>(
                 }
             },
 
-            NotificationDisplay { notif: notif, selected: *selected, children }
+            NotificationDisplay { notif: notif, selected: *selected, show_shortcut: *show_shortcut, children }
         }
     }
 }
@@ -238,8 +241,14 @@ fn NotificationDisplay<'a>(
     cx: Scope,
     notif: &'a NotificationWithTask,
     selected: bool,
+    show_shortcut: bool,
     children: Element<'a>,
 ) -> Element {
+    let shortcut_visibility_style = if *selected && *show_shortcut {
+        "visible"
+    } else {
+        "invisible"
+    };
     // tag: New notification integration
     let icon = match notif.metadata {
         NotificationMetadata::Github(_) => render! { Github { class: "h-5 w-5" } },
@@ -260,7 +269,16 @@ fn NotificationDisplay<'a>(
 
     render! {
         td {
-            class: "px-2 py-0 rounded-none relative",
+            class: "flex items-center px-2 py-0 rounded-none relative h-12 indicator",
+            span {
+                class: "{shortcut_visibility_style} indicator-item indicator-top indicator-start badge text-xs text-gray-400 z-50",
+                "▲"
+            }
+            span {
+                class: "{shortcut_visibility_style} indicator-item indicator-bottom indicator-start badge text-xs text-gray-400 z-50",
+                "▼"
+            }
+
             div { class: "flex justify-center", icon }
             if let Some(ref task) = notif.task {
                 render! { TaskHint { task: task } }

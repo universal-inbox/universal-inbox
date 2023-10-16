@@ -12,6 +12,7 @@ pub struct UniversalInboxUIModel {
     pub unhover_element: bool,
     pub authentication_state: AuthenticationState,
     pub loaded_notifications: Option<Result<usize, String>>,
+    pub selected_preview_pane: PreviewPane,
 }
 
 impl UniversalInboxUIModel {
@@ -53,4 +54,11 @@ impl AuthenticationState {
         }
         .to_string()
     }
+}
+
+#[derive(Debug, Default, PartialEq)]
+pub enum PreviewPane {
+    #[default]
+    Notification,
+    Task,
 }
