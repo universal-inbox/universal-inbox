@@ -115,8 +115,11 @@ async fn main() -> std::io::Result<()> {
             commands::sync::sync_tasks_for_all_users(task_service, *source).await
         }
         Commands::Serve => {
-            let listener = TcpListener::bind(format!("0.0.0.0:{}", settings.application.port))
-                .expect("Failed to bind port");
+            let listener = TcpListener::bind(format!(
+                "{}:{}",
+                settings.application.listen_address, settings.application.listen_port
+            ))
+            .expect("Failed to bind port");
 
             let _ = run(
                 listener,

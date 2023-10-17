@@ -49,7 +49,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     let app = authenticated_app.await;
     let existing_todoist_task = create_task_from_todoist_item(
         &app.client,
-        &app.app_address,
+        &app.api_address,
         &todoist_item,
         "Project2".to_string(),
         app.user.id,
@@ -57,7 +57,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     .await;
     let existing_notification: Box<Notification> = create_resource(
         &app.client,
-        &app.app_address,
+        &app.api_address,
         "notifications",
         Box::new(Notification {
             id: Uuid::new_v4().into(),
@@ -93,7 +93,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
 
     let notifications: Vec<Notification> = sync_notifications(
         &app.client,
-        &app.app_address,
+        &app.api_address,
         Some(NotificationSourceKind::Github),
         false,
     )
@@ -106,7 +106,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
 
     let updated_notification: Box<Notification> = get_resource(
         &app.client,
-        &app.app_address,
+        &app.api_address,
         "notifications",
         existing_notification.id.into(),
     )
@@ -153,7 +153,7 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
     for github_notification in sync_github_notifications.iter() {
         create_notification_from_github_notification(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             github_notification,
             app.user.id,
         )
@@ -162,7 +162,7 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
     // to be deleted during sync
     let existing_notification: Box<Notification> = create_resource(
         &app.client,
-        &app.app_address,
+        &app.api_address,
         "notifications",
         Box::new(Notification {
             id: Uuid::new_v4().into(),
@@ -198,7 +198,7 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
 
     let notifications: Vec<Notification> = sync_notifications(
         &app.client,
-        &app.app_address,
+        &app.api_address,
         Some(NotificationSourceKind::Github),
         false,
     )
@@ -211,7 +211,7 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
 
     let deleted_notification: Box<Notification> = get_resource(
         &app.client,
-        &app.app_address,
+        &app.api_address,
         "notifications",
         existing_notification.id.into(),
     )
@@ -232,7 +232,7 @@ async fn test_sync_all_notifications_asynchronously(
     let app = authenticated_app.await;
     let _existing_notification: Box<Notification> = create_resource(
         &app.client,
-        &app.app_address,
+        &app.api_address,
         "notifications",
         Box::new(Notification {
             id: Uuid::new_v4().into(),
@@ -269,7 +269,7 @@ async fn test_sync_all_notifications_asynchronously(
     let unauthenticated_client = reqwest::Client::new();
     let response = sync_notifications_response(
         &unauthenticated_client,
-        &app.app_address,
+        &app.api_address,
         Some(NotificationSourceKind::Github),
         true, // asynchronously
     )
@@ -279,7 +279,7 @@ async fn test_sync_all_notifications_asynchronously(
 
     let result = list_notifications(
         &app.client,
-        &app.app_address,
+        &app.api_address,
         vec![NotificationStatus::Read],
         false,
         None,
@@ -293,7 +293,7 @@ async fn test_sync_all_notifications_asynchronously(
     let synchronized = loop {
         let result = list_notifications(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             vec![NotificationStatus::Read],
             false,
             None,
@@ -329,7 +329,7 @@ async fn test_sync_all_notifications_asynchronously(
     let unauthenticated_client = reqwest::Client::new();
     let response = sync_notifications_response(
         &unauthenticated_client,
-        &app.app_address,
+        &app.api_address,
         Some(NotificationSourceKind::Github),
         true, // asynchronously
     )
@@ -341,7 +341,7 @@ async fn test_sync_all_notifications_asynchronously(
 
     let result = list_notifications(
         &app.client,
-        &app.app_address,
+        &app.api_address,
         vec![NotificationStatus::Read],
         false,
         None,
@@ -374,7 +374,7 @@ async fn test_sync_all_notifications_with_no_validated_integration_connections(
 
     let response = sync_notifications_response(
         &app.client,
-        &app.app_address,
+        &app.api_address,
         Some(NotificationSourceKind::Github),
         false, // synchronously
     )
@@ -409,7 +409,7 @@ async fn test_sync_all_notifications_asynchronously_in_error(
     let unauthenticated_client = reqwest::Client::new();
     let response = sync_notifications_response(
         &unauthenticated_client,
-        &app.app_address,
+        &app.api_address,
         Some(NotificationSourceKind::Github),
         true, // asynchronously
     )
@@ -421,7 +421,7 @@ async fn test_sync_all_notifications_asynchronously_in_error(
 
     let result = list_notifications(
         &app.client,
-        &app.app_address,
+        &app.api_address,
         vec![NotificationStatus::Read],
         false,
         None,

@@ -1423,6 +1423,11 @@ dependencies = [
 ]
 
 [[package]]
+name = "csp"
+version = "1.1.0"
+source = "git+https://github.com/dax/CSP-rs?rev=bc58cceb983207caef08c3a5981a10f28ffacf6c#bc58cceb983207caef08c3a5981a10f28ffacf6c"
+
+[[package]]
 name = "csv"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5922,6 +5927,7 @@ dependencies = [
  "clap",
  "color-backtrace",
  "config",
+ "csp",
  "enum_derive",
  "format_serde_error",
  "futures",

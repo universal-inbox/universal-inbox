@@ -34,7 +34,7 @@ mod list_integration_connections {
         #[future] authenticated_app: AuthenticatedApp,
     ) {
         let app = authenticated_app.await;
-        let result = list_integration_connections(&app.client, &app.app_address).await;
+        let result = list_integration_connections(&app.client, &app.api_address).await;
 
         assert!(result.is_empty());
     }
@@ -48,7 +48,7 @@ mod list_integration_connections {
         let app = authenticated_app.await;
         let integration_connection1: Box<IntegrationConnection> = create_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "integration-connections",
             Box::new(IntegrationConnectionCreation {
                 provider_kind: IntegrationProviderKind::Github,
@@ -57,7 +57,7 @@ mod list_integration_connections {
         .await;
         let integration_connection2: Box<IntegrationConnection> = create_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "integration-connections",
             Box::new(IntegrationConnectionCreation {
                 provider_kind: IntegrationProviderKind::Todoist,
@@ -65,7 +65,7 @@ mod list_integration_connections {
         )
         .await;
 
-        let result = list_integration_connections(&app.client, &app.app_address).await;
+        let result = list_integration_connections(&app.client, &app.api_address).await;
 
         assert_eq!(result.len(), 2);
         assert_eq!(result[0], *integration_connection1);
@@ -75,7 +75,7 @@ mod list_integration_connections {
         let (client, _user) =
             authenticate_user(&tested_app.await, "5678", "Jane", "Doe", "jane@example.com").await;
 
-        let result = list_integration_connections(&client, &app.app_address).await;
+        let result = list_integration_connections(&client, &app.api_address).await;
 
         assert_eq!(result.len(), 0);
     }
@@ -92,7 +92,7 @@ mod create_integration_connections {
 
         let integration_connection: Box<IntegrationConnection> = create_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "integration-connections",
             Box::new(IntegrationConnectionCreation {
                 provider_kind: IntegrationProviderKind::Github,
@@ -126,7 +126,7 @@ mod verify_integration_connections {
         let app = authenticated_app.await;
         let integration_connection: Box<IntegrationConnection> = create_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "integration-connections",
             Box::new(IntegrationConnectionCreation {
                 provider_kind: IntegrationProviderKind::Github,
@@ -148,7 +148,7 @@ mod verify_integration_connections {
         );
 
         let result: IntegrationConnection =
-            verify_integration_connection(&app.client, &app.app_address, integration_connection.id)
+            verify_integration_connection(&app.client, &app.api_address, integration_connection.id)
                 .await;
 
         assert_eq!(result.status, IntegrationConnectionStatus::Validated);
@@ -157,7 +157,7 @@ mod verify_integration_connections {
 
         // Verifying again should keep validating the status with Nango and return the connection
         let result: IntegrationConnection =
-            verify_integration_connection(&app.client, &app.app_address, integration_connection.id)
+            verify_integration_connection(&app.client, &app.api_address, integration_connection.id)
                 .await;
 
         assert_eq!(result.status, IntegrationConnectionStatus::Validated);
@@ -174,7 +174,7 @@ mod verify_integration_connections {
 
         let response = verify_integration_connection_response(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             Uuid::new_v4().into(),
         )
         .await;
@@ -192,7 +192,7 @@ mod verify_integration_connections {
         let app = authenticated_app.await;
         let integration_connection: Box<IntegrationConnection> = create_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "integration-connections",
             Box::new(IntegrationConnectionCreation {
                 provider_kind: IntegrationProviderKind::Github,
@@ -216,7 +216,7 @@ mod verify_integration_connections {
         );
 
         let result: IntegrationConnection =
-            verify_integration_connection(&app.client, &app.app_address, integration_connection.id)
+            verify_integration_connection(&app.client, &app.api_address, integration_connection.id)
                 .await;
 
         assert_eq!(result.status, IntegrationConnectionStatus::Validated);
@@ -238,7 +238,7 @@ mod verify_integration_connections {
         });
 
         let result: IntegrationConnection =
-            verify_integration_connection(&app.client, &app.app_address, integration_connection.id)
+            verify_integration_connection(&app.client, &app.api_address, integration_connection.id)
                 .await;
 
         assert_eq!(result.status, IntegrationConnectionStatus::Failing);
@@ -265,7 +265,7 @@ mod verify_integration_connections {
         );
 
         let result: IntegrationConnection =
-            verify_integration_connection(&app.client, &app.app_address, integration_connection.id)
+            verify_integration_connection(&app.client, &app.api_address, integration_connection.id)
                 .await;
 
         assert_eq!(result.status, IntegrationConnectionStatus::Validated);
@@ -282,7 +282,7 @@ mod verify_integration_connections {
         let app = authenticated_app.await;
         let integration_connection: Box<IntegrationConnection> = create_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "integration-connections",
             Box::new(IntegrationConnectionCreation {
                 provider_kind: IntegrationProviderKind::Github,
@@ -294,7 +294,7 @@ mod verify_integration_connections {
             authenticate_user(&tested_app.await, "5678", "Jane", "Doe", "jane@example.com").await;
         let response = verify_integration_connection_response(
             &client,
-            &app.app_address,
+            &app.api_address,
             integration_connection.id,
         )
         .await;
@@ -344,7 +344,7 @@ mod disconnect_integration_connections {
 
         let disconnected_connection: Box<IntegrationConnection> = delete_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "integration-connections",
             integration_connection.id.into(),
         )
@@ -387,7 +387,7 @@ mod disconnect_integration_connections {
 
         let disconnected_connection: Box<IntegrationConnection> = delete_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "integration-connections",
             integration_connection.id.into(),
         )

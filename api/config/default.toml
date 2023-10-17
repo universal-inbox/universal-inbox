@@ -1,6 +1,7 @@
 [application]
 environment = "default"
-port = 8000
+listen_address = "0.0.0.0"
+listen_port = 8000
 api_path = ""
 front_base_url = "http://localhost:8080"
 # If `static_path` is specified, statics from `static_dir` will be served on `static_path`

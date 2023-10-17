@@ -297,14 +297,14 @@ pub fn assert_sync_items(
 
 pub async fn create_task_from_todoist_item(
     client: &Client,
-    app_address: &str,
+    api_address: &str,
     todoist_item: &TodoistItem,
     project: String,
     user_id: UserId,
 ) -> Box<TaskCreationResult> {
     create_resource(
         client,
-        app_address,
+        api_address,
         "tasks",
         Box::new(Task {
             id: Uuid::new_v4().into(),

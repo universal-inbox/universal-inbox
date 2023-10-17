@@ -70,7 +70,7 @@ mod create_task {
 
         let creation_result: Box<TaskCreationResult> = create_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "tasks",
             expected_minimal_task.clone(),
         )
@@ -84,7 +84,7 @@ mod create_task {
 
         let task = get_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "tasks",
             creation_result.task.id.into(),
         )
@@ -93,7 +93,7 @@ mod create_task {
 
         let result = list_notifications_with_tasks(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             vec![NotificationStatus::Unread],
             false,
             Some(creation_result.task.id),
@@ -140,7 +140,7 @@ mod create_task {
 
         let creation_result: Box<TaskCreationResult> = create_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "tasks",
             expected_task.clone(),
         )
@@ -151,7 +151,7 @@ mod create_task {
 
         let task = get_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "tasks",
             creation_result.task.id.into(),
         )
@@ -161,7 +161,7 @@ mod create_task {
 
         let result = list_notifications_with_tasks(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             vec![NotificationStatus::Unread],
             false,
             Some(creation_result.task.id),
@@ -200,7 +200,7 @@ mod create_task {
 
         let response = create_resource_response(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "tasks",
             expected_task.clone(),
         )
@@ -238,7 +238,7 @@ mod create_task {
         });
 
         let response =
-            create_resource_response(&app.client, &app.app_address, "tasks", task_done.clone())
+            create_resource_response(&app.client, &app.api_address, "tasks", task_done.clone())
                 .await;
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
@@ -277,7 +277,7 @@ mod create_task {
 
         let creation_result: Box<TaskCreationResult> = create_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "tasks",
             expected_task.clone(),
         )
@@ -286,7 +286,7 @@ mod create_task {
         assert_eq!(creation_result.task, *expected_task);
 
         let response =
-            create_resource_response(&app.client, &app.app_address, "tasks", expected_task).await;
+            create_resource_response(&app.client, &app.api_address, "tasks", expected_task).await;
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
         let body = response.text().await.expect("Cannot get response body");
@@ -309,7 +309,7 @@ mod get_task {
         let unknown_task_id = Uuid::new_v4();
 
         let response =
-            get_resource_response(&app.client, &app.app_address, "tasks", unknown_task_id).await;
+            get_resource_response(&app.client, &app.api_address, "tasks", unknown_task_id).await;
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
         let body = response.text().await.expect("Cannot get response body");
@@ -330,7 +330,7 @@ mod get_task {
 
         let creation_result = create_task_from_todoist_item(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             &todoist_item,
             "Inbox".to_string(),
             app.user.id,
@@ -340,7 +340,7 @@ mod get_task {
 
         let (client, _user) =
             authenticate_user(&tested_app.await, "5678", "Jane", "Doe", "jane@example.com").await;
-        let response = get_resource_response(&client, &app.app_address, "tasks", task_id).await;
+        let response = get_resource_response(&client, &app.api_address, "tasks", task_id).await;
 
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
         let body = response.text().await.expect("Cannot get response body");
@@ -363,7 +363,7 @@ mod list_tasks {
     #[tokio::test]
     async fn test_empty_list_tasks(#[future] authenticated_app: AuthenticatedApp) {
         let app = authenticated_app.await;
-        let tasks = list_tasks(&app.client, &app.app_address, TaskStatus::Active).await;
+        let tasks = list_tasks(&app.client, &app.api_address, TaskStatus::Active).await;
 
         assert!(tasks.is_empty());
     }
@@ -378,7 +378,7 @@ mod list_tasks {
         let app = authenticated_app.await;
         let task_active = create_task_from_todoist_item(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             &todoist_item,
             "Inbox".to_string(),
             app.user.id,
@@ -393,7 +393,7 @@ mod list_tasks {
 
         let task_done = create_task_from_todoist_item(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             &todoist_item_done,
             "Inbox".to_string(),
             app.user.id,
@@ -401,12 +401,12 @@ mod list_tasks {
         .await;
         assert_eq!(task_done.task.status, TaskStatus::Done);
 
-        let tasks = list_tasks(&app.client, &app.app_address, TaskStatus::Active).await;
+        let tasks = list_tasks(&app.client, &app.api_address, TaskStatus::Active).await;
 
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0], task_active.task);
 
-        let tasks = list_tasks(&app.client, &app.app_address, TaskStatus::Done).await;
+        let tasks = list_tasks(&app.client, &app.api_address, TaskStatus::Done).await;
 
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0], task_done.task);
@@ -415,7 +415,7 @@ mod list_tasks {
         let (client, _user) =
             authenticate_user(&tested_app.await, "5678", "Jane", "Doe", "jane@example.com").await;
 
-        let result = list_tasks(&client, &app.app_address, TaskStatus::Done).await;
+        let result = list_tasks(&client, &app.api_address, TaskStatus::Done).await;
 
         assert_eq!(result.len(), 0);
     }
@@ -435,7 +435,7 @@ mod patch_task {
 
         let creation_result = create_task_from_todoist_item(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             &todoist_item,
             "Inbox".to_string(),
             app.user.id,
@@ -444,7 +444,7 @@ mod patch_task {
 
         let response = patch_resource_response(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "tasks",
             creation_result.task.id.into(),
             &TaskPatch {
@@ -468,7 +468,7 @@ mod patch_task {
 
         let creation_result = create_task_from_todoist_item(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             &todoist_item,
             "Inbox".to_string(),
             app.user.id,
@@ -479,7 +479,7 @@ mod patch_task {
 
         let response = patch_resource_response(
             &client,
-            &app.app_address,
+            &app.api_address,
             "tasks",
             creation_result.task.id.into(),
             &TaskPatch {
@@ -501,7 +501,7 @@ mod patch_task {
         let app = authenticated_app.await;
         let creation_result = create_task_from_todoist_item(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             &todoist_item,
             "Inbox".to_string(),
             app.user.id,
@@ -510,7 +510,7 @@ mod patch_task {
 
         let response = patch_resource_response(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "tasks",
             creation_result.task.id.into(),
             &TaskPatch {
@@ -542,7 +542,7 @@ mod patch_task {
 
         let response = patch_resource_response(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "tasks",
             unknown_task_id,
             &TaskPatch {
@@ -572,7 +572,7 @@ mod search_tasks {
     #[tokio::test]
     async fn test_empty_search_tasks(#[future] authenticated_app: AuthenticatedApp) {
         let app = authenticated_app.await;
-        let tasks = search_tasks(&app.client, &app.app_address, "").await;
+        let tasks = search_tasks(&app.client, &app.api_address, "").await;
 
         assert!(tasks.is_empty());
     }
@@ -587,7 +587,7 @@ mod search_tasks {
         let app = authenticated_app.await;
         let task1 = create_task_from_todoist_item(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             &todoist_item,
             "Inbox".to_string(),
             app.user.id,
@@ -602,7 +602,7 @@ mod search_tasks {
 
         let task2 = create_task_from_todoist_item(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             &other_todoist_item,
             "Inbox".to_string(),
             app.user.id,
@@ -611,24 +611,24 @@ mod search_tasks {
         assert_eq!(task2.task.title, "Other todo".to_string());
 
         // Search by task title
-        let tasks = search_tasks(&app.client, &app.app_address, "Task").await;
+        let tasks = search_tasks(&app.client, &app.api_address, "Task").await;
 
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0].id, task1.task.id);
 
-        let tasks = search_tasks(&app.client, &app.app_address, "todo").await;
+        let tasks = search_tasks(&app.client, &app.api_address, "todo").await;
 
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0].id, task2.task.id);
 
         // Search by task description
-        let tasks = search_tasks(&app.client, &app.app_address, "form").await;
+        let tasks = search_tasks(&app.client, &app.api_address, "form").await;
 
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0].id, task2.task.id);
 
         // Search by task tags
-        let tasks = search_tasks(&app.client, &app.app_address, "Food").await;
+        let tasks = search_tasks(&app.client, &app.api_address, "Food").await;
 
         assert_eq!(tasks.len(), 2);
         assert!(tasks.iter().any(|t| t.id == task1.task.id));
@@ -638,7 +638,7 @@ mod search_tasks {
         let (client, _user) =
             authenticate_user(&tested_app.await, "5678", "Jane", "Doe", "jane@example.com").await;
 
-        let result = search_tasks(&client, &app.app_address, "Task").await;
+        let result = search_tasks(&client, &app.api_address, "Task").await;
 
         assert_eq!(result.len(), 0);
     }
@@ -672,7 +672,7 @@ mod search_projects {
             None,
         );
 
-        let projects = search_projects(&app.client, &app.app_address, "in").await;
+        let projects = search_projects(&app.client, &app.api_address, "in").await;
 
         assert_eq!(projects.len(), 1);
         assert_eq!(
@@ -682,7 +682,7 @@ mod search_projects {
                 name: "Inbox".to_string()
             }
         );
-        let projects = search_projects(&app.client, &app.app_address, "box").await;
+        let projects = search_projects(&app.client, &app.api_address, "box").await;
 
         assert_eq!(projects.len(), 1);
         assert_eq!(
@@ -693,7 +693,7 @@ mod search_projects {
             }
         );
 
-        let projects = search_projects(&app.client, &app.app_address, "jec").await;
+        let projects = search_projects(&app.client, &app.api_address, "jec").await;
 
         assert_eq!(projects.len(), 1);
         assert_eq!(

@@ -3,12 +3,12 @@ use uuid::Uuid;
 
 pub async fn get_resource_response(
     client: &Client,
-    app_address: &str,
+    api_address: &str,
     resource_name: &str,
     id: uuid::Uuid,
 ) -> Response {
     client
-        .get(&format!("{app_address}/{resource_name}/{id}"))
+        .get(&format!("{api_address}/{resource_name}/{id}"))
         .send()
         .await
         .expect("Failed to execute request")
@@ -16,11 +16,11 @@ pub async fn get_resource_response(
 
 pub async fn get_resource<T: serde::Serialize + for<'a> serde::Deserialize<'a>>(
     client: &Client,
-    app_address: &str,
+    api_address: &str,
     resource_name: &str,
     id: uuid::Uuid,
 ) -> Box<T> {
-    get_resource_response(client, app_address, resource_name, id)
+    get_resource_response(client, api_address, resource_name, id)
         .await
         .json()
         .await
@@ -29,12 +29,12 @@ pub async fn get_resource<T: serde::Serialize + for<'a> serde::Deserialize<'a>>(
 
 pub async fn create_resource_response<T: serde::Serialize>(
     client: &Client,
-    app_address: &str,
+    api_address: &str,
     resource_name: &str,
     resource: Box<T>,
 ) -> Response {
     client
-        .post(&format!("{app_address}/{resource_name}"))
+        .post(&format!("{api_address}/{resource_name}"))
         .json(&*resource)
         .send()
         .await
@@ -43,11 +43,11 @@ pub async fn create_resource_response<T: serde::Serialize>(
 
 pub async fn create_resource<T: serde::Serialize, U: for<'a> serde::Deserialize<'a>>(
     client: &Client,
-    app_address: &str,
+    api_address: &str,
     resource_name: &str,
     resource: Box<T>,
 ) -> Box<U> {
-    create_resource_response(client, app_address, resource_name, resource)
+    create_resource_response(client, api_address, resource_name, resource)
         .await
         .json()
         .await
@@ -56,13 +56,13 @@ pub async fn create_resource<T: serde::Serialize, U: for<'a> serde::Deserialize<
 
 pub async fn patch_resource_response<P: serde::Serialize>(
     client: &Client,
-    app_address: &str,
+    api_address: &str,
     resource_name: &str,
     id: Uuid,
     patch: &P,
 ) -> Response {
     client
-        .patch(&format!("{app_address}/{resource_name}/{id}"))
+        .patch(&format!("{api_address}/{resource_name}/{id}"))
         .json(patch)
         .send()
         .await
@@ -71,12 +71,12 @@ pub async fn patch_resource_response<P: serde::Serialize>(
 
 pub async fn patch_resource<P: serde::Serialize, T: for<'a> serde::Deserialize<'a>>(
     client: &Client,
-    app_address: &str,
+    api_address: &str,
     resource_name: &str,
     id: Uuid,
     patch: &P,
 ) -> Box<T> {
-    patch_resource_response(client, app_address, resource_name, id, patch)
+    patch_resource_response(client, api_address, resource_name, id, patch)
         .await
         .json()
         .await
@@ -85,12 +85,12 @@ pub async fn patch_resource<P: serde::Serialize, T: for<'a> serde::Deserialize<'
 
 pub async fn delete_resource_response(
     client: &Client,
-    app_address: &str,
+    api_address: &str,
     resource_name: &str,
     id: uuid::Uuid,
 ) -> Response {
     client
-        .delete(&format!("{app_address}/{resource_name}/{id}"))
+        .delete(&format!("{api_address}/{resource_name}/{id}"))
         .send()
         .await
         .expect("Failed to execute request")
@@ -98,11 +98,11 @@ pub async fn delete_resource_response(
 
 pub async fn delete_resource<T: serde::Serialize + for<'a> serde::Deserialize<'a>>(
     client: &Client,
-    app_address: &str,
+    api_address: &str,
     resource_name: &str,
     id: uuid::Uuid,
 ) -> Box<T> {
-    delete_resource_response(client, app_address, resource_name, id)
+    delete_resource_response(client, api_address, resource_name, id)
         .await
         .json()
         .await

@@ -49,7 +49,7 @@ mod patch_notification {
 
         let existing_todoist_task_creation = create_task_from_todoist_item(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             &todoist_item,
             "Inbox".to_string(),
             app.user.id,
@@ -65,7 +65,7 @@ mod patch_notification {
 
         let patched_notification = patch_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             existing_todoist_notification.id.into(),
             &NotificationPatch {
@@ -86,7 +86,7 @@ mod patch_notification {
 
         let deleted_task: Box<Task> = get_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "tasks",
             existing_todoist_task.id.into(),
         )
@@ -113,7 +113,7 @@ mod patch_notification {
         });
         let created_notification: Box<Notification> = create_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             expected_notification.clone(),
         )
@@ -123,7 +123,7 @@ mod patch_notification {
 
         let response = patch_resource_response(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             created_notification.id.into(),
             &NotificationPatch {

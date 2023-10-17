@@ -1,5 +1,8 @@
 [application]
 environment = "test"
+api_path = "/api"
+static_path = ""
+static_dir = "tests/api/statics"
 
 [application.observability.logging]
 log_directive = "debug"
