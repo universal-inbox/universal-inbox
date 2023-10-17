@@ -44,7 +44,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     let app = authenticated_app.await;
     let existing_todoist_task = create_task_from_todoist_item(
         &app.client,
-        &app.app_address,
+        &app.api_address,
         &todoist_item,
         "Project2".to_string(),
         app.user.id,
@@ -60,7 +60,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         notif @ LinearNotification::IssueNotification { id, issue, .. } => {
             create_resource(
                 &app.client,
-                &app.app_address,
+                &app.api_address,
                 "notifications",
                 Box::new(Notification {
                     id: Uuid::new_v4().into(),
@@ -96,7 +96,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
 
     let notifications: Vec<Notification> = sync_notifications(
         &app.client,
-        &app.app_address,
+        &app.api_address,
         Some(NotificationSourceKind::Linear),
         false,
     )
@@ -108,7 +108,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
 
     let updated_notification: Box<Notification> = get_resource(
         &app.client,
-        &app.app_address,
+        &app.api_address,
         "notifications",
         existing_notification.id.into(),
     )

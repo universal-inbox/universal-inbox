@@ -22,9 +22,9 @@ use universal_inbox_api::{
 
 use crate::helpers::{auth::AuthenticatedApp, load_json_fixture_file};
 
-pub async fn list_integration_connections_response(client: &Client, app_address: &str) -> Response {
+pub async fn list_integration_connections_response(client: &Client, api_address: &str) -> Response {
     client
-        .get(&format!("{app_address}/integration-connections"))
+        .get(&format!("{api_address}/integration-connections"))
         .send()
         .await
         .expect("Failed to execute request")
@@ -32,9 +32,9 @@ pub async fn list_integration_connections_response(client: &Client, app_address:
 
 pub async fn list_integration_connections(
     client: &Client,
-    app_address: &str,
+    api_address: &str,
 ) -> Vec<IntegrationConnection> {
-    list_integration_connections_response(client, app_address)
+    list_integration_connections_response(client, api_address)
         .await
         .json()
         .await
@@ -43,12 +43,12 @@ pub async fn list_integration_connections(
 
 pub async fn verify_integration_connection_response(
     client: &Client,
-    app_address: &str,
+    api_address: &str,
     integration_connection_id: IntegrationConnectionId,
 ) -> Response {
     client
         .patch(&format!(
-            "{app_address}/integration-connections/{integration_connection_id}/status"
+            "{api_address}/integration-connections/{integration_connection_id}/status"
         ))
         .send()
         .await
@@ -57,10 +57,10 @@ pub async fn verify_integration_connection_response(
 
 pub async fn verify_integration_connection(
     client: &Client,
-    app_address: &str,
+    api_address: &str,
     integration_connection_id: IntegrationConnectionId,
 ) -> IntegrationConnection {
-    verify_integration_connection_response(client, app_address, integration_connection_id)
+    verify_integration_connection_response(client, api_address, integration_connection_id)
         .await
         .json()
         .await

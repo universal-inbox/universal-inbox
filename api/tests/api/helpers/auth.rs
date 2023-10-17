@@ -21,6 +21,7 @@ use super::{tested_app, TestedApp};
 pub struct AuthenticatedApp {
     pub client: Client,
     pub app_address: String,
+    pub api_address: String,
     pub user: User,
     pub repository: Arc<Repository>,
     pub github_mock_server: MockServer,
@@ -64,7 +65,7 @@ pub async fn authenticate_user(
     )
     .unwrap();
     let response = client
-        .post(&format!("{}/auth/session", app.app_address))
+        .post(&format!("{}/auth/session", app.api_address))
         .bearer_auth("fake_token")
         .json(&SessionAuthValidationParameters {
             auth_id_token: id_token.to_string().into(),
@@ -76,7 +77,7 @@ pub async fn authenticate_user(
     assert_eq!(response.status(), 200);
 
     let user: User = client
-        .get(&format!("{}/auth/user", app.app_address))
+        .get(&format!("{}/auth/user", app.api_address))
         .send()
         .await
         .unwrap()
@@ -94,7 +95,8 @@ pub async fn authenticated_app(#[future] tested_app: TestedApp) -> Authenticated
 
     AuthenticatedApp {
         client,
-        app_address: app.app_address.clone(),
+        app_address: app.api_address.clone(),
+        api_address: app.api_address.clone(),
         user,
         repository: app.repository.clone(),
         github_mock_server: app.github_mock_server,

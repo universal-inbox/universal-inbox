@@ -32,7 +32,7 @@ mod list_notifications {
         let app = authenticated_app.await;
         let result = list_notifications(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             vec![NotificationStatus::Unread],
             false,
             None,
@@ -55,7 +55,7 @@ mod list_notifications {
         let app = authenticated_app.await;
         let expected_notification1: Box<Notification> = create_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             Box::new(Notification {
                 id: Uuid::new_v4().into(),
@@ -77,7 +77,7 @@ mod list_notifications {
 
         let expected_notification2: Box<Notification> = create_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             Box::new(Notification {
                 id: Uuid::new_v4().into(),
@@ -100,7 +100,7 @@ mod list_notifications {
 
         let deleted_notification: Box<Notification> = create_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             Box::new(Notification {
                 id: Uuid::new_v4().into(),
@@ -122,7 +122,7 @@ mod list_notifications {
 
         let snoozed_notification: Box<Notification> = create_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             Box::new(Notification {
                 id: Uuid::new_v4().into(),
@@ -145,7 +145,7 @@ mod list_notifications {
 
         let result = list_notifications(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             vec![NotificationStatus::Unread],
             false,
             None,
@@ -157,7 +157,7 @@ mod list_notifications {
 
         let result = list_notifications(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             vec![NotificationStatus::Read, NotificationStatus::Unread],
             false,
             None,
@@ -170,7 +170,7 @@ mod list_notifications {
 
         let result = list_notifications(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             vec![NotificationStatus::Read, NotificationStatus::Unread],
             true,
             None,
@@ -184,7 +184,7 @@ mod list_notifications {
 
         let result = list_notifications(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             vec![NotificationStatus::Deleted],
             false,
             None,
@@ -196,7 +196,7 @@ mod list_notifications {
 
         let result = list_notifications(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             vec![NotificationStatus::Unsubscribed],
             false,
             None,
@@ -211,7 +211,7 @@ mod list_notifications {
 
         let result = list_notifications(
             &client,
-            &app.app_address,
+            &app.api_address,
             vec![NotificationStatus::Unread],
             false,
             None,
@@ -247,7 +247,7 @@ mod create_notification {
         });
         let created_notification: Box<Notification> = create_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             expected_notification.clone(),
         )
@@ -257,7 +257,7 @@ mod create_notification {
 
         let notification = get_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             created_notification.id.into(),
         )
@@ -288,7 +288,7 @@ mod create_notification {
         });
         let created_notification: Box<Notification> = create_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             expected_notification.clone(),
         )
@@ -298,7 +298,7 @@ mod create_notification {
 
         let response = create_resource_response(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             expected_notification,
         )
@@ -337,7 +337,7 @@ mod create_notification {
 
         let response = create_resource_response(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             expected_notification.clone(),
         )
@@ -361,7 +361,7 @@ mod get_notification {
 
         let notification = create_notification_from_github_notification(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             &github_notification,
             app.user.id,
         )
@@ -371,7 +371,7 @@ mod get_notification {
             authenticate_user(&tested_app.await, "5678", "Jane", "Doe", "jane@example.com").await;
         let response = get_resource_response(
             &client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             notification.id.0,
         )
@@ -400,7 +400,7 @@ mod get_notification {
 
         let response = get_resource_response(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             unknown_notification_id,
         )
@@ -442,7 +442,7 @@ mod patch_notification {
         let snoozed_time = Utc.with_ymd_and_hms(2022, 1, 1, 1, 2, 3).unwrap();
         let created_notification: Box<Notification> = create_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             expected_notification.clone(),
         )
@@ -452,7 +452,7 @@ mod patch_notification {
 
         let patched_notification = patch_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             created_notification.id.into(),
             &NotificationPatch {
@@ -494,7 +494,7 @@ mod patch_notification {
         });
         let created_notification: Box<Notification> = create_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             expected_notification.clone(),
         )
@@ -504,7 +504,7 @@ mod patch_notification {
 
         let response = patch_resource_response(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             created_notification.id.into(),
             &NotificationPatch {
@@ -528,7 +528,7 @@ mod patch_notification {
         let app = authenticated_app.await;
         let notification = create_notification_from_github_notification(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             &github_notification,
             app.user.id,
         )
@@ -538,7 +538,7 @@ mod patch_notification {
 
         let response = patch_resource_response(
             &client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             notification.id.into(),
             &NotificationPatch {
@@ -553,7 +553,7 @@ mod patch_notification {
         // Verify notification has not been updated
         let notification_from_db: Box<Notification> = get_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             notification.id.into(),
         )
@@ -584,7 +584,7 @@ mod patch_notification {
         });
         let created_notification: Box<Notification> = create_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             expected_notification.clone(),
         )
@@ -594,7 +594,7 @@ mod patch_notification {
 
         let response = patch_resource_response(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             created_notification.id.into(),
             &NotificationPatch {
@@ -625,7 +625,7 @@ mod patch_notification {
 
         let response = patch_resource_response(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             unknown_notification_id,
             &NotificationPatch {

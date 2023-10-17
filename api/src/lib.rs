@@ -9,24 +9,26 @@ use actix_session::{
 };
 use actix_web::{
     cookie::{time::Duration, Key},
-    dev::Server,
-    http, middleware, web, App, HttpServer,
+    dev::{Server, Service},
+    http::{self, header},
+    middleware, web, App, HttpServer,
 };
 use actix_web_lab::web::spa;
 use anyhow::Context;
-use configuration::Settings;
-use integrations::{
-    github::GithubService, google_mail::GoogleMailService, linear::LinearService,
-    oauth2::NangoService, todoist::TodoistService,
-};
-use repository::Repository;
+use csp::{Directive, Source, Sources, CSP};
 use sqlx::PgPool;
 use tokio::sync::RwLock;
 use tracing::info;
 use tracing_actix_web::TracingLogger;
 
 use crate::{
+    configuration::Settings,
+    integrations::{
+        github::GithubService, google_mail::GoogleMailService, linear::LinearService,
+        oauth2::NangoService, todoist::TodoistService,
+    },
     observability::AuthenticatedRootSpanBuilder,
+    repository::Repository,
     universal_inbox::{
         integration_connection::service::IntegrationConnectionService,
         notification::service::NotificationService, task::service::TaskService,
@@ -68,6 +70,7 @@ pub async fn run(
     let session_secret_key = Key::from(settings.application.http_session.secret_key.as_bytes());
     let max_age_days = settings.application.http_session.max_age_days;
     let max_age_inactive_days = settings.application.http_session.max_age_inactive_days;
+    let csp_header_value = build_csp_header(&settings);
     let settings_web_data = web::Data::new(settings);
 
     info!("Connecting to Redis on {}", redis_connection_string);
@@ -103,6 +106,7 @@ pub async fn run(
             .supports_credentials()
             .max_age(3600);
 
+        let csp_header_value = csp_header_value.clone();
         let mut app = App::new()
             .wrap(cors)
             .wrap(TracingLogger::<AuthenticatedRootSpanBuilder>::new())
@@ -123,6 +127,30 @@ pub async fn run(
                     .cookie_content_security(CookieContentSecurity::Signed)
                     .build(),
             )
+            .wrap_fn(move |req, srv| {
+                let csp_header_value = csp_header_value.clone();
+                let fut = srv.call(req);
+                async move {
+                    let mut res = fut.await?;
+                    if res
+                        .headers()
+                        .get(header::CONTENT_TYPE)
+                        .map(|value| {
+                            value
+                                .to_str()
+                                .map(|s| s.starts_with("text/html"))
+                                .unwrap_or_default()
+                        })
+                        .unwrap_or_default()
+                    {
+                        res.headers_mut().insert(
+                            header::CONTENT_SECURITY_POLICY,
+                            header::HeaderValue::from_str(&csp_header_value).unwrap(),
+                        );
+                    }
+                    Ok(res)
+                }
+            })
             .route("/ping", web::get().to(routes::health_check::ping))
             .service(api_scope)
             .app_data(settings_web_data.clone());
@@ -241,4 +269,31 @@ pub async fn build_services(
         user_service,
         integration_connection_service,
     )
+}
+
+fn build_csp_header(settings: &Settings) -> String {
+    CSP::new()
+        .push(Directive::DefaultSrc(Sources::new_with(Source::Self_)))
+        .push(Directive::ScriptSrc(
+            Sources::new_with(Source::Self_)
+                .push(Source::WasmUnsafeEval)
+                .push(Source::UnsafeInline),
+        ))
+        .push(Directive::StyleSrc(
+            Sources::new_with(Source::Self_).push(Source::UnsafeInline),
+        ))
+        .push(Directive::ObjectSrc(Sources::new()))
+        .push(Directive::ConnectSrc(
+            Sources::new_with(Source::Self_).push(Source::Host(
+                &settings.application.authentication.oidc_issuer_url,
+            )),
+        ))
+        .push(Directive::ImgSrc(
+            Sources::new_with(Source::Self_)
+                .push(Source::Host("https://secure.gravatar.com"))
+                .push(Source::Host("https://avatars.githubusercontent.com"))
+                .push(Source::Scheme("data")), // Allow loading of inlined svg
+        ))
+        .push(Directive::WorkerSrc(Sources::new()))
+        .to_string()
 }

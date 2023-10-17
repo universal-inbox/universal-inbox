@@ -62,7 +62,7 @@ mod patch_task {
         let app = authenticated_app.await;
         let existing_todoist_task_creation = create_task_from_todoist_item(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             &todoist_item,
             "Inbox".to_string(),
             app.user.id,
@@ -87,7 +87,7 @@ mod patch_task {
 
         let patched_task = patch_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "tasks",
             existing_todoist_task.id.into(),
             &TaskPatch {
@@ -108,7 +108,7 @@ mod patch_task {
 
         let deleted_notification: Box<Notification> = get_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             existing_todoist_notification.id.into(),
         )
@@ -127,7 +127,7 @@ mod patch_task {
         let app = authenticated_app.await;
         let existing_todoist_task_creation = create_task_from_todoist_item(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             &todoist_item,
             "Inbox".to_string(),
             app.user.id,
@@ -152,7 +152,7 @@ mod patch_task {
 
         let patched_task: Box<Task> = patch_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "tasks",
             existing_todoist_task.id.into(),
             &TaskPatch {
@@ -175,7 +175,7 @@ mod patch_task {
 
         let deleted_notification: Box<Notification> = get_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             existing_todoist_notification.id.into(),
         )
@@ -195,7 +195,7 @@ mod patch_task {
         let app = authenticated_app.await;
         let existing_todoist_task_creation = create_task_from_todoist_item(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             &todoist_item,
             "Inbox".to_string(),
             app.user.id,
@@ -260,7 +260,7 @@ mod patch_task {
 
         let patched_task = patch_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "tasks",
             existing_todoist_task.id.into(),
             &TaskPatch {
@@ -288,7 +288,7 @@ mod patch_task {
 
         let deleted_notification: Box<Notification> = get_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             existing_todoist_notification.id.into(),
         )
@@ -313,7 +313,7 @@ mod patch_task {
 
         let notification = create_notification_from_github_notification(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             &github_notification,
             app.user.id,
         )
@@ -375,7 +375,7 @@ mod patch_task {
 
         let notification_with_task = create_task_from_notification(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             notification.id,
             &TaskCreation {
                 title: todoist_item.content.clone(),
@@ -423,7 +423,7 @@ mod patch_task {
 
         let deleted_notification: Box<Notification> = get_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             notification.id.into(),
         )
@@ -449,14 +449,14 @@ mod patch_notification {
         let app = authenticated_app.await;
         let notification = create_notification_from_github_notification(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             &github_notification,
             app.user.id,
         )
         .await;
         let existing_todoist_task = create_task_from_todoist_item(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             &todoist_item,
             "Project2".to_string(),
             app.user.id,
@@ -488,7 +488,7 @@ mod patch_notification {
 
         let patched_notification = patch_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             notification.id.into(),
             &NotificationPatch {
@@ -509,7 +509,7 @@ mod patch_notification {
 
         let updated_notification = get_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             notification.id.into(),
         )

@@ -60,7 +60,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
     let todoist_items = sync_todoist_items_response.items.clone().unwrap();
     let existing_todoist_task_creation: Box<TaskCreationResult> = create_resource(
         &app.client,
-        &app.app_address,
+        &app.api_address,
         "tasks",
         Box::new(Task {
             id: Uuid::new_v4().into(),
@@ -108,7 +108,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
 
     let task_creations: Vec<TaskCreationResult> = sync_tasks(
         &app.client,
-        &app.app_address,
+        &app.api_address,
         Some(TaskSourceKind::Todoist),
         false,
     )
@@ -121,7 +121,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
 
     let updated_todoist_task: Box<Task> = get_resource(
         &app.client,
-        &app.app_address,
+        &app.api_address,
         "tasks",
         existing_todoist_task.id.into(),
     )
@@ -148,7 +148,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
 
     let updated_todoist_notification: Box<Notification> = get_resource(
         &app.client,
-        &app.app_address,
+        &app.api_address,
         "notifications",
         existing_todoist_notification.id.into(),
     )
@@ -184,7 +184,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
     let new_task = &new_todoist_task_creation.task;
     let notifications = list_notifications_with_tasks(
         &app.client,
-        &app.app_address,
+        &app.api_address,
         vec![NotificationStatus::Unread],
         false,
         Some(new_task.id),
@@ -281,7 +281,7 @@ async fn test_sync_tasks_should_add_new_empty_task(
 
     let task_creations: Vec<TaskCreationResult> = sync_tasks(
         &app.client,
-        &app.app_address,
+        &app.api_address,
         Some(TaskSourceKind::Todoist),
         false,
     )
@@ -348,7 +348,7 @@ async fn test_sync_tasks_should_reuse_existing_sync_token(
 
     let task_creations: Vec<TaskCreationResult> = sync_tasks(
         &app.client,
-        &app.app_address,
+        &app.api_address,
         Some(TaskSourceKind::Todoist),
         false,
     )
@@ -390,7 +390,7 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
         for todoist_item in todoist_items.iter() {
             let creation = create_task_from_todoist_item(
                 &app.client,
-                &app.app_address,
+                &app.api_address,
                 todoist_item,
                 "Inbox".to_string(),
                 app.user.id,
@@ -431,7 +431,7 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
 
     let task_creations: Vec<TaskCreationResult> = sync_tasks(
         &app.client,
-        &app.app_address,
+        &app.api_address,
         Some(TaskSourceKind::Todoist),
         false,
     )
@@ -444,7 +444,7 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
 
     let completed_task: Box<Task> = get_resource(
         &app.client,
-        &app.app_address,
+        &app.api_address,
         "tasks",
         task_creation.task.id.into(),
     )
@@ -455,7 +455,7 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
 
     let deleted_notification: Box<Notification> = get_resource(
         &app.client,
-        &app.app_address,
+        &app.api_address,
         "notifications",
         task_creation.notification.unwrap().id.into(),
     )
@@ -480,7 +480,7 @@ async fn test_sync_tasks_should_not_update_tasks_and_notifications_with_empty_in
         for todoist_item in todoist_items.iter() {
             let creation = create_task_from_todoist_item(
                 &app.client,
-                &app.app_address,
+                &app.api_address,
                 todoist_item,
                 "Inbox".to_string(),
                 app.user.id,
@@ -523,7 +523,7 @@ async fn test_sync_tasks_should_not_update_tasks_and_notifications_with_empty_in
 
     let task_creations: Vec<TaskCreationResult> = sync_tasks(
         &app.client,
-        &app.app_address,
+        &app.api_address,
         Some(TaskSourceKind::Todoist),
         false,
     )
@@ -547,7 +547,7 @@ async fn test_sync_tasks_should_not_update_tasks_and_notifications_with_empty_in
     {
         let task: Box<Task> = get_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "tasks",
             task_creation.task.id.into(),
         )
@@ -558,7 +558,7 @@ async fn test_sync_tasks_should_not_update_tasks_and_notifications_with_empty_in
 
         let notification: Box<Notification> = get_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             task_creation.notification.as_ref().unwrap().id.into(),
         )
@@ -581,7 +581,7 @@ async fn test_sync_all_tasks_asynchronously(
     let todoist_items = sync_todoist_items_response.items.clone().unwrap();
     let _existing_todoist_task_creation: Box<TaskCreationResult> = create_resource(
         &app.client,
-        &app.app_address,
+        &app.api_address,
         "tasks",
         Box::new(Task {
             id: Uuid::new_v4().into(),
@@ -628,7 +628,7 @@ async fn test_sync_all_tasks_asynchronously(
     let unauthenticated_client = reqwest::Client::new();
     let response = sync_tasks_response(
         &unauthenticated_client,
-        &app.app_address,
+        &app.api_address,
         Some(TaskSourceKind::Todoist),
         true, // asynchronously
     )
@@ -636,14 +636,14 @@ async fn test_sync_all_tasks_asynchronously(
 
     assert_eq!(response.status(), StatusCode::CREATED);
 
-    let result = list_tasks(&app.client, &app.app_address, TaskStatus::Active).await;
+    let result = list_tasks(&app.client, &app.api_address, TaskStatus::Active).await;
 
     // The existing task's status should not have been updated to Deleted yet
     assert_eq!(result.len(), 1);
 
     let mut i = 0;
     let synchronized = loop {
-        let result = list_tasks(&app.client, &app.app_address, TaskStatus::Active).await;
+        let result = list_tasks(&app.client, &app.api_address, TaskStatus::Active).await;
 
         debug!("result: {result:?}");
         if result.len() == 2 {
@@ -676,7 +676,7 @@ async fn test_sync_all_tasks_asynchronously(
     let unauthenticated_client = reqwest::Client::new();
     let response = sync_tasks_response(
         &unauthenticated_client,
-        &app.app_address,
+        &app.api_address,
         Some(TaskSourceKind::Todoist),
         true, // asynchronously
     )
@@ -686,7 +686,7 @@ async fn test_sync_all_tasks_asynchronously(
 
     sleep(Duration::from_millis(1000)).await;
 
-    let result = list_tasks(&app.client, &app.app_address, TaskStatus::Active).await;
+    let result = list_tasks(&app.client, &app.api_address, TaskStatus::Active).await;
 
     // Even after 1s, the existing task's status should not have been updated
     // because the sync happen too soon after the previous one
@@ -719,7 +719,7 @@ async fn test_sync_all_tasks_asynchronously_in_error(
     let unauthenticated_client = reqwest::Client::new();
     let response = sync_tasks_response(
         &unauthenticated_client,
-        &app.app_address,
+        &app.api_address,
         Some(TaskSourceKind::Todoist),
         true, // asynchronously
     )
@@ -729,7 +729,7 @@ async fn test_sync_all_tasks_asynchronously_in_error(
 
     sleep(Duration::from_millis(1000)).await;
 
-    let result = list_tasks(&app.client, &app.app_address, TaskStatus::Active).await;
+    let result = list_tasks(&app.client, &app.api_address, TaskStatus::Active).await;
 
     // Even after 1s, the existing task's status should not have been updated
     // because the sync was in error

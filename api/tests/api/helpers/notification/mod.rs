@@ -16,7 +16,7 @@ pub mod linear;
 
 pub async fn list_notifications_response(
     client: &Client,
-    app_address: &str,
+    api_address: &str,
     status_filter: Vec<NotificationStatus>,
     include_snoozed_notifications: bool,
     task_id: Option<TaskId>,
@@ -37,7 +37,7 @@ pub async fn list_notifications_response(
 
     client
         .get(&format!(
-            "{app_address}/notifications?status={status_parameter}{snoozed_notifications_parameter}{task_id_parameter}"
+            "{api_address}/notifications?status={status_parameter}{snoozed_notifications_parameter}{task_id_parameter}"
         ))
         .send()
         .await
@@ -46,14 +46,14 @@ pub async fn list_notifications_response(
 
 pub async fn list_notifications_with_tasks(
     client: &Client,
-    app_address: &str,
+    api_address: &str,
     status_filter: Vec<NotificationStatus>,
     include_snoozed_notifications: bool,
     task_id: Option<TaskId>,
 ) -> Vec<NotificationWithTask> {
     list_notifications_response(
         client,
-        app_address,
+        api_address,
         status_filter,
         include_snoozed_notifications,
         task_id,
@@ -66,14 +66,14 @@ pub async fn list_notifications_with_tasks(
 
 pub async fn list_notifications(
     client: &Client,
-    app_address: &str,
+    api_address: &str,
     status_filter: Vec<NotificationStatus>,
     include_snoozed_notifications: bool,
     task_id: Option<TaskId>,
 ) -> Vec<Notification> {
     list_notifications_with_tasks(
         client,
-        app_address,
+        api_address,
         status_filter,
         include_snoozed_notifications,
         task_id,
@@ -86,12 +86,12 @@ pub async fn list_notifications(
 
 pub async fn sync_notifications_response(
     client: &Client,
-    app_address: &str,
+    api_address: &str,
     source: Option<NotificationSourceKind>,
     asynchronous: bool,
 ) -> Response {
     client
-        .post(&format!("{}/notifications/sync", &app_address))
+        .post(&format!("{}/notifications/sync", &api_address))
         .json(
             &source
                 .map(|src| {
@@ -109,11 +109,11 @@ pub async fn sync_notifications_response(
 
 pub async fn sync_notifications(
     client: &Client,
-    app_address: &str,
+    api_address: &str,
     source: Option<NotificationSourceKind>,
     asynchronous: bool,
 ) -> Vec<Notification> {
-    sync_notifications_response(client, app_address, source, asynchronous)
+    sync_notifications_response(client, api_address, source, asynchronous)
         .await
         .json()
         .await
@@ -122,14 +122,14 @@ pub async fn sync_notifications(
 
 pub async fn create_task_from_notification_response(
     client: &Client,
-    app_address: &str,
+    api_address: &str,
     notification_id: NotificationId,
     task_creation: &TaskCreation,
 ) -> Response {
     client
         .post(&format!(
             "{}/notifications/{}/task",
-            &app_address, notification_id
+            &api_address, notification_id
         ))
         .json(task_creation)
         .send()
@@ -139,11 +139,11 @@ pub async fn create_task_from_notification_response(
 
 pub async fn create_task_from_notification(
     client: &Client,
-    app_address: &str,
+    api_address: &str,
     notification_id: NotificationId,
     task_creation: &TaskCreation,
 ) -> Option<NotificationWithTask> {
-    create_task_from_notification_response(client, app_address, notification_id, task_creation)
+    create_task_from_notification_response(client, api_address, notification_id, task_creation)
         .await
         .json()
         .await

@@ -20,13 +20,13 @@ use crate::helpers::{load_json_fixture_file, rest::create_resource};
 
 pub async fn create_notification_from_github_notification(
     client: &Client,
-    app_address: &str,
+    api_address: &str,
     github_notification: &GithubNotification,
     user_id: UserId,
 ) -> Box<Notification> {
     create_resource(
         client,
-        app_address,
+        api_address,
         "notifications",
         Box::new(Notification {
             id: Uuid::new_v4().into(),

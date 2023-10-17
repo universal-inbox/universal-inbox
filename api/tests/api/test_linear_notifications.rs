@@ -68,7 +68,7 @@ mod patch_resource {
 
         let existing_todoist_task = create_task_from_todoist_item(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             &todoist_item,
             "Project2".to_string(),
             app.user.id,
@@ -76,7 +76,7 @@ mod patch_resource {
         .await;
         let created_notification: Box<Notification> = create_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             expected_notification.clone(),
         )
@@ -86,7 +86,7 @@ mod patch_resource {
 
         let patched_notification = patch_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             created_notification.id.into(),
             &NotificationPatch {
@@ -107,7 +107,7 @@ mod patch_resource {
 
         let task: Box<Task> = get_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "tasks",
             existing_todoist_task.task.id.into(),
         )
@@ -154,7 +154,7 @@ mod patch_resource {
 
         let created_notification: Box<Notification> = create_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             expected_notification.clone(),
         )
@@ -164,7 +164,7 @@ mod patch_resource {
 
         let patch_response = patch_resource_response(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             created_notification.id.into(),
             &NotificationPatch {
@@ -217,7 +217,7 @@ mod patch_resource {
 
         let created_notification: Box<Notification> = create_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             expected_notification.clone(),
         )
@@ -227,7 +227,7 @@ mod patch_resource {
 
         let patch_response = patch_resource_response(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             created_notification.id.into(),
             &NotificationPatch {
@@ -297,7 +297,7 @@ mod patch_resource {
 
         let created_notification: Box<Notification> = create_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             expected_notification.clone(),
         )
@@ -307,7 +307,7 @@ mod patch_resource {
 
         let patched_notification = patch_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             created_notification.id.into(),
             &NotificationPatch {
@@ -372,7 +372,7 @@ mod patch_resource {
 
         let created_notification: Box<Notification> = create_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             expected_notification.clone(),
         )
@@ -382,7 +382,7 @@ mod patch_resource {
 
         let patched_notification = patch_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             created_notification.id.into(),
             &NotificationPatch {
@@ -439,7 +439,7 @@ mod patch_resource {
 
         let created_notification: Box<Notification> = create_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             expected_notification.clone(),
         )
@@ -449,7 +449,7 @@ mod patch_resource {
 
         let patched_notification = patch_resource(
             &app.client,
-            &app.app_address,
+            &app.api_address,
             "notifications",
             created_notification.id.into(),
             &NotificationPatch {

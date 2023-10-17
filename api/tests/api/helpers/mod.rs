@@ -25,6 +25,7 @@ pub mod task;
 
 pub struct TestedApp {
     pub app_address: String,
+    pub api_address: String,
     pub repository: Arc<Repository>,
     pub github_mock_server: MockServer,
     pub linear_mock_server: MockServer,
@@ -142,6 +143,8 @@ pub async fn tested_app(
         )
         .await;
 
+    let app_address = format!("http://127.0.0.1:{port}");
+    let api_address = format!("{app_address}{}", settings.application.api_path);
     let server = universal_inbox_api::run(
         listener,
         settings,
@@ -158,7 +161,8 @@ pub async fn tested_app(
     let repository = Arc::new(Repository::new(pool.clone()));
 
     TestedApp {
-        app_address: format!("http://127.0.0.1:{port}"),
+        app_address,
+        api_address,
         repository,
         github_mock_server,
         linear_mock_server,

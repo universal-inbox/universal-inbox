@@ -35,7 +35,7 @@ mod authenticate_session {
             .build()
             .unwrap();
         let response = client
-            .post(&format!("{}/auth/session", app.app_address))
+            .post(&format!("{}/auth/session", app.api_address))
             .bearer_auth("fake_access_token")
             .json(&SessionAuthValidationParameters {
                 auth_id_token: "id token".to_string().into(),
@@ -47,7 +47,7 @@ mod authenticate_session {
         assert_eq!(response.status(), 200);
 
         let user: User = client
-            .get(&format!("{}/auth/user", app.app_address))
+            .get(&format!("{}/auth/user", app.api_address))
             .send()
             .await
             .unwrap()
@@ -61,7 +61,7 @@ mod authenticate_session {
 
         // Test a new ID token is updated
         let response = client
-            .post(&format!("{}/auth/session", app.app_address))
+            .post(&format!("{}/auth/session", app.api_address))
             .bearer_auth("fake_access_token")
             .json(&SessionAuthValidationParameters {
                 auth_id_token: "other id token".to_string().into(),
@@ -73,7 +73,7 @@ mod authenticate_session {
         assert_eq!(response.status(), 200);
 
         let user: User = client
-            .get(&format!("{}/auth/user", app.app_address))
+            .get(&format!("{}/auth/user", app.api_address))
             .send()
             .await
             .unwrap()
@@ -96,7 +96,7 @@ mod authenticate_session {
         mock_oidc_introspection(&app, "1234", false);
 
         let response = reqwest::Client::new()
-            .post(&format!("{}/auth/session", app.app_address))
+            .post(&format!("{}/auth/session", app.api_address))
             .bearer_auth("fake_access_token")
             .json(&SessionAuthValidationParameters {
                 auth_id_token: "1234".to_string().into(),
@@ -127,7 +127,7 @@ mod close_session {
 
         let response = app
             .client
-            .delete(&format!("{}/auth/session", app.app_address))
+            .delete(&format!("{}/auth/session", app.api_address))
             .send()
             .await
             .unwrap();

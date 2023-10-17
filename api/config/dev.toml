@@ -1,5 +1,6 @@
 [application]
 environment = "dev"
+listen_address = "127.0.0.1"
 static_dir = "../web/dist"
 api_path = "/api"
 min_sync_tasks_interval_in_minutes = 0
