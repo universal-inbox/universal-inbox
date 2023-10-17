@@ -7,6 +7,7 @@ dependencies_log_directive = "debug"
 
 [integrations.oauth2]
 nango_secret_key = "nango_test_key"
+nango_public_key = "nango_public_test_key"
 
 [application.http_session]
 secret_key = "1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF"
