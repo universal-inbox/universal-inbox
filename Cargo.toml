@@ -17,6 +17,7 @@ path = "src/lib.rs"
 doctest = false
 
 [dependencies]
+anyhow = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
 clap = { workspace = true }
 enum_derive = { workspace = true }

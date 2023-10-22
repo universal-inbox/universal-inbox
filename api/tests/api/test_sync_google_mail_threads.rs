@@ -99,6 +99,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
             updated_at: Utc.with_ymd_and_hms(2023, 9, 13, 20, 19, 32).unwrap(),
             last_read_at: None,
             snoozed_until: Some(Utc.with_ymd_and_hms(2064, 1, 1, 0, 0, 0).unwrap()),
+            details: None,
             task_id: Some(existing_todoist_task.task.id),
         }),
     )
@@ -288,6 +289,7 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
             updated_at: Utc.with_ymd_and_hms(2023, 9, 13, 20, 19, 32).unwrap(),
             last_read_at: None,
             snoozed_until: None,
+            details: None,
             task_id: None,
         }),
     )

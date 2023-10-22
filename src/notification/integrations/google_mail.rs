@@ -230,6 +230,7 @@ impl GoogleMailThread {
             last_read_at,
             snoozed_until: None,
             user_id,
+            details: None,
             task_id: None,
         }
     }

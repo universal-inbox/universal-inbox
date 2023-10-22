@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                UPDATE\n                  notification\n                SET\n                  status = $1::notification_status\n                WHERE\n                  NOT source_id = ANY($2)\n                  AND kind = $3\n                  AND (status::TEXT = 'Read' OR status::TEXT = 'Unread')\n                RETURNING\n                  id,\n                  title,\n                  status as \"status: _\",\n                  source_id,\n                  source_html_url,\n                  metadata as \"metadata: Json<NotificationMetadata>\",\n                  updated_at,\n                  last_read_at,\n                  snoozed_until,\n                  user_id,\n                  task_id\n            ",
+  "query": "\n                UPDATE\n                  notification\n                SET\n                  status = $1::notification_status\n                FROM notification as n\n                LEFT JOIN notification_details ON notification_details.notification_id = n.id\n                WHERE\n                  NOT notification.source_id = ANY($2)\n                  AND notification.kind = $3\n                  AND (notification.status::TEXT = 'Read' OR notification.status::TEXT = 'Unread')\n                RETURNING\n                  notification.id,\n                  notification.title,\n                  notification.status as \"status: _\",\n                  notification.source_id,\n                  notification.source_html_url,\n                  notification.metadata as \"metadata: Json<NotificationMetadata>\",\n                  notification.updated_at,\n                  notification.last_read_at,\n                  notification.snoozed_until,\n                  notification.user_id,\n                  notification_details.details as \"details: Option<Json<NotificationDetails>>\",\n                  notification.task_id\n            ",
   "describe": {
     "columns": [
       {
@@ -67,6 +67,11 @@
       },
       {
         "ordinal": 10,
+        "name": "details: Option<Json<NotificationDetails>>",
+        "type_info": "Json"
+      },
+      {
+        "ordinal": 11,
         "name": "task_id",
         "type_info": "Uuid"
       }
@@ -101,8 +106,9 @@
       true,
       true,
       false,
+      false,
       true
     ]
   },
-  "hash": "59a8ef2e5e20e72dcfc20c20fa3f3c286fcfa7e8f687e7846d1e49d45202cc3f"
+  "hash": "d81e48c043d247bfed52dc7f74c99d1323ac46259c8ab13970901116db62842a"
 }

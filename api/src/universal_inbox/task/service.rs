@@ -272,7 +272,7 @@ impl TaskService {
                     .cloned()
                     .collect();
 
-                let inbox_notifications = self
+                let upsert_inbox_notifications = self
                     .notification_service
                     .upgrade()
                     .context("Unable to access notification_service from task_service")?
@@ -292,9 +292,12 @@ impl TaskService {
                     .await?;
 
                 let mut notifications_by_task_id: HashMap<Option<TaskId>, Notification> =
-                    inbox_notifications
+                    upsert_inbox_notifications
                         .into_iter()
-                        .map(|notification| (notification.task_id, notification))
+                        .map(|upsert_notification| {
+                            let notification = upsert_notification.value();
+                            (notification.task_id, *notification)
+                        })
                         .collect();
 
                 // Update existing notifications for tasks that are not in the Inbox anymore
@@ -404,20 +407,13 @@ impl TaskService {
     pub async fn sync_tasks<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        source: Option<TaskSyncSourceKind>,
+        source: TaskSyncSourceKind,
         user_id: UserId,
     ) -> Result<Vec<TaskCreationResult>, UniversalInboxError> {
         match source {
-            Some(TaskSyncSourceKind::Todoist) => {
+            TaskSyncSourceKind::Todoist => {
                 self.sync_source_tasks_and_notifications(executor, &self.todoist_service, user_id)
                     .await
-            }
-            None => {
-                let sync_result_from_todoist = self
-                    .sync_source_tasks_and_notifications(executor, &self.todoist_service, user_id)
-                    .await?;
-                // merge result with other integrations here
-                Ok(sync_result_from_todoist)
             }
         }
     }
@@ -425,7 +421,7 @@ impl TaskService {
     #[tracing::instrument(level = "debug", skip(self), err)]
     pub async fn sync_tasks_with_transaction<'a>(
         &self,
-        source: Option<TaskSyncSourceKind>,
+        source: TaskSyncSourceKind,
         user_id: UserId,
     ) -> Result<Vec<TaskCreationResult>, UniversalInboxError> {
         let mut transaction = self.begin().await.context(format!(
@@ -458,6 +454,17 @@ impl TaskService {
     }
 
     #[tracing::instrument(level = "debug", skip(self), err)]
+    pub async fn sync_all_tasks<'a>(
+        &self,
+        user_id: UserId,
+    ) -> Result<Vec<TaskCreationResult>, UniversalInboxError> {
+        let sync_result_from_todoist = self
+            .sync_tasks_with_transaction(TaskSyncSourceKind::Todoist, user_id)
+            .await?;
+        Ok(sync_result_from_todoist)
+    }
+
+    #[tracing::instrument(level = "debug", skip(self), err)]
     pub async fn sync_tasks_for_all_users<'a>(
         &self,
         source: Option<TaskSyncSourceKind>,
@@ -471,7 +478,12 @@ impl TaskService {
         for user in users {
             let user_id = user.id;
             info!("Syncing tasks for user {user_id}");
-            match self.sync_tasks_with_transaction(source, user_id).await {
+            let sync_result = if let Some(source) = source {
+                self.sync_tasks_with_transaction(source, user_id).await
+            } else {
+                self.sync_all_tasks(user_id).await
+            };
+            match sync_result {
                 Ok(tasks) => info!(
                     "{} tasks successfully synced for user {user_id}",
                     tasks.len()

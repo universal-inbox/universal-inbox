@@ -70,6 +70,7 @@ mod list_notifications {
                 last_read_at: None,
                 snoozed_until: None,
                 user_id: app.user.id,
+                details: None,
                 task_id: None,
             }),
         )
@@ -93,6 +94,7 @@ mod list_notifications {
                 // Snooze time has expired
                 snoozed_until: Some(Utc::now().with_nanosecond(0).unwrap() - Duration::minutes(1)),
                 user_id: app.user.id,
+                details: None,
                 task_id: None,
             }),
         )
@@ -115,6 +117,7 @@ mod list_notifications {
                 last_read_at: None,
                 snoozed_until: None,
                 user_id: app.user.id,
+                details: None,
                 task_id: None,
             }),
         )
@@ -138,6 +141,7 @@ mod list_notifications {
                 // Snooze time in the future
                 snoozed_until: Some(Utc::now().with_nanosecond(0).unwrap() + Duration::minutes(1)),
                 user_id: app.user.id,
+                details: None,
                 task_id: None,
             }),
         )
@@ -243,6 +247,7 @@ mod create_notification {
             last_read_at: None,
             snoozed_until: None,
             user_id: app.user.id,
+            details: None,
             task_id: None,
         });
         let created_notification: Box<Notification> = create_resource(
@@ -284,6 +289,7 @@ mod create_notification {
             last_read_at: None,
             snoozed_until: None,
             user_id: app.user.id,
+            details: None,
             task_id: None,
         });
         let created_notification: Box<Notification> = create_resource(
@@ -332,6 +338,7 @@ mod create_notification {
             last_read_at: None,
             snoozed_until: None,
             user_id: Uuid::new_v4().into(),
+            details: None,
             task_id: None,
         });
 
@@ -437,6 +444,7 @@ mod patch_notification {
             last_read_at: None,
             snoozed_until: None,
             user_id: app.user.id,
+            details: None,
             task_id: None,
         });
         let snoozed_time = Utc.with_ymd_and_hms(2022, 1, 1, 1, 2, 3).unwrap();
@@ -490,6 +498,7 @@ mod patch_notification {
             last_read_at: None,
             snoozed_until: Some(snoozed_time),
             user_id: app.user.id,
+            details: None,
             task_id: None,
         });
         let created_notification: Box<Notification> = create_resource(
@@ -580,6 +589,7 @@ mod patch_notification {
             last_read_at: None,
             snoozed_until: None,
             user_id: app.user.id,
+            details: None,
             task_id: None,
         });
         let created_notification: Box<Notification> = create_resource(

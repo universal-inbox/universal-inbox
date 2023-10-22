@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n              INSERT INTO notification_details\n                (\n                  id,\n                  created_at,\n                  updated_at,\n                  notification_id,\n                  details\n                )\n              VALUES\n                ($1, $2, $3, $4, $5)\n              ON CONFLICT (notification_id) DO UPDATE\n              SET\n                updated_at = $3,\n                details = $5\n              RETURNING\n                id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamp",
+        "Timestamp",
+        "Uuid",
+        "Json"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "1c1be9a8d29b21c66d620c0de479668ed5390402163b46c582c84d1957f1c433"
+}

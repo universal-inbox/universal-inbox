@@ -183,7 +183,11 @@ pub async fn sync_tasks(
                 info!("Syncing {source_kind_string} tasks for user {user_id}");
                 let service = task_service.read().await;
 
-                let tasks = service.sync_tasks_with_transaction(source, user_id).await;
+                let tasks = if let Some(source) = source {
+                    service.sync_tasks_with_transaction(source, user_id).await
+                } else {
+                    service.sync_all_tasks(user_id).await
+                };
 
                 match tasks {
                     Ok(tasks) => info!(
@@ -201,7 +205,11 @@ pub async fn sync_tasks(
         } else {
             let service = task_service.read().await;
 
-            let tasks = service.sync_tasks_with_transaction(source, user_id).await?;
+            let tasks = if let Some(source) = source {
+                service.sync_tasks_with_transaction(source, user_id).await?
+            } else {
+                service.sync_all_tasks(user_id).await?
+            };
             Ok(HttpResponse::Ok()
                 .content_type("application/json")
                 .body(serde_json::to_string(&tasks).context("Cannot serialize tasks")?))

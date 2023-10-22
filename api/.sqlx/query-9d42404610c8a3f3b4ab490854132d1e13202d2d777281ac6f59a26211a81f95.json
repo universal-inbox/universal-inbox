@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT\n                  id,\n                  title,\n                  status as \"status: _\",\n                  source_id,\n                  source_html_url,\n                  metadata as \"metadata: Json<NotificationMetadata>\",\n                  updated_at,\n                  last_read_at,\n                  snoozed_until,\n                  task_id,\n                  user_id\n                FROM notification\n                WHERE source_id = $1\n                AND user_id = $2\n            ",
+  "query": "\n                SELECT\n                  notification.id,\n                  notification.title,\n                  notification.status as \"status: _\",\n                  notification.source_id,\n                  notification.source_html_url,\n                  notification.metadata as \"metadata: Json<NotificationMetadata>\",\n                  notification.updated_at,\n                  notification.last_read_at,\n                  notification.snoozed_until,\n                  notification_details.details as \"details: Option<Json<NotificationDetails>>\",\n                  notification.task_id,\n                  notification.user_id\n                FROM notification\n                LEFT JOIN notification_details ON notification_details.notification_id = notification.id\n                WHERE notification.source_id = $1\n                AND notification.user_id = $2\n            ",
   "describe": {
     "columns": [
       {
@@ -62,11 +62,16 @@
       },
       {
         "ordinal": 9,
+        "name": "details: Option<Json<NotificationDetails>>",
+        "type_info": "Json"
+      },
+      {
+        "ordinal": 10,
         "name": "task_id",
         "type_info": "Uuid"
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "user_id",
         "type_info": "Uuid"
       }
@@ -87,9 +92,10 @@
       false,
       true,
       true,
+      false,
       true,
       false
     ]
   },
-  "hash": "9cea5a084ae3eb71d2613b626ff01e7f2ea28f956a984eb863709b448f2144f8"
+  "hash": "9d42404610c8a3f3b4ab490854132d1e13202d2d777281ac6f59a26211a81f95"
 }

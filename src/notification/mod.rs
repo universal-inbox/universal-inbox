@@ -10,7 +10,9 @@ use uuid::Uuid;
 use crate::{
     integration_connection::{IntegrationProvider, IntegrationProviderKind},
     notification::integrations::{
-        github::GithubNotification, google_mail::GoogleMailThread, linear::LinearNotification,
+        github::{GithubNotification, GithubPullRequest},
+        google_mail::GoogleMailThread,
+        linear::LinearNotification,
     },
     task::{integrations::todoist::DEFAULT_TODOIST_HTML_URL, Task, TaskId},
     user::UserId,
@@ -36,6 +38,7 @@ pub struct Notification {
     pub snoozed_until: Option<DateTime<Utc>>,
     pub user_id: UserId,
     pub task_id: Option<TaskId>,
+    pub details: Option<NotificationDetails>,
 }
 
 impl HasHtmlUrl for Notification {
@@ -74,6 +77,7 @@ pub struct NotificationWithTask {
     pub snoozed_until: Option<DateTime<Utc>>,
     pub user_id: UserId,
     pub task: Option<Task>,
+    pub details: Option<NotificationDetails>,
 }
 
 impl HasHtmlUrl for NotificationWithTask {
@@ -102,6 +106,7 @@ impl NotificationWithTask {
             last_read_at: notification.last_read_at,
             snoozed_until: notification.snoozed_until,
             user_id: notification.user_id,
+            details: notification.details.clone(),
             task,
         }
     }
@@ -122,6 +127,7 @@ impl NotificationWithTask {
             last_read_at: self.last_read_at,
             snoozed_until: self.snoozed_until,
             user_id,
+            details: None,
             task_id: self.task.as_ref().map(|task| task.id),
         }
     }
@@ -135,6 +141,13 @@ pub enum NotificationMetadata {
     Todoist,
     Linear(LinearNotification),
     GoogleMail(GoogleMailThread),
+}
+
+// tag: New notification integration
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
+#[serde(tag = "type", content = "content")]
+pub enum NotificationDetails {
+    GithubPullRequest(GithubPullRequest),
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Copy, Clone, Eq, Hash)]
@@ -253,6 +266,7 @@ mod tests {
                 last_read_at: None,
                 snoozed_until: None,
                 user_id: Uuid::new_v4().into(),
+                details: None,
                 task_id: None,
             };
 
@@ -278,6 +292,7 @@ mod tests {
                 last_read_at: None,
                 snoozed_until: None,
                 user_id: Uuid::new_v4().into(),
+                details: None,
                 task_id: None,
             };
 
@@ -305,6 +320,7 @@ mod tests {
                 last_read_at: None,
                 snoozed_until: None,
                 user_id: Uuid::new_v4().into(),
+                details: None,
                 task_id: None,
             };
 
@@ -327,6 +343,7 @@ mod tests {
                 last_read_at: None,
                 snoozed_until: None,
                 user_id: Uuid::new_v4().into(),
+                details: None,
                 task_id: None,
             };
 
@@ -349,6 +366,7 @@ mod tests {
                 last_read_at: None,
                 snoozed_until: None,
                 user_id: Uuid::new_v4().into(),
+                details: None,
                 task_id: None,
             };
 
@@ -369,6 +387,7 @@ mod tests {
                 last_read_at: None,
                 snoozed_until: None,
                 user_id: Uuid::new_v4().into(),
+                details: None,
                 task_id: None,
             };
 

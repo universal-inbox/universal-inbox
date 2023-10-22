@@ -1,20 +1,28 @@
 use std::{env, fs};
 
 use chrono::{TimeZone, Utc};
+use graphql_client::{GraphQLQuery, Response};
 use http::Uri;
-use httpmock::{Method::GET, Mock, MockServer};
+use httpmock::{
+    Method::{GET, POST},
+    Mock, MockServer,
+};
 use reqwest::Client;
 use rstest::*;
 use uuid::Uuid;
 
 use universal_inbox::{
     notification::{
-        integrations::github::GithubNotification, Notification, NotificationMetadata,
-        NotificationStatus,
+        integrations::github::GithubNotification, Notification, NotificationDetails,
+        NotificationMetadata, NotificationStatus,
     },
     user::UserId,
 };
-use universal_inbox_api::integrations::github;
+
+use universal_inbox_api::integrations::github::{
+    self,
+    graphql::{pull_request_query, PullRequestQuery},
+};
 
 use crate::helpers::{load_json_fixture_file, rest::create_resource};
 
@@ -43,6 +51,7 @@ pub async fn create_notification_from_github_notification(
             last_read_at: github_notification.last_read_at,
             snoozed_until: None,
             user_id,
+            details: None,
             task_id: None,
         }),
     )
@@ -67,15 +76,45 @@ pub fn mock_github_notifications_service<'a>(
     })
 }
 
+pub fn mock_github_pull_request_query<'a>(
+    github_mock_server: &'a MockServer,
+    owner: String,
+    repository: String,
+    pr_number: i64,
+    result: &'a Response<pull_request_query::ResponseData>,
+) -> Mock<'a> {
+    let expected_request_body = PullRequestQuery::build_query(pull_request_query::Variables {
+        owner,
+        repository,
+        pr_number,
+    });
+    github_mock_server.mock(|when, then| {
+        when.method(POST)
+            .path("/graphql")
+            .json_body_obj(&expected_request_body)
+            .header("accept", "application/vnd.github.merge-info-preview+json")
+            .header("authorization", "Bearer github_test_access_token");
+        then.status(200)
+            .header("content-type", "application/json")
+            .json_body_obj(result);
+    })
+}
+
 #[fixture]
 pub fn sync_github_notifications() -> Vec<GithubNotification> {
     load_json_fixture_file("/tests/api/fixtures/sync_github_notifications.json")
+}
+
+#[fixture]
+pub fn github_pull_request_123_response() -> Response<pull_request_query::ResponseData> {
+    load_json_fixture_file("/tests/api/fixtures/github_pull_request_123_response.json")
 }
 
 pub fn assert_sync_notifications(
     notifications: &[Notification],
     sync_github_notifications: &[GithubNotification],
     expected_user_id: UserId,
+    expected_notification_123_details: Option<NotificationDetails>,
 ) {
     for notification in notifications.iter() {
         assert_eq!(notification.user_id, expected_user_id);
@@ -86,7 +125,7 @@ pub fn assert_sync_notifications(
                 assert_eq!(
                     notification.source_html_url,
                     Some(
-                        "https://github.com/octokit/octokit.rb/issues/123"
+                        "https://github.com/octokit/octokit.rb/pulls/123"
                             .parse::<Uri>()
                             .unwrap()
                     )
@@ -103,6 +142,9 @@ pub fn assert_sync_notifications(
                     notification.metadata,
                     NotificationMetadata::Github(sync_github_notifications[0].clone())
                 );
+                if let Some(ref details) = expected_notification_123_details {
+                    assert_eq!(notification.details, Some(details.clone()));
+                }
             }
             // This notification should be updated
             "456" => {
@@ -128,6 +170,7 @@ pub fn assert_sync_notifications(
                     notification.metadata,
                     NotificationMetadata::Github(sync_github_notifications[1].clone())
                 );
+                assert!(notification.details.is_none());
             }
             _ => {
                 unreachable!("Unexpected notification title '{}'", &notification.title);

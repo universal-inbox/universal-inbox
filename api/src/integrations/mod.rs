@@ -22,7 +22,7 @@ pub mod oauth2;
 pub mod todoist;
 
 pub mod notification {
-    use universal_inbox::notification::Notification;
+    use universal_inbox::notification::{Notification, NotificationDetails};
 
     use super::*;
 
@@ -52,6 +52,12 @@ pub mod notification {
             snoozed_until_at: DateTime<Utc>,
             user_id: UserId,
         ) -> Result<(), UniversalInboxError>;
+        async fn fetch_notification_details<'a>(
+            &self,
+            executor: &mut Transaction<'a, Postgres>,
+            notification: &Notification,
+            user_id: UserId,
+        ) -> Result<Option<NotificationDetails>, UniversalInboxError>;
     }
 }
 

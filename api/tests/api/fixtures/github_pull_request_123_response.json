@@ -1,0 +1,93 @@
+{
+  "data": {
+    "repository": {
+      "pullRequest": {
+        "id": "PR_abcdef",
+        "number": 123,
+        "url": "https://github.com/octokit/octokit.rb/pull/123",
+        "titleHTML": "test change",
+        "bodyHTML": "<p dir=\"auto\">This is a test change</p>",
+        "labels": {
+          "nodes": []
+        },
+        "comments": {
+          "totalCount": 0
+        },
+        "commits": {
+          "nodes": [
+            {
+              "commit": {
+                "oid": "1234567890",
+                "checkSuites": {
+                  "nodes": [
+                    {
+                      "conclusion": null,
+                      "status": "QUEUED",
+                      "checkRuns": {
+                        "nodes": []
+                      },
+                      "workflowRun": null,
+                      "app": {
+                        "name": "Cloudflare Pages",
+                        "url": "https://pages.cloudflare.com",
+                        "logoUrl": "https://avatars.githubusercontent.com/in/85455?u=b286429105730c609e6561bb49f94a912de38b5b&v=4"
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "totalCount": 1
+        },
+        "baseRefName": "main",
+        "baseRepository": {
+          "nameWithOwner": "octokit/octokit.rb",
+          "url": "https://github.com/octokit/octokit.rb"
+        },
+        "headRefName": "test-branch",
+        "headRepository": {
+          "nameWithOwner": "octokit/octokit.rb",
+          "url": "https://github.com/octokit/octokit.rb"
+        },
+        "author": {
+          "__typename": "User",
+          "avatarUrl": "https://avatars.githubusercontent.com/u/12345",
+          "login": "test",
+          "name": "Test user"
+        },
+        "assignees": {
+          "nodes": []
+        },
+        "reviewDecision": null,
+        "reviews": {
+          "nodes": []
+        },
+        "reviewRequests": {
+          "nodes": [
+            {
+              "requestedReviewer": {
+                "__typename": "User",
+                "userAvatarUrl": "https://avatars.githubusercontent.com/u/67890",
+                "userLogin": "other-test",
+                "userName": null
+              }
+            }
+          ]
+        },
+        "state": "OPEN",
+        "isDraft": false,
+        "closedAt": null,
+        "createdAt": "2023-10-21T20:36:42Z",
+        "updatedAt": "2023-10-21T20:36:42Z",
+        "mergeable": "MERGEABLE",
+        "mergedAt": null,
+        "mergeStateStatus": "CLEAN",
+        "mergedBy": null,
+        "deletions": 1,
+        "additions": 1,
+        "changedFiles": 1
+      }
+    }
+  }
+}
