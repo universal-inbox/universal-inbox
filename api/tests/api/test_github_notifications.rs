@@ -76,6 +76,7 @@ mod patch_resource {
             last_read_at: None,
             snoozed_until: None,
             user_id: app.user.id,
+            details: None,
             task_id: Some(existing_todoist_task.task.id),
         });
         let created_notification: Box<Notification> = create_resource(
@@ -165,6 +166,7 @@ mod patch_resource {
             last_read_at: None,
             snoozed_until: None,
             user_id: app.user.id,
+            details: None,
             task_id: None,
         });
         let created_notification: Box<Notification> = create_resource(
@@ -236,6 +238,7 @@ mod patch_resource {
             last_read_at: None,
             snoozed_until: None,
             user_id: app.user.id,
+            details: None,
             task_id: None,
         });
         let created_notification: Box<Notification> = create_resource(
@@ -297,6 +300,7 @@ mod patch_resource {
             last_read_at: None,
             snoozed_until: None,
             user_id: app.user.id,
+            details: None,
             task_id: None,
         });
         let snoozed_time = Utc.with_ymd_and_hms(2022, 1, 1, 1, 2, 3).unwrap();
@@ -354,6 +358,7 @@ mod patch_resource {
             last_read_at: None,
             snoozed_until: Some(snoozed_time),
             user_id: app.user.id,
+            details: None,
             task_id: None,
         });
         let created_notification: Box<Notification> = create_resource(
@@ -405,6 +410,7 @@ mod patch_resource {
             last_read_at: None,
             snoozed_until: None,
             user_id: app.user.id,
+            details: None,
             task_id: None,
         });
         let created_notification: Box<Notification> = create_resource(

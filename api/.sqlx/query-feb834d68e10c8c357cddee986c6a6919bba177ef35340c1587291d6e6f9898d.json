@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT\n                  id,\n                  title,\n                  status as \"status: _\",\n                  source_id,\n                  source_html_url,\n                  metadata as \"metadata: Json<NotificationMetadata>\",\n                  updated_at,\n                  last_read_at,\n                  snoozed_until,\n                  task_id,\n                  user_id\n                FROM notification\n                WHERE id = $1\n            ",
+  "query": "\n                SELECT\n                  notification.id,\n                  notification.title,\n                  notification.status as \"status: _\",\n                  notification.source_id,\n                  notification.source_html_url,\n                  notification.metadata as \"metadata: Json<NotificationMetadata>\",\n                  notification.updated_at,\n                  notification.last_read_at,\n                  notification.snoozed_until,\n                  notification_details.details as \"details: Option<Json<NotificationDetails>>\",\n                  notification.task_id,\n                  notification.user_id\n                FROM notification\n                LEFT JOIN notification_details ON notification_details.notification_id = notification.id\n                WHERE notification.id = $1\n            ",
   "describe": {
     "columns": [
       {
@@ -62,11 +62,16 @@
       },
       {
         "ordinal": 9,
+        "name": "details: Option<Json<NotificationDetails>>",
+        "type_info": "Json"
+      },
+      {
+        "ordinal": 10,
         "name": "task_id",
         "type_info": "Uuid"
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "user_id",
         "type_info": "Uuid"
       }
@@ -86,9 +91,10 @@
       false,
       true,
       true,
+      false,
       true,
       false
     ]
   },
-  "hash": "f83bbfe0e636a92aa16d0a59f046c8d47c54d7fcabb8d73840cfe6c15753bfdc"
+  "hash": "feb834d68e10c8c357cddee986c6a6919bba177ef35340c1587291d6e6f9898d"
 }

@@ -109,6 +109,7 @@ mod patch_notification {
             updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
             last_read_at: None,
             snoozed_until: None,
+            details: None,
             task_id: None,
         });
         let created_notification: Box<Notification> = create_resource(

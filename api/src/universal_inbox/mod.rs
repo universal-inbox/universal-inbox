@@ -88,3 +88,28 @@ pub struct UpdateStatus<T> {
     pub updated: bool,
     pub result: Option<T>,
 }
+
+#[derive(Debug)]
+pub enum UpsertStatus<T> {
+    Created(T),
+    Updated(T),
+    Untouched(T),
+}
+
+impl<T> UpsertStatus<T> {
+    fn value(self: UpsertStatus<T>) -> T {
+        match self {
+            UpsertStatus::Created(inner)
+            | UpsertStatus::Updated(inner)
+            | UpsertStatus::Untouched(inner) => inner,
+        }
+    }
+
+    fn value_ref(self: &UpsertStatus<T>) -> &T {
+        match self {
+            UpsertStatus::Created(inner)
+            | UpsertStatus::Updated(inner)
+            | UpsertStatus::Untouched(inner) => inner,
+        }
+    }
+}

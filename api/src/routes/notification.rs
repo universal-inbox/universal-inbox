@@ -205,9 +205,13 @@ pub async fn sync_notifications(
                 info!("Syncing {source_kind_string} notifications for user {user_id}");
                 let service = notification_service.read().await;
 
-                let notifications = service
-                    .sync_notifications_with_transaction(source, user_id)
-                    .await;
+                let notifications = if let Some(source) = source {
+                    service
+                        .sync_notifications_with_transaction(source, user_id)
+                        .await
+                } else {
+                    service.sync_all_notifications(user_id).await
+                };
 
                 match notifications {
                     Ok(notifications) => info!(
@@ -223,9 +227,13 @@ pub async fn sync_notifications(
         } else {
             let service = notification_service.read().await;
 
-            let notifications = service
-                .sync_notifications_with_transaction(source, user_id)
-                .await?;
+            let notifications = if let Some(source) = source {
+                service
+                    .sync_notifications_with_transaction(source, user_id)
+                    .await?
+            } else {
+                service.sync_all_notifications(user_id).await?
+            };
             Ok(HttpResponse::Ok().content_type("application/json").body(
                 serde_json::to_string(&notifications).context("Cannot serialize notifications")?,
             ))

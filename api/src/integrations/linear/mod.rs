@@ -15,7 +15,7 @@ use universal_inbox::{
         integrations::linear::{
             LinearIssue, LinearNotification, LinearOrganization, LinearProject, LinearTeam,
         },
-        Notification, NotificationSource, NotificationSourceKind,
+        Notification, NotificationDetails, NotificationSource, NotificationSourceKind,
     },
     user::UserId,
 };
@@ -26,6 +26,7 @@ use crate::{
     universal_inbox::{
         integration_connection::service::IntegrationConnectionService, UniversalInboxError,
     },
+    utils::graphql::assert_no_error_in_graphql_response,
 };
 
 type DateTime = ChronoDateTime<Utc>;
@@ -174,6 +175,7 @@ pub struct LinearService {
 }
 
 static LINEAR_GRAPHQL_URL: &str = "https://api.linear.app/graphql";
+static LINEAR_GRAPHQL_API_NAME: &str = "Linear";
 
 impl LinearService {
     pub fn new(
@@ -208,7 +210,7 @@ impl LinearService {
             serde_json::from_str(&response)
                 .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
 
-        assert_no_error_in_response(&notifications_response)?;
+        assert_no_error_in_graphql_response(&notifications_response, LINEAR_GRAPHQL_API_NAME)?;
 
         Ok(notifications_response
             .data
@@ -240,7 +242,7 @@ impl LinearService {
             serde_json::from_str(&response)
                 .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
 
-        assert_no_error_in_response(&notification_response)?;
+        assert_no_error_in_graphql_response(&notification_response, LINEAR_GRAPHQL_API_NAME)?;
 
         Ok(notification_response
             .data
@@ -271,7 +273,7 @@ impl LinearService {
             serde_json::from_str(&response)
                 .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
 
-        assert_no_error_in_response(&archive_response)?;
+        assert_no_error_in_graphql_response(&archive_response, LINEAR_GRAPHQL_API_NAME)?;
 
         let response_data = archive_response
             .data
@@ -313,7 +315,7 @@ impl LinearService {
             serde_json::from_str(&response)
                 .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
 
-        assert_no_error_in_response(&update_response)?;
+        assert_no_error_in_graphql_response(&update_response, LINEAR_GRAPHQL_API_NAME)?;
 
         let response_data = update_response
             .data
@@ -356,7 +358,7 @@ impl LinearService {
             serde_json::from_str(&response)
                 .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
 
-        assert_no_error_in_response(&update_response)?;
+        assert_no_error_in_graphql_response(&update_response, LINEAR_GRAPHQL_API_NAME)?;
 
         let response_data = update_response
             .data
@@ -386,24 +388,6 @@ fn build_linear_client(access_token: &AccessToken) -> Result<ClientWithMiddlewar
     Ok(ClientBuilder::new(reqwest_client)
         .with(TracingMiddleware::<SpanBackendWithUrl>::new())
         .build())
-}
-
-fn assert_no_error_in_response<T>(response: &Response<T>) -> Result<(), UniversalInboxError> {
-    if let Some(ref errors) = response.errors {
-        if !errors.is_empty() {
-            let error_messages = errors
-                .iter()
-                .map(|error| error.message.clone())
-                .collect::<Vec<String>>()
-                .join(", ");
-            return Err(UniversalInboxError::Unexpected(anyhow!(
-                "Errors occured while querying Linear API: {}",
-                error_messages
-            )));
-        }
-    }
-
-    Ok(())
 }
 
 #[async_trait]
@@ -528,6 +512,18 @@ impl NotificationSourceService for LinearService {
             snoozed_until_at,
         )
         .await
+    }
+
+    #[tracing::instrument(level = "debug", skip(self, _executor, _notification), fields(notification_id = _notification.id.to_string()), err)]
+    async fn fetch_notification_details<'a>(
+        &self,
+        _executor: &mut Transaction<'a, Postgres>,
+        _notification: &Notification,
+        _user_id: UserId,
+    ) -> Result<Option<NotificationDetails>, UniversalInboxError> {
+        // Linear notification details are fetch as part of the fetch_all_notifications call
+        // all details are fetch in a single GraphQL call
+        Ok(None)
     }
 }
 

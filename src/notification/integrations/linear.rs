@@ -130,6 +130,7 @@ impl LinearNotification {
                 last_read_at: *read_at,
                 snoozed_until: *snoozed_until_at,
                 user_id,
+                details: None,
                 task_id: None,
             },
             LinearNotification::ProjectNotification {
@@ -154,6 +155,7 @@ impl LinearNotification {
                 last_read_at: *read_at,
                 snoozed_until: *snoozed_until_at,
                 user_id,
+                details: None,
                 task_id: None,
             },
         }

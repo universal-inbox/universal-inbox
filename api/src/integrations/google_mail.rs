@@ -21,7 +21,8 @@ use universal_inbox::{
         integrations::google_mail::{
             EmailAddress, GoogleMailMessage, GoogleMailThread, GOOGLE_MAIL_INBOX_LABEL,
         },
-        Notification, NotificationSource, NotificationSourceKind, NotificationStatus,
+        Notification, NotificationDetails, NotificationSource, NotificationSourceKind,
+        NotificationStatus,
     },
     user::UserId,
 };
@@ -443,6 +444,19 @@ impl NotificationSourceService for GoogleMailService {
     ) -> Result<(), UniversalInboxError> {
         // Google Mail threads cannot be snoozed from the API => no-op
         Ok(())
+    }
+
+    #[tracing::instrument(level = "debug", skip(self, _executor, _notification), fields(notification_id = _notification.id.0.to_string()), err)]
+    async fn fetch_notification_details<'a>(
+        &self,
+        _executor: &mut Transaction<'a, Postgres>,
+        _notification: &Notification,
+        _user_id: UserId,
+    ) -> Result<Option<NotificationDetails>, UniversalInboxError> {
+        // Google Mail threads details are fetch as part of the get_thread call in
+        // fetch_all_notification
+        // Should it be moved here?
+        Ok(None)
     }
 }
 

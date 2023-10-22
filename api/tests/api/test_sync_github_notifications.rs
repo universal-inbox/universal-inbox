@@ -1,5 +1,6 @@
 use actix_http::StatusCode;
 use chrono::{TimeZone, Utc};
+use graphql_client::Response;
 use rstest::*;
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
@@ -7,15 +8,18 @@ use uuid::Uuid;
 use universal_inbox::{
     integration_connection::{IntegrationConnectionStatus, IntegrationProviderKind},
     notification::{
-        integrations::github::GithubNotification, Notification, NotificationMetadata,
-        NotificationSourceKind, NotificationStatus,
+        integrations::github::GithubNotification, Notification, NotificationDetails,
+        NotificationMetadata, NotificationSourceKind, NotificationStatus,
     },
     task::integrations::todoist::TodoistItem,
 };
 
 use universal_inbox_api::{
     configuration::Settings,
-    integrations::{github, oauth2::NangoConnection},
+    integrations::{
+        github::{self, graphql::pull_request_query},
+        oauth2::NangoConnection,
+    },
 };
 
 use crate::helpers::{
@@ -27,7 +31,8 @@ use crate::helpers::{
     notification::{
         github::{
             assert_sync_notifications, create_notification_from_github_notification,
-            mock_github_notifications_service, sync_github_notifications,
+            github_pull_request_123_response, mock_github_notifications_service,
+            mock_github_pull_request_query, sync_github_notifications,
         },
         list_notifications, sync_notifications, sync_notifications_response,
     },
@@ -43,6 +48,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     #[future] authenticated_app: AuthenticatedApp,
     // Vec[GithubNotification { source_id: "123", ... }, GithubNotification { source_id: "456", ... } ]
     sync_github_notifications: Vec<GithubNotification>,
+    github_pull_request_123_response: Response<pull_request_query::ResponseData>,
     todoist_item: Box<TodoistItem>,
     nango_github_connection: Box<NangoConnection>,
 ) {
@@ -72,6 +78,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
             updated_at: Utc.with_ymd_and_hms(2014, 11, 6, 0, 0, 0).unwrap(),
             last_read_at: None,
             snoozed_until: Some(Utc.with_ymd_and_hms(2064, 1, 1, 0, 0, 0).unwrap()),
+            details: None,
             task_id: Some(existing_todoist_task.task.id),
         }),
     )
@@ -84,12 +91,26 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         nango_github_connection,
     )
     .await;
+    let expected_notification_123_details: NotificationDetails = github_pull_request_123_response
+        .data
+        .clone()
+        .unwrap()
+        .try_into()
+        .unwrap();
 
     let github_notifications_mock =
         mock_github_notifications_service(&app.github_mock_server, "1", &sync_github_notifications);
     let empty_result = Vec::<GithubNotification>::new();
     let github_notifications_mock2 =
         mock_github_notifications_service(&app.github_mock_server, "2", &empty_result);
+
+    let github_pull_request_123_query_mock = mock_github_pull_request_query(
+        &app.github_mock_server,
+        "octokit".to_string(),
+        "octokit.rb".to_string(),
+        123,
+        &github_pull_request_123_response,
+    );
 
     let notifications: Vec<Notification> = sync_notifications(
         &app.client,
@@ -100,7 +121,13 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     .await;
 
     assert_eq!(notifications.len(), sync_github_notifications.len());
-    assert_sync_notifications(&notifications, &sync_github_notifications, app.user.id);
+    github_pull_request_123_query_mock.assert();
+    assert_sync_notifications(
+        &notifications,
+        &sync_github_notifications,
+        app.user.id,
+        Some(expected_notification_123_details),
+    );
     github_notifications_mock.assert();
     github_notifications_mock2.assert();
 
@@ -177,6 +204,7 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
             updated_at: Utc.with_ymd_and_hms(2014, 11, 6, 0, 0, 0).unwrap(),
             last_read_at: None,
             snoozed_until: None,
+            details: None,
             task_id: None,
         }),
     )
@@ -205,7 +233,12 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
     .await;
 
     assert_eq!(notifications.len(), sync_github_notifications.len());
-    assert_sync_notifications(&notifications, &sync_github_notifications, app.user.id);
+    assert_sync_notifications(
+        &notifications,
+        &sync_github_notifications,
+        app.user.id,
+        None,
+    );
     github_notifications_mock.assert();
     github_notifications_mock2.assert();
 
@@ -227,6 +260,7 @@ async fn test_sync_all_notifications_asynchronously(
     #[future] authenticated_app: AuthenticatedApp,
     // Vec[GithubNotification { source_id: "123", ... }, GithubNotification { source_id: "456", ... } ]
     sync_github_notifications: Vec<GithubNotification>,
+    github_pull_request_123_response: Response<pull_request_query::ResponseData>,
     nango_github_connection: Box<NangoConnection>,
 ) {
     let app = authenticated_app.await;
@@ -247,6 +281,7 @@ async fn test_sync_all_notifications_asynchronously(
             updated_at: Utc.with_ymd_and_hms(2014, 11, 6, 0, 0, 0).unwrap(),
             last_read_at: None,
             snoozed_until: None,
+            details: None,
             task_id: None,
         }),
     )
@@ -265,6 +300,13 @@ async fn test_sync_all_notifications_asynchronously(
     let empty_result = Vec::<GithubNotification>::new();
     let mut github_notifications_mock2 =
         mock_github_notifications_service(&app.github_mock_server, "2", &empty_result);
+    let mut github_pull_request_123_query_mock = mock_github_pull_request_query(
+        &app.github_mock_server,
+        "octokit".to_string(),
+        "octokit.rb".to_string(),
+        123,
+        &github_pull_request_123_response,
+    );
 
     let unauthenticated_client = reqwest::Client::new();
     let response = sync_notifications_response(
@@ -317,9 +359,12 @@ async fn test_sync_all_notifications_asynchronously(
     assert!(synchronized);
     github_notifications_mock.assert();
     github_notifications_mock2.assert();
+    github_pull_request_123_query_mock.assert();
 
     github_notifications_mock.delete();
     github_notifications_mock2.delete();
+    github_pull_request_123_query_mock.delete();
+
     // Triggering a new sync should not actually sync again
     let github_notifications_mock = app.github_mock_server.mock(|when, then| {
         when.any_request();

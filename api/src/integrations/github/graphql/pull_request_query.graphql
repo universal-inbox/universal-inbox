@@ -1,0 +1,147 @@
+query PullRequestQuery($owner: String!, $repository: String!, $pr_number: Int!) {
+  repository(owner: $owner, name: $repository) {
+    pullRequest(number: $pr_number) {
+      id
+      number
+      url
+      titleHTML
+      bodyHTML
+      labels(first: 10) {
+        nodes {
+          color
+          description
+          name
+        }
+      }
+      comments {
+        totalCount
+      }
+      commits(last: 1) {
+        nodes {
+          commit {
+            oid
+            checkSuites(first: 10) {
+              nodes {
+                conclusion
+                status
+                checkRuns(first: 10) {
+                  nodes {
+                    conclusion
+                    name
+                    status
+                    detailsUrl
+                  }
+                }
+                workflowRun {
+                  workflow {
+                    name
+                    url
+                  }
+                }
+                app {
+                  name
+                  logoUrl
+                  url
+                }
+              }
+            }
+          }
+        }
+        totalCount
+      }
+
+      baseRefName
+      baseRepository {
+        nameWithOwner
+        url
+      }
+      headRefName
+      headRepository {
+        nameWithOwner
+        url
+      }
+      author {
+        __typename
+        avatarUrl
+        login
+        ... on User {
+          name
+        }
+      }
+      assignees(first: 10) {
+        nodes {
+          avatarUrl
+          login
+          name
+        }
+      }
+
+      reviewDecision
+      reviews(first: 10) {
+        nodes {
+          author {
+            __typename
+            avatarUrl
+            login
+            ... on User {
+              name
+            }
+          }
+          bodyHTML
+          state
+
+        }
+      }
+
+      reviewRequests(first: 10) {
+        nodes {
+          requestedReviewer {
+            __typename
+            ... on User {
+              userAvatarUrl: avatarUrl
+              userLogin: login
+              userName: name
+            }
+            ... on Bot {
+              botLogin: login
+              botAvatarUrl: avatarUrl
+
+            }
+            ... on Mannequin {
+              mannequinLogin: login
+              mannequinAvatarUrl: avatarUrl
+
+            }
+            ... on Team {
+              teamAvatarUrl: avatarUrl
+              teamName: name
+            }
+          }
+        }
+      }
+
+      state
+      isDraft
+
+      closedAt
+      createdAt
+      updatedAt
+
+      mergeable
+      mergedAt
+      mergeStateStatus
+      mergedBy {
+        __typename
+        login
+        avatarUrl
+        ... on User {
+          name
+        }
+      }
+
+      deletions
+      additions
+      changedFiles
+    }
+  }
+}

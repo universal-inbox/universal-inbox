@@ -107,6 +107,7 @@ impl Task {
             last_read_at: None,
             snoozed_until: None,
             user_id,
+            details: None,
             task_id: Some(self.id),
         }
     }
@@ -283,6 +284,7 @@ impl From<Task> for NotificationWithTask {
             last_read_at: None,
             snoozed_until: None,
             user_id: task.user_id,
+            details: None,
             task: Some(task),
         }
     }

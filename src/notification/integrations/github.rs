@@ -1,3 +1,6 @@
+use std::fmt;
+
+use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use git_url_parse::GitUrl;
 use http::{uri::Authority, Uri};
@@ -468,8 +471,291 @@ impl GithubNotification {
             last_read_at: self.last_read_at,
             snoozed_until: None,
             user_id,
+            details: None,
             task_id: None,
         }
+    }
+}
+
+#[serde_as]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct GithubPullRequest {
+    pub id: String,
+    pub number: i64,
+    #[serde_as(as = "DisplayFromStr")]
+    pub url: Uri,
+    pub title: String,
+    pub body: String,
+    pub state: GithubPullRequestState,
+    pub is_draft: bool,
+    pub closed_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub merged_at: Option<DateTime<Utc>>,
+    pub mergeable_state: GithubMergeableState,
+    pub merge_state_status: GithubMergeStateStatus,
+    pub merged_by: Option<GithubActor>,
+    pub deletions: i64,
+    pub additions: i64,
+    pub changed_files: i64,
+    pub labels: Vec<GithubLabel>,
+    pub comments_count: i64,
+    pub latest_commit: GithubCommitChecks,
+    pub base_ref_name: String,
+    pub base_repository: Option<GithubRepositorySummary>,
+    pub head_ref_name: String,
+    pub head_repository: Option<GithubRepositorySummary>,
+    pub author: Option<GithubActor>,
+    pub assignees: Vec<GithubActor>,
+    pub review_decision: Option<GithubPullRequestReviewDecision>,
+    pub reviews: Vec<GithubPullRequestReview>,
+    pub review_requests: Vec<GithubReviewer>,
+}
+
+#[serde_as]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct GithubRepositorySummary {
+    pub name_with_owner: String,
+    #[serde_as(as = "DisplayFromStr")]
+    pub url: Uri,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
+pub enum GithubPullRequestState {
+    Open,
+    Closed,
+    Merged,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
+pub enum GithubMergeableState {
+    Conflicting,
+    Mergeable,
+    Unknown,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
+pub enum GithubMergeStateStatus {
+    Behind,
+    Blocked,
+    Clean,
+    Dirty,
+    Draft,
+    HasHook,
+    Unknown,
+    Unstable,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
+pub enum GithubPullRequestReviewDecision {
+    Approved,
+    ChangesRequested,
+    ReviewRequired,
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+#[serde(tag = "type", content = "content")]
+pub enum GithubActor {
+    User(GithubUserSummary),
+    Bot(GithubBotSummary),
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct GithubLabel {
+    pub name: String,
+    pub color: String,
+    pub description: Option<String>,
+}
+
+#[serde_as]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct GithubUserSummary {
+    pub login: String,
+    #[serde_as(as = "DisplayFromStr")]
+    pub avatar_url: Uri,
+    pub name: Option<String>,
+}
+
+#[serde_as]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct GithubBotSummary {
+    pub login: String,
+    #[serde_as(as = "DisplayFromStr")]
+    pub avatar_url: Uri,
+}
+
+#[serde_as]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct GithubTeamSummary {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde_as(as = "Option<DisplayFromStr>")]
+    pub avatar_url: Option<Uri>,
+    pub name: String,
+}
+
+#[serde_as]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct GithubMannequinSummary {
+    #[serde_as(as = "DisplayFromStr")]
+    pub avatar_url: Uri,
+    pub login: String,
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct GithubCommitChecks {
+    pub git_commit_id: GitObjectId,
+    pub check_suites: Option<Vec<GithubCheckSuite>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Hash)]
+#[serde(transparent)]
+pub struct GitObjectId(String);
+
+impl fmt::Display for GitObjectId {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<String> for GitObjectId {
+    fn from(string: String) -> Self {
+        Self(string)
+    }
+}
+
+impl From<GitObjectId> for String {
+    fn from(git_object_id: GitObjectId) -> Self {
+        git_object_id.0
+    }
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone, Default)]
+pub struct GithubCheckSuite {
+    pub check_runs: Vec<GithubCheckRun>,
+    pub conclusion: Option<GithubCheckConclusionState>,
+    pub status: GithubCheckStatusState,
+    pub workflow: Option<GithubWorkflow>,
+    pub app: Option<GithubCheckSuiteApp>,
+}
+
+#[serde_as]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone, Default)]
+pub struct GithubCheckRun {
+    pub name: String,
+    pub conclusion: Option<GithubCheckConclusionState>,
+    pub status: GithubCheckStatusState,
+    #[serde_as(as = "Option<DisplayFromStr>")]
+    pub url: Option<Uri>,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
+pub enum GithubCheckConclusionState {
+    ActionRequired,
+    Cancelled,
+    Failure,
+    Neutral,
+    Skipped,
+    Stale,
+    StartupFailure,
+    Success,
+    TimedOut,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Default)]
+pub enum GithubCheckStatusState {
+    Completed,
+    InProgress,
+    #[default]
+    Pending,
+    Queued,
+    Requested,
+    Waiting,
+}
+
+#[serde_as]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct GithubCheckSuiteApp {
+    pub name: String,
+    #[serde_as(as = "DisplayFromStr")]
+    pub logo_url: Uri,
+    #[serde_as(as = "DisplayFromStr")]
+    pub url: Uri,
+}
+
+#[serde_as]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct GithubWorkflow {
+    pub name: String,
+    #[serde_as(as = "DisplayFromStr")]
+    pub url: Uri,
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone, Default)]
+pub struct GithubPullRequestReview {
+    pub author: Option<GithubActor>,
+    pub body: String,
+    pub state: GithubPullRequestReviewState,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Default)]
+pub enum GithubPullRequestReviewState {
+    Approved,
+    ChangesRequested,
+    Commented,
+    Dismissed,
+    #[default]
+    Pending,
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+#[serde(tag = "type", content = "content")]
+pub enum GithubReviewer {
+    User(GithubUserSummary),
+    Bot(GithubBotSummary),
+    Team(GithubTeamSummary),
+    Mannequin(GithubMannequinSummary),
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
+pub enum GithubUri {
+    PullRequest {
+        owner: String,
+        repository: String,
+        number: i64,
+    },
+}
+
+impl GithubUri {
+    pub fn try_from_api_uri(resource_uri: &Uri) -> Result<Self> {
+        if resource_uri.host() != Some("api.github.com") {
+            return Err(
+                anyhow!(
+                    "Failed to parse Github API resource URI: it must be hosted on api.github.com, found: {:?}", resource_uri.host()
+                )
+            );
+        }
+
+        if let &["", "repos", owner, repository, "pulls", number] = resource_uri
+            .path()
+            .split('/')
+            .collect::<Vec<&str>>()
+            .as_slice()
+        {
+            return Ok(GithubUri::PullRequest {
+                owner: owner.to_string(),
+                repository: repository.to_string(),
+                number: number.parse()
+                    .with_context(|| {
+                        format!(
+                            "Failed to parse Github API resource URI: Pull request number must be an integer: {}", number)
+                    })?
+            });
+        }
+
+        Err(anyhow!(
+            "Failed to parse Github API resource URI: unknown resource type: {}",
+            resource_uri
+        ))
     }
 }
 
@@ -579,6 +865,57 @@ mod tests {
                 ),
                 None
             );
+        }
+    }
+
+    mod try_from_api_uri {
+        use super::*;
+
+        #[rstest]
+        #[case::pull_request(
+            "https://api.github.com/repos/octokit/octokit.rb/pulls/123",
+            GithubUri::PullRequest {
+                owner: "octokit".to_string(),
+                repository: "octokit.rb".to_string(),
+                number: 123
+            }
+        )]
+        fn test_try_from_api_uri(
+            #[case] resource_uri: &str,
+            #[case] expected_github_uri: GithubUri,
+        ) {
+            assert_eq!(
+                GithubUri::try_from_api_uri(&resource_uri.parse::<Uri>().unwrap()).unwrap(),
+                expected_github_uri
+            );
+        }
+
+        #[rstest]
+        fn test_try_from_api_uri_from_non_api_domain() {
+            assert!(GithubUri::try_from_api_uri(
+                &"https://github.com/octokit/octokit.rb/pulls/123"
+                    .parse::<Uri>()
+                    .unwrap()
+            )
+            .is_err());
+        }
+
+        #[rstest]
+        fn test_try_from_api_uri_from_unknown_resource() {
+            assert!(GithubUri::try_from_api_uri(
+                &"https://api.github.com/unknown/123".parse::<Uri>().unwrap()
+            )
+            .is_err());
+        }
+
+        #[rstest]
+        fn test_try_from_api_uri_from_invalid_pull_request_number() {
+            assert!(GithubUri::try_from_api_uri(
+                &"https://api.github.com/repos/octokit/octokit.rb/abc"
+                    .parse::<Uri>()
+                    .unwrap()
+            )
+            .is_err());
         }
     }
 }

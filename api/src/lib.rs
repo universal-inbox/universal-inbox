@@ -43,6 +43,7 @@ pub mod observability;
 pub mod repository;
 pub mod routes;
 pub mod universal_inbox;
+pub mod utils;
 
 pub async fn run(
     listener: TcpListener,

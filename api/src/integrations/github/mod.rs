@@ -5,6 +5,7 @@ use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use futures::stream::{self, TryStreamExt};
+use graphql_client::GraphQLQuery;
 use http::{HeaderMap, HeaderValue, Uri};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_tracing::{SpanBackendWithUrl, TracingMiddleware};
@@ -14,27 +15,38 @@ use tokio::sync::RwLock;
 use universal_inbox::{
     integration_connection::{IntegrationProvider, IntegrationProviderKind},
     notification::{
-        integrations::github::GithubNotification, Notification, NotificationSource,
+        integrations::github::{GithubNotification, GithubUri},
+        Notification, NotificationDetails, NotificationMetadata, NotificationSource,
         NotificationSourceKind,
     },
     user::UserId,
 };
 
 use crate::{
-    integrations::{notification::NotificationSourceService, oauth2::AccessToken, APP_USER_AGENT},
+    integrations::{
+        github::graphql::{pull_request_query, PullRequestQuery},
+        notification::NotificationSourceService,
+        oauth2::AccessToken,
+        APP_USER_AGENT,
+    },
     universal_inbox::{
         integration_connection::service::IntegrationConnectionService, UniversalInboxError,
     },
+    utils::graphql::assert_no_error_in_graphql_response,
 };
+
+pub mod graphql;
 
 #[derive(Clone, Debug)]
 pub struct GithubService {
     github_base_url: String,
+    github_graphql_url: String,
     page_size: usize,
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
 }
 
 static GITHUB_BASE_URL: &str = "https://api.github.com";
+static GITHUB_GRAPHQL_API_NAME: &str = "Github";
 
 impl GithubService {
     pub fn new(
@@ -43,7 +55,13 @@ impl GithubService {
         integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     ) -> Result<GithubService, UniversalInboxError> {
         Ok(GithubService {
-            github_base_url: github_base_url.unwrap_or_else(|| GITHUB_BASE_URL.to_string()),
+            github_base_url: github_base_url
+                .clone()
+                .unwrap_or_else(|| GITHUB_BASE_URL.to_string()),
+            github_graphql_url: format!(
+                "{}/graphql",
+                github_base_url.unwrap_or_else(|| GITHUB_BASE_URL.to_string())
+            ),
             page_size,
             integration_connection_service,
         })
@@ -59,7 +77,7 @@ impl GithubService {
             "{}/notifications?page={page}&per_page={per_page}",
             self.github_base_url
         );
-        let response = build_github_client(access_token)
+        let response = build_github_rest_client(access_token)
             .context("Failed to build Github client")?
             .get(&url)
             .send()
@@ -80,7 +98,7 @@ impl GithubService {
         thread_id: &str,
         access_token: &AccessToken,
     ) -> Result<(), UniversalInboxError> {
-        let response = build_github_client(access_token)
+        let response = build_github_rest_client(access_token)
             .context("Failed to build Github client")?
             .patch(&format!(
                 "{}/notifications/threads/{thread_id}",
@@ -107,7 +125,7 @@ impl GithubService {
         thread_id: &str,
         access_token: &AccessToken,
     ) -> Result<(), UniversalInboxError> {
-        let response = build_github_client(access_token)
+        let response = build_github_rest_client(access_token)
             .context("Failed to build Github client")?
             .put(&format!(
                 "{}/notifications/threads/{thread_id}/subscription",
@@ -131,15 +149,71 @@ impl GithubService {
             }
         }
     }
+
+    pub async fn query_pull_request(
+        &self,
+        owner: String,
+        repository: String,
+        pr_number: i64,
+        access_token: &AccessToken,
+    ) -> Result<pull_request_query::ResponseData, UniversalInboxError> {
+        let request_body = PullRequestQuery::build_query(pull_request_query::Variables {
+            owner,
+            repository,
+            pr_number,
+        });
+
+        let response = build_github_graphql_client(access_token)
+            .context("Failed to build Github client")?
+            .post(&self.github_graphql_url)
+            .json(&request_body)
+            .send()
+            .await
+            .context("Cannot fetch pull request from Github graphql API")?
+            .text()
+            .await
+            .context("Failed to fetch pull request response from Github graphql API")?;
+
+        let pull_request_response: graphql_client::Response<pull_request_query::ResponseData> =
+            serde_json::from_str(&response)
+                .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
+
+        assert_no_error_in_graphql_response(&pull_request_response, GITHUB_GRAPHQL_API_NAME)?;
+
+        Ok(pull_request_response
+            .data
+            .ok_or_else(|| anyhow!("Failed to parse `data` from Github graphql response"))?)
+    }
 }
 
-fn build_github_client(access_token: &AccessToken) -> Result<ClientWithMiddleware, reqwest::Error> {
+fn build_github_rest_client(
+    access_token: &AccessToken,
+) -> Result<ClientWithMiddleware, reqwest::Error> {
     let mut headers = HeaderMap::new();
-
     headers.insert(
         "Accept",
         HeaderValue::from_static("application/vnd.github.v3+json"),
     );
+
+    build_github_client(access_token, headers)
+}
+
+fn build_github_graphql_client(
+    access_token: &AccessToken,
+) -> Result<ClientWithMiddleware, reqwest::Error> {
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        "Accept",
+        HeaderValue::from_static("application/vnd.github.merge-info-preview+json"),
+    );
+
+    build_github_client(access_token, headers)
+}
+
+fn build_github_client(
+    access_token: &AccessToken,
+    mut headers: HeaderMap,
+) -> Result<ClientWithMiddleware, reqwest::Error> {
     let mut auth_header_value: HeaderValue = format!("Bearer {access_token}").parse().unwrap();
     auth_header_value.set_sensitive(true);
     headers.insert("Authorization", auth_header_value);
@@ -257,6 +331,48 @@ impl NotificationSourceService for GithubService {
     ) -> Result<(), UniversalInboxError> {
         // Github notifications cannot be snoozed => no-op
         Ok(())
+    }
+
+    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.0.to_string()), err)]
+    async fn fetch_notification_details<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        notification: &Notification,
+        user_id: UserId,
+    ) -> Result<Option<NotificationDetails>, UniversalInboxError> {
+        let (access_token, _) = self
+            .integration_connection_service
+            .read()
+            .await
+            .find_access_token(executor, IntegrationProviderKind::Github, None, user_id)
+            .await?
+            .ok_or_else(|| {
+                anyhow!("Cannot fetch Github notification details without an access token")
+            })?;
+
+        let NotificationMetadata::Github(ref github_notification) = notification.metadata else {
+            return Err(UniversalInboxError::Unexpected(anyhow!(
+                "Given notification must have been built from a Github notification"
+            )));
+        };
+        let Some(ref resource_url) = github_notification.subject.url else {
+            return Ok(None);
+        };
+
+        let resource_response = match GithubUri::try_from_api_uri(resource_url) {
+            Ok(GithubUri::PullRequest {
+                owner,
+                repository,
+                number,
+            }) => {
+                self.query_pull_request(owner, repository, number, &access_token)
+                    .await?
+            }
+            // Not yet implemented resource type
+            Err(_) => return Ok(None),
+        };
+
+        Ok(Some(resource_response.try_into()?))
     }
 }
 

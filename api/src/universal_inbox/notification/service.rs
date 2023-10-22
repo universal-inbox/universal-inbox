@@ -11,9 +11,9 @@ use tracing::{debug, error, info};
 
 use universal_inbox::{
     notification::{
-        service::NotificationPatch, Notification, NotificationId, NotificationMetadata,
-        NotificationSourceKind, NotificationStatus, NotificationSyncSourceKind,
-        NotificationWithTask,
+        service::NotificationPatch, Notification, NotificationDetails, NotificationId,
+        NotificationMetadata, NotificationSourceKind, NotificationStatus,
+        NotificationSyncSourceKind, NotificationWithTask,
     },
     task::{service::TaskPatch, TaskCreation, TaskId, TaskStatus},
     user::UserId,
@@ -27,7 +27,7 @@ use crate::{
     repository::{notification::NotificationRepository, Repository},
     universal_inbox::{
         integration_connection::service::IntegrationConnectionService, task::service::TaskService,
-        user::service::UserService, UniversalInboxError, UpdateStatus,
+        user::service::UserService, UniversalInboxError, UpdateStatus, UpsertStatus,
     },
 };
 
@@ -195,12 +195,37 @@ impl NotificationService {
         &self,
         executor: &mut Transaction<'a, Postgres>,
         notification: Box<Notification>,
+        notification_source_kind: NotificationSourceKind,
         update_snoozed_until: bool,
-    ) -> Result<Box<Notification>, UniversalInboxError> {
+    ) -> Result<UpsertStatus<Box<Notification>>, UniversalInboxError> {
         self.repository
-            .create_or_update_notification(executor, notification, update_snoozed_until)
+            .create_or_update_notification(
+                executor,
+                notification,
+                notification_source_kind,
+                update_snoozed_until,
+            )
             .await
-            .map(Box::new)
+    }
+
+    async fn sync_source_notification_details<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        notification_source_service: &(dyn NotificationSourceService + Send + Sync),
+        notification: &Notification,
+        user_id: UserId,
+    ) -> Result<Option<NotificationDetails>, UniversalInboxError> {
+        let notification_details = notification_source_service
+            .fetch_notification_details(executor, notification, user_id)
+            .await?;
+        let Some(details) = notification_details else {
+            return Ok(None);
+        };
+        let details_upsert = self
+            .repository
+            .create_or_update_notification_details(executor, notification.id, details)
+            .await?;
+        Ok(Some(details_upsert.value()))
     }
 
     async fn sync_source_notifications<'a>(
@@ -245,15 +270,50 @@ impl NotificationService {
             .await
         {
             Ok(source_notifications) => {
-                self.save_notifications_from_source(
-                    executor,
-                    notification_source_service.get_notification_source_kind(),
-                    source_notifications,
-                    false,
-                    notification_source_service.is_supporting_snoozed_notifications(),
-                    user_id,
-                )
-                .await
+                let notification_source_kind =
+                    notification_source_service.get_notification_source_kind();
+                let notification_upserts = self
+                    .save_notifications_from_source(
+                        executor,
+                        notification_source_kind,
+                        source_notifications,
+                        false,
+                        notification_source_service.is_supporting_snoozed_notifications(),
+                        user_id,
+                    )
+                    .await?;
+
+                let mut notifications = vec![];
+                let mut notification_details_synced = 0;
+                for notification_upsert in notification_upserts {
+                    let notification = match notification_upsert {
+                        UpsertStatus::Created(notification)
+                        | UpsertStatus::Updated(notification) => {
+                            let notification_details = self
+                                .sync_source_notification_details(
+                                    executor,
+                                    notification_source_service,
+                                    &notification,
+                                    user_id,
+                                )
+                                .await?;
+                            notification_details_synced += 1;
+
+                            Notification {
+                                details: notification_details,
+                                ..*notification
+                            }
+                        }
+                        UpsertStatus::Untouched(notification) => *notification,
+                    };
+                    notifications.push(notification);
+                }
+
+                info!(
+                    "{} {notification_source_kind} notification details successfully synced for user {user_id}.",
+                    notification_details_synced
+                );
+                Ok(notifications)
             }
             Err(e) => {
                 self.integration_connection_service
@@ -282,29 +342,30 @@ impl NotificationService {
         is_incremental_update: bool,
         update_snoozed_until: bool,
         user_id: UserId,
-    ) -> Result<Vec<Notification>, UniversalInboxError> {
-        let mut notifications = vec![];
+    ) -> Result<Vec<UpsertStatus<Box<Notification>>>, UniversalInboxError> {
+        let mut upsert_notifications: Vec<UpsertStatus<Box<Notification>>> = vec![];
         for notification in source_notifications {
-            let uptodate_notification = self
+            let upsert_notification = self
                 .repository
                 .create_or_update_notification(
                     executor,
                     Box::new(notification),
+                    notification_source_kind,
                     update_snoozed_until,
                 )
                 .await?;
-            notifications.push(uptodate_notification);
+            upsert_notifications.push(upsert_notification);
         }
         info!(
             "{} {notification_source_kind} notifications successfully synced for user {user_id}.",
-            notifications.len()
+            upsert_notifications.len()
         );
 
         // For incremental synchronization, there is no need to update stale notifications
         if !is_incremental_update {
-            let source_notification_ids = notifications
+            let source_notification_ids = upsert_notifications
                 .iter()
-                .map(|notification| notification.source_id.clone())
+                .map(|upsert_notification| upsert_notification.value_ref().source_id.clone())
                 .collect::<Vec<String>>();
 
             let deleted_notifications = self
@@ -322,27 +383,27 @@ impl NotificationService {
             );
         }
 
-        Ok(notifications)
+        Ok(upsert_notifications)
     }
 
     #[tracing::instrument(level = "debug", skip(self, executor), err)]
     pub async fn sync_notifications<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        source: Option<NotificationSyncSourceKind>,
+        source: NotificationSyncSourceKind,
         user_id: UserId,
     ) -> Result<Vec<Notification>, UniversalInboxError> {
         // tag: New notification integration
         match source {
-            Some(NotificationSyncSourceKind::Github) => {
+            NotificationSyncSourceKind::Github => {
                 self.sync_source_notifications(executor, &self.github_service, user_id)
                     .await
             }
-            Some(NotificationSyncSourceKind::Linear) => {
+            NotificationSyncSourceKind::Linear => {
                 self.sync_source_notifications(executor, &self.linear_service, user_id)
                     .await
             }
-            Some(NotificationSyncSourceKind::GoogleMail) => {
+            NotificationSyncSourceKind::GoogleMail => {
                 self.sync_source_notifications(
                     executor,
                     &*self.google_mail_service.read().await,
@@ -350,33 +411,13 @@ impl NotificationService {
                 )
                 .await
             }
-            None => {
-                let notifications_from_github = self
-                    .sync_source_notifications(executor, &self.github_service, user_id)
-                    .await?;
-                let notifications_from_linear = self
-                    .sync_source_notifications(executor, &self.linear_service, user_id)
-                    .await?;
-                let notifications_from_google_mail = self
-                    .sync_source_notifications(
-                        executor,
-                        &*self.google_mail_service.read().await,
-                        user_id,
-                    )
-                    .await?;
-                Ok(notifications_from_github
-                    .into_iter()
-                    .chain(notifications_from_linear.into_iter())
-                    .chain(notifications_from_google_mail.into_iter())
-                    .collect())
-            }
         }
     }
 
     #[tracing::instrument(level = "debug", skip(self), err)]
     pub async fn sync_notifications_with_transaction<'a>(
         &self,
-        source: Option<NotificationSyncSourceKind>,
+        source: NotificationSyncSourceKind,
         user_id: UserId,
     ) -> Result<Vec<Notification>, UniversalInboxError> {
         let mut transaction = self.begin().await.context(format!(
@@ -412,6 +453,28 @@ impl NotificationService {
     }
 
     #[tracing::instrument(level = "debug", skip(self), err)]
+    pub async fn sync_all_notifications<'a>(
+        &self,
+        user_id: UserId,
+    ) -> Result<Vec<Notification>, UniversalInboxError> {
+        // tag: New notification integration
+        let notifications_from_github = self
+            .sync_notifications_with_transaction(NotificationSyncSourceKind::Github, user_id)
+            .await?;
+        let notifications_from_linear = self
+            .sync_notifications_with_transaction(NotificationSyncSourceKind::Linear, user_id)
+            .await?;
+        let notifications_from_google_mail = self
+            .sync_notifications_with_transaction(NotificationSyncSourceKind::GoogleMail, user_id)
+            .await?;
+        Ok(notifications_from_github
+            .into_iter()
+            .chain(notifications_from_linear.into_iter())
+            .chain(notifications_from_google_mail.into_iter())
+            .collect())
+    }
+
+    #[tracing::instrument(level = "debug", skip(self), err)]
     pub async fn sync_notifications_for_all_users<'a>(
         &self,
         source: Option<NotificationSyncSourceKind>,
@@ -424,10 +487,13 @@ impl NotificationService {
         for user in users {
             let user_id = user.id;
             info!("Syncing notifications for user {user_id}");
-            match self
-                .sync_notifications_with_transaction(source, user_id)
-                .await
-            {
+            let sync_result = if let Some(source) = source {
+                self.sync_notifications_with_transaction(source, user_id)
+                    .await
+            } else {
+                self.sync_all_notifications(user_id).await
+            };
+            match sync_result {
                 Ok(notifications) => info!(
                     "{} notifications successfully synced for user {user_id}",
                     notifications.len()

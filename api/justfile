@@ -27,7 +27,7 @@ test-coverage:
 
 ## Run recipes
 run:
-    watchexec -r cargo run -- serve
+    watchexec --debounce 500 --exts toml,rs --restart --watch src cargo run -- serve
 
 sync-tasks $RUST_LOG="info":
     cargo run -- sync-tasks
