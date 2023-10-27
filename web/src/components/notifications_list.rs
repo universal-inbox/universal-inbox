@@ -5,13 +5,9 @@ use std::collections::HashSet;
 use chrono::{DateTime, Local};
 use dioxus::{events::MouseEvent, prelude::*};
 use dioxus_free_icons::{
-    icons::{
-        bs_icons::{
-            BsArrowRepeat, BsBellSlash, BsBookmarkCheck, BsCalendar2Check, BsCardChecklist, BsChat,
-            BsCheck2, BsCheckCircle, BsClockHistory, BsExclamationCircle, BsGrid, BsLink45deg,
-            BsRecordCircle, BsStar, BsTrash,
-        },
-        io_icons::IoGitPullRequest,
+    icons::bs_icons::{
+        BsArrowRepeat, BsBellSlash, BsBookmarkCheck, BsCalendar2Check, BsCardChecklist, BsCheck2,
+        BsClockHistory, BsExclamationCircle, BsGrid, BsLink45deg, BsRecordCircle, BsStar, BsTrash,
     },
     Icon,
 };
@@ -20,7 +16,6 @@ use fermi::UseAtomRef;
 use universal_inbox::{
     notification::{
         integrations::{
-            github::GithubNotification,
             google_mail::{
                 GoogleMailThread, MessageSelection, GOOGLE_MAIL_IMPORTANT_LABEL,
                 GOOGLE_MAIL_STARRED_LABEL,
@@ -37,7 +32,10 @@ use universal_inbox::{
 };
 
 use crate::{
-    components::icons::{Github, GoogleMail, Linear, Mail, Todoist},
+    components::{
+        icons::{GoogleMail, Linear, Mail, Todoist},
+        integrations::github::{icons::Github, notification::GithubNotificationDisplay},
+    },
     model::UniversalInboxUIModel,
 };
 
@@ -292,7 +290,7 @@ fn NotificationDisplay<'a>(
                 NotificationMetadata::Github(github_notification) => render! {
                     GithubNotificationDisplay {
                         notif: notif,
-                        github_notification: github_notification.clone(),
+                        github_notification: github_notification,
                     }
                 },
                 NotificationMetadata::Linear(linear_notification) => render! {
@@ -349,46 +347,6 @@ fn DefaultNotificationDisplay<'a>(cx: Scope, notif: &'a NotificationWithTask) ->
             div {
                 class: "flex flex-col grow",
                 span { "{notif.title}" }
-            }
-        }
-    }
-}
-
-#[inline_props]
-fn GithubNotificationDisplay<'a>(
-    cx: Scope,
-    notif: &'a NotificationWithTask,
-    github_notification: GithubNotification,
-) -> Element {
-    let github_notification_id = github_notification.extract_id();
-    let type_icon = match github_notification.subject.r#type.as_str() {
-        "PullRequest" => render! { Icon { class: "h-5 w-5", icon: IoGitPullRequest } },
-        "Issue" => render! { Icon { class: "h-5 w-5", icon: BsRecordCircle } },
-        "Discussion" => render! { Icon { class: "h-5 w-5", icon: BsChat } },
-        "CheckSuite" => render! { Icon { class: "h-5 w-5", icon: BsCheckCircle } },
-        _ => None,
-    };
-
-    render! {
-        div {
-            class: "flex items-center gap-2",
-
-            type_icon
-
-            div {
-                class: "flex flex-col grow",
-
-                span { "{notif.title}" }
-                div {
-                    class: "flex gap-2 text-xs text-gray-400",
-
-                    span { "{github_notification.repository.full_name}" }
-                    if let Some(github_notification_id) = github_notification_id {
-                        render! {
-                            span { "#{github_notification_id}" }
-                        }
-                    }
-                }
             }
         }
     }

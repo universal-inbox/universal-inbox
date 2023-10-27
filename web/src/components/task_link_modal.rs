@@ -14,7 +14,10 @@ use universal_inbox::{
 
 use crate::{
     components::floating_label_inputs::FloatingLabelInputSearchSelect,
-    components::icons::{Github, GoogleMail, Linear, Todoist},
+    components::{
+        icons::{GoogleMail, Linear, Todoist},
+        integrations::github::icons::Github,
+    },
     model::UniversalInboxUIModel,
     services::api::call_api,
     utils::focus_element,

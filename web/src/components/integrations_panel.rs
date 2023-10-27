@@ -20,7 +20,10 @@ use universal_inbox::{
     IntegrationProviderConfig,
 };
 
-use crate::components::icons::{Github, GoogleDocs, GoogleMail, Linear, Notion, TickTick, Todoist};
+use crate::components::{
+    icons::{GoogleDocs, GoogleMail, Linear, Notion, TickTick, Todoist},
+    integrations::github::icons::Github,
+};
 
 #[inline_props]
 pub fn IntegrationsPanel<'a>(

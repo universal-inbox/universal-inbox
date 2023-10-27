@@ -11,7 +11,10 @@ use universal_inbox::integration_connection::{
 };
 
 use crate::{
-    components::icons::{Github, GoogleMail, Linear, Todoist},
+    components::{
+        icons::{GoogleMail, Linear, Todoist},
+        integrations::github::icons::Github,
+    },
     model::UI_MODEL,
     route::Route,
     services::{
