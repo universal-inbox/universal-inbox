@@ -697,7 +697,7 @@ pub struct GithubPullRequestReview {
     pub state: GithubPullRequestReviewState,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Default)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Copy, Clone, Eq, Default)]
 pub enum GithubPullRequestReviewState {
     Approved,
     ChangesRequested,
