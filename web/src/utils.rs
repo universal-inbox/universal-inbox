@@ -72,3 +72,18 @@ pub fn get_local_storage() -> Result<web_sys::Storage> {
         .map_err(|err| JsError::try_from(err).unwrap())?
         .context("No local storage available")
 }
+
+pub fn compute_text_color_from_background_color(color: &str) -> String {
+    let color = color.trim_start_matches('#');
+    let r = u8::from_str_radix(&color[0..2], 16).unwrap();
+    let g = u8::from_str_radix(&color[2..4], 16).unwrap();
+    let b = u8::from_str_radix(&color[4..6], 16).unwrap();
+
+    let luminance = (0.299 * r as f32 + 0.587 * g as f32 + 0.114 * b as f32) / 255.0;
+
+    if luminance > 0.5 {
+        "text-black".to_string()
+    } else {
+        "text-white".to_string()
+    }
+}

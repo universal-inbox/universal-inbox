@@ -14,7 +14,7 @@ use itertools::Itertools;
 
 use universal_inbox::notification::integrations::github::{
     GithubActor, GithubBotSummary, GithubCheckConclusionState, GithubCheckRun,
-    GithubCheckStatusState, GithubCheckSuite, GithubCheckSuiteApp, GithubCommitChecks,
+    GithubCheckStatusState, GithubCheckSuite, GithubCheckSuiteApp, GithubCommitChecks, GithubLabel,
     GithubMannequinSummary, GithubMergeableState, GithubPullRequest, GithubPullRequestReview,
     GithubPullRequestReviewDecision, GithubPullRequestReviewState, GithubPullRequestState,
     GithubRepositorySummary, GithubReviewer, GithubTeamSummary, GithubUserSummary, GithubWorkflow,
@@ -22,7 +22,7 @@ use universal_inbox::notification::integrations::github::{
 
 use crate::components::{
     integrations::github::{icons::GithubPullRequestIcon, GithubActorDisplay},
-    CollapseCard, CollapseCardWithIcon, UserWithAvatar,
+    CollapseCard, CollapseCardWithIcon, Tag, TagsInCard, UserWithAvatar,
 };
 
 #[inline_props]
@@ -132,6 +132,15 @@ pub fn GithubPullRequestPreview<'a>(
     }
 }
 
+impl From<GithubLabel> for Tag {
+    fn from(github_label: GithubLabel) -> Self {
+        Tag {
+            name: github_label.name,
+            color: Some(github_label.color),
+        }
+    }
+}
+
 #[inline_props]
 fn GithubPullRequestDetails<'a>(cx: Scope, github_pull_request: &'a GithubPullRequest) -> Element {
     let pr_state_label = match github_pull_request.state {
@@ -164,6 +173,14 @@ fn GithubPullRequestDetails<'a>(cx: Scope, github_pull_request: &'a GithubPullRe
     render! {
         div {
             class: "flex flex-col gap-2 w-full",
+
+            TagsInCard {
+                tags: github_pull_request
+                    .labels
+                    .iter()
+                    .map(|label| label.clone().into())
+                    .collect()
+            }
 
             if let Some(actor) = &github_pull_request.author {
                 render! {
