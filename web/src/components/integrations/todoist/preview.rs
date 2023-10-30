@@ -7,12 +7,15 @@ use dioxus_free_icons::{
     },
     Icon,
 };
+
 use universal_inbox::{
     notification::NotificationWithTask,
     task::integrations::todoist::{TodoistItem, TodoistItemPriority},
     task::Task,
     HasHtmlUrl,
 };
+
+use crate::components::CollapseCard;
 
 #[inline_props]
 pub fn TodoistTaskPreview<'a>(
@@ -65,57 +68,48 @@ pub fn TodoistTaskPreview<'a>(
                 }
             }
 
-            table {
-                class: "table-auto",
-                tbody {
-                    if let Some(due) = &todoist_task.due {
-                        render! {
-                            tr {
-                                td {
-                                    div {
-                                        class: "flex items-center gap-1 text-gray-400",
-                                        Icon { class: "h-3 w-3", icon: BsCalendar2Check }
-                                        "Due date"
-                                    }
-                                }
-                                td {
-                                    div {
-                                        class: "flex items-center gap-1",
-                                        "{due.date}"
-                                        if due.is_recurring {
-                                            render! { Icon { class: "h-3 w-3", icon: BsArrowRepeat } }
-                                        }
+            div {
+                class: "flex flex-col gap-2 w-full",
+                if let Some(due) = &todoist_task.due {
+                    render! {
+                        CollapseCard {
+                            header: render! {
+                                div {
+                                    class: "flex items-center gap-2",
+
+                                    Icon { class: "h-3 w-3", icon: BsCalendar2Check }
+                                    span { class: "text-gray-400", "Due date:" }
+                                    "{due.date}"
+                                    if due.is_recurring {
+                                        render! { Icon { class: "h-3 w-3", icon: BsArrowRepeat } }
                                     }
                                 }
                             }
                         }
                     }
+                }
 
-                    tr {
-                        td {
-                            div {
-                                class: "flex items-center gap-1 text-gray-400",
-                                Icon { class: "h-3 w-3 {task_priority_style}", icon: BsFlag }
-                                "Priority"
-                            }
+                CollapseCard {
+                    header: render! {
+                        div {
+                            class: "flex items-center gap-2",
+
+                            Icon { class: "h-3 w-3 {task_priority_style}", icon: BsFlag }
+                            span { class: "text-gray-400", "Priority:" }
+                            "{priority}"
                         }
-                        td { "{priority}" }
                     }
+                }
 
-                    tr {
-                        td {
-                            div {
-                                class: "flex items-center gap-1 text-gray-400",
-                                span { "@" }
-                                span { "Labels" }
-                            }
-                        }
-                        td {
-                            div {
-                                class: "flex items-center gap-1",
-                                for label in &todoist_task.labels {
-                                    render! { span { "@{label}" } }
-                                }
+                CollapseCard {
+                    header: render! {
+                        div {
+                            class: "flex items-center gap-2",
+
+                            span { class: "text-gray-400", "@" }
+                            span { class: "text-gray-400", "Labels:" }
+                            for label in &todoist_task.labels {
+                                render! { span { "@{label}" } }
                             }
                         }
                     }
