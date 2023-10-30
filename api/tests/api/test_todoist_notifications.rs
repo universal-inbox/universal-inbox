@@ -96,6 +96,58 @@ mod patch_notification {
 
     #[rstest]
     #[tokio::test]
+    async fn test_patch_todoist_notification_status_as_snoozed(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        todoist_item: Box<TodoistItem>,
+        nango_todoist_connection: Box<NangoConnection>,
+    ) {
+        let app = authenticated_app.await;
+        create_and_mock_integration_connection(
+            &app,
+            &settings.integrations.oauth2.nango_secret_key,
+            IntegrationProviderKind::Todoist,
+            &settings,
+            nango_todoist_connection,
+        )
+        .await;
+
+        let existing_todoist_task_creation = create_task_from_todoist_item(
+            &app.client,
+            &app.api_address,
+            &todoist_item,
+            "Inbox".to_string(),
+            app.user.id,
+        )
+        .await;
+        let existing_todoist_task = existing_todoist_task_creation.task;
+        assert_eq!(existing_todoist_task.status, TaskStatus::Active);
+        let existing_todoist_notification = existing_todoist_task_creation.notification.unwrap();
+        let snoozed_time = Utc.with_ymd_and_hms(2022, 1, 1, 1, 2, 3).unwrap();
+
+        let patched_notification = patch_resource(
+            &app.client,
+            &app.api_address,
+            "notifications",
+            existing_todoist_notification.id.into(),
+            &NotificationPatch {
+                snoozed_until: Some(snoozed_time),
+                ..Default::default()
+            },
+        )
+        .await;
+
+        assert_eq!(
+            patched_notification,
+            Box::new(Notification {
+                snoozed_until: Some(snoozed_time),
+                ..existing_todoist_notification
+            })
+        );
+    }
+
+    #[rstest]
+    #[tokio::test]
     async fn test_patch_todoist_notification_status(#[future] authenticated_app: AuthenticatedApp) {
         let app = authenticated_app.await;
         let expected_notification = Box::new(Notification {
