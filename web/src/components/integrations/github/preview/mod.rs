@@ -14,6 +14,7 @@ use universal_inbox::{
 
 use crate::components::integrations::github::icons::GithubPullRequestIcon;
 
+pub mod discussion;
 pub mod pull_request;
 
 #[inline_props]

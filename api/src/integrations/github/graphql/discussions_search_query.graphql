@@ -1,0 +1,72 @@
+query DiscussionsSearchQuery($search_query: String!) {
+  search(
+    query: $search_query
+    type: DISCUSSION
+    first: 1
+  ) {
+    nodes {
+      __typename
+      ... on Discussion {
+        id
+        title
+        bodyHTML
+        number
+        url
+
+        stateReason
+        closedAt
+        createdAt
+        updatedAt
+        answerChosenAt
+        answerChosenBy {
+          __typename
+          avatarUrl
+          login
+          ... on User {
+            name
+          }
+        }
+
+        repository {
+          nameWithOwner
+          url
+        }
+
+        comments {
+          totalCount
+        }
+
+        labels(first: 10) {
+          nodes {
+            color
+            description
+            name
+          }
+        }
+
+        author {
+          __typename
+          avatarUrl
+          login
+          ... on User {
+            name
+          }
+        }
+
+        answer {
+          bodyHTML
+          url
+
+          author {
+            __typename
+            avatarUrl
+            login
+            ... on User {
+              name
+            }
+          }
+        }
+      }
+    }
+  }
+}

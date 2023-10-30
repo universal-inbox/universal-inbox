@@ -716,6 +716,45 @@ pub enum GithubReviewer {
     Mannequin(GithubMannequinSummary),
 }
 
+#[serde_as]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct GithubDiscussion {
+    pub id: String,
+    pub number: i64,
+    #[serde_as(as = "DisplayFromStr")]
+    pub url: Uri,
+    pub title: String,
+    pub body: String,
+    pub repository: GithubRepositorySummary,
+    pub state_reason: Option<GithubDiscussionStateReason>,
+    pub closed_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub labels: Vec<GithubLabel>,
+    pub comments_count: i64,
+    pub author: Option<GithubActor>,
+    pub answer_chosen_at: Option<DateTime<Utc>>,
+    pub answer_chosen_by: Option<GithubActor>,
+    pub answer: Option<GithubDiscussionComment>,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Copy, Clone, Eq)]
+pub enum GithubDiscussionStateReason {
+    Duplicate,
+    Outdated,
+    Reopened,
+    Resolved,
+}
+
+#[serde_as]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct GithubDiscussionComment {
+    #[serde_as(as = "DisplayFromStr")]
+    pub url: Uri,
+    pub body: String,
+    pub author: Option<GithubActor>,
+}
+
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
 pub enum GithubUri {
     PullRequest {

@@ -8,8 +8,9 @@ use uuid::Uuid;
 use universal_inbox::{
     integration_connection::{IntegrationConnectionStatus, IntegrationProviderKind},
     notification::{
-        integrations::github::GithubNotification, Notification, NotificationDetails,
-        NotificationMetadata, NotificationSourceKind, NotificationStatus,
+        integrations::github::{GithubNotification, GithubNotificationSubject},
+        Notification, NotificationDetails, NotificationMetadata, NotificationSourceKind,
+        NotificationStatus,
     },
     task::integrations::todoist::TodoistItem,
 };
@@ -17,7 +18,10 @@ use universal_inbox::{
 use universal_inbox_api::{
     configuration::Settings,
     integrations::{
-        github::{self, graphql::pull_request_query},
+        github::{
+            self,
+            graphql::{discussions_search_query, pull_request_query},
+        },
         oauth2::NangoConnection,
     },
 };
@@ -31,7 +35,8 @@ use crate::helpers::{
     notification::{
         github::{
             assert_sync_notifications, create_notification_from_github_notification,
-            github_pull_request_123_response, mock_github_notifications_service,
+            github_discussion_123_response, github_notification, github_pull_request_123_response,
+            mock_github_discussions_search_query, mock_github_notifications_service,
             mock_github_pull_request_query, sync_github_notifications,
         },
         list_notifications, sync_notifications, sync_notifications_response,
@@ -494,4 +499,73 @@ async fn test_sync_all_notifications_asynchronously_in_error(
             .as_str(),
         "Failed to fetch notifications from Github"
     );
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_sync_discussion_notification_with_details(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    mut github_notification: Box<GithubNotification>,
+    github_discussion_123_response: Response<discussions_search_query::ResponseData>,
+    nango_github_connection: Box<NangoConnection>,
+) {
+    github_notification.subject = GithubNotificationSubject {
+        title: "test discussion".to_string(),
+        url: None,
+        latest_comment_url: None,
+        r#type: "Discussion".to_string(),
+    };
+
+    let app = authenticated_app.await;
+    create_and_mock_integration_connection(
+        &app,
+        &settings.integrations.oauth2.nango_secret_key,
+        IntegrationProviderKind::Github,
+        &settings,
+        nango_github_connection,
+    )
+    .await;
+
+    let github_notifications_response = vec![*github_notification];
+    let github_notifications_mock = mock_github_notifications_service(
+        &app.github_mock_server,
+        "1",
+        &github_notifications_response,
+    );
+
+    let github_discussions_search_query_mock = mock_github_discussions_search_query(
+        &app.github_mock_server,
+        "repo:octocat/Hello-World \"test discussion\"",
+        &github_discussion_123_response,
+    );
+
+    let notifications: Vec<Notification> = sync_notifications(
+        &app.client,
+        &app.api_address,
+        Some(NotificationSourceKind::Github),
+        false,
+    )
+    .await;
+
+    assert_eq!(notifications.len(), 1);
+    github_discussions_search_query_mock.assert();
+    github_notifications_mock.assert();
+
+    let notifications = list_notifications(
+        &app.client,
+        &app.api_address,
+        vec![NotificationStatus::Unread],
+        false,
+        None,
+    )
+    .await;
+
+    assert_eq!(notifications.len(), 1);
+    match &notifications[0].details {
+        Some(NotificationDetails::GithubDiscussion(details)) => {
+            assert_eq!(details.title, "test discussion");
+        }
+        _ => unreachable!("Expected a GithubDiscussion notification"),
+    }
 }
