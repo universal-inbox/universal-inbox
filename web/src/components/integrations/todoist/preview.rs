@@ -15,7 +15,7 @@ use universal_inbox::{
     HasHtmlUrl,
 };
 
-use crate::components::CollapseCard;
+use crate::components::{CollapseCard, TagsInCard};
 
 #[inline_props]
 pub fn TodoistTaskPreview<'a>(
@@ -70,6 +70,15 @@ pub fn TodoistTaskPreview<'a>(
 
             div {
                 class: "flex flex-col gap-2 w-full",
+
+                TagsInCard {
+                    tags: todoist_task
+                        .labels
+                        .iter()
+                        .map(|label| label.clone().into())
+                        .collect()
+                }
+
                 if let Some(due) = &todoist_task.due {
                     render! {
                         CollapseCard {
@@ -97,20 +106,6 @@ pub fn TodoistTaskPreview<'a>(
                             Icon { class: "h-3 w-3 {task_priority_style}", icon: BsFlag }
                             span { class: "text-gray-400", "Priority:" }
                             "{priority}"
-                        }
-                    }
-                }
-
-                CollapseCard {
-                    header: render! {
-                        div {
-                            class: "flex items-center gap-2",
-
-                            span { class: "text-gray-400", "@" }
-                            span { class: "text-gray-400", "Labels:" }
-                            for label in &todoist_task.labels {
-                                render! { span { "@{label}" } }
-                            }
                         }
                     }
                 }

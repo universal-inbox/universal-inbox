@@ -3,6 +3,8 @@
 use dioxus::prelude::*;
 use http::Uri;
 
+use crate::utils::compute_text_color_from_background_color;
+
 pub mod floating_label_inputs;
 pub mod footer;
 pub mod icons;
@@ -85,6 +87,60 @@ pub fn UserWithAvatar(cx: Scope, user_name: String, avatar_url: Option<Option<Ur
             }
 
             span { class: "text-sm", "{user_name}" }
+        }
+    }
+}
+
+#[derive(PartialEq)]
+pub struct Tag {
+    pub name: String,
+    pub color: Option<String>,
+}
+
+impl From<String> for Tag {
+    fn from(name: String) -> Self {
+        Tag { name, color: None }
+    }
+}
+
+#[inline_props]
+pub fn TagsInCard(cx: Scope, tags: Vec<Tag>) -> Element {
+    if tags.is_empty() {
+        return None;
+    }
+
+    render! {
+        CollapseCard {
+            header: render! {
+                div {
+                    class: "flex flex-wrap items-center gap-2",
+                    for tag in &tags {
+                        render! { Tag { tag: tag } }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[inline_props]
+pub fn Tag<'a>(cx: Scope, tag: &'a Tag) -> Element {
+    let badge_class = tag
+        .color
+        .as_ref()
+        .map(|color| compute_text_color_from_background_color(color))
+        .unwrap_or_else(|| "text-white".to_string());
+    let badge_style = tag
+        .color
+        .as_ref()
+        .map(|color| format!("background-color: #{color}"))
+        .unwrap_or_else(|| "background-color: #6b7280".to_string());
+
+    render! {
+        div {
+            class: "badge {badge_class}",
+            style: "{badge_style}",
+            "{tag.name}"
         }
     }
 }

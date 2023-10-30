@@ -7,7 +7,7 @@ use universal_inbox::notification::integrations::github::GithubDiscussion;
 
 use crate::components::{
     integrations::github::{icons::GithubDiscussionIcon, GithubActorDisplay},
-    CollapseCard,
+    CollapseCard, TagsInCard,
 };
 
 #[inline_props]
@@ -61,6 +61,14 @@ fn GithubDiscussionDetails<'a>(cx: Scope, github_discussion: &'a GithubDiscussio
     render! {
         div {
             class: "flex flex-col gap-2 w-full",
+
+            TagsInCard {
+                tags: github_discussion
+                    .labels
+                    .iter()
+                    .map(|label| label.clone().into())
+                    .collect()
+            }
 
             if let Some(actor) = &github_discussion.author {
                 render! {
