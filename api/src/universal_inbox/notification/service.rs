@@ -582,7 +582,8 @@ impl NotificationService {
                                     "Todoist notification {notification_id} is expected to be linked to a task"
                                 )));
                             }
-                        } else {
+                            // Other actions than delete or snoozing is not supported
+                        } else if patch.snoozed_until.is_none() {
                             return Err(UniversalInboxError::UnsupportedAction(format!(
                                 "Cannot update the status of Todoist notification {notification_id}, update task's project"
                             )));
