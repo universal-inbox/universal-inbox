@@ -19,6 +19,8 @@ use crate::{
     HasHtmlUrl,
 };
 
+use self::integrations::github::GithubDiscussion;
+
 pub mod integrations;
 pub mod service;
 
@@ -127,7 +129,7 @@ impl NotificationWithTask {
             last_read_at: self.last_read_at,
             snoozed_until: self.snoozed_until,
             user_id,
-            details: None,
+            details: self.details,
             task_id: self.task.as_ref().map(|task| task.id),
         }
     }
@@ -148,6 +150,7 @@ pub enum NotificationMetadata {
 #[serde(tag = "type", content = "content")]
 pub enum NotificationDetails {
     GithubPullRequest(GithubPullRequest),
+    GithubDiscussion(GithubDiscussion),
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Copy, Clone, Eq, Hash)]

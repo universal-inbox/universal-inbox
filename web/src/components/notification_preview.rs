@@ -17,7 +17,8 @@ use crate::{
             github::{
                 icons::Github,
                 preview::{
-                    pull_request::GithubPullRequestPreview, GithubNotificationDefaultPreview,
+                    discussion::GithubDiscussionPreview, pull_request::GithubPullRequestPreview,
+                    GithubNotificationDefaultPreview,
                 },
             },
             google_mail::preview::GoogleMailThreadPreview,
@@ -126,6 +127,9 @@ fn NotificationDetailsPreview<'a>(cx: Scope, notification: &'a NotificationWithT
         return match details {
             NotificationDetails::GithubPullRequest(github_pull_request) => render! {
                 GithubPullRequestPreview { github_pull_request: github_pull_request }
+            },
+            NotificationDetails::GithubDiscussion(github_discussion) => render! {
+                GithubDiscussionPreview { _github_discussion: github_discussion }
             },
         };
     }

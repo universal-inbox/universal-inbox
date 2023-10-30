@@ -21,7 +21,9 @@ use universal_inbox::{
 
 use universal_inbox_api::integrations::github::{
     self,
-    graphql::{pull_request_query, PullRequestQuery},
+    graphql::{
+        discussions_search_query, pull_request_query, DiscussionsSearchQuery, PullRequestQuery,
+    },
 };
 
 use crate::helpers::{load_json_fixture_file, rest::create_resource};
@@ -100,6 +102,27 @@ pub fn mock_github_pull_request_query<'a>(
     })
 }
 
+pub fn mock_github_discussions_search_query<'a>(
+    github_mock_server: &'a MockServer,
+    search_query: &str,
+    result: &'a Response<discussions_search_query::ResponseData>,
+) -> Mock<'a> {
+    let expected_request_body =
+        DiscussionsSearchQuery::build_query(discussions_search_query::Variables {
+            search_query: search_query.to_string(),
+        });
+    github_mock_server.mock(|when, then| {
+        when.method(POST)
+            .path("/graphql")
+            .json_body_obj(&expected_request_body)
+            .header("accept", "application/vnd.github.merge-info-preview+json")
+            .header("authorization", "Bearer github_test_access_token");
+        then.status(200)
+            .header("content-type", "application/json")
+            .json_body_obj(result);
+    })
+}
+
 #[fixture]
 pub fn sync_github_notifications() -> Vec<GithubNotification> {
     load_json_fixture_file("/tests/api/fixtures/sync_github_notifications.json")
@@ -108,6 +131,11 @@ pub fn sync_github_notifications() -> Vec<GithubNotification> {
 #[fixture]
 pub fn github_pull_request_123_response() -> Response<pull_request_query::ResponseData> {
     load_json_fixture_file("/tests/api/fixtures/github_pull_request_123_response.json")
+}
+
+#[fixture]
+pub fn github_discussion_123_response() -> Response<discussions_search_query::ResponseData> {
+    load_json_fixture_file("/tests/api/fixtures/github_discussion_123_response.json")
 }
 
 pub fn assert_sync_notifications(

@@ -24,7 +24,9 @@ use universal_inbox::{
 
 use crate::{
     integrations::{
-        github::graphql::{pull_request_query, PullRequestQuery},
+        github::graphql::{
+            discussions_search_query, pull_request_query, DiscussionsSearchQuery, PullRequestQuery,
+        },
         notification::NotificationSourceService,
         oauth2::AccessToken,
         APP_USER_AGENT,
@@ -181,6 +183,41 @@ impl GithubService {
         assert_no_error_in_graphql_response(&pull_request_response, GITHUB_GRAPHQL_API_NAME)?;
 
         Ok(pull_request_response
+            .data
+            .ok_or_else(|| anyhow!("Failed to parse `data` from Github graphql response"))?)
+    }
+
+    pub async fn search_discussion(
+        &self,
+        repository: &str,
+        title: &str,
+        access_token: &AccessToken,
+    ) -> Result<discussions_search_query::ResponseData, UniversalInboxError> {
+        let search_query = format!("repo:{repository} \"{title}\"");
+        let request_body =
+            DiscussionsSearchQuery::build_query(discussions_search_query::Variables {
+                search_query,
+            });
+
+        let response = build_github_graphql_client(access_token)
+            .context("Failed to build Github client")?
+            .post(&self.github_graphql_url)
+            .json(&request_body)
+            .send()
+            .await
+            .context("Cannot fetch discussion from Github graphql API")?
+            .text()
+            .await
+            .context("Failed to fetch dicussion response from Github graphql API")?;
+
+        let discussions_search_response: graphql_client::Response<
+            discussions_search_query::ResponseData,
+        > = serde_json::from_str(&response)
+            .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
+
+        assert_no_error_in_graphql_response(&discussions_search_response, GITHUB_GRAPHQL_API_NAME)?;
+
+        Ok(discussions_search_response
             .data
             .ok_or_else(|| anyhow!("Failed to parse `data` from Github graphql response"))?)
     }
@@ -355,24 +392,35 @@ impl NotificationSourceService for GithubService {
                 "Given notification must have been built from a Github notification"
             )));
         };
-        let Some(ref resource_url) = github_notification.subject.url else {
-            return Ok(None);
-        };
 
-        let resource_response = match GithubUri::try_from_api_uri(resource_url) {
-            Ok(GithubUri::PullRequest {
-                owner,
-                repository,
-                number,
-            }) => {
-                self.query_pull_request(owner, repository, number, &access_token)
+        let notification_details = if let Some(ref resource_url) = github_notification.subject.url {
+            match GithubUri::try_from_api_uri(resource_url) {
+                Ok(GithubUri::PullRequest {
+                    owner,
+                    repository,
+                    number,
+                }) => self
+                    .query_pull_request(owner, repository, number, &access_token)
                     .await?
+                    .try_into()?,
+                // Not yet implemented resource type
+                Err(_) => return Ok(None),
             }
-            // Not yet implemented resource type
-            Err(_) => return Ok(None),
+        } else {
+            match github_notification.subject.r#type.as_str() {
+                "Discussion" => self
+                    .search_discussion(
+                        &github_notification.repository.full_name,
+                        &github_notification.subject.title,
+                        &access_token,
+                    )
+                    .await?
+                    .try_into()?,
+                _ => return Ok(None),
+            }
         };
 
-        Ok(Some(resource_response.try_into()?))
+        Ok(Some(notification_details))
     }
 }
 
