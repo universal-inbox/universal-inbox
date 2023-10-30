@@ -20,7 +20,10 @@ use universal_inbox::notification::integrations::github::{
     GithubRepositorySummary, GithubReviewer, GithubTeamSummary, GithubUserSummary, GithubWorkflow,
 };
 
-use crate::components::{integrations::github::icons::GithubPullRequestIcon, CollapseCardWithIcon};
+use crate::components::{
+    integrations::github::{icons::GithubPullRequestIcon, GithubActorDisplay},
+    CollapseCard, CollapseCardWithIcon, UserWithAvatar,
+};
 
 #[inline_props]
 pub fn GithubPullRequestPreview<'a>(
@@ -161,6 +164,21 @@ fn GithubPullRequestDetails<'a>(cx: Scope, github_pull_request: &'a GithubPullRe
     render! {
         div {
             class: "flex flex-col gap-2 w-full",
+
+            if let Some(actor) = &github_pull_request.author {
+                render! {
+                    CollapseCard {
+                        header: render! {
+                            div {
+                                class: "flex gap-2",
+
+                                span { class: "text-gray-400", "Opened by" }
+                                GithubActorDisplay { actor: actor }
+                            }
+                        },
+                    }
+                }
+            }
 
             CollapseCardWithIcon {
                 icon: render! {
@@ -536,15 +554,11 @@ fn GithubReviewLine(cx: Scope, review: GithubReview) -> Element {
                                 div {
                                     class: "flex gap-2 items-center",
                                     review_status_icon,
-                                    if let Some(reviewer_avatar_url) = reviewer_avatar_url {
-                                        render! {
-                                            img {
-                                                class: "h-5 w-5 rounded-full",
-                                                src: "{reviewer_avatar_url}"
-                                            }
-                                        }
-                                    }
-                                    span { class: "text-sm", "{reviewer_display_name}" }
+                                    UserWithAvatar {
+                                        user_name: reviewer_display_name,
+                                        avatar_url: reviewer_avatar_url
+
+                                    },
                                 }
                             }
 
@@ -560,12 +574,10 @@ fn GithubReviewLine(cx: Scope, review: GithubReview) -> Element {
                             class: "flex gap-2 items-center",
 
                             review_status_icon,
-                            if let Some(reviewer_avatar_url) = reviewer_avatar_url {
-                                render! {
-                                    img { class: "h-5 w-5 rounded-full", src: "{reviewer_avatar_url}" },
-                                }
-                            }
-                            span { class: "text-sm", "{reviewer_display_name}" }
+                            UserWithAvatar {
+                                user_name: reviewer_display_name,
+                                avatar_url: reviewer_avatar_url
+                            },
                         }
                     }
                 }

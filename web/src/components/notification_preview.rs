@@ -129,7 +129,7 @@ fn NotificationDetailsPreview<'a>(cx: Scope, notification: &'a NotificationWithT
                 GithubPullRequestPreview { github_pull_request: github_pull_request }
             },
             NotificationDetails::GithubDiscussion(github_discussion) => render! {
-                GithubDiscussionPreview { _github_discussion: github_discussion }
+                GithubDiscussionPreview { github_discussion: github_discussion }
             },
         };
     }
