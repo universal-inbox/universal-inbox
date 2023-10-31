@@ -5,7 +5,10 @@ use opentelemetry::global;
 use sqlx::{postgres::PgConnectOptions, ConnectOptions, PgPool};
 use tracing::{error, info};
 
-use universal_inbox::{notification::NotificationSyncSourceKind, task::TaskSyncSourceKind};
+use universal_inbox::{
+    notification::{NotificationSourceKind, NotificationSyncSourceKind},
+    task::TaskSyncSourceKind,
+};
 
 use universal_inbox_api::{
     build_services, commands,
@@ -39,6 +42,12 @@ enum Commands {
     SyncTasks {
         #[clap(value_enum, value_parser)]
         source: Option<TaskSyncSourceKind>,
+    },
+
+    // Clear notifications details from the database. Useful when stored data is no longer valid.
+    DeleteNotificationDetails {
+        #[clap(value_enum, value_parser)]
+        source: NotificationSourceKind,
     },
 
     /// Run API server
@@ -113,6 +122,9 @@ async fn main() -> std::io::Result<()> {
         }
         Commands::SyncTasks { source } => {
             commands::sync::sync_tasks_for_all_users(task_service, *source).await
+        }
+        Commands::DeleteNotificationDetails { source } => {
+            commands::migration::delete_notification_details(notification_service, *source).await
         }
         Commands::Serve => {
             let listener = TcpListener::bind(format!(
