@@ -683,4 +683,15 @@ impl NotificationService {
 
         Ok(None)
     }
+
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    pub async fn delete_notification_details<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        source: NotificationSourceKind,
+    ) -> Result<u64, UniversalInboxError> {
+        self.repository
+            .delete_notification_details(executor, source)
+            .await
+    }
 }

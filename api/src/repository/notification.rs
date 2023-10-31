@@ -84,6 +84,11 @@ pub trait NotificationRepository {
         notification_kind: Option<NotificationSourceKind>,
         patch: &'b NotificationPatch,
     ) -> Result<Vec<UpdateStatus<Notification>>, UniversalInboxError>;
+    async fn delete_notification_details<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        kind: NotificationSourceKind,
+    ) -> Result<u64, UniversalInboxError>;
 }
 
 #[async_trait]
@@ -794,6 +799,30 @@ impl NotificationRepository for Repository {
             })
             .collect();
         Ok(update_statuses)
+    }
+
+    #[tracing::instrument(level = "debug", skip(self, executor))]
+    async fn delete_notification_details<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        kind: NotificationSourceKind,
+    ) -> Result<u64, UniversalInboxError> {
+        let res = sqlx::query!(
+            r#"
+            DELETE FROM notification_details
+              USING notification
+            WHERE notification_details.notification_id = notification.id
+              AND notification.kind = $1
+            "#,
+            kind.to_string()
+        )
+        .execute(&mut **executor)
+        .await
+        .with_context(|| {
+            format!("Failed to delete notification details for {kind} from storage")
+        })?;
+
+        Ok(res.rows_affected())
     }
 }
 
