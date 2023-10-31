@@ -13,7 +13,7 @@ use universal_inbox::{
 
 use universal_inbox_api::{
     configuration::Settings,
-    integrations::{linear::notifications_query, oauth2::NangoConnection},
+    integrations::{linear::graphql::notifications_query, oauth2::NangoConnection},
 };
 
 use crate::helpers::{

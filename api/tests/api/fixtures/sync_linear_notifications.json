@@ -12,7 +12,19 @@
           "project": {
             "id": "c1b0f0f8-9e16-4335-a540-bda09cc491df",
             "name": "Test project",
-            "url": "https://linear.app/universal-inbox/project/test-project-33065448b39c"
+            "url": "https://linear.app/universal-inbox/project/test-project-33065448b39c",
+            "description": "This is a test project",
+            "icon": null,
+            "color": "#FFFFFF",
+            "state": "started",
+            "progress": 0.54321,
+            "startDate": "2023-07-31",
+            "targetDate": "2023-08-31",
+            "lead": {
+              "displayName": "John Smith",
+              "avatarUrl": "https://avatar.url",
+              "url": "https://linear.app/user/john-smith"
+            }
           }
         },
         {
@@ -25,7 +37,19 @@
           "project": {
             "id": "c1b0f0f8-9e16-4335-a540-bda09cc491df",
             "name": "Test project",
-            "url": "https://linear.app/universal-inbox/project/test-project-33065448b39c"
+            "url": "https://linear.app/universal-inbox/project/test-project-33065448b39c",
+            "description": "This is a test project",
+            "icon": null,
+            "color": "#FFFFFF",
+            "state": "started",
+            "progress": 0.54321,
+            "startDate": "2023-07-31",
+            "targetDate": "2023-08-31",
+            "lead": {
+              "displayName": "John Smith",
+              "avatarUrl": "https://avatar.url",
+              "url": "https://linear.app/user/john-smith"
+            }
           }
         },
         {
@@ -37,9 +61,55 @@
           "snoozedUntilAt": "2023-08-12T07:00:00.000Z",
           "issue": {
             "id": "c8805a87-5a65-47d6-a385-64945ce3b036",
+            "createdAt": "2023-07-31T06:01:27.112Z",
+            "updatedAt": "2023-07-31T06:01:27.112Z",
+            "completedAt": null,
+            "cancelledAt": null,
+            "dueDate": null,
             "identifier": "UNI-13",
             "title": "Test issue 3",
             "url": "https://linear.app/universal-inbox/issue/UNI-13/test-issue-3",
+            "priority": 0,
+            "project": {
+              "id": "c1b0f0f8-9e16-4335-a540-bda09cc491df",
+              "name": "Test project",
+              "url": "https://linear.app/universal-inbox/project/test-project-33065448b39c",
+              "description": "This is a test project",
+              "icon": null,
+              "color": "#FFFFFF",
+              "state": "started",
+              "progress": 0.54321,
+              "startDate": "2023-07-31",
+              "targetDate": "2023-08-31",
+              "lead": {
+                "displayName": "John Smith",
+                "avatarUrl": "https://avatar.url",
+                "url": "https://linear.app/user/john-smith"
+              }
+          },
+            "projectMilestone": null,
+            "creator": {
+              "displayName": "John Smith",
+              "avatarUrl": "https://avatar.url",
+              "url": "https://linear.app/user/john-smith"
+            },
+            "assignee": null,
+            "state": {
+              "name": "In progress",
+              "color": "#FABD00",
+              "description": "This issue is being actively worked on",
+              "type": "started"
+            },
+            "labels": {
+              "nodes": [
+                {
+                  "name": "Test",
+                  "description": "This is a test label",
+                  "color": "#FFFFFF"
+                }
+              ]
+            },
+            "description": "This is a test issue",
             "team": {
               "id": "ee20be3f-6558-4586-b610-6c44738e362f",
               "key": "UNI",
@@ -56,9 +126,56 @@
           "snoozedUntilAt": null,
           "issue": {
             "id": "7b2eb301-4e49-40b1-9524-fd0c33e4c02e",
+            "createdAt": "2023-07-31T06:01:27.112Z",
+            "updatedAt": "2023-07-31T06:01:27.112Z",
+            "completedAt": "2023-07-31T06:01:27.112Z",
+            "cancelledAt": null,
+            "dueDate": null,
             "identifier": "UNI-12",
             "title": "Test issue 2",
             "url": "https://linear.app/universal-inbox/issue/UNI-12/test-issue-2",
+            "priority": 1,
+            "project": {
+              "id": "c1b0f0f8-9e16-4335-a540-bda09cc491df",
+              "name": "Test project",
+              "url": "https://linear.app/universal-inbox/project/test-project-33065448b39c",
+              "description": "This is a test project",
+              "icon": null,
+              "color": "#FFFFFF",
+              "state": "started",
+              "progress": 0.54321,
+              "startDate": "2023-07-31",
+              "targetDate": "2023-08-31",
+              "lead": {
+                "displayName": "John Smith",
+                "avatarUrl": "https://avatar.url",
+                "url": "https://linear.app/user/john-smith"
+              }
+            },
+            "projectMilestone": {
+              "name": "Test milestone",
+              "description": "This is a test milestone"
+            },
+            "creator": {
+              "displayName": "John Smith",
+              "avatarUrl": "https://avatar.url",
+              "url": "https://linear.app/user/john-smith"
+            },
+            "assignee": {
+              "displayName": "John Smith",
+              "avatarUrl": "https://avatar.url",
+              "url": "https://linear.app/user/john-smith"
+            },
+            "state": {
+              "name": "In triage",
+              "color": "#FABD00",
+              "description": null,
+              "type": "triage"
+            },
+            "labels": {
+              "nodes": []
+            },
+            "description": "This is a test issue",
             "team": {
               "id": "ee20be3f-6558-4586-b610-6c44738e362f",
               "key": "UNI",
@@ -75,9 +192,49 @@
           "snoozedUntilAt": null,
           "issue": {
             "id": "4dda960e-f498-4c6e-9477-a8e0ff441ff5",
+            "createdAt": "2023-07-31T06:01:27.112Z",
+            "updatedAt": "2023-07-31T06:01:27.112Z",
+            "completedAt": null,
+            "cancelledAt": "2023-07-31T06:01:27.112Z",
+            "dueDate": "2023-08-30",
             "identifier": "UNI-11",
             "title": "Test issue1",
             "url": "https://linear.app/universal-inbox/issue/UNI-11/test-issue1",
+            "priority": 2,
+            "project": {
+              "id": "c1b0f0f8-9e16-4335-a540-bda09cc491df",
+              "name": "Test project",
+              "url": "https://linear.app/universal-inbox/project/test-project-33065448b39c",
+              "description": "This is a test project",
+              "icon": null,
+              "color": "#FFFFFF",
+              "state": "started",
+              "progress": 0.54321,
+              "startDate": "2023-07-31",
+              "targetDate": "2023-08-31",
+              "lead": {
+                "displayName": "John Smith",
+                "avatarUrl": "https://avatar.url",
+                "url": "https://linear.app/user/john-smith"
+              }
+            },
+            "projectMilestone": null,
+            "creator": {
+              "displayName": "John Smith",
+              "avatarUrl": "https://avatar.url",
+              "url": "https://linear.app/user/john-smith"
+            },
+            "assignee": null,
+            "state": {
+              "name": "In triage",
+              "color": "#FABD00",
+              "description": null,
+              "type": "triage"
+            },
+            "labels": {
+              "nodes": []
+            },
+            "description": null,
             "team": {
               "id": "ee20be3f-6558-4586-b610-6c44738e362f",
               "key": "UNI",
@@ -89,7 +246,8 @@
     },
     "organization": {
       "name": "Universal Inbox",
-      "urlKey": "universal-inbox"
+      "urlKey": "universal-inbox",
+      "logoUrl": "https://linear.app/images/linear-icon.png"
     }
   }
 }
