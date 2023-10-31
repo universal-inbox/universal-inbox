@@ -2,171 +2,42 @@ use std::sync::Arc;
 
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
-use chrono::{DateTime as ChronoDateTime, Utc};
+use chrono::{DateTime, Utc};
 use graphql_client::{GraphQLQuery, Response};
 use http::{HeaderMap, HeaderValue};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_tracing::{SpanBackendWithUrl, TracingMiddleware};
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
+
 use universal_inbox::{
     integration_connection::{IntegrationProvider, IntegrationProviderKind},
     notification::{
-        integrations::linear::{
-            LinearIssue, LinearNotification, LinearOrganization, LinearProject, LinearTeam,
-        },
-        Notification, NotificationDetails, NotificationSource, NotificationSourceKind,
+        integrations::linear::LinearNotification, Notification, NotificationDetails,
+        NotificationSource, NotificationSourceKind,
     },
     user::UserId,
 };
-use uuid::Uuid;
 
 use crate::{
-    integrations::{notification::NotificationSourceService, oauth2::AccessToken, APP_USER_AGENT},
+    integrations::{
+        linear::graphql::{
+            issue_update_subscribers, notification_archive, notification_subscribers_query,
+            notification_update_snoozed_until_at, notifications_query, IssueUpdateSubscribers,
+            NotificationArchive, NotificationSubscribersQuery, NotificationUpdateSnoozedUntilAt,
+            NotificationsQuery,
+        },
+        notification::NotificationSourceService,
+        oauth2::AccessToken,
+        APP_USER_AGENT,
+    },
     universal_inbox::{
         integration_connection::service::IntegrationConnectionService, UniversalInboxError,
     },
     utils::graphql::assert_no_error_in_graphql_response,
 };
 
-type DateTime = ChronoDateTime<Utc>;
-
-#[derive(GraphQLQuery)]
-#[graphql(
-    schema_path = "src/integrations/linear/schema.json",
-    query_path = "src/integrations/linear/notifications_query.graphql",
-    response_derives = "Debug,Clone,Serialize",
-    variables_derives = "Deserialize"
-)]
-pub struct NotificationsQuery;
-
-impl TryFrom<notifications_query::ResponseData> for Vec<LinearNotification> {
-    type Error = UniversalInboxError;
-
-    fn try_from(value: notifications_query::ResponseData) -> Result<Self, Self::Error> {
-        let organization_name = value.organization.name.clone();
-        let organization_key = value.organization.url_key.clone();
-
-        value
-            .notifications
-            .nodes
-            .into_iter()
-            .map(|notification| match notification {
-                notifications_query::NotificationsQueryNotificationsNodes {
-                    id,
-                    type_,
-                    read_at,
-                    updated_at,
-                    snoozed_until_at,
-                    on: notifications_query::NotificationsQueryNotificationsNodesOn::IssueNotification(notifications_query::NotificationsQueryNotificationsNodesOnIssueNotification {
-                        issue: notifications_query::NotificationsQueryNotificationsNodesOnIssueNotificationIssue {
-                            id: issue_id,
-                            identifier,
-                            title,
-                            url,
-                            team: notifications_query::NotificationsQueryNotificationsNodesOnIssueNotificationIssueTeam {
-                                id: team_id,
-                                key,
-                                name
-                            }
-                        },
-                    }),
-                } => Ok(Some(LinearNotification::IssueNotification {
-                    id: Uuid::parse_str(&id).context(format!("Failed to parse UUID from `{id}`"))?,
-                    r#type: type_,
-                    read_at,
-                    updated_at,
-                    snoozed_until_at,
-                    organization: LinearOrganization {
-                        name: organization_name.clone(),
-                        key: organization_key.clone(),
-                    },
-                    issue: LinearIssue {
-                        id: Uuid::parse_str(&issue_id)
-                            .context(format!("Failed to parse UUID from `{issue_id}`"))?,
-                        identifier,
-                        title,
-                        url: url.parse().context(format!("Failed to parse URL from `{url}`"))?,
-                        team: LinearTeam {
-                            id: Uuid::parse_str(&team_id)
-                                .context(format!("Failed to parse UUID from `{team_id}`"))?,
-                            key,
-                            name
-                        }
-                    },
-                })),
-                notifications_query::NotificationsQueryNotificationsNodes {
-                    id,
-                    type_,
-                    read_at,
-                    updated_at,
-                    snoozed_until_at,
-                    on: notifications_query::NotificationsQueryNotificationsNodesOn::ProjectNotification(notifications_query::NotificationsQueryNotificationsNodesOnProjectNotification {
-                        project: notifications_query::NotificationsQueryNotificationsNodesOnProjectNotificationProject {
-                            id: project_id,
-                            name,
-                            url,
-                        },
-                    }),
-                } => Ok(Some(LinearNotification::ProjectNotification {
-                    id: Uuid::parse_str(&id).context(format!("Failed to parse UUID from `{id}`"))?,
-                    r#type: type_,
-                    read_at,
-                    updated_at,
-                    snoozed_until_at,
-                    organization: LinearOrganization {
-                        name: organization_name.clone(),
-                        key: organization_key.clone(),
-                    },
-                    project: LinearProject {
-                        id: Uuid::parse_str(&project_id).context(format!("Failed to parse UUID from `{project_id}`"))?,
-                        name,
-                        url: url.parse().context(format!("Failed to parse URL from `{url}`"))?,
-                    },
-                })),
-                // Ignoring any other type of notifications
-                _ => Ok(None)
-            })
-            .filter_map(|linear_notification_result| linear_notification_result.transpose())
-            .collect()
-    }
-}
-
-#[derive(GraphQLQuery)]
-#[graphql(
-    schema_path = "src/integrations/linear/schema.json",
-    query_path = "src/integrations/linear/notification_archive.graphql",
-    response_derives = "Debug,Clone,Serialize",
-    variables_derives = "Deserialize"
-)]
-pub struct NotificationArchive;
-
-#[derive(GraphQLQuery)]
-#[graphql(
-    schema_path = "src/integrations/linear/schema.json",
-    query_path = "src/integrations/linear/issue_update_subscribers.graphql",
-    response_derives = "Debug,Clone,Serialize",
-    variables_derives = "Deserialize"
-)]
-pub struct IssueUpdateSubscribers;
-
-#[derive(GraphQLQuery)]
-#[graphql(
-    schema_path = "src/integrations/linear/schema.json",
-    query_path = "src/integrations/linear/notification_update_snoozed_until_at.graphql",
-    response_derives = "Debug,Clone,Serialize",
-    variables_derives = "Deserialize"
-)]
-pub struct NotificationUpdateSnoozedUntilAt;
-
-#[derive(GraphQLQuery)]
-#[graphql(
-    schema_path = "src/integrations/linear/schema.json",
-    query_path = "src/integrations/linear/notification_subscribers_query.graphql",
-    response_derives = "Debug,Clone,Serialize",
-    variables_derives = "Deserialize"
-)]
-pub struct NotificationSubscribersQuery;
+pub mod graphql;
 
 #[derive(Clone, Debug)]
 pub struct LinearService {
@@ -334,7 +205,7 @@ impl LinearService {
         &self,
         access_token: &AccessToken,
         issue_id: String,
-        snoozed_until_at: ChronoDateTime<Utc>,
+        snoozed_until_at: DateTime<Utc>,
     ) -> Result<(), UniversalInboxError> {
         let request_body = NotificationUpdateSnoozedUntilAt::build_query(
             notification_update_snoozed_until_at::Variables {
@@ -495,7 +366,7 @@ impl NotificationSourceService for LinearService {
         &self,
         executor: &mut Transaction<'a, Postgres>,
         source_id: &str,
-        snoozed_until_at: ChronoDateTime<Utc>,
+        snoozed_until_at: DateTime<Utc>,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
         let (access_token, _) = self

@@ -12,7 +12,7 @@ use universal_inbox::{
     user::UserId,
 };
 
-use universal_inbox_api::integrations::linear::{
+use universal_inbox_api::integrations::linear::graphql::{
     issue_update_subscribers::{self, IssueUpdateSubscribersIssueUpdate},
     notification_archive::{self, NotificationArchiveNotificationArchive},
     notification_subscribers_query::{

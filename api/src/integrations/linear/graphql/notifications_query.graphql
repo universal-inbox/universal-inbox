@@ -1,0 +1,102 @@
+query NotificationsQuery {
+  notifications {
+    nodes {
+      __typename
+      id
+      type
+      readAt
+      updatedAt
+      snoozedUntilAt
+      ... on IssueNotification {
+        issue {
+          id
+          createdAt
+          updatedAt
+          startedAt
+          completedAt
+          canceledAt
+          dueDate
+          identifier
+          title
+          url
+          priority
+          project {
+            id
+            name
+            url
+            description
+            icon
+            color
+            state
+            progress
+            startDate
+            targetDate
+            lead {
+              displayName
+              avatarUrl
+              url
+            }
+          }
+          projectMilestone {
+            name
+            description
+          }
+          creator {
+            displayName
+            avatarUrl
+            url
+          }
+          assignee {
+            displayName
+            avatarUrl
+            url
+          }
+          state {
+            name
+            color
+            description
+            type
+          }
+          labels {
+            nodes {
+              name
+              description
+              color
+            }
+          }
+          description
+          team {
+            id
+            key
+            name
+          }
+        }
+      }
+      ... on ProjectNotification {
+        project {
+          id
+          name
+          url
+          description
+          icon
+          color
+          state
+          progress
+          startDate
+          targetDate
+          lead {
+            displayName
+            avatarUrl
+            url
+          }
+        }
+      }
+    }
+  }
+
+  organization {
+    name
+    urlKey
+    logoUrl
+  }
+}
