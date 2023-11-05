@@ -3,7 +3,10 @@
 use dioxus::prelude::*;
 
 use dioxus_free_icons::{
-    icons::bs_icons::{BsCheckCircle, BsRecordCircle},
+    icons::{
+        bs_icons::{BsCheckCircle, BsRecordCircle},
+        go_icons::{GoGitCommit, GoGitPullRequest, GoGitPullRequestClosed, GoGitPullRequestDraft},
+    },
     Icon,
 };
 
@@ -58,86 +61,9 @@ pub fn GithubNotificationIcon<'a>(
             "Issue" => render! { Icon { class: "{class}", icon: BsRecordCircle } },
             "Discussion" => render! { GithubDiscussionIcon { class: "{class}" } },
             "CheckSuite" => render! { Icon { class: "{class}", icon: BsCheckCircle } },
+            "Commit" => render! { Icon { class: "{class}", icon: GoGitCommit } },
             _ => None,
         },
-    }
-}
-
-#[inline_props]
-pub fn GithubPullRequestOpened<'a>(cx: Scope, class: Option<&'a str>) -> Element {
-    render! {
-        svg {
-            xmlns: "http://www.w3.org/2000/svg",
-            class: "{class.unwrap_or_default()}",
-            role: "img",
-            "viewBox": "0 0 24 24",
-            fill: "currentColor",
-            stroke: "currentColor",
-            title { "Github opened pull request" }
-            path {
-                d: "M16 19.25a3.25 3.25 0 1 1 6.5 0 3.25 3.25 0 0 1-6.5 0Zm-14.5 0a3.25 3.25 0 1 1 6.5 0 3.25 3.25 0 0 1-6.5 0Zm0-14.5a3.25 3.25 0 1 1 6.5 0 3.25 3.25 0 0 1-6.5 0ZM4.75 3a1.75 1.75 0 1 0 .001 3.501A1.75 1.75 0 0 0 4.75 3Zm0 14.5a1.75 1.75 0 1 0 .001 3.501A1.75 1.75 0 0 0 4.75 17.5Zm14.5 0a1.75 1.75 0 1 0 .001 3.501 1.75 1.75 0 0 0-.001-3.501Z"
-            }
-            path {
-                d: "M13.405 1.72a.75.75 0 0 1 0 1.06L12.185 4h4.065A3.75 3.75 0 0 1 20 7.75v8.75a.75.75 0 0 1-1.5 0V7.75a2.25 2.25 0 0 0-2.25-2.25h-4.064l1.22 1.22a.75.75 0 0 1-1.061 1.06l-2.5-2.5a.75.75 0 0 1 0-1.06l2.5-2.5a.75.75 0 0 1 1.06 0ZM4.75 7.25A.75.75 0 0 1 5.5 8v8A.75.75 0 0 1 4 16V8a.75.75 0 0 1 .75-.75Z"
-            }
-        }
-    }
-}
-
-#[inline_props]
-pub fn GithubPullRequestDraft<'a>(cx: Scope, class: Option<&'a str>) -> Element {
-    render! {
-        svg {
-            xmlns: "http://www.w3.org/2000/svg",
-            class: "{class.unwrap_or_default()}",
-            role: "img",
-            "viewBox": "0 0 24 24",
-            fill: "currentColor",
-            stroke: "currentColor",
-            title { "Github draft pull request" }
-            path {
-                d: "M4.75 1.5a3.25 3.25 0 0 1 .745 6.414A.827.827 0 0 1 5.5 8v8a.827.827 0 0 1-.005.086A3.25 3.25 0 0 1 4.75 22.5a3.25 3.25 0 0 1-.745-6.414A.827.827 0 0 1 4 16V8c0-.029.002-.057.005-.086A3.25 3.25 0 0 1 4.75 1.5ZM16 19.25a3.25 3.25 0 1 1 6.5 0 3.25 3.25 0 0 1-6.5 0ZM3 4.75a1.75 1.75 0 1 0 3.501-.001A1.75 1.75 0 0 0 3 4.75Zm0 14.5a1.75 1.75 0 1 0 3.501-.001A1.75 1.75 0 0 0 3 19.25Zm16.25-1.75a1.75 1.75 0 1 0 .001 3.501 1.75 1.75 0 0 0-.001-3.501Zm0-11.5a1.75 1.75 0 1 0 0-3.5 1.75 1.75 0 0 0 0 3.5ZM21 11.25a1.75 1.75 0 1 1-3.5 0 1.75 1.75 0 0 1 3.5 0Z"
-            }
-        }
-    }
-}
-
-#[inline_props]
-pub fn GithubPullRequestClosed<'a>(cx: Scope, class: Option<&'a str>) -> Element {
-    render! {
-        svg {
-            xmlns: "http://www.w3.org/2000/svg",
-            class: "{class.unwrap_or_default()}",
-            role: "img",
-            "viewBox": "0 0 24 24",
-            fill: "currentColor",
-            stroke: "currentColor",
-            title { "Github closed pull request" }
-            path {
-                d: "M22.266 2.711a.75.75 0 1 0-1.061-1.06l-1.983 1.983-1.984-1.983a.75.75 0 1 0-1.06 1.06l1.983 1.983-1.983 1.984a.75.75 0 0 0 1.06 1.06l1.984-1.983 1.983 1.983a.75.75 0 0 0 1.06-1.06l-1.983-1.984 1.984-1.983ZM4.75 1.5a3.25 3.25 0 0 1 .745 6.414A.827.827 0 0 1 5.5 8v8a.827.827 0 0 1-.005.086A3.25 3.25 0 0 1 4.75 22.5a3.25 3.25 0 0 1-.745-6.414A.827.827 0 0 1 4 16V8c0-.029.002-.057.005-.086A3.25 3.25 0 0 1 4.75 1.5ZM16 19.25a3.252 3.252 0 0 1 2.5-3.163V9.625a.75.75 0 0 1 1.5 0v6.462a3.252 3.252 0 0 1-.75 6.413A3.25 3.25 0 0 1 16 19.25ZM3 4.75a1.75 1.75 0 1 0 3.501-.001A1.75 1.75 0 0 0 3 4.75Zm0 14.5a1.75 1.75 0 1 0 3.501-.001A1.75 1.75 0 0 0 3 19.25Zm16.25-1.75a1.75 1.75 0 1 0 .001 3.501 1.75 1.75 0 0 0-.001-3.501Z"
-            }
-        }
-    }
-}
-
-#[inline_props]
-pub fn GithubPullRequestMerged<'a>(cx: Scope, class: Option<&'a str>) -> Element {
-    render! {
-        svg {
-            xmlns: "http://www.w3.org/2000/svg",
-            class: "{class.unwrap_or_default()}",
-            role: "img",
-            "viewBox": "0 0 24 24",
-            fill: "currentColor",
-            stroke: "currentColor",
-            title { "Github merged pull request" }
-            path {
-                d: "M16 19.25a3.25 3.25 0 1 1 6.5 0 3.25 3.25 0 0 1-6.5 0Zm-14.5 0a3.25 3.25 0 1 1 6.5 0 3.25 3.25 0 0 1-6.5 0Zm0-14.5a3.25 3.25 0 1 1 6.5 0 3.25 3.25 0 0 1-6.5 0ZM4.75 3a1.75 1.75 0 1 0 .001 3.501A1.75 1.75 0 0 0 4.75 3Zm0 14.5a1.75 1.75 0 1 0 .001 3.501A1.75 1.75 0 0 0 4.75 17.5Zm14.5 0a1.75 1.75 0 1 0 .001 3.501 1.75 1.75 0 0 0-.001-3.501Z"
-            }
-            path {
-                d: "M13.405 1.72a.75.75 0 0 1 0 1.06L12.185 4h4.065A3.75 3.75 0 0 1 20 7.75v8.75a.75.75 0 0 1-1.5 0V7.75a2.25 2.25 0 0 0-2.25-2.25h-4.064l1.22 1.22a.75.75 0 0 1-1.061 1.06l-2.5-2.5a.75.75 0 0 1 0-1.06l2.5-2.5a.75.75 0 0 1 1.06 0ZM4.75 7.25A.75.75 0 0 1 5.5 8v8A.75.75 0 0 1 4 16V8a.75.75 0 0 1 .75-.75Z"
-            }
-        }
     }
 }
 
@@ -161,21 +87,21 @@ pub fn GithubPullRequestIcon<'a>(
         };
     let class = class.unwrap_or_default();
     let Some(github_pull_request) = github_pull_request else {
-        return render! { GithubPullRequestOpened { class: "{class}" } };
+        return render! { Icon { class: "{class}", icon: GoGitPullRequest } };
     };
 
     match github_pull_request.state {
         GithubPullRequestState::Closed => {
-            render! { GithubPullRequestClosed { class: "{class} {closed_icon_style}" }}
+            render! { Icon { class: "{class} {closed_icon_style}", icon: GoGitPullRequestClosed }}
         }
         GithubPullRequestState::Merged => {
-            render! { GithubPullRequestMerged { class: "{class} {merged_icon_style}" }}
+            render! { Icon { class: "{class} {merged_icon_style}", icon: GoGitPullRequest }}
         }
         GithubPullRequestState::Open => {
             if github_pull_request.is_draft {
-                render! { GithubPullRequestDraft { class: "{class} {draft_icon_style}" }}
+                render! { Icon { class: "{class} {draft_icon_style}", icon: GoGitPullRequestDraft }}
             } else {
-                render! { GithubPullRequestOpened { class: "{class} {opened_icon_style}" }}
+                render! { Icon { class: "{class} {opened_icon_style}", icon: GoGitPullRequest }}
             }
         }
     }
