@@ -9,7 +9,7 @@ use dioxus_free_icons::{
 use universal_inbox::notification::integrations::linear::LinearProject;
 
 use crate::components::{
-    integrations::linear::icons::LinearProjectIcon, CollapseCard, UserWithAvatar,
+    integrations::linear::icons::LinearProjectIcon, SmallCard, UserWithAvatar,
 };
 
 #[inline_props]
@@ -46,7 +46,11 @@ pub fn LinearProjectPreview<'a>(cx: Scope, linear_project: &'a LinearProject) ->
 }
 
 #[inline_props]
-pub fn LinearProjectDetails<'a>(cx: Scope, linear_project: &'a LinearProject) -> Element {
+pub fn LinearProjectDetails<'a>(
+    cx: Scope,
+    linear_project: &'a LinearProject,
+    card_class: Option<&'a str>,
+) -> Element {
     let description = markdown::to_html(&linear_project.description);
 
     render! {
@@ -55,58 +59,44 @@ pub fn LinearProjectDetails<'a>(cx: Scope, linear_project: &'a LinearProject) ->
 
             if let Some(lead) = &linear_project.lead {
                 render! {
-                    CollapseCard {
-                        header: render! {
-                            div {
-                                class: "flex gap-2",
-
-                                span { class: "text-gray-400", "Led by" }
-                                UserWithAvatar {
-                                    user_name: lead.name.clone(),
-                                    avatar_url: lead.avatar_url.clone(),
-                                }
-                            }
+                    SmallCard {
+                        card_class: "{card_class.unwrap_or_default()}",
+                        span { class: "text-gray-400", "Led by" }
+                        UserWithAvatar {
+                            user_name: lead.name.clone(),
+                            avatar_url: lead.avatar_url.clone(),
                         }
                     }
                 }
             }
 
-            CollapseCard {
-                header: render! {
-                    div {
-                        class: "flex gap-2 items-center",
-                        LinearProjectIcon { class: "h-5 w-5", linear_project: linear_project }
-                        "{linear_project.state}"
-                        if linear_project.progress > 0 {
-                            render! {
-                                div { class: "grow" }
-                                div {
-                                    class: "h-5 w-5 radial-progress text-primary",
-                                    style: "--value:{linear_project.progress}; --thickness: 2px;"
-                                }
-                                "{linear_project.progress}%"
-                            }
+            SmallCard {
+                card_class: "{card_class.unwrap_or_default()}",
+                LinearProjectIcon { class: "h-5 w-5", linear_project: linear_project }
+                "{linear_project.state}",
+                if linear_project.progress > 0 {
+                    render! {
+                        div { class: "grow" }
+                        div {
+                            class: "h-5 w-5 radial-progress text-primary",
+                            style: "--value:{linear_project.progress}; --thickness: 2px;"
                         }
+                        "{linear_project.progress}%"
                     }
                 }
             }
 
             if let Some(start_date) = linear_project.start_date {
                 render! {
-                    CollapseCard {
-                        header: render! {
-                            div {
-                                class: "flex gap-2",
-
+                    SmallCard {
+                        card_class: "{card_class.unwrap_or_default()}",
+                        Icon { class: "h-5 w-5 text-gray-400", icon: BsCalendar2Event }
+                        span { "{start_date}" }
+                        Icon { class: "h-5 w-5 text-gray-400", icon: BsArrowRight }
+                        if let Some(target_date) = linear_project.target_date {
+                            render! {
                                 Icon { class: "h-5 w-5 text-gray-400", icon: BsCalendar2Event }
-                                span { "{start_date}" }
-                                Icon { class: "h-5 w-5 text-gray-400", icon: BsArrowRight }
-                                if let Some(target_date) = linear_project.target_date {
-                                    render! {
-                                        Icon { class: "h-5 w-5 text-gray-400", icon: BsCalendar2Event }
-                                        span { "{target_date}" }
-                                    }
-                                }
+                                span { "{target_date}" }
                             }
                         }
                     }

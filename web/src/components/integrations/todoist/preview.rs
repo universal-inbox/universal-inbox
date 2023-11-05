@@ -16,7 +16,7 @@ use universal_inbox::{
 };
 
 use crate::{
-    components::{CollapseCard, TagsInCard},
+    components::{SmallCard, TagsInCard},
     theme::{
         PRIORITY_HIGH_COLOR_CLASS, PRIORITY_LOW_COLOR_CLASS, PRIORITY_NORMAL_COLOR_CLASS,
         PRIORITY_URGENT_COLOR_CLASS,
@@ -87,33 +87,21 @@ pub fn TodoistTaskPreview<'a>(
 
                 if let Some(due) = &todoist_task.due {
                     render! {
-                        CollapseCard {
-                            header: render! {
-                                div {
-                                    class: "flex items-center gap-2",
-
-                                    Icon { class: "h-3 w-3", icon: BsCalendar2Check }
-                                    span { class: "text-gray-400", "Due date:" }
-                                    "{due.date}"
-                                    if due.is_recurring {
-                                        render! { Icon { class: "h-3 w-3", icon: BsArrowRepeat } }
-                                    }
-                                }
+                        SmallCard {
+                            Icon { class: "h-3 w-3", icon: BsCalendar2Check }
+                            span { class: "text-gray-400", "Due date:" }
+                            "{due.date}",
+                            if due.is_recurring {
+                                render! { Icon { class: "h-3 w-3", icon: BsArrowRepeat } }
                             }
                         }
                     }
                 }
 
-                CollapseCard {
-                    header: render! {
-                        div {
-                            class: "flex items-center gap-2",
-
-                            Icon { class: "h-3 w-3 {task_priority_style}", icon: BsFlag }
-                            span { class: "text-gray-400", "Priority:" }
-                            "{priority}"
-                        }
-                    }
+                SmallCard {
+                    Icon { class: "h-3 w-3 {task_priority_style}", icon: BsFlag }
+                    span { class: "text-gray-400", "Priority:" }
+                    "{priority}"
                 }
             }
 

@@ -16,7 +16,7 @@ use crate::{
             icons::{LinearIssueIcon, LinearProjectIcon, LinearProjectMilestoneIcon},
             preview::project::LinearProjectDetails,
         },
-        CollapseCard, CollapseCardWithIcon, TagsInCard, UserWithAvatar,
+        CollapseCard, SmallCard, TagsInCard, UserWithAvatar,
     },
     theme::{
         PRIORITY_HIGH_COLOR_CLASS, PRIORITY_LOW_COLOR_CLASS, PRIORITY_NORMAL_COLOR_CLASS,
@@ -96,27 +96,19 @@ fn LinearIssueDetails<'a>(cx: Scope, linear_issue: &'a LinearIssue) -> Element {
 
             if let Some(creator) = &linear_issue.creator {
                 render! {
-                    CollapseCard {
-                        header: render! {
-                            div {
-                                class: "flex gap-2",
-
-                                span { class: "text-gray-400", "Created by" }
-                                UserWithAvatar {
-                                    user_name: creator.name.clone(),
-                                    avatar_url: creator.avatar_url.clone(),
-                                }
-                            }
+                    SmallCard {
+                        span { class: "text-gray-400", "Created by" }
+                        UserWithAvatar {
+                            user_name: creator.name.clone(),
+                            avatar_url: creator.avatar_url.clone(),
                         }
                     }
                 }
             }
 
-            CollapseCardWithIcon {
-                icon: render! {
-                    LinearIssueIcon { class: "h-5 w-5", linear_issue: linear_issue }
-                },
-                title: "{linear_issue.state.name}"
+            SmallCard {
+                LinearIssueIcon { class: "h-5 w-5", linear_issue: linear_issue }
+                span { "{linear_issue.state.name}" }
             }
 
             TagsInCard {
@@ -129,32 +121,20 @@ fn LinearIssueDetails<'a>(cx: Scope, linear_issue: &'a LinearIssue) -> Element {
 
             if let Some(due_date) = &linear_issue.due_date {
                 render! {
-                    CollapseCard {
-                        header: render! {
-                            div {
-                                class: "flex items-center gap-2",
-
-                                Icon { class: "h-5 w-5", icon: BsCalendar2Check }
-                                span { class: "text-gray-400", "Due date:" }
-                                "{due_date}"
-                            }
-                        }
+                    SmallCard {
+                        Icon { class: "h-5 w-5", icon: BsCalendar2Check }
+                        span { class: "text-gray-400", "Due date:" }
+                        "{due_date}"
                     }
                 }
             }
 
             if linear_issue.priority != LinearIssuePriority::NoPriority {
                 render! {
-                    CollapseCard {
-                        header: render! {
-                            div {
-                                class: "flex items-center gap-2",
-
-                                Icon { class: "h-5 w-5 {issue_priority_style}", icon: BsFlag }
-                                span { class: "text-gray-400", "Priority:" }
-                                "{linear_issue.priority}"
-                            }
-                        }
+                    SmallCard {
+                        Icon { class: "h-5 w-5 {issue_priority_style}", icon: BsFlag }
+                        span { class: "text-gray-400", "Priority:" }
+                        "{linear_issue.priority}"
                     }
                 }
             }
@@ -165,16 +145,10 @@ fn LinearIssueDetails<'a>(cx: Scope, linear_issue: &'a LinearIssue) -> Element {
 
             if let Some(project_milestone) = &linear_issue.project_milestone {
                 render! {
-                    CollapseCard {
-                        header: render! {
-                            div {
-                                class: "flex items-center gap-2",
-
-                                LinearProjectMilestoneIcon { class: "h-5 w-5" }
-                                span { class: "text-gray-400", "Milestone:" }
-                                "{project_milestone.name}"
-                            }
-                        }
+                    SmallCard {
+                        LinearProjectMilestoneIcon { class: "h-5 w-5" }
+                        span { class: "text-gray-400", "Milestone:" }
+                        "{project_milestone.name}"
                     }
                 }
             }
@@ -208,26 +182,25 @@ pub fn LinearProjectCard<'a>(cx: Scope, project: &'a LinearProject) -> Element {
     render! {
         CollapseCard {
             header: render! {
-                div {
-                    class: "flex items-center gap-2",
-
-                    project_icon
-                    span { class: "text-gray-400", "Project:" }
-                    a {
-                        href: "{project.url}",
-                        target: "_blank",
-                        "{project.name}"
-                    }
-                    a {
-                        class: "flex-none",
-                        href: "{project.url}",
-                        target: "_blank",
-                        Icon { class: "h-5 w-5 text-gray-400 p-1", icon: BsArrowUpRightSquare }
-                    }
+                project_icon,
+                span { class: "text-gray-400", "Project:" }
+                a {
+                    href: "{project.url}",
+                    target: "_blank",
+                    "{project.name}"
+                }
+                a {
+                    class: "flex-none",
+                    href: "{project.url}",
+                    target: "_blank",
+                    Icon { class: "h-5 w-5 text-gray-400 p-1", icon: BsArrowUpRightSquare }
                 }
             },
 
-            LinearProjectDetails { linear_project: project }
+            LinearProjectDetails {
+                card_class: "bg-neutral text-neutral-content",
+                linear_project: project,
+            }
         }
     }
 }

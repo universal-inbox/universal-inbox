@@ -22,7 +22,7 @@ use universal_inbox::notification::integrations::github::{
 
 use crate::components::{
     integrations::github::{icons::GithubPullRequestIcon, GithubActorDisplay},
-    CollapseCard, CollapseCardWithIcon, Tag, TagsInCard, UserWithAvatar,
+    CollapseCardWithIcon, SmallCard, Tag, TagsInCard, UserWithAvatar,
 };
 
 #[inline_props]
@@ -184,29 +184,21 @@ fn GithubPullRequestDetails<'a>(cx: Scope, github_pull_request: &'a GithubPullRe
 
             if let Some(actor) = &github_pull_request.author {
                 render! {
-                    CollapseCard {
-                        header: render! {
-                            div {
-                                class: "flex gap-2",
-
-                                span { class: "text-gray-400", "Opened by" }
-                                GithubActorDisplay { actor: actor }
-                            }
-                        },
+                    SmallCard {
+                        span { class: "text-gray-400", "Opened by" }
+                        GithubActorDisplay { actor: actor }
                     }
                 }
             }
 
-            CollapseCardWithIcon {
-                icon: render! {
-                    GithubPullRequestIcon { class: "h-5 w-5", github_pull_request: github_pull_request }
-                },
-                title: "{pr_state_label}"
+            SmallCard {
+                GithubPullRequestIcon { class: "h-5 w-5", github_pull_request: github_pull_request }
+                span { "{pr_state_label}" }
             }
 
             if github_pull_request.state == GithubPullRequestState::Open {
                 render! {
-                    CollapseCardWithIcon { title: "{mergeable_state_label}", icon: mergeable_state_icon }
+                    SmallCard { mergeable_state_icon, span { "{mergeable_state_label}" } }
                 }
             }
 

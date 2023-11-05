@@ -26,23 +26,9 @@ fn CollapseCardWithIcon<'a>(
     children: Element<'a>,
 ) -> Element {
     render! {
-        if children.is_some() {
-            render! {
-                CollapseCard {
-                    header: render! {
-                        div { class: "flex gap-2 items-center", icon, "{title}" }
-                    },
-                    children
-                }
-            }
-        } else {
-            render! {
-                CollapseCard {
-                    header: render! {
-                        div { class: "flex gap-2 items-center", icon, "{title}" }
-                    }
-                }
-            }
+        CollapseCard {
+            header: render! { icon, span { "{title}" } },
+            children
         }
     }
 }
@@ -55,23 +41,41 @@ fn CollapseCard<'a>(cx: Scope, header: Element<'a>, children: Element<'a>) -> El
 
             div {
                 class: "card-body p-0",
-                if children.is_some() {
-                    render! {
-                        details {
-                            class: "collapse collapse-arrow",
-                            summary {
-                                class: "collapse-title min-h-min p-2",
-                                header
-                            }
-
-                            div { class: "collapse-content", children }
-                        }
+                details {
+                    class: "collapse collapse-arrow",
+                    summary {
+                        class: "collapse-title min-h-min p-2",
+                        div { class: "flex items-center gap-2", header }
                     }
-                } else {
-                    render! { div { class: "p-2", header } }
+
+                    div { class: "collapse-content", children }
                 }
             }
+        }
+    }
+}
 
+#[inline_props]
+fn SmallCard<'a>(
+    cx: Scope,
+    card_class: Option<&'a str>,
+    class: Option<&'a str>,
+    children: Element<'a>,
+) -> Element {
+    let card_class = card_class
+        .and_then(|card_class| (!card_class.is_empty()).then_some(card_class))
+        .unwrap_or("bg-base-200 text-base-content");
+
+    render! {
+        div {
+            class: "card w-full {card_class}",
+            div {
+                class: "card-body p-2",
+                div {
+                    class: "flex items-center gap-2 {class.unwrap_or_default()}",
+                    children
+                }
+            }
         }
     }
 }
@@ -110,14 +114,10 @@ pub fn TagsInCard(cx: Scope, tags: Vec<Tag>) -> Element {
     }
 
     render! {
-        CollapseCard {
-            header: render! {
-                div {
-                    class: "flex flex-wrap items-center gap-2",
-                    for tag in &tags {
-                        render! { Tag { tag: tag } }
-                    }
-                }
+        SmallCard {
+            class: "flex-wrap",
+            for tag in &tags {
+                render! { Tag { tag: tag } }
             }
         }
     }
