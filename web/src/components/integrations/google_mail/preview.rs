@@ -8,7 +8,7 @@ use dioxus_free_icons::{icons::bs_icons::BsArrowUpRightSquare, Icon};
 use universal_inbox::{
     notification::{
         integrations::google_mail::{
-            GoogleMailThread, MessageSelection, GOOGLE_MAIL_IMPORTANT_LABEL,
+            GoogleMailMessage, GoogleMailThread, GOOGLE_MAIL_IMPORTANT_LABEL,
             GOOGLE_MAIL_STARRED_LABEL,
         },
         NotificationWithTask,
@@ -16,7 +16,7 @@ use universal_inbox::{
     HasHtmlUrl,
 };
 
-use crate::components::icons::Mail;
+use crate::components::{icons::Mail, SmallCard, TagsInCard};
 
 #[inline_props]
 pub fn GoogleMailThreadPreview<'a>(
@@ -25,17 +25,17 @@ pub fn GoogleMailThreadPreview<'a>(
     google_mail_thread: GoogleMailThread,
 ) -> Element {
     let link = notification.get_html_url();
-    let from_address = google_mail_thread.get_message_header(MessageSelection::First, "From");
-    let interlocutors_count = google_mail_thread
+    let labels = google_mail_thread
         .messages
         .iter()
         .fold(HashSet::new(), |mut acc, msg| {
-            if let Some(from_address) = msg.get_header("From") {
-                acc.insert(from_address);
+            if let Some(labels) = &msg.label_ids {
+                for label in labels {
+                    acc.insert(label.clone());
+                }
             }
             acc
-        })
-        .len();
+        });
     let is_starred = google_mail_thread.is_tagged_with(GOOGLE_MAIL_STARRED_LABEL, None);
     let is_important = google_mail_thread.is_tagged_with(GOOGLE_MAIL_IMPORTANT_LABEL, None);
     let mail_icon_style = match (is_starred, is_important) {
@@ -47,17 +47,6 @@ pub fn GoogleMailThreadPreview<'a>(
     render! {
         div {
             class: "flex flex-col gap-2 w-full",
-
-            div {
-                class: "flex gap-2",
-
-                if let Some(from_address) = from_address {
-                    render! {
-                        span { class: "text-xs text-gray-400", "From: {from_address}" }
-                        span { class: "text-xs text-gray-400", "({interlocutors_count})" }
-                    }
-                }
-            }
 
             h2 {
                 class: "flex items-center gap-2 text-lg",
@@ -74,6 +63,68 @@ pub fn GoogleMailThreadPreview<'a>(
                     target: "_blank",
                     Icon { class: "h-5 w-5 text-gray-400 p-1", icon: BsArrowUpRightSquare }
                 }
+            }
+
+            TagsInCard {
+                tags: labels
+                    .iter()
+                    .map(|label| label.clone().into())
+                    .collect()
+            }
+
+            for message in google_mail_thread.messages.iter() {
+                render! { GoogleMailThreadMessage { message: message } }
+            }
+        }
+    }
+}
+
+#[inline_props]
+fn GoogleMailThreadMessage<'a>(cx: Scope, message: &'a GoogleMailMessage) -> Element {
+    let from = message.get_header("From");
+    let to = message.get_header("To");
+    let date = message.get_header("Date");
+
+    render! {
+        div {
+            class: "card w-full bg-base-200 text-base-content",
+            div {
+                class: "card-body flex flex-col gap-2 p-2",
+
+                if let Some(from) = from {
+                    render! {
+                        SmallCard {
+                            class: "text-xs",
+                            card_class: "bg-neutral text-neutral-content",
+                            span { class: "text-gray-400", "From:" }
+                            span { "{from}" }
+                        }
+                    }
+                }
+
+                if let Some(to) = to {
+                    render! {
+                        SmallCard {
+                            class: "text-xs",
+                            card_class: "bg-neutral text-neutral-content",
+                            span { class: "text-gray-400", "To:" }
+                            span { "{to}" }
+                        }
+                    }
+                }
+
+                if let Some(date) = date {
+                    render! {
+                        SmallCard {
+                            class: "text-xs",
+                            card_class: "bg-neutral text-neutral-content",
+                            span { class: "text-gray-400", "Date:" }
+                            span { "{date}" }
+                        }
+                    }
+                }
+
+                span { dangerous_inner_html: "{message.snippet} &hellip;" }
             }
         }
     }
