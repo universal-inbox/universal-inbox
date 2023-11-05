@@ -26,13 +26,9 @@ pub fn GithubActorDisplay<'a>(cx: Scope, actor: &'a GithubActor) -> Element {
     };
 
     render! {
-        div {
-            class: "flex gap-1 items-center",
-
-            UserWithAvatar {
-                user_name: actor_display_name,
-                avatar_url: Some(actor_avatar_url),
-            }
+        UserWithAvatar {
+            user_name: actor_display_name,
+            avatar_url: Some(actor_avatar_url),
         }
     }
 }

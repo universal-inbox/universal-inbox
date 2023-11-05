@@ -6,12 +6,18 @@ use dioxus_free_icons::{
     icons::bs_icons::{BsCheckCircle, BsRecordCircle},
     Icon,
 };
+
 use universal_inbox::notification::{
     integrations::github::{
         GithubDiscussion, GithubDiscussionStateReason, GithubNotification, GithubPullRequest,
         GithubPullRequestState,
     },
     NotificationDetails, NotificationWithTask,
+};
+
+use crate::theme::{
+    CANCELED_TEXT_COLOR_CLASS, COMPLETED_TEXT_COLOR_CLASS, DRAFT_TEXT_COLOR_CLASS,
+    STARTED_TEXT_COLOR_CLASS,
 };
 
 #[inline_props]
@@ -145,10 +151,10 @@ pub fn GithubPullRequestIcon<'a>(
     let (closed_icon_style, merged_icon_style, draft_icon_style, opened_icon_style) =
         if should_style_icon.unwrap_or(true) {
             (
-                "text-base",
-                "text-indigo-500",
-                "text-gray-400",
-                "text-primary",
+                CANCELED_TEXT_COLOR_CLASS,
+                COMPLETED_TEXT_COLOR_CLASS,
+                DRAFT_TEXT_COLOR_CLASS,
+                STARTED_TEXT_COLOR_CLASS,
             )
         } else {
             ("", "", "", "")
@@ -260,10 +266,10 @@ pub fn GithubDiscussionIcon<'a>(
     let (closed_icon_style, opened_icon_style, duplicate_icon_style, outdated_icon_style) =
         if should_style_icon.unwrap_or(true) {
             (
-                "text-base",
-                "text-primary",
-                "text-indigo-500",
-                "text-gray-400",
+                COMPLETED_TEXT_COLOR_CLASS,
+                STARTED_TEXT_COLOR_CLASS,
+                CANCELED_TEXT_COLOR_CLASS,
+                CANCELED_TEXT_COLOR_CLASS,
             )
         } else {
             ("", "", "", "")

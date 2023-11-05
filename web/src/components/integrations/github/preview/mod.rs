@@ -3,7 +3,7 @@
 use dioxus::prelude::*;
 
 use dioxus_free_icons::{
-    icons::bs_icons::{BsArrowUpRightSquare, BsChat, BsCheckCircle, BsRecordCircle},
+    icons::bs_icons::{BsArrowUpRightSquare, BsCheckCircle, BsRecordCircle},
     Icon,
 };
 
@@ -12,7 +12,7 @@ use universal_inbox::{
     HasHtmlUrl,
 };
 
-use crate::components::integrations::github::icons::GithubPullRequestIcon;
+use crate::components::integrations::github::icons::{GithubDiscussionIcon, GithubPullRequestIcon};
 
 pub mod discussion;
 pub mod pull_request;
@@ -28,7 +28,7 @@ pub fn GithubNotificationDefaultPreview<'a>(
     let type_icon = match github_notification.subject.r#type.as_str() {
         "PullRequest" => render! { GithubPullRequestIcon { class: "flex-none h-5 w-5" } },
         "Issue" => render! { Icon { class: "flex-none h-5 w-5", icon: BsRecordCircle } },
-        "Discussion" => render! { Icon { class: "flex-none h-5 w-5", icon: BsChat } },
+        "Discussion" => render! { GithubDiscussionIcon { class: "flex-none h-5 w-5" } },
         "CheckSuite" => render! { Icon { class: "flex-none h-5 w-5", icon: BsCheckCircle } },
         _ => None,
     };

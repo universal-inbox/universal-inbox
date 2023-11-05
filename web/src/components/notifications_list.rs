@@ -7,7 +7,7 @@ use dioxus::{events::MouseEvent, prelude::*};
 use dioxus_free_icons::{
     icons::bs_icons::{
         BsArrowRepeat, BsBellSlash, BsBookmarkCheck, BsCalendar2Check, BsCardChecklist, BsCheck2,
-        BsClockHistory, BsExclamationCircle, BsGrid, BsLink45deg, BsRecordCircle, BsStar, BsTrash,
+        BsClockHistory, BsExclamationCircle, BsLink45deg, BsStar, BsTrash,
     },
     Icon,
 };
@@ -15,12 +15,9 @@ use fermi::UseAtomRef;
 
 use universal_inbox::{
     notification::{
-        integrations::{
-            google_mail::{
-                GoogleMailThread, MessageSelection, GOOGLE_MAIL_IMPORTANT_LABEL,
-                GOOGLE_MAIL_STARRED_LABEL,
-            },
-            linear::{LinearIssue, LinearNotification},
+        integrations::google_mail::{
+            GoogleMailThread, MessageSelection, GOOGLE_MAIL_IMPORTANT_LABEL,
+            GOOGLE_MAIL_STARRED_LABEL,
         },
         NotificationMetadata, NotificationWithTask,
     },
@@ -34,7 +31,10 @@ use universal_inbox::{
 use crate::{
     components::{
         icons::{GoogleMail, Linear, Mail, Todoist},
-        integrations::github::{icons::Github, notification::GithubNotificationDisplay},
+        integrations::{
+            github::{icons::Github, notification::GithubNotificationDisplay},
+            linear::notification::LinearNotificationDisplay,
+        },
     },
     model::UniversalInboxUIModel,
 };
@@ -347,53 +347,6 @@ fn DefaultNotificationDisplay<'a>(cx: Scope, notif: &'a NotificationWithTask) ->
             div {
                 class: "flex flex-col grow",
                 span { "{notif.title}" }
-            }
-        }
-    }
-}
-
-#[inline_props]
-fn LinearNotificationDisplay<'a>(
-    cx: Scope,
-    notif: &'a NotificationWithTask,
-    linear_notification: LinearNotification,
-) -> Element {
-    let type_icon = match linear_notification {
-        LinearNotification::IssueNotification { .. } => render! {
-            Icon { class: "h-5 w-5", icon: BsRecordCircle }
-        },
-        LinearNotification::ProjectNotification { .. } => render! {
-            Icon { class: "h-5 w-5", icon: BsGrid }
-        },
-    };
-
-    render! {
-        div {
-            class: "flex items-center gap-2",
-
-            type_icon
-
-            div {
-                class: "flex flex-col grow",
-
-                span { "{notif.title}" }
-                div {
-                    class: "flex gap-2",
-
-                    if let Some(team) = linear_notification.get_team() {
-                        render! {
-                            span { class: "text-xs text-gray-400", "{team.name}" }
-                        }
-                    }
-
-                    if let LinearNotification::IssueNotification {
-                        issue: LinearIssue { identifier, .. }, ..
-                    } = linear_notification {
-                        render! {
-                            span { class: "text-xs text-gray-400", "#{identifier}" }
-                        }
-                    }
-                }
             }
         }
     }
