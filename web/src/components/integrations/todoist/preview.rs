@@ -15,7 +15,13 @@ use universal_inbox::{
     HasHtmlUrl,
 };
 
-use crate::components::{CollapseCard, TagsInCard};
+use crate::{
+    components::{CollapseCard, TagsInCard},
+    theme::{
+        PRIORITY_HIGH_COLOR_CLASS, PRIORITY_LOW_COLOR_CLASS, PRIORITY_NORMAL_COLOR_CLASS,
+        PRIORITY_URGENT_COLOR_CLASS,
+    },
+};
 
 #[inline_props]
 pub fn TodoistTaskPreview<'a>(
@@ -30,10 +36,10 @@ pub fn TodoistTaskPreview<'a>(
     let body = markdown::to_html(&task.body);
     let priority: u8 = task.priority.into();
     let task_priority_style = match todoist_task.priority {
-        TodoistItemPriority::P1 => "",
-        TodoistItemPriority::P2 => "text-yellow-500",
-        TodoistItemPriority::P3 => "text-orange-500",
-        TodoistItemPriority::P4 => "text-red-500",
+        TodoistItemPriority::P1 => PRIORITY_LOW_COLOR_CLASS,
+        TodoistItemPriority::P2 => PRIORITY_NORMAL_COLOR_CLASS,
+        TodoistItemPriority::P3 => PRIORITY_HIGH_COLOR_CLASS,
+        TodoistItemPriority::P4 => PRIORITY_URGENT_COLOR_CLASS,
     };
 
     render! {

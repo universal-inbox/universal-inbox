@@ -5,6 +5,19 @@ use gloo_utils::errors::JsError;
 
 use crate::utils::get_local_storage;
 
+// Notification state colors
+pub const DRAFT_TEXT_COLOR_CLASS: &str = "text-gray-400";
+pub const BACKLOG_TEXT_COLOR_CLASS: &str = "text-base";
+pub const STARTED_TEXT_COLOR_CLASS: &str = "text-primary";
+pub const COMPLETED_TEXT_COLOR_CLASS: &str = "text-indigo-500";
+pub const CANCELED_TEXT_COLOR_CLASS: &str = "text-gray-400";
+
+// Priorities colors
+pub const PRIORITY_LOW_COLOR_CLASS: &str = "text-primary";
+pub const PRIORITY_NORMAL_COLOR_CLASS: &str = "text-yellow-500";
+pub const PRIORITY_HIGH_COLOR_CLASS: &str = "text-orange-500";
+pub const PRIORITY_URGENT_COLOR_CLASS: &str = "text-red-500";
+
 pub fn toggle_dark_mode(toggle: bool) -> Result<bool> {
     let window = web_sys::window().context("Unable to get the window object")?;
     let document = window
