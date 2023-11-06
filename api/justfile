@@ -18,6 +18,9 @@ check-db:
     cargo sqlx prepare -- --bin universal-inbox-api
     cargo check --tests
 
+migrate-db:
+    sqlx database setup
+
 ## Test recipes
 test test-filter="" $RUST_LOG="info":
     cargo nextest run --color always {{test-filter}}
