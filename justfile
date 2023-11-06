@@ -27,6 +27,9 @@ build-container:
     docker build -t universal-inbox .
 
 ## Dev recipes
+run-db:
+    process-compose -f .devbox/virtenv/redis/process-compose.yaml -f .devbox/virtenv/postgresql_15/process-compose.yaml -p 9999
+
 check:
     cargo clippy --tests -- -D warnings
 
@@ -52,6 +55,9 @@ test-coverage:
     cargo llvm-cov nextest --all-features --lcov --output-path lcov.info
 
 ## Run recipes
+migrate-db:
+    just api/migrate-db
+
 run-api:
     just api/run
 
