@@ -293,6 +293,7 @@ fn build_csp_header(settings: &Settings) -> String {
             Sources::new_with(Source::Self_)
                 .push(Source::Host("https://secure.gravatar.com"))
                 .push(Source::Host("https://avatars.githubusercontent.com"))
+                .push(Source::Host("https://public.linear.app"))
                 .push(Source::Scheme("data")), // Allow loading of inlined svg
         ))
         .push(Directive::WorkerSrc(Sources::new()))

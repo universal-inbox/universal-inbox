@@ -28,7 +28,7 @@ mod content_security_policy {
                    Some(
                        &HeaderValue::from_str(
                            &format!(
-                               "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; object-src 'none'; connect-src 'self' {}; img-src 'self' https://secure.gravatar.com https://avatars.githubusercontent.com data:; worker-src 'none'",
+                               "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; object-src 'none'; connect-src 'self' {}; img-src 'self' https://secure.gravatar.com https://avatars.githubusercontent.com https://public.linear.app data:; worker-src 'none'",
                                app.oidc_issuer_mock_server.base_url()
                            )
                        ).unwrap()
