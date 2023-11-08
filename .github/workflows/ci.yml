@@ -6,8 +6,11 @@ on:
       - main
   pull_request:
 
-jobs:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
+jobs:
   base:
     name: Base
     runs-on: ubuntu-latest
