@@ -24,7 +24,10 @@ build-release-all: build-release
     just api/build-release
 
 build-container:
-    docker build -t universal-inbox .
+    docker build -t dax42/universal-inbox:latest .
+
+publish-container: build-container
+    docker push dax42/universal-inbox:latest
 
 ## Dev recipes
 run-db:

@@ -1,0 +1,58 @@
+name: "universal-inbox"
+
+services:
+  nango-db:
+    image: "postgres:15"
+    networks:
+      - universal-inbox
+    volumes:
+      - nango-db:/var/lib/postgresql/data
+    env_file:
+      - nango-db.env
+    profiles:
+      - "database"
+
+  nango-server:
+    image: "nangohq/nango-server:0.32.10"
+    networks:
+      - universal-inbox
+    ports:
+      - "3003:3003"
+    env_file:
+      - nango-server.env
+
+  universal-inbox-db:
+    image: "postgres:15"
+    networks:
+      - universal-inbox
+    volumes:
+      - universal-inbox-db:/var/lib/postgresql/data
+    env_file:
+      - universal-inbox-db.env
+    ports:
+      - "5432:5432"
+    profiles:
+      - "database"
+
+  universal-inbox-redis:
+    image: "redis:latest"
+    networks:
+      - universal-inbox
+    profiles:
+      - "database"
+
+  universal-inbox:
+    image: "dax42/universal-inbox:latest"
+    networks:
+      - universal-inbox
+    env_file:
+      - universal-inbox.env
+    ports:
+      - "8000:8000"
+
+networks:
+  universal-inbox:
+
+volumes:
+  nango-db:
+  universal-inbox-db:

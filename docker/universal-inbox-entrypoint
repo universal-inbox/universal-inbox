@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+set -Eeo pipefail
+
+export DATABASE_URL="postgresql://$UNIVERSAL_INBOX__DATABASE__USERNAME:$UNIVERSAL_INBOX__DATABASE__PASSWORD@$UNIVERSAL_INBOX__DATABASE__HOST:$UNIVERSAL_INBOX__DATABASE__PORT/$UNIVERSAL_INBOX__DATABASE__DATABASE_NAME"
+
+/usr/local/bin/sqlx migrate run
+
+exec /app/universal-inbox "$*"
