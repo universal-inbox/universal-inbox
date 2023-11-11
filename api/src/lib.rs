@@ -273,6 +273,13 @@ pub async fn build_services(
 }
 
 fn build_csp_header(settings: &Settings) -> String {
+    let mut connect_srcs = Sources::new_with(Source::Self_).push(Source::Host(
+        &settings.application.security.authentication.oidc_issuer_url,
+    ));
+    for url in settings.application.security.csp_extra_connect_src.iter() {
+        connect_srcs.push_borrowed(Source::Host(url));
+    }
+
     CSP::new()
         .push(Directive::DefaultSrc(Sources::new_with(Source::Self_)))
         .push(Directive::ScriptSrc(
@@ -284,11 +291,7 @@ fn build_csp_header(settings: &Settings) -> String {
             Sources::new_with(Source::Self_).push(Source::UnsafeInline),
         ))
         .push(Directive::ObjectSrc(Sources::new()))
-        .push(Directive::ConnectSrc(
-            Sources::new_with(Source::Self_).push(Source::Host(
-                &settings.application.authentication.oidc_issuer_url,
-            )),
-        ))
+        .push(Directive::ConnectSrc(connect_srcs))
         .push(Directive::ImgSrc(
             Sources::new_with(Source::Self_)
                 .push(Source::Host("https://secure.gravatar.com"))

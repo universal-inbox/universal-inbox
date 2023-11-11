@@ -15,7 +15,7 @@ nango_public_key = "nango_public_test_key"
 [application.http_session]
 secret_key = "1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF"
 
-[application.authentication]
+[application.security.authentication]
 oidc_issuer_url = "https://oidcprovider.com"
 oidc_introspection_url = "https://oidcprovider.com/oauth/v2/introspect"
 oidc_front_client_id = "12345"

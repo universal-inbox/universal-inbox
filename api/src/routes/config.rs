@@ -18,12 +18,14 @@ pub async fn front_config(
     let config = FrontConfig {
         oidc_issuer_url: settings
             .application
+            .security
             .authentication
             .oidc_issuer_url
             .url()
             .clone(),
         oidc_client_id: settings
             .application
+            .security
             .authentication
             .oidc_front_client_id
             .to_string(),
@@ -32,7 +34,12 @@ pub async fn front_config(
             .front_base_url
             .join("auth-oidc-callback")
             .context("Failed to parse OIDC redirect URL")?,
-        user_profile_url: settings.application.authentication.user_profile_url.clone(),
+        user_profile_url: settings
+            .application
+            .security
+            .authentication
+            .user_profile_url
+            .clone(),
         nango_base_url: settings.integrations.oauth2.nango_base_url.clone(),
         nango_public_key: settings.integrations.oauth2.nango_public_key.clone(),
         // tag: New notification integration
