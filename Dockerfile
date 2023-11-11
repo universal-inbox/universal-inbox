@@ -44,6 +44,7 @@ RUN devbox run -- just api/build-release
 FROM debian:bookworm-slim AS runtime
 WORKDIR /app
 RUN mkdir /data
+COPY docker/universal-inbox-entrypoint universal-inbox-entrypoint
 COPY --from=release-api-builder /app/target/release/universal-inbox-api universal-inbox
 RUN apt-get update \
     && apt-get install -y ca-certificates patchelf \
@@ -56,5 +57,5 @@ COPY --from=release-api-builder /app/api/migrations migrations
 COPY --from=tools /usr/local/cargo/bin/sqlx /usr/local/bin/sqlx
 COPY --from=release-web-builder /app/web/dist/ statics
 ENV CONFIG_FILE /app/config/prod.toml
-ENTRYPOINT ["/app/universal-inbox"]
+ENTRYPOINT ["/app/universal-inbox-entrypoint"]
 CMD ["serve"]
