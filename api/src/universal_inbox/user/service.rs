@@ -70,6 +70,7 @@ impl UserService {
     ) -> Result<User, UniversalInboxError> {
         let provider_metadata = CoreProviderMetadata::discover_async(
             self.application_settings
+                .security
                 .authentication
                 .oidc_issuer_url
                 .clone(),
@@ -82,11 +83,13 @@ impl UserService {
         let client = CoreClient::from_provider_metadata(
             provider_metadata,
             self.application_settings
+                .security
                 .authentication
                 .oidc_api_client_id
                 .clone(),
             Some(
                 self.application_settings
+                    .security
                     .authentication
                     .oidc_api_client_secret
                     .clone(),
@@ -94,6 +97,7 @@ impl UserService {
         )
         .set_introspection_uri(
             self.application_settings
+                .security
                 .authentication
                 .oidc_introspection_url
                 .clone(),
@@ -179,6 +183,7 @@ impl UserService {
     ) -> Result<Url, UniversalInboxError> {
         let provider_metadata = ProviderMetadataWithLogout::discover_async(
             self.application_settings
+                .security
                 .authentication
                 .oidc_issuer_url
                 .clone(),

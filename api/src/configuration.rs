@@ -25,11 +25,17 @@ pub struct ApplicationSettings {
     pub api_path: String,
     pub static_path: Option<String>,
     pub static_dir: Option<String>,
-    pub authentication: AuthenticationSettings,
     pub http_session: HttpSessionSettings,
     pub min_sync_notifications_interval_in_minutes: i64,
     pub min_sync_tasks_interval_in_minutes: i64,
     pub observability: ObservabilitySettings,
+    pub security: SecuritySettings,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct SecuritySettings {
+    pub csp_extra_connect_src: Vec<String>,
+    pub authentication: AuthenticationSettings,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -178,7 +184,13 @@ impl Settings {
             .add_source(File::with_name(&default_config_file))
             .add_source(File::with_name(&local_config_file).required(false))
             .add_source(File::with_name(&config_file).required(config_file_required))
-            .add_source(Environment::with_prefix("universal_inbox"))
+            .add_source(
+                Environment::with_prefix("universal_inbox")
+                    .try_parsing(true)
+                    .separator("__")
+                    .list_separator(",")
+                    .with_list_parse_key("application.security.csp_extra_connect_src"),
+            )
             .build()?;
 
         config.try_deserialize()

@@ -9,7 +9,10 @@ front_base_url = "http://localhost:8080"
 min_sync_notifications_interval_in_minutes = 5
 min_sync_tasks_interval_in_minutes = 5
 
-# [application.authentication]
+[application.security]
+csp_extra_connect_src = []
+
+# [application.security.authentication]
 # oidc_issuer_url = "https://oidc.provider"
 # oidc_front_client_id = "1234@universal_inbox"
 # oidc_api_client_id = "5678@universal_inbox"

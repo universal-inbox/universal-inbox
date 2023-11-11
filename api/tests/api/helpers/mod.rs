@@ -118,9 +118,13 @@ pub async fn tested_app(
     let nango_mock_server = MockServer::start();
     let nango_mock_server_uri = &nango_mock_server.base_url();
 
-    settings.application.authentication.oidc_issuer_url =
+    settings.application.security.authentication.oidc_issuer_url =
         IssuerUrl::new(oidc_issuer_mock_server_uri.to_string()).unwrap();
-    settings.application.authentication.oidc_introspection_url =
+    settings
+        .application
+        .security
+        .authentication
+        .oidc_introspection_url =
         IntrospectionUrl::new(format!("{oidc_issuer_mock_server_uri}/introspect")).unwrap();
 
     let pool: Arc<PgPool> = db_connection.await;
