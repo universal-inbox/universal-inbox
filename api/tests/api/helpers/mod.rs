@@ -1,7 +1,7 @@
 use std::{env, fs, net::TcpListener, str::FromStr, sync::Arc};
 
 use httpmock::MockServer;
-use openidconnect::{IntrospectionUrl, IssuerUrl};
+use openidconnect::{ClientId, IntrospectionUrl, IssuerUrl};
 use rstest::*;
 use sqlx::{
     postgres::PgConnectOptions, ConnectOptions, Connection, Executor, PgConnection, PgPool,
@@ -11,7 +11,7 @@ use url::Url;
 use uuid::Uuid;
 
 use universal_inbox_api::{
-    configuration::Settings,
+    configuration::{OIDCFlowSettings, Settings},
     integrations::oauth2::NangoService,
     observability::{get_subscriber, init_subscriber},
     repository::Repository,
@@ -124,8 +124,13 @@ pub async fn tested_app(
         .application
         .security
         .authentication
-        .oidc_introspection_url =
-        IntrospectionUrl::new(format!("{oidc_issuer_mock_server_uri}/introspect")).unwrap();
+        .oidc_flow_settings = OIDCFlowSettings::AuthorizationCodePKCEFlow {
+        introspection_url: IntrospectionUrl::new(format!(
+            "{oidc_issuer_mock_server_uri}/introspect"
+        ))
+        .unwrap(),
+        front_client_id: ClientId::new("12345".to_string()),
+    };
 
     let pool: Arc<PgPool> = db_connection.await;
 

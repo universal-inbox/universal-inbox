@@ -21,7 +21,7 @@ pub mod user;
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
 pub struct FrontConfig {
     pub oidc_issuer_url: Url,
-    pub oidc_client_id: String,
+    pub oidc_client_id: Option<String>,
     pub oidc_redirect_url: Url,
     pub user_profile_url: Url,
     pub nango_base_url: Url,

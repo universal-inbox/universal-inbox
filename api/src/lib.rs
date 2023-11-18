@@ -80,12 +80,9 @@ pub async fn run(
     info!("Listening on {}", listen_address);
 
     let server = HttpServer::new(move || {
-        info!(
-            "Mounting API on {}",
-            if api_path.is_empty() { "/" } else { &api_path }
-        );
+        info!("Mounting API on {}", api_path);
 
-        let api_scope = web::scope(&api_path)
+        let api_scope = web::scope(api_path.trim_end_matches('/'))
             .route("/front_config", web::get().to(routes::config::front_config))
             .service(routes::auth::scope())
             .service(routes::notification::scope())

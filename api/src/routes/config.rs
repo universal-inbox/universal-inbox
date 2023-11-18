@@ -10,11 +10,28 @@ use universal_inbox::{
     integration_connection::IntegrationProviderKind, FrontConfig, IntegrationProviderConfig,
 };
 
-use crate::{configuration::Settings, universal_inbox::UniversalInboxError};
+use crate::{
+    configuration::{OIDCFlowSettings, Settings},
+    universal_inbox::UniversalInboxError,
+};
 
 pub async fn front_config(
     settings: web::Data<Settings>,
 ) -> Result<HttpResponse, UniversalInboxError> {
+    let oidc_client_id = if let OIDCFlowSettings::AuthorizationCodePKCEFlow {
+        front_client_id,
+        ..
+    } = &settings
+        .application
+        .security
+        .authentication
+        .oidc_flow_settings
+    {
+        Some(front_client_id.to_string())
+    } else {
+        None
+    };
+
     let config = FrontConfig {
         oidc_issuer_url: settings
             .application
@@ -23,17 +40,10 @@ pub async fn front_config(
             .oidc_issuer_url
             .url()
             .clone(),
-        oidc_client_id: settings
-            .application
-            .security
-            .authentication
-            .oidc_front_client_id
-            .to_string(),
+        oidc_client_id,
         oidc_redirect_url: settings
             .application
-            .front_base_url
-            .join("auth-oidc-callback")
-            .context("Failed to parse OIDC redirect URL")?,
+            .get_oidc_auth_code_pkce_flow_redirect_url()?,
         user_profile_url: settings
             .application
             .security

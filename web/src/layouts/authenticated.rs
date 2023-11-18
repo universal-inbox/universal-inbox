@@ -21,19 +21,15 @@ pub fn AuthenticatedLayout(cx: Scope) -> Element {
     let ui_model_ref = use_atom_ref(cx, &UI_MODEL);
     let app_config_ref = use_atom_ref(cx, &APP_CONFIG);
     let api_base_url = use_memo(cx, (), |()| get_api_base_url().unwrap());
-    let session_url = use_memo(cx, &(api_base_url.clone(),), |(api_base_url,)| {
-        api_base_url.join("auth/session").unwrap()
-    });
 
     if let Some(app_config) = app_config_ref.read().as_ref() {
         return render! {
-            // Router + Route == 300KB (release) !!!
             Authenticated {
                 issuer_url: app_config.oidc_issuer_url.clone(),
                 client_id: app_config.oidc_client_id.clone(),
                 redirect_url: app_config.oidc_redirect_url.clone(),
-                session_url: session_url.clone(),
                 ui_model_ref: ui_model_ref.clone(),
+                api_base_url: api_base_url.clone(),
 
                 AuthenticatedApp {}
             }
@@ -56,6 +52,7 @@ pub fn AuthenticatedApp(cx: Scope) -> Element {
     let integration_connection_service =
         use_coroutine_handle::<IntegrationConnectionCommand>(cx).unwrap();
     let notification_service = use_coroutine_handle::<NotificationCommand>(cx).unwrap();
+    let history = WebHistory::<Route>::default();
     let nav = use_navigator(cx);
 
     use_future(cx, (), |()| {
@@ -76,8 +73,10 @@ pub fn AuthenticatedApp(cx: Scope) -> Element {
     });
 
     if let Some(integration_connections) = integration_connections_ref.read().as_ref() {
-        if integration_connections.is_empty() {
+        if integration_connections.is_empty() && history.current_route() != (Route::SettingsPage {})
+        {
             nav.push(Route::SettingsPage {});
+            cx.needs_update();
             None
         } else {
             render! { Outlet::<Route> {} }

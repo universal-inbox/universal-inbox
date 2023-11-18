@@ -131,7 +131,9 @@ pub fn App(cx: Scope) -> Element {
 
     debug!("Rendering app");
     render! {
-        Router::<Route> {}
+        Router::<Route> {
+            config: || RouterConfig::default().history(WebHistory::<Route>::default())
+        }
     }
 }
 

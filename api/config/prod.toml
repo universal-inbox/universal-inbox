@@ -1,5 +1,4 @@
 [application]
 environment = "production"
 static_dir = "./statics"
-api_path = "/api"
 static_path = ""

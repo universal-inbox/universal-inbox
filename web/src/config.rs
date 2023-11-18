@@ -17,7 +17,7 @@ use crate::{services::api::call_api, utils::current_origin};
 pub struct AppConfig {
     pub api_base_url: Url,
     pub oidc_issuer_url: Url,
-    pub oidc_client_id: String,
+    pub oidc_client_id: Option<String>,
     pub oidc_redirect_url: Url,
     pub user_profile_url: Url,
     pub nango_base_url: Url,

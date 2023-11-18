@@ -3,6 +3,8 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
+pub mod openidconnect;
+
 // Simplify the ID token type to a string. This avoid to embed all the openidconnect
 // associated types
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Hash)]
@@ -35,4 +37,9 @@ pub struct SessionAuthValidationParameters {
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Hash)]
 pub struct CloseSessionResponse {
     pub logout_url: Url,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Hash)]
+pub struct AuthorizeSessionResponse {
+    pub authorization_url: Url,
 }

@@ -1,6 +1,5 @@
 [application]
 environment = "test"
-api_path = "/api"
 static_path = ""
 static_dir = "tests/api/statics"
 
@@ -17,11 +16,14 @@ secret_key = "1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF"
 
 [application.security.authentication]
 oidc_issuer_url = "https://oidcprovider.com"
-oidc_introspection_url = "https://oidcprovider.com/oauth/v2/introspect"
-oidc_front_client_id = "12345"
 oidc_api_client_id = "67890"
 oidc_api_client_secret = "azerty"
 user_profile_url = "https://oidcprovider.com/users/me"
+
+[application.security.authentication.oidc_flow_settings]
+type = "AuthorizationCodePKCEFlow"
+introspection_url = "https://oidcprovider.com/oauth/v2/introspect"
+front_client_id = "12345"
 
 [integrations.github]
 page_size = 2
