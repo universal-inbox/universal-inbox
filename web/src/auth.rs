@@ -2,38 +2,37 @@
 
 use log::{debug, error};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 use fermi::UseAtomRef;
 use gloo_utils::errors::JsError;
 use openidconnect::{
-    core::{CoreAuthenticationFlow, CoreClient, CoreProviderMetadata},
-    reqwest::async_http_client,
-    url::Url,
-    AccessToken, AccessTokenHash, AdditionalClaims, AuthDisplay, AuthPrompt, AuthorizationCode,
-    ClientId, CsrfToken, ErrorResponse, GenderClaim, IssuerUrl, JsonWebKey, JsonWebKeyType,
-    JsonWebKeyUse, JweContentEncryptionAlgorithm, JwsSigningAlgorithm, Nonce, PkceCodeChallenge,
-    PkceCodeVerifier, RedirectUrl, RevocableToken, TokenIntrospectionResponse, TokenResponse,
-    TokenType,
+    AccessToken, AuthorizationCode, ClientId, IssuerUrl, Nonce, PkceCodeChallenge,
+    PkceCodeVerifier, RedirectUrl,
 };
 use reqwest::{Client, Method};
+use url::Url;
 
-use universal_inbox::auth::{AuthIdToken, SessionAuthValidationParameters};
+use universal_inbox::auth::{
+    openidconnect::OpenidConnectProvider, AuthIdToken, AuthorizeSessionResponse,
+    SessionAuthValidationParameters,
+};
 
 use crate::{
     components::spinner::Spinner,
     model::{AuthenticationState, UniversalInboxUIModel},
     route::Route,
+    services::api::call_api,
     utils::{current_location, get_local_storage, redirect_to},
 };
 
 #[derive(Props)]
 pub struct AuthenticatedProps<'a> {
     issuer_url: Url,
-    client_id: String,
+    client_id: Option<Option<String>>,
     redirect_url: Url,
-    session_url: Url,
+    api_base_url: Url,
     ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
     children: Element<'a>,
 }
@@ -53,7 +52,7 @@ pub fn Authenticated<'a>(cx: Scope<'a, AuthenticatedProps<'a>>) -> Element<'a> {
     let ui_model_ref = cx.props.ui_model_ref.clone();
     let error = use_state(cx, || None::<anyhow::Error>);
     let current_url = current_location().unwrap();
-    let session_url = &cx.props.session_url;
+    let api_base_url = &cx.props.api_base_url;
     let issuer_url = &cx.props.issuer_url;
     let client_id = &cx.props.client_id;
     let redirect_url = &cx.props.redirect_url;
@@ -67,7 +66,6 @@ pub fn Authenticated<'a>(cx: Scope<'a, AuthenticatedProps<'a>>) -> Element<'a> {
     } else {
         None
     };
-    debug!("auth: Got auth-oidc-callback-code {auth_code:?}");
     // end workaround
     let nav = use_navigator(cx);
 
@@ -83,7 +81,7 @@ pub fn Authenticated<'a>(cx: Scope<'a, AuthenticatedProps<'a>>) -> Element<'a> {
     use_future(cx, &authentication_state, |_| {
         to_owned![ui_model_ref];
         to_owned![auth_code];
-        to_owned![session_url];
+        to_owned![api_base_url];
         to_owned![issuer_url];
         to_owned![client_id];
         to_owned![redirect_url];
@@ -93,7 +91,7 @@ pub fn Authenticated<'a>(cx: Scope<'a, AuthenticatedProps<'a>>) -> Element<'a> {
             if let Err(auth_error) = authenticate(
                 ui_model_ref,
                 auth_code,
-                &session_url,
+                &api_base_url,
                 &issuer_url,
                 client_id,
                 &redirect_url,
@@ -141,9 +139,9 @@ pub fn Authenticated<'a>(cx: Scope<'a, AuthenticatedProps<'a>>) -> Element<'a> {
 async fn authenticate(
     ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
     auth_code: Option<String>,
-    session_url: &Url,
+    api_base_url: &Url,
     issuer_url: &Url,
-    client_id: String,
+    client_id: Option<Option<String>>,
     redirect_url: &Url,
 ) -> Result<()> {
     let authentication_state = ui_model_ref.read().authentication_state.clone();
@@ -153,63 +151,57 @@ async fn authenticate(
         return Ok(());
     }
 
-    // Issuer URL must strictly be equal to the one found in the auth provider
-    // metadata. For now clearly the trailing slash added by Url.to_string().
-    let issuer_url_string = issuer_url.as_str().trim_end_matches('/').to_string();
-    // Use OpenID Connect Discovery to fetch the provider metadata.
-    let provider_metadata =
-        CoreProviderMetadata::discover_async(IssuerUrl::new(issuer_url_string)?, async_http_client)
-            .await?;
-
-    // Create an OpenID Connect client by specifying the client ID
-    let client =
-        CoreClient::from_provider_metadata(provider_metadata, ClientId::new(client_id), None)
-            // Set the URL the user will be redirected to after the authorization process.
-            .set_redirect_uri(RedirectUrl::new(redirect_url.to_string())?);
-
-    if let Some(auth_code) = auth_code {
-        // We are on the auth callback URL with a code from the auth provider, so we can fetch the access token
-        ui_model_ref.write_silent().authentication_state = AuthenticationState::FetchingAccessToken;
-        let (access_token, auth_id_token) =
-            fetch_access_token(client, AuthorizationCode::new(auth_code)).await?;
-        create_authenticated_session(
-            session_url,
-            &access_token,
-            &auth_id_token,
-            ui_model_ref.clone(),
+    // Authorization code flow with PKCE (ie. handled by the client)
+    if let Some(Some(client_id)) = client_id {
+        debug!("auth: Authenticating with Authorization code PKCE flow");
+        let oidc_provider = OpenidConnectProvider::build(
+            IssuerUrl::new(issuer_url.to_string())?,
+            ClientId::new(client_id),
+            None,
+            RedirectUrl::new(redirect_url.to_string())?,
         )
-        .await
-    } else {
+        .await?;
+
+        if let Some(auth_code) = auth_code {
+            // We are on the auth callback URL with a code from the auth provider, so we can fetch the access token
+            ui_model_ref.write_silent().authentication_state =
+                AuthenticationState::FetchingAccessToken;
+            let (access_token, auth_id_token) =
+                fetch_access_token(oidc_provider, AuthorizationCode::new(auth_code)).await?;
+            create_authenticated_session(
+                api_base_url,
+                &access_token,
+                &auth_id_token,
+                ui_model_ref.clone(),
+            )
+            .await
+        } else {
+            debug!("auth: Not authenticated, redirecting to login");
+            ui_model_ref.write_silent().authentication_state =
+                AuthenticationState::RedirectingToAuthProvider;
+            // let auth_url = build_auth_url(client).await?.to_string();
+            let auth_url = build_auth_url(oidc_provider).await?.to_string();
+            debug!("auth: Redirecting to auth provider: {auth_url}");
+            redirect_to(&auth_url)
+        }
+    }
+    // Authorization code flow (ie. handled by the server)
+    else {
+        debug!("auth: Authenticating with Authorization code flow (server flow)");
         debug!("auth: Not authenticated, redirecting to login");
+        let auth_url = get_authorization_code_flow_auth_url(api_base_url)
+            .await?
+            .to_string();
         ui_model_ref.write_silent().authentication_state =
             AuthenticationState::RedirectingToAuthProvider;
-        let auth_url = build_auth_url(client).await?.to_string();
+        debug!("auth: Redirecting to auth provider: {auth_url}");
         redirect_to(&auth_url)
     }
 }
 
-// Generate the PKCE challenge and build an authorization URL (at the auth provider) to redirect the user to
-#[allow(clippy::type_complexity)]
-pub async fn build_auth_url<AC, AD, GC, JE, JS, JT, JU, K, P, TE, TR, TT, TIR, RT, TRE>(
-    client: openidconnect::Client<AC, AD, GC, JE, JS, JT, JU, K, P, TE, TR, TT, TIR, RT, TRE>,
-) -> Result<Url>
-where
-    AC: AdditionalClaims,
-    AD: AuthDisplay,
-    GC: GenderClaim,
-    JE: JweContentEncryptionAlgorithm<JT>,
-    JS: JwsSigningAlgorithm<JT>,
-    JT: JsonWebKeyType,
-    JU: JsonWebKeyUse,
-    K: JsonWebKey<JS, JT, JU>,
-    P: AuthPrompt,
-    TE: ErrorResponse + 'static,
-    TR: TokenResponse<AC, GC, JE, JS, JT, TT>,
-    TT: TokenType + 'static,
-    TIR: TokenIntrospectionResponse<TT>,
-    RT: RevocableToken,
-    TRE: ErrorResponse + 'static,
-{
+/// Generate the PKCE challenge and build an authorization URL (at the auth provider) to redirect the user to
+/// Store the PKCE code verifier and the nonce in the local storage for later verification
+pub async fn build_auth_url(oidc_provider: OpenidConnectProvider) -> Result<Url> {
     let (pkce_challenge, pkce_code_verifier) = PkceCodeChallenge::new_random_sha256();
 
     let local_storage = get_local_storage()?;
@@ -217,17 +209,8 @@ where
         .set_item("auth-oidc-pkce-code-verifier", pkce_code_verifier.secret())
         .map_err(|err| JsError::try_from(err).unwrap())?;
 
-    let (auth_url, _csrf_token, nonce) = client
-        .authorize_url(
-            CoreAuthenticationFlow::AuthorizationCode,
-            CsrfToken::new_random,
-            Nonce::new_random,
-        )
-        // Set the desired scopes.
-        .add_scope(openidconnect::Scope::new("profile".to_string()))
-        .add_scope(openidconnect::Scope::new("email".to_string()))
-        .set_pkce_challenge(pkce_challenge)
-        .url();
+    let (auth_url, _csrf_token, nonce) =
+        oidc_provider.build_authorization_code_pkce_flow_auth_url(pkce_challenge);
 
     local_storage
         .set_item("auth-oidc-nonce", nonce.secret())
@@ -236,29 +219,11 @@ where
     Ok(auth_url)
 }
 
-// Fetch the access token from the auth provider using the given code
-#[allow(clippy::type_complexity)]
-async fn fetch_access_token<AC, AD, GC, JE, JS, JT, JU, K, P, TE, TR, TT, TIR, RT, TRE>(
-    client: openidconnect::Client<AC, AD, GC, JE, JS, JT, JU, K, P, TE, TR, TT, TIR, RT, TRE>,
+/// Fetch the access token from the auth provider using the given code
+async fn fetch_access_token(
+    oidc_provider: OpenidConnectProvider,
     auth_code: AuthorizationCode,
-) -> Result<(AccessToken, AuthIdToken)>
-where
-    AC: AdditionalClaims,
-    AD: AuthDisplay,
-    GC: GenderClaim,
-    JE: JweContentEncryptionAlgorithm<JT>,
-    JS: JwsSigningAlgorithm<JT>,
-    JT: JsonWebKeyType,
-    JU: JsonWebKeyUse,
-    K: JsonWebKey<JS, JT, JU>,
-    P: AuthPrompt,
-    TE: ErrorResponse + 'static + std::marker::Send + std::marker::Sync,
-    TR: TokenResponse<AC, GC, JE, JS, JT, TT>,
-    TT: TokenType + 'static,
-    TIR: TokenIntrospectionResponse<TT>,
-    RT: RevocableToken,
-    TRE: ErrorResponse + 'static,
-{
+) -> Result<(AccessToken, AuthIdToken)> {
     let local_storage = get_local_storage()?;
 
     // Retrieve variables generated before redirecting to the auth provider
@@ -276,32 +241,9 @@ where
     );
 
     debug!("auth: Requesting access token to auth provider");
-    let token_response = client
-        .exchange_code(auth_code)
-        .set_pkce_verifier(pkce_code_verifier)
-        .request_async(async_http_client)
+    let (access_token, id_token) = oidc_provider
+        .fetch_access_token(auth_code, nonce, Some(pkce_code_verifier))
         .await?;
-
-    // Extract the ID token claims after verifying its authenticity
-    let id_token = token_response
-        .id_token()
-        .context("Server did not return an ID token")?;
-    let claims = id_token.claims(
-        &client
-            .id_token_verifier()
-            .set_other_audience_verifier_fn(|_| true),
-        &nonce,
-    )?;
-
-    // Verify the access token hash to ensure that the access token hasn't been substituted for
-    // another user's.
-    if let Some(expected_access_token_hash) = claims.access_token_hash() {
-        let actual_access_token_hash =
-            AccessTokenHash::from_token(token_response.access_token(), &id_token.signing_alg()?)?;
-        if actual_access_token_hash != *expected_access_token_hash {
-            return Err(anyhow!("Invalid access token: Access token hash mismatch"));
-        }
-    }
     debug!("auth: Got a valid access token from auth provider");
 
     local_storage
@@ -311,21 +253,15 @@ where
         .remove_item("auth-oidc-nonce")
         .map_err(|err| JsError::try_from(err).unwrap())?;
 
-    Ok((
-        token_response.access_token().clone(),
-        token_response
-            .id_token()
-            .context("No token ID found")?
-            .to_string()
-            .into(),
-    ))
+    Ok((access_token, id_token.to_string().into()))
 }
 
 async fn is_session_authenticated(
-    session_url: &Url,
+    api_base_url: &Url,
     access_token: &AccessToken,
     auth_id_token: &AuthIdToken,
 ) -> Result<bool> {
+    let session_url = api_base_url.join("auth/session")?;
     let body = SessionAuthValidationParameters {
         auth_id_token: auth_id_token.clone(),
     };
@@ -340,7 +276,7 @@ async fn is_session_authenticated(
 }
 
 async fn create_authenticated_session(
-    session_url: &Url,
+    api_base_url: &Url,
     access_token: &AccessToken,
     auth_id_token: &AuthIdToken,
     ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
@@ -348,11 +284,24 @@ async fn create_authenticated_session(
     debug!("auth: Creating authenticated session");
     ui_model_ref.write_silent().authentication_state = AuthenticationState::VerifyingAccessToken;
     let is_authenticated =
-        is_session_authenticated(session_url, access_token, auth_id_token).await?;
+        is_session_authenticated(api_base_url, access_token, auth_id_token).await?;
     ui_model_ref.write().authentication_state = if is_authenticated {
         AuthenticationState::Authenticated
     } else {
         AuthenticationState::NotAuthenticated
     };
     Ok(())
+}
+
+async fn get_authorization_code_flow_auth_url(api_base_url: &Url) -> Result<Url> {
+    let response: AuthorizeSessionResponse = call_api(
+        Method::GET,
+        api_base_url,
+        "auth/session/authorize",
+        None::<i32>,
+        None,
+    )
+    .await?;
+    debug!("auth: Got auth URL from server: {:?}", response);
+    Ok(response.authorization_url)
 }

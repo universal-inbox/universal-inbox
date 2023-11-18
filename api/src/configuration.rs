@@ -1,5 +1,6 @@
 use std::{collections::HashMap, env};
 
+use anyhow::Context;
 use config::{Config, ConfigError, Environment, File};
 use openidconnect::{ClientId, ClientSecret, IntrospectionUrl, IssuerUrl};
 use serde::Deserialize;
@@ -7,6 +8,8 @@ use universal_inbox::integration_connection::{
     IntegrationProviderKind, NangoProviderKey, NangoPublicKey,
 };
 use url::Url;
+
+use crate::universal_inbox::UniversalInboxError;
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct Settings {
@@ -59,11 +62,22 @@ pub struct LoggingSettings {
 #[derive(Deserialize, Clone, Debug)]
 pub struct AuthenticationSettings {
     pub oidc_issuer_url: IssuerUrl,
-    pub oidc_introspection_url: IntrospectionUrl,
-    pub oidc_front_client_id: ClientId,
     pub oidc_api_client_id: ClientId,
     pub oidc_api_client_secret: ClientSecret,
+    pub oidc_flow_settings: OIDCFlowSettings,
     pub user_profile_url: Url,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+#[serde(tag = "type")]
+pub enum OIDCFlowSettings {
+    AuthorizationCodePKCEFlow {
+        // Introspection URL is only required for the Authorization code PKCE flow as
+        // the API server must validate (ie. has not be revoked) the access token sent by the front.
+        introspection_url: IntrospectionUrl,
+        front_client_id: ClientId,
+    },
+    GoogleAuthorizationCodeFlow,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -198,5 +212,25 @@ impl Settings {
 
     pub fn new() -> Result<Self, ConfigError> {
         Settings::new_from_file(None)
+    }
+}
+
+impl ApplicationSettings {
+    /// This function is used to get the OIDC redirect URL for the front client.
+    pub fn get_oidc_auth_code_pkce_flow_redirect_url(&self) -> Result<Url, UniversalInboxError> {
+        Ok(self
+            .front_base_url
+            .join("auth-oidc-callback")
+            .context("Failed to parse OIDC redirect URL")?)
+    }
+
+    /// This function is used to get the OIDC redirect URL for the API client.
+    pub fn get_oidc_auth_code_flow_redirect_url(&self) -> Result<Url, UniversalInboxError> {
+        Ok(self
+            .front_base_url
+            .join(&self.api_path)
+            .context("Failed to parse OIDC redirect URL")?
+            .join("auth/session/authenticated")
+            .context("Failed to parse OIDC redirect URL")?)
     }
 }

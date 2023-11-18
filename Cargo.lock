@@ -5900,6 +5900,7 @@ dependencies = [
  "http",
  "macro-attr",
  "num_enum",
+ "openidconnect",
  "pretty_assertions",
  "rstest",
  "serde",

@@ -34,11 +34,16 @@ pub async fn call_api<R: for<'de> serde::de::Deserialize<'de>, B: serde::Seriali
     let response: Response = request.send().await?;
 
     if let Some(ui_model_ref) = ui_model_ref {
+        let mut ui_model_ref = ui_model_ref.write();
         if response.status() == StatusCode::UNAUTHORIZED {
-            ui_model_ref.write().authentication_state = AuthenticationState::NotAuthenticated;
+            if ui_model_ref.authentication_state == AuthenticationState::Unknown
+                || ui_model_ref.authentication_state != AuthenticationState::Authenticated
+            {
+                ui_model_ref.authentication_state = AuthenticationState::NotAuthenticated;
+            }
             return Err(anyhow!("Unauthorized call to the API"));
-        } else if ui_model_ref.read().authentication_state != AuthenticationState::Authenticated {
-            ui_model_ref.write().authentication_state = AuthenticationState::Authenticated;
+        } else if ui_model_ref.authentication_state != AuthenticationState::Authenticated {
+            ui_model_ref.authentication_state = AuthenticationState::Authenticated;
         }
     }
 
