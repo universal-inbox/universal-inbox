@@ -9,6 +9,8 @@ front_base_url = "http://localhost:8080"
 # static_path = ""
 min_sync_notifications_interval_in_minutes = 5
 min_sync_tasks_interval_in_minutes = 5
+# Disabled by default
+# support_href = "mailto:support@universal-inbox.com"
 
 [application.security]
 csp_extra_connect_src = []

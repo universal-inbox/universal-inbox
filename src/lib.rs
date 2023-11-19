@@ -27,6 +27,7 @@ pub struct FrontConfig {
     pub nango_base_url: Url,
     pub nango_public_key: NangoPublicKey,
     pub integration_providers: HashMap<IntegrationProviderKind, IntegrationProviderConfig>,
+    pub support_href: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]

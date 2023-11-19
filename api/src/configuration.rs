@@ -33,6 +33,7 @@ pub struct ApplicationSettings {
     pub min_sync_tasks_interval_in_minutes: i64,
     pub observability: ObservabilitySettings,
     pub security: SecuritySettings,
+    pub support_href: Option<String>,
 }
 
 #[derive(Deserialize, Clone, Debug)]

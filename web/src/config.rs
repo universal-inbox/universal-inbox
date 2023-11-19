@@ -23,6 +23,7 @@ pub struct AppConfig {
     pub nango_base_url: Url,
     pub nango_public_key: NangoPublicKey,
     pub integration_providers: HashMap<IntegrationProviderKind, IntegrationProviderConfig>,
+    pub support_href: Option<String>,
 }
 
 #[wasm_bindgen(module = "/js/api.js")]
@@ -62,6 +63,7 @@ pub async fn get_app_config() -> Result<AppConfig> {
         nango_base_url: front_config.nango_base_url,
         nango_public_key: front_config.nango_public_key,
         integration_providers: front_config.integration_providers,
+        support_href: front_config.support_href,
     };
     Ok(app_config)
 }

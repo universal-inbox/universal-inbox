@@ -46,6 +46,10 @@ pub fn NavBar(cx: Scope) -> Element {
         .read()
         .as_ref()
         .map(|config| config.user_profile_url.clone());
+    let support_href = app_config_ref
+        .read()
+        .as_ref()
+        .and_then(|config| config.support_href.clone());
 
     let is_dark_mode = use_state(cx, || {
         toggle_dark_mode(false).expect("Failed to initialize the theme")
@@ -82,11 +86,15 @@ pub fn NavBar(cx: Scope) -> Element {
             div {
                 class: "navbar-end",
 
-                a {
-                    class: "btn btn-ghost btn-square",
-                    href: "mailto:support@universal-inbox.com",
-                    title: "Contact support",
-                    Icon { class: "w-5 h-5", icon: BsQuestionLg }
+                if let Some(support_href) = support_href {
+                    render!(
+                        a {
+                            class: "btn btn-ghost btn-square",
+                            href: "{support_href}",
+                            title: "Contact support",
+                            Icon { class: "w-5 h-5", icon: BsQuestionLg }
+                        }
+                    )
                 }
 
                 label {
