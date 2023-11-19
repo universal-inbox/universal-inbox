@@ -270,9 +270,20 @@ pub async fn build_services(
 }
 
 fn build_csp_header(settings: &Settings) -> String {
-    let mut connect_srcs = Sources::new_with(Source::Self_).push(Source::Host(
-        &settings.application.security.authentication.oidc_issuer_url,
-    ));
+    let nango_ws_scheme = if settings.integrations.oauth2.nango_base_url.scheme() == "http" {
+        "ws"
+    } else {
+        "wss"
+    };
+    let nango_base_url = settings.integrations.oauth2.nango_base_url.to_string();
+    let mut nango_ws_base_url = settings.integrations.oauth2.nango_base_url.clone();
+    nango_ws_base_url.set_scheme(nango_ws_scheme).unwrap();
+    let mut connect_srcs = Sources::new_with(Source::Self_)
+        .push(Source::Host(
+            &settings.application.security.authentication.oidc_issuer_url,
+        ))
+        .push(Source::Host(nango_ws_base_url.as_str()))
+        .push(Source::Host(&nango_base_url));
     for url in settings.application.security.csp_extra_connect_src.iter() {
         connect_srcs.push_borrowed(Source::Host(url));
     }
