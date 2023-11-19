@@ -4,6 +4,7 @@ use dioxus::prelude::*;
 use dioxus_free_icons::icons::bs_icons::{
     BsBoxArrowInLeft, BsGear, BsInbox, BsMoon, BsPerson, BsQuestionLg, BsSun,
 };
+use dioxus_free_icons::icons::go_icons::GoMarkGithub;
 use dioxus_free_icons::Icon;
 use dioxus_router::prelude::*;
 use fermi::use_atom_ref;
@@ -85,6 +86,14 @@ pub fn NavBar(cx: Scope) -> Element {
 
             div {
                 class: "navbar-end",
+
+                a {
+                    class: "p-2",
+                    href: "https://github.com/universal-inbox/universal-inbox",
+                    title: "Universal Inbox on GitHub",
+                    target: "_blank",
+                    Icon { class: "w-5 h-5", icon: GoMarkGithub }
+                }
 
                 if let Some(support_href) = support_href {
                     render!(
