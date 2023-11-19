@@ -167,6 +167,7 @@ pub async fn front_config(
                 },
             ),
         ]),
+        support_href: settings.application.support_href.clone(),
     };
 
     Ok(HttpResponse::Ok()
