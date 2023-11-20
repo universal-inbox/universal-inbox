@@ -12,6 +12,7 @@ use openidconnect::{core::CoreIdToken, AccessToken, AuthorizationCode, CsrfToken
 use serde::Deserialize;
 use serde_json::json;
 use tokio::sync::RwLock;
+use tracing::debug;
 
 use universal_inbox::{
     auth::{AuthorizeSessionResponse, CloseSessionResponse, SessionAuthValidationParameters},
@@ -112,6 +113,11 @@ pub async fn authorize_session(
     let service = user_service.read().await;
     let (authorization_url, csrf_token, nonce) = service.build_auth_url().await?;
 
+    debug!(
+        "store CSRF token: {:?} & nonce: {:?}",
+        csrf_token.secret(),
+        nonce
+    );
     session
         .insert(OIDC_CSRF_TOKEN_SESSION_KEY, csrf_token)
         .context("Failed to insert CSRF token into the session")?;
@@ -150,6 +156,11 @@ pub async fn authenticated_session(
         .context(format!(
             "Missing `{OIDC_CSRF_TOKEN_SESSION_KEY}` session key"
         ))?;
+    debug!(
+        "fetched CSRF token: {:?} vs state: {:?}",
+        csrf_token.secret(),
+        authenticated_session_request.state.secret()
+    );
     if authenticated_session_request.state.secret() != csrf_token.secret() {
         return Err(UniversalInboxError::Unauthorized(
             "Invalid CSRF token".to_string(),
