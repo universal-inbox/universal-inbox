@@ -95,6 +95,7 @@ pub struct DatabaseSettings {
     pub port: u16,
     pub host: String,
     pub database_name: String,
+    pub use_tls: bool,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -103,6 +104,7 @@ pub struct RedisSettings {
     pub host: String,
     pub user: Option<String>,
     pub password: Option<String>,
+    pub use_tls: bool,
 }
 
 // tag: New notification integration
@@ -152,30 +154,40 @@ pub struct DefaultIntegrationSettings {
 impl DatabaseSettings {
     pub fn connection_string(&self) -> String {
         format!(
-            "postgres://{}:{}@{}:{}/{}",
-            self.username, self.password, self.host, self.port, self.database_name
+            "postgres://{}:{}@{}:{}/{}{}",
+            self.username,
+            self.password,
+            self.host,
+            self.port,
+            self.database_name,
+            if self.use_tls { "?sslmode=require" } else { "" }
         )
     }
 
     pub fn connection_string_without_db(&self) -> String {
         format!(
-            "postgres://{}:{}@{}:{}",
-            self.username, self.password, self.host, self.port
+            "postgres://{}:{}@{}:{}{}",
+            self.username,
+            self.password,
+            self.host,
+            self.port,
+            if self.use_tls { "?sslmode=require" } else { "" }
         )
     }
 }
 
 impl RedisSettings {
     pub fn connection_string(&self) -> String {
+        let scheme = if self.use_tls { "rediss" } else { "redis" };
         if let Some(password) = &self.password {
             format!(
-                "redis://{}:{password}@{}:{}",
+                "{scheme}://{}:{password}@{}:{}",
                 self.user.clone().unwrap_or_default(),
                 self.host,
                 self.port
             )
         } else {
-            format!("redis://{}:{}", self.host, self.port)
+            format!("{scheme}://{}:{}", self.host, self.port)
         }
     }
 }
