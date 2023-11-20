@@ -55,10 +55,12 @@ port = 5432
 username = "postgres"
 password = "password"
 database_name = "universal-inbox"
+use_tls = false
 
 [redis]
 host = "127.0.0.1"
 port = 6379
+use_tls = false
 
 # tag: New notification integration
 [integrations.github]
