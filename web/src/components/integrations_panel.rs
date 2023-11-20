@@ -317,12 +317,16 @@ pub fn Documentation(cx: Scope, config: IntegrationProviderConfig) -> Element {
 
     render! {
         if let Some(ref warning_message) = config.warning_message {
-            render! {
-                div {
-                    class: "alert alert-warning shadow-lg my-4 py-2",
-                    Icon { class: "w-5 h-5", icon: BsExclamationTriangle }
-                    p { class: "max-w-full prose prose-sm", dangerous_inner_html: "{warning_message}" }
+            if !warning_message.is_empty() {
+                render! {
+                    div {
+                        class: "alert alert-warning shadow-lg my-4 py-2",
+                        Icon { class: "w-5 h-5", icon: BsExclamationTriangle }
+                        p { class: "max-w-full prose prose-sm", dangerous_inner_html: "{warning_message}" }
+                    }
                 }
+            } else {
+                None
             }
         }
 

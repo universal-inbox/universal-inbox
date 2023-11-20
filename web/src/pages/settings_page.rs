@@ -37,7 +37,7 @@ pub fn SettingsPage(cx: Scope) -> Element {
                     class: "h-full mx-auto flex flex-row px-4",
 
                     div {
-                        class: "h-full overflow-auto scroll-auto px-2",
+                        class: "h-full w-full overflow-auto scroll-auto px-2",
 
                         IntegrationsPanel {
                             integration_providers: app_config.integration_providers.clone(),
