@@ -1,39 +1,30 @@
 #![allow(non_snake_case)]
 
-use std::collections::HashSet;
-
 use chrono::{DateTime, Local};
 use dioxus::{events::MouseEvent, prelude::*};
 use dioxus_free_icons::{
     icons::bs_icons::{
-        BsArrowRepeat, BsBellSlash, BsBookmarkCheck, BsCalendar2Check, BsCardChecklist, BsCheck2,
-        BsClockHistory, BsExclamationCircle, BsLink45deg, BsStar, BsTrash,
+        BsBellSlash, BsBookmarkCheck, BsCalendar2Check, BsCheck2, BsClockHistory, BsLink45deg,
+        BsTrash,
     },
     Icon,
 };
 use fermi::UseAtomRef;
 
 use universal_inbox::{
-    notification::{
-        integrations::google_mail::{
-            GoogleMailThread, MessageSelection, GOOGLE_MAIL_IMPORTANT_LABEL,
-            GOOGLE_MAIL_STARRED_LABEL,
-        },
-        NotificationMetadata, NotificationWithTask,
-    },
-    task::{
-        integrations::todoist::{TodoistItem, TodoistItemPriority},
-        Task, TaskMetadata,
-    },
+    notification::{NotificationMetadata, NotificationWithTask},
+    task::{Task, TaskMetadata},
     HasHtmlUrl,
 };
 
 use crate::{
     components::{
-        icons::{GoogleMail, Linear, Mail, Todoist},
+        icons::{GoogleMail, Linear, Todoist},
         integrations::{
             github::{icons::Github, notification::GithubNotificationDisplay},
+            google_mail::notification::GoogleMailThreadDisplay,
             linear::notification::LinearNotificationDisplay,
+            todoist::notification::TodoistNotificationDisplay,
         },
     },
     model::UniversalInboxUIModel,
@@ -254,6 +245,42 @@ fn NotificationDisplay<'a>(
         NotificationMetadata::GoogleMail(_) => render! { GoogleMail { class: "h-5 w-5" } },
         NotificationMetadata::Todoist => render! { Todoist { class: "h-5 w-5" } },
     };
+    // tag: New notification integration
+    let notification_display = match &notif.metadata {
+        NotificationMetadata::Github(github_notification) => render! {
+            GithubNotificationDisplay {
+                notif: notif,
+                github_notification: github_notification,
+            }
+        },
+        NotificationMetadata::Linear(linear_notification) => render! {
+            LinearNotificationDisplay {
+                notif: notif,
+                linear_notification: linear_notification.clone()
+            }
+        },
+        NotificationMetadata::GoogleMail(google_mail_thread) => render! {
+            GoogleMailThreadDisplay {
+                notif: notif,
+                google_mail_thread: google_mail_thread.clone()
+            }
+        },
+        NotificationMetadata::Todoist => {
+            if let Some(task) = &notif.task {
+                match &task.metadata {
+                    TaskMetadata::Todoist(todoist_task) => render! {
+                        TodoistNotificationDisplay {
+                            notif: notif,
+                            todoist_task: todoist_task.clone(),
+                        }
+                    },
+                }
+            } else {
+                render! { DefaultNotificationDisplay { notif: notif } }
+            }
+        }
+    };
+
     let button_style = use_memo(cx, (selected,), |(selected,)| {
         if selected {
             "swap-active"
@@ -285,39 +312,7 @@ fn NotificationDisplay<'a>(
         td {
             class: "px-2 py-0",
 
-            // tag: New notification integration
-            match &notif.metadata {
-                NotificationMetadata::Github(github_notification) => render! {
-                    GithubNotificationDisplay {
-                        notif: notif,
-                        github_notification: github_notification,
-                    }
-                },
-                NotificationMetadata::Linear(linear_notification) => render! {
-                    LinearNotificationDisplay {
-                        notif: notif,
-                        linear_notification: linear_notification.clone()
-                    }
-                },
-                NotificationMetadata::GoogleMail(google_mail_thread) => render! {
-                    GoogleMailThreadDisplay {
-                        notif: notif,
-                        google_mail_thread: google_mail_thread.clone()
-                    }
-                },
-                NotificationMetadata::Todoist => if let Some(task) = &notif.task {
-                    match &task.metadata {
-                        TaskMetadata::Todoist(todoist_task) => render! {
-                            TodoistNotificationDisplay {
-                                notif: notif,
-                                todoist_task: todoist_task.clone(),
-                            }
-                        }
-                    }
-                } else {
-                    render! { DefaultNotificationDisplay { notif: notif } }
-                }
-            }
+            notification_display
         }
         td {
             class: "px-2 py-0 rounded-none flex flex-wrap items-center justify-end",
@@ -347,117 +342,6 @@ fn DefaultNotificationDisplay<'a>(cx: Scope, notif: &'a NotificationWithTask) ->
             div {
                 class: "flex flex-col grow",
                 span { "{notif.title}" }
-            }
-        }
-    }
-}
-
-#[inline_props]
-fn GoogleMailThreadDisplay<'a>(
-    cx: Scope,
-    notif: &'a NotificationWithTask,
-    google_mail_thread: GoogleMailThread,
-) -> Element {
-    let is_starred = google_mail_thread.is_tagged_with(GOOGLE_MAIL_STARRED_LABEL, None);
-    let is_important = google_mail_thread.is_tagged_with(GOOGLE_MAIL_IMPORTANT_LABEL, None);
-    let from_address = google_mail_thread.get_message_header(MessageSelection::First, "From");
-    let interlocutors_count = google_mail_thread
-        .messages
-        .iter()
-        .fold(HashSet::new(), |mut acc, msg| {
-            if let Some(from_address) = msg.get_header("From") {
-                acc.insert(from_address);
-            }
-            acc
-        })
-        .len();
-    let mail_icon_style = match (is_starred, is_important) {
-        (_, true) => "text-red-500",
-        (true, false) => "text-yellow-500",
-        _ => "",
-    };
-
-    render! {
-        div {
-            class: "flex items-center gap-2",
-
-            Mail { class: "h-5 w-5 {mail_icon_style}" }
-
-            div {
-                class: "flex flex-col grow",
-
-                div {
-                    class: "flex flex-row items-center",
-                    span { class: "mx-0.5", "{notif.title}" }
-                    if is_starred {
-                        render! { Icon { class: "mx-0.5 h-3 w-3 text-yellow-500", icon: BsStar } }
-                    }
-                    if is_important {
-                        render! { Icon { class: "mx-0.5 h-3 w-3 text-red-500", icon: BsExclamationCircle } }
-                    }
-                }
-
-                div {
-                    class: "flex gap-2",
-
-                    if let Some(from_address) = from_address {
-                        render! { span { class: "text-xs text-gray-400", "{from_address}" } }
-                    }
-                    span { class: "text-xs text-gray-400", "({interlocutors_count})" }
-                }
-            }
-        }
-    }
-}
-
-#[inline_props]
-fn TodoistNotificationDisplay<'a>(
-    cx: Scope,
-    notif: &'a NotificationWithTask,
-    todoist_task: TodoistItem,
-) -> Element {
-    let title = markdown::to_html(&notif.title);
-    let task_icon_style = match todoist_task.priority {
-        TodoistItemPriority::P1 => "",
-        TodoistItemPriority::P2 => "text-yellow-500",
-        TodoistItemPriority::P3 => "text-orange-500",
-        TodoistItemPriority::P4 => "text-red-500",
-    };
-
-    render! {
-        div {
-            class: "flex items-center gap-2",
-
-            Icon { class: "h-5 w-5 {task_icon_style}", icon: BsCardChecklist }
-
-            div {
-                class: "flex flex-col grow",
-
-                span { dangerous_inner_html: "{title}" }
-                div {
-                    class: "flex gap-2",
-
-                    if let Some(due) = &todoist_task.due {
-                        render! {
-                            div {
-                                class: "flex items-center text-xs text-gray-400 gap-1",
-
-                                Icon { class: "h-3 w-3", icon: BsCalendar2Check }
-                                "{due.date}"
-                                if due.is_recurring {
-                                    render! { Icon { class: "h-3 w-3", icon: BsArrowRepeat } }
-                                }
-                            }
-                        }
-                    }
-
-                    div {
-                        class: "flex gap-2",
-                        for label in &todoist_task.labels {
-                            render! { span { class: "text-xs text-gray-400", "@{label}" } }
-                        }
-                    }
-                }
             }
         }
     }
