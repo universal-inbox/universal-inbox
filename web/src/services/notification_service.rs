@@ -238,9 +238,19 @@ async fn delete_notification(
     ui_model_ref: &UseAtomRef<UniversalInboxUIModel>,
     toast_service: &Coroutine<ToastCommand>,
 ) {
-    notifications
-        .write()
-        .retain(|notif| notif.id != notification_id);
+    {
+        let mut notifications = notifications.write();
+        let mut ui_model_ref = ui_model_ref.write();
+
+        notifications.retain(|notif| notif.id != notification_id);
+        let notifications_count = notifications.len();
+
+        if notifications_count > 0
+            && ui_model_ref.selected_notification_index >= notifications_count
+        {
+            ui_model_ref.selected_notification_index = notifications_count - 1;
+        }
+    }
 
     let _result: Result<Notification, anyhow::Error> = call_api_and_notify(
         Method::PATCH,
