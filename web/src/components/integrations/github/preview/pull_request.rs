@@ -191,6 +191,31 @@ fn GithubPullRequestDetails<'a>(cx: Scope, github_pull_request: &'a GithubPullRe
                 }
             }
 
+            if !github_pull_request.assignees.is_empty() {
+                render! {
+                    SmallCard {
+                        span { class: "text-gray-400", "Assigned to" }
+                        div {
+                            class: "flex flex-col",
+                            for assignee in &github_pull_request.assignees {
+                                render! {
+                                    GithubActorDisplay { actor: assignee }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if let Some(merged_by) = &github_pull_request.merged_by {
+                render! {
+                    SmallCard {
+                        span { class: "text-gray-400", "Merged by" }
+                        GithubActorDisplay { actor: merged_by }
+                    }
+                }
+            }
+
             SmallCard {
                 GithubPullRequestIcon { class: "h-5 w-5", github_pull_request: github_pull_request }
                 span { "{pr_state_label}" }

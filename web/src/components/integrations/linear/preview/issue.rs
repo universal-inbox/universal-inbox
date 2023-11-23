@@ -106,6 +106,18 @@ fn LinearIssueDetails<'a>(cx: Scope, linear_issue: &'a LinearIssue) -> Element {
                 }
             }
 
+            if let Some(assignee) = &linear_issue.assignee {
+                render! {
+                    SmallCard {
+                        span { class: "text-gray-400", "Assigned to" }
+                        UserWithAvatar {
+                            user_name: assignee.name.clone(),
+                            avatar_url: assignee.avatar_url.clone(),
+                        }
+                    }
+                }
+            }
+
             SmallCard {
                 LinearIssueIcon { class: "h-5 w-5", linear_issue: linear_issue }
                 span { "{linear_issue.state.name}" }
