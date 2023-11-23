@@ -77,6 +77,13 @@ pub fn TodoistTaskPreview<'a>(
             div {
                 class: "flex flex-col gap-2 w-full",
 
+                div {
+                    class: "flex text-gray-400 gap-1 text-xs",
+
+                    "Created at ",
+                    span { class: "text-primary", "{todoist_task.added_at}" }
+                }
+
                 TagsInCard {
                     tags: todoist_task
                         .labels
