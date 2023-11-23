@@ -30,23 +30,6 @@ pub fn GithubPullRequestPreview<'a>(
     cx: Scope,
     github_pull_request: &'a GithubPullRequest,
 ) -> Element {
-    let show_base_and_head_repositories = match (
-        &github_pull_request.head_repository,
-        &github_pull_request.base_repository,
-    ) {
-        (
-            Some(GithubRepositorySummary {
-                name_with_owner: head_name_with_owner,
-                ..
-            }),
-            Some(GithubRepositorySummary {
-                name_with_owner: base_name_with_owner,
-                ..
-            }),
-        ) => head_name_with_owner != base_name_with_owner,
-        _ => false,
-    };
-
     render! {
         div {
             class: "flex flex-col w-full gap-2",
@@ -90,6 +73,77 @@ pub fn GithubPullRequestPreview<'a>(
                 }
             }
 
+            GithubPullRequestDetails { github_pull_request: github_pull_request }
+        }
+    }
+}
+
+impl From<GithubLabel> for Tag {
+    fn from(github_label: GithubLabel) -> Self {
+        Tag {
+            name: github_label.name,
+            color: Some(github_label.color),
+        }
+    }
+}
+
+#[inline_props]
+fn GithubPullRequestDetails<'a>(cx: Scope, github_pull_request: &'a GithubPullRequest) -> Element {
+    let show_base_and_head_repositories = match (
+        &github_pull_request.head_repository,
+        &github_pull_request.base_repository,
+    ) {
+        (
+            Some(GithubRepositorySummary {
+                name_with_owner: head_name_with_owner,
+                ..
+            }),
+            Some(GithubRepositorySummary {
+                name_with_owner: base_name_with_owner,
+                ..
+            }),
+        ) => head_name_with_owner != base_name_with_owner,
+        _ => false,
+    };
+
+    let pr_state_label = match github_pull_request.state {
+        GithubPullRequestState::Closed => "Closed",
+        GithubPullRequestState::Merged => "Merged",
+        GithubPullRequestState::Open => {
+            if github_pull_request.is_draft {
+                "Draft"
+            } else {
+                "Opened"
+            }
+        }
+    };
+
+    let (mergeable_state_label, mergeable_state_icon) = match github_pull_request.mergeable_state {
+        GithubMergeableState::Mergeable => (
+            "Pull request is mergeable",
+            render! { Icon { class: "h-5 w-5 text-success", icon: BsCheckCircleFill } },
+        ),
+        GithubMergeableState::Conflicting => (
+            "Pull request is conflicting",
+            render! { Icon { class: "h-5 w-5 text-error", icon: BsXCircleFill } },
+        ),
+        GithubMergeableState::Unknown => (
+            "Unknown pull request mergeable state",
+            render! { Icon { class: "h-5 w-5 text-warning", icon: BsQuestionCircleFill } },
+        ),
+    };
+
+    render! {
+        div {
+            class: "flex flex-col gap-2 w-full",
+
+            div {
+                class: "flex text-gray-400 gap-1 text-xs",
+
+                "Created at ",
+                span { class: "text-primary", "{github_pull_request.created_at}" }
+            }
+
             div {
                 class: "flex flex-wrap items-center text-gray-400 gap-1 text-xs",
 
@@ -126,53 +180,6 @@ pub fn GithubPullRequestPreview<'a>(
                 }
                 span { class: "text-primary", "{github_pull_request.base_ref_name}" }
             }
-
-            GithubPullRequestDetails { github_pull_request: github_pull_request }
-        }
-    }
-}
-
-impl From<GithubLabel> for Tag {
-    fn from(github_label: GithubLabel) -> Self {
-        Tag {
-            name: github_label.name,
-            color: Some(github_label.color),
-        }
-    }
-}
-
-#[inline_props]
-fn GithubPullRequestDetails<'a>(cx: Scope, github_pull_request: &'a GithubPullRequest) -> Element {
-    let pr_state_label = match github_pull_request.state {
-        GithubPullRequestState::Closed => "Closed",
-        GithubPullRequestState::Merged => "Merged",
-        GithubPullRequestState::Open => {
-            if github_pull_request.is_draft {
-                "Draft"
-            } else {
-                "Opened"
-            }
-        }
-    };
-
-    let (mergeable_state_label, mergeable_state_icon) = match github_pull_request.mergeable_state {
-        GithubMergeableState::Mergeable => (
-            "Pull request is mergeable",
-            render! { Icon { class: "h-5 w-5 text-success", icon: BsCheckCircleFill } },
-        ),
-        GithubMergeableState::Conflicting => (
-            "Pull request is conflicting",
-            render! { Icon { class: "h-5 w-5 text-error", icon: BsXCircleFill } },
-        ),
-        GithubMergeableState::Unknown => (
-            "Unknown pull request mergeable state",
-            render! { Icon { class: "h-5 w-5 text-warning", icon: BsQuestionCircleFill } },
-        ),
-    };
-
-    render! {
-        div {
-            class: "flex flex-col gap-2 w-full",
 
             TagsInCard {
                 tags: github_pull_request

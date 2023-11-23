@@ -62,6 +62,13 @@ fn GithubDiscussionDetails<'a>(cx: Scope, github_discussion: &'a GithubDiscussio
         div {
             class: "flex flex-col gap-2 w-full",
 
+            div {
+                class: "flex text-gray-400 gap-1 text-xs",
+
+                "Created at ",
+                span { class: "text-primary", "{github_discussion.created_at}" }
+            }
+
             TagsInCard {
                 tags: github_discussion
                     .labels

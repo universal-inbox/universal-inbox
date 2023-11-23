@@ -94,6 +94,13 @@ fn LinearIssueDetails<'a>(cx: Scope, linear_issue: &'a LinearIssue) -> Element {
         div {
             class: "flex flex-col gap-2 w-full",
 
+            div {
+                class: "flex text-gray-400 gap-1 text-xs",
+
+                "Created at ",
+                span { class: "text-primary", "{linear_issue.created_at}" }
+            }
+
             if let Some(creator) = &linear_issue.creator {
                 render! {
                     SmallCard {
