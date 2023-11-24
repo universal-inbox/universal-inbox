@@ -2,11 +2,18 @@
 
 use dioxus::prelude::*;
 
+use dioxus_free_icons::{icons::bs_icons::BsChatTextFill, Icon};
 use universal_inbox::notification::{
-    integrations::github::GithubNotification, NotificationWithTask,
+    integrations::github::{
+        GithubDiscussion, GithubNotification, GithubPullRequest, GithubPullRequestReviewDecision,
+    },
+    NotificationWithTask,
 };
 
-use crate::components::integrations::github::icons::GithubNotificationIcon;
+use crate::components::integrations::github::{
+    icons::GithubNotificationIcon, preview::pull_request::ChecksGithubPullRequest,
+    GithubActorDisplay,
+};
 
 #[inline_props]
 pub fn GithubNotificationDisplay<'a>(
@@ -41,6 +48,85 @@ pub fn GithubNotificationDisplay<'a>(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+#[inline_props]
+pub fn GithubPullRequestDetailsDisplay<'a>(
+    cx: Scope,
+    github_pull_request: &'a GithubPullRequest,
+) -> Element {
+    render! {
+        div {
+            class: "flex items-center gap-2",
+
+            ChecksGithubPullRequest { latest_commit: &github_pull_request.latest_commit, icon_size: "h-3 w-3" }
+
+            if github_pull_request.comments_count > 0 {
+                render! {
+                    div {
+                        class: "flex gap-1",
+                        Icon { class: "h-3 w-3 text-info", icon: BsChatTextFill }
+                        span { class: "text-xs text-gray-400", "{github_pull_request.comments_count}" }
+                    }
+                }
+            }
+
+            GithubReviewStatus { github_pull_request: github_pull_request }
+
+            if let Some(actor) = &github_pull_request.author {
+                render! { GithubActorDisplay { actor: actor, without_name: true } }
+            } else {
+                None
+            }
+        }
+    }
+}
+
+#[inline_props]
+fn GithubReviewStatus<'a>(cx: Scope, github_pull_request: &'a GithubPullRequest) -> Element {
+    github_pull_request
+        .review_decision
+        .as_ref()
+        .map(|review_decision| match review_decision {
+            GithubPullRequestReviewDecision::Approved => {
+                render! { div { class: "badge p-1 whitespace-nowrap bg-success text-[10px] text-white", "Approved" } }
+            }
+            GithubPullRequestReviewDecision::ChangesRequested => {
+                render! { div { class: "badge p-1 whitespace-nowrap bg-error text-[10px] text-white", "Changes requested" } }
+            }
+            GithubPullRequestReviewDecision::ReviewRequired => {
+                render! { div { class: "badge p-1 whitespace-nowrap bg-info text-[10px] text-white", "Review required" } }
+            }
+        })
+        .unwrap_or(None)
+}
+
+#[inline_props]
+pub fn GithubDiscussionDetailsDisplay<'a>(
+    cx: Scope,
+    github_discussion: &'a GithubDiscussion,
+) -> Element {
+    render! {
+        div {
+            class: "flex items-center gap-2",
+
+            if github_discussion.comments_count > 0 {
+                render! {
+                    div {
+                        class: "flex gap-1",
+                        Icon { class: "h-3 w-3 text-info", icon: BsChatTextFill }
+                        span { class: "text-xs text-gray-400", "{github_discussion.comments_count}" }
+                    }
+                }
+            }
+
+            if let Some(actor) = &github_discussion.author {
+                render! { GithubActorDisplay { actor: actor, without_name: true } }
+            } else {
+                None
             }
         }
     }
