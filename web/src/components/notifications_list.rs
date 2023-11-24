@@ -12,7 +12,7 @@ use dioxus_free_icons::{
 use fermi::UseAtomRef;
 
 use universal_inbox::{
-    notification::{NotificationMetadata, NotificationWithTask},
+    notification::{NotificationDetails, NotificationMetadata, NotificationWithTask},
     task::{Task, TaskMetadata},
     HasHtmlUrl,
 };
@@ -21,7 +21,13 @@ use crate::{
     components::{
         icons::{GoogleMail, Linear, Todoist},
         integrations::{
-            github::{icons::Github, notification::GithubNotificationDisplay},
+            github::{
+                icons::Github,
+                notification::{
+                    GithubDiscussionDetailsDisplay, GithubNotificationDisplay,
+                    GithubPullRequestDetailsDisplay,
+                },
+            },
             google_mail::notification::GoogleMailThreadDisplay,
             linear::notification::LinearNotificationDisplay,
             todoist::notification::TodoistNotificationDisplay,
@@ -315,7 +321,7 @@ fn NotificationDisplay<'a>(
             notification_display
         }
         td {
-            class: "px-2 py-0 rounded-none flex flex-wrap items-center justify-end",
+            class: "px-2 py-0 rounded-none flex items-center justify-end",
             div {
                 class: "swap {button_style}",
                 div {
@@ -323,8 +329,13 @@ fn NotificationDisplay<'a>(
                     children
                 }
                 div {
-                    class: "swap-off text-xs text-gray-400 flex items-center justify-end group-hover:invisible",
-                    "{notif_updated_at}"
+                    class: "swap-off text-xs text-gray-400 flex gap-2 items-center justify-end group-hover:invisible",
+
+                    if let Some(details) = &notif.details {
+                        render! { NotificationDetailsDisplay { notification_details: details } }
+                    }
+
+                    span { class: "whitespace-nowrap", "{notif_updated_at}" }
                 }
             }
         }
@@ -432,5 +443,20 @@ fn TaskHint<'a>(cx: Scope, task: &'a Task) -> Element {
                 Icon { class: "w-4 h-4", icon: BsBookmarkCheck }
             }
         }
+    }
+}
+
+#[inline_props]
+pub fn NotificationDetailsDisplay<'a>(
+    cx: Scope,
+    notification_details: &'a NotificationDetails,
+) -> Element {
+    match notification_details {
+        NotificationDetails::GithubPullRequest(github_pull_request) => render! {
+            GithubPullRequestDetailsDisplay { github_pull_request: github_pull_request }
+        },
+        NotificationDetails::GithubDiscussion(github_discussion) => render! {
+            GithubDiscussionDetailsDisplay { github_discussion: github_discussion }
+        },
     }
 }

@@ -81,7 +81,11 @@ fn SmallCard<'a>(
 }
 
 #[inline_props]
-pub fn UserWithAvatar(cx: Scope, user_name: String, avatar_url: Option<Option<Uri>>) -> Element {
+pub fn UserWithAvatar(
+    cx: Scope,
+    user_name: Option<String>,
+    avatar_url: Option<Option<Uri>>,
+) -> Element {
     render! {
         div {
             class: "flex gap-2 items-center",
@@ -90,7 +94,9 @@ pub fn UserWithAvatar(cx: Scope, user_name: String, avatar_url: Option<Option<Ur
                 render! { img { class: "h-5 w-5 rounded-full", src: "{avatar_url}" } }
             }
 
-            span { class: "text-sm", "{user_name}" }
+            if let Some(user_name) = user_name {
+                render! { span { class: "text-sm", "{user_name}" } }
+            }
         }
     }
 }

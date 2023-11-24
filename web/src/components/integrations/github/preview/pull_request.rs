@@ -234,7 +234,7 @@ fn GithubPullRequestDetails<'a>(cx: Scope, github_pull_request: &'a GithubPullRe
                 }
             }
 
-            ChecksGithubPullRequest { latest_commit: &github_pull_request.latest_commit }
+            ChecksGithubPullRequest { latest_commit: &github_pull_request.latest_commit, with_details: true }
 
             ReviewsGithubPullRequest { github_pull_request: github_pull_request }
 
@@ -247,51 +247,62 @@ fn GithubPullRequestDetails<'a>(cx: Scope, github_pull_request: &'a GithubPullRe
 }
 
 #[inline_props]
-fn ChecksGithubPullRequest<'a>(cx: Scope, latest_commit: &'a GithubCommitChecks) -> Element {
+pub fn ChecksGithubPullRequest<'a>(
+    cx: Scope,
+    latest_commit: &'a GithubCommitChecks,
+    with_details: Option<bool>,
+    icon_size: Option<&'a str>,
+) -> Element {
+    let with_details = with_details.unwrap_or_default();
     let checks_progress = use_memo(
         cx,
         &(latest_commit.check_suites.clone(),),
         |(check_suites,)| compute_pull_request_checks_progress(&check_suites),
     );
+    let icon_size = icon_size.unwrap_or("h-5 w-5");
 
     let checks_state = checks_progress.as_ref().map(|checks_progress| {
         match checks_progress.status() {
             GithubCheckStatusState::Pending => (
                 "Checks not started yet",
-                render! { Icon { class: "h-5 w-5 text-success", icon: BsPauseCircleFill } },
+                render! { Icon { class: "{icon_size} text-success", icon: BsPauseCircleFill } },
             ),
             GithubCheckStatusState::InProgress => (
                 "Checks are in progress",
-                render! { span { class: "h-5 w-5 loading loading-spinner text-primary" } },
+                render! { span { class: "{icon_size} loading loading-spinner text-primary" } },
             ),
             GithubCheckStatusState::Completed => match checks_progress.conclusion() {
                 GithubCheckConclusionState::Success => (
                     "All checks passed",
-                    render! { Icon { class: "h-5 w-5 text-success", icon: BsCheckCircleFill } },
+                    render! { Icon { class: "{icon_size} text-success", icon: BsCheckCircleFill } },
                 ),
                 GithubCheckConclusionState::Failure => (
                     "Some checks failed",
-                    render! { Icon { class: "h-5 w-5 text-error", icon: BsXCircleFill } },
+                    render! { Icon { class: "{icon_size} text-error", icon: BsXCircleFill } },
                 ),
                 _ => (
                     "Unknown checks status",
-                    render! { Icon { class: "h-5 w-5 text-warning", icon: BsQuestionCircleFill } },
+                    render! { Icon { class: "{icon_size} text-warning", icon: BsQuestionCircleFill } },
                 ),
             },
             _ => (
                 "Unknown checks status",
-                render! { Icon { class: "h-5 w-5 text-warning", icon: BsQuestionCircleFill } },
+                render! { Icon { class: "{icon_size} text-warning", icon: BsQuestionCircleFill } },
             ),
         }
     });
 
     if let Some(checks_state) = checks_state {
-        render! {
-            CollapseCardWithIcon {
-                title: "{checks_state.0}",
-                icon: render! { checks_state.1 },
-                ChecksGithubPullRequestDetails { latest_commit: latest_commit }
-            }
+        if with_details {
+            return render! {
+                CollapseCardWithIcon {
+                    title: "{checks_state.0}",
+                    icon: render! { checks_state.1 },
+                    ChecksGithubPullRequestDetails { latest_commit: latest_commit }
+                }
+            };
+        } else {
+            render! { checks_state.1 }
         }
     } else {
         None
@@ -628,7 +639,7 @@ fn GithubReviewLine(cx: Scope, review: GithubReview) -> Element {
 }
 
 #[derive(PartialEq, Eq, Debug, Clone)]
-enum GithubReview {
+pub enum GithubReview {
     Requested {
         reviewer: GithubReviewer,
     },
@@ -639,7 +650,7 @@ enum GithubReview {
     },
 }
 
-fn compute_pull_request_reviews(
+pub fn compute_pull_request_reviews(
     reviews: &[GithubPullRequestReview],
     review_requests: &[GithubReviewer],
 ) -> Vec<GithubReview> {
