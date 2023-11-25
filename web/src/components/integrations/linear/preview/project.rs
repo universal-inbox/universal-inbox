@@ -65,6 +65,7 @@ pub fn LinearProjectDetails<'a>(
                         UserWithAvatar {
                             user_name: lead.name.clone(),
                             avatar_url: lead.avatar_url.clone(),
+                            initials_from: lead.name.clone(),
                         }
                     }
                 }

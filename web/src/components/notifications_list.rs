@@ -29,7 +29,7 @@ use crate::{
                 },
             },
             google_mail::notification::GoogleMailThreadDisplay,
-            linear::notification::LinearNotificationDisplay,
+            linear::notification::{LinearNotificationDetailsDisplay, LinearNotificationDisplay},
             todoist::notification::TodoistNotificationDisplay,
         },
     },
@@ -329,13 +329,10 @@ fn NotificationDisplay<'a>(
                     children
                 }
                 div {
-                    class: "swap-off text-xs text-gray-400 flex gap-2 items-center justify-end group-hover:invisible",
+                    class: "swap-off text-xs flex gap-2 items-center justify-end group-hover:invisible",
 
-                    if let Some(details) = &notif.details {
-                        render! { NotificationDetailsDisplay { notification_details: details } }
-                    }
-
-                    span { class: "whitespace-nowrap", "{notif_updated_at}" }
+                    NotificationDetailsDisplay { notification: notif }
+                    span { class: "text-gray-400 whitespace-nowrap text-[10px] font-mono", "{notif_updated_at}" }
                 }
             }
         }
@@ -449,14 +446,22 @@ fn TaskHint<'a>(cx: Scope, task: &'a Task) -> Element {
 #[inline_props]
 pub fn NotificationDetailsDisplay<'a>(
     cx: Scope,
-    notification_details: &'a NotificationDetails,
+    notification: &'a NotificationWithTask,
 ) -> Element {
-    match notification_details {
-        NotificationDetails::GithubPullRequest(github_pull_request) => render! {
-            GithubPullRequestDetailsDisplay { github_pull_request: github_pull_request }
+    if let Some(details) = &notification.details {
+        return match details {
+            NotificationDetails::GithubPullRequest(github_pull_request) => render! {
+                GithubPullRequestDetailsDisplay { github_pull_request: github_pull_request }
+            },
+            NotificationDetails::GithubDiscussion(github_discussion) => render! {
+                GithubDiscussionDetailsDisplay { github_discussion: github_discussion }
+            },
+        };
+    }
+    match &notification.metadata {
+        NotificationMetadata::Linear(linear_notification) => render! {
+            LinearNotificationDetailsDisplay { linear_notification: linear_notification }
         },
-        NotificationDetails::GithubDiscussion(github_discussion) => render! {
-            GithubDiscussionDetailsDisplay { github_discussion: github_discussion }
-        },
+        _ => None,
     }
 }

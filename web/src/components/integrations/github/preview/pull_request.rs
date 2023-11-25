@@ -607,9 +607,9 @@ fn GithubReviewLine(cx: Scope, review: GithubReview) -> Element {
                                     class: "flex gap-2 items-center",
                                     review_status_icon,
                                     UserWithAvatar {
-                                        user_name: reviewer_display_name,
-                                        avatar_url: reviewer_avatar_url
-
+                                        user_name: reviewer_display_name.clone(),
+                                        avatar_url: reviewer_avatar_url,
+                                        initials_from: reviewer_display_name,
                                     },
                                 }
                             }
@@ -627,8 +627,9 @@ fn GithubReviewLine(cx: Scope, review: GithubReview) -> Element {
 
                             review_status_icon,
                             UserWithAvatar {
-                                user_name: reviewer_display_name,
-                                avatar_url: reviewer_avatar_url
+                                user_name: reviewer_display_name.clone(),
+                                avatar_url: reviewer_avatar_url,
+                                initials_from: reviewer_display_name,
                             },
                         }
                     }

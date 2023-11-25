@@ -3,11 +3,14 @@
 use dioxus::prelude::*;
 
 use universal_inbox::notification::{
-    integrations::linear::{LinearIssue, LinearNotification},
+    integrations::linear::{LinearIssue, LinearNotification, LinearProject},
     NotificationWithTask,
 };
 
-use crate::components::integrations::linear::icons::{LinearIssueIcon, LinearProjectIcon};
+use crate::components::{
+    integrations::linear::icons::{LinearIssueIcon, LinearProjectIcon},
+    Tag, TagDisplay, UserWithAvatar,
+};
 
 #[inline_props]
 pub fn LinearNotificationDisplay<'a>(
@@ -30,26 +33,82 @@ pub fn LinearNotificationDisplay<'a>(
 
             type_icon
 
-            div {
-                class: "flex flex-col grow",
-
-                span { "{notif.title}" }
                 div {
-                    class: "flex gap-2",
+                    class: "flex flex-col grow",
 
-                    if let Some(team) = linear_notification.get_team() {
-                        render! {
-                            span { class: "text-xs text-gray-400", "{team.name}" }
+                    span { "{notif.title}" }
+                    div {
+                        class: "flex gap-2",
+
+                        if let Some(team) = linear_notification.get_team() {
+                            render! {
+                                span { class: "text-xs text-gray-400", "{team.name}" }
+                            }
+                        }
+
+                        if let LinearNotification::IssueNotification {
+                            issue: LinearIssue { identifier, .. }, ..
+                        } = linear_notification {
+                            render! {
+                                span { class: "text-xs text-gray-400", "#{identifier}" }
+                            }
                         }
                     }
+                }
+        }
+    }
+}
 
-                    if let LinearNotification::IssueNotification {
-                        issue: LinearIssue { identifier, .. }, ..
-                    } = linear_notification {
-                        render! {
-                            span { class: "text-xs text-gray-400", "#{identifier}" }
-                        }
-                    }
+#[inline_props]
+pub fn LinearNotificationDetailsDisplay<'a>(
+    cx: Scope,
+    linear_notification: &'a LinearNotification,
+) -> Element {
+    match linear_notification {
+        LinearNotification::IssueNotification { issue, .. } => render! {
+            LinearIssueDetailsDisplay { linear_issue: issue }
+        },
+        LinearNotification::ProjectNotification { project, .. } => render! {
+            LinearProjectDetailsDisplay { linear_project: project }
+        },
+    }
+}
+
+#[inline_props]
+pub fn LinearIssueDetailsDisplay<'a>(cx: Scope, linear_issue: &'a LinearIssue) -> Element {
+    render! {
+        div {
+            class: "flex items-center gap-2",
+
+            for tag in linear_issue
+                .labels
+                .iter()
+                .map(|label| Into::<Tag>::into(label.clone())) {
+                render! { TagDisplay { tag: tag, class: "text-[10px]" } }
+            }
+
+            if let Some(assignee) = &linear_issue.assignee {
+                render! {
+                    UserWithAvatar { avatar_url: assignee.avatar_url.clone(), initials_from: assignee.name.clone() }
+                }
+            } else {
+                render! {
+                    UserWithAvatar { avatar_url: None }
+                }
+            }
+        }
+    }
+}
+
+#[inline_props]
+pub fn LinearProjectDetailsDisplay<'a>(cx: Scope, linear_project: &'a LinearProject) -> Element {
+    render! {
+        div {
+            class: "flex flex-col gap-2",
+
+            if let Some(lead) = &linear_project.lead {
+                render! {
+                    UserWithAvatar { avatar_url: lead.avatar_url.clone(), initials_from: lead.name.clone() }
                 }
             }
         }

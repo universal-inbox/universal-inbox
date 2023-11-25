@@ -30,8 +30,16 @@ pub fn GithubActorDisplay<'a>(
     };
 
     if without_name.unwrap_or_default() {
-        render! { UserWithAvatar { avatar_url: Some(actor_avatar_url) } }
+        render! {
+            UserWithAvatar { avatar_url: Some(actor_avatar_url), initials_from: actor_display_name }
+        }
     } else {
-        render! { UserWithAvatar { user_name: actor_display_name, avatar_url: Some(actor_avatar_url) } }
+        render! {
+            UserWithAvatar {
+                user_name: actor_display_name.clone(),
+                avatar_url: Some(actor_avatar_url),
+                initials_from: actor_display_name
+            }
+        }
     }
 }
