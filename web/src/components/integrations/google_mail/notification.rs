@@ -51,17 +51,7 @@ pub fn GoogleMailThreadDisplay<'a>(
             div {
                 class: "flex flex-col grow",
 
-                div {
-                    class: "flex flex-row items-center",
-                    span { class: "mx-0.5", "{notif.title}" }
-                    if is_starred {
-                        render! { Icon { class: "mx-0.5 h-3 w-3 text-yellow-500", icon: BsStar } }
-                    }
-                    if is_important {
-                        render! { Icon { class: "mx-0.5 h-3 w-3 text-red-500", icon: BsExclamationCircle } }
-                    }
-                }
-
+                span { class: "mx-0.5", "{notif.title}" }
                 div {
                     class: "flex gap-2",
 
@@ -70,6 +60,28 @@ pub fn GoogleMailThreadDisplay<'a>(
                     }
                     span { class: "text-xs text-gray-400", "({interlocutors_count})" }
                 }
+            }
+        }
+    }
+}
+
+#[inline_props]
+pub fn GoogleMailNotificationDetailsDisplay<'a>(
+    cx: Scope,
+    google_mail_thread: &'a GoogleMailThread,
+) -> Element {
+    let is_starred = google_mail_thread.is_tagged_with(GOOGLE_MAIL_STARRED_LABEL, None);
+    let is_important = google_mail_thread.is_tagged_with(GOOGLE_MAIL_IMPORTANT_LABEL, None);
+
+    render! {
+        div {
+            class: "flex gap-2",
+
+            if is_starred {
+                render! { Icon { class: "mx-0.5 h-5 w-5 text-yellow-500", icon: BsStar } }
+            }
+            if is_important {
+                render! { Icon { class: "mx-0.5 h-5 w-5 text-red-500", icon: BsExclamationCircle } }
             }
         }
     }

@@ -28,7 +28,9 @@ use crate::{
                     GithubPullRequestDetailsDisplay,
                 },
             },
-            google_mail::notification::GoogleMailThreadDisplay,
+            google_mail::notification::{
+                GoogleMailNotificationDetailsDisplay, GoogleMailThreadDisplay,
+            },
             linear::notification::{LinearNotificationDetailsDisplay, LinearNotificationDisplay},
             todoist::notification::{
                 TodoistNotificationDetailsDisplay, TodoistNotificationDisplay,
@@ -475,7 +477,9 @@ pub fn NotificationDetailsDisplay<'a>(
                 None
             }
         }
-        NotificationMetadata::GoogleMail(_) => None,
+        NotificationMetadata::GoogleMail(google_mail_thread) => render! {
+            GoogleMailNotificationDetailsDisplay { google_mail_thread: google_mail_thread }
+        },
         NotificationMetadata::Github(_) => None,
     }
 }

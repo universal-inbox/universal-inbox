@@ -80,9 +80,9 @@ pub fn GithubPullRequestPreview<'a>(
 
 impl From<GithubLabel> for Tag {
     fn from(github_label: GithubLabel) -> Self {
-        Tag {
+        Tag::Colored {
             name: github_label.name,
-            color: Some(github_label.color),
+            color: github_label.color,
         }
     }
 }
