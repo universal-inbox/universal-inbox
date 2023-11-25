@@ -104,7 +104,7 @@ pub fn LinearIssueDetailsDisplay<'a>(cx: Scope, linear_issue: &'a LinearIssue) -
 pub fn LinearProjectDetailsDisplay<'a>(cx: Scope, linear_project: &'a LinearProject) -> Element {
     render! {
         div {
-            class: "flex flex-col gap-2",
+            class: "flex gap-2",
 
             if let Some(lead) = &linear_project.lead {
                 render! {

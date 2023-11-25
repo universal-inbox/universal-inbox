@@ -11,6 +11,8 @@ use universal_inbox::{
     task::integrations::todoist::{TodoistItem, TodoistItemPriority},
 };
 
+use crate::components::{Tag, TagDisplay};
+
 #[inline_props]
 pub fn TodoistNotificationDisplay<'a>(
     cx: Scope,
@@ -51,15 +53,24 @@ pub fn TodoistNotificationDisplay<'a>(
                             }
                         }
                     }
-
-                    div {
-                        class: "flex gap-2",
-                        for label in &todoist_task.labels {
-                            render! { span { class: "text-xs text-gray-400", "@{label}" } }
-                        }
-                    }
                 }
             }
+        }
+    }
+}
+
+#[inline_props]
+pub fn TodoistNotificationDetailsDisplay<'a>(cx: Scope, todoist_item: &'a TodoistItem) -> Element {
+    render! {
+        div {
+            class: "flex gap-2",
+
+            for tag in todoist_item
+                .labels
+                .iter()
+                .map(|label| Into::<Tag>::into(label.clone())) {
+                    render! { TagDisplay { tag: tag, class: "text-[10px]" } }
+                }
         }
     }
 }
