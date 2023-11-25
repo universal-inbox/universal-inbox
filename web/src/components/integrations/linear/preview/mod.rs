@@ -14,9 +14,9 @@ pub mod project;
 
 impl From<LinearLabel> for Tag {
     fn from(linear_label: LinearLabel) -> Self {
-        Tag {
+        Tag::Colored {
             name: linear_label.name,
-            color: Some(linear_label.color.trim_start_matches('#').to_string()),
+            color: linear_label.color.trim_start_matches('#').to_string(),
         }
     }
 }

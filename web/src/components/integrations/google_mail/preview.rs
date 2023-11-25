@@ -16,7 +16,7 @@ use universal_inbox::{
     HasHtmlUrl,
 };
 
-use crate::components::{icons::Mail, SmallCard, TagsInCard};
+use crate::components::{icons::Mail, SmallCard, Tag, TagsInCard};
 
 #[inline_props]
 pub fn GoogleMailThreadPreview<'a>(
@@ -68,7 +68,18 @@ pub fn GoogleMailThreadPreview<'a>(
             TagsInCard {
                 tags: labels
                     .iter()
-                    .map(|label| label.clone().into())
+                    .map(|label| {
+                        let class = match label.as_str() {
+                            GOOGLE_MAIL_IMPORTANT_LABEL => Some("bg-red-500".to_string()),
+                            GOOGLE_MAIL_STARRED_LABEL => Some("bg-yellow-500".to_string()),
+                            _ => None,
+                        };
+                        if let Some(class) = class {
+                            Tag::Stylized { name: label.clone(), class }
+                        } else {
+                            Tag::Default { name: label.clone() }
+                        }
+                    })
                     .collect()
             }
 

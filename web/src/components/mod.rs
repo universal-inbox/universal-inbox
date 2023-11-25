@@ -138,14 +138,46 @@ pub fn UserWithAvatar(
 }
 
 #[derive(Clone, PartialEq)]
-pub struct Tag {
-    pub name: String,
-    pub color: Option<String>,
+pub enum Tag {
+    Default { name: String },
+    Colored { name: String, color: String },
+    Stylized { name: String, class: String },
 }
 
 impl From<String> for Tag {
     fn from(name: String) -> Self {
-        Tag { name, color: None }
+        Tag::Default { name }
+    }
+}
+
+impl Tag {
+    pub fn get_text_class_color(&self, default: &str) -> String {
+        match self {
+            Tag::Colored { color, .. } => compute_text_color_from_background_color(color),
+            _ => default.to_string(),
+        }
+    }
+
+    pub fn get_style(&self) -> Option<String> {
+        match self {
+            Tag::Colored { color, .. } => Some(format!("background-color: #{color}")),
+            _ => None,
+        }
+    }
+
+    pub fn get_class(&self) -> Option<String> {
+        match self {
+            Tag::Stylized { class, .. } => Some(class.clone()),
+            _ => None,
+        }
+    }
+
+    pub fn get_name(&self) -> String {
+        match self {
+            Tag::Default { name, .. } => name.clone(),
+            Tag::Colored { name, .. } => name.clone(),
+            Tag::Stylized { name, .. } => name.clone(),
+        }
     }
 }
 
@@ -167,22 +199,21 @@ pub fn TagsInCard(cx: Scope, tags: Vec<Tag>) -> Element {
 
 #[inline_props]
 pub fn TagDisplay<'a>(cx: Scope, tag: Tag, class: Option<&'a str>) -> Element {
-    let badge_class = tag
-        .color
-        .as_ref()
-        .map(|color| compute_text_color_from_background_color(color))
-        .unwrap_or_else(|| "text-white".to_string());
-    let badge_style = tag
-        .color
-        .as_ref()
-        .map(|color| format!("background-color: #{color}"))
-        .unwrap_or_else(|| "background-color: #6b7280".to_string());
+    let badge_text_class = tag.get_text_class_color("text-white");
+    let badge_class = tag.get_class().unwrap_or_default();
+    let badge_style = tag.get_style().unwrap_or_else(|| {
+        if badge_class.is_empty() {
+            "background-color: #6b7280".to_string()
+        } else {
+            "".to_string()
+        }
+    });
 
     render! {
         div {
-            class: "badge {badge_class} {class.unwrap_or_default()}",
+            class: "badge {badge_text_class} {badge_class} {class.unwrap_or_default()}",
             style: "{badge_style}",
-            "{tag.name}"
+            "{tag.get_name()}"
         }
     }
 }
