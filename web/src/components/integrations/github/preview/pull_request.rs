@@ -181,6 +181,16 @@ fn GithubPullRequestDetails<'a>(cx: Scope, github_pull_request: &'a GithubPullRe
                 span { class: "text-primary", "{github_pull_request.base_ref_name}" }
             }
 
+            div {
+                class: "flex flex-wrap items-center text-gray-400 gap-1 text-xs",
+                span { class: "text-red-500", "-{github_pull_request.deletions}" }
+                span { "/" }
+                span { class: "text-green-500", "+{github_pull_request.additions}" }
+                span { "in" }
+                span { class: "text-primary", "{github_pull_request.changed_files}" }
+                span { "files" }
+            }
+
             TagsInCard {
                 tags: github_pull_request
                     .labels
