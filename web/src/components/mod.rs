@@ -1,6 +1,7 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
+use dioxus_free_icons::{icons::bs_icons::BsPersonCircle, Icon};
 use http::Uri;
 
 use crate::utils::compute_text_color_from_background_color;
@@ -80,18 +81,53 @@ fn SmallCard<'a>(
     }
 }
 
+fn get_initials_from_name(name: &str) -> String {
+    name.split_whitespace()
+        .take(2)
+        .map(|word| word.chars().next().unwrap_or_default())
+        .collect::<String>()
+        .to_ascii_uppercase()
+}
+
 #[inline_props]
 pub fn UserWithAvatar(
     cx: Scope,
     user_name: Option<String>,
     avatar_url: Option<Option<Uri>>,
+    initials_from: Option<String>,
 ) -> Element {
     render! {
         div {
             class: "flex gap-2 items-center",
 
-            if let Some(Some(avatar_url)) = avatar_url {
-                render! { img { class: "h-5 w-5 rounded-full", src: "{avatar_url}" } }
+            match avatar_url {
+                Some(Some(avatar_url)) => render! {
+                    div {
+                        class: "avatar",
+                        div {
+                            class: "w-5 rounded-full",
+                            img { src: "{avatar_url}" }
+                        }
+                    }
+                },
+                Some(None) => {
+                    if let Some(initials) = initials_from
+                        .as_ref()
+                        .map(|initials_from| get_initials_from_name(initials_from)) {
+                            render! {
+                                div {
+                                    class: "avatar placeholder",
+                                    div {
+                                        class: "w-5 rounded-full bg-neutral text-neutral-content",
+                                        span { class: "text-[10px]", "{initials}" }
+                                    }
+                                }
+                            }
+                        } else {
+                            render! { Icon { class: "h-5 w-5 text-gray-400", icon: BsPersonCircle } }
+                        }
+                }
+                None => None
             }
 
             if let Some(user_name) = user_name {
@@ -101,7 +137,7 @@ pub fn UserWithAvatar(
     }
 }
 
-#[derive(PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct Tag {
     pub name: String,
     pub color: Option<String>,
@@ -122,15 +158,15 @@ pub fn TagsInCard(cx: Scope, tags: Vec<Tag>) -> Element {
     render! {
         SmallCard {
             class: "flex-wrap",
-            for tag in &tags {
-                render! { Tag { tag: tag } }
+            for tag in tags {
+                render! { TagDisplay { tag: tag.clone() } }
             }
         }
     }
 }
 
 #[inline_props]
-pub fn Tag<'a>(cx: Scope, tag: &'a Tag) -> Element {
+pub fn TagDisplay<'a>(cx: Scope, tag: Tag, class: Option<&'a str>) -> Element {
     let badge_class = tag
         .color
         .as_ref()
@@ -144,7 +180,7 @@ pub fn Tag<'a>(cx: Scope, tag: &'a Tag) -> Element {
 
     render! {
         div {
-            class: "badge {badge_class}",
+            class: "badge {badge_class} {class.unwrap_or_default()}",
             style: "{badge_style}",
             "{tag.name}"
         }

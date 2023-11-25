@@ -108,6 +108,7 @@ fn LinearIssueDetails<'a>(cx: Scope, linear_issue: &'a LinearIssue) -> Element {
                         UserWithAvatar {
                             user_name: creator.name.clone(),
                             avatar_url: creator.avatar_url.clone(),
+                            initials_from: creator.name.clone(),
                         }
                     }
                 }
@@ -120,6 +121,7 @@ fn LinearIssueDetails<'a>(cx: Scope, linear_issue: &'a LinearIssue) -> Element {
                         UserWithAvatar {
                             user_name: assignee.name.clone(),
                             avatar_url: assignee.avatar_url.clone(),
+                            initials_from: assignee.name.clone(),
                         }
                     }
                 }
