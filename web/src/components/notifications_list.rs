@@ -30,7 +30,9 @@ use crate::{
             },
             google_mail::notification::GoogleMailThreadDisplay,
             linear::notification::{LinearNotificationDetailsDisplay, LinearNotificationDisplay},
-            todoist::notification::TodoistNotificationDisplay,
+            todoist::notification::{
+                TodoistNotificationDetailsDisplay, TodoistNotificationDisplay,
+            },
         },
     },
     model::UniversalInboxUIModel,
@@ -462,6 +464,18 @@ pub fn NotificationDetailsDisplay<'a>(
         NotificationMetadata::Linear(linear_notification) => render! {
             LinearNotificationDetailsDisplay { linear_notification: linear_notification }
         },
-        _ => None,
+        NotificationMetadata::Todoist => {
+            if let Some(task) = &notification.task {
+                match &task.metadata {
+                    TaskMetadata::Todoist(todoist_item) => render! {
+                        TodoistNotificationDetailsDisplay { todoist_item: todoist_item }
+                    },
+                }
+            } else {
+                None
+            }
+        }
+        NotificationMetadata::GoogleMail(_) => None,
+        NotificationMetadata::Github(_) => None,
     }
 }
