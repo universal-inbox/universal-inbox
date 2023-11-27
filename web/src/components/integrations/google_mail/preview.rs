@@ -16,7 +16,7 @@ use universal_inbox::{
     HasHtmlUrl,
 };
 
-use crate::components::{icons::Mail, SmallCard, Tag, TagsInCard};
+use crate::components::{icons::Mail, CardWithHeaders, Tag, TagsInCard};
 
 #[inline_props]
 pub fn GoogleMailThreadPreview<'a>(
@@ -92,51 +92,22 @@ pub fn GoogleMailThreadPreview<'a>(
 
 #[inline_props]
 fn GoogleMailThreadMessage<'a>(cx: Scope, message: &'a GoogleMailMessage) -> Element {
-    let from = message.get_header("From");
-    let to = message.get_header("To");
-    let date = message.get_header("Date");
+    let mut headers = vec![];
+    if let Some(from) = message.get_header("From") {
+        headers.push(render! { span { class: "text-gray-400", "From:" }, span { "{from}" } });
+    }
+    if let Some(to) = message.get_header("To") {
+        headers.push(render! { span { class: "text-gray-400", "To:" }, span { "{to}" } });
+    }
+    if let Some(date) = message.get_header("Date") {
+        headers.push(render! { span { class: "text-gray-400", "Date:" }, span { "{date}" } });
+    }
 
     render! {
-        div {
-            class: "card w-full bg-base-200 text-base-content",
-            div {
-                class: "card-body flex flex-col gap-2 p-2",
+        CardWithHeaders {
+            headers: headers,
 
-                if let Some(from) = from {
-                    render! {
-                        SmallCard {
-                            class: "text-xs",
-                            card_class: "bg-neutral text-neutral-content",
-                            span { class: "text-gray-400", "From:" }
-                            span { "{from}" }
-                        }
-                    }
-                }
-
-                if let Some(to) = to {
-                    render! {
-                        SmallCard {
-                            class: "text-xs",
-                            card_class: "bg-neutral text-neutral-content",
-                            span { class: "text-gray-400", "To:" }
-                            span { "{to}" }
-                        }
-                    }
-                }
-
-                if let Some(date) = date {
-                    render! {
-                        SmallCard {
-                            class: "text-xs",
-                            card_class: "bg-neutral text-neutral-content",
-                            span { class: "text-gray-400", "Date:" }
-                            span { "{date}" }
-                        }
-                    }
-                }
-
-                span { dangerous_inner_html: "{message.snippet} &hellip;" }
-            }
+            span { dangerous_inner_html: "{message.snippet} &hellip;" }
         }
     }
 }

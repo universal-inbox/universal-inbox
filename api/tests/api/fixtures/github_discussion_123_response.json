@@ -39,6 +39,7 @@
           "answer": {
             "bodyHTML": "<p dir=\"auto\">test answer</p>",
             "url": "https://github.com/octocat/Hello-World/discussions/1",
+            "createdAt": "2023-10-19T20:35:06Z",
             "author": {
               "__typename": "User",
               "avatarUrl": "https://avatars.githubusercontent.com/u/123?v=4",

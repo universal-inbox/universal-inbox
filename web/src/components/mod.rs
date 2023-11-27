@@ -217,3 +217,28 @@ pub fn TagDisplay<'a>(cx: Scope, tag: Tag, class: Option<&'a str>) -> Element {
         }
     }
 }
+
+#[inline_props]
+pub fn CardWithHeaders<'a>(cx: Scope, headers: Vec<Element<'a>>, children: Element<'a>) -> Element {
+    render! {
+        div {
+            class: "card w-full bg-base-200 text-base-content",
+            div {
+                class: "card-body flex flex-col gap-2 p-2",
+
+                for header in headers {
+                    render! {
+                        SmallCard {
+                            class: "text-xs",
+                            card_class: "bg-neutral text-neutral-content",
+
+                            header
+                        }
+                    }
+                }
+
+                children
+            }
+        }
+    }
+}

@@ -13,8 +13,21 @@ query PullRequestQuery($owner: String!, $repository: String!, $pr_number: Int!) 
           name
         }
       }
-      comments {
+      comments(first: 50) {
         totalCount
+        nodes {
+          bodyHTML
+          createdAt
+          url
+          author {
+            __typename
+            avatarUrl
+            login
+            ... on User {
+              name
+            }
+          }
+        }
       }
       commits(last: 1) {
         nodes {
@@ -68,7 +81,7 @@ query PullRequestQuery($owner: String!, $repository: String!, $pr_number: Int!) 
           name
         }
       }
-      assignees(first: 10) {
+      assignees(first: 20) {
         nodes {
           avatarUrl
           login
@@ -77,7 +90,7 @@ query PullRequestQuery($owner: String!, $repository: String!, $pr_number: Int!) 
       }
 
       reviewDecision
-      reviews(first: 10) {
+      reviews(first: 20) {
         nodes {
           author {
             __typename
@@ -93,7 +106,7 @@ query PullRequestQuery($owner: String!, $repository: String!, $pr_number: Int!) 
         }
       }
 
-      reviewRequests(first: 10) {
+      reviewRequests(first: 20) {
         nodes {
           requestedReviewer {
             __typename

@@ -14,15 +14,16 @@ use itertools::Itertools;
 
 use universal_inbox::notification::integrations::github::{
     GithubActor, GithubBotSummary, GithubCheckConclusionState, GithubCheckRun,
-    GithubCheckStatusState, GithubCheckSuite, GithubCheckSuiteApp, GithubCommitChecks, GithubLabel,
-    GithubMannequinSummary, GithubMergeableState, GithubPullRequest, GithubPullRequestReview,
-    GithubPullRequestReviewDecision, GithubPullRequestReviewState, GithubPullRequestState,
-    GithubRepositorySummary, GithubReviewer, GithubTeamSummary, GithubUserSummary, GithubWorkflow,
+    GithubCheckStatusState, GithubCheckSuite, GithubCheckSuiteApp, GithubCommitChecks,
+    GithubIssueComment, GithubLabel, GithubMannequinSummary, GithubMergeableState,
+    GithubPullRequest, GithubPullRequestReview, GithubPullRequestReviewDecision,
+    GithubPullRequestReviewState, GithubPullRequestState, GithubRepositorySummary, GithubReviewer,
+    GithubTeamSummary, GithubUserSummary, GithubWorkflow,
 };
 
 use crate::components::{
     integrations::github::{icons::GithubPullRequestIcon, GithubActorDisplay},
-    CollapseCardWithIcon, SmallCard, Tag, TagsInCard, UserWithAvatar,
+    CardWithHeaders, CollapseCardWithIcon, SmallCard, Tag, TagsInCard, UserWithAvatar,
 };
 
 #[inline_props]
@@ -252,6 +253,8 @@ fn GithubPullRequestDetails<'a>(cx: Scope, github_pull_request: &'a GithubPullRe
                 class: "w-full prose prose-sm dark:prose-invert",
                 dangerous_inner_html: "{github_pull_request.body}"
             }
+
+            GithubCommentList { comments: &github_pull_request.comments }
         }
     }
 }
@@ -707,6 +710,28 @@ pub fn compute_pull_request_reviews(
         .sorted_by(|(k1, _), (k2, _)| Ord::cmp(&k1, &k2))
         .map(|(_, v)| v)
         .collect()
+}
+
+#[inline_props]
+pub fn GithubCommentList<'a>(cx: Scope, comments: &'a [GithubIssueComment]) -> Element {
+    render! {
+        div {
+            class: "flex flex-col gap-2",
+            for comment in comments {
+                render! {
+                    CardWithHeaders {
+                        headers: if let Some(author) = &comment.author {
+                            vec![render! {
+                                GithubActorDisplay { actor: author },
+                                span { class: "text-gray-400", "at {comment.created_at}" }
+                            }]
+                        } else { vec![] },
+                        span { dangerous_inner_html: "{comment.body}" }
+                    }
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]
