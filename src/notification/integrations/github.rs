@@ -500,6 +500,7 @@ pub struct GithubPullRequest {
     pub changed_files: i64,
     pub labels: Vec<GithubLabel>,
     pub comments_count: i64,
+    pub comments: Vec<GithubIssueComment>,
     pub latest_commit: GithubCommitChecks,
     pub base_ref_name: String,
     pub base_repository: Option<GithubRepositorySummary>,
@@ -752,6 +753,17 @@ pub struct GithubDiscussionComment {
     #[serde_as(as = "DisplayFromStr")]
     pub url: Uri,
     pub body: String,
+    pub created_at: DateTime<Utc>,
+    pub author: Option<GithubActor>,
+}
+
+#[serde_as]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct GithubIssueComment {
+    #[serde_as(as = "DisplayFromStr")]
+    pub url: Uri,
+    pub body: String,
+    pub created_at: DateTime<Utc>,
     pub author: Option<GithubActor>,
 }
 

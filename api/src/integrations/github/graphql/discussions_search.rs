@@ -163,6 +163,7 @@ impl TryFrom<discussions_search_query::DiscussionsSearchQuerySearchNodesOnDiscus
                 .parse()
                 .context("Unable to parse Github discussion comment URL")?,
             body: value.body_html,
+            created_at: value.created_at,
             author: value.author.map(|author| author.try_into()).transpose()?,
         })
     }

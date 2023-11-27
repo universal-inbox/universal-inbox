@@ -56,6 +56,7 @@ query DiscussionsSearchQuery($search_query: String!) {
         answer {
           bodyHTML
           url
+          createdAt
 
           author {
             __typename

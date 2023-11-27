@@ -5,10 +5,11 @@ use universal_inbox::notification::{
     integrations::github::{
         GithubActor, GithubBotSummary, GithubCheckConclusionState, GithubCheckRun,
         GithubCheckStatusState, GithubCheckSuite, GithubCheckSuiteApp, GithubCommitChecks,
-        GithubLabel, GithubMannequinSummary, GithubMergeStateStatus, GithubMergeableState,
-        GithubPullRequest, GithubPullRequestReview, GithubPullRequestReviewDecision,
-        GithubPullRequestReviewState, GithubPullRequestState, GithubRepositorySummary,
-        GithubReviewer, GithubTeamSummary, GithubUserSummary, GithubWorkflow,
+        GithubIssueComment, GithubLabel, GithubMannequinSummary, GithubMergeStateStatus,
+        GithubMergeableState, GithubPullRequest, GithubPullRequestReview,
+        GithubPullRequestReviewDecision, GithubPullRequestReviewState, GithubPullRequestState,
+        GithubRepositorySummary, GithubReviewer, GithubTeamSummary, GithubUserSummary,
+        GithubWorkflow,
     },
     NotificationDetails,
 };
@@ -547,6 +548,55 @@ impl TryFrom<pull_request_query::PullRequestQueryRepositoryPullRequestReviewRequ
     }
 }
 
+impl TryFrom<pull_request_query::PullRequestQueryRepositoryPullRequestCommentsNodes>
+    for GithubIssueComment
+{
+    type Error = UniversalInboxError;
+
+    fn try_from(
+        value: pull_request_query::PullRequestQueryRepositoryPullRequestCommentsNodes,
+    ) -> Result<Self, Self::Error> {
+        Ok(GithubIssueComment {
+            url: value
+                .url
+                .parse()
+                .context("Unable to parse Github issue comment URL")?,
+            body: value.body_html,
+            created_at: value.created_at,
+            author: value.author.map(|author| author.try_into()).transpose()?,
+        })
+    }
+}
+
+impl TryFrom<pull_request_query::PullRequestQueryRepositoryPullRequestCommentsNodesAuthor>
+    for GithubActor
+{
+    type Error = UniversalInboxError;
+
+    fn try_from(
+        value: pull_request_query::PullRequestQueryRepositoryPullRequestCommentsNodesAuthor,
+    ) -> Result<Self, Self::Error> {
+        Ok(match value.on {
+            pull_request_query::PullRequestQueryRepositoryPullRequestCommentsNodesAuthorOn::User(
+                user,
+            ) => GithubActor::User(GithubUserSummary {
+                login: value.login,
+                name: user.name,
+                avatar_url: value
+                    .avatar_url
+                    .parse::<Uri>()
+                    .context("Github actor should have a valid avatar URL")?,
+            }),
+            _ => GithubActor::Bot(GithubBotSummary {
+                login: value.login,
+                avatar_url: value
+                    .avatar_url
+                    .parse::<Uri>()
+                    .context("Github actor should have a valid avatar URL")?,
+            })
+        })
+    }
+}
 impl TryFrom<pull_request_query::ResponseData> for NotificationDetails {
     type Error = UniversalInboxError;
 
@@ -583,6 +633,16 @@ impl TryFrom<pull_request_query::ResponseData> for NotificationDetails {
             changed_files: pr.changed_files,
             labels: pr.labels.map(|labels| labels.into()).unwrap_or_default(),
             comments_count: pr.comments.total_count,
+            comments: pr
+                .comments
+                .nodes
+                .map(|nodes| {
+                    nodes
+                        .into_iter()
+                        .filter_map(|node| node.and_then(|node| node.try_into().ok()))
+                        .collect::<Vec<GithubIssueComment>>()
+                })
+                .unwrap_or_default(),
             latest_commit: TryInto::<Option<GithubCommitChecks>>::try_into(pr.commits)?
                 .context("Expected at least 1 commit associated with a Github pull request")?,
             base_ref_name: pr.base_ref_name,
