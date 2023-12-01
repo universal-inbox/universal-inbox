@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use http::Uri;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -41,5 +40,5 @@ pub struct IntegrationProviderConfig {
 }
 
 pub trait HasHtmlUrl {
-    fn get_html_url(&self) -> Uri;
+    fn get_html_url(&self) -> Url;
 }

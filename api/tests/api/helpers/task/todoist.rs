@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use chrono::{NaiveDate, TimeZone, Utc};
-use http::Uri;
 use httpmock::{Method::POST, Mock, MockServer};
 use pretty_assertions::assert_eq;
 use reqwest::Client;
@@ -9,6 +8,7 @@ use rstest::*;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tracing::debug;
+use url::Url;
 use uuid::Uuid;
 
 use universal_inbox::{
@@ -233,7 +233,7 @@ pub fn assert_sync_items(
                     task.source_html_url,
                     Some(
                         "https://todoist.com/showTask?id=1123"
-                            .parse::<Uri>()
+                            .parse::<Url>()
                             .unwrap()
                     )
                 );
@@ -273,7 +273,7 @@ pub fn assert_sync_items(
                     task.source_html_url,
                     Some(
                         "https://todoist.com/showTask?id=1456"
-                            .parse::<Uri>()
+                            .parse::<Url>()
                             .unwrap()
                     )
                 );

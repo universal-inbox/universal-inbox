@@ -3,9 +3,9 @@ use std::fmt;
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use git_url_parse::GitUrl;
-use http::{uri::Authority, Uri};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
+use url::{Host, Url};
 use uuid::Uuid;
 
 use crate::{
@@ -19,10 +19,10 @@ pub struct GithubNotificationSubject {
     pub title: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde_as(as = "Option<DisplayFromStr>")]
-    pub url: Option<Uri>,
+    pub url: Option<Url>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde_as(as = "Option<DisplayFromStr>")]
-    pub latest_comment_url: Option<Uri>,
+    pub latest_comment_url: Option<Url>,
     pub r#type: String,
 }
 
@@ -32,7 +32,7 @@ pub struct GithubCodeOfConduct {
     pub key: String,
     pub name: String,
     #[serde_as(as = "DisplayFromStr")]
-    pub url: Uri,
+    pub url: Url,
     pub body: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde_as(as = "Option<DisplayFromStr>")]
@@ -46,11 +46,11 @@ pub struct GithubLicense {
     pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde_as(as = "Option<DisplayFromStr>")]
-    pub url: Option<Uri>,
+    pub url: Option<Url>,
     pub spdx_id: Option<String>,
     pub node_id: String,
     #[serde_as(as = "DisplayFromStr")]
-    pub html_url: Uri,
+    pub html_url: Url,
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
@@ -71,30 +71,30 @@ pub struct GithubUser {
     pub id: u64,
     pub node_id: String,
     #[serde_as(as = "DisplayFromStr")]
-    pub avatar_url: Uri,
+    pub avatar_url: Url,
     pub gravatar_id: Option<String>,
     #[serde_as(as = "DisplayFromStr")]
-    pub url: Uri,
+    pub url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub html_url: Uri,
+    pub html_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub followers_url: Uri,
+    pub followers_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub following_url: Uri,
+    pub following_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub gists_url: Uri,
+    pub gists_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub starred_url: Uri,
+    pub starred_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub subscriptions_url: Uri,
+    pub subscriptions_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub organizations_url: Uri,
+    pub organizations_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub repos_url: Uri,
+    pub repos_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub events_url: Uri,
+    pub events_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub received_events_url: Uri,
+    pub received_events_url: Url,
     pub r#type: String,
     pub site_admin: bool,
     pub starred_at: Option<DateTime<Utc>>,
@@ -110,102 +110,102 @@ pub struct GithubRepository {
     pub owner: GithubUser,
     pub private: bool,
     #[serde_as(as = "DisplayFromStr")]
-    pub html_url: Uri,
+    pub html_url: Url,
     pub description: Option<String>,
     pub fork: bool,
     #[serde_as(as = "DisplayFromStr")]
-    pub url: Uri,
+    pub url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub archive_url: Uri,
+    pub archive_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub assignees_url: Uri,
+    pub assignees_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub blobs_url: Uri,
+    pub blobs_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub branches_url: Uri,
+    pub branches_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub collaborators_url: Uri,
+    pub collaborators_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub comments_url: Uri,
+    pub comments_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub commits_url: Uri,
+    pub commits_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub compare_url: Uri,
+    pub compare_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub contents_url: Uri,
+    pub contents_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub contributors_url: Uri,
+    pub contributors_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub deployments_url: Uri,
+    pub deployments_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub downloads_url: Uri,
+    pub downloads_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub events_url: Uri,
+    pub events_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub forks_url: Uri,
+    pub forks_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub git_commits_url: Uri,
+    pub git_commits_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub git_refs_url: Uri,
+    pub git_refs_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub git_tags_url: Uri,
+    pub git_tags_url: Url,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde_as(as = "Option<DisplayFromStr>")]
     pub git_url: Option<GitUrl>,
     #[serde_as(as = "DisplayFromStr")]
-    pub issue_comment_url: Uri,
+    pub issue_comment_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub issue_events_url: Uri,
+    pub issue_events_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub issues_url: Uri,
+    pub issues_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub keys_url: Uri,
+    pub keys_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub labels_url: Uri,
+    pub labels_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub languages_url: Uri,
+    pub languages_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub merges_url: Uri,
+    pub merges_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub milestones_url: Uri,
+    pub milestones_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub notifications_url: Uri,
+    pub notifications_url: Url,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde_as(as = "Option<DisplayFromStr>")]
-    pub pulls_urls: Option<Uri>,
+    pub pulls_urls: Option<Url>,
     #[serde_as(as = "DisplayFromStr")]
-    pub releases_url: Uri,
+    pub releases_url: Url,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde_as(as = "Option<DisplayFromStr>")]
     pub ssh_url: Option<GitUrl>,
     #[serde_as(as = "DisplayFromStr")]
-    pub stargazers_url: Uri,
+    pub stargazers_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub statuses_url: Uri,
+    pub statuses_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub subscribers_url: Uri,
+    pub subscribers_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub subscription_url: Uri,
+    pub subscription_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub tags_url: Uri,
+    pub tags_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub teams_url: Uri,
+    pub teams_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub trees_url: Uri,
+    pub trees_url: Url,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde_as(as = "Option<DisplayFromStr>")]
-    pub clone_url: Option<Uri>,
+    pub clone_url: Option<Url>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde_as(as = "Option<DisplayFromStr>")]
-    pub mirror_url: Option<Uri>,
+    pub mirror_url: Option<Url>,
     #[serde_as(as = "DisplayFromStr")]
-    pub hooks_url: Uri,
+    pub hooks_url: Url,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde_as(as = "Option<DisplayFromStr>")]
-    pub svn_url: Option<Uri>,
+    pub svn_url: Option<Url>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde_as(as = "Option<DisplayFromStr>")]
-    pub homepage: Option<Uri>,
+    pub homepage: Option<Url>,
     pub language: Option<String>,
     pub forks_count: Option<u32>,
     pub stargazers_count: Option<u32>,
@@ -255,97 +255,97 @@ pub struct GithubRepositoryTemplate {
     pub owner: GithubUser,
     pub private: bool,
     #[serde_as(as = "DisplayFromStr")]
-    pub html_url: Uri,
+    pub html_url: Url,
     pub description: Option<String>,
     pub fork: bool,
     #[serde_as(as = "DisplayFromStr")]
-    pub url: Uri,
+    pub url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub archive_url: Uri,
+    pub archive_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub assignees_url: Uri,
+    pub assignees_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub blobs_url: Uri,
+    pub blobs_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub branches_url: Uri,
+    pub branches_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub collaborators_url: Uri,
+    pub collaborators_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub comments_url: Uri,
+    pub comments_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub commits_url: Uri,
+    pub commits_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub compare_url: Uri,
+    pub compare_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub contents_url: Uri,
+    pub contents_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub contributors_url: Uri,
+    pub contributors_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub deployments_url: Uri,
+    pub deployments_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub downloads_url: Uri,
+    pub downloads_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub events_url: Uri,
+    pub events_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub forks_url: Uri,
+    pub forks_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub git_commits_url: Uri,
+    pub git_commits_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub git_refs_url: Uri,
+    pub git_refs_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub git_tags_url: Uri,
+    pub git_tags_url: Url,
     #[serde_as(as = "DisplayFromStr")]
     pub git_url: GitUrl,
     #[serde_as(as = "DisplayFromStr")]
-    pub issue_comment_url: Uri,
+    pub issue_comment_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub issue_events_url: Uri,
+    pub issue_events_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub issues_url: Uri,
+    pub issues_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub keys_url: Uri,
+    pub keys_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub labels_url: Uri,
+    pub labels_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub languages_url: Uri,
+    pub languages_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub merges_url: Uri,
+    pub merges_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub milestones_url: Uri,
+    pub milestones_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub notifications_url: Uri,
+    pub notifications_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub pulls_urls: Uri,
+    pub pulls_urls: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub releases_url: Uri,
+    pub releases_url: Url,
     #[serde_as(as = "DisplayFromStr")]
     pub ssh_url: GitUrl,
     #[serde_as(as = "DisplayFromStr")]
-    pub stargazers_url: Uri,
+    pub stargazers_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub statuses_url: Uri,
+    pub statuses_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub subscribers_url: Uri,
+    pub subscribers_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub subscription_url: Uri,
+    pub subscription_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub tags_url: Uri,
+    pub tags_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub teams_url: Uri,
+    pub teams_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub trees_url: Uri,
+    pub trees_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub clone_url: Uri,
+    pub clone_url: Url,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde_as(as = "Option<DisplayFromStr>")]
-    pub mirror_url: Option<Uri>,
+    pub mirror_url: Option<Url>,
     #[serde_as(as = "DisplayFromStr")]
-    pub hooks_url: Uri,
+    pub hooks_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub svn_url: Uri,
+    pub svn_url: Url,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde_as(as = "Option<DisplayFromStr>")]
-    pub homepage: Option<Uri>,
+    pub homepage: Option<Url>,
     pub language: Option<String>,
     pub forks_count: u32,
     pub stargazers_count: u32,
@@ -395,9 +395,9 @@ pub struct GithubNotification {
     pub updated_at: DateTime<Utc>,
     pub last_read_at: Option<DateTime<Utc>>,
     #[serde_as(as = "DisplayFromStr")]
-    pub url: Uri,
+    pub url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub subscription_url: Uri,
+    pub subscription_url: Url,
 }
 
 impl GithubNotification {
@@ -408,46 +408,37 @@ impl GithubNotification {
         Some(id.to_string())
     }
 
-    pub fn get_html_url_from_api_url(api_url: &Option<Uri>) -> Option<Uri> {
-        api_url.as_ref().and_then(|uri| {
-            if uri.host() == Some("api.github.com") && uri.path().starts_with("/repos") {
-                let mut uri_parts = uri.clone().into_parts();
-                uri_parts.authority = Some(Authority::from_static("github.com"));
-                uri_parts.path_and_query = uri_parts
-                    .path_and_query
-                    .and_then(|pq| pq.as_str().trim_start_matches("/repos").parse().ok());
-                return Uri::from_parts(uri_parts).ok();
+    pub fn get_html_url_from_api_url(api_url: &Option<Url>) -> Option<Url> {
+        api_url.as_ref().and_then(|url| {
+            if url.host() == Some(Host::Domain("api.github.com"))
+                && url.path().starts_with("/repos")
+            {
+                let mut result = url.clone();
+                result.set_host(Some("github.com")).unwrap(); // safe to unwrap
+                result.set_path(url.path().trim_start_matches("/repos"));
+                return Some(result);
             }
             None
         })
     }
 
-    pub fn get_html_url_from_metadata(&self) -> Uri {
+    pub fn get_html_url_from_metadata(&self) -> Url {
         match self.subject.r#type.as_str() {
             // There is no enough information in the notification to link to the source
             "CheckSuite" => {
-                let mut uri_parts = self.repository.html_url.clone().into_parts();
-                uri_parts.path_and_query = uri_parts
-                    .path_and_query
-                    .and_then(|pq| format!("{}/actions", pq.as_str()).parse().ok());
-                Uri::from_parts(uri_parts).unwrap()
+                let mut result = self.repository.html_url.clone();
+                result.set_path(&format!("{}/actions", self.repository.html_url.path()));
+                result
             }
             "Discussion" => {
-                let mut uri_parts = self.repository.html_url.clone().into_parts();
-                uri_parts.path_and_query = uri_parts.path_and_query.and_then(|pq| {
-                    format!(
-                        "{}/discussions?{}",
-                        pq.as_str(),
-                        serde_urlencoded::to_string([(
-                            "discussions_q",
-                            self.subject.title.clone()
-                        )])
-                        .unwrap_or_default()
-                    )
-                    .parse()
-                    .ok()
-                });
-                Uri::from_parts(uri_parts).unwrap()
+                let mut result = self.repository.html_url.clone();
+                result.set_path(&format!("{}/discussions", self.repository.html_url.path()));
+                result.set_query(
+                    serde_urlencoded::to_string([("discussions_q", self.subject.title.clone())])
+                        .ok()
+                        .as_deref(),
+                );
+                result
             }
             _ => self.repository.html_url.clone(),
         }
@@ -466,7 +457,7 @@ impl GithubNotification {
             } else {
                 NotificationStatus::Read
             },
-            metadata: NotificationMetadata::Github(self.clone()),
+            metadata: NotificationMetadata::Github(Box::new(self.clone())),
             updated_at: self.updated_at,
             last_read_at: self.last_read_at,
             snoozed_until: None,
@@ -483,7 +474,7 @@ pub struct GithubPullRequest {
     pub id: String,
     pub number: i64,
     #[serde_as(as = "DisplayFromStr")]
-    pub url: Uri,
+    pub url: Url,
     pub title: String,
     pub body: String,
     pub state: GithubPullRequestState,
@@ -518,7 +509,7 @@ pub struct GithubPullRequest {
 pub struct GithubRepositorySummary {
     pub name_with_owner: String,
     #[serde_as(as = "DisplayFromStr")]
-    pub url: Uri,
+    pub url: Url,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
@@ -573,7 +564,7 @@ pub struct GithubLabel {
 pub struct GithubUserSummary {
     pub login: String,
     #[serde_as(as = "DisplayFromStr")]
-    pub avatar_url: Uri,
+    pub avatar_url: Url,
     pub name: Option<String>,
 }
 
@@ -582,7 +573,7 @@ pub struct GithubUserSummary {
 pub struct GithubBotSummary {
     pub login: String,
     #[serde_as(as = "DisplayFromStr")]
-    pub avatar_url: Uri,
+    pub avatar_url: Url,
 }
 
 #[serde_as]
@@ -590,7 +581,7 @@ pub struct GithubBotSummary {
 pub struct GithubTeamSummary {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde_as(as = "Option<DisplayFromStr>")]
-    pub avatar_url: Option<Uri>,
+    pub avatar_url: Option<Url>,
     pub name: String,
 }
 
@@ -598,7 +589,7 @@ pub struct GithubTeamSummary {
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct GithubMannequinSummary {
     #[serde_as(as = "DisplayFromStr")]
-    pub avatar_url: Uri,
+    pub avatar_url: Url,
     pub login: String,
 }
 
@@ -646,7 +637,7 @@ pub struct GithubCheckRun {
     pub conclusion: Option<GithubCheckConclusionState>,
     pub status: GithubCheckStatusState,
     #[serde_as(as = "Option<DisplayFromStr>")]
-    pub url: Option<Uri>,
+    pub url: Option<Url>,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
@@ -678,9 +669,9 @@ pub enum GithubCheckStatusState {
 pub struct GithubCheckSuiteApp {
     pub name: String,
     #[serde_as(as = "DisplayFromStr")]
-    pub logo_url: Uri,
+    pub logo_url: Url,
     #[serde_as(as = "DisplayFromStr")]
-    pub url: Uri,
+    pub url: Url,
 }
 
 #[serde_as]
@@ -688,7 +679,7 @@ pub struct GithubCheckSuiteApp {
 pub struct GithubWorkflow {
     pub name: String,
     #[serde_as(as = "DisplayFromStr")]
-    pub url: Uri,
+    pub url: Url,
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone, Default)]
@@ -723,7 +714,7 @@ pub struct GithubDiscussion {
     pub id: String,
     pub number: i64,
     #[serde_as(as = "DisplayFromStr")]
-    pub url: Uri,
+    pub url: Url,
     pub title: String,
     pub body: String,
     pub repository: GithubRepositorySummary,
@@ -751,7 +742,7 @@ pub enum GithubDiscussionStateReason {
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct GithubDiscussionComment {
     #[serde_as(as = "DisplayFromStr")]
-    pub url: Uri,
+    pub url: Url,
     pub body: String,
     pub created_at: DateTime<Utc>,
     pub author: Option<GithubActor>,
@@ -761,14 +752,14 @@ pub struct GithubDiscussionComment {
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct GithubIssueComment {
     #[serde_as(as = "DisplayFromStr")]
-    pub url: Uri,
+    pub url: Url,
     pub body: String,
     pub created_at: DateTime<Utc>,
     pub author: Option<GithubActor>,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
-pub enum GithubUri {
+pub enum GithubUrl {
     PullRequest {
         owner: String,
         repository: String,
@@ -776,36 +767,36 @@ pub enum GithubUri {
     },
 }
 
-impl GithubUri {
-    pub fn try_from_api_uri(resource_uri: &Uri) -> Result<Self> {
-        if resource_uri.host() != Some("api.github.com") {
+impl GithubUrl {
+    pub fn try_from_api_url(resource_url: &Url) -> Result<Self> {
+        if resource_url.host() != Some(Host::Domain("api.github.com")) {
             return Err(
                 anyhow!(
-                    "Failed to parse Github API resource URI: it must be hosted on api.github.com, found: {:?}", resource_uri.host()
+                    "Failed to parse Github API resource URL: it must be hosted on api.github.com, found: {:?}", resource_url.host()
                 )
             );
         }
 
-        if let &["", "repos", owner, repository, "pulls", number] = resource_uri
+        if let &["", "repos", owner, repository, "pulls", number] = resource_url
             .path()
             .split('/')
             .collect::<Vec<&str>>()
             .as_slice()
         {
-            return Ok(GithubUri::PullRequest {
+            return Ok(GithubUrl::PullRequest {
                 owner: owner.to_string(),
                 repository: repository.to_string(),
                 number: number.parse()
                     .with_context(|| {
                         format!(
-                            "Failed to parse Github API resource URI: Pull request number must be an integer: {}", number)
+                            "Failed to parse Github API resource URL: Pull request number must be an integer: {}", number)
                     })?
             });
         }
 
         Err(anyhow!(
-            "Failed to parse Github API resource URI: unknown resource type: {}",
-            resource_uri
+            "Failed to parse Github API resource URL: unknown resource type: {}",
+            resource_url
         ))
     }
 }
@@ -819,7 +810,7 @@ mod tests {
         use super::*;
 
         #[rstest]
-        fn test_uri_serialization_config() {
+        fn test_url_serialization_config() {
             assert_eq!(
                 r#"{"key":"key1","name":"name1","url":"https://api.github.com/1","body":"body1"}"#,
                 serde_json::to_string(&GithubCodeOfConduct {
@@ -846,7 +837,7 @@ mod tests {
         }
 
         #[rstest]
-        fn test_uri_deserialization_config() {
+        fn test_url_deserialization_config() {
             assert_eq!(
             GithubCodeOfConduct {
                 key: "key1".to_string(),
@@ -893,9 +884,9 @@ mod tests {
         ) {
             assert_eq!(
                 GithubNotification::get_html_url_from_api_url(&Some(
-                    api_url.parse::<Uri>().unwrap()
+                    api_url.parse::<Url>().unwrap()
                 )),
-                Some(expected_html_url.parse::<Uri>().unwrap())
+                Some(expected_html_url.parse::<Url>().unwrap())
             );
         }
 
@@ -912,58 +903,58 @@ mod tests {
         ) {
             assert_eq!(
                 GithubNotification::get_html_url_from_api_url(
-                    &api_url.map(|url| url.parse::<Uri>().unwrap())
+                    &api_url.map(|url| url.parse::<Url>().unwrap())
                 ),
                 None
             );
         }
     }
 
-    mod try_from_api_uri {
+    mod try_from_api_url {
         use super::*;
 
         #[rstest]
         #[case::pull_request(
             "https://api.github.com/repos/octokit/octokit.rb/pulls/123",
-            GithubUri::PullRequest {
+            GithubUrl::PullRequest {
                 owner: "octokit".to_string(),
                 repository: "octokit.rb".to_string(),
                 number: 123
             }
         )]
-        fn test_try_from_api_uri(
-            #[case] resource_uri: &str,
-            #[case] expected_github_uri: GithubUri,
+        fn test_try_from_api_url(
+            #[case] resource_url: &str,
+            #[case] expected_github_url: GithubUrl,
         ) {
             assert_eq!(
-                GithubUri::try_from_api_uri(&resource_uri.parse::<Uri>().unwrap()).unwrap(),
-                expected_github_uri
+                GithubUrl::try_from_api_url(&resource_url.parse::<Url>().unwrap()).unwrap(),
+                expected_github_url
             );
         }
 
         #[rstest]
-        fn test_try_from_api_uri_from_non_api_domain() {
-            assert!(GithubUri::try_from_api_uri(
+        fn test_try_from_api_url_from_non_api_domain() {
+            assert!(GithubUrl::try_from_api_url(
                 &"https://github.com/octokit/octokit.rb/pulls/123"
-                    .parse::<Uri>()
+                    .parse::<Url>()
                     .unwrap()
             )
             .is_err());
         }
 
         #[rstest]
-        fn test_try_from_api_uri_from_unknown_resource() {
-            assert!(GithubUri::try_from_api_uri(
-                &"https://api.github.com/unknown/123".parse::<Uri>().unwrap()
+        fn test_try_from_api_url_from_unknown_resource() {
+            assert!(GithubUrl::try_from_api_url(
+                &"https://api.github.com/unknown/123".parse::<Url>().unwrap()
             )
             .is_err());
         }
 
         #[rstest]
-        fn test_try_from_api_uri_from_invalid_pull_request_number() {
-            assert!(GithubUri::try_from_api_uri(
+        fn test_try_from_api_url_from_invalid_pull_request_number() {
+            assert!(GithubUrl::try_from_api_url(
                 &"https://api.github.com/repos/octokit/octokit.rb/abc"
-                    .parse::<Uri>()
+                    .parse::<Url>()
                     .unwrap()
             )
             .is_err());

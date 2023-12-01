@@ -18,7 +18,7 @@ impl ResponseError for UniversalInboxError {
     fn status_code(&self) -> StatusCode {
         match self {
             UniversalInboxError::InvalidEnumData { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            UniversalInboxError::InvalidUriData { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            UniversalInboxError::InvalidUrlData { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             UniversalInboxError::InvalidInputData { .. } => StatusCode::BAD_REQUEST,
             UniversalInboxError::TaskNotFound { .. } => StatusCode::BAD_REQUEST,
             UniversalInboxError::AlreadyExists { .. } => StatusCode::BAD_REQUEST,

@@ -2,10 +2,10 @@ use std::fmt;
 
 use anyhow::anyhow;
 use chrono::{DateTime, NaiveDate, Utc};
-use http::Uri;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use serde_with::{serde_as, DisplayFromStr};
+use url::Url;
 use uuid::Uuid;
 
 use crate::{
@@ -16,6 +16,7 @@ use crate::{
 #[serde_as]
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 #[serde(tag = "type", content = "content")]
+#[allow(clippy::large_enum_variant)] // TODO - review later
 pub enum LinearNotification {
     IssueNotification {
         id: Uuid,
@@ -49,7 +50,7 @@ pub struct LinearIssue {
     pub identifier: String,
     pub title: String,
     #[serde_as(as = "DisplayFromStr")]
-    pub url: Uri,
+    pub url: Url,
     pub priority: LinearIssuePriority,
     pub project: Option<LinearProject>,
     pub project_milestone: Option<LinearProjectMilestone>,
@@ -123,9 +124,9 @@ pub struct LinearProjectMilestone {
 pub struct LinearUser {
     pub name: String,
     #[serde_as(as = "Option<DisplayFromStr>")]
-    pub avatar_url: Option<Uri>,
+    pub avatar_url: Option<Url>,
     #[serde_as(as = "DisplayFromStr")]
-    pub url: Uri,
+    pub url: Url,
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
@@ -178,10 +179,9 @@ pub struct LinearProject {
     pub id: Uuid,
     pub name: String,
     #[serde_as(as = "DisplayFromStr")]
-    pub url: Uri,
+    pub url: Url,
     pub description: String,
-    #[serde_as(as = "Option<DisplayFromStr>")]
-    pub icon: Option<Uri>,
+    pub icon: Option<String>,
     pub color: String,
     pub state: LinearProjectState,
     pub progress: i64, // percentage between 0 and 100
@@ -242,11 +242,11 @@ pub struct LinearOrganization {
     pub name: String,
     pub key: String,
     #[serde_as(as = "Option<DisplayFromStr>")]
-    pub logo_url: Option<Uri>,
+    pub logo_url: Option<Url>,
 }
 
 impl LinearNotification {
-    pub fn get_html_url_from_metadata(&self) -> Uri {
+    pub fn get_html_url_from_metadata(&self) -> Url {
         match self {
             LinearNotification::IssueNotification {
                 issue: LinearIssue { url, .. },
@@ -302,7 +302,7 @@ impl LinearNotification {
                 } else {
                     NotificationStatus::Unread
                 },
-                metadata: NotificationMetadata::Linear(self.clone()),
+                metadata: NotificationMetadata::Linear(Box::new(self.clone())),
                 updated_at: *updated_at,
                 last_read_at: *read_at,
                 snoozed_until: *snoozed_until_at,
@@ -327,7 +327,7 @@ impl LinearNotification {
                 } else {
                     NotificationStatus::Unread
                 },
-                metadata: NotificationMetadata::Linear(self.clone()),
+                metadata: NotificationMetadata::Linear(Box::new(self.clone())),
                 updated_at: *updated_at,
                 last_read_at: *read_at,
                 snoozed_until: *snoozed_until_at,
@@ -340,9 +340,9 @@ impl LinearNotification {
 }
 
 impl LinearTeam {
-    pub fn get_url(&self, organization: LinearOrganization) -> Uri {
+    pub fn get_url(&self, organization: LinearOrganization) -> Url {
         format!("https://linear.app/{}/team/{}", organization.key, self.key)
-            .parse::<Uri>()
+            .parse::<Url>()
             .unwrap()
     }
 }

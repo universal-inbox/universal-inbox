@@ -13,10 +13,7 @@ use universal_inbox::{
     },
     task::{integrations::todoist::TodoistItem, Task},
 };
-use universal_inbox_api::{
-    configuration::Settings,
-    integrations::{github, oauth2::NangoConnection},
-};
+use universal_inbox_api::{configuration::Settings, integrations::oauth2::NangoConnection};
 
 use crate::helpers::{
     auth::{authenticated_app, AuthenticatedApp},
@@ -70,8 +67,10 @@ mod patch_resource {
             title: "notif1".to_string(),
             status: NotificationStatus::Unread,
             source_id: "1234".to_string(),
-            source_html_url: github::get_html_url_from_api_url(&github_notification.subject.url),
-            metadata: NotificationMetadata::Github(*github_notification),
+            source_html_url: GithubNotification::get_html_url_from_api_url(
+                &github_notification.subject.url,
+            ),
+            metadata: NotificationMetadata::Github(github_notification),
             updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
             last_read_at: None,
             snoozed_until: None,
@@ -160,8 +159,10 @@ mod patch_resource {
             title: "notif1".to_string(),
             status: NotificationStatus::Unread,
             source_id: "1234".to_string(),
-            source_html_url: github::get_html_url_from_api_url(&github_notification.subject.url),
-            metadata: NotificationMetadata::Github(*github_notification),
+            source_html_url: GithubNotification::get_html_url_from_api_url(
+                &github_notification.subject.url,
+            ),
+            metadata: NotificationMetadata::Github(github_notification),
             updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
             last_read_at: None,
             snoozed_until: None,
@@ -232,8 +233,10 @@ mod patch_resource {
             title: "notif1".to_string(),
             status: NotificationStatus::Unread,
             source_id: "1234".to_string(),
-            source_html_url: github::get_html_url_from_api_url(&github_notification.subject.url),
-            metadata: NotificationMetadata::Github(*github_notification),
+            source_html_url: GithubNotification::get_html_url_from_api_url(
+                &github_notification.subject.url,
+            ),
+            metadata: NotificationMetadata::Github(github_notification),
             updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
             last_read_at: None,
             snoozed_until: None,
@@ -294,8 +297,10 @@ mod patch_resource {
             title: "notif1".to_string(),
             status: NotificationStatus::Unread,
             source_id: "1234".to_string(),
-            source_html_url: github::get_html_url_from_api_url(&github_notification.subject.url),
-            metadata: NotificationMetadata::Github(*github_notification),
+            source_html_url: GithubNotification::get_html_url_from_api_url(
+                &github_notification.subject.url,
+            ),
+            metadata: NotificationMetadata::Github(github_notification),
             updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
             last_read_at: None,
             snoozed_until: None,
@@ -352,8 +357,10 @@ mod patch_resource {
             title: "notif1".to_string(),
             status: NotificationStatus::Unread,
             source_id: "1234".to_string(),
-            source_html_url: github::get_html_url_from_api_url(&github_notification.subject.url),
-            metadata: NotificationMetadata::Github(*github_notification),
+            source_html_url: GithubNotification::get_html_url_from_api_url(
+                &github_notification.subject.url,
+            ),
+            metadata: NotificationMetadata::Github(github_notification),
             updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
             last_read_at: None,
             snoozed_until: Some(snoozed_time),
@@ -404,8 +411,10 @@ mod patch_resource {
             title: "notif1".to_string(),
             status: NotificationStatus::Unread,
             source_id: "1234".to_string(),
-            source_html_url: github::get_html_url_from_api_url(&github_notification.subject.url),
-            metadata: NotificationMetadata::Github(*github_notification),
+            source_html_url: GithubNotification::get_html_url_from_api_url(
+                &github_notification.subject.url,
+            ),
+            metadata: NotificationMetadata::Github(github_notification),
             updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
             last_read_at: None,
             snoozed_until: None,

@@ -105,28 +105,28 @@ pub async fn tested_app(
 
     // tag: New notification integration
     let github_mock_server = MockServer::start();
-    let github_mock_server_uri = &github_mock_server.base_url();
+    let github_mock_server_url = &github_mock_server.base_url();
     let linear_mock_server = MockServer::start();
-    let linear_mock_server_uri = &linear_mock_server.base_url();
+    let linear_mock_server_url = &linear_mock_server.base_url();
     let google_mail_mock_server = MockServer::start();
-    let google_mail_mock_server_uri = &google_mail_mock_server.base_url();
+    let google_mail_mock_server_url = &google_mail_mock_server.base_url();
     let todoist_mock_server = MockServer::start();
-    let todoist_mock_server_uri = &todoist_mock_server.base_url();
+    let todoist_mock_server_url = &todoist_mock_server.base_url();
 
     let oidc_issuer_mock_server = MockServer::start();
-    let oidc_issuer_mock_server_uri = &oidc_issuer_mock_server.base_url();
+    let oidc_issuer_mock_server_url = &oidc_issuer_mock_server.base_url();
     let nango_mock_server = MockServer::start();
-    let nango_mock_server_uri = &nango_mock_server.base_url();
+    let nango_mock_server_url = &nango_mock_server.base_url();
 
     settings.application.security.authentication.oidc_issuer_url =
-        IssuerUrl::new(oidc_issuer_mock_server_uri.to_string()).unwrap();
+        IssuerUrl::new(oidc_issuer_mock_server_url.to_string()).unwrap();
     settings
         .application
         .security
         .authentication
         .oidc_flow_settings = OIDCFlowSettings::AuthorizationCodePKCEFlow {
         introspection_url: IntrospectionUrl::new(format!(
-            "{oidc_issuer_mock_server_uri}/introspect"
+            "{oidc_issuer_mock_server_url}/introspect"
         ))
         .unwrap(),
         front_client_id: ClientId::new("12345".to_string()),
@@ -135,7 +135,7 @@ pub async fn tested_app(
     let pool: Arc<PgPool> = db_connection.await;
 
     let nango_service = NangoService::new(
-        nango_mock_server_uri.parse::<Url>().unwrap(),
+        nango_mock_server_url.parse::<Url>().unwrap(),
         &settings.integrations.oauth2.nango_secret_key,
     )
     .expect("Failed to create new NangoService");
@@ -144,10 +144,10 @@ pub async fn tested_app(
         universal_inbox_api::build_services(
             pool.clone(),
             &settings,
-            Some(github_mock_server_uri.to_string()),
-            Some(linear_mock_server_uri.to_string()),
-            Some(google_mail_mock_server_uri.to_string()),
-            Some(todoist_mock_server_uri.to_string()),
+            Some(github_mock_server_url.to_string()),
+            Some(linear_mock_server_url.to_string()),
+            Some(google_mail_mock_server_url.to_string()),
+            Some(todoist_mock_server_url.to_string()),
             nango_service,
         )
         .await;

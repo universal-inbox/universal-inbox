@@ -1,8 +1,8 @@
-use actix_http::Uri;
 use chrono::{DateTime, NaiveDate, Utc};
 use graphql_client::{Error, GraphQLQuery, Response};
 use httpmock::{Method::POST, Mock, MockServer};
 use rstest::*;
+use url::Url;
 
 use universal_inbox::{
     notification::{
@@ -220,7 +220,7 @@ pub fn assert_sync_notifications(
                     notification.source_html_url,
                     Some(
                         "https://linear.app/universal-inbox/issue/UNI-13/test-issue-3"
-                            .parse::<Uri>()
+                            .parse::<Url>()
                             .unwrap()
                     )
                 );
@@ -246,7 +246,7 @@ pub fn assert_sync_notifications(
                 );
                 assert_eq!(
                     notification.metadata,
-                    NotificationMetadata::Linear(sync_linear_notifications[2].clone())
+                    NotificationMetadata::Linear(Box::new(sync_linear_notifications[2].clone()))
                 );
             }
             // Project notification
@@ -257,7 +257,7 @@ pub fn assert_sync_notifications(
                     notification.source_html_url,
                     Some(
                         "https://linear.app/universal-inbox/project/test-project-33065448b39c"
-                            .parse::<Uri>()
+                            .parse::<Url>()
                             .unwrap()
                     )
                 );
@@ -273,7 +273,7 @@ pub fn assert_sync_notifications(
                 assert_eq!(notification.last_read_at, None);
                 assert_eq!(
                     notification.metadata,
-                    NotificationMetadata::Linear(sync_linear_notifications[0].clone())
+                    NotificationMetadata::Linear(Box::new(sync_linear_notifications[0].clone()))
                 );
             }
             _ => {

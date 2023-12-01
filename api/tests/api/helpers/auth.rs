@@ -47,10 +47,10 @@ pub async fn authenticate_user(
     let client = Client::builder().cookie_store(true).build().unwrap();
 
     let signing_key = CoreHmacKey::new("secret".as_bytes());
-    let oidc_issuer_mock_server_uri = &app.oidc_issuer_mock_server.base_url();
+    let oidc_issuer_mock_server_url = &app.oidc_issuer_mock_server.base_url();
     let id_token = CoreIdToken::new(
         CoreIdTokenClaims::new(
-            IssuerUrl::new(oidc_issuer_mock_server_uri.to_string()).unwrap(),
+            IssuerUrl::new(oidc_issuer_mock_server_url.to_string()).unwrap(),
             vec![Audience::new("client-id-123".to_string())],
             Utc::now() + Duration::seconds(120),
             Utc::now(),
@@ -109,16 +109,16 @@ pub async fn authenticated_app(#[future] tested_app: TestedApp) -> Authenticated
 }
 
 pub fn mock_oidc_openid_configuration(app: &TestedApp) {
-    let oidc_issuer_mock_server_uri = &app.oidc_issuer_mock_server.base_url();
+    let oidc_issuer_mock_server_url = &app.oidc_issuer_mock_server.base_url();
 
     app.oidc_issuer_mock_server.mock(|when, then| {
         when.method(GET).path("/.well-known/openid-configuration");
         then.status(200)
             .header("Content-Type", "application/json")
             .json_body(json!({
-                "authorization_endpoint": format!("{oidc_issuer_mock_server_uri}/authorize"),
-                "jwks_uri": format!("{oidc_issuer_mock_server_uri}/keys"),
-                "introspection_endpoint": format!("{oidc_issuer_mock_server_uri}/introspect"),
+                "authorization_endpoint": format!("{oidc_issuer_mock_server_url}/authorize"),
+                "jwks_uri": format!("{oidc_issuer_mock_server_url}/keys"),
+                "introspection_endpoint": format!("{oidc_issuer_mock_server_url}/introspect"),
                 "introspection_endpoint_auth_methods_supported": [
                     "client_secret_basic",
                     "private_key_jwt"
@@ -126,7 +126,7 @@ pub fn mock_oidc_openid_configuration(app: &TestedApp) {
                 "introspection_endpoint_auth_signing_alg_values_supported": [
                     "RS256"
                 ],
-                "issuer": &oidc_issuer_mock_server_uri,
+                "issuer": &oidc_issuer_mock_server_url,
                 "response_types_supported": [
                     "code",
                     "id_token",
@@ -138,8 +138,8 @@ pub fn mock_oidc_openid_configuration(app: &TestedApp) {
                 "id_token_signing_alg_values_supported": [
                     "RS256"
                 ],
-                "userinfo_endpoint": format!("{oidc_issuer_mock_server_uri}/userinfo"),
-                "end_session_endpoint": format!("{oidc_issuer_mock_server_uri}/end_session")
+                "userinfo_endpoint": format!("{oidc_issuer_mock_server_url}/userinfo"),
+                "end_session_endpoint": format!("{oidc_issuer_mock_server_url}/end_session")
             }));
     });
 }
@@ -165,7 +165,7 @@ pub fn mock_oidc_keys(app: &TestedApp) {
 }
 
 pub fn mock_oidc_introspection(app: &TestedApp, auth_provider_user_id: &str, active: bool) {
-    let oidc_issuer_mock_server_uri = &app.oidc_issuer_mock_server.base_url();
+    let oidc_issuer_mock_server_url = &app.oidc_issuer_mock_server.base_url();
 
     app.oidc_issuer_mock_server.mock(|when, then| {
         when.method(POST).path("/introspect");
@@ -182,7 +182,7 @@ pub fn mock_oidc_introspection(app: &TestedApp, auth_provider_user_id: &str, act
                 "nbf": Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap().timestamp(),
                 "sub": auth_provider_user_id,
                 "aud": ["1234567890"],
-                "iss": &oidc_issuer_mock_server_uri,
+                "iss": &oidc_issuer_mock_server_url,
                 "jti": "1234567",
             }));
     });

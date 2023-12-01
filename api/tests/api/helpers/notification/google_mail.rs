@@ -1,5 +1,4 @@
 use chrono::{TimeZone, Utc};
-use http::Uri;
 use httpmock::{
     prelude::HttpMockRequest,
     Method::{GET, POST},
@@ -7,6 +6,7 @@ use httpmock::{
 };
 use rstest::*;
 use serde_json::json;
+use url::Url;
 
 use universal_inbox::{
     notification::{
@@ -171,8 +171,8 @@ pub fn assert_sync_notifications(
                 assert_eq!(
                     notification.source_html_url,
                     Some(
-                        "https://mail.google.com/mail/u/user@example.com/"
-                            .parse::<Uri>()
+                        "https://mail.google.com/mail/u/user@example.com/#inbox/123"
+                            .parse::<Url>()
                             .unwrap()
                     )
                 );
@@ -183,7 +183,7 @@ pub fn assert_sync_notifications(
                 assert_eq!(notification.last_read_at, None,);
                 assert_eq!(
                     notification.metadata,
-                    NotificationMetadata::GoogleMail(sync_google_mail_thread_123.clone())
+                    NotificationMetadata::GoogleMail(Box::new(sync_google_mail_thread_123.clone()))
                 );
             }
             // This notification should be updated
@@ -193,8 +193,8 @@ pub fn assert_sync_notifications(
                 assert_eq!(
                     notification.source_html_url,
                     Some(
-                        "https://mail.google.com/mail/u/user@example.com/"
-                            .parse::<Uri>()
+                        "https://mail.google.com/mail/u/user@example.com/#inbox/456"
+                            .parse::<Url>()
                             .unwrap()
                     )
                 );
@@ -208,7 +208,7 @@ pub fn assert_sync_notifications(
                 );
                 assert_eq!(
                     notification.metadata,
-                    NotificationMetadata::GoogleMail(sync_google_mail_thread_456.clone())
+                    NotificationMetadata::GoogleMail(Box::new(sync_google_mail_thread_456.clone()))
                 );
             }
             _ => {

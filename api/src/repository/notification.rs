@@ -1,8 +1,8 @@
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
-use http::Uri;
 use sqlx::{postgres::PgRow, types::Json, FromRow, Postgres, QueryBuilder, Row, Transaction};
+use url::Url;
 use uuid::Uuid;
 
 use universal_inbox::{
@@ -928,8 +928,8 @@ impl TryFrom<&NotificationRow> for Notification {
             .source_html_url
             .as_ref()
             .map(|url| {
-                url.parse::<Uri>()
-                    .map_err(|e| UniversalInboxError::InvalidUriData {
+                url.parse::<Url>()
+                    .map_err(|e| UniversalInboxError::InvalidUrlData {
                         source: e,
                         output: url.clone(),
                     })
@@ -966,8 +966,8 @@ impl TryFrom<&NotificationWithTaskRow> for NotificationWithTask {
             .notification_source_html_url
             .as_ref()
             .map(|url| {
-                url.parse::<Uri>()
-                    .map_err(|e| UniversalInboxError::InvalidUriData {
+                url.parse::<Url>()
+                    .map_err(|e| UniversalInboxError::InvalidUrlData {
                         source: e,
                         output: url.clone(),
                     })

@@ -1,7 +1,8 @@
 use chrono::{NaiveDate, TimeZone, Utc};
-use http::{StatusCode, Uri};
+use http::StatusCode;
 use rstest::*;
 use serde_json::json;
+use url::Url;
 use uuid::Uuid;
 
 use universal_inbox::{
@@ -58,7 +59,7 @@ mod create_task {
             completed_at: None,
             priority: TaskPriority::P4,
             due_at: None,
-            source_html_url: "https://todoist.com/showTask?id=1234".parse::<Uri>().ok(),
+            source_html_url: "https://todoist.com/showTask?id=1234".parse::<Url>().ok(),
             tags: vec![],
             parent_id: None,
             project: "Inbox".to_string(),
@@ -128,7 +129,7 @@ mod create_task {
             due_at: Some(universal_inbox::task::DueDate::Date(
                 NaiveDate::from_ymd_opt(2016, 9, 1).unwrap(),
             )),
-            source_html_url: "https://todoist.com/showTask?id=5678".parse::<Uri>().ok(),
+            source_html_url: "https://todoist.com/showTask?id=5678".parse::<Url>().ok(),
             tags: vec!["tag1".to_string(), "tag2".to_string()],
             parent_id: None,
             project: "project 1".to_string(),
@@ -188,7 +189,7 @@ mod create_task {
             due_at: Some(universal_inbox::task::DueDate::Date(
                 NaiveDate::from_ymd_opt(2016, 9, 1).unwrap(),
             )),
-            source_html_url: "https://todoist.com/showTask?id=5678".parse::<Uri>().ok(),
+            source_html_url: "https://todoist.com/showTask?id=5678".parse::<Url>().ok(),
             tags: vec!["tag1".to_string(), "tag2".to_string()],
             parent_id: None,
             project: "project 1".to_string(),
@@ -227,7 +228,7 @@ mod create_task {
             due_at: Some(universal_inbox::task::DueDate::Date(
                 NaiveDate::from_ymd_opt(2022, 1, 3).unwrap(),
             )),
-            source_html_url: "https://todoist.com/showTask?id=5678".parse::<Uri>().ok(),
+            source_html_url: "https://todoist.com/showTask?id=5678".parse::<Url>().ok(),
             tags: vec!["tag1".to_string(), "tag2".to_string()],
             parent_id: None,
             project: "project 1".to_string(),
@@ -265,7 +266,7 @@ mod create_task {
             completed_at: None,
             priority: TaskPriority::P4,
             due_at: None,
-            source_html_url: "https://todoist.com/showTask?id=1234".parse::<Uri>().ok(),
+            source_html_url: "https://todoist.com/showTask?id=1234".parse::<Url>().ok(),
             tags: vec![],
             parent_id: None,
             project: "Inbox".to_string(),

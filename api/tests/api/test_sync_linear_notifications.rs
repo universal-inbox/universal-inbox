@@ -69,7 +69,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
                     status: NotificationStatus::Unread,
                     source_id: id.to_string(),
                     source_html_url: Some(issue.url.clone()),
-                    metadata: NotificationMetadata::Linear(notif.clone()),
+                    metadata: NotificationMetadata::Linear(Box::new(notif.clone())),
                     updated_at: Utc.with_ymd_and_hms(2014, 11, 6, 0, 0, 0).unwrap(),
                     last_read_at: None,
                     snoozed_until: Some(Utc.with_ymd_and_hms(2064, 1, 1, 0, 0, 0).unwrap()),
@@ -142,7 +142,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     );
     assert_eq!(
         updated_notification.metadata,
-        NotificationMetadata::Linear(sync_linear_notifications[2].clone())
+        NotificationMetadata::Linear(Box::new(sync_linear_notifications[2].clone()))
     );
     assert_eq!(
         updated_notification.snoozed_until,

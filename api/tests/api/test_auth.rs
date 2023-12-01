@@ -124,7 +124,7 @@ mod close_session {
     ) {
         let app = authenticated_app.await;
         let tested_app = tested_app.await;
-        let oidc_issuer_mock_server_uri = &app.oidc_issuer_mock_server.base_url();
+        let oidc_issuer_mock_server_url = &app.oidc_issuer_mock_server.base_url();
 
         mock_oidc_openid_configuration(&tested_app);
 
@@ -147,7 +147,7 @@ mod close_session {
         assert_eq!(
             close_session_response.logout_url.to_string(),
             format!(
-                "{oidc_issuer_mock_server_uri}/end_session?{}",
+                "{oidc_issuer_mock_server_url}/end_session?{}",
                 serde_urlencoded::to_string([
                     ("id_token_hint", app.user.auth_id_token.to_string()),
                     (

@@ -1,8 +1,9 @@
 use anyhow::{anyhow, Error};
 use format_serde_error::SerdeError;
-use http::uri::InvalidUri;
-use universal_inbox::{integration_connection::ConnectionId, task::TaskId};
+use url::ParseError;
 use uuid::Uuid;
+
+use universal_inbox::{integration_connection::ConnectionId, task::TaskId};
 
 pub mod integration_connection;
 pub mod notification;
@@ -36,10 +37,10 @@ pub enum UniversalInboxError {
         source: enum_derive::ParseEnumError,
         output: String,
     },
-    #[error("Error while parsing URI")]
-    InvalidUriData {
+    #[error("Error while parsing URL")]
+    InvalidUrlData {
         #[source]
-        source: InvalidUri,
+        source: ParseError,
         output: String,
     },
     #[error("Invalid input data: {user_error}")]
