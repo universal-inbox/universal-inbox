@@ -1,8 +1,8 @@
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
-use http::Uri;
 use sqlx::{types::Json, Postgres, QueryBuilder, Transaction};
+use url::Url;
 use uuid::Uuid;
 
 use universal_inbox::{
@@ -690,8 +690,8 @@ impl TryFrom<&TaskRow> for Task {
             .source_html_url
             .as_ref()
             .map(|url| {
-                url.parse::<Uri>()
-                    .map_err(|e| UniversalInboxError::InvalidUriData {
+                url.parse::<Url>()
+                    .map_err(|e| UniversalInboxError::InvalidUrlData {
                         source: e,
                         output: url.clone(),
                     })

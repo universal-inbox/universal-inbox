@@ -74,14 +74,7 @@ impl
                 .parse()
                 .context(format!("Failed to parse URL from `{}`", value.url))?,
             description: value.description,
-            icon: value
-                .icon
-                .map(|icon| {
-                    icon.clone()
-                        .try_into()
-                        .context(format!("Failed to parse URL from `{icon}`"))
-                })
-                .transpose()?,
+            icon: value.icon,
             color: value.color,
             state: value.state.try_into()?,
             progress: (value.progress * 100.0).round() as i64,

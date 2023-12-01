@@ -1,5 +1,5 @@
 use anyhow::Context;
-use http::Uri;
+use url::Url;
 
 use universal_inbox::notification::{
     integrations::github::{
@@ -115,8 +115,8 @@ for GithubCheckRun {
         Ok(GithubCheckRun {
             name: value.name,
             conclusion: value.conclusion.map(|conclusion| conclusion.into()),
-            url: value.details_url.map(|details_url| details_url.parse::<Uri>().context(
-                "Github check run details URL could not be parsed into a URI",
+            url: value.details_url.map(|details_url| details_url.parse::<Url>().context(
+                "Github check run details URL could not be parsed into a URL",
             )).transpose()?,
             status: value.status.into(),
         })
@@ -158,7 +158,7 @@ impl
                         url: workflow_run
                             .workflow
                             .url
-                            .parse::<Uri>()
+                            .parse::<Url>()
                             .context("Github workflow should have a valid URL")?,
                     })
                 })
@@ -170,9 +170,9 @@ impl
                         name: app.name,
                         url: app
                             .url
-                            .parse::<Uri>()
+                            .parse::<Url>()
                             .context("Github check suite application should have a valid URL")?,
-                        logo_url: app.logo_url.parse::<Uri>().context(
+                        logo_url: app.logo_url.parse::<Url>().context(
                             "Github check suite application should have a valid logo URL",
                         )?,
                     })
@@ -223,7 +223,7 @@ impl TryFrom<pull_request_query::PullRequestQueryRepositoryPullRequestAuthor> fo
                     name: user.name,
                     avatar_url: value
                         .avatar_url
-                        .parse::<Uri>()
+                        .parse::<Url>()
                         .context("Github actor should have a valid avatar URL")?,
                 })
             }
@@ -232,7 +232,7 @@ impl TryFrom<pull_request_query::PullRequestQueryRepositoryPullRequestAuthor> fo
                 login: value.login,
                 avatar_url: value
                     .avatar_url
-                    .parse::<Uri>()
+                    .parse::<Url>()
                     .context("Github actor should have a valid avatar URL")?,
             }),
         })
@@ -252,7 +252,7 @@ impl TryFrom<pull_request_query::PullRequestQueryRepositoryPullRequestMergedBy> 
                     name: user.name,
                     avatar_url: value
                         .avatar_url
-                        .parse::<Uri>()
+                        .parse::<Url>()
                         .context("Github actor should have a valid avatar URL")?,
                 })
             }
@@ -261,7 +261,7 @@ impl TryFrom<pull_request_query::PullRequestQueryRepositoryPullRequestMergedBy> 
                 login: value.login,
                 avatar_url: value
                     .avatar_url
-                    .parse::<Uri>()
+                    .parse::<Url>()
                     .context("Github actor should have a valid avatar URL")?,
             }),
         })
@@ -331,7 +331,7 @@ impl TryFrom<pull_request_query::PullRequestQueryRepositoryPullRequestAssignees>
                                 login: node.login,
                                 avatar_url: node
                                     .avatar_url
-                                    .parse::<Uri>()
+                                    .parse::<Url>()
                                     .context("Github actor should have a valid avatar URL")?,
                             }))
                         })
@@ -377,7 +377,7 @@ impl TryFrom<pull_request_query::PullRequestQueryRepositoryPullRequestReviewsNod
                 name: user.name,
                 avatar_url: value
                     .avatar_url
-                    .parse::<Uri>()
+                    .parse::<Url>()
                     .context("Github actor should have a valid avatar URL")?,
             }),
             // Simplification: any other users are considered as bot. May be revisited in the future
@@ -385,7 +385,7 @@ impl TryFrom<pull_request_query::PullRequestQueryRepositoryPullRequestReviewsNod
                 login: value.login,
                 avatar_url: value
                     .avatar_url
-                    .parse::<Uri>()
+                    .parse::<Url>()
                     .context("Github actor should have a valid avatar URL")?,
             }),
         })
@@ -457,7 +457,7 @@ impl TryFrom<pull_request_query::PullRequestQueryRepositoryPullRequestReviewRequ
             GithubReviewer::User(GithubUserSummary {
                 name: value.user_name,
                 login: value.user_login,
-                avatar_url: value.user_avatar_url.parse::<Uri>()
+                avatar_url: value.user_avatar_url.parse::<Url>()
                     .context("Github actor should have a valid avatar URL")?,
             })
         )
@@ -475,7 +475,7 @@ impl TryFrom<pull_request_query::PullRequestQueryRepositoryPullRequestReviewRequ
         Ok(
             GithubReviewer::Bot(GithubBotSummary {
                 login: value.bot_login,
-                avatar_url: value.bot_avatar_url.parse::<Uri>()
+                avatar_url: value.bot_avatar_url.parse::<Url>()
                     .context("Github actor should have a valid avatar URL")?,
             })
         )
@@ -494,7 +494,7 @@ impl TryFrom<pull_request_query::PullRequestQueryRepositoryPullRequestReviewRequ
             GithubReviewer::Team(GithubTeamSummary {
                 name: value.team_name,
                 avatar_url: value.team_avatar_url.map(|url| {
-                    url.parse::<Uri>()
+                    url.parse::<Url>()
                         .context("Github actor should have a valid avatar URL")
                 }).transpose()?,
             })
@@ -513,7 +513,7 @@ impl TryFrom<pull_request_query::PullRequestQueryRepositoryPullRequestReviewRequ
         Ok(
             GithubReviewer::Mannequin(GithubMannequinSummary {
                 login: value.mannequin_login,
-                avatar_url: value.mannequin_avatar_url.parse::<Uri>()
+                avatar_url: value.mannequin_avatar_url.parse::<Url>()
                     .context("Github actor should have a valid avatar URL")?,
             })
         )
@@ -584,14 +584,14 @@ impl TryFrom<pull_request_query::PullRequestQueryRepositoryPullRequestCommentsNo
                 name: user.name,
                 avatar_url: value
                     .avatar_url
-                    .parse::<Uri>()
+                    .parse::<Url>()
                     .context("Github actor should have a valid avatar URL")?,
             }),
             _ => GithubActor::Bot(GithubBotSummary {
                 login: value.login,
                 avatar_url: value
                     .avatar_url
-                    .parse::<Uri>()
+                    .parse::<Url>()
                     .context("Github actor should have a valid avatar URL")?,
             })
         })

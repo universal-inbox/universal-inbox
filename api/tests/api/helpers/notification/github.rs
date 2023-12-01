@@ -2,13 +2,13 @@ use std::{env, fs};
 
 use chrono::{TimeZone, Utc};
 use graphql_client::{GraphQLQuery, Response};
-use http::Uri;
 use httpmock::{
     Method::{GET, POST},
     Mock, MockServer,
 };
 use reqwest::Client;
 use rstest::*;
+use url::Url;
 use uuid::Uuid;
 
 use universal_inbox::{
@@ -19,11 +19,8 @@ use universal_inbox::{
     user::UserId,
 };
 
-use universal_inbox_api::integrations::github::{
-    self,
-    graphql::{
-        discussions_search_query, pull_request_query, DiscussionsSearchQuery, PullRequestQuery,
-    },
+use universal_inbox_api::integrations::github::graphql::{
+    discussions_search_query, pull_request_query, DiscussionsSearchQuery, PullRequestQuery,
 };
 
 use crate::helpers::{load_json_fixture_file, rest::create_resource};
@@ -42,13 +39,15 @@ pub async fn create_notification_from_github_notification(
             id: Uuid::new_v4().into(),
             title: github_notification.subject.title.clone(),
             source_id: github_notification.id.to_string(),
-            source_html_url: github::get_html_url_from_api_url(&github_notification.subject.url),
+            source_html_url: GithubNotification::get_html_url_from_api_url(
+                &github_notification.subject.url,
+            ),
             status: if github_notification.unread {
                 NotificationStatus::Unread
             } else {
                 NotificationStatus::Read
             },
-            metadata: NotificationMetadata::Github(github_notification.clone()),
+            metadata: NotificationMetadata::Github(Box::new(github_notification.clone())),
             updated_at: github_notification.updated_at,
             last_read_at: github_notification.last_read_at,
             snoozed_until: None,
@@ -154,7 +153,7 @@ pub fn assert_sync_notifications(
                     notification.source_html_url,
                     Some(
                         "https://github.com/octokit/octokit.rb/pulls/123"
-                            .parse::<Uri>()
+                            .parse::<Url>()
                             .unwrap()
                     )
                 );
@@ -168,7 +167,7 @@ pub fn assert_sync_notifications(
                 );
                 assert_eq!(
                     notification.metadata,
-                    NotificationMetadata::Github(sync_github_notifications[0].clone())
+                    NotificationMetadata::Github(Box::new(sync_github_notifications[0].clone()))
                 );
                 if let Some(ref details) = expected_notification_123_details {
                     assert_eq!(notification.details, Some(details.clone()));
@@ -182,7 +181,7 @@ pub fn assert_sync_notifications(
                     notification.source_html_url,
                     Some(
                         "https://github.com/octokit/octokit.rb/issues/456"
-                            .parse::<Uri>()
+                            .parse::<Url>()
                             .unwrap()
                     )
                 );
@@ -196,7 +195,7 @@ pub fn assert_sync_notifications(
                 );
                 assert_eq!(
                     notification.metadata,
-                    NotificationMetadata::Github(sync_github_notifications[1].clone())
+                    NotificationMetadata::Github(Box::new(sync_github_notifications[1].clone()))
                 );
                 assert!(notification.details.is_none());
             }

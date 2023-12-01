@@ -95,7 +95,9 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
             status: NotificationStatus::Unread,
             source_id: google_mail_thread_get_456.id.clone(),
             source_html_url: Some(google_mail_thread_get_456.get_html_url_from_metadata()),
-            metadata: NotificationMetadata::GoogleMail(google_mail_thread_get_456.clone()),
+            metadata: NotificationMetadata::GoogleMail(Box::new(
+                google_mail_thread_get_456.clone(),
+            )),
             updated_at: Utc.with_ymd_and_hms(2023, 9, 13, 20, 19, 32).unwrap(),
             last_read_at: None,
             snoozed_until: Some(Utc.with_ymd_and_hms(2064, 1, 1, 0, 0, 0).unwrap()),
@@ -196,7 +198,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     );
     assert_eq!(
         updated_notification.metadata,
-        NotificationMetadata::GoogleMail(google_mail_thread_get_456.clone())
+        NotificationMetadata::GoogleMail(Box::new(google_mail_thread_get_456.clone()))
     );
     // `snoozed_until` and `task_id` should not be reset
     assert_eq!(
@@ -285,7 +287,9 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
             status: NotificationStatus::Unsubscribed,
             source_id: google_mail_thread_get_456.id.clone(),
             source_html_url: Some(google_mail_thread_get_456.get_html_url_from_metadata()),
-            metadata: NotificationMetadata::GoogleMail(google_mail_thread_get_456.clone()),
+            metadata: NotificationMetadata::GoogleMail(Box::new(
+                google_mail_thread_get_456.clone(),
+            )),
             updated_at: Utc.with_ymd_and_hms(2023, 9, 13, 20, 19, 32).unwrap(),
             last_read_at: None,
             snoozed_until: None,
@@ -370,9 +374,9 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
         expected_notification_status_after_sync
     );
     match updated_notification.metadata {
-        NotificationMetadata::GoogleMail(GoogleMailThread { messages, .. }) => {
-            assert_eq!(messages.len(), 2);
-            assert_eq!(messages[0].label_ids, None);
+        NotificationMetadata::GoogleMail(thread) => {
+            assert_eq!(thread.messages.len(), 2);
+            assert_eq!(thread.messages[0].label_ids, None);
 
             let mut expected_labels = vec!["TEST_LABEL".to_string()];
             if has_new_unread_message {
@@ -382,7 +386,7 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
                 expected_labels.push(GOOGLE_MAIL_UNREAD_LABEL.to_string());
             }
 
-            assert_eq!(messages[1].label_ids, Some(expected_labels));
+            assert_eq!(thread.messages[1].label_ids, Some(expected_labels));
         }
         _ => unreachable!("Unexpected metadata {:?}", updated_notification.metadata),
     };

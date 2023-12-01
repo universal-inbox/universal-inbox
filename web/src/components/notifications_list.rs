@@ -266,13 +266,13 @@ fn NotificationDisplay<'a>(
         NotificationMetadata::Linear(linear_notification) => render! {
             LinearNotificationDisplay {
                 notif: notif,
-                linear_notification: linear_notification.clone()
+                linear_notification: *linear_notification.clone()
             }
         },
         NotificationMetadata::GoogleMail(google_mail_thread) => render! {
             GoogleMailThreadDisplay {
                 notif: notif,
-                google_mail_thread: google_mail_thread.clone()
+                google_mail_thread: *google_mail_thread.clone()
             }
         },
         NotificationMetadata::Todoist => {

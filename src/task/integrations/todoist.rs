@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
-use http::Uri;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
+use url::Url;
 
 use crate::task::{DueDate, TaskPriority};
 
@@ -128,9 +128,9 @@ pub struct TodoistProject {
     pub view_style: String,
 }
 
-pub fn get_task_html_url(item_id: &str) -> Option<Uri> {
+pub fn get_task_html_url(item_id: &str) -> Option<Url> {
     format!("https://todoist.com/showTask?id={item_id}")
-        .parse::<Uri>()
+        .parse::<Url>()
         .ok()
 }
 

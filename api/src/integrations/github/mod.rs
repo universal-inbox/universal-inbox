@@ -1,12 +1,11 @@
 use std::sync::Arc;
 
-use actix_http::uri::Authority;
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use futures::stream::{self, TryStreamExt};
 use graphql_client::GraphQLQuery;
-use http::{HeaderMap, HeaderValue, Uri};
+use http::{HeaderMap, HeaderValue};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_tracing::{SpanBackendWithUrl, TracingMiddleware};
 use sqlx::{Postgres, Transaction};
@@ -15,7 +14,7 @@ use tokio::sync::RwLock;
 use universal_inbox::{
     integration_connection::{IntegrationProvider, IntegrationProviderKind},
     notification::{
-        integrations::github::{GithubNotification, GithubUri},
+        integrations::github::{GithubNotification, GithubUrl},
         Notification, NotificationDetails, NotificationMetadata, NotificationSource,
         NotificationSourceKind,
     },
@@ -264,20 +263,6 @@ fn build_github_client(
         .build())
 }
 
-pub fn get_html_url_from_api_url(api_url: &Option<Uri>) -> Option<Uri> {
-    api_url.as_ref().and_then(|uri| {
-        if uri.host() == Some("api.github.com") && uri.path().starts_with("/repos") {
-            let mut uri_parts = uri.clone().into_parts();
-            uri_parts.authority = Some(Authority::from_static("github.com"));
-            uri_parts.path_and_query = uri_parts
-                .path_and_query
-                .and_then(|pq| pq.as_str().trim_start_matches("/repos").parse().ok());
-            return Uri::from_parts(uri_parts).ok();
-        }
-        None
-    })
-}
-
 #[async_trait]
 impl NotificationSourceService for GithubService {
     #[tracing::instrument(level = "debug", skip(self, executor), err)]
@@ -394,8 +379,8 @@ impl NotificationSourceService for GithubService {
         };
 
         let notification_details = if let Some(ref resource_url) = github_notification.subject.url {
-            match GithubUri::try_from_api_uri(resource_url) {
-                Ok(GithubUri::PullRequest {
+            match GithubUrl::try_from_api_url(resource_url) {
+                Ok(GithubUrl::PullRequest {
                     owner,
                     repository,
                     number,
@@ -437,51 +422,5 @@ impl NotificationSource for GithubService {
 
     fn is_supporting_snoozed_notifications(&self) -> bool {
         false
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use rstest::*;
-
-    mod get_html_url_from_api_url {
-        use super::*;
-
-        #[rstest]
-        #[case(
-            "https://api.github.com/repos/octokit/octokit.rb/issues/123",
-            "https://github.com/octokit/octokit.rb/issues/123"
-        )]
-        #[case(
-            "https://api.github.com/repos/octokit/octokit.rb/pulls/123",
-            "https://github.com/octokit/octokit.rb/pulls/123"
-        )]
-        fn test_get_html_url_from_api_url_with_valid_api_url(
-            #[case] api_url: &str,
-            #[case] expected_html_url: &str,
-        ) {
-            assert_eq!(
-                get_html_url_from_api_url(&Some(api_url.parse::<Uri>().unwrap())),
-                Some(expected_html_url.parse::<Uri>().unwrap())
-            );
-        }
-
-        #[rstest]
-        fn test_get_html_url_from_api_url_with_invalid_github_api_url(
-            #[values(
-                None,
-                Some("https://api.github.com/octokit/octokit.rb/issues/123"),
-                Some("https://github.com/repos/octokit/octokit.rb/issues/123"),
-                Some("https://github.com/octokit/octokit.rb/issues/123"),
-                Some("https://google.com")
-            )]
-            api_url: Option<&str>,
-        ) {
-            assert_eq!(
-                get_html_url_from_api_url(&api_url.map(|url| url.parse::<Uri>().unwrap())),
-                None
-            );
-        }
     }
 }

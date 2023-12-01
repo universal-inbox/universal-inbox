@@ -137,16 +137,16 @@ fn NotificationDetailsPreview<'a>(cx: Scope, notification: &'a NotificationWithT
         NotificationMetadata::Github(github_notification) => render! {
             GithubNotificationDefaultPreview {
                 notification: notification,
-                github_notification: github_notification.clone(),
+                github_notification: *github_notification.clone(),
             }
         },
         NotificationMetadata::Linear(linear_notification) => render! {
-            LinearNotificationPreview { linear_notification: linear_notification.clone() }
+            LinearNotificationPreview { linear_notification: *linear_notification.clone() }
         },
         NotificationMetadata::GoogleMail(google_mail_thread) => render! {
             GoogleMailThreadPreview {
                 notification: notification,
-                google_mail_thread: google_mail_thread.clone()
+                google_mail_thread: *google_mail_thread.clone()
             }
         },
         NotificationMetadata::Todoist => None,

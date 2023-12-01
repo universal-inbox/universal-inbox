@@ -2,7 +2,7 @@
 
 use dioxus::prelude::*;
 use dioxus_free_icons::{icons::bs_icons::BsPersonCircle, Icon};
-use http::Uri;
+use url::Url;
 
 use crate::utils::compute_text_color_from_background_color;
 
@@ -93,7 +93,7 @@ fn get_initials_from_name(name: &str) -> String {
 pub fn UserWithAvatar(
     cx: Scope,
     user_name: Option<String>,
-    avatar_url: Option<Option<Uri>>,
+    avatar_url: Option<Option<Url>>,
     initials_from: Option<String>,
 ) -> Element {
     render! {

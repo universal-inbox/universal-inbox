@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Context};
-use http::Uri;
+use url::Url;
 
 use universal_inbox::notification::{
     integrations::github::{
@@ -53,14 +53,14 @@ impl TryFrom<discussions_search_query::DiscussionsSearchQuerySearchNodesOnDiscus
                 name: user.name,
                 avatar_url: value
                     .avatar_url
-                    .parse::<Uri>()
+                    .parse::<Url>()
                     .context("Github actor should have a valid avatar URL")?,
             }),
             _ => GithubActor::Bot(GithubBotSummary {
                 login: value.login,
                 avatar_url: value
                     .avatar_url
-                    .parse::<Uri>()
+                    .parse::<Url>()
                     .context("Github actor should have a valid avatar URL")?,
             })
         })
@@ -83,14 +83,14 @@ impl TryFrom<discussions_search_query::DiscussionsSearchQuerySearchNodesOnDiscus
                 name: user.name,
                 avatar_url: value
                     .avatar_url
-                    .parse::<Uri>()
+                    .parse::<Url>()
                     .context("Github actor should have a valid avatar URL")?,
             }),
             _ => GithubActor::Bot(GithubBotSummary {
                 login: value.login,
                 avatar_url: value
                     .avatar_url
-                    .parse::<Uri>()
+                    .parse::<Url>()
                     .context("Github actor should have a valid avatar URL")?,
             })
         })
@@ -113,14 +113,14 @@ impl TryFrom<discussions_search_query::DiscussionsSearchQuerySearchNodesOnDiscus
                 name: user.name,
                 avatar_url: value
                     .avatar_url
-                    .parse::<Uri>()
+                    .parse::<Url>()
                     .context("Github actor should have a valid avatar URL")?,
             }),
             _ => GithubActor::Bot(GithubBotSummary {
                 login: value.login,
                 avatar_url: value
                     .avatar_url
-                    .parse::<Uri>()
+                    .parse::<Url>()
                     .context("Github actor should have a valid avatar URL")?,
             })
         })

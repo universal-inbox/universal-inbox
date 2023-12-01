@@ -5,11 +5,11 @@ use std::{
 
 use chrono::{DateTime, NaiveDate, NaiveDateTime, ParseError, Utc};
 use clap::ValueEnum;
-use http::Uri;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use serde_with::{serde_as, DisplayFromStr};
+use url::Url;
 use uuid::Uuid;
 
 use crate::{
@@ -36,7 +36,7 @@ pub struct Task {
     pub due_at: Option<DueDate>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde_as(as = "Option<DisplayFromStr>")]
-    pub source_html_url: Option<Uri>,
+    pub source_html_url: Option<Url>,
     pub tags: Vec<String>,
     pub parent_id: Option<TaskId>,
     pub project: String,
@@ -112,24 +112,24 @@ impl Task {
         }
     }
 
-    pub fn get_html_project_url(&self) -> Uri {
+    pub fn get_html_project_url(&self) -> Url {
         match &self.metadata {
             TaskMetadata::Todoist(todoist_task) => format!(
                 "{DEFAULT_TODOIST_HTML_URL}project/{}",
                 todoist_task.project_id
             )
-            .parse::<Uri>()
+            .parse::<Url>()
             .unwrap(),
         }
     }
 }
 
 impl HasHtmlUrl for Task {
-    fn get_html_url(&self) -> Uri {
+    fn get_html_url(&self) -> Url {
         self.source_html_url
             .clone()
             .unwrap_or_else(|| match self.metadata {
-                TaskMetadata::Todoist(_) => DEFAULT_TODOIST_HTML_URL.parse::<Uri>().unwrap(),
+                TaskMetadata::Todoist(_) => DEFAULT_TODOIST_HTML_URL.parse::<Url>().unwrap(),
             })
     }
 }
