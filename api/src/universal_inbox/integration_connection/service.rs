@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use chrono::{DateTime, Utc};
 use sqlx::{Postgres, Transaction};
 
@@ -224,9 +224,10 @@ impl IntegrationConnectionService {
                 )
                 .await?;
 
-            return Err(UniversalInboxError::UnknownNangoConnectionError(
-                integration_connection.connection_id,
-            ));
+            return Err(UniversalInboxError::Recoverable(anyhow!(
+                "Unkown Nango connection: {}",
+                integration_connection.connection_id
+            )));
         }
 
         Ok(None)
