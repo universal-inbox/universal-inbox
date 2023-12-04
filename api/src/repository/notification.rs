@@ -620,6 +620,8 @@ impl NotificationRepository for Repository {
             .separated(" AND ")
             .push(" notification.id = ")
             .push_bind_unseparated(notification_id.0)
+            .push(" n.id = ")
+            .push_bind_unseparated(notification_id.0)
             .push(" notification.user_id = ")
             .push_bind_unseparated(for_user_id.0);
 
@@ -729,6 +731,8 @@ impl NotificationRepository for Repository {
             .separated(" AND ");
         separated
             .push(" notification.task_id = ")
+            .push_bind_unseparated(task_id.0)
+            .push(" n.task_id = ")
             .push_bind_unseparated(task_id.0);
 
         if let Some(kind) = notification_kind {
