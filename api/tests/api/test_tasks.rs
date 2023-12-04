@@ -11,15 +11,14 @@ use universal_inbox::{
     },
     notification::{NotificationStatus, NotificationWithTask},
     task::{
-        integrations::todoist::TodoistItem, service::TaskPatch, ProjectSummary, Task, TaskMetadata,
-        TaskPriority, TaskStatus,
+        integrations::todoist::TodoistItem, service::TaskPatch, ProjectSummary, Task,
+        TaskCreationResult, TaskMetadata, TaskPriority, TaskStatus,
     },
 };
 
 use universal_inbox_api::{
     configuration::Settings,
     integrations::{oauth2::NangoConnection, todoist::TodoistSyncResponse},
-    universal_inbox::task::TaskCreationResult,
 };
 
 use crate::helpers::{

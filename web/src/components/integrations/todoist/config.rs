@@ -1,10 +1,16 @@
 #![allow(non_snake_case)]
 use dioxus::prelude::*;
 
-use universal_inbox::integration_connection::integrations::todoist::TodoistConfig;
+use universal_inbox::integration_connection::{
+    config::IntegrationConnectionConfig, integrations::todoist::TodoistConfig,
+};
 
 #[inline_props]
-pub fn TodoistProviderConfiguration(cx: Scope, config: TodoistConfig) -> Element {
+pub fn TodoistProviderConfiguration<'a>(
+    cx: Scope,
+    config: TodoistConfig,
+    on_config_change: EventHandler<'a, IntegrationConnectionConfig>,
+) -> Element {
     render! {
         div {
             class: "flex flex-col",
@@ -19,8 +25,12 @@ pub fn TodoistProviderConfiguration(cx: Scope, config: TodoistConfig) -> Element
                     }
                     input {
                         r#type: "checkbox",
-                        class: "toggle toggle-primary",
-                        disabled: true,
+                        class: "toggle toggle-ghost",
+                        oninput: move |event| {
+                            on_config_change.call(IntegrationConnectionConfig::Todoist(TodoistConfig {
+                                sync_tasks_enabled: event.value == "true",
+                            }))
+                        },
                         checked: config.sync_tasks_enabled
                     }
                 }
@@ -36,7 +46,7 @@ pub fn TodoistProviderConfiguration(cx: Scope, config: TodoistConfig) -> Element
                     }
                     input {
                         r#type: "checkbox",
-                        class: "toggle toggle-primary",
+                        class: "toggle toggle-ghost",
                         disabled: true,
                         checked: true
                     }

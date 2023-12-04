@@ -106,6 +106,7 @@ pub async fn create_integration_connection(
     app: &AuthenticatedApp,
     config: IntegrationConnectionConfig,
     status: IntegrationConnectionStatus,
+    context: Option<IntegrationConnectionContext>,
 ) -> Box<IntegrationConnection> {
     let mut transaction = app.repository.begin().await.unwrap();
     let integration_connection = app
@@ -117,7 +118,7 @@ pub async fn create_integration_connection(
         .await
         .unwrap();
 
-    let update_result = app
+    let _update_result = app
         .repository
         .update_integration_connection_status(
             &mut transaction,
@@ -126,6 +127,12 @@ pub async fn create_integration_connection(
             None,
             app.user.id,
         )
+        .await
+        .unwrap();
+
+    let update_result = app
+        .repository
+        .update_integration_connection_context(&mut transaction, integration_connection.id, context)
         .await
         .unwrap();
     transaction.commit().await.unwrap();
@@ -180,7 +187,11 @@ pub async fn update_integration_connection_context(
     let mut transaction = app.repository.begin().await.unwrap();
     let result = app
         .repository
-        .update_integration_connection_context(&mut transaction, integration_connection_id, context)
+        .update_integration_connection_context(
+            &mut transaction,
+            integration_connection_id,
+            Some(context),
+        )
         .await
         .unwrap();
     transaction.commit().await.unwrap();
@@ -197,7 +208,8 @@ pub async fn create_and_mock_integration_connection(
 ) -> Box<IntegrationConnection> {
     let provider_kind = config.kind();
     let integration_connection =
-        create_integration_connection(app, config, IntegrationConnectionStatus::Validated).await;
+        create_integration_connection(app, config, IntegrationConnectionStatus::Validated, None)
+            .await;
     let config_key = settings
         .integrations
         .oauth2

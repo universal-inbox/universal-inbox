@@ -18,13 +18,12 @@ use universal_inbox::{
     notification::{Notification, NotificationStatus},
     task::{
         integrations::todoist::{self, TodoistItem},
-        Task, TaskMetadata, TaskPriority, TaskSourceKind, TaskStatus,
+        Task, TaskCreationResult, TaskMetadata, TaskPriority, TaskSourceKind, TaskStatus,
     },
 };
 use universal_inbox_api::{
     configuration::Settings,
     integrations::{oauth2::NangoConnection, todoist::TodoistSyncResponse},
-    universal_inbox::task::TaskCreationResult,
 };
 
 use crate::helpers::{
@@ -587,6 +586,7 @@ async fn test_sync_tasks_with_no_validated_integration_connections(
         &app,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         IntegrationConnectionStatus::Created,
+        None,
     )
     .await;
     let todoist_mock = app.todoist_mock_server.mock(|when, then| {

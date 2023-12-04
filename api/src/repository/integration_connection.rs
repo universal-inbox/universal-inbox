@@ -68,7 +68,7 @@ pub trait IntegrationConnectionRepository {
         &self,
         executor: &mut Transaction<'a, Postgres>,
         integration_connection_id: IntegrationConnectionId,
-        context: IntegrationConnectionContext,
+        context: Option<IntegrationConnectionContext>,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError>;
 
     async fn does_integration_connection_exist<'a>(
@@ -356,11 +356,11 @@ impl IntegrationConnectionRepository for Repository {
         &self,
         executor: &mut Transaction<'a, Postgres>,
         integration_connection_id: IntegrationConnectionId,
-        context: IntegrationConnectionContext,
+        context: Option<IntegrationConnectionContext>,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
         let mut query_builder = QueryBuilder::new("UPDATE integration_connection SET context = ");
         query_builder
-            .push_bind(Json(context))
+            .push_bind(context.map(Json))
             .push(" FROM integration_connection_config ")
             .push(" WHERE ")
             .separated(" AND ")

@@ -320,6 +320,12 @@ pub trait TaskSource: IntegrationProviderSource {
     fn get_task_source_kind(&self) -> TaskSourceKind;
 }
 
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
+pub struct TaskCreationResult {
+    pub task: Task,
+    pub notification: Option<Notification>,
+}
+
 #[cfg(test)]
 mod tests {
 
