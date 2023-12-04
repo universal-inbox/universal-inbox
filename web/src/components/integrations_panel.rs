@@ -408,7 +408,10 @@ pub fn IntegrationConnectionProviderConfiguration<'a>(
             }
         },
         IntegrationProvider::Github { config } => render! {
-            GithubProviderConfiguration { config: config.clone() }
+            GithubProviderConfiguration {
+                on_config_change: |c| on_config_change.call(c),
+                config: config.clone()
+            }
         },
         IntegrationProvider::Todoist { config, .. } => render! {
             TodoistProviderConfiguration { config: config.clone() }
