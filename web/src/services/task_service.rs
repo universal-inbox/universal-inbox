@@ -6,8 +6,8 @@ use reqwest::Method;
 use url::Url;
 
 use universal_inbox::task::{
-    service::SyncTasksParameters, service::TaskPatch, Task, TaskId, TaskPlanning, TaskStatus,
-    TaskSyncSourceKind,
+    service::SyncTasksParameters, service::TaskPatch, Task, TaskCreationResult, TaskId,
+    TaskPlanning, TaskStatus, TaskSyncSourceKind,
 };
 
 use crate::{
@@ -84,7 +84,7 @@ pub async fn task_service(
                 .await;
             }
             Some(TaskCommand::Sync(source)) => {
-                let _result: Result<Vec<Task>> = call_api_and_notify(
+                let _result: Result<Vec<TaskCreationResult>> = call_api_and_notify(
                     Method::POST,
                     &api_base_url,
                     "tasks/sync",

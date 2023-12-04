@@ -16,8 +16,8 @@ use universal_inbox::{
         NotificationStatus,
     },
     task::{
-        service::TaskPatch, ProjectSummary, Task, TaskCreation, TaskId, TaskMetadata, TaskStatus,
-        TaskSummary, TaskSyncSourceKind,
+        service::TaskPatch, ProjectSummary, Task, TaskCreation, TaskCreationResult, TaskId,
+        TaskMetadata, TaskStatus, TaskSummary, TaskSyncSourceKind,
     },
     user::UserId,
     HasHtmlUrl,
@@ -28,8 +28,8 @@ use crate::{
     repository::{task::TaskRepository, Repository},
     universal_inbox::{
         integration_connection::service::IntegrationConnectionService,
-        notification::service::NotificationService, task::TaskCreationResult,
-        user::service::UserService, UniversalInboxError, UpdateStatus,
+        notification::service::NotificationService, user::service::UserService,
+        UniversalInboxError, UpdateStatus,
     },
 };
 

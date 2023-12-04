@@ -116,6 +116,9 @@ impl IntegrationConnectionService {
                 .delete_notification_details(executor, kind)
                 .await?;
             self.repository.delete_notifications(executor, kind).await?;
+            self.repository
+                .update_integration_connection_context(executor, integration_connection_id, None)
+                .await?;
         }
 
         Ok(updated_integration_connection_config)
@@ -306,7 +309,11 @@ impl IntegrationConnectionService {
         context: IntegrationConnectionContext,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
         self.repository
-            .update_integration_connection_context(executor, integration_connection_id, context)
+            .update_integration_connection_context(
+                executor,
+                integration_connection_id,
+                Some(context),
+            )
             .await
     }
 }

@@ -6,13 +6,14 @@ use uuid::Uuid;
 
 use universal_inbox::{
     integration_connection::{
-        config::IntegrationConnectionConfig, integrations::github::GithubConfig,
-        integrations::google_mail::GoogleMailConfig, provider::IntegrationProvider,
-        provider::IntegrationProviderKind, IntegrationConnection, IntegrationConnectionCreation,
-        IntegrationConnectionStatus,
+        config::IntegrationConnectionConfig,
+        integrations::google_mail::GoogleMailConfig,
+        integrations::{github::GithubConfig, google_mail::GoogleMailContext},
+        provider::{IntegrationConnectionContext, IntegrationProvider, IntegrationProviderKind},
+        IntegrationConnection, IntegrationConnectionCreation, IntegrationConnectionStatus,
     },
     notification::{
-        integrations::google_mail::{GoogleMailLabel, GoogleMailThread},
+        integrations::google_mail::{EmailAddress, GoogleMailLabel, GoogleMailThread},
         Notification,
     },
 };
@@ -331,6 +332,7 @@ mod disconnect_integration_connections {
             &app,
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             IntegrationConnectionStatus::Validated,
+            None,
         )
         .await;
         let github_config_key = settings
@@ -374,6 +376,7 @@ mod disconnect_integration_connections {
             &app,
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             IntegrationConnectionStatus::Validated,
+            None,
         )
         .await;
 
@@ -443,6 +446,12 @@ mod update_integration_connection_config {
             &app,
             IntegrationConnectionConfig::GoogleMail(google_mail_config),
             IntegrationConnectionStatus::Validated,
+            Some(IntegrationConnectionContext::GoogleMail(
+                GoogleMailContext {
+                    user_email_address: EmailAddress("test@example.com".to_string()),
+                    labels: vec![],
+                },
+            )),
         )
         .await;
         let integration_connection2 = create_integration_connection(
@@ -451,6 +460,7 @@ mod update_integration_connection_config {
                 sync_notifications_enabled: true,
             }),
             IntegrationConnectionStatus::Validated,
+            None,
         )
         .await;
 
@@ -485,7 +495,7 @@ mod update_integration_connection_config {
             }))
         );
 
-        // Verify the configuration has been updated
+        // Verify the configuration has been updated and context has been cleared
         let updated_integration_connection: Option<IntegrationConnection> =
             get_integration_connection(&app, integration_connection1.id).await;
 
@@ -536,6 +546,7 @@ mod update_integration_connection_config {
                 },
             }),
             IntegrationConnectionStatus::Validated,
+            None,
         )
         .await;
         let (client, _user) =

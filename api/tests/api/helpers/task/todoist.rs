@@ -16,19 +16,16 @@ use universal_inbox::{
     notification::{NotificationMetadata, NotificationStatus},
     task::{
         integrations::todoist::{self, TodoistItem, TodoistItemDue, TodoistItemPriority},
-        DueDate, Task, TaskMetadata, TaskStatus,
+        DueDate, Task, TaskCreationResult, TaskMetadata, TaskStatus,
     },
     user::UserId,
 };
 
-use universal_inbox_api::{
-    integrations::todoist::{
-        TodoistCommandStatus, TodoistItemInfoResponse, TodoistSyncCommandItemAddArgs,
-        TodoistSyncCommandItemCompleteArgs, TodoistSyncCommandItemDeleteArgs,
-        TodoistSyncCommandItemMoveArgs, TodoistSyncCommandItemUpdateArgs,
-        TodoistSyncCommandProjectAddArgs, TodoistSyncResponse, TodoistSyncStatusResponse,
-    },
-    universal_inbox::task::TaskCreationResult,
+use universal_inbox_api::integrations::todoist::{
+    TodoistCommandStatus, TodoistItemInfoResponse, TodoistSyncCommandItemAddArgs,
+    TodoistSyncCommandItemCompleteArgs, TodoistSyncCommandItemDeleteArgs,
+    TodoistSyncCommandItemMoveArgs, TodoistSyncCommandItemUpdateArgs,
+    TodoistSyncCommandProjectAddArgs, TodoistSyncResponse, TodoistSyncStatusResponse,
 };
 
 use crate::helpers::{load_json_fixture_file, rest::create_resource};
