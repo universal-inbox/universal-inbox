@@ -70,6 +70,20 @@ pub trait IntegrationConnectionRepository {
         integration_connection_id: IntegrationConnectionId,
         context: IntegrationConnectionContext,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError>;
+
+    async fn does_integration_connection_exist<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        id: IntegrationConnectionId,
+    ) -> Result<bool, UniversalInboxError>;
+
+    async fn update_integration_connection_config<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        integration_connection_id: IntegrationConnectionId,
+        config: IntegrationConnectionConfig,
+        for_user_id: UserId,
+    ) -> Result<UpdateStatus<Box<IntegrationConnectionConfig>>, UniversalInboxError>;
 }
 
 #[async_trait]
@@ -195,10 +209,10 @@ impl IntegrationConnectionRepository for Repository {
             .push_bind_unseparated(failure_message.clone());
 
         query_builder
-            .push(" FROM integration_connection AS ic ")
-            .push(" INNER JOIN integration_connection_config ON integration_connection_config.integration_connection_id = ic.id ")
+            .push(" FROM integration_connection_config ")
             .push(" WHERE ")
             .separated(" AND ")
+            .push(" integration_connection_config.integration_connection_id = integration_connection.id ")
             .push(" integration_connection.id = ")
             .push_bind_unseparated(integration_connection_id.0)
             .push(" integration_connection.user_id = ")
@@ -284,10 +298,10 @@ impl IntegrationConnectionRepository for Repository {
             .push_bind_unseparated(failure_message.clone());
 
         query_builder
-            .push(" FROM integration_connection AS ic ")
-            .push(" INNER JOIN integration_connection_config ON integration_connection_config.integration_connection_id = ic.id ")
+            .push(" FROM integration_connection_config ")
             .push(" WHERE ")
             .separated(" AND ")
+            .push(" integration_connection_config.integration_connection_id = integration_connection.id ")
             .push(" integration_connection.user_id = ")
             .push_bind_unseparated(user_id.0)
             .push(" integration_connection.provider_kind::TEXT = ")
@@ -347,13 +361,15 @@ impl IntegrationConnectionRepository for Repository {
         let mut query_builder = QueryBuilder::new("UPDATE integration_connection SET context = ");
         query_builder
             .push_bind(Json(context))
-            .push(" FROM integration_connection AS ic ")
-            .push(" INNER JOIN integration_connection_config ON integration_connection_config.integration_connection_id = ic.id ")
+            .push(" FROM integration_connection_config ")
             .push(" WHERE ")
+            .separated(" AND ")
+            .push(" integration_connection_config.integration_connection_id = integration_connection.id ")
             .push(" integration_connection.id = ")
-            .push_bind(integration_connection_id.0)
-            .push(
-                r#"
+            .push_bind_unseparated(integration_connection_id.0);
+
+        query_builder.push(
+            r#"
                 RETURNING
                   integration_connection.id,
                   integration_connection.user_id,
@@ -368,7 +384,7 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.context,
                   true as "is_updated"
                "#,
-            );
+        );
 
         let row: Option<UpdatedIntegrationConnectionRow> = query_builder
             .build_query_as::<UpdatedIntegrationConnectionRow>()
@@ -527,6 +543,86 @@ impl IntegrationConnectionRepository for Repository {
         })?;
 
         Ok(integration_connection)
+    }
+
+    #[tracing::instrument(level = "debug", skip(self, executor))]
+    async fn does_integration_connection_exist<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        id: IntegrationConnectionId,
+    ) -> Result<bool, UniversalInboxError> {
+        let count: Option<i64> = sqlx::query_scalar!(
+            r#"SELECT count(*) FROM integration_connection WHERE id = $1"#,
+            id.0
+        )
+        .fetch_one(&mut **executor)
+        .await
+        .with_context(|| format!("Failed to check if integration connection {id} exists",))?;
+
+        if let Some(1) = count {
+            return Ok(true);
+        }
+        return Ok(false);
+    }
+
+    #[tracing::instrument(level = "debug", skip(self, executor))]
+    async fn update_integration_connection_config<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        integration_connection_id: IntegrationConnectionId,
+        config: IntegrationConnectionConfig,
+        for_user_id: UserId,
+    ) -> Result<UpdateStatus<Box<IntegrationConnectionConfig>>, UniversalInboxError> {
+        let mut query_builder =
+            QueryBuilder::new("UPDATE integration_connection_config SET config = ");
+        query_builder
+            .push_bind(Json(config.clone()))
+            .push(" FROM integration_connection ")
+            .push(" WHERE ")
+            .separated(" AND ")
+            .push(" integration_connection.id = integration_connection_config.integration_connection_id ")
+            .push(" integration_connection.id = ")
+            .push_bind_unseparated(integration_connection_id.0)
+            .push(" integration_connection.user_id = ")
+            .push_bind_unseparated(for_user_id.0);
+
+        query_builder.push(
+            r#"
+                RETURNING
+                  integration_connection.id,
+                  integration_connection.user_id,
+                  integration_connection.connection_id,
+                  integration_connection.status,
+                  integration_connection.failure_message,
+                  integration_connection.created_at,
+                  integration_connection.updated_at,
+                  integration_connection.last_sync_started_at,
+                  integration_connection.last_sync_failure_message,
+                  integration_connection_config.config as config,
+                  integration_connection.context,
+                  true as "is_updated"
+               "#,
+        );
+
+        let row: Option<UpdatedIntegrationConnectionRow> = query_builder
+            .build_query_as::<UpdatedIntegrationConnectionRow>()
+            .fetch_optional(&mut **executor)
+            .await
+            .with_context(|| {
+                format!("Failed to update integration connection {integration_connection_id} config from storage")
+            })?;
+
+        if let Some(updated_integration_connection_row) = row {
+            Ok(UpdateStatus {
+                updated: updated_integration_connection_row.is_updated,
+                result: Some(Box::new(config)),
+            })
+        } else {
+            Ok(UpdateStatus {
+                updated: false,
+                result: None,
+            })
+        }
     }
 }
 

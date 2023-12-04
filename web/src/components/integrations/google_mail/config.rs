@@ -2,15 +2,17 @@
 
 use dioxus::prelude::*;
 
-use universal_inbox::integration_connection::integrations::google_mail::{
-    GoogleMailConfig, GoogleMailContext,
+use universal_inbox::integration_connection::{
+    config::IntegrationConnectionConfig,
+    integrations::google_mail::{GoogleMailConfig, GoogleMailContext},
 };
 
 #[inline_props]
-pub fn GoogleMailProviderConfiguration(
+pub fn GoogleMailProviderConfiguration<'a>(
     cx: Scope,
     config: GoogleMailConfig,
     context: Option<Option<GoogleMailContext>>,
+    on_config_change: EventHandler<'a, IntegrationConnectionConfig>,
 ) -> Element {
     render! {
         div {
@@ -27,7 +29,12 @@ pub fn GoogleMailProviderConfiguration(
                     input {
                         r#type: "checkbox",
                         class: "toggle toggle-primary",
-                        disabled: true,
+                        oninput: move |event| {
+                            on_config_change.call(IntegrationConnectionConfig::GoogleMail(GoogleMailConfig {
+                                sync_notifications_enabled: event.value == "true",
+                                ..config.clone()
+                            }))
+                        },
                         checked: config.sync_notifications_enabled
                     }
                 }
@@ -43,13 +50,27 @@ pub fn GoogleMailProviderConfiguration(
                     }
                     select {
                         class:"select select-sm select-ghost text-xs",
-                        disabled: true,
+                        oninput: move |event| {
+                            if let Some(Some(context)) = context {
+                                let selected_label = context.labels.iter().find(|label| label.id == event.value);
+                                if let Some(selected_label) = selected_label {
+                                    on_config_change.call(IntegrationConnectionConfig::GoogleMail(GoogleMailConfig {
+                                        synced_label: selected_label.clone(),
+                                        ..config.clone()
+                                    }));
+                                }
+                            }
+                        },
 
                         if let Some(Some(context)) = context {
                             render! {
                                 for label in &context.labels {
                                     render! {
-                                        option { selected: *label.id == config.synced_label.id, "{label.name}" }
+                                        option {
+                                            selected: *label.id == config.synced_label.id,
+                                            value: "{label.id}",
+                                            "{label.name}"
+                                        }
                                     }
                                 }
                             }

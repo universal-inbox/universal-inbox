@@ -4,10 +4,14 @@ use rstest::*;
 use serde_json::json;
 use uuid::Uuid;
 
-use universal_inbox::integration_connection::{
-    config::IntegrationConnectionConfig, integrations::github::GithubConfig,
-    provider::IntegrationProviderKind, IntegrationConnection, IntegrationConnectionCreation,
-    IntegrationConnectionStatus,
+use universal_inbox::{
+    integration_connection::{
+        config::IntegrationConnectionConfig, integrations::github::GithubConfig,
+        integrations::google_mail::GoogleMailConfig, provider::IntegrationProvider,
+        provider::IntegrationProviderKind, IntegrationConnection, IntegrationConnectionCreation,
+        IntegrationConnectionStatus,
+    },
+    notification::integrations::google_mail::GoogleMailLabel,
 };
 
 use universal_inbox_api::{
@@ -18,9 +22,10 @@ use universal_inbox_api::{
 use crate::helpers::{
     auth::{authenticate_user, authenticated_app, AuthenticatedApp},
     integration_connection::{
-        create_integration_connection, list_integration_connections, mock_nango_connection_service,
-        mock_nango_delete_connection_service, nango_github_connection,
-        verify_integration_connection, verify_integration_connection_response,
+        create_integration_connection, get_integration_connection, list_integration_connections,
+        mock_nango_connection_service, mock_nango_delete_connection_service,
+        nango_github_connection, verify_integration_connection,
+        verify_integration_connection_response,
     },
     rest::{create_resource, delete_resource},
     settings, tested_app, TestedApp,
@@ -395,5 +400,157 @@ mod disconnect_integration_connections {
         );
         assert_eq!(disconnected_connection.failure_message, None);
         nango_mock.assert();
+    }
+}
+
+mod update_integration_connection_config {
+    use super::*;
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_update_integration_connection_config(
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let integration_connection1 = create_integration_connection(
+            &app,
+            IntegrationConnectionConfig::GoogleMail(GoogleMailConfig {
+                sync_notifications_enabled: true,
+                synced_label: GoogleMailLabel {
+                    id: "Label_1".to_string(),
+                    name: "Label 1".to_string(),
+                },
+            }),
+            IntegrationConnectionStatus::Validated,
+        )
+        .await;
+        let integration_connection2 = create_integration_connection(
+            &app,
+            IntegrationConnectionConfig::Github(GithubConfig {
+                sync_notifications_enabled: true,
+            }),
+            IntegrationConnectionStatus::Validated,
+        )
+        .await;
+
+        let config: Box<IntegrationConnectionConfig> = app
+            .client
+            .put(&format!(
+                "{}integration-connections/{}/config",
+                app.api_address, integration_connection1.id
+            ))
+            .json(&IntegrationConnectionConfig::GoogleMail(GoogleMailConfig {
+                sync_notifications_enabled: false,
+                synced_label: GoogleMailLabel {
+                    id: "Label_2".to_string(),
+                    name: "Label 2".to_string(),
+                },
+            }))
+            .send()
+            .await
+            .expect("Failed to execute request")
+            .json()
+            .await
+            .expect("Failed to parse JSON result");
+
+        assert_eq!(
+            config,
+            Box::new(IntegrationConnectionConfig::GoogleMail(GoogleMailConfig {
+                sync_notifications_enabled: false,
+                synced_label: GoogleMailLabel {
+                    id: "Label_2".to_string(),
+                    name: "Label 2".to_string(),
+                },
+            }))
+        );
+
+        let updated_integration_connection: Option<IntegrationConnection> =
+            get_integration_connection(&app, integration_connection1.id).await;
+
+        assert_eq!(
+            updated_integration_connection,
+            Some(IntegrationConnection {
+                provider: IntegrationProvider::GoogleMail {
+                    config: GoogleMailConfig {
+                        sync_notifications_enabled: false,
+                        synced_label: GoogleMailLabel {
+                            id: "Label_2".to_string(),
+                            name: "Label 2".to_string(),
+                        }
+                    },
+                    context: None
+                },
+                ..*integration_connection1
+            })
+        );
+
+        let other_integration_connection: Option<IntegrationConnection> =
+            get_integration_connection(&app, integration_connection2.id).await;
+
+        assert_eq!(other_integration_connection, Some(*integration_connection2));
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_update_integration_connection_config_of_another_user(
+        #[future] tested_app: TestedApp,
+        #[future] authenticated_app: AuthenticatedApp,
+    ) {
+        let app = authenticated_app.await;
+        let integration_connection = create_integration_connection(
+            &app,
+            IntegrationConnectionConfig::GoogleMail(GoogleMailConfig {
+                sync_notifications_enabled: true,
+                synced_label: GoogleMailLabel {
+                    id: "Label_1".to_string(),
+                    name: "Label 1".to_string(),
+                },
+            }),
+            IntegrationConnectionStatus::Validated,
+        )
+        .await;
+        let (client, _user) =
+            authenticate_user(&tested_app.await, "5678", "Jane", "Doe", "jane@example.com").await;
+
+        let response = client
+            .put(&format!(
+                "{}integration-connections/{}/config",
+                app.api_address, integration_connection.id
+            ))
+            .json(&IntegrationConnectionConfig::GoogleMail(GoogleMailConfig {
+                sync_notifications_enabled: false,
+                synced_label: GoogleMailLabel {
+                    id: "Label_2".to_string(),
+                    name: "Label 2".to_string(),
+                },
+            }))
+            .send()
+            .await
+            .expect("Failed to execute request");
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        // Verify that the integration connection was not updated
+        let integration_connection: IntegrationConnection =
+            get_integration_connection(&app, integration_connection.id)
+                .await
+                .unwrap();
+
+        assert_eq!(
+            integration_connection,
+            IntegrationConnection {
+                provider: IntegrationProvider::GoogleMail {
+                    config: GoogleMailConfig {
+                        sync_notifications_enabled: true,
+                        synced_label: GoogleMailLabel {
+                            id: "Label_1".to_string(),
+                            name: "Label 1".to_string(),
+                        }
+                    },
+                    context: None
+                },
+                ..integration_connection.clone()
+            }
+        );
     }
 }
