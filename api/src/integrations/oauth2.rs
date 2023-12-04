@@ -8,6 +8,7 @@ use reqwest_tracing::{SpanBackendWithUrl, TracingMiddleware};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_with::serde_as;
+use tracing::warn;
 use universal_inbox::integration_connection::{ConnectionId, NangoProviderKey};
 use url::Url;
 
@@ -93,6 +94,13 @@ impl NangoService {
             .context(format!("Cannot fetch connection {connection_id} for provider {provider_config_key} from Nango API"))?;
 
         if response.status() == reqwest::StatusCode::BAD_REQUEST {
+            warn!(
+                "Nango API returned 400 Bad Request: {}",
+                response
+                    .text()
+                    .await
+                    .context("Failed to fetch connection response for {connection_id} for provider {provider_config_key} from Nango API")?
+            );
             return Ok(None);
         };
 

@@ -3,7 +3,7 @@ use format_serde_error::SerdeError;
 use url::ParseError;
 use uuid::Uuid;
 
-use universal_inbox::{integration_connection::ConnectionId, task::TaskId};
+use universal_inbox::task::TaskId;
 
 pub mod integration_connection;
 pub mod notification;
@@ -64,8 +64,6 @@ pub enum UniversalInboxError {
     #[error("Forbidden access: {0}")]
     Forbidden(String),
     #[error("Unknown Nango connection: {0}")]
-    UnknownNangoConnectionError(ConnectionId),
-    #[error("An error occured but transaction was still committed: {0}")]
     Recoverable(anyhow::Error),
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
