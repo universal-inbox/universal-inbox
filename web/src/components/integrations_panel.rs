@@ -15,30 +15,38 @@ use itertools::Itertools;
 
 use universal_inbox::{
     integration_connection::{
-        IntegrationConnection, IntegrationConnectionStatus, IntegrationProviderKind,
+        provider::{IntegrationProvider, IntegrationProviderKind},
+        IntegrationConnection, IntegrationConnectionStatus,
     },
-    IntegrationProviderConfig,
+    IntegrationProviderStaticConfig,
 };
 
 use crate::components::{
     icons::{GoogleDocs, GoogleMail, Linear, Notion, TickTick, Todoist},
-    integrations::github::icons::Github,
+    integrations::{
+        github::{config::GithubProviderConfiguration, icons::Github},
+        google_mail::config::GoogleMailProviderConfiguration,
+        linear::config::LinearProviderConfiguration,
+        todoist::config::TodoistProviderConfiguration,
+    },
 };
 
 #[inline_props]
 pub fn IntegrationsPanel<'a>(
     cx: Scope,
-    integration_providers: HashMap<IntegrationProviderKind, IntegrationProviderConfig>,
+    integration_providers: HashMap<IntegrationProviderKind, IntegrationProviderStaticConfig>,
     integration_connections: Vec<IntegrationConnection>,
     on_connect: EventHandler<'a, (IntegrationProviderKind, Option<&'a IntegrationConnection>)>,
     on_disconnect: EventHandler<'a, &'a IntegrationConnection>,
     on_reconnect: EventHandler<'a, &'a IntegrationConnection>,
 ) -> Element {
-    let sorted_integration_providers: Vec<(&IntegrationProviderKind, &IntegrationProviderConfig)> =
-        integration_providers
-            .iter()
-            .sorted_by(|(k1, _), (k2, _)| Ord::cmp(&k1.to_string(), &k2.to_string()))
-            .collect();
+    let sorted_integration_providers: Vec<(
+        &IntegrationProviderKind,
+        &IntegrationProviderStaticConfig,
+    )> = integration_providers
+        .iter()
+        .sorted_by(|(k1, _), (k2, _)| Ord::cmp(&k1.to_string(), &k2.to_string()))
+        .collect();
 
     render! {
         div {
@@ -80,7 +88,7 @@ pub fn IntegrationsPanel<'a>(
                         IntegrationSettings {
                             kind: **kind,
                             config: (*config).clone(),
-                            connection: integration_connections.iter().find(|c| c.provider_kind == **kind).cloned(),
+                            connection: integration_connections.iter().find(|c| c.provider.kind() == **kind).cloned(),
                             on_connect: |c| on_connect.call((**kind, c)),
                             on_disconnect: |c| on_disconnect.call(c),
                             on_reconnect: |c| on_reconnect.call(c),
@@ -95,7 +103,7 @@ pub fn IntegrationsPanel<'a>(
                         IntegrationSettings {
                             kind: **kind,
                             config: (*config).clone(),
-                            connection: integration_connections.iter().find(|c| c.provider_kind == **kind).cloned(),
+                            connection: integration_connections.iter().find(|c| c.provider.kind() == **kind).cloned(),
                             on_connect: |c| on_connect.call((**kind, c)),
                             on_disconnect: |c| on_disconnect.call(c),
                             on_reconnect: |c| on_reconnect.call(c),
@@ -120,7 +128,7 @@ pub fn IntegrationsPanel<'a>(
                         IntegrationSettings {
                             kind: **kind,
                             config: (*config).clone(),
-                            connection: integration_connections.iter().find(|c| c.provider_kind == **kind).cloned(),
+                            connection: integration_connections.iter().find(|c| c.provider.kind() == **kind).cloned(),
                             on_connect: |c| on_connect.call((**kind, c)),
                             on_disconnect: |c| on_disconnect.call(c),
                             on_reconnect: |c| on_reconnect.call(c),
@@ -135,7 +143,7 @@ pub fn IntegrationsPanel<'a>(
                         IntegrationSettings {
                             kind: **kind,
                             config: (*config).clone(),
-                            connection: integration_connections.iter().find(|c| c.provider_kind == **kind).cloned(),
+                            connection: integration_connections.iter().find(|c| c.provider.kind() == **kind).cloned(),
                             on_connect: |c| on_connect.call((**kind, c)),
                             on_disconnect: |c| on_disconnect.call(c),
                             on_reconnect: |c| on_reconnect.call(c),
@@ -151,7 +159,7 @@ pub fn IntegrationsPanel<'a>(
 pub fn IntegrationSettings<'a>(
     cx: Scope,
     kind: IntegrationProviderKind,
-    config: IntegrationProviderConfig,
+    config: IntegrationProviderStaticConfig,
     connection: Option<Option<IntegrationConnection>>,
     on_connect: EventHandler<'a, Option<&'a IntegrationConnection>>,
     on_disconnect: EventHandler<'a, &'a IntegrationConnection>,
@@ -169,12 +177,13 @@ pub fn IntegrationSettings<'a>(
         IntegrationProviderKind::TickTick => render! { TickTick { class: "w-8 h-8" } },
     };
 
-    let (connection_button_label, connection_button_style, sync_message, feature_label) =
+    let (connection_button_label, connection_button_style, sync_message, provider) =
         use_memo(cx, &connection.clone(), |connection| match connection {
             Some(Some(IntegrationConnection {
                 status: IntegrationConnectionStatus::Validated,
                 last_sync_started_at: Some(ref started_at),
                 last_sync_failure_message: None,
+                provider,
                 ..
             })) => (
                 "Disconnect",
@@ -185,45 +194,29 @@ pub fn IntegrationSettings<'a>(
                         .with_timezone(&Local)
                         .to_rfc3339_opts(SecondsFormat::Secs, true)
                 )),
-                if kind.is_notification_service() {
-                    Some("Synchronize notifications")
-                } else if kind.is_task_service() {
-                    Some("Synchronize tasks from the inbox as notifications")
-                } else {
-                    None
-                },
+                Some(provider),
             ),
             Some(Some(IntegrationConnection {
                 status: IntegrationConnectionStatus::Validated,
                 last_sync_failure_message: Some(message),
+                provider,
                 ..
             })) => (
                 "Disconnect",
                 "btn-success",
                 Some(format!("🔴 Last sync failed: {message}")),
-                if kind.is_notification_service() {
-                    Some("Synchronize notifications")
-                } else if kind.is_task_service() {
-                    Some("Synchronize tasks from the inbox as notifications")
-                } else {
-                    None
-                },
+                Some(provider),
             ),
             Some(Some(IntegrationConnection {
                 status: IntegrationConnectionStatus::Validated,
                 last_sync_started_at: None,
+                provider,
                 ..
             })) => (
                 "Disconnect",
                 "btn-success",
                 Some("🟠 Not yet synced".to_string()),
-                if kind.is_notification_service() {
-                    Some("Synchronize notifications")
-                } else if kind.is_task_service() {
-                    Some("Synchronize tasks from the inbox as notifications")
-                } else {
-                    None
-                },
+                Some(provider),
             ),
             Some(Some(IntegrationConnection {
                 status: IntegrationConnectionStatus::Failing,
@@ -291,16 +284,9 @@ pub fn IntegrationSettings<'a>(
                     }
                 }
 
-                if let Some(feature_label) = feature_label {
+                if let Some(provider) = provider {
                     render! {
-                        div {
-                            class: "form-control",
-                            label {
-                                class: "cursor-pointer label",
-                                span { class: "label-text, text-neutral-content", "{feature_label}" }
-                                input { r#type: "checkbox", class: "toggle toggle-primary", disabled: true, checked: true }
-                            }
-                        }
+                        IntegrationConnectionProviderConfiguration { provider: provider.clone() }
                     }
                 }
 
@@ -311,7 +297,7 @@ pub fn IntegrationSettings<'a>(
 }
 
 #[inline_props]
-pub fn Documentation(cx: Scope, config: IntegrationProviderConfig) -> Element {
+pub fn Documentation(cx: Scope, config: IntegrationProviderStaticConfig) -> Element {
     let mut doc_for_actions: Vec<(&String, &String)> = config.doc_for_actions.iter().collect();
     doc_for_actions.sort_by(|e1, e2| e1.0.cmp(e2.0));
 
@@ -390,5 +376,27 @@ pub fn IconForAction(cx: Scope, action: String) -> Element {
             class: "btn btn-ghost btn-square pointer-events-none",
             icon
         }
+    }
+}
+
+#[inline_props]
+pub fn IntegrationConnectionProviderConfiguration(
+    cx: Scope,
+    provider: IntegrationProvider,
+) -> Element {
+    match provider {
+        IntegrationProvider::GoogleMail { config, context } => render! {
+            GoogleMailProviderConfiguration { config: config.clone(), context: context.clone() }
+        },
+        IntegrationProvider::Github { config } => render! {
+            GithubProviderConfiguration { config: config.clone() }
+        },
+        IntegrationProvider::Todoist { config, .. } => render! {
+            TodoistProviderConfiguration { config: config.clone() }
+        },
+        IntegrationProvider::Linear { config } => render! {
+            LinearProviderConfiguration { config: config.clone() }
+        },
+        _ => None,
     }
 }

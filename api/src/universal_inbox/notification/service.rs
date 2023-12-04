@@ -10,6 +10,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, info};
 
 use universal_inbox::{
+    integration_connection::IntegrationConnection,
     notification::{
         service::NotificationPatch, Notification, NotificationDetails, NotificationId,
         NotificationMetadata, NotificationSourceKind, NotificationStatus,
@@ -22,7 +23,7 @@ use universal_inbox::{
 use crate::{
     integrations::{
         github::GithubService, google_mail::GoogleMailService, linear::LinearService,
-        notification::NotificationSourceService,
+        notification::NotificationSourceService, oauth2::AccessToken,
     },
     repository::{notification::NotificationRepository, Repository},
     universal_inbox::{
@@ -235,7 +236,7 @@ impl NotificationService {
         user_id: UserId,
     ) -> Result<Vec<Notification>, UniversalInboxError> {
         let integration_provider_kind = notification_source_service.get_integration_provider_kind();
-        let result = self
+        let result: Option<(AccessToken, IntegrationConnection)> = self
             .integration_connection_service
             .read()
             .await
@@ -249,8 +250,16 @@ impl NotificationService {
             )
             .await?;
 
-        if result.is_none() {
-            debug!("No validated {integration_provider_kind} integration found for user {user_id}, skipping sync.");
+        if let Some((_, integration_connection)) = result {
+            if !integration_connection
+                .provider
+                .is_sync_notifications_enabled()
+            {
+                debug!("{integration_provider_kind} integration for user {user_id} is disabled, skipping notifications sync.");
+                return Ok(vec![]);
+            }
+        } else {
+            debug!("No validated {integration_provider_kind} integration found for user {user_id}, skipping notifications sync.");
             return Ok(vec![]);
         }
 

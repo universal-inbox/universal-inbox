@@ -4,7 +4,9 @@ use serde_json::json;
 use uuid::Uuid;
 
 use universal_inbox::{
-    integration_connection::IntegrationProviderKind,
+    integration_connection::{
+        config::IntegrationConnectionConfig, integrations::todoist::TodoistConfig,
+    },
     notification::{
         service::NotificationPatch, Notification, NotificationMetadata, NotificationStatus,
     },
@@ -41,7 +43,7 @@ mod patch_notification {
         create_and_mock_integration_connection(
             &app,
             &settings.integrations.oauth2.nango_secret_key,
-            IntegrationProviderKind::Todoist,
+            IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
             nango_todoist_connection,
         )
@@ -106,7 +108,7 @@ mod patch_notification {
         create_and_mock_integration_connection(
             &app,
             &settings.integrations.oauth2.nango_secret_key,
-            IntegrationProviderKind::Todoist,
+            IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
             nango_todoist_connection,
         )

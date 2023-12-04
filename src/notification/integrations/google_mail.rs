@@ -90,6 +90,12 @@ pub enum MessageSelection {
     Last,
 }
 
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct GoogleMailLabel {
+    pub id: String,
+    pub name: String,
+}
+
 mod message_date_format {
     use chrono::{DateTime, NaiveDateTime, Utc};
     use serde::{self, Deserialize, Deserializer, Serializer};
@@ -177,6 +183,7 @@ impl GoogleMailThread {
         mut self,
         user_id: UserId,
         current_notification_status: Option<NotificationStatus>,
+        synced_label_id: &str,
     ) -> Notification {
         let title = self
             .get_message_header(MessageSelection::First, "Subject")
@@ -203,11 +210,11 @@ impl GoogleMailThread {
                 if has_directly_addressed_messages {
                     NotificationStatus::Unread
                 } else {
-                    self.remove_labels(vec![GOOGLE_MAIL_INBOX_LABEL]);
+                    self.remove_labels(vec![GOOGLE_MAIL_INBOX_LABEL, synced_label_id]);
                     NotificationStatus::Unsubscribed
                 }
             } else {
-                self.remove_labels(vec![GOOGLE_MAIL_INBOX_LABEL]);
+                self.remove_labels(vec![GOOGLE_MAIL_INBOX_LABEL, synced_label_id]);
                 NotificationStatus::Unsubscribed
             }
         } else {
@@ -429,7 +436,7 @@ mod tests {
                     },
                 ],
             }
-            .into_notification(Uuid::new_v4().into(), None);
+            .into_notification(Uuid::new_v4().into(), None, GOOGLE_MAIL_STARRED_LABEL);
 
             assert_eq!(google_mail_notification.title, "test subject".to_string());
             assert_eq!(
@@ -490,7 +497,7 @@ mod tests {
                     },
                 ],
             }
-            .into_notification(Uuid::new_v4().into(), None);
+            .into_notification(Uuid::new_v4().into(), None, GOOGLE_MAIL_STARRED_LABEL);
 
             assert_eq!(google_mail_notification.title, DEFAULT_SUBJECT.to_string());
             assert_eq!(
@@ -540,7 +547,7 @@ mod tests {
                     },
                 ],
             }
-            .into_notification(Uuid::new_v4().into(), None);
+            .into_notification(Uuid::new_v4().into(), None, GOOGLE_MAIL_STARRED_LABEL);
 
             assert_eq!(google_mail_notification.status, NotificationStatus::Read);
             assert_eq!(
@@ -572,7 +579,10 @@ mod tests {
                     GoogleMailMessage {
                         id: "18a909f8179".to_string(),
                         thread_id: "18a909f8178".to_string(),
-                        label_ids: Some(vec![GOOGLE_MAIL_INBOX_LABEL.to_string()]),
+                        label_ids: Some(vec![
+                            GOOGLE_MAIL_INBOX_LABEL.to_string(),
+                            GOOGLE_MAIL_STARRED_LABEL.to_string(),
+                        ]),
                         snippet: "test 2".to_string(),
                         size_estimate: 6,
                         history_id: "5678".to_string(),
@@ -587,6 +597,7 @@ mod tests {
             .into_notification(
                 Uuid::new_v4().into(),
                 Some(NotificationStatus::Unsubscribed),
+                GOOGLE_MAIL_STARRED_LABEL,
             );
 
             assert_eq!(
@@ -595,11 +606,8 @@ mod tests {
             );
             match google_mail_notification.metadata {
                 NotificationMetadata::GoogleMail(thread) => {
-                    assert_eq!(
-                        thread.messages[0].label_ids,
-                        Some(vec![GOOGLE_MAIL_STARRED_LABEL.to_string()])
-                    );
-                    assert_eq!(thread.messages[1].label_ids, Some(Vec::<String>::new()));
+                    assert_eq!(thread.messages[0].label_ids, Some(vec![]));
+                    assert_eq!(thread.messages[1].label_ids, Some(vec![]));
                 }
                 _ => unreachable!("Google Mail notification should match previous pattern"),
             };
@@ -651,6 +659,7 @@ mod tests {
             .into_notification(
                 Uuid::new_v4().into(),
                 Some(NotificationStatus::Unsubscribed),
+                GOOGLE_MAIL_STARRED_LABEL,
             );
 
             assert_eq!(
@@ -659,17 +668,11 @@ mod tests {
             );
             match google_mail_notification.metadata {
                 NotificationMetadata::GoogleMail(thread) => {
-                    assert_eq!(
-                        thread.messages[0].label_ids,
-                        Some(vec![GOOGLE_MAIL_STARRED_LABEL.to_string()])
-                    );
+                    assert_eq!(thread.messages[0].label_ids, Some(vec![]));
                     // message is archived but kept unread
                     assert_eq!(
                         thread.messages[1].label_ids,
-                        Some(vec![
-                            GOOGLE_MAIL_STARRED_LABEL.to_string(),
-                            GOOGLE_MAIL_UNREAD_LABEL.to_string()
-                        ])
+                        Some(vec![GOOGLE_MAIL_UNREAD_LABEL.to_string()])
                     );
                 }
                 _ => unreachable!("Google Mail notification should match previous pattern"),
@@ -726,6 +729,7 @@ mod tests {
             .into_notification(
                 Uuid::new_v4().into(),
                 Some(NotificationStatus::Unsubscribed),
+                GOOGLE_MAIL_STARRED_LABEL,
             );
 
             assert_eq!(google_mail_notification.status, NotificationStatus::Unread);

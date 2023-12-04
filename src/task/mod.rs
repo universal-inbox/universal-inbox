@@ -13,7 +13,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::{
-    integration_connection::{IntegrationProvider, IntegrationProviderKind},
+    integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
     notification::{Notification, NotificationMetadata, NotificationStatus, NotificationWithTask},
     task::integrations::todoist::{TodoistItem, DEFAULT_TODOIST_HTML_URL},
     user::UserId,
@@ -316,7 +316,7 @@ impl TryFrom<IntegrationProviderKind> for TaskSyncSourceKind {
     }
 }
 
-pub trait TaskSource: IntegrationProvider {
+pub trait TaskSource: IntegrationProviderSource {
     fn get_task_source_kind(&self) -> TaskSourceKind;
 }
 

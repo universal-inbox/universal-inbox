@@ -6,7 +6,10 @@ use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
 use universal_inbox::{
-    integration_connection::{IntegrationConnectionStatus, IntegrationProviderKind},
+    integration_connection::{
+        config::IntegrationConnectionConfig, integrations::github::GithubConfig,
+        provider::IntegrationProviderKind, IntegrationConnectionStatus,
+    },
     notification::{
         integrations::github::{GithubNotification, GithubNotificationSubject},
         Notification, NotificationDetails, NotificationMetadata, NotificationSourceKind,
@@ -88,7 +91,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     create_and_mock_integration_connection(
         &app,
         &settings.integrations.oauth2.nango_secret_key,
-        IntegrationProviderKind::Github,
+        IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         &settings,
         nango_github_connection,
     )
@@ -214,7 +217,7 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
     create_and_mock_integration_connection(
         &app,
         &settings.integrations.oauth2.nango_secret_key,
-        IntegrationProviderKind::Github,
+        IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         &settings,
         nango_github_connection,
     )
@@ -291,7 +294,7 @@ async fn test_sync_all_notifications_asynchronously(
     create_and_mock_integration_connection(
         &app,
         &settings.integrations.oauth2.nango_secret_key,
-        IntegrationProviderKind::Github,
+        IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         &settings,
         nango_github_connection,
     )
@@ -409,8 +412,42 @@ async fn test_sync_all_notifications_with_no_validated_integration_connections(
     let app = authenticated_app.await;
     create_integration_connection(
         &app,
-        IntegrationProviderKind::Github,
+        IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         IntegrationConnectionStatus::Created,
+    )
+    .await;
+
+    let github_notifications_mock = app.github_mock_server.mock(|when, then| {
+        when.any_request();
+        then.status(200);
+    });
+
+    let response = sync_notifications_response(
+        &app.client,
+        &app.api_address,
+        Some(NotificationSourceKind::Github),
+        false, // synchronously
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    github_notifications_mock.assert_hits(0);
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_sync_all_notifications_with_synchronization_disabled(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    nango_github_connection: Box<NangoConnection>,
+) {
+    let app = authenticated_app.await;
+    create_and_mock_integration_connection(
+        &app,
+        &settings.integrations.oauth2.nango_secret_key,
+        IntegrationConnectionConfig::Github(GithubConfig::default()), // Default config is disabled
+        &settings,
+        nango_github_connection,
     )
     .await;
 
@@ -442,7 +479,7 @@ async fn test_sync_all_notifications_asynchronously_in_error(
     create_and_mock_integration_connection(
         &app,
         &settings.integrations.oauth2.nango_secret_key,
-        IntegrationProviderKind::Github,
+        IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         &settings,
         nango_github_connection,
     )
@@ -518,7 +555,7 @@ async fn test_sync_discussion_notification_with_details(
     create_and_mock_integration_connection(
         &app,
         &settings.integrations.oauth2.nango_secret_key,
-        IntegrationProviderKind::Github,
+        IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         &settings,
         nango_github_connection,
     )

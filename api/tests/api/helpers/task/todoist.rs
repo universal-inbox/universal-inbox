@@ -12,7 +12,7 @@ use url::Url;
 use uuid::Uuid;
 
 use universal_inbox::{
-    integration_connection::SyncToken,
+    integration_connection::integrations::todoist::SyncToken,
     notification::{NotificationMetadata, NotificationStatus},
     task::{
         integrations::todoist::{self, TodoistItem, TodoistItemDue, TodoistItemPriority},

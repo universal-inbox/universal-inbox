@@ -75,7 +75,7 @@ pub fn get_subscriber_with_telemetry(
 pub fn get_subscriber(env_filter_str: &str) -> impl Subscriber + Send + Sync {
     let env_filter =
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(env_filter_str));
-    let fmt = tracing_subscriber::fmt::layer().compact();
+    let fmt = tracing_subscriber::fmt::layer().pretty();
 
     Registry::default().with(env_filter).with(fmt)
 }

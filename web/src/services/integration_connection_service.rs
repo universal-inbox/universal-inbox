@@ -8,10 +8,10 @@ use url::Url;
 
 use universal_inbox::{
     integration_connection::{
-        IntegrationConnection, IntegrationConnectionCreation, IntegrationConnectionId,
-        IntegrationConnectionStatus, IntegrationProviderKind, NangoPublicKey,
+        provider::IntegrationProviderKind, IntegrationConnection, IntegrationConnectionCreation,
+        IntegrationConnectionId, IntegrationConnectionStatus, NangoPublicKey,
     },
-    IntegrationProviderConfig,
+    IntegrationProviderStaticConfig,
 };
 
 use crate::{
@@ -108,15 +108,14 @@ pub async fn integration_connnection_service<'a>(
                         &task_service,
                     ),
                     Err(error) => {
+                        let provider_kind = integration_connection.provider.kind();
                         error!(
-                            "An error occurred while authenticating with {}: {error:?}",
-                            integration_connection.provider_kind
+                            "An error occurred while authenticating with {provider_kind}: {error:?}"
                         );
                         toast_service.send(ToastCommand::Push(Toast {
                             kind: ToastKind::Failure,
                             message: format!(
-                                "An error occurred while authenticating with {}. Please, retry 🙏 If the issue keeps happening, please contact our support.",
-                                integration_connection.provider_kind
+                                "An error occurred while authenticating with {provider_kind}. Please, retry 🙏 If the issue keeps happening, please contact our support."
                             ),
                             timeout: Some(5_000),
                             ..Default::default()
@@ -152,15 +151,14 @@ pub async fn integration_connnection_service<'a>(
                         &task_service,
                     ),
                     Err(error) => {
+                        let provider_kind = integration_connection.provider.kind();
                         error!(
-                            "An error occurred while reconnecting with {}: {error:?}",
-                            integration_connection.provider_kind
+                            "An error occurred while reconnecting with {provider_kind}: {error:?}"
                         );
                         toast_service.send(ToastCommand::Push(Toast {
                             kind: ToastKind::Failure,
                             message: format!(
-                                "An error occurred while reconnecting with {}. Please, retry 🙏 If the issue keeps happening, please contact our support.",
-                                integration_connection.provider_kind
+                                "An error occurred while reconnecting with {provider_kind}. Please, retry 🙏 If the issue keeps happening, please contact our support."
                             ),
                             timeout: Some(5_000),
                             ..Default::default()
@@ -245,12 +243,13 @@ async fn authenticate_integration_connection(
     app_config_ref: &UseAtomRef<Option<AppConfig>>,
     ui_model_ref: &UseAtomRef<UniversalInboxUIModel>,
 ) -> Result<IntegrationConnection> {
+    let provider_kind = integration_connection.provider.kind();
     let (nango_base_url, nango_public_key, provider_config) =
-        get_configs(app_config_ref, integration_connection.provider_kind)?;
+        get_configs(app_config_ref, provider_kind)?;
 
     debug!(
-        "Authenticating integration_connection {} for {}",
-        integration_connection.id, integration_connection.provider_kind
+        "Authenticating integration_connection {} for {provider_kind}",
+        integration_connection.id
     );
     nango_auth(
         &nango_base_url,
@@ -377,10 +376,10 @@ fn sync_integration_connection(
     task_service: &Coroutine<TaskCommand>,
 ) {
     if integration_connection.is_connected() {
-        if let Ok(source) = integration_connection.provider_kind.try_into() {
+        if let Ok(source) = integration_connection.provider.kind().try_into() {
             notification_service.send(NotificationCommand::Sync(Some(source)));
         }
-        if let Ok(source) = integration_connection.provider_kind.try_into() {
+        if let Ok(source) = integration_connection.provider.kind().try_into() {
             task_service.send(TaskCommand::Sync(Some(source)));
         }
     }
@@ -389,7 +388,7 @@ fn sync_integration_connection(
 fn get_configs(
     app_config_ref: &UseAtomRef<Option<AppConfig>>,
     integration_provider_kind: IntegrationProviderKind,
-) -> Result<(Url, NangoPublicKey, IntegrationProviderConfig)> {
+) -> Result<(Url, NangoPublicKey, IntegrationProviderStaticConfig)> {
     if let Some(app_config) = app_config_ref.read().as_ref() {
         Ok((
             app_config.nango_base_url.clone(),

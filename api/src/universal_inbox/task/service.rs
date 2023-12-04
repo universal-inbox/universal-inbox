@@ -8,7 +8,7 @@ use anyhow::{anyhow, Context};
 use chrono::{Duration, Utc};
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 use universal_inbox::{
     notification::{
@@ -239,7 +239,13 @@ impl TaskService {
             )
             .await?;
 
-        if result.is_none() {
+        if let Some((_, integration_connection)) = result {
+            if !integration_connection.provider.is_sync_tasks_enabled() {
+                debug!("{integration_provider_kind} integration for user {user_id} is disabled, skipping tasks sync.");
+                return Ok(vec![]);
+            }
+        } else {
+            debug!("No validated {integration_provider_kind} integration found for user {user_id}, skipping tasks sync.");
             return Ok(vec![]);
         }
 

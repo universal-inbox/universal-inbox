@@ -8,7 +8,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::{
-    integration_connection::{IntegrationProvider, IntegrationProviderKind},
+    integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
     notification::integrations::{
         github::{GithubNotification, GithubPullRequest},
         google_mail::GoogleMailThread,
@@ -222,7 +222,7 @@ impl TryFrom<IntegrationProviderKind> for NotificationSyncSourceKind {
     }
 }
 
-pub trait NotificationSource: IntegrationProvider {
+pub trait NotificationSource: IntegrationProviderSource {
     fn get_notification_source_kind(&self) -> NotificationSourceKind;
     fn is_supporting_snoozed_notifications(&self) -> bool;
 }

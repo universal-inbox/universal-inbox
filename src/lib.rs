@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use integration_connection::{IntegrationProviderKind, NangoProviderKey, NangoPublicKey};
+use integration_connection::{provider::IntegrationProviderKind, NangoProviderKey, NangoPublicKey};
 
 #[macro_use]
 extern crate macro_attr;
@@ -25,12 +25,12 @@ pub struct FrontConfig {
     pub user_profile_url: Url,
     pub nango_base_url: Url,
     pub nango_public_key: NangoPublicKey,
-    pub integration_providers: HashMap<IntegrationProviderKind, IntegrationProviderConfig>,
+    pub integration_providers: HashMap<IntegrationProviderKind, IntegrationProviderStaticConfig>,
     pub support_href: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
-pub struct IntegrationProviderConfig {
+pub struct IntegrationProviderStaticConfig {
     pub name: String,
     pub nango_config_key: NangoProviderKey,
     pub doc: String,

@@ -7,7 +7,8 @@ use actix_web::{
 use anyhow::Context;
 
 use universal_inbox::{
-    integration_connection::IntegrationProviderKind, FrontConfig, IntegrationProviderConfig,
+    integration_connection::provider::IntegrationProviderKind, FrontConfig,
+    IntegrationProviderStaticConfig,
 };
 
 use crate::{
@@ -56,7 +57,7 @@ pub async fn front_config(
         integration_providers: HashMap::from([
             (
                 IntegrationProviderKind::Github,
-                IntegrationProviderConfig {
+                IntegrationProviderStaticConfig {
                     name: settings.integrations.github.name.clone(),
                     nango_config_key: settings
                         .integrations
@@ -73,7 +74,7 @@ pub async fn front_config(
             ),
             (
                 IntegrationProviderKind::Linear,
-                IntegrationProviderConfig {
+                IntegrationProviderStaticConfig {
                     name: settings.integrations.linear.name.clone(),
                     nango_config_key: settings
                         .integrations
@@ -90,7 +91,7 @@ pub async fn front_config(
             ),
             (
                 IntegrationProviderKind::GoogleMail,
-                IntegrationProviderConfig {
+                IntegrationProviderStaticConfig {
                     name: settings.integrations.google_mail.name.clone(),
                     nango_config_key: settings
                         .integrations
@@ -107,7 +108,7 @@ pub async fn front_config(
             ),
             (
                 IntegrationProviderKind::Slack,
-                IntegrationProviderConfig {
+                IntegrationProviderStaticConfig {
                     name: "Slack".to_string(),
                     nango_config_key: "slack".to_string().into(),
                     doc: "".to_string(),
@@ -118,7 +119,7 @@ pub async fn front_config(
             ),
             (
                 IntegrationProviderKind::Notion,
-                IntegrationProviderConfig {
+                IntegrationProviderStaticConfig {
                     name: "Notion".to_string(),
                     nango_config_key: "notion".to_string().into(),
                     doc: "".to_string(),
@@ -129,7 +130,7 @@ pub async fn front_config(
             ),
             (
                 IntegrationProviderKind::GoogleDocs,
-                IntegrationProviderConfig {
+                IntegrationProviderStaticConfig {
                     name: "Google Docs".to_string(),
                     nango_config_key: "googledocs".to_string().into(),
                     doc: "".to_string(),
@@ -140,7 +141,7 @@ pub async fn front_config(
             ),
             (
                 IntegrationProviderKind::Todoist,
-                IntegrationProviderConfig {
+                IntegrationProviderStaticConfig {
                     name: settings.integrations.todoist.name.clone(),
                     nango_config_key: settings
                         .integrations
@@ -157,7 +158,7 @@ pub async fn front_config(
             ),
             (
                 IntegrationProviderKind::TickTick,
-                IntegrationProviderConfig {
+                IntegrationProviderStaticConfig {
                     name: "Tick Tick".to_string(),
                     nango_config_key: "ticktick".to_string().into(),
                     doc: "".to_string(),

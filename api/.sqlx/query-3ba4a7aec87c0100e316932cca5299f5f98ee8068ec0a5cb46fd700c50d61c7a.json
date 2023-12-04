@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                INSERT INTO integration_connection_config\n                  (\n                    id,\n                    integration_connection_id,\n                    config,\n                    created_at,\n                    updated_at\n                  )\n                VALUES\n                  (\n                    $1,\n                    $2,\n                    $3,\n                    $4,\n                    $5\n                  )\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Json",
+        "Timestamp",
+        "Timestamp"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3ba4a7aec87c0100e316932cca5299f5f98ee8068ec0a5cb46fd700c50d61c7a"
+}

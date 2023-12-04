@@ -6,8 +6,9 @@ use uuid::Uuid;
 
 use universal_inbox::{
     integration_connection::{
-        IntegrationConnection, IntegrationConnectionContext, IntegrationConnectionId,
-        IntegrationConnectionStatus, IntegrationProviderKind,
+        config::IntegrationConnectionConfig,
+        provider::{IntegrationConnectionContext, IntegrationProvider, IntegrationProviderKind},
+        IntegrationConnection, IntegrationConnectionId, IntegrationConnectionStatus,
     },
     user::UserId,
 };
@@ -83,19 +84,21 @@ impl IntegrationConnectionRepository for Repository {
             IntegrationConnectionRow,
             r#"
                 SELECT
-                  id,
-                  user_id,
-                  connection_id,
-                  provider_kind as "provider_kind: _",
-                  status as "status: _",
-                  failure_message,
-                  created_at,
-                  updated_at,
-                  last_sync_started_at,
-                  last_sync_failure_message,
-                  context as "context: Json<IntegrationConnectionContext>"
+                  integration_connection.id,
+                  integration_connection.user_id,
+                  integration_connection.connection_id,
+                  integration_connection.status as "status: _",
+                  integration_connection.failure_message,
+                  integration_connection.created_at,
+                  integration_connection.updated_at,
+                  integration_connection.last_sync_started_at,
+                  integration_connection.last_sync_failure_message,
+                  integration_connection_config.config as "config: Json<IntegrationConnectionConfig>",
+                  integration_connection.context as "context: Json<IntegrationConnectionContext>"
                 FROM integration_connection
-                WHERE id = $1
+                INNER JOIN integration_connection_config
+                  ON integration_connection.id = integration_connection_config.integration_connection_id
+                WHERE integration_connection.id = $1
             "#,
             integration_connection_id.0
         )
@@ -122,39 +125,41 @@ impl IntegrationConnectionRepository for Repository {
         let mut query_builder = QueryBuilder::new(
             r#"
                 SELECT
-                  id,
-                  user_id,
-                  connection_id,
-                  provider_kind,
-                  status,
-                  failure_message,
-                  created_at,
-                  updated_at,
-                  last_sync_started_at,
-                  last_sync_failure_message,
-                  context
+                  integration_connection.id,
+                  integration_connection.user_id,
+                  integration_connection.connection_id,
+                  integration_connection.status,
+                  integration_connection.failure_message,
+                  integration_connection.created_at,
+                  integration_connection.updated_at,
+                  integration_connection.last_sync_started_at,
+                  integration_connection.last_sync_failure_message,
+                  integration_connection_config.config as config,
+                  integration_connection.context
                 FROM integration_connection
+                INNER JOIN integration_connection_config
+                  ON integration_connection.id = integration_connection_config.integration_connection_id
                 WHERE
             "#,
         );
         let mut separated = query_builder.separated(" AND ");
         separated
-            .push("user_id = ")
+            .push("integration_connection.user_id = ")
             .push_bind_unseparated(user_id.0);
         separated
-            .push("provider_kind::TEXT = ")
+            .push("integration_connection.provider_kind::TEXT = ")
             .push_bind_unseparated(integration_provider_kind.to_string());
 
         if let Some(synced_before) = synced_before {
             separated
-                .push("(last_sync_started_at is null OR last_sync_started_at <= ")
+                .push("(integration_connection.last_sync_started_at is null OR integration_connection.last_sync_started_at <= ")
                 .push_bind_unseparated(synced_before)
                 .push_unseparated(")");
         }
 
         if let Some(status) = with_status {
             separated
-                .push("(status::TEXT = ")
+                .push("(integration_connection.status::TEXT = ")
                 .push_bind_unseparated(status.to_string())
                 .push_unseparated(")");
         }
@@ -190,27 +195,29 @@ impl IntegrationConnectionRepository for Repository {
             .push_bind_unseparated(failure_message.clone());
 
         query_builder
+            .push(" FROM integration_connection AS ic ")
+            .push(" INNER JOIN integration_connection_config ON integration_connection_config.integration_connection_id = ic.id ")
             .push(" WHERE ")
             .separated(" AND ")
-            .push(" id = ")
+            .push(" integration_connection.id = ")
             .push_bind_unseparated(integration_connection_id.0)
-            .push(" user_id = ")
+            .push(" integration_connection.user_id = ")
             .push_bind_unseparated(for_user_id.0);
 
         query_builder.push(
             r#"
                 RETURNING
-                  id,
-                  user_id,
-                  connection_id,
-                  provider_kind,
-                  status,
-                  failure_message,
-                  created_at,
-                  updated_at,
-                  last_sync_started_at,
-                  last_sync_failure_message,
-                  context,
+                  integration_connection.id,
+                  integration_connection.user_id,
+                  integration_connection.connection_id,
+                  integration_connection.status,
+                  integration_connection.failure_message,
+                  integration_connection.created_at,
+                  integration_connection.updated_at,
+                  integration_connection.last_sync_started_at,
+                  integration_connection.last_sync_failure_message,
+                  integration_connection_config.config as config,
+                  integration_connection.context,
                   (SELECT
              "#,
         );
@@ -277,27 +284,29 @@ impl IntegrationConnectionRepository for Repository {
             .push_bind_unseparated(failure_message.clone());
 
         query_builder
+            .push(" FROM integration_connection AS ic ")
+            .push(" INNER JOIN integration_connection_config ON integration_connection_config.integration_connection_id = ic.id ")
             .push(" WHERE ")
             .separated(" AND ")
-            .push(" user_id = ")
+            .push(" integration_connection.user_id = ")
             .push_bind_unseparated(user_id.0)
-            .push(" provider_kind::TEXT = ")
+            .push(" integration_connection.provider_kind::TEXT = ")
             .push_bind_unseparated(integration_provider_kind.to_string());
 
         query_builder.push(
             r#"
                 RETURNING
-                  id,
-                  user_id,
-                  connection_id,
-                  provider_kind,
-                  status,
-                  failure_message,
-                  created_at,
-                  updated_at,
-                  last_sync_started_at,
-                  last_sync_failure_message,
-                  context,
+                  integration_connection.id,
+                  integration_connection.user_id,
+                  integration_connection.connection_id,
+                  integration_connection.status,
+                  integration_connection.failure_message,
+                  integration_connection.created_at,
+                  integration_connection.updated_at,
+                  integration_connection.last_sync_started_at,
+                  integration_connection.last_sync_failure_message,
+                  integration_connection_config.config as config,
+                  integration_connection.context,
                   true as "is_updated"
              "#,
         );
@@ -338,23 +347,25 @@ impl IntegrationConnectionRepository for Repository {
         let mut query_builder = QueryBuilder::new("UPDATE integration_connection SET context = ");
         query_builder
             .push_bind(Json(context))
+            .push(" FROM integration_connection AS ic ")
+            .push(" INNER JOIN integration_connection_config ON integration_connection_config.integration_connection_id = ic.id ")
             .push(" WHERE ")
-            .push(" id = ")
+            .push(" integration_connection.id = ")
             .push_bind(integration_connection_id.0)
             .push(
                 r#"
                 RETURNING
-                  id,
-                  user_id,
-                  connection_id,
-                  provider_kind,
-                  status,
-                  failure_message,
-                  created_at,
-                  updated_at,
-                  last_sync_started_at,
-                  last_sync_failure_message,
-                  context,
+                  integration_connection.id,
+                  integration_connection.user_id,
+                  integration_connection.connection_id,
+                  integration_connection.status,
+                  integration_connection.failure_message,
+                  integration_connection.created_at,
+                  integration_connection.updated_at,
+                  integration_connection.last_sync_started_at,
+                  integration_connection.last_sync_failure_message,
+                  integration_connection_config.config as config,
+                  integration_connection.context,
                   true as "is_updated"
                "#,
             );
@@ -395,18 +406,20 @@ impl IntegrationConnectionRepository for Repository {
             IntegrationConnectionRow,
             r#"
                 SELECT
-                  id,
-                  user_id,
-                  connection_id,
-                  provider_kind as "provider_kind: _",
-                  status as "status: _",
-                  failure_message,
-                  created_at,
-                  updated_at,
-                  last_sync_started_at,
-                  last_sync_failure_message,
-                  context as "context: Json<IntegrationConnectionContext>"
+                  integration_connection.id,
+                  integration_connection.user_id,
+                  integration_connection.connection_id,
+                  integration_connection.status as "status: _",
+                  integration_connection.failure_message,
+                  integration_connection.created_at,
+                  integration_connection.updated_at,
+                  integration_connection.last_sync_started_at,
+                  integration_connection.last_sync_failure_message,
+                  integration_connection_config.config as "config: Json<IntegrationConnectionConfig>",
+                  integration_connection.context as "context: Json<IntegrationConnectionContext>"
                 FROM integration_connection
+                INNER JOIN integration_connection_config
+                  ON integration_connection.id = integration_connection_config.integration_connection_id
                 WHERE user_id = $1
             "#,
             for_user_id.0
@@ -454,7 +467,7 @@ impl IntegrationConnectionRepository for Repository {
             integration_connection.id.0,
             integration_connection.user_id.0,
             integration_connection.connection_id.0,
-            integration_connection.provider_kind.to_string() as _,
+            integration_connection.provider.kind().to_string() as _,
             integration_connection.status.to_string() as _,
             integration_connection.failure_message,
             integration_connection.created_at.naive_utc(),
@@ -477,6 +490,42 @@ impl IntegrationConnectionRepository for Repository {
             }
         })?;
 
+        let now = Utc::now().naive_utc();
+        let new_id = Uuid::new_v4();
+        sqlx::query!(
+            r#"
+                INSERT INTO integration_connection_config
+                  (
+                    id,
+                    integration_connection_id,
+                    config,
+                    created_at,
+                    updated_at
+                  )
+                VALUES
+                  (
+                    $1,
+                    $2,
+                    $3,
+                    $4,
+                    $5
+                  )
+            "#,
+            new_id,
+            integration_connection.id.0,
+            Json(integration_connection.provider.config()) as Json<IntegrationConnectionConfig>,
+            now,
+            now,
+        )
+        .execute(&mut **executor)
+        .await
+        .with_context(|| {
+            format!(
+                "Failed to insert configuration for integration connection {}",
+                integration_connection.id
+            )
+        })?;
+
         Ok(integration_connection)
     }
 }
@@ -489,28 +538,18 @@ enum PgIntegrationConnectionStatus {
     Failing,
 }
 
-// tag: New notification integration
-#[derive(sqlx::Type, Debug)]
-#[sqlx(type_name = "integration_provider_kind")]
-enum PgIntegrationProviderKind {
-    Github,
-    Linear,
-    GoogleMail,
-    Todoist,
-}
-
 #[derive(Debug, sqlx::FromRow)]
 pub struct IntegrationConnectionRow {
     id: Uuid,
     user_id: Uuid,
     connection_id: Uuid,
-    provider_kind: PgIntegrationProviderKind,
     status: PgIntegrationConnectionStatus,
     failure_message: Option<String>,
     created_at: NaiveDateTime,
     updated_at: NaiveDateTime,
     last_sync_started_at: Option<NaiveDateTime>,
     last_sync_failure_message: Option<String>,
+    config: Json<IntegrationConnectionConfig>,
     context: Option<Json<IntegrationConnectionContext>>,
 }
 
@@ -535,31 +574,15 @@ impl TryFrom<&PgIntegrationConnectionStatus> for IntegrationConnectionStatus {
     }
 }
 
-impl TryFrom<&PgIntegrationProviderKind> for IntegrationProviderKind {
-    type Error = UniversalInboxError;
-
-    fn try_from(provider_kind: &PgIntegrationProviderKind) -> Result<Self, Self::Error> {
-        let provider_kind_str = format!("{provider_kind:?}");
-        provider_kind_str
-            .parse()
-            .map_err(|e| UniversalInboxError::InvalidEnumData {
-                source: e,
-                output: provider_kind_str,
-            })
-    }
-}
-
 impl TryFrom<IntegrationConnectionRow> for IntegrationConnection {
     type Error = UniversalInboxError;
     fn try_from(row: IntegrationConnectionRow) -> Result<Self, Self::Error> {
         let status = (&row.status).try_into()?;
-        let provider_kind = (&row.provider_kind).try_into()?;
 
         Ok(IntegrationConnection {
             id: row.id.into(),
             user_id: row.user_id.into(),
             connection_id: row.connection_id.into(),
-            provider_kind,
             status,
             failure_message: row.failure_message,
             created_at: DateTime::from_naive_utc_and_offset(row.created_at, Utc),
@@ -568,7 +591,10 @@ impl TryFrom<IntegrationConnectionRow> for IntegrationConnection {
                 .last_sync_started_at
                 .map(|started_at| DateTime::from_naive_utc_and_offset(started_at, Utc)),
             last_sync_failure_message: row.last_sync_failure_message,
-            context: row.context.map(|context| context.0),
+            provider: IntegrationProvider::new(
+                row.config.0.clone(),
+                row.context.map(|context| context.0),
+            )?,
         })
     }
 }

@@ -10,7 +10,10 @@ use uuid::Uuid;
 
 use universal_inbox::{
     integration_connection::{
-        IntegrationConnection, IntegrationConnectionContext, IntegrationProviderKind, SyncToken,
+        config::IntegrationConnectionConfig,
+        integrations::todoist::{SyncToken, TodoistConfig, TodoistContext},
+        provider::{IntegrationConnectionContext, IntegrationProvider, IntegrationProviderKind},
+        IntegrationConnection, IntegrationConnectionStatus,
     },
     notification::{Notification, NotificationStatus},
     task::{
@@ -27,9 +30,9 @@ use universal_inbox_api::{
 use crate::helpers::{
     auth::{authenticated_app, AuthenticatedApp},
     integration_connection::{
-        create_and_mock_integration_connection, get_integration_connection,
-        get_integration_connection_per_provider, nango_todoist_connection,
-        update_integration_connection_context,
+        create_and_mock_integration_connection, create_integration_connection,
+        get_integration_connection, get_integration_connection_per_provider,
+        nango_todoist_connection, update_integration_connection_context,
     },
     notification::list_notifications_with_tasks,
     rest::{create_resource, get_resource},
@@ -87,7 +90,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
     let integration_connection = create_and_mock_integration_connection(
         &app,
         &settings.integrations.oauth2.nango_secret_key,
-        IntegrationProviderKind::Todoist,
+        IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
         nango_todoist_connection,
     )
@@ -206,9 +209,12 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
     assert_eq!(
         updated_integration_connection,
         IntegrationConnection {
-            context: Some(IntegrationConnectionContext::Todoist {
-                items_sync_token: SyncToken("todoist_sync_items_token".to_string())
-            }),
+            provider: IntegrationProvider::Todoist {
+                context: Some(TodoistContext {
+                    items_sync_token: SyncToken("todoist_sync_items_token".to_string())
+                }),
+                config: TodoistConfig::enabled()
+            },
             ..updated_integration_connection.clone()
         }
     );
@@ -226,7 +232,7 @@ async fn test_sync_tasks_should_add_new_empty_task(
     create_and_mock_integration_connection(
         &app,
         &settings.integrations.oauth2.nango_secret_key,
-        IntegrationProviderKind::Todoist,
+        IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
         nango_todoist_connection,
     )
@@ -316,7 +322,7 @@ async fn test_sync_tasks_should_reuse_existing_sync_token(
     let integration_connection = create_and_mock_integration_connection(
         &app,
         &settings.integrations.oauth2.nango_secret_key,
-        IntegrationProviderKind::Todoist,
+        IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
         nango_todoist_connection,
     )
@@ -326,9 +332,9 @@ async fn test_sync_tasks_should_reuse_existing_sync_token(
     update_integration_connection_context(
         &app,
         integration_connection.id,
-        IntegrationConnectionContext::Todoist {
+        IntegrationConnectionContext::Todoist(TodoistContext {
             items_sync_token: sync_token.clone(),
-        },
+        }),
     )
     .await;
 
@@ -364,9 +370,12 @@ async fn test_sync_tasks_should_reuse_existing_sync_token(
     assert_eq!(
         updated_integration_connection,
         IntegrationConnection {
-            context: Some(IntegrationConnectionContext::Todoist {
-                items_sync_token: SyncToken("new_sync_token".to_string())
-            }),
+            provider: IntegrationProvider::Todoist {
+                context: Some(TodoistContext {
+                    items_sync_token: SyncToken("new_sync_token".to_string())
+                }),
+                config: TodoistConfig::enabled()
+            },
             ..updated_integration_connection.clone()
         },
     );
@@ -411,7 +420,7 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
     create_and_mock_integration_connection(
         &app,
         &settings.integrations.oauth2.nango_secret_key,
-        IntegrationProviderKind::Todoist,
+        IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
         nango_todoist_connection,
     )
@@ -503,7 +512,7 @@ async fn test_sync_tasks_should_not_update_tasks_and_notifications_with_empty_in
     create_and_mock_integration_connection(
         &app,
         &settings.integrations.oauth2.nango_secret_key,
-        IntegrationProviderKind::Todoist,
+        IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
         nango_todoist_connection,
     )
@@ -570,6 +579,68 @@ async fn test_sync_tasks_should_not_update_tasks_and_notifications_with_empty_in
 
 #[rstest]
 #[tokio::test]
+async fn test_sync_tasks_with_no_validated_integration_connections(
+    #[future] authenticated_app: AuthenticatedApp,
+) {
+    let app = authenticated_app.await;
+    create_integration_connection(
+        &app,
+        IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
+        IntegrationConnectionStatus::Created,
+    )
+    .await;
+    let todoist_mock = app.todoist_mock_server.mock(|when, then| {
+        when.any_request();
+        then.status(200);
+    });
+
+    let response = sync_tasks_response(
+        &app.client,
+        &app.api_address,
+        Some(TaskSourceKind::Todoist),
+        false,
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    todoist_mock.assert_hits(0);
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_sync_tasks_with_synchronization_disabled(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    nango_todoist_connection: Box<NangoConnection>,
+) {
+    let app = authenticated_app.await;
+    create_and_mock_integration_connection(
+        &app,
+        &settings.integrations.oauth2.nango_secret_key,
+        IntegrationConnectionConfig::Todoist(TodoistConfig::default()),
+        &settings,
+        nango_todoist_connection,
+    )
+    .await;
+    let todoist_mock = app.todoist_mock_server.mock(|when, then| {
+        when.any_request();
+        then.status(200);
+    });
+
+    let response = sync_tasks_response(
+        &app.client,
+        &app.api_address,
+        Some(TaskSourceKind::Todoist),
+        false,
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    todoist_mock.assert_hits(0);
+}
+
+#[rstest]
+#[tokio::test]
 async fn test_sync_all_tasks_asynchronously(
     settings: Settings,
     #[future] authenticated_app: AuthenticatedApp,
@@ -606,7 +677,7 @@ async fn test_sync_all_tasks_asynchronously(
     create_and_mock_integration_connection(
         &app,
         &settings.integrations.oauth2.nango_secret_key,
-        IntegrationProviderKind::Todoist,
+        IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
         nango_todoist_connection,
     )
@@ -705,7 +776,7 @@ async fn test_sync_all_tasks_asynchronously_in_error(
     create_and_mock_integration_connection(
         &app,
         &settings.integrations.oauth2.nango_secret_key,
-        IntegrationProviderKind::Todoist,
+        IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
         nango_todoist_connection,
     )

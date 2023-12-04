@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT\n                  id,\n                  user_id,\n                  connection_id,\n                  provider_kind as \"provider_kind: _\",\n                  status as \"status: _\",\n                  failure_message,\n                  created_at,\n                  updated_at,\n                  last_sync_started_at,\n                  last_sync_failure_message,\n                  context as \"context: Json<IntegrationConnectionContext>\"\n                FROM integration_connection\n                WHERE id = $1\n            ",
+  "query": "\n                SELECT\n                  integration_connection.id,\n                  integration_connection.user_id,\n                  integration_connection.connection_id,\n                  integration_connection.status as \"status: _\",\n                  integration_connection.failure_message,\n                  integration_connection.created_at,\n                  integration_connection.updated_at,\n                  integration_connection.last_sync_started_at,\n                  integration_connection.last_sync_failure_message,\n                  integration_connection_config.config as \"config: Json<IntegrationConnectionConfig>\",\n                  integration_connection.context as \"context: Json<IntegrationConnectionContext>\"\n                FROM integration_connection\n                INNER JOIN integration_connection_config\n                  ON integration_connection.id = integration_connection_config.integration_connection_id\n                WHERE integration_connection.id = $1\n            ",
   "describe": {
     "columns": [
       {
@@ -20,23 +20,6 @@
       },
       {
         "ordinal": 3,
-        "name": "provider_kind: _",
-        "type_info": {
-          "Custom": {
-            "name": "integration_provider_kind",
-            "kind": {
-              "Enum": [
-                "Github",
-                "Todoist",
-                "Linear",
-                "GoogleMail"
-              ]
-            }
-          }
-        }
-      },
-      {
-        "ordinal": 4,
         "name": "status: _",
         "type_info": {
           "Custom": {
@@ -52,29 +35,34 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 4,
         "name": "failure_message",
         "type_info": "Text"
       },
       {
-        "ordinal": 6,
+        "ordinal": 5,
         "name": "created_at",
         "type_info": "Timestamp"
       },
       {
-        "ordinal": 7,
+        "ordinal": 6,
         "name": "updated_at",
         "type_info": "Timestamp"
       },
       {
-        "ordinal": 8,
+        "ordinal": 7,
         "name": "last_sync_started_at",
         "type_info": "Timestamp"
       },
       {
-        "ordinal": 9,
+        "ordinal": 8,
         "name": "last_sync_failure_message",
         "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "config: Json<IntegrationConnectionConfig>",
+        "type_info": "Json"
       },
       {
         "ordinal": 10,
@@ -92,14 +80,14 @@
       false,
       false,
       false,
-      false,
       true,
       false,
       false,
       true,
       true,
+      false,
       true
     ]
   },
-  "hash": "5c13ca0273a37f3fb5657dce55ab97b2dc72dd72294e1cd3583af5f259645122"
+  "hash": "d089e7e1d8042176e243ad198b31ade1908716000be8f50441275e09dad67560"
 }

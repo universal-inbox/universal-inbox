@@ -3,7 +3,9 @@ use graphql_client::{Error, Response};
 use rstest::*;
 
 use universal_inbox::{
-    integration_connection::IntegrationProviderKind,
+    integration_connection::{
+        config::IntegrationConnectionConfig, integrations::linear::LinearConfig,
+    },
     notification::{
         integrations::linear::LinearNotification, service::NotificationPatch, Notification,
         NotificationStatus,
@@ -52,7 +54,7 @@ mod patch_resource {
         create_and_mock_integration_connection(
             &app,
             &settings.integrations.oauth2.nango_secret_key,
-            IntegrationProviderKind::Linear,
+            IntegrationConnectionConfig::Linear(LinearConfig::enabled()),
             &settings,
             nango_linear_connection,
         )
@@ -133,7 +135,7 @@ mod patch_resource {
         create_and_mock_integration_connection(
             &app,
             &settings.integrations.oauth2.nango_secret_key,
-            IntegrationProviderKind::Linear,
+            IntegrationConnectionConfig::Linear(LinearConfig::enabled()),
             &settings,
             nango_linear_connection,
         )
@@ -201,7 +203,7 @@ mod patch_resource {
         create_and_mock_integration_connection(
             &app,
             &settings.integrations.oauth2.nango_secret_key,
-            IntegrationProviderKind::Linear,
+            IntegrationConnectionConfig::Linear(LinearConfig::enabled()),
             &settings,
             nango_linear_connection,
         )
@@ -264,7 +266,7 @@ mod patch_resource {
         create_and_mock_integration_connection(
             &app,
             &settings.integrations.oauth2.nango_secret_key,
-            IntegrationProviderKind::Linear,
+            IntegrationConnectionConfig::Linear(LinearConfig::enabled()),
             &settings,
             nango_linear_connection,
         )
@@ -349,7 +351,7 @@ mod patch_resource {
         create_and_mock_integration_connection(
             &app,
             &settings.integrations.oauth2.nango_secret_key,
-            IntegrationProviderKind::Linear,
+            IntegrationConnectionConfig::Linear(LinearConfig::enabled()),
             &settings,
             nango_linear_connection,
         )
@@ -422,7 +424,7 @@ mod patch_resource {
         create_and_mock_integration_connection(
             &app,
             &settings.integrations.oauth2.nango_secret_key,
-            IntegrationProviderKind::Linear,
+            IntegrationConnectionConfig::Linear(LinearConfig::enabled()),
             &settings,
             nango_linear_connection,
         )

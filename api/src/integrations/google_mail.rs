@@ -15,11 +15,17 @@ use tokio::sync::RwLock;
 
 use universal_inbox::{
     integration_connection::{
-        IntegrationConnectionContext, IntegrationProvider, IntegrationProviderKind,
+        integrations::google_mail::{GoogleMailConfig, GoogleMailContext},
+        provider::{
+            IntegrationConnectionContext, IntegrationProvider, IntegrationProviderKind,
+            IntegrationProviderSource,
+        },
+        IntegrationConnection,
     },
     notification::{
         integrations::google_mail::{
-            EmailAddress, GoogleMailMessage, GoogleMailThread, GOOGLE_MAIL_INBOX_LABEL,
+            EmailAddress, GoogleMailLabel, GoogleMailMessage, GoogleMailThread,
+            GOOGLE_MAIL_INBOX_LABEL,
         },
         Notification, NotificationDetails, NotificationSource, NotificationSourceKind,
         NotificationStatus,
@@ -102,6 +108,57 @@ impl From<GoogleMailThread> for RawGoogleMailThread {
             messages: thread.messages,
         }
     }
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct GoogleMailLabelList {
+    pub labels: Option<Vec<RawGoogleMailLabel>>,
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct RawGoogleMailLabel {
+    pub id: String,
+    pub name: String,
+    #[serde(rename = "messageListVisibility")]
+    pub message_list_visibility: Option<GoogleMailMessageListVisibility>,
+    #[serde(rename = "labelListVisibility")]
+    pub label_list_visibility: Option<GoogleMailLabelListVisibility>,
+    pub r#type: GoogleMailLabelType,
+}
+
+impl From<RawGoogleMailLabel> for GoogleMailLabel {
+    fn from(label: RawGoogleMailLabel) -> Self {
+        GoogleMailLabel {
+            id: label.id,
+            name: label.name,
+        }
+    }
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub enum GoogleMailMessageListVisibility {
+    #[serde(rename = "hide")]
+    Hide,
+    #[serde(rename = "show")]
+    Show,
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub enum GoogleMailLabelListVisibility {
+    #[serde(rename = "labelHide")]
+    LabelHide,
+    #[serde(rename = "labelShowIfUnread")]
+    LabelShowIfUnread,
+    #[serde(rename = "labelShow")]
+    LabelShow,
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub enum GoogleMailLabelType {
+    #[serde(rename = "user")]
+    User,
+    #[serde(rename = "system")]
+    System,
 }
 
 impl GoogleMailService {
@@ -259,15 +316,52 @@ impl GoogleMailService {
     async fn archive_thread(
         &self,
         thread_id: &str,
+        synced_label_id: &str,
         access_token: &AccessToken,
     ) -> Result<(), UniversalInboxError> {
         self.modify_thread(
             thread_id,
             vec![],
-            vec![GOOGLE_MAIL_INBOX_LABEL],
+            vec![GOOGLE_MAIL_INBOX_LABEL, synced_label_id],
             access_token,
         )
         .await
+    }
+
+    pub async fn list_labels(
+        &self,
+        access_token: &AccessToken,
+    ) -> Result<GoogleMailLabelList, UniversalInboxError> {
+        let url = format!("{}/users/me/labels", self.google_mail_base_url);
+
+        let response = build_google_mail_client(access_token)
+            .context("Failed to build GoogleMail client")?
+            .get(&url)
+            .send()
+            .await
+            .context("Cannot fetch labels from GoogleMail API")?
+            .text()
+            .await
+            .context("Failed to fetch labels response from GoogleMail API")?;
+
+        let labels: GoogleMailLabelList = serde_json::from_str(&response)
+            .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
+
+        Ok(labels)
+    }
+
+    fn get_config(
+        integration_connection: &IntegrationConnection,
+    ) -> Result<GoogleMailConfig, UniversalInboxError> {
+        let IntegrationProvider::GoogleMail { config, .. } = &integration_connection.provider
+        else {
+            return Err(UniversalInboxError::Unexpected(anyhow!(
+                "Integration connection ({}) provider is not Google Mail",
+                integration_connection.id
+            )));
+        };
+
+        Ok(config.clone())
     }
 }
 
@@ -309,34 +403,51 @@ impl NotificationSourceService for GoogleMailService {
                 anyhow!("Cannot fetch Google Mail notifications without an access token")
             })?;
 
-        let user_email_address = match integration_connection.context {
-            Some(IntegrationConnectionContext::GoogleMail { user_email_address }) => {
-                user_email_address
-            }
+        let labels = self
+            .list_labels(&access_token)
+            .await
+            .context("Failed to fetch Google Mail labels")?;
+
+        let config = GoogleMailService::get_config(&integration_connection)?;
+
+        let user_email_address = match &integration_connection.provider {
+            IntegrationProvider::GoogleMail {
+                context:
+                    Some(GoogleMailContext {
+                        user_email_address, ..
+                    }),
+                ..
+            } => user_email_address.clone(),
             _ => {
                 let GoogleMailUserProfile { email_address, .. } =
                     self.get_user_profile(&access_token).await?;
-                let email_address: EmailAddress = email_address.into();
-                self.integration_connection_service
-                    .read()
-                    .await
-                    .update_integration_connection_context(
-                        executor,
-                        integration_connection.id,
-                        IntegrationConnectionContext::GoogleMail {
-                            user_email_address: email_address.clone(),
-                        },
-                    )
-                    .await
-                    .map_err(|_| {
-                        anyhow!(
-                            "Failed to update Google Mail integration connection {} context",
-                            integration_connection.id
-                        )
-                    })?;
-                email_address
+                email_address.into()
             }
         };
+
+        self.integration_connection_service
+            .read()
+            .await
+            .update_integration_connection_context(
+                executor,
+                integration_connection.id,
+                IntegrationConnectionContext::GoogleMail(GoogleMailContext {
+                    user_email_address: user_email_address.clone(),
+                    labels: labels
+                        .labels
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|label| label.into())
+                        .collect(),
+                }),
+            )
+            .await
+            .map_err(|_| {
+                anyhow!(
+                    "Failed to update Google Mail integration connection {} context",
+                    integration_connection.id
+                )
+            })?;
 
         let mut page_token: Option<String> = None;
         let mut google_mail_threads: Vec<GoogleMailThread> = vec![];
@@ -345,7 +456,7 @@ impl NotificationSourceService for GoogleMailService {
                 .list_threads(
                     page_token,
                     self.page_size,
-                    vec![GOOGLE_MAIL_INBOX_LABEL.to_string()],
+                    vec![config.synced_label.id.clone()],
                     &access_token,
                 )
                 .await?;
@@ -378,13 +489,16 @@ impl NotificationSourceService for GoogleMailService {
                 .get_notification_for_source_id(executor, &google_mail_thread.id, user_id)
                 .await?;
             let existing_notification_status = existing_notification.map(|notif| notif.status);
-            let notification =
-                google_mail_thread.into_notification(user_id, existing_notification_status);
+            let notification = google_mail_thread.into_notification(
+                user_id,
+                existing_notification_status,
+                &config.synced_label.id,
+            );
             if notification.status == NotificationStatus::Unsubscribed {
                 self.modify_thread(
                     &notification.source_id,
                     vec![],
-                    vec![GOOGLE_MAIL_INBOX_LABEL],
+                    vec![GOOGLE_MAIL_INBOX_LABEL, &config.synced_label.id],
                     &access_token,
                 )
                 .await?;
@@ -402,7 +516,7 @@ impl NotificationSourceService for GoogleMailService {
         source_id: &str,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
-        let (access_token, _) = self
+        let (access_token, integration_connection) = self
             .integration_connection_service
             .read()
             .await
@@ -411,8 +525,10 @@ impl NotificationSourceService for GoogleMailService {
             .ok_or_else(|| {
                 anyhow!("Cannot delete GoogleMail notification without an access token")
             })?;
+        let config = GoogleMailService::get_config(&integration_connection)?;
 
-        self.archive_thread(source_id, &access_token).await
+        self.archive_thread(source_id, &config.synced_label.id, &access_token)
+            .await
     }
 
     #[tracing::instrument(level = "debug", skip(self, executor), err)]
@@ -422,7 +538,7 @@ impl NotificationSourceService for GoogleMailService {
         source_id: &str,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
-        let (access_token, _) = self
+        let (access_token, integration_connection) = self
             .integration_connection_service
             .read()
             .await
@@ -431,8 +547,10 @@ impl NotificationSourceService for GoogleMailService {
             .ok_or_else(|| {
                 anyhow!("Cannot unsubscribe from GoogleMail notifications without an access token")
             })?;
+        let config = GoogleMailService::get_config(&integration_connection)?;
 
-        self.archive_thread(source_id, &access_token).await
+        self.archive_thread(source_id, &config.synced_label.id, &access_token)
+            .await
     }
 
     async fn snooze_notification_from_source<'a>(
@@ -460,7 +578,7 @@ impl NotificationSourceService for GoogleMailService {
     }
 }
 
-impl IntegrationProvider for GoogleMailService {
+impl IntegrationProviderSource for GoogleMailService {
     fn get_integration_provider_kind(&self) -> IntegrationProviderKind {
         IntegrationProviderKind::GoogleMail
     }
