@@ -1,4 +1,5 @@
 use chrono::{TimeZone, Utc};
+use graphql_client::Response;
 use http::StatusCode;
 use httpmock::Method::{PATCH, PUT};
 use rstest::*;
@@ -11,16 +12,22 @@ use universal_inbox::{
     },
     notification::{
         integrations::github::GithubNotification, service::NotificationPatch, Notification,
-        NotificationMetadata, NotificationStatus,
+        NotificationDetails, NotificationMetadata, NotificationStatus,
     },
     task::{integrations::todoist::TodoistItem, Task},
 };
-use universal_inbox_api::{configuration::Settings, integrations::oauth2::NangoConnection};
+use universal_inbox_api::{
+    configuration::Settings,
+    integrations::{github::graphql::pull_request_query, oauth2::NangoConnection},
+};
 
 use crate::helpers::{
     auth::{authenticated_app, AuthenticatedApp},
     integration_connection::{create_and_mock_integration_connection, nango_github_connection},
-    notification::github::github_notification,
+    notification::{
+        create_or_update_notification_details,
+        github::{github_notification, github_pull_request_123_response},
+    },
     rest::{create_resource, get_resource, patch_resource, patch_resource_response},
     settings,
     task::todoist::{create_task_from_todoist_item, todoist_item},
@@ -37,6 +44,7 @@ mod patch_resource {
         nango_github_connection: Box<NangoConnection>,
         github_notification: Box<GithubNotification>,
         todoist_item: Box<TodoistItem>,
+        github_pull_request_123_response: Response<pull_request_query::ResponseData>,
         #[values(205, 304, 404)] github_status_code: u16,
     ) {
         let app = authenticated_app.await;
@@ -64,6 +72,12 @@ mod patch_resource {
             app.user.id,
         )
         .await;
+        let notification_details: NotificationDetails = github_pull_request_123_response
+            .data
+            .clone()
+            .unwrap()
+            .try_into()
+            .unwrap();
         let expected_notification = Box::new(Notification {
             id: Uuid::new_v4().into(),
             title: "notif1".to_string(),
@@ -77,7 +91,7 @@ mod patch_resource {
             last_read_at: None,
             snoozed_until: None,
             user_id: app.user.id,
-            details: None,
+            details: Some(notification_details.clone()),
             task_id: Some(existing_todoist_task.task.id),
         });
         let created_notification: Box<Notification> = create_resource(
@@ -85,6 +99,12 @@ mod patch_resource {
             &app.api_address,
             "notifications",
             expected_notification.clone(),
+        )
+        .await;
+        create_or_update_notification_details(
+            &app,
+            created_notification.id,
+            notification_details.clone(),
         )
         .await;
 

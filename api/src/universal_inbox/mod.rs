@@ -96,7 +96,7 @@ pub enum UpsertStatus<T> {
 }
 
 impl<T> UpsertStatus<T> {
-    fn value(self: UpsertStatus<T>) -> T {
+    pub fn value(self: UpsertStatus<T>) -> T {
         match self {
             UpsertStatus::Created(inner)
             | UpsertStatus::Updated(inner)
@@ -104,7 +104,7 @@ impl<T> UpsertStatus<T> {
         }
     }
 
-    fn value_ref(self: &UpsertStatus<T>) -> &T {
+    pub fn value_ref(self: &UpsertStatus<T>) -> &T {
         match self {
             UpsertStatus::Created(inner)
             | UpsertStatus::Updated(inner)

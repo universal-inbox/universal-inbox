@@ -4,11 +4,16 @@ use reqwest::{Client, Response};
 use serde_json::json;
 
 use universal_inbox::{
-    notification::{Notification, NotificationId, NotificationStatus, NotificationWithTask},
+    notification::{
+        Notification, NotificationDetails, NotificationId, NotificationSourceKind,
+        NotificationStatus, NotificationWithTask,
+    },
     task::{TaskCreation, TaskId},
 };
 
-use universal_inbox::notification::NotificationSourceKind;
+use universal_inbox_api::repository::notification::NotificationRepository;
+
+use crate::helpers::auth::AuthenticatedApp;
 
 pub mod github;
 pub mod google_mail;
@@ -147,4 +152,21 @@ pub async fn create_task_from_notification(
         .json()
         .await
         .expect("Cannot parse JSON result")
+}
+
+pub async fn create_or_update_notification_details(
+    app: &AuthenticatedApp,
+    notification_id: NotificationId,
+    details: NotificationDetails,
+) -> NotificationDetails {
+    let mut transaction = app.repository.begin().await.unwrap();
+    let upsert_status = app
+        .repository
+        .create_or_update_notification_details(&mut transaction, notification_id, details)
+        .await
+        .unwrap();
+
+    transaction.commit().await.unwrap();
+
+    upsert_status.value()
 }
