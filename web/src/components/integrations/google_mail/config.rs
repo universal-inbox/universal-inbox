@@ -28,7 +28,7 @@ pub fn GoogleMailProviderConfiguration<'a>(
                     }
                     input {
                         r#type: "checkbox",
-                        class: "toggle toggle-primary",
+                        class: "toggle toggle-ghost",
                         oninput: move |event| {
                             on_config_change.call(IntegrationConnectionConfig::GoogleMail(GoogleMailConfig {
                                 sync_notifications_enabled: event.value == "true",

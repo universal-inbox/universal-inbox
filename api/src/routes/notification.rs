@@ -1,11 +1,12 @@
-use std::{fmt, sync::Arc};
+use std::sync::Arc;
 
 use actix_http::body::BoxBody;
 use actix_identity::Identity;
 use actix_web::{web, HttpResponse, Scope};
 use anyhow::Context;
-use serde::{de, Deserialize};
+use serde::Deserialize;
 use serde_json::json;
+use serde_with::{formats::CommaSeparator, serde_as, StringWithSeparator};
 use tokio::sync::RwLock;
 use tracing::{error, info};
 
@@ -48,43 +49,13 @@ pub fn scope() -> Scope {
         )
 }
 
+#[serde_as]
 #[derive(Debug, Deserialize)]
 pub struct ListNotificationRequest {
-    #[serde(deserialize_with = "deserialize_stringified_list")]
-    status: Vec<NotificationStatus>,
+    #[serde_as(as = "Option<StringWithSeparator::<CommaSeparator, NotificationStatus>>")]
+    status: Option<Vec<NotificationStatus>>,
     include_snoozed_notifications: Option<bool>,
     task_id: Option<TaskId>,
-}
-
-pub fn deserialize_stringified_list<'de, D>(
-    deserializer: D,
-) -> Result<Vec<NotificationStatus>, D::Error>
-where
-    D: de::Deserializer<'de>,
-{
-    struct StringVecVisitor;
-
-    impl<'de> de::Visitor<'de> for StringVecVisitor {
-        type Value = Vec<NotificationStatus>;
-
-        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-            formatter.write_str("a string containing a list of NoticationStatus")
-        }
-
-        fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-        where
-            E: de::Error,
-        {
-            let mut ids = Vec::new();
-            for id in v.split(',') {
-                let id = id.parse::<NotificationStatus>().map_err(E::custom)?;
-                ids.push(id);
-            }
-            Ok(ids)
-        }
-    }
-
-    deserializer.deserialize_any(StringVecVisitor)
 }
 
 pub async fn list_notifications(
@@ -105,7 +76,7 @@ pub async fn list_notifications(
     let result: Vec<NotificationWithTask> = service
         .list_notifications(
             &mut transaction,
-            list_notification_request.status.clone(),
+            list_notification_request.status.clone().unwrap_or_default(),
             list_notification_request
                 .include_snoozed_notifications
                 .unwrap_or(false),

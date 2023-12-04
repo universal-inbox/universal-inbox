@@ -89,6 +89,11 @@ pub trait NotificationRepository {
         executor: &mut Transaction<'a, Postgres>,
         kind: NotificationSourceKind,
     ) -> Result<u64, UniversalInboxError>;
+    async fn delete_notifications<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        kind: NotificationSourceKind,
+    ) -> Result<u64, UniversalInboxError>;
 }
 
 #[async_trait]
@@ -229,33 +234,36 @@ impl NotificationRepository for Repository {
                 LEFT JOIN notification_details ON notification_details.notification_id = notification.id
                 LEFT JOIN task ON task.id = notification.task_id
                 WHERE
-                  notification.status::TEXT = ANY(
             "#,
         );
 
-        query_builder
-            .push_bind(
-                status
-                    .into_iter()
-                    .map(|s| s.to_string())
-                    .collect::<Vec<String>>(),
-            )
-            .push(")");
-        query_builder
-            .push(" AND notification.user_id = ")
-            .push_bind(user_id.0);
+        let mut separated = query_builder.separated(" AND ");
+        if !status.is_empty() {
+            separated
+                .push("notification.status::TEXT = ANY(")
+                .push_bind_unseparated(
+                    status
+                        .into_iter()
+                        .map(|s| s.to_string())
+                        .collect::<Vec<String>>(),
+                )
+                .push_unseparated(")");
+        }
+        separated
+            .push(" notification.user_id = ")
+            .push_bind_unseparated(user_id.0);
 
         if !include_snoozed_notifications {
-            query_builder
-                .push(" AND (notification.snoozed_until is NULL OR notification.snoozed_until <=")
-                .push_bind(Utc::now().naive_utc())
-                .push(")");
+            separated
+                .push(" (notification.snoozed_until is NULL OR notification.snoozed_until <=")
+                .push_bind_unseparated(Utc::now().naive_utc())
+                .push_unseparated(")");
         }
 
         if let Some(id) = task_id {
-            query_builder
-                .push(" AND notification.task_id = ")
-                .push_bind(id.0);
+            separated
+                .push(" notification.task_id = ")
+                .push_bind_unseparated(id.0);
         }
 
         query_builder.push(" ORDER BY notification.updated_at ASC LIMIT 100");
@@ -825,6 +833,26 @@ impl NotificationRepository for Repository {
         .with_context(|| {
             format!("Failed to delete notification details for {kind} from storage")
         })?;
+
+        Ok(res.rows_affected())
+    }
+
+    #[tracing::instrument(level = "debug", skip(self, executor))]
+    async fn delete_notifications<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        kind: NotificationSourceKind,
+    ) -> Result<u64, UniversalInboxError> {
+        let res = sqlx::query!(
+            r#"
+            DELETE FROM notification
+            WHERE notification.kind = $1
+            "#,
+            kind.to_string()
+        )
+        .execute(&mut **executor)
+        .await
+        .with_context(|| format!("Failed to delete notification for {kind} from storage"))?;
 
         Ok(res.rows_affected())
     }

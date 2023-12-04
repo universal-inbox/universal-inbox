@@ -16,8 +16,11 @@ use universal_inbox::{
 
 use crate::{
     integrations::oauth2::{AccessToken, NangoService},
-    repository::integration_connection::IntegrationConnectionRepository,
     repository::Repository,
+    repository::{
+        integration_connection::IntegrationConnectionRepository,
+        notification::NotificationRepository,
+    },
     universal_inbox::{UniversalInboxError, UpdateStatus},
 };
 
@@ -88,7 +91,7 @@ impl IntegrationConnectionService {
             .update_integration_connection_config(
                 executor,
                 integration_connection_id,
-                integration_connection_config,
+                integration_connection_config.clone(),
                 for_user_id,
             )
             .await?;
@@ -98,14 +101,21 @@ impl IntegrationConnectionService {
                 updated: false,
                 result: None,
             })
-            && self
+        {
+            if self
                 .repository
                 .does_integration_connection_exist(executor, integration_connection_id)
                 .await?
-        {
-            return Err(UniversalInboxError::Forbidden(format!(
+            {
+                return Err(UniversalInboxError::Forbidden(format!(
                         "Only the owner of the integration connection {integration_connection_id} can patch it"
                     )));
+            }
+        } else if let Some(kind) = integration_connection_config.notification_source_kind() {
+            self.repository
+                .delete_notification_details(executor, kind)
+                .await?;
+            self.repository.delete_notifications(executor, kind).await?;
         }
 
         Ok(updated_integration_connection_config)

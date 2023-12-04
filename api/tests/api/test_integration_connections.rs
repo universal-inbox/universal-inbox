@@ -11,7 +11,10 @@ use universal_inbox::{
         provider::IntegrationProviderKind, IntegrationConnection, IntegrationConnectionCreation,
         IntegrationConnectionStatus,
     },
-    notification::integrations::google_mail::GoogleMailLabel,
+    notification::{
+        integrations::google_mail::{GoogleMailLabel, GoogleMailThread},
+        Notification,
+    },
 };
 
 use universal_inbox_api::{
@@ -27,6 +30,7 @@ use crate::helpers::{
         nango_github_connection, verify_integration_connection,
         verify_integration_connection_response,
     },
+    notification::{google_mail::google_mail_thread_get_123, list_notifications},
     rest::{create_resource, delete_resource},
     settings, tested_app, TestedApp,
 };
@@ -410,17 +414,34 @@ mod update_integration_connection_config {
     #[tokio::test]
     async fn test_update_integration_connection_config(
         #[future] authenticated_app: AuthenticatedApp,
+        google_mail_thread_get_123: GoogleMailThread,
     ) {
         let app = authenticated_app.await;
+        let google_mail_config = GoogleMailConfig {
+            sync_notifications_enabled: true,
+            synced_label: GoogleMailLabel {
+                id: "Label_1".to_string(),
+                name: "Label 1".to_string(),
+            },
+        };
+        let synced_label_id = google_mail_config.synced_label.id.clone();
+
+        let existing_notification = Box::new(google_mail_thread_get_123.into_notification(
+            app.user.id,
+            None,
+            &synced_label_id,
+        ));
+        let _created_notification: Box<Notification> = create_resource(
+            &app.client,
+            &app.api_address,
+            "notifications",
+            existing_notification,
+        )
+        .await;
+
         let integration_connection1 = create_integration_connection(
             &app,
-            IntegrationConnectionConfig::GoogleMail(GoogleMailConfig {
-                sync_notifications_enabled: true,
-                synced_label: GoogleMailLabel {
-                    id: "Label_1".to_string(),
-                    name: "Label 1".to_string(),
-                },
-            }),
+            IntegrationConnectionConfig::GoogleMail(google_mail_config),
             IntegrationConnectionStatus::Validated,
         )
         .await;
@@ -464,6 +485,7 @@ mod update_integration_connection_config {
             }))
         );
 
+        // Verify the configuration has been updated
         let updated_integration_connection: Option<IntegrationConnection> =
             get_integration_connection(&app, integration_connection1.id).await;
 
@@ -484,10 +506,17 @@ mod update_integration_connection_config {
             })
         );
 
+        // Verify no other integration connection configuration has been updated
         let other_integration_connection: Option<IntegrationConnection> =
             get_integration_connection(&app, integration_connection2.id).await;
 
         assert_eq!(other_integration_connection, Some(*integration_connection2));
+
+        // Verify notifications have been cleared
+        let notifications: Vec<Notification> =
+            list_notifications(&app.client, &app.api_address, vec![], true, None).await;
+
+        assert!(notifications.is_empty());
     }
 
     #[rstest]

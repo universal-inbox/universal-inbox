@@ -5,7 +5,6 @@ module.exports = {
   content: ["index.html", "./src/**/*.rs", "./src/*.rs"],
   darkMode: "class",
   plugins: [
-    require('@tailwindcss/forms'),
     require('@tailwindcss/typography'),
     require("daisyui")
   ],
