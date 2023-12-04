@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            DELETE FROM notification\n            WHERE notification.kind = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "697b7b847a628f6303852fe39f8c7ac845527ee6fcc17f58612c1422e4d8987a"
+}

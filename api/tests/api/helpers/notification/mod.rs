@@ -27,22 +27,27 @@ pub async fn list_notifications_response(
     task_id: Option<TaskId>,
 ) -> Response {
     let snoozed_notifications_parameter = if include_snoozed_notifications {
-        "&include_snoozed_notifications=true"
+        "include_snoozed_notifications=true&"
     } else {
         ""
     };
     let task_id_parameter = task_id
-        .map(|id| format!("&task_id={id}"))
+        .map(|id| format!("task_id={id}"))
         .unwrap_or_default();
-    let status_parameter = status_filter
-        .into_iter()
-        .map(|s| s.to_string())
-        .collect::<Vec<String>>()
-        .join(",");
+    let status_parameter = if status_filter.is_empty() {
+        "".to_string()
+    } else {
+        let filters = status_filter
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<String>>()
+            .join(",");
+        format!("status={filters}&")
+    };
 
     client
         .get(&format!(
-            "{api_address}notifications?status={status_parameter}{snoozed_notifications_parameter}{task_id_parameter}"
+            "{api_address}notifications?{status_parameter}{snoozed_notifications_parameter}{task_id_parameter}"
         ))
         .send()
         .await

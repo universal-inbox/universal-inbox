@@ -1,11 +1,14 @@
 use serde::{Deserialize, Serialize};
 
-use crate::integration_connection::{
-    integrations::{
-        github::GithubConfig, google_mail::GoogleMailConfig, linear::LinearConfig,
-        todoist::TodoistConfig,
+use crate::{
+    integration_connection::{
+        integrations::{
+            github::GithubConfig, google_mail::GoogleMailConfig, linear::LinearConfig,
+            todoist::TodoistConfig,
+        },
+        provider::IntegrationProviderKind,
     },
-    provider::IntegrationProviderKind,
+    notification::NotificationSourceKind,
 };
 
 // tag: New notification integration
@@ -33,6 +36,19 @@ impl IntegrationConnectionConfig {
             Self::GoogleDocs => IntegrationProviderKind::GoogleDocs,
             Self::Slack => IntegrationProviderKind::Slack,
             Self::TickTick => IntegrationProviderKind::TickTick,
+        }
+    }
+
+    pub fn notification_source_kind(&self) -> Option<NotificationSourceKind> {
+        match self {
+            Self::GoogleMail(_) => Some(NotificationSourceKind::GoogleMail),
+            Self::Todoist(_) => Some(NotificationSourceKind::Todoist),
+            Self::Linear(_) => Some(NotificationSourceKind::Linear),
+            Self::Github(_) => Some(NotificationSourceKind::Github),
+            Self::Notion => None,
+            Self::GoogleDocs => None,
+            Self::Slack => None,
+            Self::TickTick => None,
         }
     }
 }
