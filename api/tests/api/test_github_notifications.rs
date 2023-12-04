@@ -6,7 +6,9 @@ use serde_json::json;
 use uuid::Uuid;
 
 use universal_inbox::{
-    integration_connection::IntegrationProviderKind,
+    integration_connection::{
+        config::IntegrationConnectionConfig, integrations::github::GithubConfig,
+    },
     notification::{
         integrations::github::GithubNotification, service::NotificationPatch, Notification,
         NotificationMetadata, NotificationStatus,
@@ -41,7 +43,7 @@ mod patch_resource {
         create_and_mock_integration_connection(
             &app,
             &settings.integrations.oauth2.nango_secret_key,
-            IntegrationProviderKind::Github,
+            IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
             nango_github_connection,
         )
@@ -132,7 +134,7 @@ mod patch_resource {
         create_and_mock_integration_connection(
             &app,
             &settings.integrations.oauth2.nango_secret_key,
-            IntegrationProviderKind::Github,
+            IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
             nango_github_connection,
         )
@@ -215,7 +217,7 @@ mod patch_resource {
         create_and_mock_integration_connection(
             &app,
             &settings.integrations.oauth2.nango_secret_key,
-            IntegrationProviderKind::Github,
+            IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
             nango_github_connection,
         )

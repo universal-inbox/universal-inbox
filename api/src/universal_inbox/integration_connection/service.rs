@@ -6,8 +6,9 @@ use sqlx::{Postgres, Transaction};
 
 use universal_inbox::{
     integration_connection::{
-        IntegrationConnection, IntegrationConnectionContext, IntegrationConnectionId,
-        IntegrationConnectionStatus, IntegrationProviderKind, NangoProviderKey,
+        provider::{IntegrationConnectionContext, IntegrationProviderKind},
+        IntegrationConnection, IntegrationConnectionId, IntegrationConnectionStatus,
+        NangoProviderKey,
     },
     user::UserId,
 };
@@ -65,7 +66,7 @@ impl IntegrationConnectionService {
     ) -> Result<Box<IntegrationConnection>, UniversalInboxError> {
         let integration_connection = Box::new(IntegrationConnection::new(
             for_user_id,
-            integration_provider_kind,
+            integration_provider_kind.default_integration_connection_config(),
         ));
 
         self.repository
@@ -89,13 +90,13 @@ impl IntegrationConnectionService {
                 return Err(UniversalInboxError::Forbidden(format!("Only the owner of the integration connection {integration_connection_id} can verify it")));
             }
 
-            let provider_config_key = self
-                .nango_provider_keys
-                .get(&integration_connection.provider_kind)
-                .context(format!(
-                    "No Nango provider config key found for {}",
-                    integration_connection.provider_kind,
-                ))?;
+            let provider_kind = integration_connection.provider.kind();
+            let provider_config_key =
+                self.nango_provider_keys
+                    .get(&provider_kind)
+                    .context(format!(
+                        "No Nango provider config key found for {provider_kind}"
+                    ))?;
 
             let nango_connection_exists = self
                 .nango_service
@@ -144,13 +145,13 @@ impl IntegrationConnectionService {
                 return Err(UniversalInboxError::Forbidden(format!("Only the owner of the integration connection {integration_connection_id} can verify it")));
             }
 
-            let provider_config_key = self
-                .nango_provider_keys
-                .get(&integration_connection.provider_kind)
-                .context(format!(
-                    "No Nango provider config key found for {}",
-                    integration_connection.provider_kind,
-                ))?;
+            let provider_kind = integration_connection.provider.kind();
+            let provider_config_key =
+                self.nango_provider_keys
+                    .get(&provider_kind)
+                    .context(format!(
+                        "No Nango provider config key found for {provider_kind}"
+                    ))?;
 
             self.nango_service
                 .delete_connection(integration_connection.connection_id, provider_config_key)
@@ -194,13 +195,13 @@ impl IntegrationConnectionService {
             .await?;
 
         if let Some(integration_connection) = integration_connection {
-            let provider_config_key = self
-                .nango_provider_keys
-                .get(&integration_connection.provider_kind)
-                .context(format!(
-                    "No Nango provider config key found for {}",
-                    integration_connection.provider_kind,
-                ))?;
+            let provider_kind = integration_connection.provider.kind();
+            let provider_config_key =
+                self.nango_provider_keys
+                    .get(&provider_kind)
+                    .context(format!(
+                        "No Nango provider config key found for {provider_kind}"
+                    ))?;
 
             if let Some(nango_connection) = self
                 .nango_service

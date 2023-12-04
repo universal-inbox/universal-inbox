@@ -5,8 +5,9 @@ use serde_json::json;
 use uuid::Uuid;
 
 use universal_inbox::integration_connection::{
-    IntegrationConnection, IntegrationConnectionCreation, IntegrationConnectionStatus,
-    IntegrationProviderKind,
+    config::IntegrationConnectionConfig, integrations::github::GithubConfig,
+    provider::IntegrationProviderKind, IntegrationConnection, IntegrationConnectionCreation,
+    IntegrationConnectionStatus,
 };
 
 use universal_inbox_api::{
@@ -17,10 +18,11 @@ use universal_inbox_api::{
 use crate::helpers::{
     auth::{authenticate_user, authenticated_app, AuthenticatedApp},
     integration_connection::{
-        list_integration_connections, mock_nango_connection_service, nango_github_connection,
+        create_integration_connection, list_integration_connections, mock_nango_connection_service,
+        mock_nango_delete_connection_service, nango_github_connection,
         verify_integration_connection, verify_integration_connection_response,
     },
-    rest::create_resource,
+    rest::{create_resource, delete_resource},
     settings, tested_app, TestedApp,
 };
 
@@ -101,7 +103,7 @@ mod create_integration_connections {
         .await;
 
         assert_eq!(
-            integration_connection.provider_kind,
+            integration_connection.provider.kind(),
             IntegrationProviderKind::Github
         );
         assert_eq!(integration_connection.user_id, app.user.id);
@@ -304,12 +306,6 @@ mod verify_integration_connections {
 }
 
 mod disconnect_integration_connections {
-    use crate::helpers::{
-        integration_connection::{
-            create_integration_connection, mock_nango_delete_connection_service,
-        },
-        rest::delete_resource,
-    };
     use httpmock::Method::DELETE;
     use pretty_assertions::assert_eq;
 
@@ -324,7 +320,7 @@ mod disconnect_integration_connections {
         let app = authenticated_app.await;
         let integration_connection = create_integration_connection(
             &app,
-            IntegrationProviderKind::Github,
+            IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             IntegrationConnectionStatus::Validated,
         )
         .await;
@@ -367,7 +363,7 @@ mod disconnect_integration_connections {
         let app = authenticated_app.await;
         let integration_connection = create_integration_connection(
             &app,
-            IntegrationProviderKind::Github,
+            IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             IntegrationConnectionStatus::Validated,
         )
         .await;

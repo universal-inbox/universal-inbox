@@ -7,7 +7,10 @@ use uuid::Uuid;
 
 use universal_inbox::{
     integration_connection::{
-        IntegrationConnection, IntegrationConnectionContext, IntegrationProviderKind,
+        config::IntegrationConnectionConfig,
+        integrations::google_mail::{GoogleMailConfig, GoogleMailContext},
+        provider::IntegrationProvider,
+        IntegrationConnection,
     },
     notification::{
         integrations::google_mail::{
@@ -22,7 +25,10 @@ use universal_inbox::{
 use universal_inbox_api::{
     configuration::Settings,
     integrations::{
-        google_mail::{GoogleMailThreadList, GoogleMailThreadMinimal, GoogleMailUserProfile},
+        google_mail::{
+            GoogleMailLabelList, GoogleMailThreadList, GoogleMailThreadMinimal,
+            GoogleMailUserProfile,
+        },
         oauth2::NangoConnection,
     },
 };
@@ -35,8 +41,9 @@ use crate::helpers::{
     },
     notification::{
         google_mail::{
-            assert_sync_notifications, google_mail_thread_get_123, google_mail_thread_get_456,
-            google_mail_user_profile, mock_google_mail_get_user_profile_service,
+            assert_sync_notifications, google_mail_labels_list, google_mail_thread_get_123,
+            google_mail_thread_get_456, google_mail_user_profile,
+            mock_google_mail_get_user_profile_service, mock_google_mail_labels_list_service,
             mock_google_mail_thread_get_service, mock_google_mail_thread_modify_service,
             mock_google_mail_threads_list_service,
         },
@@ -55,6 +62,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     google_mail_thread_get_123: GoogleMailThread,
     google_mail_thread_get_456: GoogleMailThread,
     google_mail_user_profile: GoogleMailUserProfile,
+    google_mail_labels_list: GoogleMailLabelList,
     todoist_item: Box<TodoistItem>,
     nango_google_mail_connection: Box<NangoConnection>,
 ) {
@@ -106,10 +114,11 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         }),
     )
     .await;
+    let google_mail_config = GoogleMailConfig::enabled();
     let integration_connection = create_and_mock_integration_connection(
         &app,
         &settings.integrations.oauth2.nango_secret_key,
-        IntegrationProviderKind::GoogleMail,
+        IntegrationConnectionConfig::GoogleMail(google_mail_config.clone()),
         &settings,
         nango_google_mail_connection,
     )
@@ -119,11 +128,15 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         &app.google_mail_mock_server,
         &google_mail_user_profile,
     );
+    let google_mail_labels_list_mock = mock_google_mail_labels_list_service(
+        &app.google_mail_mock_server,
+        &google_mail_labels_list,
+    );
     let google_mail_threads_list_mock = mock_google_mail_threads_list_service(
         &app.google_mail_mock_server,
         None,
         settings.integrations.google_mail.page_size,
-        Some(vec![GOOGLE_MAIL_INBOX_LABEL.to_string()]),
+        Some(vec![google_mail_config.synced_label.id.clone()]),
         &google_mail_threads_list,
     );
     let empty_result = GoogleMailThreadList {
@@ -135,7 +148,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         &app.google_mail_mock_server,
         Some("next_token"),
         settings.integrations.google_mail.page_size,
-        Some(vec![GOOGLE_MAIL_INBOX_LABEL.to_string()]),
+        Some(vec![google_mail_config.synced_label.id.clone()]),
         &empty_result,
     );
     let raw_google_mail_thread_get_123 = google_mail_thread_get_123.clone().into();
@@ -159,10 +172,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     )
     .await;
 
-    assert_eq!(
-        notifications.len(),
-        google_mail_threads_list.threads.clone().unwrap().len()
-    );
+    assert_eq!(notifications.len(), 2);
     assert_sync_notifications(
         &notifications,
         &google_mail_thread_get_123,
@@ -170,6 +180,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         app.user.id,
     );
     google_mail_get_user_profile_mock.assert_hits(1);
+    google_mail_labels_list_mock.assert_hits(1);
     google_mail_threads_list_mock.assert();
     google_mail_threads_list_mock2.assert();
     google_mail_thread_get_123_mock.assert();
@@ -217,7 +228,18 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     assert_eq!(
         updated_integration_connection,
         IntegrationConnection {
-            context: Some(IntegrationConnectionContext::GoogleMail { user_email_address }),
+            provider: IntegrationProvider::GoogleMail {
+                context: Some(GoogleMailContext {
+                    user_email_address,
+                    labels: google_mail_labels_list
+                        .labels
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|label| label.into())
+                        .collect(),
+                }),
+                config: GoogleMailConfig::enabled()
+            },
             ..updated_integration_connection.clone()
         }
     );
@@ -234,6 +256,7 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
     #[future] authenticated_app: AuthenticatedApp,
     mut google_mail_thread_get_456: GoogleMailThread,
     google_mail_user_profile: GoogleMailUserProfile,
+    google_mail_labels_list: GoogleMailLabelList,
     nango_google_mail_connection: Box<NangoConnection>,
     #[case] has_new_message_addressed_directly: bool,
     #[case] has_new_unread_message: bool,
@@ -242,13 +265,16 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
     // When a Universal Inbox notification is marked as unsubscribed from a Google Mail thread with new
     // messages and none of these new messages are directly addressed to the user (ie. the user's email
     // is not in the `To` header), the status of the notification remains unchanged.
-    // In that case all new messages are automatically archived (ie. the `INBOX` label is removed)
+    // In that case all new messages are automatically archived (ie. the `INBOX` label and the label to
+    // sync are removed)
     //
     // If there is at least one new message with the user's email address in the `To` header, the
     // notification's status will be updated either to:
     // - `Unread` if one of the new messages have the UNREAD label
     // - `Unsubscribed` otherwise
     let app = authenticated_app.await;
+    let google_mail_config = GoogleMailConfig::enabled();
+    let synced_label_id = google_mail_config.synced_label.id.clone();
     let user_email_address = EmailAddress(google_mail_user_profile.email_address.clone());
 
     // First message is already known by Universal Inbox and marked as unsubscribed
@@ -258,11 +284,13 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
         vec![
             "TEST_LABEL".to_string(),
             GOOGLE_MAIL_INBOX_LABEL.to_string(),
+            synced_label_id.clone(),
             GOOGLE_MAIL_UNREAD_LABEL.to_string(),
         ]
     } else {
         vec![
             "TEST_LABEL".to_string(),
+            synced_label_id.clone(),
             GOOGLE_MAIL_INBOX_LABEL.to_string(),
         ]
     });
@@ -312,7 +340,7 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
     create_and_mock_integration_connection(
         &app,
         &settings.integrations.oauth2.nango_secret_key,
-        IntegrationProviderKind::GoogleMail,
+        IntegrationConnectionConfig::GoogleMail(google_mail_config.clone()),
         &settings,
         nango_google_mail_connection,
     )
@@ -322,11 +350,15 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
         &app.google_mail_mock_server,
         &google_mail_user_profile,
     );
+    let google_mail_labels_list_mock = mock_google_mail_labels_list_service(
+        &app.google_mail_mock_server,
+        &google_mail_labels_list,
+    );
     let google_mail_threads_list_mock = mock_google_mail_threads_list_service(
         &app.google_mail_mock_server,
         None,
         settings.integrations.google_mail.page_size,
-        Some(vec![GOOGLE_MAIL_INBOX_LABEL.to_string()]),
+        Some(vec![synced_label_id.clone()]),
         &google_mail_threads_list,
     );
     let raw_google_mail_thread_get_456 = google_mail_thread_get_456.clone().into();
@@ -341,7 +373,7 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
                 &app.google_mail_mock_server,
                 &google_mail_thread_get_456.id,
                 vec![],
-                vec![GOOGLE_MAIL_INBOX_LABEL],
+                vec![GOOGLE_MAIL_INBOX_LABEL, &synced_label_id],
             )
         });
 
@@ -355,6 +387,7 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
 
     assert_eq!(notifications.len(), 1);
     google_mail_get_user_profile_mock.assert_hits(1);
+    google_mail_labels_list_mock.assert_hits(1);
     google_mail_threads_list_mock.assert();
     google_mail_thread_get_456_mock.assert();
     if let Some(google_mail_thread_modify_mock) = google_mail_thread_modify_mock {
@@ -382,6 +415,7 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
             if has_new_unread_message {
                 if has_new_message_addressed_directly {
                     expected_labels.push(GOOGLE_MAIL_INBOX_LABEL.to_string());
+                    expected_labels.push(synced_label_id.clone());
                 }
                 expected_labels.push(GOOGLE_MAIL_UNREAD_LABEL.to_string());
             }

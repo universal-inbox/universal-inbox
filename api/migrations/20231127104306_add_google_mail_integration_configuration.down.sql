@@ -1,0 +1,7 @@
+DROP INDEX integration_connection_config_integration_connection_id_idx;
+
+DROP TABLE integration_connection_config;
+
+DROP FUNCTION text_to_integration_connection_config_kind;
+
+DROP TYPE integration_connection_config_kind;

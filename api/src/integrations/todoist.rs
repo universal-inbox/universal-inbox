@@ -21,7 +21,11 @@ use uuid::Uuid;
 
 use universal_inbox::{
     integration_connection::{
-        IntegrationConnectionContext, IntegrationProvider, IntegrationProviderKind, SyncToken,
+        integrations::todoist::{SyncToken, TodoistContext},
+        provider::{
+            IntegrationConnectionContext, IntegrationProvider, IntegrationProviderKind,
+            IntegrationProviderSource,
+        },
     },
     notification::{NotificationSource, NotificationSourceKind},
     task::{
@@ -427,21 +431,14 @@ impl TaskSourceService<TodoistItem> for TodoistService {
             .await?
             .ok_or_else(|| anyhow!("Cannot fetch Todoist task without an access token"))?;
 
-        let sync_response = self
-            .sync_items(
-                &access_token,
-                integration_connection.context.and_then(|context| {
-                    if let IntegrationConnectionContext::Todoist {
-                        items_sync_token: sync_token,
-                    } = context
-                    {
-                        Some(sync_token)
-                    } else {
-                        None
-                    }
-                }),
-            )
-            .await?;
+        let items_sync_token = match integration_connection.provider {
+            IntegrationProvider::Todoist {
+                context: Some(TodoistContext { items_sync_token }),
+                ..
+            } => Some(items_sync_token),
+            _ => None,
+        };
+        let sync_response = self.sync_items(&access_token, items_sync_token).await?;
 
         self.integration_connection_service
             .read()
@@ -449,9 +446,9 @@ impl TaskSourceService<TodoistItem> for TodoistService {
             .update_integration_connection_context(
                 executor,
                 integration_connection.id,
-                IntegrationConnectionContext::Todoist {
+                IntegrationConnectionContext::Todoist(TodoistContext {
                     items_sync_token: sync_response.sync_token,
-                },
+                }),
             )
             .await
             .map_err(|_| {
@@ -702,7 +699,7 @@ impl TaskSource for TodoistService {
     }
 }
 
-impl IntegrationProvider for TodoistService {
+impl IntegrationProviderSource for TodoistService {
     fn get_integration_provider_kind(&self) -> IntegrationProviderKind {
         IntegrationProviderKind::Todoist
     }

@@ -5,7 +5,7 @@ use config::{Config, ConfigError, Environment, File};
 use openidconnect::{ClientId, ClientSecret, IntrospectionUrl, IssuerUrl};
 use serde::Deserialize;
 use universal_inbox::integration_connection::{
-    IntegrationProviderKind, NangoProviderKey, NangoPublicKey,
+    provider::IntegrationProviderKind, NangoProviderKey, NangoPublicKey,
 };
 use url::Url;
 

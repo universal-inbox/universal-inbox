@@ -4,7 +4,9 @@ use rstest::*;
 use uuid::Uuid;
 
 use universal_inbox::{
-    integration_connection::IntegrationProviderKind,
+    integration_connection::{
+        config::IntegrationConnectionConfig, integrations::linear::LinearConfig,
+    },
     notification::{
         integrations::linear::LinearNotification, Notification, NotificationMetadata,
         NotificationSourceKind, NotificationStatus,
@@ -84,7 +86,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     create_and_mock_integration_connection(
         &app,
         &settings.integrations.oauth2.nango_secret_key,
-        IntegrationProviderKind::Linear,
+        IntegrationConnectionConfig::Linear(LinearConfig::enabled()),
         &settings,
         nango_linear_connection,
     )

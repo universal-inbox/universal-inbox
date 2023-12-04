@@ -7,7 +7,7 @@ use dioxus_router::prelude::*;
 use fermi::use_atom_ref;
 
 use universal_inbox::integration_connection::{
-    IntegrationConnection, IntegrationConnectionStatus, IntegrationProviderKind,
+    provider::IntegrationProviderKind, IntegrationConnection, IntegrationConnectionStatus,
 };
 
 use crate::{
@@ -116,7 +116,7 @@ pub fn IntegrationConnectionsStatus(
             }
         }
 
-        for integration_connection in (integration_connections.iter().filter(|c| c.provider_kind.is_notification_service() )) {
+        for integration_connection in (integration_connections.iter().filter(|c| c.provider.kind().is_notification_service() )) {
             IntegrationConnectionStatus {
                 connection: integration_connection.clone(),
             }
@@ -124,7 +124,7 @@ pub fn IntegrationConnectionsStatus(
 
         div { class: "divider divider-horizontal" }
 
-        for integration_connection in (integration_connections.iter().filter(|c| c.provider_kind.is_task_service() )) {
+        for integration_connection in (integration_connections.iter().filter(|c| c.provider.kind().is_task_service() )) {
             IntegrationConnectionStatus {
                 connection: integration_connection.clone(),
             }
@@ -134,6 +134,7 @@ pub fn IntegrationConnectionsStatus(
 
 #[inline_props]
 pub fn IntegrationConnectionStatus(cx: Scope, connection: IntegrationConnection) -> Element {
+    let provider_kind = connection.provider.kind();
     let (connection_style, tooltip) =
         use_memo(cx, &connection.clone(), |connection| match connection {
             IntegrationConnection {
@@ -146,14 +147,13 @@ pub fn IntegrationConnectionStatus(cx: Scope, connection: IntegrationConnection)
                 started_at
                     .map(|started_at| {
                         format!(
-                            "{} successfully synced at {}",
-                            connection.provider_kind,
+                            "{provider_kind} successfully synced at {}",
                             started_at
                                 .with_timezone(&Local)
                                 .to_rfc3339_opts(SecondsFormat::Secs, true)
                         )
                     })
-                    .unwrap_or_else(|| format!("{} successfully synced", connection.provider_kind)),
+                    .unwrap_or_else(|| format!("{provider_kind} successfully synced")),
             ),
             IntegrationConnection {
                 status: IntegrationConnectionStatus::Failing,
@@ -177,7 +177,7 @@ pub fn IntegrationConnectionStatus(cx: Scope, connection: IntegrationConnection)
         });
 
     // tag: New notification integration
-    let icon = match connection.provider_kind {
+    let icon = match provider_kind {
         IntegrationProviderKind::Github => Some(render! {
             Github { class: "w-4 h-4 {connection_style}" }
         }),

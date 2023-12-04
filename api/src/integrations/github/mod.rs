@@ -12,7 +12,7 @@ use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
 
 use universal_inbox::{
-    integration_connection::{IntegrationProvider, IntegrationProviderKind},
+    integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
     notification::{
         integrations::github::{GithubNotification, GithubUrl},
         Notification, NotificationDetails, NotificationMetadata, NotificationSource,
@@ -409,7 +409,7 @@ impl NotificationSourceService for GithubService {
     }
 }
 
-impl IntegrationProvider for GithubService {
+impl IntegrationProviderSource for GithubService {
     fn get_integration_provider_kind(&self) -> IntegrationProviderKind {
         IntegrationProviderKind::Github
     }

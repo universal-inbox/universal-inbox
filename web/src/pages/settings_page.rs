@@ -4,7 +4,9 @@ use dioxus::prelude::*;
 use fermi::use_atom_ref;
 use log::debug;
 
-use universal_inbox::integration_connection::{IntegrationConnection, IntegrationProviderKind};
+use universal_inbox::integration_connection::{
+    provider::IntegrationProviderKind, IntegrationConnection,
+};
 
 use crate::{
     components::{integrations_panel::IntegrationsPanel, spinner::Spinner},

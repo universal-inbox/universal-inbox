@@ -3,7 +3,10 @@ use httpmock::Method::PATCH;
 use rstest::*;
 
 use universal_inbox::{
-    integration_connection::IntegrationProviderKind,
+    integration_connection::{
+        config::IntegrationConnectionConfig, integrations::github::GithubConfig,
+        integrations::todoist::TodoistConfig,
+    },
     notification::{
         integrations::github::GithubNotification, service::NotificationPatch, Notification,
         NotificationStatus, NotificationWithTask,
@@ -47,7 +50,6 @@ use crate::helpers::{
 };
 
 mod patch_task {
-
     use super::*;
     use pretty_assertions::assert_eq;
 
@@ -74,7 +76,7 @@ mod patch_task {
         create_and_mock_integration_connection(
             &app,
             &settings.integrations.oauth2.nango_secret_key,
-            IntegrationProviderKind::Todoist,
+            IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
             nango_todoist_connection,
         )
@@ -139,7 +141,7 @@ mod patch_task {
         create_and_mock_integration_connection(
             &app,
             &settings.integrations.oauth2.nango_secret_key,
-            IntegrationProviderKind::Todoist,
+            IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
             nango_todoist_connection,
         )
@@ -217,7 +219,7 @@ mod patch_task {
         create_and_mock_integration_connection(
             &app,
             &settings.integrations.oauth2.nango_secret_key,
-            IntegrationProviderKind::Todoist,
+            IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
             nango_todoist_connection,
         )
@@ -334,7 +336,7 @@ mod patch_task {
         create_and_mock_integration_connection(
             &app,
             &settings.integrations.oauth2.nango_secret_key,
-            IntegrationProviderKind::Todoist,
+            IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
             nango_todoist_connection,
         )
@@ -342,7 +344,7 @@ mod patch_task {
         create_and_mock_integration_connection(
             &app,
             &settings.integrations.oauth2.nango_secret_key,
-            IntegrationProviderKind::Github,
+            IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
             nango_github_connection,
         )
@@ -465,7 +467,7 @@ mod patch_notification {
         create_and_mock_integration_connection(
             &app,
             &settings.integrations.oauth2.nango_secret_key,
-            IntegrationProviderKind::Todoist,
+            IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
             nango_todoist_connection,
         )

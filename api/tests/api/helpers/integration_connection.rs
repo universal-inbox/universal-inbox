@@ -8,8 +8,10 @@ use rstest::fixture;
 
 use universal_inbox::{
     integration_connection::{
-        IntegrationConnection, IntegrationConnectionContext, IntegrationConnectionId,
-        IntegrationConnectionStatus, IntegrationProviderKind, NangoProviderKey,
+        config::IntegrationConnectionConfig,
+        provider::{IntegrationConnectionContext, IntegrationProviderKind},
+        IntegrationConnection, IntegrationConnectionId, IntegrationConnectionStatus,
+        NangoProviderKey,
     },
     user::UserId,
 };
@@ -102,7 +104,7 @@ pub fn mock_nango_delete_connection_service<'a>(
 
 pub async fn create_integration_connection(
     app: &AuthenticatedApp,
-    provider_kind: IntegrationProviderKind,
+    config: IntegrationConnectionConfig,
     status: IntegrationConnectionStatus,
 ) -> Box<IntegrationConnection> {
     let mut transaction = app.repository.begin().await.unwrap();
@@ -110,7 +112,7 @@ pub async fn create_integration_connection(
         .repository
         .create_integration_connection(
             &mut transaction,
-            Box::new(IntegrationConnection::new(app.user.id, provider_kind)),
+            Box::new(IntegrationConnection::new(app.user.id, config)),
         )
         .await
         .unwrap();
@@ -189,13 +191,13 @@ pub async fn update_integration_connection_context(
 pub async fn create_and_mock_integration_connection(
     app: &AuthenticatedApp,
     nango_secret_key: &str,
-    provider_kind: IntegrationProviderKind,
+    config: IntegrationConnectionConfig,
     settings: &Settings,
     nango_connection: Box<NangoConnection>,
 ) -> Box<IntegrationConnection> {
+    let provider_kind = config.kind();
     let integration_connection =
-        create_integration_connection(app, provider_kind, IntegrationConnectionStatus::Validated)
-            .await;
+        create_integration_connection(app, config, IntegrationConnectionStatus::Validated).await;
     let config_key = settings
         .integrations
         .oauth2

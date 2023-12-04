@@ -6,7 +6,9 @@ use url::Url;
 use uuid::Uuid;
 
 use universal_inbox::{
-    integration_connection::IntegrationProviderKind,
+    integration_connection::{
+        config::IntegrationConnectionConfig, integrations::todoist::TodoistConfig,
+    },
     notification::{NotificationStatus, NotificationWithTask},
     task::{
         integrations::todoist::TodoistItem, service::TaskPatch, ProjectSummary, Task, TaskMetadata,
@@ -661,7 +663,7 @@ mod search_projects {
         create_and_mock_integration_connection(
             &app,
             &settings.integrations.oauth2.nango_secret_key,
-            IntegrationProviderKind::Todoist,
+            IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
             nango_todoist_connection,
         )

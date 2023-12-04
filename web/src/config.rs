@@ -7,8 +7,8 @@ use url::Url;
 use wasm_bindgen::prelude::*;
 
 use universal_inbox::{
-    integration_connection::{IntegrationProviderKind, NangoPublicKey},
-    FrontConfig, IntegrationProviderConfig,
+    integration_connection::{provider::IntegrationProviderKind, NangoPublicKey},
+    FrontConfig, IntegrationProviderStaticConfig,
 };
 
 use crate::{services::api::call_api, utils::current_origin};
@@ -22,7 +22,7 @@ pub struct AppConfig {
     pub user_profile_url: Url,
     pub nango_base_url: Url,
     pub nango_public_key: NangoPublicKey,
-    pub integration_providers: HashMap<IntegrationProviderKind, IntegrationProviderConfig>,
+    pub integration_providers: HashMap<IntegrationProviderKind, IntegrationProviderStaticConfig>,
     pub support_href: Option<String>,
 }
 

@@ -11,7 +11,7 @@ use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
 
 use universal_inbox::{
-    integration_connection::{IntegrationProvider, IntegrationProviderKind},
+    integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
     notification::{
         integrations::linear::LinearNotification, Notification, NotificationDetails,
         NotificationSource, NotificationSourceKind,
@@ -398,7 +398,7 @@ impl NotificationSourceService for LinearService {
     }
 }
 
-impl IntegrationProvider for LinearService {
+impl IntegrationProviderSource for LinearService {
     fn get_integration_provider_kind(&self) -> IntegrationProviderKind {
         IntegrationProviderKind::Linear
     }

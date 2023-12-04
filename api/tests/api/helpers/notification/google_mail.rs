@@ -17,7 +17,7 @@ use universal_inbox::{
 };
 
 use universal_inbox_api::integrations::google_mail::{
-    GoogleMailThreadList, GoogleMailUserProfile, RawGoogleMailThread,
+    GoogleMailLabelList, GoogleMailThreadList, GoogleMailUserProfile, RawGoogleMailThread,
 };
 
 use crate::helpers::load_json_fixture_file;
@@ -29,6 +29,20 @@ pub fn mock_google_mail_get_user_profile_service<'a>(
     google_mail_mock_server.mock(|when, then| {
         when.method(GET)
             .path("/users/me/profile")
+            .header("authorization", "Bearer google_mail_test_access_token");
+        then.status(200)
+            .header("content-type", "application/json")
+            .json_body_obj(result);
+    })
+}
+
+pub fn mock_google_mail_labels_list_service<'a>(
+    google_mail_mock_server: &'a MockServer,
+    result: &'a GoogleMailLabelList,
+) -> Mock<'a> {
+    google_mail_mock_server.mock(|when, then| {
+        when.method(GET)
+            .path("/users/me/labels")
             .header("authorization", "Bearer google_mail_test_access_token");
         then.status(200)
             .header("content-type", "application/json")
@@ -126,6 +140,11 @@ pub fn mock_google_mail_thread_modify_service<'a>(
 #[fixture]
 pub fn google_mail_user_profile() -> GoogleMailUserProfile {
     load_json_fixture_file("/tests/api/fixtures/google_mail_user_profile.json")
+}
+
+#[fixture]
+pub fn google_mail_labels_list() -> GoogleMailLabelList {
+    load_json_fixture_file("/tests/api/fixtures/google_mail_labels_list.json")
 }
 
 #[fixture]
