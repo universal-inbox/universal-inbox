@@ -15,6 +15,7 @@ use itertools::Itertools;
 
 use universal_inbox::{
     integration_connection::{
+        config::IntegrationConnectionConfig,
         provider::{IntegrationProvider, IntegrationProviderKind},
         IntegrationConnection, IntegrationConnectionStatus,
     },
@@ -39,6 +40,7 @@ pub fn IntegrationsPanel<'a>(
     on_connect: EventHandler<'a, (IntegrationProviderKind, Option<&'a IntegrationConnection>)>,
     on_disconnect: EventHandler<'a, &'a IntegrationConnection>,
     on_reconnect: EventHandler<'a, &'a IntegrationConnection>,
+    on_config_change: EventHandler<'a, (&'a IntegrationConnection, IntegrationConnectionConfig)>,
 ) -> Element {
     let sorted_integration_providers: Vec<(
         &IntegrationProviderKind,
@@ -92,6 +94,7 @@ pub fn IntegrationsPanel<'a>(
                             on_connect: |c| on_connect.call((**kind, c)),
                             on_disconnect: |c| on_disconnect.call(c),
                             on_reconnect: |c| on_reconnect.call(c),
+                            on_config_change: |(ic, c)| on_config_change.call((ic, c)),
                         }
                     }
                 }
@@ -107,6 +110,7 @@ pub fn IntegrationsPanel<'a>(
                             on_connect: |c| on_connect.call((**kind, c)),
                             on_disconnect: |c| on_disconnect.call(c),
                             on_reconnect: |c| on_reconnect.call(c),
+                            on_config_change: |(ic, c)| on_config_change.call((ic, c)),
                         }
                     }
                 }
@@ -132,6 +136,7 @@ pub fn IntegrationsPanel<'a>(
                             on_connect: |c| on_connect.call((**kind, c)),
                             on_disconnect: |c| on_disconnect.call(c),
                             on_reconnect: |c| on_reconnect.call(c),
+                            on_config_change: |(ic, c)| on_config_change.call((ic, c)),
                         }
                     }
                 }
@@ -147,6 +152,7 @@ pub fn IntegrationsPanel<'a>(
                             on_connect: |c| on_connect.call((**kind, c)),
                             on_disconnect: |c| on_disconnect.call(c),
                             on_reconnect: |c| on_reconnect.call(c),
+                            on_config_change: |(ic, c)| on_config_change.call((ic, c)),
                         }
                     }
                 }
@@ -164,6 +170,7 @@ pub fn IntegrationSettings<'a>(
     on_connect: EventHandler<'a, Option<&'a IntegrationConnection>>,
     on_disconnect: EventHandler<'a, &'a IntegrationConnection>,
     on_reconnect: EventHandler<'a, &'a IntegrationConnection>,
+    on_config_change: EventHandler<'a, (&'a IntegrationConnection, IntegrationConnectionConfig)>,
 ) -> Element {
     // tag: New notification integration
     let icon = match kind {
@@ -285,8 +292,15 @@ pub fn IntegrationSettings<'a>(
                 }
 
                 if let Some(provider) = provider {
-                    render! {
-                        IntegrationConnectionProviderConfiguration { provider: provider.clone() }
+                    if let Some(Some(connection)) = connection {
+                        render! {
+                            IntegrationConnectionProviderConfiguration {
+                                on_config_change: move |config| on_config_change.call((&connection, config)),
+                                provider: provider.clone(),
+                            }
+                        }
+                    } else {
+                        None
                     }
                 }
 
@@ -380,13 +394,18 @@ pub fn IconForAction(cx: Scope, action: String) -> Element {
 }
 
 #[inline_props]
-pub fn IntegrationConnectionProviderConfiguration(
+pub fn IntegrationConnectionProviderConfiguration<'a>(
     cx: Scope,
     provider: IntegrationProvider,
+    on_config_change: EventHandler<'a, IntegrationConnectionConfig>,
 ) -> Element {
     match provider {
         IntegrationProvider::GoogleMail { config, context } => render! {
-            GoogleMailProviderConfiguration { config: config.clone(), context: context.clone() }
+            GoogleMailProviderConfiguration {
+                on_config_change: |c| on_config_change.call(c),
+                config: config.clone(),
+                context: context.clone(),
+            }
         },
         IntegrationProvider::Github { config } => render! {
             GithubProviderConfiguration { config: config.clone() }

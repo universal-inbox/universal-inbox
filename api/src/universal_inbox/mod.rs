@@ -82,7 +82,7 @@ impl UniversalInboxError {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct UpdateStatus<T> {
     pub updated: bool,
     pub result: Option<T>,

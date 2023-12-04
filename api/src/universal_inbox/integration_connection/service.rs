@@ -6,6 +6,7 @@ use sqlx::{Postgres, Transaction};
 
 use universal_inbox::{
     integration_connection::{
+        config::IntegrationConnectionConfig,
         provider::{IntegrationConnectionContext, IntegrationProviderKind},
         IntegrationConnection, IntegrationConnectionId, IntegrationConnectionStatus,
         NangoProviderKey,
@@ -72,6 +73,42 @@ impl IntegrationConnectionService {
         self.repository
             .create_integration_connection(executor, integration_connection)
             .await
+    }
+
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    pub async fn update_integration_connection_config<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        integration_connection_id: IntegrationConnectionId,
+        integration_connection_config: IntegrationConnectionConfig,
+        for_user_id: UserId,
+    ) -> Result<UpdateStatus<Box<IntegrationConnectionConfig>>, UniversalInboxError> {
+        let updated_integration_connection_config = self
+            .repository
+            .update_integration_connection_config(
+                executor,
+                integration_connection_id,
+                integration_connection_config,
+                for_user_id,
+            )
+            .await?;
+
+        if updated_integration_connection_config
+            == (UpdateStatus {
+                updated: false,
+                result: None,
+            })
+            && self
+                .repository
+                .does_integration_connection_exist(executor, integration_connection_id)
+                .await?
+        {
+            return Err(UniversalInboxError::Forbidden(format!(
+                        "Only the owner of the integration connection {integration_connection_id} can patch it"
+                    )));
+        }
+
+        Ok(updated_integration_connection_config)
     }
 
     #[tracing::instrument(level = "debug", skip(self, executor), err)]

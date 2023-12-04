@@ -9,7 +9,8 @@ use tokio::sync::RwLock;
 
 use universal_inbox::{
     integration_connection::{
-        IntegrationConnection, IntegrationConnectionCreation, IntegrationConnectionId,
+        config::IntegrationConnectionConfig, IntegrationConnection, IntegrationConnectionCreation,
+        IntegrationConnectionId,
     },
     user::UserId,
 };
@@ -34,6 +35,11 @@ pub fn scope() -> Scope {
         .service(
             web::resource("/{integration_connection_id}")
                 .route(web::delete().to(disconnect_integration_connection))
+                .route(web::method(http::Method::OPTIONS).to(option_wildcard)),
+        )
+        .service(
+            web::resource("/{integration_connection_id}/config")
+                .route(web::put().to(update_integration_connection_config))
                 .route(web::method(http::Method::OPTIONS).to(option_wildcard)),
         )
         .service(
@@ -100,6 +106,62 @@ pub async fn create_integration_connection(
         serde_json::to_string(&created_integration_connection)
             .context("Cannot serialize integration connection")?,
     ))
+}
+
+pub async fn update_integration_connection_config(
+    path: web::Path<IntegrationConnectionId>,
+    integration_connection_config: web::Json<IntegrationConnectionConfig>,
+    integration_connection_service: web::Data<Arc<RwLock<IntegrationConnectionService>>>,
+    identity: Identity,
+) -> Result<HttpResponse, UniversalInboxError> {
+    let user_id = identity
+        .id()
+        .context("No user ID found in identity")?
+        .parse::<UserId>()
+        .context("User ID has wrong format")?;
+    let integration_connection_id = path.into_inner();
+    let service = integration_connection_service.read().await;
+    let mut transaction = service.begin().await.context(
+        "Failed to create new transaction while updating integration connection configuration",
+    )?;
+
+    let updated_config = service
+        .update_integration_connection_config(
+            &mut transaction,
+            integration_connection_id,
+            integration_connection_config.into_inner(),
+            user_id,
+        )
+        .await?;
+
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit while updating integration connection configuration")?;
+
+    match updated_config {
+        UpdateStatus {
+            updated: true,
+            result: Some(config),
+        } => Ok(HttpResponse::Ok()
+                .content_type("application/json")
+                .body(serde_json::to_string(&config).context("Cannot serialize integration connection configuration")?)),
+        UpdateStatus {
+            updated: false,
+            result: Some(_),
+        } => Ok(HttpResponse::NotModified().finish()),
+        UpdateStatus {
+            updated: _,
+            result: None,
+        } => Ok(HttpResponse::NotFound()
+                .content_type("application/json")
+                .body(BoxBody::new(
+                    json!({
+                        "message": format!("Cannot update unknown integration connection {integration_connection_id}")
+                    })
+                        .to_string(),
+                ))),
+    }
 }
 
 pub async fn verify_integration_connection(

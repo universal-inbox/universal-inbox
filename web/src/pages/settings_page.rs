@@ -5,7 +5,7 @@ use fermi::use_atom_ref;
 use log::debug;
 
 use universal_inbox::integration_connection::{
-    provider::IntegrationProviderKind, IntegrationConnection,
+    config::IntegrationConnectionConfig, provider::IntegrationProviderKind, IntegrationConnection,
 };
 
 use crate::{
@@ -63,6 +63,11 @@ pub fn SettingsPage(cx: Scope) -> Element {
                             on_reconnect: |connection: &IntegrationConnection| {
                                 integration_connection_service.send(
                                     IntegrationConnectionCommand::ReconnectIntegrationConnection(connection.clone())
+                                );
+                            },
+                            on_config_change: |(connection, config): (&IntegrationConnection, IntegrationConnectionConfig)| {
+                                integration_connection_service.send(
+                                    IntegrationConnectionCommand::UpdateIntegrationConnectionConfig(connection.clone(), config)
                                 );
                             },
                         }

@@ -8,8 +8,9 @@ use url::Url;
 
 use universal_inbox::{
     integration_connection::{
-        provider::IntegrationProviderKind, IntegrationConnection, IntegrationConnectionCreation,
-        IntegrationConnectionId, IntegrationConnectionStatus, NangoPublicKey,
+        config::IntegrationConnectionConfig, provider::IntegrationProviderKind,
+        IntegrationConnection, IntegrationConnectionCreation, IntegrationConnectionId,
+        IntegrationConnectionStatus, NangoPublicKey,
     },
     IntegrationProviderStaticConfig,
 };
@@ -28,6 +29,7 @@ use crate::{
 pub enum IntegrationConnectionCommand {
     Refresh,
     CreateIntegrationConnection(IntegrationProviderKind),
+    UpdateIntegrationConnectionConfig(IntegrationConnection, IntegrationConnectionConfig),
     AuthenticateIntegrationConnection(IntegrationConnection),
     DisconnectIntegrationConnection(IntegrationConnectionId),
     ReconnectIntegrationConnection(IntegrationConnection),
@@ -85,6 +87,41 @@ pub async fn integration_connnection_service<'a>(
                         toast_service.send(ToastCommand::Push(Toast {
                             kind: ToastKind::Failure,
                             message: format!("An error occurred while connecting with {integration_provider_kind}. Please, retry 🙏 If the issue keeps happening, please contact our support."),
+                            timeout: Some(5_000),
+                            ..Default::default()
+                        }));
+                    }
+                }
+            }
+            Some(IntegrationConnectionCommand::UpdateIntegrationConnectionConfig(
+                integration_connection,
+                config,
+            )) => {
+                match update_integration_connection_config(
+                    integration_connection.id,
+                    config,
+                    &integration_connections_ref,
+                    &app_config_ref,
+                    &ui_model_ref,
+                )
+                .await
+                {
+                    Ok(()) => sync_integration_connection(
+                        &integration_connection,
+                        &notification_service,
+                        &task_service,
+                    ),
+                    Err(error) => {
+                        error!(
+                            "An error occurred while updating integration connection {} configuration: {error:?}",
+                            integration_connection.id
+                        );
+                        toast_service.send(ToastCommand::Push(Toast {
+                            kind: ToastKind::Failure,
+                            message: format!(
+                                "An error occurred while updating integration connection {}. Please, retry 🙏 If the issue keeps happening, please contact our support.",
+                                integration_connection.id
+                            ),
                             timeout: Some(5_000),
                             ..Default::default()
                         }));
@@ -412,4 +449,29 @@ fn get_api_base_url(app_config_ref: &UseAtomRef<Option<AppConfig>>) -> Result<Ur
     } else {
         Err(anyhow!("Application not yet loaded, it is unexpected."))
     }
+}
+
+async fn update_integration_connection_config(
+    integration_connection_id: IntegrationConnectionId,
+    config: IntegrationConnectionConfig,
+    integration_connections_ref: &UseAtomRef<Option<Vec<IntegrationConnection>>>,
+    app_config_ref: &UseAtomRef<Option<AppConfig>>,
+    ui_model_ref: &UseAtomRef<UniversalInboxUIModel>,
+) -> Result<()> {
+    let api_base_url = get_api_base_url(app_config_ref)?;
+
+    debug!("Updating integration connection {integration_connection_id} configuration: {config:?}");
+    let _: IntegrationConnectionConfig = call_api(
+        Method::PUT,
+        &api_base_url,
+        &format!("integration-connections/{integration_connection_id}/config"),
+        Some(config),
+        Some(ui_model_ref.clone()),
+    )
+    .await?;
+
+    refresh_integration_connection(integration_connections_ref, app_config_ref, ui_model_ref)
+        .await?;
+
+    Ok(())
 }

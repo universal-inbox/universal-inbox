@@ -28,12 +28,10 @@ use crate::{
     repository::{task::TaskRepository, Repository},
     universal_inbox::{
         integration_connection::service::IntegrationConnectionService,
-        notification::service::NotificationService, user::service::UserService,
-        UniversalInboxError, UpdateStatus,
+        notification::service::NotificationService, task::TaskCreationResult,
+        user::service::UserService, UniversalInboxError, UpdateStatus,
     },
 };
-
-use super::TaskCreationResult;
 
 #[derive(Debug)]
 pub struct TaskService {

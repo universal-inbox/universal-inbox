@@ -95,7 +95,7 @@ pub async fn run(
 
         let cors = Cors::default()
             .allowed_origin(&front_base_url)
-            .allowed_methods(vec!["GET", "POST", "PATCH", "DELETE"])
+            .allowed_methods(vec!["GET", "POST", "PATCH", "DELETE", "PUT"])
             .allowed_headers(vec![
                 http::header::AUTHORIZATION,
                 http::header::COOKIE,
