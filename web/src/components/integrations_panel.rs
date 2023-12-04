@@ -417,7 +417,10 @@ pub fn IntegrationConnectionProviderConfiguration<'a>(
             TodoistProviderConfiguration { config: config.clone() }
         },
         IntegrationProvider::Linear { config } => render! {
-            LinearProviderConfiguration { config: config.clone() }
+            LinearProviderConfiguration {
+                on_config_change: |c| on_config_change.call(c),
+                config: config.clone()
+            }
         },
         _ => None,
     }
