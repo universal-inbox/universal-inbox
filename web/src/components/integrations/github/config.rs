@@ -20,7 +20,7 @@ pub fn GithubProviderConfiguration<'a>(
                 label {
                     class: "cursor-pointer label",
                     span {
-                        class: "label-text, text-neutral-content",
+                        class: "label-text",
                         "Synchronize Github notifications"
                     }
                     input {

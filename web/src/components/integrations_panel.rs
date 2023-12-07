@@ -240,7 +240,7 @@ pub fn IntegrationSettings<'a>(
 
     render! {
         div {
-            class: "card w-full bg-neutral text-neutral-content",
+            class: "card w-full bg-base-200 text-base-content",
 
             div {
                 class: "card-body",
@@ -333,7 +333,7 @@ pub fn Documentation(cx: Scope, config: IntegrationProviderStaticConfig) -> Elem
         if !config.doc.is_empty() {
             render! {
                 details {
-                    class: "collapse collapse-arrow bg-neutral-focus",
+                    class: "collapse collapse-arrow bg-neutral text-neutral-content",
                     summary {
                         class: "collapse-title text-lg font-medium min-h-min",
                         div {

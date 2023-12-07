@@ -442,7 +442,7 @@ where
             class: "dropdown bg-base-100 group",
 
             label {
-                class: "input-group h-10 group",
+                class: "join h-10 group w-full",
                 tabindex: -1,
 
                 &cx.props.children
@@ -450,7 +450,7 @@ where
                 button {
                     id: "selected-result",
                     name: "selected-result",
-                    class: "{border_style} {button_style} grow truncate block bg-transparent text-left border-0 border-b-2 focus:outline-none focus:ring-0 peer",
+                    class: "{border_style} {button_style} grow truncate block bg-transparent text-left border-0 border-b-2 focus:outline-none focus:ring-0 peer join-item",
                     onfocus: |_| {
                         let value = !*dropdown_opened.current();
                         let id = cx.props.name.clone();
@@ -467,7 +467,7 @@ where
                     "{selected_result_title}"
                 }
                 span {
-                    class: "{border_style} block py-2 bg-transparent border-0 border-b-2",
+                    class: "{border_style} block py-2 bg-transparent border-0 border-b-2 join-item",
                     ArrowDown { class: "h-5 w-5 group-hover:visible invisible" }
                 }
                 label {

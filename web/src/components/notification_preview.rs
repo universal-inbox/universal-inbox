@@ -35,7 +35,6 @@ pub fn NotificationPreview<'a>(
     ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
     notification: &'a NotificationWithTask,
 ) -> Element {
-    let is_help_enabled = ui_model_ref.read().is_help_enabled;
     let has_notification_details_preview = !notification.is_built_from_task();
     let has_task_details_preview = notification.task.is_some();
 
@@ -50,26 +49,11 @@ pub fn NotificationPreview<'a>(
         latest_shown_notification_id.set(Some(notification.id));
     }
 
-    let tab_width_style = if has_notification_details_preview && has_task_details_preview {
-        "w-1/2"
-    } else {
-        "w-full"
-    };
     let (notification_tab_style, task_tab_style) =
         if ui_model_ref.read().selected_preview_pane == PreviewPane::Notification {
             ("tab-active", "")
         } else {
             ("", "tab-active")
-        };
-    let (notification_shortcut_visibility_style, task_shortcut_visibility_style) =
-        if is_help_enabled && has_notification_details_preview && has_task_details_preview {
-            if ui_model_ref.read().selected_preview_pane == PreviewPane::Notification {
-                ("invisible", "visible")
-            } else {
-                ("visible", "invisible")
-            }
-        } else {
-            ("invisible", "invisible")
         };
 
     render! {
@@ -77,33 +61,34 @@ pub fn NotificationPreview<'a>(
             class: "flex flex-col gap-4 w-full",
 
             div {
-                class: "tabs w-full",
+                class: "tabs tabs-bordered w-full",
+                role: "tablist",
 
                 if has_notification_details_preview {
                     render! {
                         button {
-                            class: "tab tab-bordered {tab_width_style} {notification_tab_style} flex gap-2",
+                            class: "tab {notification_tab_style}",
+                            role: "tab",
                             onclick: move |_| { ui_model_ref.write().selected_preview_pane = PreviewPane::Notification },
-                            NotificationDetailsPreviewIcon { notification: notification }
-                            "Notification"
+                            div {
+                                class: "flex gap-2",
+                                NotificationDetailsPreviewIcon { notification: notification }
+                                "Notification"
+                            }
                         }
                     }
                 }
                 if has_task_details_preview {
                     render! {
                         button {
-                            class: "tab tab-bordered {tab_width_style} {task_tab_style} flex gap-2 indicator",
+                            class: "tab {task_tab_style}",
+                            role: "tab",
                             onclick: move |_| { ui_model_ref.write().selected_preview_pane = PreviewPane::Task },
-                            span {
-                                class: "{task_shortcut_visibility_style} indicator-item indicator-top indicator-start badge text-xs text-gray-400 z-50",
-                                "▶︎"
+                            div {
+                                class: "flex gap-2",
+                                TaskDetailsPreviewIcon { notification: notification }
+                                "Task"
                             }
-                            span {
-                                class: "{notification_shortcut_visibility_style} indicator-item indicator-top indicator-start badge text-xs text-gray-400 z-50",
-                                "◀︎"
-                            }
-                            TaskDetailsPreviewIcon { notification: notification }
-                            "Task"
                         }
                     }
                 }
