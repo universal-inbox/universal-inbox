@@ -20,7 +20,7 @@ pub fn LinearProviderConfiguration<'a>(
                 label {
                     class: "cursor-pointer label",
                     span {
-                        class: "label-text, text-neutral-content",
+                        class: "label-text",
                         "Synchronize Linear notifications"
                     }
                     input {

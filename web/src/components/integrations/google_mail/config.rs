@@ -23,7 +23,7 @@ pub fn GoogleMailProviderConfiguration<'a>(
                 label {
                     class: "cursor-pointer label",
                     span {
-                        class: "label-text, text-neutral-content",
+                        class: "label-text",
                         "Synchronize Google Mail threads as notification"
                     }
                     input {
@@ -45,7 +45,7 @@ pub fn GoogleMailProviderConfiguration<'a>(
                 label {
                     class: "label",
                     span {
-                        class: "label-text, text-neutral-content",
+                        class: "label-text",
                         "Google Mail label to synchronize"
                     }
                     select {
