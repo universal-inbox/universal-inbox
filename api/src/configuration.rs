@@ -61,24 +61,34 @@ pub struct LoggingSettings {
 }
 
 #[derive(Deserialize, Clone, Debug)]
-pub struct AuthenticationSettings {
+#[serde(tag = "type")]
+pub enum AuthenticationSettings {
+    OpenIDConnect(Box<OpenIDConnectSettings>),
+    Local,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct OpenIDConnectSettings {
     pub oidc_issuer_url: IssuerUrl,
     pub oidc_api_client_id: ClientId,
     pub oidc_api_client_secret: ClientSecret,
-    pub oidc_flow_settings: OIDCFlowSettings,
     pub user_profile_url: Url,
+    pub oidc_flow_settings: OIDCFlowSettings,
 }
 
 #[derive(Deserialize, Clone, Debug)]
 #[serde(tag = "type")]
 pub enum OIDCFlowSettings {
-    AuthorizationCodePKCEFlow {
-        // Introspection URL is only required for the Authorization code PKCE flow as
-        // the API server must validate (ie. has not be revoked) the access token sent by the front.
-        introspection_url: IntrospectionUrl,
-        front_client_id: ClientId,
-    },
+    AuthorizationCodePKCEFlow(OIDCAuthorizationCodePKCEFlowSettings),
     GoogleAuthorizationCodeFlow,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct OIDCAuthorizationCodePKCEFlowSettings {
+    // Introspection URL is only required for the Authorization code PKCE flow as
+    // the API server must validate (ie. has not be revoked) the access token sent by the front.
+    pub introspection_url: IntrospectionUrl,
+    pub front_client_id: ClientId,
 }
 
 #[derive(Deserialize, Clone, Debug)]

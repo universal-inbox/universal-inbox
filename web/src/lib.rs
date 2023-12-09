@@ -6,7 +6,7 @@ extern crate lazy_static;
 use anyhow::{anyhow, Context, Result};
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
-use fermi::{use_atom_ref, use_init_atom_root, UseAtomRef};
+use fermi::{use_atom_ref, use_atom_state, use_init_atom_root, UseAtomRef};
 use gloo_utils::errors::JsError;
 use log::debug;
 use utils::get_element_by_id;
@@ -26,7 +26,10 @@ use services::{
     user_service::{user_service, CONNECTED_USER},
 };
 
-use crate::utils::{current_location, get_local_storage};
+use crate::{
+    theme::{toggle_dark_mode, IS_DARK_MODE},
+    utils::{current_location, get_local_storage},
+};
 
 mod auth;
 mod components;
@@ -92,6 +95,7 @@ pub fn App(cx: Scope) -> Element {
             task_service_handle.clone(),
         )
     });
+    let is_dark_mode = use_atom_state(cx, &IS_DARK_MODE);
 
     use_future(cx, (), |()| {
         to_owned![ui_model_ref];
@@ -99,8 +103,11 @@ pub fn App(cx: Scope) -> Element {
         to_owned![task_service_handle];
         to_owned![notifications_ref];
         to_owned![app_config_ref];
+        to_owned![is_dark_mode];
 
         async move {
+            is_dark_mode.set(toggle_dark_mode(false).expect("Failed to initialize the theme"));
+
             setup_key_bindings(
                 ui_model_ref,
                 notification_service_handle.clone(),
@@ -151,9 +158,13 @@ fn setup_key_bindings(
         let list_length = notifications.len();
         let selected_notification =
             notifications.get(ui_model_ref.read().selected_notification_index);
+        let current_url = current_location().unwrap();
         let mut handled = true;
 
-        if ui_model_ref.read().task_planning_modal_opened
+        if current_url.path() != "/" {
+            // The notification page
+            handled = false;
+        } else if ui_model_ref.read().task_planning_modal_opened
             || ui_model_ref.read().task_link_modal_opened
         {
             match evt.key().as_ref() {

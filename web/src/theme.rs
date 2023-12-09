@@ -1,6 +1,7 @@
 use log::debug;
 
 use anyhow::{Context, Result};
+use fermi::Atom;
 use gloo_utils::errors::JsError;
 
 use crate::utils::get_local_storage;
@@ -17,6 +18,8 @@ pub const PRIORITY_LOW_COLOR_CLASS: &str = "text-primary";
 pub const PRIORITY_NORMAL_COLOR_CLASS: &str = "text-yellow-500";
 pub const PRIORITY_HIGH_COLOR_CLASS: &str = "text-orange-500";
 pub const PRIORITY_URGENT_COLOR_CLASS: &str = "text-red-500";
+
+pub static IS_DARK_MODE: Atom<bool> = Atom(|_| false);
 
 pub fn toggle_dark_mode(toggle: bool) -> Result<bool> {
     let window = web_sys::window().context("Unable to get the window object")?;

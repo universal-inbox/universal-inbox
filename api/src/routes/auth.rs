@@ -1,16 +1,14 @@
 use std::{str::FromStr, sync::Arc};
 
-use actix_http::body::BoxBody;
 use actix_identity::Identity;
 use actix_session::Session;
 use actix_web::{
     web::{self, Redirect},
     HttpMessage, HttpRequest, HttpResponse, Scope,
 };
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use openidconnect::{core::CoreIdToken, AccessToken, AuthorizationCode, CsrfToken, Nonce};
 use serde::Deserialize;
-use serde_json::json;
 use tokio::sync::RwLock;
 use tracing::debug;
 
@@ -20,7 +18,7 @@ use universal_inbox::{
 };
 
 use crate::{
-    configuration::Settings,
+    configuration::{AuthenticationSettings, OIDCFlowSettings, Settings},
     routes::option_wildcard,
     universal_inbox::{user::service::UserService, UniversalInboxError},
 };
@@ -45,11 +43,6 @@ pub fn scope() -> Scope {
                 .route(web::delete().to(close_session))
                 .route(web::method(http::Method::OPTIONS).to(option_wildcard)),
         )
-        .service(
-            web::resource("user")
-                .route(web::get().to(get_user))
-                .route(web::method(http::Method::OPTIONS).to(option_wildcard)),
-        )
 }
 
 /// Authenticate a user session using the Authorization Code + PKCE flow.
@@ -64,6 +57,7 @@ pub async fn authenticate_session(
     request: HttpRequest,
     params: web::Json<SessionAuthValidationParameters>,
     user_service: web::Data<Arc<RwLock<UserService>>>,
+    settings: web::Data<Settings>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let access_token = AccessToken::new(
         request
@@ -84,10 +78,33 @@ pub async fn authenticate_session(
         .await
         .context("Failed to create new transaction while authenticating user")?;
 
+    let AuthenticationSettings::OpenIDConnect(openid_connect_settings) =
+        &settings.application.security.authentication
+    else {
+        return Err(UniversalInboxError::Unexpected(anyhow!(
+            "This service can only be called when OpenID Connect authentication is configured"
+                .to_string()
+        )));
+    };
+    let OIDCFlowSettings::AuthorizationCodePKCEFlow(pkce_flow_settings) =
+        &openid_connect_settings.oidc_flow_settings
+    else {
+        return Err(UniversalInboxError::Unexpected(anyhow!(
+            "This service can only be called when OpenID Connect PKCE flow is configured"
+                .to_string()
+        )));
+    };
+
     let id_token = CoreIdToken::from_str(&params.auth_id_token.to_string())
         .context("Could not parse OIDC ID token")?;
     let user = service
-        .authenticate_for_auth_code_pkce_flow(&mut transaction, access_token, id_token)
+        .authenticate_for_auth_code_pkce_flow(
+            &mut transaction,
+            openid_connect_settings,
+            pkce_flow_settings,
+            access_token,
+            id_token,
+        )
         .await?;
 
     transaction
@@ -109,9 +126,19 @@ const OIDC_NONCE_SESSION_KEY: &str = "oidc_nonce";
 pub async fn authorize_session(
     user_service: web::Data<Arc<RwLock<UserService>>>,
     session: Session,
+    settings: web::Data<Settings>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let service = user_service.read().await;
-    let (authorization_url, csrf_token, nonce) = service.build_auth_url().await?;
+    let AuthenticationSettings::OpenIDConnect(openid_connect_settings) =
+        &settings.application.security.authentication
+    else {
+        return Err(UniversalInboxError::Unexpected(anyhow!(
+            "This service can only be called when OpenID Connect authentication is configured"
+                .to_string()
+        )));
+    };
+    let (authorization_url, csrf_token, nonce) =
+        service.build_auth_url(openid_connect_settings).await?;
 
     debug!(
         "store CSRF token: {:?} & nonce: {:?}",
@@ -178,9 +205,18 @@ pub async fn authenticated_session(
         .await
         .context("Failed to create new transaction while authenticating user")?;
 
+    let AuthenticationSettings::OpenIDConnect(openid_connect_settings) =
+        &settings.application.security.authentication
+    else {
+        return Err(UniversalInboxError::Unexpected(anyhow!(
+            "This service can only be called when OpenID Connect authentication is configured"
+                .to_string()
+        )));
+    };
     let user = service
         .authenticate_for_auth_code_flow(
             &mut transaction,
+            openid_connect_settings,
             authenticated_session_request.code.clone(),
             nonce,
         )
@@ -198,33 +234,6 @@ pub async fn authenticated_session(
     Ok(Redirect::to(
         settings.application.front_base_url.to_string(),
     ))
-}
-
-pub async fn get_user(
-    user_service: web::Data<Arc<RwLock<UserService>>>,
-    identity: Identity,
-) -> Result<HttpResponse, UniversalInboxError> {
-    let user_id: UserId = identity
-        .id()
-        .context("Missing `user_id` in session")?
-        .try_into()
-        .context("Wrong user ID format")?;
-    let service = user_service.read().await;
-    let mut transaction = service
-        .begin()
-        .await
-        .context("Failed to create new transaction while fetching user")?;
-
-    match service.get_user(&mut transaction, user_id).await? {
-        Some(user) => Ok(HttpResponse::Ok()
-            .content_type("application/json")
-            .body(serde_json::to_string(&user).context("Cannot serialize user")?)),
-        None => Ok(HttpResponse::NotFound()
-            .content_type("application/json")
-            .body(BoxBody::new(
-                json!({ "message": format!("Cannot find user {user_id}") }).to_string(),
-            ))),
-    }
 }
 
 pub async fn close_session(

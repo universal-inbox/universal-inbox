@@ -11,7 +11,7 @@ use url::Url;
 use uuid::Uuid;
 
 use universal_inbox_api::{
-    configuration::{OIDCFlowSettings, Settings},
+    configuration::{AuthenticationSettings, OIDCFlowSettings, Settings},
     integrations::oauth2::NangoService,
     observability::{get_subscriber, init_subscriber},
     repository::Repository,
@@ -118,19 +118,23 @@ pub async fn tested_app(
     let nango_mock_server = MockServer::start();
     let nango_mock_server_url = &nango_mock_server.base_url();
 
-    settings.application.security.authentication.oidc_issuer_url =
-        IssuerUrl::new(oidc_issuer_mock_server_url.to_string()).unwrap();
-    settings
-        .application
-        .security
-        .authentication
-        .oidc_flow_settings = OIDCFlowSettings::AuthorizationCodePKCEFlow {
-        introspection_url: IntrospectionUrl::new(format!(
-            "{oidc_issuer_mock_server_url}/introspect"
-        ))
-        .unwrap(),
-        front_client_id: ClientId::new("12345".to_string()),
-    };
+    if let AuthenticationSettings::OpenIDConnect(ref mut oidc_settings) =
+        &mut settings.application.security.authentication
+    {
+        oidc_settings.oidc_issuer_url =
+            IssuerUrl::new(oidc_issuer_mock_server_url.to_string()).unwrap();
+    }
+    if let AuthenticationSettings::OpenIDConnect(ref mut oidc_settings) =
+        &mut settings.application.security.authentication
+    {
+        if let OIDCFlowSettings::AuthorizationCodePKCEFlow(ref mut flow_settings) =
+            oidc_settings.oidc_flow_settings
+        {
+            flow_settings.introspection_url =
+                IntrospectionUrl::new(format!("{oidc_issuer_mock_server_url}/introspect")).unwrap();
+            flow_settings.front_client_id = ClientId::new("12345".to_string());
+        }
+    }
 
     let pool: Arc<PgPool> = db_connection.await;
 

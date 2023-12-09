@@ -18,6 +18,7 @@ pub mod spinner;
 pub mod task_link_modal;
 pub mod task_planning_modal;
 pub mod toast_zone;
+pub mod universal_inbox_title;
 
 #[inline_props]
 fn CollapseCardWithIcon<'a>(

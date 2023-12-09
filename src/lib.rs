@@ -19,10 +19,7 @@ pub mod user;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
 pub struct FrontConfig {
-    pub oidc_issuer_url: Url,
-    pub oidc_client_id: Option<String>,
-    pub oidc_redirect_url: Url,
-    pub user_profile_url: Url,
+    pub authentication_config: FrontAuthenticationConfig,
     pub nango_base_url: Url,
     pub nango_public_key: NangoPublicKey,
     pub integration_providers: HashMap<IntegrationProviderKind, IntegrationProviderStaticConfig>,
@@ -37,6 +34,21 @@ pub struct IntegrationProviderStaticConfig {
     pub warning_message: Option<String>,
     pub doc_for_actions: HashMap<String, String>,
     pub is_implemented: bool,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]
+#[serde(tag = "type")]
+pub enum FrontAuthenticationConfig {
+    OIDCAuthorizationCodePKCEFlow {
+        oidc_issuer_url: Url,
+        oidc_client_id: String,
+        oidc_redirect_url: Url,
+        user_profile_url: Url,
+    },
+    OIDCGoogleAuthorizationCodeFlow {
+        user_profile_url: Url,
+    },
+    Local,
 }
 
 pub trait HasHtmlUrl {

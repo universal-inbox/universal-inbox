@@ -15,6 +15,7 @@ nango_public_key = "nango_public_test_key"
 secret_key = "1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF"
 
 [application.security.authentication]
+type = "OpenIDConnect"
 oidc_issuer_url = "https://oidcprovider.com"
 oidc_api_client_id = "67890"
 oidc_api_client_secret = "azerty"

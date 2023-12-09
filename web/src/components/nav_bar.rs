@@ -7,9 +7,11 @@ use dioxus_free_icons::icons::bs_icons::{
 use dioxus_free_icons::icons::go_icons::GoMarkGithub;
 use dioxus_free_icons::Icon;
 use dioxus_router::prelude::*;
-use fermi::use_atom_ref;
+use fermi::{use_atom_ref, use_atom_state};
 use gravatar::{Gravatar, Rating};
+use universal_inbox::FrontAuthenticationConfig;
 
+use crate::theme::IS_DARK_MODE;
 use crate::{
     config::APP_CONFIG,
     route::Route,
@@ -43,18 +45,25 @@ pub fn NavBar(cx: Scope) -> Element {
 
     let app_config_ref = use_atom_ref(cx, &APP_CONFIG);
     // Howto use use_memo with an Option?
-    let user_profile_url = app_config_ref
-        .read()
-        .as_ref()
-        .map(|config| config.user_profile_url.clone());
+    let user_profile_url =
+        app_config_ref
+            .read()
+            .as_ref()
+            .and_then(|config| match &config.authentication_config {
+                FrontAuthenticationConfig::OIDCAuthorizationCodePKCEFlow {
+                    user_profile_url,
+                    ..
+                } => Some(user_profile_url.clone()),
+                FrontAuthenticationConfig::OIDCGoogleAuthorizationCodeFlow { user_profile_url } => {
+                    Some(user_profile_url.clone())
+                }
+                FrontAuthenticationConfig::Local => None,
+            });
     let support_href = app_config_ref
         .read()
         .as_ref()
         .and_then(|config| config.support_href.clone());
-
-    let is_dark_mode = use_state(cx, || {
-        toggle_dark_mode(false).expect("Failed to initialize the theme")
-    });
+    let is_dark_mode = use_atom_state(cx, &IS_DARK_MODE);
 
     use_future(cx, (), |()| {
         to_owned![user_service];
@@ -113,10 +122,7 @@ pub fn NavBar(cx: Scope) -> Element {
                         "type": "checkbox",
                         checked: "{is_dark_mode}",
                         onclick: |_| {
-                            is_dark_mode.set(
-                                toggle_dark_mode(true)
-                                    .expect("Failed to switch the theme")
-                            );
+                            is_dark_mode.set(toggle_dark_mode(true).expect("Failed to switch the theme"));
                         }
                     }
                     Icon { class: "swap-on w-5 h-5", icon: BsSun }

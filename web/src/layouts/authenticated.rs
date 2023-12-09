@@ -25,9 +25,7 @@ pub fn AuthenticatedLayout(cx: Scope) -> Element {
     if let Some(app_config) = app_config_ref.read().as_ref() {
         return render! {
             Authenticated {
-                issuer_url: app_config.oidc_issuer_url.clone(),
-                client_id: app_config.oidc_client_id.clone(),
-                redirect_url: app_config.oidc_redirect_url.clone(),
+                authentication_config: app_config.authentication_config.clone(),
                 ui_model_ref: ui_model_ref.clone(),
                 api_base_url: api_base_url.clone(),
 

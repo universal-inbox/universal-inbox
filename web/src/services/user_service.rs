@@ -30,7 +30,7 @@ pub async fn user_service<'a>(
                 let result: Result<User> = call_api(
                     Method::GET,
                     &api_base_url,
-                    "auth/user",
+                    "users/me",
                     None::<i32>,
                     Some(ui_model_ref.clone()),
                 )

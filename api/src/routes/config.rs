@@ -7,50 +7,53 @@ use actix_web::{
 use anyhow::Context;
 
 use universal_inbox::{
-    integration_connection::provider::IntegrationProviderKind, FrontConfig,
-    IntegrationProviderStaticConfig,
+    integration_connection::provider::IntegrationProviderKind, FrontAuthenticationConfig,
+    FrontConfig, IntegrationProviderStaticConfig,
 };
 
 use crate::{
-    configuration::{OIDCFlowSettings, Settings},
+    configuration::{
+        AuthenticationSettings, OIDCAuthorizationCodePKCEFlowSettings, OIDCFlowSettings,
+        OpenIDConnectSettings, Settings,
+    },
     universal_inbox::UniversalInboxError,
 };
 
 pub async fn front_config(
     settings: web::Data<Settings>,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    let oidc_client_id = if let OIDCFlowSettings::AuthorizationCodePKCEFlow {
-        front_client_id,
-        ..
-    } = &settings
-        .application
-        .security
-        .authentication
-        .oidc_flow_settings
-    {
-        Some(front_client_id.to_string())
-    } else {
-        None
+    let authentication_config = match &settings.application.security.authentication {
+        AuthenticationSettings::OpenIDConnect(oidc_settings) => match **oidc_settings {
+            OpenIDConnectSettings {
+                ref oidc_issuer_url,
+                ref user_profile_url,
+                oidc_flow_settings:
+                    OIDCFlowSettings::AuthorizationCodePKCEFlow(OIDCAuthorizationCodePKCEFlowSettings {
+                        ref front_client_id,
+                        ..
+                    }),
+                ..
+            } => FrontAuthenticationConfig::OIDCAuthorizationCodePKCEFlow {
+                oidc_issuer_url: oidc_issuer_url.url().clone(),
+                oidc_client_id: front_client_id.to_string(),
+                oidc_redirect_url: settings
+                    .application
+                    .get_oidc_auth_code_pkce_flow_redirect_url()?,
+                user_profile_url: user_profile_url.clone(),
+            },
+            OpenIDConnectSettings {
+                ref user_profile_url,
+                oidc_flow_settings: OIDCFlowSettings::GoogleAuthorizationCodeFlow,
+                ..
+            } => FrontAuthenticationConfig::OIDCGoogleAuthorizationCodeFlow {
+                user_profile_url: user_profile_url.clone(),
+            },
+        },
+        AuthenticationSettings::Local => FrontAuthenticationConfig::Local,
     };
 
     let config = FrontConfig {
-        oidc_issuer_url: settings
-            .application
-            .security
-            .authentication
-            .oidc_issuer_url
-            .url()
-            .clone(),
-        oidc_client_id,
-        oidc_redirect_url: settings
-            .application
-            .get_oidc_auth_code_pkce_flow_redirect_url()?,
-        user_profile_url: settings
-            .application
-            .security
-            .authentication
-            .user_profile_url
-            .clone(),
+        authentication_config,
         nango_base_url: settings.integrations.oauth2.nango_base_url.clone(),
         nango_public_key: settings.integrations.oauth2.nango_public_key.clone(),
         // tag: New notification integration

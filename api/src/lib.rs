@@ -15,6 +15,7 @@ use actix_web::{
 };
 use actix_web_lab::web::spa;
 use anyhow::Context;
+use configuration::AuthenticationSettings;
 use csp::{Directive, Source, Sources, CSP};
 use sqlx::PgPool;
 use tokio::sync::RwLock;
@@ -85,9 +86,10 @@ pub async fn run(
         let api_scope = web::scope(api_path.trim_end_matches('/'))
             .route("/front_config", web::get().to(routes::config::front_config))
             .service(routes::auth::scope())
+            .service(routes::integration_connection::scope())
             .service(routes::notification::scope())
             .service(routes::task::scope())
-            .service(routes::integration_connection::scope())
+            .service(routes::user::scope())
             .app_data(web::Data::new(notification_service.clone()))
             .app_data(web::Data::new(task_service.clone()))
             .app_data(web::Data::new(user_service.clone()))
@@ -279,11 +281,13 @@ fn build_csp_header(settings: &Settings) -> String {
     let mut nango_ws_base_url = settings.integrations.oauth2.nango_base_url.clone();
     nango_ws_base_url.set_scheme(nango_ws_scheme).unwrap();
     let mut connect_srcs = Sources::new_with(Source::Self_)
-        .push(Source::Host(
-            &settings.application.security.authentication.oidc_issuer_url,
-        ))
         .push(Source::Host(nango_ws_base_url.as_str()))
         .push(Source::Host(&nango_base_url));
+    if let AuthenticationSettings::OpenIDConnect(oidc_settings) =
+        &settings.application.security.authentication
+    {
+        connect_srcs.push_borrowed(Source::Host(oidc_settings.oidc_issuer_url.as_str()));
+    }
     for url in settings.application.security.csp_extra_connect_src.iter() {
         connect_srcs.push_borrowed(Source::Host(url));
     }
