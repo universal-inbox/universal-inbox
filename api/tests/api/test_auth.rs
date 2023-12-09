@@ -50,7 +50,7 @@ mod authenticate_session {
         assert_eq!(response.status(), 200);
 
         let user: User = client
-            .get(&format!("{}auth/user", app.api_address))
+            .get(&format!("{}users/me", app.api_address))
             .send()
             .await
             .unwrap()
@@ -76,7 +76,7 @@ mod authenticate_session {
         assert_eq!(response.status(), 200);
 
         let user: User = client
-            .get(&format!("{}auth/user", app.api_address))
+            .get(&format!("{}users/me", app.api_address))
             .send()
             .await
             .unwrap()

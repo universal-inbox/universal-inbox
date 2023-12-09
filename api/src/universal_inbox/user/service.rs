@@ -21,7 +21,10 @@ use universal_inbox::{
 };
 
 use crate::{
-    configuration::{ApplicationSettings, OIDCFlowSettings},
+    configuration::{
+        ApplicationSettings, AuthenticationSettings, OIDCAuthorizationCodePKCEFlowSettings,
+        OIDCFlowSettings, OpenIDConnectSettings,
+    },
     repository::user::UserRepository,
     repository::Repository,
     universal_inbox::{UniversalInboxError, UpdateStatus},
@@ -65,18 +68,23 @@ impl UserService {
         self.repository.fetch_all_users(executor).await
     }
 
+    /// In an OpenID Connect Authorization code flow, the API has fetched the access token and
+    /// thus does not need to validate it.
     #[tracing::instrument(level = "debug", skip(self, executor, nonce), err)]
     pub async fn authenticate_for_auth_code_flow<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
+        openid_connect_settings: &OpenIDConnectSettings,
         code: AuthorizationCode,
         nonce: Nonce,
     ) -> Result<User, UniversalInboxError> {
-        let (access_token, id_token) = self.fetch_access_token(code, nonce.clone()).await?;
+        let (access_token, id_token) = self
+            .fetch_access_token(openid_connect_settings, code, nonce.clone())
+            .await?;
 
-        // In the Authorization code flow, the API has fetched the access token and thus does not need to
-        // validate it.
-        let oidc_provider = self.get_openid_connect_provider().await?;
+        let oidc_provider = self
+            .get_openid_connect_provider(openid_connect_settings)
+            .await?;
         let auth_user_id = oidc_provider
             .verify_id_token_claims(&id_token, &nonce)?
             .subject()
@@ -96,27 +104,16 @@ impl UserService {
     #[tracing::instrument(level = "debug", skip(self, oidc_provider), err)]
     async fn verify_access_token(
         &self,
+        pkce_flow_settings: &OIDCAuthorizationCodePKCEFlowSettings,
         oidc_provider: &mut OpenidConnectProvider,
         access_token: &AccessToken,
     ) -> Result<AuthUserId, UniversalInboxError> {
-        let OIDCFlowSettings::AuthorizationCodePKCEFlow {
-            introspection_url, ..
-        } = &self
-            .application_settings
-            .security
-            .authentication
-            .oidc_flow_settings
-        else {
-            return Err(UniversalInboxError::Unexpected(anyhow!(
-                "Cannot validate OIDC ID Token without a configured introspection URL"
-            )));
-        };
         // The introspection URL is only used for the Authorization code PKCE flow as
         // the API server must validate (ie. has not be revoked) the access token sent by the front.
         let client = oidc_provider
             .client
             .clone()
-            .set_introspection_uri(introspection_url.clone());
+            .set_introspection_uri(pkce_flow_settings.introspection_url.clone());
 
         let introspection_result = client
             .introspect(access_token)
@@ -139,10 +136,14 @@ impl UserService {
             .into())
     }
 
+    /// In an OpenIDConnect flow, the access token is fetched by the front-end and sent to the API
+    /// This function validates the access token and creates the user if it does not exist.
     #[tracing::instrument(level = "debug", skip(self, executor, id_token), err)]
     pub async fn authenticate_for_auth_code_pkce_flow<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
+        openid_connect_settings: &OpenIDConnectSettings,
+        pkce_flow_settings: &OIDCAuthorizationCodePKCEFlowSettings,
         access_token: AccessToken,
         id_token: IdToken<
             EmptyAdditionalClaims,
@@ -152,9 +153,11 @@ impl UserService {
             CoreJsonWebKeyType,
         >,
     ) -> Result<User, UniversalInboxError> {
-        let mut oidc_provider = self.get_openid_connect_provider().await?;
+        let mut oidc_provider = self
+            .get_openid_connect_provider(openid_connect_settings)
+            .await?;
         let auth_user_id: AuthUserId = self
-            .verify_access_token(&mut oidc_provider, &access_token)
+            .verify_access_token(pkce_flow_settings, &mut oidc_provider, &access_token)
             .await?;
         self.authenticate_and_create_user_if_not_exists(
             executor,
@@ -166,6 +169,8 @@ impl UserService {
         .await
     }
 
+    /// In an OpenIDConnect flow, this function update the ID token associated with the given auth_user_id
+    /// If there no user associated with the given auth_user_id, it creates a new user.
     #[tracing::instrument(level = "debug", skip(self, executor, oidc_provider, id_token), err)]
     async fn authenticate_and_create_user_if_not_exists<'a>(
         &self,
@@ -246,58 +251,63 @@ impl UserService {
         executor: &mut Transaction<'a, Postgres>,
         user_id: UserId,
     ) -> Result<Url, UniversalInboxError> {
-        match &self
-            .application_settings
-            .security
-            .authentication
-            .oidc_flow_settings
-        {
-            OIDCFlowSettings::AuthorizationCodePKCEFlow { .. } => {
-                let provider_metadata = ProviderMetadataWithLogout::discover_async(
-                    self.application_settings
-                        .security
-                        .authentication
-                        .oidc_issuer_url
-                        .clone(),
-                    async_http_client,
-                )
-                .await
-                .context("metadata provider error")?;
-                let end_session_url: EndSessionUrl = provider_metadata
-                    .additional_metadata()
-                    .end_session_endpoint
-                    .as_ref()
-                    .ok_or_else(|| anyhow!("No end session endpoint found in provider metadata"))?
-                    .clone();
-                let logout_request: LogoutRequest = end_session_url.into();
+        match &self.application_settings.security.authentication {
+            AuthenticationSettings::OpenIDConnect(oidc_settings) => {
+                match &oidc_settings.oidc_flow_settings {
+                    OIDCFlowSettings::AuthorizationCodePKCEFlow { .. } => {
+                        let provider_metadata = ProviderMetadataWithLogout::discover_async(
+                            oidc_settings.oidc_issuer_url.clone(),
+                            async_http_client,
+                        )
+                        .await
+                        .context("metadata provider error")?;
+                        let end_session_url: EndSessionUrl = provider_metadata
+                            .additional_metadata()
+                            .end_session_endpoint
+                            .as_ref()
+                            .ok_or_else(|| {
+                                anyhow!("No end session endpoint found in provider metadata")
+                            })?
+                            .clone();
+                        let logout_request: LogoutRequest = end_session_url.into();
 
-                let user = self
-                    .repository
-                    .get_user(executor, user_id)
-                    .await?
-                    .ok_or_else(|| anyhow!("User with ID {user_id} not found"))?;
-                let id_token = CoreIdToken::from_str(&user.auth_id_token.to_string())
-                    .context("Could not parse stored OIDC ID token, this should not happen")?;
+                        let user = self
+                            .repository
+                            .get_user(executor, user_id)
+                            .await?
+                            .ok_or_else(|| anyhow!("User with ID {user_id} not found"))?;
+                        let id_token = CoreIdToken::from_str(&user.auth_id_token.to_string())
+                            .context(
+                                "Could not parse stored OIDC ID token, this should not happen",
+                            )?;
 
-                Ok(logout_request
-                    .set_id_token_hint(&id_token)
-                    .set_post_logout_redirect_uri(PostLogoutRedirectUrl::from_url(
-                        self.application_settings.front_base_url.clone(),
-                    ))
-                    .http_get_url())
+                        Ok(logout_request
+                            .set_id_token_hint(&id_token)
+                            .set_post_logout_redirect_uri(PostLogoutRedirectUrl::from_url(
+                                self.application_settings.front_base_url.clone(),
+                            ))
+                            .http_get_url())
+                    }
+                    OIDCFlowSettings::GoogleAuthorizationCodeFlow => {
+                        Ok(
+                            "https://accounts.google.com/logout?continue=http://localhost:8000" // TODO: remove hardcoded continue value
+                                .parse::<Url>()
+                                .unwrap(),
+                        )
+                    }
+                }
             }
-            OIDCFlowSettings::GoogleAuthorizationCodeFlow => Ok(
-                "https://accounts.google.com/logout?continue=http://localhost:8000"
-                    .parse::<Url>()
-                    .unwrap(),
-            ),
+            AuthenticationSettings::Local => todo!(),
         }
     }
 
     #[tracing::instrument(level = "debug", skip(self), err)]
-    pub async fn build_auth_url<'a>(&self) -> Result<(Url, CsrfToken, Nonce), UniversalInboxError> {
+    pub async fn build_auth_url<'a>(
+        &self,
+        openid_connect_settings: &OpenIDConnectSettings,
+    ) -> Result<(Url, CsrfToken, Nonce), UniversalInboxError> {
         Ok(self
-            .get_openid_connect_provider()
+            .get_openid_connect_provider(openid_connect_settings)
             .await?
             .build_google_authorization_code_flow_auth_url())
     }
@@ -306,6 +316,7 @@ impl UserService {
     #[tracing::instrument(level = "debug", skip(self), err)]
     pub async fn fetch_access_token<'a>(
         &self,
+        openid_connect_settings: &OpenIDConnectSettings,
         auth_code: AuthorizationCode,
         nonce: Nonce,
     ) -> Result<
@@ -322,7 +333,7 @@ impl UserService {
         UniversalInboxError,
     > {
         Ok(self
-            .get_openid_connect_provider()
+            .get_openid_connect_provider(openid_connect_settings)
             .await?
             .fetch_access_token(auth_code, nonce, None)
             .await?)
@@ -330,6 +341,7 @@ impl UserService {
 
     async fn get_openid_connect_provider(
         &self,
+        openid_connect_settings: &OpenIDConnectSettings,
     ) -> Result<OpenidConnectProvider, UniversalInboxError> {
         let redirect_url = RedirectUrl::new(
             self.application_settings
@@ -339,23 +351,9 @@ impl UserService {
         .context("Failed to build OpenID connect redirection URL from {redirect_url}")?;
 
         Ok(OpenidConnectProvider::build(
-            self.application_settings
-                .security
-                .authentication
-                .oidc_issuer_url
-                .clone(),
-            self.application_settings
-                .security
-                .authentication
-                .oidc_api_client_id
-                .clone(),
-            Some(
-                self.application_settings
-                    .security
-                    .authentication
-                    .oidc_api_client_secret
-                    .clone(),
-            ),
+            openid_connect_settings.oidc_issuer_url.clone(),
+            openid_connect_settings.oidc_api_client_id.clone(),
+            Some(openid_connect_settings.oidc_api_client_secret.clone()),
             redirect_url,
         )
         .await?)
