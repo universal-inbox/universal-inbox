@@ -17,9 +17,11 @@ use universal_inbox::{
     user::UserId,
 };
 
-use crate::universal_inbox::{task::service::TaskService, UniversalInboxError, UpdateStatus};
-
-use super::option_wildcard;
+use crate::{
+    observability::spawn_with_tracing,
+    routes::option_wildcard,
+    universal_inbox::{task::service::TaskService, UniversalInboxError, UpdateStatus},
+};
 
 pub fn scope() -> Scope {
     web::scope("/tasks")
@@ -176,7 +178,7 @@ pub async fn sync_tasks(
 
         if params.asynchronous.unwrap_or(true) {
             let task_service = task_service.get_ref().clone();
-            tokio::spawn(async move {
+            spawn_with_tracing(async move {
                 let source_kind_string = source
                     .map(|s| s.to_string())
                     .unwrap_or_else(|| "all types of".to_string());
@@ -217,7 +219,7 @@ pub async fn sync_tasks(
     } else {
         let task_service = task_service.get_ref().clone();
 
-        tokio::spawn(async move {
+        spawn_with_tracing(async move {
             let source_kind_string = source
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| "all types of".to_string());

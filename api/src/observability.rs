@@ -1,4 +1,4 @@
-use std::{str::FromStr, time::Duration};
+use std::{future::Future, str::FromStr, time::Duration};
 
 use actix_http::body::MessageBody;
 use actix_identity::IdentityExt;
@@ -11,8 +11,9 @@ use opentelemetry_sdk::{
     trace::{self, RandomIdGenerator, Sampler},
     Resource,
 };
+use tokio::task::JoinHandle;
 use tonic::metadata::{AsciiMetadataKey, MetadataMap};
-use tracing::{subscriber::set_global_default, Span, Subscriber};
+use tracing::{subscriber::set_global_default, Instrument, Span, Subscriber};
 use tracing_actix_web::{DefaultRootSpanBuilder, RootSpanBuilder};
 use tracing_log::LogTracer;
 use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Registry};
@@ -120,4 +121,22 @@ impl RootSpanBuilder for AuthenticatedRootSpanBuilder {
     ) {
         DefaultRootSpanBuilder::on_request_end(span, outcome);
     }
+}
+
+pub fn spawn_blocking_with_tracing<F, R>(f: F) -> JoinHandle<R>
+where
+    F: FnOnce() -> R + Send + 'static,
+    R: Send + 'static,
+{
+    let current_span = tracing::Span::current();
+    tokio::task::spawn_blocking(move || current_span.in_scope(f))
+}
+
+pub fn spawn_with_tracing<F>(f: F) -> JoinHandle<F::Output>
+where
+    F: Future + Send + 'static,
+    F::Output: Send + 'static,
+{
+    let current_span = tracing::Span::current();
+    tokio::spawn(f.instrument(current_span))
 }
