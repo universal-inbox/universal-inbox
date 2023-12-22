@@ -3,8 +3,8 @@ use rstest::*;
 use crate::helpers::{
     tested_app_with_local_auth,
     user::{
-        get_current_user, get_current_user_response, login_user_response, register_user,
-        register_user_response,
+        get_current_user, get_current_user_response, login_user_response, logout_user_response,
+        register_user, register_user_response,
     },
     TestedApp,
 };
@@ -156,5 +156,28 @@ mod authenticate_session {
             body.get("message").unwrap(),
             "Unauthorized access: Invalid email address or password"
         );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_logout_user(#[future] tested_app_with_local_auth: TestedApp) {
+        let app = tested_app_with_local_auth.await;
+
+        let (client, _user) = register_user(
+            &app,
+            "John",
+            "Doe",
+            "john@doe.name".parse().unwrap(),
+            "Very-harD-pasSword-5",
+        )
+        .await;
+
+        let logout_response = logout_user_response(&client, &app.api_address).await;
+
+        assert_eq!(logout_response.status(), http::StatusCode::OK);
+
+        let response = get_current_user_response(&client, &app).await;
+
+        assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
     }
 }

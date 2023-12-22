@@ -312,7 +312,9 @@ impl UserService {
                     }
                 }
             }
-            AuthenticationSettings::Local(_) => todo!(),
+            AuthenticationSettings::Local(_) => {
+                Ok(self.application_settings.front_base_url.clone())
+            }
         }
     }
 
