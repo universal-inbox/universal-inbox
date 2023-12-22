@@ -29,7 +29,7 @@ mod content_security_policy {
                        &HeaderValue::from_str(
                            &format!(
                                "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; object-src 'none'; connect-src 'self' ws://localhost:3003/ http://localhost:3003/ {}; img-src 'self' https://secure.gravatar.com https://avatars.githubusercontent.com https://public.linear.app data:; worker-src 'none'",
-                               app.oidc_issuer_mock_server.base_url()
+                               app.oidc_issuer_mock_server.as_ref().unwrap().base_url()
                            )
                        ).unwrap()
                    )

@@ -290,7 +290,7 @@ mod create_task {
         let response =
             create_resource_response(&app.client, &app.api_address, "tasks", expected_task).await;
 
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(response.status(), StatusCode::CONFLICT);
         let body = response.text().await.expect("Cannot get response body");
         assert_eq!(
             body,

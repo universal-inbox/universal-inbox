@@ -113,7 +113,7 @@ pub async fn authenticate_session(
         .context("Failed to commit while authenticating user")?;
 
     Identity::login(&request.extensions(), user.id.to_string())
-        .map_err(|err| UniversalInboxError::Unauthorized(err.to_string()))?;
+        .map_err(|err| UniversalInboxError::Unauthorized(anyhow!(err.to_string())))?;
 
     Ok(HttpResponse::Ok().finish())
 }
@@ -189,9 +189,9 @@ pub async fn authenticated_session(
         authenticated_session_request.state.secret()
     );
     if authenticated_session_request.state.secret() != csrf_token.secret() {
-        return Err(UniversalInboxError::Unauthorized(
-            "Invalid CSRF token".to_string(),
-        ));
+        return Err(UniversalInboxError::Unauthorized(anyhow!(
+            "Invalid CSRF token"
+        )));
     }
 
     let nonce = session
@@ -229,7 +229,7 @@ pub async fn authenticated_session(
 
     // 4. Create a new authenticated session
     Identity::login(&request.extensions(), user.id.to_string())
-        .map_err(|err| UniversalInboxError::Unauthorized(err.to_string()))?;
+        .map_err(|err| UniversalInboxError::Unauthorized(anyhow!(err.to_string())))?;
 
     Ok(Redirect::to(
         settings.application.front_base_url.to_string(),

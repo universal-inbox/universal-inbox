@@ -25,23 +25,22 @@ const NOT_CONNECTED_USER_NAME: &str = "Not connected";
 pub fn NavBar(cx: Scope) -> Element {
     let user_service = use_coroutine_handle::<UserCommand>(cx).unwrap();
     let connected_user_ref = use_atom_ref(cx, &CONNECTED_USER);
-    let user_avatar = use_memo(cx, &connected_user_ref.read().clone(), |connected_user| {
-        connected_user
-            .map(|user| {
-                Gravatar::new(user.email.as_str())
-                    .set_size(Some(150))
-                    .set_rating(Some(Rating::G))
-                    .set_default(Some(gravatar::Default::MysteryMan))
-                    .image_url()
-                    .to_string()
-            })
-            .unwrap_or_else(|| DEFAULT_USER_AVATAR.to_string())
-    });
-    let user_name = use_memo(cx, &connected_user_ref.read().clone(), |connected_user| {
-        connected_user
-            .map(|user| user.first_name)
-            .unwrap_or_else(|| NOT_CONNECTED_USER_NAME.to_string())
-    });
+    let connected_user = connected_user_ref.read();
+    let user_avatar = connected_user
+        .as_ref()
+        .map(|user| {
+            Gravatar::new(user.email.as_str())
+                .set_size(Some(150))
+                .set_rating(Some(Rating::G))
+                .set_default(Some(gravatar::Default::MysteryMan))
+                .image_url()
+                .to_string()
+        })
+        .unwrap_or_else(|| DEFAULT_USER_AVATAR.to_string());
+    let user_name = connected_user
+        .as_ref()
+        .map(|user| user.first_name.clone())
+        .unwrap_or_else(|| NOT_CONNECTED_USER_NAME.to_string());
 
     let app_config_ref = use_atom_ref(cx, &APP_CONFIG);
     // Howto use use_memo with an Option?

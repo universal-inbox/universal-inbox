@@ -14,3 +14,4 @@ mod test_sync_todoist_tasks;
 mod test_tasks;
 mod test_todoist_notifications;
 mod test_todoist_tasks;
+mod test_users;

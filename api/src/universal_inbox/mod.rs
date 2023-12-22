@@ -2,6 +2,7 @@ use anyhow::{anyhow, Error};
 use format_serde_error::SerdeError;
 use url::ParseError;
 use uuid::Uuid;
+use validator::ValidationErrors;
 
 use universal_inbox::task::TaskId;
 
@@ -49,6 +50,8 @@ pub enum UniversalInboxError {
         source: Option<sqlx::Error>,
         user_error: String,
     },
+    #[error("Invalid parameters: {0}")]
+    InvalidParameters(ValidationErrors),
     #[error("The entity {id} already exists")]
     AlreadyExists {
         #[source]
@@ -60,7 +63,7 @@ pub enum UniversalInboxError {
     #[error("Task not found: {0}")]
     TaskNotFound(TaskId),
     #[error("Unauthorized access: {0}")]
-    Unauthorized(String),
+    Unauthorized(anyhow::Error),
     #[error("Forbidden access: {0}")]
     Forbidden(String),
     #[error("Unknown Nango connection: {0}")]

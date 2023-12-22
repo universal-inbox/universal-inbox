@@ -20,12 +20,14 @@ doctest = false
 anyhow = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
 clap = { workspace = true }
+email_address = { workspace = true }
 enum_derive = { workspace = true }
 git-url-parse = "0.4.0"
 http = { workspace = true }
 macro-attr = { workspace = true }
 num_enum = "0.7.0"
 openidconnect = { workspace = true }
+secrecy = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true, features = ["preserve_order"] }
 serde_repr = "0.1.0"
@@ -33,6 +35,7 @@ serde_urlencoded = { workspace = true }
 serde_with = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true, features = ["serde"] }
+validator = { workspace = true }
 
 [workspace.dependencies]
 anyhow = { version = "1.0" }
@@ -41,6 +44,7 @@ chrono = { version = "0.4.0", default-features = false, features = [
   "std",
 ] }
 clap = { version = "4.1.0", features = ["derive"] }
+email_address = { version = "0.2" }
 enum_derive = { version = "0.1.0" }
 http = { version = "0.2.0" }
 itertools = { version = "0.11.0" }
@@ -51,6 +55,7 @@ openidconnect = { version = "3.4.0" }
 pretty_assertions = { version = "1.3.0" }
 reqwest = { version = "0.11", features = ["json", "cookies"] }
 rstest = { version = "0.13.0" }
+secrecy = { version = "0.8.0", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 serde_urlencoded = { version = "0.7.0" }
@@ -58,6 +63,7 @@ serde_with = { version = "2.3.0" }
 thiserror = { version = "1.0" }
 url = { version = "2.5.0" }
 uuid = { version = "1.0", features = ["v4"] }
+validator = { version = "0.16.0", features = ["derive"] }
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }

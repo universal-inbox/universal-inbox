@@ -1,6 +1,7 @@
 use std::{str::FromStr, sync::Arc};
 
 use anyhow::{anyhow, Context};
+use argon2::{password_hash::SaltString, Argon2, Params, PasswordHasher, PasswordVerifier};
 use openidconnect::{
     core::{
         CoreGenderClaim, CoreIdToken, CoreJsonWebKeyType, CoreJweContentEncryptionAlgorithm,
@@ -11,13 +12,18 @@ use openidconnect::{
     LogoutRequest, Nonce, PostLogoutRedirectUrl, ProviderMetadataWithLogout, RedirectUrl,
     SubjectIdentifier, TokenIntrospectionResponse,
 };
+use rand;
+use secrecy::{ExposeSecret, Secret};
 use sqlx::{Postgres, Transaction};
 use tracing::info;
 use url::Url;
 
 use universal_inbox::{
     auth::openidconnect::OpenidConnectProvider,
-    user::{AuthUserId, User, UserId},
+    user::{
+        AuthUserId, Credentials, LocalUserAuth, OpenIdConnectUserAuth, Password, PasswordHash,
+        User, UserAuth, UserId,
+    },
 };
 
 use crate::{
@@ -25,6 +31,7 @@ use crate::{
         ApplicationSettings, AuthenticationSettings, OIDCAuthorizationCodePKCEFlowSettings,
         OIDCFlowSettings, OpenIDConnectSettings,
     },
+    observability::spawn_blocking_with_tracing,
     repository::user::UserRepository,
     repository::Repository,
     universal_inbox::{UniversalInboxError, UpdateStatus},
@@ -124,9 +131,9 @@ impl UserService {
             .context("Introspection request error")?;
 
         if !introspection_result.active() {
-            return Err(UniversalInboxError::Unauthorized(
-                "Given access token is not active".to_string(),
-            ));
+            return Err(UniversalInboxError::Unauthorized(anyhow!(
+                "Given access token is not active"
+            )));
         }
 
         Ok(introspection_result
@@ -227,17 +234,20 @@ impl UserService {
                 let email = user_infos
                     .email()
                     .context("No email found in user info")?
-                    .to_string();
+                    .parse()
+                    .context("Invalid email address")?;
 
                 self.repository
                     .create_user(
                         executor,
                         User::new(
-                            auth_user_id,
-                            id_token.to_string().into(),
                             first_name,
                             last_name,
                             email,
+                            UserAuth::OpenIdConnect(OpenIdConnectUserAuth {
+                                auth_user_id,
+                                auth_id_token: id_token.to_string().into(),
+                            }),
                         ),
                     )
                     .await
@@ -276,7 +286,12 @@ impl UserService {
                             .get_user(executor, user_id)
                             .await?
                             .ok_or_else(|| anyhow!("User with ID {user_id} not found"))?;
-                        let id_token = CoreIdToken::from_str(&user.auth_id_token.to_string())
+                        let UserAuth::OpenIdConnect(user_auth) = &user.auth else {
+                            return Err(anyhow!(
+                                "User with ID {user_id} does not have OpenIDConnect auth parameters"
+                            ))?;
+                        };
+                        let id_token = CoreIdToken::from_str(&user_auth.auth_id_token.to_string())
                             .context(
                                 "Could not parse stored OIDC ID token, this should not happen",
                             )?;
@@ -297,7 +312,7 @@ impl UserService {
                     }
                 }
             }
-            AuthenticationSettings::Local => todo!(),
+            AuthenticationSettings::Local(_) => todo!(),
         }
     }
 
@@ -357,5 +372,101 @@ impl UserService {
             redirect_url,
         )
         .await?)
+    }
+
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    pub async fn register_user<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        user: User,
+    ) -> Result<User, UniversalInboxError> {
+        self.repository.create_user(executor, user).await
+    }
+
+    #[tracing::instrument(level = "debug", skip(self, executor, credentials), err)]
+    pub async fn validate_credentials<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        credentials: Credentials,
+    ) -> Result<User, UniversalInboxError> {
+        // Use a default password hash to prevent timing attacks
+        let mut expected_password_hash = Secret::new(PasswordHash(
+            "$argon2id$v=19$m=20000,t=2,p=1$\
+                 gZiV/M1gPc22ElAH/Jh1Hw$\
+                 CWOrkoo7oJBQ/iyh7uJ0LO2aLEfrHwTWllSAxT0zRno"
+                .to_string(),
+        ));
+
+        let user = self
+            .repository
+            .get_user_by_email(executor, &credentials.email)
+            .await?;
+        if let Some(User {
+            auth: UserAuth::Local(LocalUserAuth { ref password_hash }),
+            ..
+        }) = user
+        {
+            expected_password_hash = password_hash.clone();
+        }
+        spawn_blocking_with_tracing(move || {
+            UserService::verify_password_hash(expected_password_hash, credentials.password)
+        })
+        .await
+        .context("Failed to spawn blocking task.")??;
+
+        user.ok_or_else(|| UniversalInboxError::Unauthorized(anyhow!("Unknown user")))
+    }
+
+    #[tracing::instrument(level = "debug", skip(self, password), err)]
+    pub fn get_new_password_hash(
+        &self,
+        password: Secret<Password>,
+    ) -> Result<Secret<PasswordHash>, UniversalInboxError> {
+        let salt = SaltString::generate(&mut rand::thread_rng());
+        let AuthenticationSettings::Local(local_auth_settings) =
+            &self.application_settings.security.authentication
+        else {
+            return Err(anyhow!(
+                "Cannot hash password without local authentication settings"
+            ))?;
+        };
+
+        Ok(Argon2::new(
+            local_auth_settings.argon2_algorithm,
+            local_auth_settings.argon2_version,
+            Params::new(
+                local_auth_settings.argon2_memory_size,
+                local_auth_settings.argon2_iterations,
+                local_auth_settings.argon2_parallelism,
+                None,
+            )
+            .context("Failed to build Argon2 parameters")?,
+        )
+        .hash_password(password.expose_secret().0.as_bytes(), &salt)
+        .map(|hash| Secret::new(PasswordHash(hash.to_string())))
+        .context("Failed to hash password")?)
+    }
+
+    #[tracing::instrument(level = "debug", skip(expected_password_hash, password_candidate), err)]
+    fn verify_password_hash(
+        expected_password_hash: Secret<PasswordHash>,
+        password_candidate: Secret<Password>,
+    ) -> Result<(), UniversalInboxError> {
+        let expected_password_hash =
+            argon2::PasswordHash::new(expected_password_hash.expose_secret().0.as_str())
+                .context("Failed to parse hash in PHC string format.")?;
+
+        let params: Params = (&expected_password_hash)
+            .try_into()
+            .context("Failed to extract Argon2 parameters from PHC string")?;
+        let argon2: Argon2 = params.into();
+
+        argon2
+            .verify_password(
+                password_candidate.expose_secret().0.as_bytes(),
+                &expected_password_hash,
+            )
+            .context("Invalid password.")
+            .map_err(UniversalInboxError::Unauthorized)
     }
 }

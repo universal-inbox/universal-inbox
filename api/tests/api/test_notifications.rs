@@ -313,7 +313,7 @@ mod create_notification {
         )
         .await;
 
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(response.status(), StatusCode::CONFLICT);
         let body = response.text().await.expect("Cannot get response body");
         assert_eq!(
             body,

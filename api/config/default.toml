@@ -43,6 +43,12 @@ csp_extra_connect_src = []
 #
 [application.security.authentication]
 type = "Local"
+# See OWASP recommendations https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html
+argon2_algorithm = "argon2id"
+argon2_version = 19
+argon2_memory_size = 20000
+argon2_iterations = 2
+argon2_parallelism = 1
 
 [application.http_session]
 # secret_key = ""

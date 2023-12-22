@@ -13,6 +13,7 @@ pub struct UniversalInboxUIModel {
     pub authentication_state: AuthenticationState,
     pub loaded_notifications: Option<Result<usize, String>>,
     pub selected_preview_pane: PreviewPane,
+    pub error_message: Option<String>,
 }
 
 impl UniversalInboxUIModel {

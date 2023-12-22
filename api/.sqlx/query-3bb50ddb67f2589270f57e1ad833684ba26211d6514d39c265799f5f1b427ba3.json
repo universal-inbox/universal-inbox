@@ -1,0 +1,27 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                INSERT INTO \"user\"\n                  (\n                    id,\n                    first_name,\n                    last_name,\n                    email,\n                    created_at,\n                    updated_at\n                  )\n                VALUES ($1, $2, $3, $4, $5, $6)\n                RETURNING\n                  id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Timestamp",
+        "Timestamp"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3bb50ddb67f2589270f57e1ad833684ba26211d6514d39c265799f5f1b427ba3"
+}
