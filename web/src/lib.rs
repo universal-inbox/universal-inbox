@@ -34,6 +34,7 @@ use crate::{
 mod auth;
 mod components;
 mod config;
+mod form;
 mod layouts;
 mod model;
 mod pages;
@@ -45,7 +46,7 @@ mod utils;
 pub fn App(cx: Scope) -> Element {
     use_init_atom_root(cx);
     let notifications_ref = use_atom_ref(cx, &NOTIFICATIONS);
-    let ui_model_ref = use_atom_ref(cx, &UI_MODEL);
+    let ui_model_ref: UseAtomRef<UniversalInboxUIModel> = use_atom_ref(cx, &UI_MODEL).clone();
     let toasts_ref = use_atom_ref(cx, &TOASTS);
     let app_config_ref = use_atom_ref(cx, &APP_CONFIG);
     let connected_user_ref = use_atom_ref(cx, &CONNECTED_USER);
@@ -139,7 +140,14 @@ pub fn App(cx: Scope) -> Element {
     debug!("Rendering app");
     render! {
         Router::<Route> {
-            config: || RouterConfig::default().history(WebHistory::<Route>::default())
+            config: move || {
+                RouterConfig::default()
+                    .history(WebHistory::<Route>::default())
+                    .on_update(move |_state| {
+                        ui_model_ref.clone().write().error_message = None;
+                        None
+                    })
+            }
         }
     }
 }

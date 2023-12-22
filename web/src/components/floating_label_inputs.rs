@@ -22,6 +22,8 @@ pub struct InputProps<T: 'static> {
     #[props(default)]
     force_validation: Option<bool>,
     #[props(default)]
+    r#type: Option<String>,
+    #[props(default)]
     phantom: PhantomData<T>,
 }
 
@@ -53,6 +55,7 @@ where
             .unwrap_or_default()
     });
 
+    let input_type = cx.props.r#type.clone().unwrap_or("text".to_string());
     let validate = use_state(cx, || false);
     use_memo(
         cx,
@@ -85,7 +88,7 @@ where
         div {
             class: "relative",
             input {
-                "type": "text",
+                "type": "{input_type}",
                 name: "{cx.props.name}",
                 id: "{cx.props.name}",
                 class: "{input_style} block py-2 px-0 w-full bg-transparent border-0 border-b-2 focus:outline-none focus:ring-0 peer",
@@ -93,7 +96,6 @@ where
                 required: "{cx.props.required}",
                 value: "{cx.props.value}",
                 oninput: move |evt| {
-                    validate.set(true);
                     cx.props.value.set(evt.value.clone());
                 },
                 onfocusout: |_| validate.set(true),
@@ -101,7 +103,7 @@ where
             }
             label {
                 "for": "{cx.props.name}",
-                class: "{label_style} {required_label_style} absolute duration-300 transform -translate-y-6 scale-75 top-3 -z-10 origin-[0] peer-focus:left-0 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-6",
+                class: "{label_style} {required_label_style} absolute duration-300 transform -translate-y-6 scale-75 top-3 origin-[0] peer-focus:left-0 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-6",
                 "{cx.props.label}"
             }
             ErrorMessage { message: error_message }
@@ -572,7 +574,7 @@ pub fn ErrorMessage<'a>(cx: Scope, message: &'a UseState<Option<String>>) -> Ele
         render! {
             p {
                 class: "mt-2 text-error dark:text-error",
-                span { class: "font-medium", "{error}" }
+                span { "{error}" }
             }
         }
     } else {

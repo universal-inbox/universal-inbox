@@ -49,7 +49,7 @@ pub async fn front_config(
                 user_profile_url: user_profile_url.clone(),
             },
         },
-        AuthenticationSettings::Local => FrontAuthenticationConfig::Local,
+        AuthenticationSettings::Local(_) => FrontAuthenticationConfig::Local,
     };
 
     let config = FrontConfig {

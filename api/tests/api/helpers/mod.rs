@@ -11,7 +11,9 @@ use url::Url;
 use uuid::Uuid;
 
 use universal_inbox_api::{
-    configuration::{AuthenticationSettings, OIDCFlowSettings, Settings},
+    configuration::{
+        AuthenticationSettings, LocalAuthenticationSettings, OIDCFlowSettings, Settings,
+    },
     integrations::oauth2::NangoService,
     observability::{get_subscriber, init_subscriber},
     repository::Repository,
@@ -22,6 +24,7 @@ pub mod integration_connection;
 pub mod notification;
 pub mod rest;
 pub mod task;
+pub mod user;
 
 pub struct TestedApp {
     pub app_address: String,
@@ -31,7 +34,7 @@ pub struct TestedApp {
     pub linear_mock_server: MockServer,
     pub google_mail_mock_server: MockServer,
     pub todoist_mock_server: MockServer,
-    pub oidc_issuer_mock_server: MockServer,
+    pub oidc_issuer_mock_server: Option<MockServer>,
     pub nango_mock_server: MockServer,
 }
 
@@ -181,7 +184,89 @@ pub async fn tested_app(
         linear_mock_server,
         google_mail_mock_server,
         todoist_mock_server,
-        oidc_issuer_mock_server,
+        oidc_issuer_mock_server: Some(oidc_issuer_mock_server),
+        nango_mock_server,
+    }
+}
+
+#[fixture]
+pub async fn tested_app_with_local_auth(
+    mut settings: Settings,
+    #[allow(unused, clippy::let_unit_value)] tracing_setup: (),
+    #[future] db_connection: Arc<PgPool>,
+) -> TestedApp {
+    info!("Setting up server");
+    let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
+    let port = listener.local_addr().unwrap().port();
+
+    // tag: New notification integration
+    let github_mock_server = MockServer::start();
+    let github_mock_server_url = &github_mock_server.base_url();
+    let linear_mock_server = MockServer::start();
+    let linear_mock_server_url = &linear_mock_server.base_url();
+    let google_mail_mock_server = MockServer::start();
+    let google_mail_mock_server_url = &google_mail_mock_server.base_url();
+    let todoist_mock_server = MockServer::start();
+    let todoist_mock_server_url = &todoist_mock_server.base_url();
+
+    let nango_mock_server = MockServer::start();
+    let nango_mock_server_url = &nango_mock_server.base_url();
+
+    settings.application.security.authentication =
+        AuthenticationSettings::Local(LocalAuthenticationSettings {
+            argon2_algorithm: argon2::Algorithm::Argon2id,
+            argon2_version: argon2::Version::V0x13,
+            argon2_memory_size: 20000,
+            argon2_iterations: 2,
+            argon2_parallelism: 1,
+        });
+
+    let pool: Arc<PgPool> = db_connection.await;
+
+    let nango_service = NangoService::new(
+        nango_mock_server_url.parse::<Url>().unwrap(),
+        &settings.integrations.oauth2.nango_secret_key,
+    )
+    .expect("Failed to create new NangoService");
+
+    let (notification_service, task_service, user_service, integration_connection_service) =
+        universal_inbox_api::build_services(
+            pool.clone(),
+            &settings,
+            Some(github_mock_server_url.to_string()),
+            Some(linear_mock_server_url.to_string()),
+            Some(google_mail_mock_server_url.to_string()),
+            Some(todoist_mock_server_url.to_string()),
+            nango_service,
+        )
+        .await;
+
+    let app_address = format!("http://127.0.0.1:{port}");
+    let api_address = format!("{app_address}{}", settings.application.api_path);
+    let server = universal_inbox_api::run(
+        listener,
+        settings,
+        notification_service,
+        task_service,
+        user_service,
+        integration_connection_service,
+    )
+    .await
+    .expect("Failed to bind address");
+
+    tokio::spawn(server);
+
+    let repository = Arc::new(Repository::new(pool.clone()));
+
+    TestedApp {
+        app_address,
+        api_address,
+        repository,
+        github_mock_server,
+        linear_mock_server,
+        google_mail_mock_server,
+        todoist_mock_server,
+        oidc_issuer_mock_server: None,
         nango_mock_server,
     }
 }

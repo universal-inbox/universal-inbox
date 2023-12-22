@@ -58,12 +58,6 @@ pub async fn integration_connnection_service<'a>(
                 .await
                 {
                     error!("An error occurred while refreshing integration connections: {error:?}");
-                    toast_service.send(ToastCommand::Push(Toast {
-                        kind: ToastKind::Failure,
-                        message: "An error occurred while refreshing integration connections. Please, retry 🙏 If the issue keeps happening, please contact our support.".to_string(),
-                        timeout: Some(5_000),
-                        ..Default::default()
-                    }));
                 }
             }
             Some(IntegrationConnectionCommand::CreateIntegrationConnection(

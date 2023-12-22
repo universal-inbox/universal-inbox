@@ -1,0 +1,86 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                SELECT\n                  \"user\".id,\n                  \"user\".first_name,\n                  \"user\".last_name,\n                  \"user\".email,\n                  \"user\".created_at,\n                  \"user\".updated_at,\n                  user_auth.kind as \"user_auth_kind: _\",\n                  user_auth.auth_user_id,\n                  user_auth.auth_id_token,\n                  user_auth.password_hash\n                FROM \"user\"\n                INNER JOIN user_auth ON user_auth.user_id = \"user\".id\n                WHERE \"user\".id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "first_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "last_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "email",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 5,
+        "name": "updated_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 6,
+        "name": "user_auth_kind: _",
+        "type_info": {
+          "Custom": {
+            "name": "user_auth_kind",
+            "kind": {
+              "Enum": [
+                "OpenIdConnect",
+                "Local"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "auth_user_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "auth_id_token",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "password_hash",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "c706bf1b3f6d761144017c58e29bdfdab553c6928683dd9829013b2243984d25"
+}

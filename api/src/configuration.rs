@@ -3,7 +3,8 @@ use std::{collections::HashMap, env};
 use anyhow::Context;
 use config::{Config, ConfigError, Environment, File};
 use openidconnect::{ClientId, ClientSecret, IntrospectionUrl, IssuerUrl};
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
+use serde_with::{serde_as, DisplayFromStr};
 use universal_inbox::integration_connection::{
     provider::IntegrationProviderKind, NangoProviderKey, NangoPublicKey,
 };
@@ -64,7 +65,7 @@ pub struct LoggingSettings {
 #[serde(tag = "type")]
 pub enum AuthenticationSettings {
     OpenIDConnect(Box<OpenIDConnectSettings>),
-    Local,
+    Local(LocalAuthenticationSettings),
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -74,6 +75,26 @@ pub struct OpenIDConnectSettings {
     pub oidc_api_client_secret: ClientSecret,
     pub user_profile_url: Url,
     pub oidc_flow_settings: OIDCFlowSettings,
+}
+
+#[serde_as]
+#[derive(Deserialize, Clone, Debug)]
+pub struct LocalAuthenticationSettings {
+    #[serde_as(as = "DisplayFromStr")]
+    pub argon2_algorithm: argon2::Algorithm,
+    #[serde(deserialize_with = "from_u32")]
+    pub argon2_version: argon2::Version,
+    pub argon2_memory_size: u32,
+    pub argon2_iterations: u32,
+    pub argon2_parallelism: u32,
+}
+
+fn from_u32<'de, D>(deserializer: D) -> Result<argon2::Version, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value: u32 = Deserialize::deserialize(deserializer)?;
+    value.try_into().map_err(serde::de::Error::custom)
 }
 
 #[derive(Deserialize, Clone, Debug)]

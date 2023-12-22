@@ -5,13 +5,17 @@ use futures_util::StreamExt;
 use reqwest::Method;
 use url::Url;
 
-use universal_inbox::{auth::CloseSessionResponse, user::User};
+use universal_inbox::{
+    auth::CloseSessionResponse,
+    user::{Credentials, RegisterUserParameters, User},
+};
 
 use crate::{model::UniversalInboxUIModel, services::api::call_api, utils::redirect_to};
 
-#[derive(Debug)]
 pub enum UserCommand {
     GetUser,
+    RegisterUser(RegisterUserParameters),
+    Login(Credentials),
     Logout,
 }
 
@@ -38,6 +42,45 @@ pub async fn user_service<'a>(
 
                 if let Ok(user) = result {
                     connected_user.write().replace(user);
+                };
+            }
+            Some(UserCommand::RegisterUser(parameters)) => {
+                let result: Result<User> = call_api(
+                    Method::POST,
+                    &api_base_url,
+                    "users",
+                    Some(parameters),
+                    Some(ui_model_ref.clone()),
+                )
+                .await;
+
+                match result {
+                    Ok(user) => {
+                        connected_user.write().replace(user);
+                    }
+                    Err(err) => {
+                        ui_model_ref.write().error_message = Some(err.to_string());
+                    }
+                };
+            }
+            Some(UserCommand::Login(credentials)) => {
+                ui_model_ref.write().error_message = None;
+                let result: Result<User> = call_api(
+                    Method::POST,
+                    &api_base_url,
+                    "users/me",
+                    Some(credentials),
+                    Some(ui_model_ref.clone()),
+                )
+                .await;
+
+                match result {
+                    Ok(user) => {
+                        connected_user.write().replace(user);
+                    }
+                    Err(err) => {
+                        ui_model_ref.write().error_message = Some(err.to_string());
+                    }
                 };
             }
             Some(UserCommand::Logout) => {

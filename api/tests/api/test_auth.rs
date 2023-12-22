@@ -4,7 +4,7 @@ use rstest::*;
 
 use universal_inbox::{
     auth::{CloseSessionResponse, SessionAuthValidationParameters},
-    user::User,
+    user::{User, UserAuth},
 };
 
 use universal_inbox_api::configuration::Settings;
@@ -60,7 +60,10 @@ mod authenticate_session {
 
         assert_eq!(user.first_name, "John");
         assert_eq!(user.last_name, "Doe");
-        assert_eq!(user.auth_id_token, ID_TOKEN.to_string().into());
+        let UserAuth::OpenIdConnect(user_auth) = &user.auth else {
+            panic!("User auth is not OpenIdConnect");
+        };
+        assert_eq!(user_auth.auth_id_token, ID_TOKEN.to_string().into());
 
         // Test a new ID token is updated
         let response = client
@@ -84,7 +87,10 @@ mod authenticate_session {
             .await
             .unwrap();
 
-        assert_eq!(user.auth_id_token, OTHER_ID_TOKEN.to_string().into());
+        let UserAuth::OpenIdConnect(user_auth) = &user.auth else {
+            panic!("User auth is not OpenIdConnect");
+        };
+        assert_eq!(user_auth.auth_id_token, OTHER_ID_TOKEN.to_string().into());
     }
 
     #[rstest]
@@ -124,7 +130,7 @@ mod close_session {
     ) {
         let app = authenticated_app.await;
         let tested_app = tested_app.await;
-        let oidc_issuer_mock_server_url = &app.oidc_issuer_mock_server.base_url();
+        let oidc_issuer_mock_server_url = app.oidc_issuer_mock_server.as_ref().unwrap().base_url();
 
         mock_oidc_openid_configuration(&tested_app);
 
@@ -144,12 +150,15 @@ mod close_session {
 
         let close_session_response: CloseSessionResponse = response.json().await.unwrap();
 
+        let UserAuth::OpenIdConnect(user_auth) = &app.user.auth else {
+            panic!("User auth is not OpenIdConnect");
+        };
         assert_eq!(
             close_session_response.logout_url.to_string(),
             format!(
                 "{oidc_issuer_mock_server_url}/end_session?{}",
                 serde_urlencoded::to_string([
-                    ("id_token_hint", app.user.auth_id_token.to_string()),
+                    ("id_token_hint", user_auth.auth_id_token.to_string()),
                     (
                         "post_logout_redirect_uri",
                         settings.application.front_base_url.to_string()
