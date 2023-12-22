@@ -87,3 +87,11 @@ pub async fn login_user_response(
         .await
         .unwrap()
 }
+
+pub async fn logout_user_response(client: &Client, api_address: &str) -> reqwest::Response {
+    client
+        .delete(&format!("{api_address}auth/session"))
+        .send()
+        .await
+        .unwrap()
+}

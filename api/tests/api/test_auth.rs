@@ -14,7 +14,9 @@ use crate::helpers::{
         authenticated_app, mock_oidc_introspection, mock_oidc_keys, mock_oidc_openid_configuration,
         mock_oidc_user_info, AuthenticatedApp,
     },
-    settings, tested_app, TestedApp,
+    settings, tested_app,
+    user::logout_user_response,
+    TestedApp,
 };
 
 mod authenticate_session {
@@ -134,12 +136,7 @@ mod close_session {
 
         mock_oidc_openid_configuration(&tested_app);
 
-        let response = app
-            .client
-            .delete(&format!("{}auth/session", app.api_address))
-            .send()
-            .await
-            .unwrap();
+        let response = logout_user_response(&app.client, &app.api_address).await;
 
         assert_eq!(response.status(), 200);
         for cookie in response.cookies() {
