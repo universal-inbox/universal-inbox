@@ -1,8 +1,10 @@
 use std::{net::TcpListener, str::FromStr, sync::Arc};
 
 use clap::{Parser, Subcommand};
+use email_address::EmailAddress;
 use opentelemetry::global;
 use sqlx::{postgres::PgConnectOptions, ConnectOptions, PgPool};
+use tokio::sync::RwLock;
 use tracing::{error, info};
 
 use universal_inbox::{
@@ -14,6 +16,7 @@ use universal_inbox_api::{
     build_services, commands,
     configuration::Settings,
     integrations::oauth2::NangoService,
+    mailer::SmtpMailer,
     observability::{get_subscriber, get_subscriber_with_telemetry, init_subscriber},
     run,
 };
@@ -44,10 +47,17 @@ enum Commands {
         source: Option<TaskSyncSourceKind>,
     },
 
-    // Clear notifications details from the database. Useful when stored data is no longer valid.
+    /// Clear notifications details from the database. Useful when stored data is no longer valid.
     DeleteNotificationDetails {
         #[clap(value_enum, value_parser)]
         source: NotificationSourceKind,
+    },
+
+    /// Send welcome and verification email to user
+    SendVerificationEmail {
+        user_email: EmailAddress,
+        #[arg(short, long)]
+        dry_run: bool,
     },
 
     /// Run API server
@@ -113,8 +123,40 @@ async fn main() -> std::io::Result<()> {
     )
     .expect("Failed to create new GithubService");
 
+    let mailer = Arc::new(RwLock::new(
+        SmtpMailer::build(
+            settings.application.email.smtp_server.clone(),
+            settings.application.email.smtp_port,
+            settings.application.email.smtp_username.clone(),
+            settings.application.email.smtp_password.clone(),
+            settings
+                .application
+                .email
+                .from_header
+                .parse()
+                .expect("Failed to parse email settings `from_header`"),
+            settings
+                .application
+                .email
+                .reply_to_header
+                .parse()
+                .expect("Failed to parse email settings `reply_to`"),
+        )
+        .expect("Failed to build an SmtpMailer"),
+    ));
+
     let (notification_service, task_service, user_service, integration_connection_service) =
-        build_services(pool, &settings, None, None, None, None, nango_service).await;
+        build_services(
+            pool,
+            &settings,
+            None,
+            None,
+            None,
+            None,
+            nango_service,
+            mailer,
+        )
+        .await;
 
     let result = match &cli.command {
         Commands::SyncNotifications { source } => {
@@ -126,6 +168,10 @@ async fn main() -> std::io::Result<()> {
         Commands::DeleteNotificationDetails { source } => {
             commands::migration::delete_notification_details(notification_service, *source).await
         }
+        Commands::SendVerificationEmail {
+            user_email,
+            dry_run,
+        } => commands::user::send_verification_email(user_service, user_email, *dry_run).await,
         Commands::Serve => {
             let listener = TcpListener::bind(format!(
                 "{}:{}",

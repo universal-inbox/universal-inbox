@@ -32,15 +32,25 @@ config = "0.13.0"
 csp = { git = "https://github.com/dax/CSP-rs", rev = "bc58cceb983207caef08c3a5981a10f28ffacf6c" }
 email_address = { workspace = true }
 enum_derive = { workspace = true }
+enum-display = "0.1.0"
 format_serde_error = "0.3.0"
 futures = "0.3.0"
 graphql_client = "0.13.0"
 hostname = "0.3.0"
 http = { workspace = true }
 itertools = { workspace = true }
-lazy_static = { workspace = true }
+lettre = { version = "0.11.0", default-features = false, features = [
+  "tokio1",
+  "tokio1-rustls-tls",
+  "tracing",
+  "builder",
+  "hostname",
+  "pool",
+  "smtp-transport"
+] }
 log = { workspace = true }
 macro-attr = { workspace = true }
+mailgen = "0.2.0"
 openidconnect = { workspace = true }
 opentelemetry = { version = "0.20.0", features = ["trace", "logs", "metrics", "rt-tokio"] }
 opentelemetry_api = { version = "0.20.0", features = ["trace", "logs", "metrics"] }

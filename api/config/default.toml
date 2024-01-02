@@ -12,6 +12,14 @@ min_sync_tasks_interval_in_minutes = 5
 # Disabled by default
 # support_href = "mailto:support@universal-inbox.com"
 
+[application.email]
+smtp_server = "smtp.example.com"
+smtp_port = 465
+smtp_username = "user"
+smtp_password = "password"
+from_header = "nobody <nobody@example.com>"
+reply_to_header = "support <support@example.com>"
+
 [application.security]
 csp_extra_connect_src = []
 

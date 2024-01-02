@@ -9,7 +9,8 @@ use uuid::Uuid;
 use universal_inbox::{
     auth::AuthIdToken,
     user::{
-        AuthUserId, LocalUserAuth, OpenIdConnectUserAuth, PasswordHash, User, UserAuth, UserId,
+        AuthUserId, EmailValidationToken, LocalUserAuth, OpenIdConnectUserAuth, PasswordHash, User,
+        UserAuth, UserId,
     },
 };
 
@@ -53,6 +54,19 @@ pub trait UserRepository {
         auth_user_id: &AuthUserId,
         auth_id_token: &AuthIdToken,
     ) -> Result<UpdateStatus<User>, UniversalInboxError>;
+    async fn update_email_validation_parameters<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        user_id: UserId,
+        email_validated_at: Option<DateTime<Utc>>,
+        email_validation_sent_at: Option<DateTime<Utc>>,
+        email_validation_token: Option<EmailValidationToken>,
+    ) -> Result<UpdateStatus<User>, UniversalInboxError>;
+    async fn get_user_email_validation_token<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        user_id: UserId,
+    ) -> Result<Option<EmailValidationToken>, UniversalInboxError>;
 }
 
 #[async_trait]
@@ -71,6 +85,8 @@ impl UserRepository for Repository {
                   "user".first_name,
                   "user".last_name,
                   "user".email,
+                  "user".email_validated_at,
+                  "user".email_validation_sent_at,
                   "user".created_at,
                   "user".updated_at,
                   user_auth.kind as "user_auth_kind: _",
@@ -103,6 +119,8 @@ impl UserRepository for Repository {
                   "user".first_name,
                   "user".last_name,
                   "user".email,
+                  "user".email_validated_at,
+                  "user".email_validation_sent_at,
                   "user".created_at,
                   "user".updated_at,
                   user_auth.kind as "user_auth_kind: _",
@@ -134,6 +152,8 @@ impl UserRepository for Repository {
                   "user".first_name,
                   "user".last_name,
                   "user".email,
+                  "user".email_validated_at,
+                  "user".email_validation_sent_at,
                   "user".created_at,
                   "user".updated_at,
                   user_auth.kind as "user_auth_kind: _",
@@ -169,6 +189,8 @@ impl UserRepository for Repository {
                   "user".first_name,
                   "user".last_name,
                   "user".email,
+                  "user".email_validated_at,
+                  "user".email_validation_sent_at,
                   "user".created_at,
                   "user".updated_at,
                   user_auth.kind as "user_auth_kind: _",
@@ -309,6 +331,8 @@ impl UserRepository for Repository {
                   "user".first_name,
                   "user".last_name,
                   "user".email,
+                  "user".email_validated_at,
+                  "user".email_validation_sent_at,
                   "user".created_at,
                   "user".updated_at,
                   user_auth.kind as user_auth_kind,
@@ -343,6 +367,132 @@ impl UserRepository for Repository {
             })
         }
     }
+
+    #[tracing::instrument(level = "debug", skip(self, executor))]
+    async fn update_email_validation_parameters<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        user_id: UserId,
+        email_validated_at: Option<DateTime<Utc>>,
+        email_validation_sent_at: Option<DateTime<Utc>>,
+        email_validation_token: Option<EmailValidationToken>,
+    ) -> Result<UpdateStatus<User>, UniversalInboxError> {
+        if email_validated_at.is_none()
+            && email_validation_sent_at.is_none()
+            && email_validation_token.is_none()
+        {
+            return Ok(UpdateStatus {
+                updated: false,
+                result: None,
+            });
+        }
+
+        let mut query_builder = QueryBuilder::new(r#"UPDATE "user" SET"#);
+        let mut separated = query_builder.separated(", ");
+        if let Some(email_validated_at) = &email_validated_at {
+            separated
+                .push(" email_validated_at = ")
+                .push_bind_unseparated(email_validated_at.naive_utc());
+        }
+        if let Some(email_validation_sent_at) = &email_validation_sent_at {
+            separated
+                .push(" email_validation_sent_at = ")
+                .push_bind_unseparated(email_validation_sent_at.naive_utc());
+        }
+        if let Some(email_validation_token) = &email_validation_token {
+            separated
+                .push(" email_validation_token = ")
+                .push_bind_unseparated(email_validation_token.0);
+        }
+        query_builder.push(" FROM user_auth WHERE ");
+        let mut separated = query_builder.separated(" AND ");
+        separated
+            .push(r#"user_auth.user_id = "user".id"#)
+            .push(r#""user".id = "#)
+            .push_bind_unseparated(user_id.0);
+
+        query_builder.push(
+            r#"
+                RETURNING
+                  "user".id,
+                  "user".first_name,
+                  "user".last_name,
+                  "user".email,
+                  "user".email_validated_at,
+                  "user".email_validation_sent_at,
+                  "user".created_at,
+                  "user".updated_at,
+                  user_auth.kind as user_auth_kind,
+                  user_auth.auth_user_id,
+                  user_auth.auth_id_token,
+                  user_auth.password_hash,
+                  (SELECT"#,
+        );
+        let mut separated = query_builder.separated(" OR ");
+        if let Some(email_validated_at) = &email_validated_at {
+            separated
+                .push(" (email_validated_at is NULL OR email_validated_at != ")
+                .push_bind_unseparated(email_validated_at.naive_utc())
+                .push_unseparated(")");
+        }
+        if let Some(email_validation_sent_at) = &email_validation_sent_at {
+            separated
+                .push(" (email_validation_sent_at is NULL OR email_validation_sent_at != ")
+                .push_bind_unseparated(email_validation_sent_at.naive_utc())
+                .push_unseparated(")");
+        }
+        if let Some(email_validation_token) = &email_validation_token {
+            separated
+                .push(" (email_validation_token is NULL OR email_validation_token != ")
+                .push_bind_unseparated(email_validation_token.0)
+                .push_unseparated(")");
+        }
+        query_builder
+            .push(r#" FROM "user" WHERE id = "#)
+            .push_bind(user_id.0)
+            .push(r#") as "is_updated""#);
+
+        let record: Option<UpdatedUserRow> = query_builder
+            .build_query_as::<UpdatedUserRow>()
+            .fetch_optional(&mut **executor)
+            .await
+            .context(format!(
+                "Failed to update user email validation parameter with ID {user_id} from storage"
+            ))?;
+
+        if let Some(updated_user_row) = record {
+            Ok(UpdateStatus {
+                updated: updated_user_row.is_updated,
+                result: Some(updated_user_row.user_row.try_into()?),
+            })
+        } else {
+            Ok(UpdateStatus {
+                updated: false,
+                result: None,
+            })
+        }
+    }
+
+    #[tracing::instrument(level = "debug", skip(self, executor))]
+    async fn get_user_email_validation_token<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        user_id: UserId,
+    ) -> Result<Option<EmailValidationToken>, UniversalInboxError> {
+        let row: Option<Option<Uuid>> = sqlx::query_scalar!(
+            r#"SELECT email_validation_token FROM "user" WHERE id = $1"#,
+            user_id.0
+        )
+        .fetch_optional(&mut **executor)
+        .await
+        .with_context(|| {
+            format!(
+                "Failed to fetch user email validation token for user ID {user_id} from storage"
+            )
+        })?;
+
+        Ok(row.and_then(|row| row.map(|token| token.into())))
+    }
 }
 
 #[derive(sqlx::Type, Debug)]
@@ -358,6 +508,8 @@ pub struct UserRow {
     first_name: String,
     last_name: String,
     email: String,
+    email_validated_at: Option<NaiveDateTime>,
+    email_validation_sent_at: Option<NaiveDateTime>,
     created_at: NaiveDateTime,
     updated_at: NaiveDateTime,
     user_auth_kind: PgUserAuthKind,
@@ -409,6 +561,12 @@ impl TryFrom<&UserRow> for User {
                 .email
                 .parse()
                 .context("Unable to parse stored email address")?,
+            email_validated_at: row
+                .email_validated_at
+                .map(|naive| DateTime::from_naive_utc_and_offset(naive, Utc)),
+            email_validation_sent_at: row
+                .email_validation_sent_at
+                .map(|naive| DateTime::from_naive_utc_and_offset(naive, Utc)),
             auth,
             created_at: DateTime::from_naive_utc_and_offset(row.created_at, Utc),
             updated_at: DateTime::from_naive_utc_and_offset(row.updated_at, Utc),

@@ -145,6 +145,7 @@ pub fn App(cx: Scope) -> Element {
                     .history(WebHistory::<Route>::default())
                     .on_update(move |_state| {
                         ui_model_ref.clone().write().error_message = None;
+                        ui_model_ref.clone().write().confirmation_message = None;
                         None
                     })
             }

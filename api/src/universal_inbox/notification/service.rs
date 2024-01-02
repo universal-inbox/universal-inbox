@@ -1,7 +1,4 @@
-use std::{
-    fmt::Debug,
-    sync::{Arc, Weak},
-};
+use std::sync::{Arc, Weak};
 
 use anyhow::{anyhow, Context};
 use chrono::{Duration, Utc};
@@ -33,7 +30,6 @@ use crate::{
 };
 
 // tag: New notification integration
-#[derive(Debug)]
 pub struct NotificationService {
     repository: Arc<Repository>,
     github_service: GithubService,

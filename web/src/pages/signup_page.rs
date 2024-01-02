@@ -28,7 +28,7 @@ pub fn SignupPage(cx: Scope) -> Element {
     let force_validation = use_state(cx, || false);
 
     render! {
-        body {
+        div {
             class: "flex min-h-screen items-center justify-center bg-base-100",
             div {
                 class: "m-4 min-h-[50vh] w-full max-w-md",

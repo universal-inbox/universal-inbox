@@ -2,12 +2,14 @@ use anyhow::Result;
 use dioxus::prelude::*;
 use fermi::{AtomRef, UseAtomRef};
 use futures_util::StreamExt;
+use log::error;
 use reqwest::Method;
 use url::Url;
 
 use universal_inbox::{
     auth::CloseSessionResponse,
-    user::{Credentials, RegisterUserParameters, User},
+    user::{Credentials, EmailValidationToken, RegisterUserParameters, User, UserId},
+    SuccessResponse,
 };
 
 use crate::{model::UniversalInboxUIModel, services::api::call_api, utils::redirect_to};
@@ -17,6 +19,8 @@ pub enum UserCommand {
     RegisterUser(RegisterUserParameters),
     Login(Credentials),
     Logout,
+    ResendVerificationEmail,
+    VerifyEmail(UserId, EmailValidationToken),
 }
 
 pub static CONNECTED_USER: AtomRef<Option<User>> = AtomRef(|_| None);
@@ -31,18 +35,7 @@ pub async fn user_service<'a>(
         let msg = rx.next().await;
         match msg {
             Some(UserCommand::GetUser) => {
-                let result: Result<User> = call_api(
-                    Method::GET,
-                    &api_base_url,
-                    "users/me",
-                    None::<i32>,
-                    Some(ui_model_ref.clone()),
-                )
-                .await;
-
-                if let Ok(user) = result {
-                    connected_user.write().replace(user);
-                };
+                get_user(&api_base_url, connected_user.clone(), ui_model_ref.clone()).await;
             }
             Some(UserCommand::RegisterUser(parameters)) => {
                 let result: Result<User> = call_api(
@@ -97,7 +90,72 @@ pub async fn user_service<'a>(
                     let _ = redirect_to(logout_url.as_str());
                 };
             }
+            Some(UserCommand::ResendVerificationEmail) => {
+                let result: Result<SuccessResponse> = call_api(
+                    Method::POST,
+                    &api_base_url,
+                    "users/me/email_verification",
+                    None::<i32>,
+                    Some(ui_model_ref.clone()),
+                )
+                .await;
+
+                match result {
+                    Ok(SuccessResponse { message }) => {
+                        ui_model_ref.write().confirmation_message = Some(message);
+                    }
+                    Err(err) => {
+                        ui_model_ref.write().error_message = Some(err.to_string());
+                    }
+                };
+            }
+            Some(UserCommand::VerifyEmail(user_id, email_validation_token)) => {
+                let result: Result<SuccessResponse> = call_api(
+                    Method::GET,
+                    &api_base_url,
+                    format!("users/{user_id}/email_verification/{email_validation_token}").as_str(),
+                    None::<i32>,
+                    None,
+                )
+                .await;
+
+                match result {
+                    Ok(SuccessResponse { message }) => {
+                        ui_model_ref.write().confirmation_message = Some(message);
+                        // Refresh user as it should now have a validated email and either redirected to the
+                        // to the app if it has a logged session or to the login form otherwise
+                        get_user(&api_base_url, connected_user.clone(), ui_model_ref.clone()).await
+                    }
+                    Err(err) => {
+                        ui_model_ref.write().error_message = Some(err.to_string());
+                    }
+                };
+            }
             None => {}
+        }
+    }
+}
+
+async fn get_user(
+    api_base_url: &Url,
+    connected_user: UseAtomRef<Option<User>>,
+    ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
+) {
+    let result: Result<User> = call_api(
+        Method::GET,
+        api_base_url,
+        "users/me",
+        None::<i32>,
+        Some(ui_model_ref),
+    )
+    .await;
+
+    match result {
+        Ok(user) => {
+            connected_user.write().replace(user);
+        }
+        Err(err) => {
+            error!("Failed to get current user: {err}");
         }
     }
 }

@@ -17,6 +17,7 @@ use actix_web_lab::web::spa;
 use anyhow::Context;
 use configuration::AuthenticationSettings;
 use csp::{Directive, Source, Sources, CSP};
+use mailer::Mailer;
 use sqlx::PgPool;
 use tokio::sync::RwLock;
 use tracing::info;
@@ -40,6 +41,7 @@ use crate::{
 pub mod commands;
 pub mod configuration;
 pub mod integrations;
+pub mod mailer;
 pub mod observability;
 pub mod repository;
 pub mod routes;
@@ -180,6 +182,7 @@ pub async fn run(
     Ok(server.run())
 }
 
+#[allow(clippy::too_many_arguments)] // ignore for now, to revisit later
 pub async fn build_services(
     pool: Arc<PgPool>,
     settings: &Settings,
@@ -188,6 +191,7 @@ pub async fn build_services(
     google_mail_base_url: Option<String>,
     todoist_address: Option<String>,
     nango_service: NangoService,
+    mailer: Arc<RwLock<dyn Mailer + Send + Sync>>,
 ) -> (
     Arc<RwLock<NotificationService>>,
     Arc<RwLock<TaskService>>,
@@ -195,9 +199,11 @@ pub async fn build_services(
     Arc<RwLock<IntegrationConnectionService>>,
 ) {
     let repository = Arc::new(Repository::new(pool.clone()));
+
     let user_service = Arc::new(RwLock::new(UserService::new(
         repository.clone(),
         settings.application.clone(),
+        mailer.clone(),
     )));
 
     let integration_connection_service = Arc::new(RwLock::new(IntegrationConnectionService::new(

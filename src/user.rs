@@ -18,6 +18,8 @@ pub struct User {
     pub first_name: String,
     pub last_name: String,
     pub email: EmailAddress,
+    pub email_validated_at: Option<DateTime<Utc>>,
+    pub email_validation_sent_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub auth: UserAuth,
@@ -30,10 +32,16 @@ impl User {
             first_name,
             last_name,
             email,
+            email_validated_at: None,
+            email_validation_sent_at: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
             auth,
         }
+    }
+
+    pub fn is_email_validated(&self) -> bool {
+        self.email_validated_at.is_some()
     }
 }
 
@@ -192,6 +200,44 @@ impl TryFrom<String> for UserId {
 }
 
 impl FromStr for UserId {
+    type Err = uuid::Error;
+
+    fn from_str(uuid: &str) -> Result<Self, Self::Err> {
+        Ok(Self(Uuid::parse_str(uuid)?))
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(transparent)]
+pub struct EmailValidationToken(pub Uuid);
+
+impl fmt::Display for EmailValidationToken {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<Uuid> for EmailValidationToken {
+    fn from(uuid: Uuid) -> Self {
+        Self(uuid)
+    }
+}
+
+impl From<EmailValidationToken> for Uuid {
+    fn from(email_validation_token: EmailValidationToken) -> Self {
+        email_validation_token.0
+    }
+}
+
+impl TryFrom<String> for EmailValidationToken {
+    type Error = uuid::Error;
+
+    fn try_from(uuid: String) -> Result<Self, Self::Error> {
+        Ok(Self(Uuid::parse_str(&uuid)?))
+    }
+}
+
+impl FromStr for EmailValidationToken {
     type Err = uuid::Error;
 
     fn from_str(uuid: &str) -> Result<Self, Self::Err> {

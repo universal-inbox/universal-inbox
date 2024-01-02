@@ -2,6 +2,8 @@ use std::{str::FromStr, sync::Arc};
 
 use anyhow::{anyhow, Context};
 use argon2::{password_hash::SaltString, Argon2, Params, PasswordHasher, PasswordVerifier};
+use chrono::Utc;
+use email_address::EmailAddress;
 use openidconnect::{
     core::{
         CoreGenderClaim, CoreIdToken, CoreJsonWebKeyType, CoreJweContentEncryptionAlgorithm,
@@ -15,14 +17,16 @@ use openidconnect::{
 use rand;
 use secrecy::{ExposeSecret, Secret};
 use sqlx::{Postgres, Transaction};
+use tokio::sync::RwLock;
 use tracing::info;
 use url::Url;
+use uuid::Uuid;
 
 use universal_inbox::{
     auth::openidconnect::OpenidConnectProvider,
     user::{
-        AuthUserId, Credentials, LocalUserAuth, OpenIdConnectUserAuth, Password, PasswordHash,
-        User, UserAuth, UserId,
+        AuthUserId, Credentials, EmailValidationToken, LocalUserAuth, OpenIdConnectUserAuth,
+        Password, PasswordHash, User, UserAuth, UserId,
     },
 };
 
@@ -31,26 +35,29 @@ use crate::{
         ApplicationSettings, AuthenticationSettings, OIDCAuthorizationCodePKCEFlowSettings,
         OIDCFlowSettings, OpenIDConnectSettings,
     },
+    mailer::{EmailTemplate, Mailer},
     observability::spawn_blocking_with_tracing,
     repository::user::UserRepository,
     repository::Repository,
     universal_inbox::{UniversalInboxError, UpdateStatus},
 };
 
-#[derive(Debug)]
 pub struct UserService {
     repository: Arc<Repository>,
     application_settings: ApplicationSettings,
+    mailer: Arc<RwLock<dyn Mailer + Send + Sync>>,
 }
 
 impl UserService {
     pub fn new(
         repository: Arc<Repository>,
         application_settings: ApplicationSettings,
+        mailer: Arc<RwLock<dyn Mailer + Send + Sync>>,
     ) -> UserService {
         UserService {
             repository,
             application_settings,
+            mailer,
         }
     }
 
@@ -65,6 +72,15 @@ impl UserService {
         id: UserId,
     ) -> Result<Option<User>, UniversalInboxError> {
         self.repository.get_user(executor, id).await
+    }
+
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    pub async fn get_user_by_email<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        email: &EmailAddress,
+    ) -> Result<Option<User>, UniversalInboxError> {
+        self.repository.get_user_by_email(executor, email).await
     }
 
     #[tracing::instrument(level = "debug", skip(self, executor), err)]
@@ -382,7 +398,10 @@ impl UserService {
         executor: &mut Transaction<'a, Postgres>,
         user: User,
     ) -> Result<User, UniversalInboxError> {
-        self.repository.create_user(executor, user).await
+        let new_user = self.repository.create_user(executor, user).await?;
+        self.send_verification_email(executor, new_user.id, false)
+            .await?;
+        Ok(new_user)
     }
 
     #[tracing::instrument(level = "debug", skip(self, executor, credentials), err)]
@@ -470,5 +489,82 @@ impl UserService {
             )
             .context("Invalid password.")
             .map_err(UniversalInboxError::Unauthorized)
+    }
+
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    pub async fn send_verification_email<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        user_id: UserId,
+        dry_run: bool,
+    ) -> Result<(), UniversalInboxError> {
+        let email_validation_token: EmailValidationToken = Uuid::new_v4().into();
+        let updated_user = self
+            .repository
+            .update_email_validation_parameters(
+                executor,
+                user_id,
+                None,
+                Some(Utc::now()),
+                Some(email_validation_token.clone()),
+            )
+            .await?;
+
+        if let UpdateStatus {
+            updated: true,
+            result: Some(user),
+        } = updated_user
+        {
+            let email_verification_url = format!(
+                "{}users/{user_id}/email_verification/{email_validation_token}",
+                self.application_settings.front_base_url
+            )
+            .parse()
+            .context("Failed to build email validation URL")?;
+
+            let template = EmailTemplate::EmailVerification {
+                first_name: user.first_name.clone(),
+                email_verification_url,
+            };
+            self.mailer
+                .read()
+                .await
+                .send_email(user, template, dry_run)
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    pub async fn verify_email<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        user_id: UserId,
+        email_validation_token: EmailValidationToken,
+    ) -> Result<(), UniversalInboxError> {
+        let stored_email_validation_token = self
+            .repository
+            .get_user_email_validation_token(executor, user_id)
+            .await?;
+
+        match stored_email_validation_token {
+            Some(token) if token == email_validation_token => {
+                self.repository
+                    .update_email_validation_parameters(
+                        executor,
+                        user_id,
+                        Some(Utc::now()),
+                        None,
+                        None,
+                    )
+                    .await?;
+                Ok(())
+            }
+            _ => Err(UniversalInboxError::InvalidInputData {
+                source: None,
+                user_error: format!("Invalid email validation token for user {user_id}"),
+            }),
+        }
     }
 }

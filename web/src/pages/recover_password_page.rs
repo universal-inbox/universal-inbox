@@ -8,7 +8,7 @@ use crate::route::Route;
 
 pub fn RecoverPasswordPage(cx: Scope) -> Element {
     render! {
-        body {
+        div {
             class: "flex min-h-screen items-center justify-center bg-base-100",
             div {
                 class: "m-4 min-h-[50vh] w-full max-w-md",

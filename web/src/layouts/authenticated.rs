@@ -13,6 +13,7 @@ use crate::{
     services::{
         integration_connection_service::{IntegrationConnectionCommand, INTEGRATION_CONNECTIONS},
         notification_service::NotificationCommand,
+        user_service::UserCommand,
     },
 };
 
@@ -46,6 +47,7 @@ pub fn AuthenticatedLayout(cx: Scope) -> Element {
 
 #[inline_props]
 pub fn AuthenticatedApp(cx: Scope) -> Element {
+    let user_service = use_coroutine_handle::<UserCommand>(cx).unwrap();
     let integration_connections_ref = use_atom_ref(cx, &INTEGRATION_CONNECTIONS);
     let integration_connection_service =
         use_coroutine_handle::<IntegrationConnectionCommand>(cx).unwrap();
@@ -54,10 +56,12 @@ pub fn AuthenticatedApp(cx: Scope) -> Element {
     let nav = use_navigator(cx);
 
     use_future(cx, (), |()| {
+        to_owned![user_service];
         to_owned![integration_connection_service];
         to_owned![notification_service];
 
         async move {
+            user_service.send(UserCommand::GetUser);
             // Load integration connections status
             integration_connection_service.send(IntegrationConnectionCommand::Refresh);
 

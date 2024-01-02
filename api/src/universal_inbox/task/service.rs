@@ -33,7 +33,6 @@ use crate::{
     },
 };
 
-#[derive(Debug)]
 pub struct TaskService {
     repository: Arc<Repository>,
     todoist_service: TodoistService,

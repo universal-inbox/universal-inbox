@@ -3,6 +3,7 @@ use std::{collections::HashMap, env};
 use anyhow::Context;
 use config::{Config, ConfigError, Environment, File};
 use openidconnect::{ClientId, ClientSecret, IntrospectionUrl, IssuerUrl};
+use secrecy::Secret;
 use serde::{Deserialize, Deserializer};
 use serde_with::{serde_as, DisplayFromStr};
 use universal_inbox::integration_connection::{
@@ -35,6 +36,7 @@ pub struct ApplicationSettings {
     pub observability: ObservabilitySettings,
     pub security: SecuritySettings,
     pub support_href: Option<String>,
+    pub email: EmailSettings,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -180,6 +182,16 @@ pub struct DefaultIntegrationSettings {
     pub doc: String,
     pub warning_message: Option<String>,
     pub doc_for_actions: HashMap<String, String>,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct EmailSettings {
+    pub smtp_server: String,
+    pub smtp_port: u16,
+    pub smtp_username: String,
+    pub smtp_password: Secret<String>,
+    pub from_header: String,
+    pub reply_to_header: String,
 }
 
 impl DatabaseSettings {
