@@ -7,7 +7,7 @@ use universal_inbox::integration_connection::{
     integrations::google_mail::{GoogleMailConfig, GoogleMailContext},
 };
 
-#[inline_props]
+#[component]
 pub fn GoogleMailProviderConfiguration<'a>(
     cx: Scope,
     config: GoogleMailConfig,

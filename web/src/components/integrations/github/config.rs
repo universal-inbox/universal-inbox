@@ -5,7 +5,7 @@ use universal_inbox::integration_connection::{
     config::IntegrationConnectionConfig, integrations::github::GithubConfig,
 };
 
-#[inline_props]
+#[component]
 pub fn GithubProviderConfiguration<'a>(
     cx: Scope,
     config: GithubConfig,

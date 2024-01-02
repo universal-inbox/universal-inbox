@@ -2,7 +2,7 @@
 
 use dioxus::prelude::*;
 
-#[inline_props]
+#[component]
 #[allow(unused_variables)]
 pub fn PageNotFound(cx: Scope, route: Vec<String>) -> Element {
     render! {

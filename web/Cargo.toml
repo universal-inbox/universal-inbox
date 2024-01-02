@@ -32,7 +32,7 @@ itertools = { workspace = true }
 js-sys = "0.3"
 lazy_static = { workspace = true }
 log = { workspace = true }
-markdown = "0.3.0"
+markdown = "1.0.0-alpha.16"
 openidconnect = { workspace = true }
 reqwest = { workspace = true }
 secrecy = { workspace = true }
@@ -44,7 +44,7 @@ universal-inbox = { path = ".." }
 url = { workspace = true }
 uuid = { workspace = true, features = ["js"] }
 wasm-bindgen-futures = "0.4"
-wasm-bindgen = "=0.2.87"
+wasm-bindgen = "=0.2.89"
 
 [dependencies.web-sys]
 version = "0.3"

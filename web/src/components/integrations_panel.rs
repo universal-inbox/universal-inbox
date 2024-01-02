@@ -32,7 +32,7 @@ use crate::components::{
     },
 };
 
-#[inline_props]
+#[component]
 pub fn IntegrationsPanel<'a>(
     cx: Scope,
     integration_providers: HashMap<IntegrationProviderKind, IntegrationProviderStaticConfig>,
@@ -161,7 +161,7 @@ pub fn IntegrationsPanel<'a>(
     }
 }
 
-#[inline_props]
+#[component]
 pub fn IntegrationSettings<'a>(
     cx: Scope,
     kind: IntegrationProviderKind,
@@ -310,7 +310,7 @@ pub fn IntegrationSettings<'a>(
     }
 }
 
-#[inline_props]
+#[component]
 pub fn Documentation(cx: Scope, config: IntegrationProviderStaticConfig) -> Element {
     let mut doc_for_actions: Vec<(&String, &String)> = config.doc_for_actions.iter().collect();
     doc_for_actions.sort_by(|e1, e2| e1.0.cmp(e2.0));
@@ -375,7 +375,7 @@ pub fn Documentation(cx: Scope, config: IntegrationProviderStaticConfig) -> Elem
     }
 }
 
-#[inline_props]
+#[component]
 pub fn IconForAction(cx: Scope, action: String) -> Element {
     let icon = match action.as_str() {
         "delete" => render! { Icon { class: "w-5 h-5", icon: BsTrash } },
@@ -393,7 +393,7 @@ pub fn IconForAction(cx: Scope, action: String) -> Element {
     }
 }
 
-#[inline_props]
+#[component]
 pub fn IntegrationConnectionProviderConfiguration<'a>(
     cx: Scope,
     provider: IntegrationProvider,

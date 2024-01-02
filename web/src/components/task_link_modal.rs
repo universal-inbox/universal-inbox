@@ -25,7 +25,7 @@ use crate::{
 
 use super::floating_label_inputs::Searchable;
 
-#[inline_props]
+#[component]
 pub fn TaskLinkModal<'a>(
     cx: Scope,
     api_base_url: Url,

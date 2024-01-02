@@ -13,7 +13,7 @@ use crate::{
     services::user_service::CONNECTED_USER,
 };
 
-#[inline_props]
+#[component]
 pub fn EmailValidatedLayout(cx: Scope) -> Element {
     let connected_user_ref = use_atom_ref(cx, &CONNECTED_USER);
     let ui_model_ref = use_atom_ref(cx, &UI_MODEL);

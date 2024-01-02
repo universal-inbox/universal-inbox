@@ -18,7 +18,7 @@ use universal_inbox::{
 
 use crate::components::{icons::Mail, CardWithHeaders, Tag, TagsInCard};
 
-#[inline_props]
+#[component]
 pub fn GoogleMailThreadPreview<'a>(
     cx: Scope,
     notification: &'a NotificationWithTask,
@@ -90,7 +90,7 @@ pub fn GoogleMailThreadPreview<'a>(
     }
 }
 
-#[inline_props]
+#[component]
 fn GoogleMailThreadMessage<'a>(cx: Scope, message: &'a GoogleMailMessage) -> Element {
     let mut headers = vec![];
     if let Some(from) = message.get_header("From") {

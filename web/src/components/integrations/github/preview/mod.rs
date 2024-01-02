@@ -17,7 +17,7 @@ use crate::components::integrations::github::icons::{GithubDiscussionIcon, Githu
 pub mod discussion;
 pub mod pull_request;
 
-#[inline_props]
+#[component]
 pub fn GithubNotificationDefaultPreview<'a>(
     cx: Scope,
     notification: &'a NotificationWithTask,

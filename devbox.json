@@ -1,34 +1,34 @@
 {
   "packages": {
-    "sqlx-cli": "0.7.1",
-    "wasm-bindgen-cli": "0.2.87",
-    "trunk": "latest",
-    "pre-commit": "latest",
-    "rustup": "latest",
-    "cargo-audit": "latest",
-    "cargo-expand": "latest",
-    "cargo-nextest": "latest",
+    "sqlx-cli":       "0.7.1",
+    "trunk":          "latest",
+    "pre-commit":     "latest",
+    "rustup":         "latest",
+    "cargo-audit":    "latest",
+    "cargo-expand":   "latest",
+    "cargo-nextest":  "latest",
     "cargo-outdated": "latest",
-    "just": "latest",
-    "watchexec": "latest",
-    "postgresql_15": "latest",
-    "redis": "latest",
-    "iconv": "latest",
-    "nodejs": "latest",
-    "pkg-config": "latest",
-    "taplo": "latest",
+    "just":           "latest",
+    "watchexec":      "latest",
+    "postgresql_15":  "latest",
+    "redis":          "latest",
+    "iconv":          "latest",
+    "nodejs":         "latest",
+    "pkg-config":     "latest",
+    "taplo":          "latest",
     "darwin.apple_sdk.frameworks.Foundation": {
       "platforms": [
         "x86_64-darwin",
         "aarch64-darwin"
       ]
     },
-    "fzf": "latest",
-    "process-compose": "latest",
-    "binaryen": "latest",
-    "cargo-llvm-cov": "latest",
-    "cargo-chef": "latest",
-    "openssl.dev": ""
+    "fzf":              "latest",
+    "process-compose":  "latest",
+    "binaryen":         "latest",
+    "cargo-llvm-cov":   "latest",
+    "cargo-chef":       "latest",
+    "openssl.dev":      "",
+    "wasm-bindgen-cli": "0.2.89"
   },
   "shell": {
     "init_hook": [

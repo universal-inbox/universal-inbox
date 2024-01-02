@@ -23,7 +23,7 @@ use crate::{
     },
 };
 
-#[inline_props]
+#[component]
 pub fn TodoistTaskPreview<'a>(
     cx: Scope,
     notification: &'a NotificationWithTask,

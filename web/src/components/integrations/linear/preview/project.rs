@@ -12,7 +12,7 @@ use crate::components::{
     integrations::linear::icons::LinearProjectIcon, SmallCard, UserWithAvatar,
 };
 
-#[inline_props]
+#[component]
 pub fn LinearProjectPreview<'a>(cx: Scope, linear_project: &'a LinearProject) -> Element {
     render! {
         div {
@@ -45,7 +45,7 @@ pub fn LinearProjectPreview<'a>(cx: Scope, linear_project: &'a LinearProject) ->
     }
 }
 
-#[inline_props]
+#[component]
 pub fn LinearProjectDetails<'a>(
     cx: Scope,
     linear_project: &'a LinearProject,

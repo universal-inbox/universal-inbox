@@ -38,7 +38,7 @@ pub struct AuthenticatedProps<'a> {
     children: Element<'a>,
 }
 
-#[inline_props]
+#[component]
 #[allow(unused_variables)]
 pub fn AuthPage(cx: Scope, query: String) -> Element {
     render!(div {

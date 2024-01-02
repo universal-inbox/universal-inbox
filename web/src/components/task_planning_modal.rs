@@ -29,7 +29,7 @@ use crate::{
     utils::focus_element,
 };
 
-#[inline_props]
+#[component]
 pub fn TaskPlanningModal<'a>(
     cx: Scope,
     api_base_url: Url,
@@ -46,7 +46,7 @@ pub fn TaskPlanningModal<'a>(
     let task_title = use_state(cx, || "".to_string());
     let task_to_plan = use_state(cx, || None);
 
-    use_memo(cx, &notification_to_plan.clone(), |notification| {
+    let _ = use_memo(cx, &notification_to_plan.clone(), |notification| {
         if let Some(task) = notification.task {
             task_title.set(task.title.clone());
             project.set(task.project.clone());

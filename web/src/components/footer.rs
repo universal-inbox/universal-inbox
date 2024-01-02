@@ -85,7 +85,7 @@ pub fn Footer(cx: Scope) -> Element {
     }
 }
 
-#[inline_props]
+#[component]
 pub fn IntegrationConnectionsStatus(
     cx: Scope,
     integration_connections: Vec<IntegrationConnection>,
@@ -132,7 +132,7 @@ pub fn IntegrationConnectionsStatus(
     }
 }
 
-#[inline_props]
+#[component]
 pub fn IntegrationConnectionStatus(cx: Scope, connection: IntegrationConnection) -> Element {
     let provider_kind = connection.provider.kind();
     let (connection_style, tooltip) =

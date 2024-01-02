@@ -13,7 +13,7 @@ pub mod icons;
 pub mod notification;
 pub mod preview;
 
-#[inline_props]
+#[component]
 pub fn GithubActorDisplay<'a>(
     cx: Scope,
     actor: &'a GithubActor,

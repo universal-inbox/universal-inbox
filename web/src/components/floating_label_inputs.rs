@@ -57,7 +57,7 @@ where
 
     let input_type = cx.props.r#type.clone().unwrap_or("text".to_string());
     let validate = use_state(cx, || false);
-    use_memo(
+    let _ = use_memo(
         cx,
         &(
             cx.props.value.clone(),
@@ -155,7 +155,7 @@ where
     );
 
     let validate = use_state(cx, || false);
-    use_memo(
+    let _ = use_memo(
         cx,
         &(
             cx.props.value.clone(),
@@ -222,7 +222,7 @@ where
     });
 
     let validate = use_state(cx, || false);
-    use_memo(
+    let _ = use_memo(
         cx,
         &(
             cx.props.value.clone(),
@@ -304,7 +304,7 @@ where
         .unwrap_or_default();
 
     let selected_index = use_state(cx, || 0);
-    use_memo(cx, (&cx.props.search_results,), |(_,)| {
+    let _ = use_memo(cx, (&cx.props.search_results,), |(_,)| {
         selected_index.set(0)
     });
 
@@ -427,7 +427,7 @@ where
         }
     });
 
-    use_memo(
+    let _ = use_memo(
         cx,
         &(select_value.clone(), cx.props.search_results.clone()),
         |(select_value, search_results)| {
@@ -543,7 +543,7 @@ where
     }
 }
 
-#[inline_props]
+#[component]
 fn ArrowDown<'a>(cx: Scope, class: Option<&'a str>) -> Element {
     render! {
         svg {
@@ -568,7 +568,7 @@ fn is_dropdown_opened(has_value: bool, autofocus: bool, dropdown_opened: bool) -
     (!has_value && autofocus) || dropdown_opened
 }
 
-#[inline_props]
+#[component]
 pub fn ErrorMessage<'a>(cx: Scope, message: &'a UseState<Option<String>>) -> Element {
     if let Some(error) = message.as_ref() {
         render! {
@@ -582,7 +582,7 @@ pub fn ErrorMessage<'a>(cx: Scope, message: &'a UseState<Option<String>>) -> Ele
     }
 }
 
-#[inline_props]
+#[component]
 fn SearchResultRow<'a>(
     cx: Scope,
     selected: bool,

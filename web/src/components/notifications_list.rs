@@ -40,7 +40,7 @@ use crate::{
     model::UniversalInboxUIModel,
 };
 
-#[inline_props]
+#[component]
 pub fn NotificationsList<'a>(
     cx: Scope,
     notifications: Vec<NotificationWithTask>,
@@ -193,7 +193,7 @@ pub fn NotificationsList<'a>(
     } }
 }
 
-#[inline_props]
+#[component]
 fn Notification<'a>(
     cx: Scope,
     notif: &'a NotificationWithTask,
@@ -235,7 +235,7 @@ fn Notification<'a>(
     }
 }
 
-#[inline_props]
+#[component]
 fn NotificationDisplay<'a>(
     cx: Scope,
     notif: &'a NotificationWithTask,
@@ -343,7 +343,7 @@ fn NotificationDisplay<'a>(
     }
 }
 
-#[inline_props]
+#[component]
 fn DefaultNotificationDisplay<'a>(cx: Scope, notif: &'a NotificationWithTask) -> Element {
     render! {
         div {
@@ -428,7 +428,7 @@ fn NotificationButton<'a>(cx: Scope<'a, NotificationButtonProps<'a>>) -> Element
     }
 }
 
-#[inline_props]
+#[component]
 fn TaskHint<'a>(cx: Scope, task: &'a Task) -> Element {
     let kind = task.get_task_source_kind();
     let html_url = task.get_html_url();
@@ -447,7 +447,7 @@ fn TaskHint<'a>(cx: Scope, task: &'a Task) -> Element {
     }
 }
 
-#[inline_props]
+#[component]
 pub fn NotificationDetailsDisplay<'a>(
     cx: Scope,
     notification: &'a NotificationWithTask,

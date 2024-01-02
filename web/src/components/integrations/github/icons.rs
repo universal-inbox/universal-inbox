@@ -23,7 +23,7 @@ use crate::theme::{
     STARTED_TEXT_COLOR_CLASS,
 };
 
-#[inline_props]
+#[component]
 pub fn Github<'a>(cx: Scope, class: Option<&'a str>) -> Element {
     render! {
         svg {
@@ -41,7 +41,7 @@ pub fn Github<'a>(cx: Scope, class: Option<&'a str>) -> Element {
     }
 }
 
-#[inline_props]
+#[component]
 pub fn GithubNotificationIcon<'a>(
     cx: Scope,
     notif: &'a NotificationWithTask,
@@ -67,7 +67,7 @@ pub fn GithubNotificationIcon<'a>(
     }
 }
 
-#[inline_props]
+#[component]
 pub fn GithubPullRequestIcon<'a>(
     cx: Scope,
     github_pull_request: Option<&'a GithubPullRequest>,
@@ -107,7 +107,7 @@ pub fn GithubPullRequestIcon<'a>(
     }
 }
 
-#[inline_props]
+#[component]
 pub fn GithubDiscussionOpened<'a>(cx: Scope, class: Option<&'a str>) -> Element {
     render! {
         svg {
@@ -128,7 +128,7 @@ pub fn GithubDiscussionOpened<'a>(cx: Scope, class: Option<&'a str>) -> Element 
     }
 }
 
-#[inline_props]
+#[component]
 pub fn GithubDiscussionClosed<'a>(cx: Scope, class: Option<&'a str>) -> Element {
     render! {
         svg {
@@ -146,7 +146,7 @@ pub fn GithubDiscussionClosed<'a>(cx: Scope, class: Option<&'a str>) -> Element 
     }
 }
 
-#[inline_props]
+#[component]
 pub fn GithubDiscussionDuplicate<'a>(cx: Scope, class: Option<&'a str>) -> Element {
     render! {
         svg {
@@ -164,7 +164,7 @@ pub fn GithubDiscussionDuplicate<'a>(cx: Scope, class: Option<&'a str>) -> Eleme
     }
 }
 
-#[inline_props]
+#[component]
 pub fn GithubDiscussionOutdated<'a>(cx: Scope, class: Option<&'a str>) -> Element {
     render! {
         svg {
@@ -182,7 +182,7 @@ pub fn GithubDiscussionOutdated<'a>(cx: Scope, class: Option<&'a str>) -> Elemen
     }
 }
 
-#[inline_props]
+#[component]
 pub fn GithubDiscussionIcon<'a>(
     cx: Scope,
     github_discussion: Option<&'a GithubDiscussion>,
