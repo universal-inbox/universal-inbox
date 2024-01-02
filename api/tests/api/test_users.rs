@@ -1,22 +1,31 @@
+use std::collections::HashMap;
+
 use rstest::*;
+use uuid::Uuid;
+
+use universal_inbox::user::{EmailValidationToken, UserId};
+
+use universal_inbox_api::{configuration::Settings, mailer::EmailTemplate};
 
 use crate::helpers::{
-    tested_app_with_local_auth,
+    settings, tested_app_with_local_auth,
     user::{
-        get_current_user, get_current_user_response, login_user_response, logout_user_response,
-        register_user, register_user_response,
+        get_current_user, get_current_user_response, get_user_email_validation_token,
+        login_user_response, logout_user_response, register_user, register_user_response,
     },
     TestedApp,
 };
 
 mod authenticate_session {
-    use std::collections::HashMap;
-
     use super::*;
+    use pretty_assertions::assert_eq;
 
     #[rstest]
     #[tokio::test]
-    async fn test_register_user(#[future] tested_app_with_local_auth: TestedApp) {
+    async fn test_register_user(
+        settings: Settings,
+        #[future] tested_app_with_local_auth: TestedApp,
+    ) {
         let app = tested_app_with_local_auth.await;
 
         let (_client, user) = register_user(
@@ -31,6 +40,31 @@ mod authenticate_session {
         assert_eq!(user.first_name, "John");
         assert_eq!(user.last_name, "Doe");
         assert_eq!(user.email, "john@doe.name".parse().unwrap());
+        assert!(user.email_validated_at.is_none());
+        assert!(!user.is_email_validated());
+        assert!(user.email_validation_sent_at.is_some());
+
+        let email_validation_token = get_user_email_validation_token(&app, user.id).await;
+
+        assert!(email_validation_token.is_some());
+
+        let emails_sent = (*app.mailer_stub.read().await.emails_sent.read().await).clone();
+        assert_eq!(emails_sent.len(), 1);
+        assert_eq!(emails_sent[0].0.id, user.id);
+        assert_eq!(
+            emails_sent[0].1,
+            EmailTemplate::EmailVerification {
+                first_name: "John".to_string(),
+                email_verification_url: format!(
+                    "{}users/{}/email_verification/{}",
+                    settings.application.front_base_url,
+                    user.id,
+                    email_validation_token.unwrap()
+                )
+                .parse()
+                .unwrap()
+            }
+        );
     }
 
     #[rstest]
@@ -104,6 +138,8 @@ mod authenticate_session {
         assert_eq!(user.first_name, "John");
         assert_eq!(user.last_name, "Doe");
         assert_eq!(user.email, "john@doe.name".parse().unwrap());
+        assert!(user.email_validated_at.is_none());
+        assert!(user.email_validation_sent_at.is_some());
     }
 
     #[rstest]
@@ -179,5 +215,187 @@ mod authenticate_session {
         let response = get_current_user_response(&client, &app).await;
 
         assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_send_email_verification(
+        settings: Settings,
+        #[future] tested_app_with_local_auth: TestedApp,
+    ) {
+        let app = tested_app_with_local_auth.await;
+
+        let (client, user) = register_user(
+            &app,
+            "John",
+            "Doe",
+            "john@doe.name".parse().unwrap(),
+            "Very-harD-pasSword-5",
+        )
+        .await;
+
+        let first_email_validation_token = get_user_email_validation_token(&app, user.id)
+            .await
+            .unwrap();
+
+        let emails_sent = (*app.mailer_stub.read().await.emails_sent.read().await).clone();
+        assert_eq!(emails_sent.len(), 1);
+
+        let response = client
+            .post(format!("{}users/me/email_verification", app.api_address))
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), http::StatusCode::OK);
+
+        let email_validation_token = get_user_email_validation_token(&app, user.id)
+            .await
+            .unwrap();
+
+        assert!(first_email_validation_token != email_validation_token);
+
+        let emails_sent = (*app.mailer_stub.read().await.emails_sent.read().await).clone();
+        assert_eq!(emails_sent.len(), 2);
+        assert_eq!(emails_sent[1].0.id, user.id);
+        assert_eq!(
+            emails_sent[1].1,
+            EmailTemplate::EmailVerification {
+                first_name: "John".to_string(),
+                email_verification_url: format!(
+                    "{}users/{}/email_verification/{email_validation_token}",
+                    settings.application.front_base_url, user.id
+                )
+                .parse()
+                .unwrap()
+            }
+        );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_verify_email(#[future] tested_app_with_local_auth: TestedApp) {
+        let app = tested_app_with_local_auth.await;
+
+        let (client, user) = register_user(
+            &app,
+            "John",
+            "Doe",
+            "john@doe.name".parse().unwrap(),
+            "Very-harD-pasSword-5",
+        )
+        .await;
+        let email_validation_token = get_user_email_validation_token(&app, user.id)
+            .await
+            .unwrap();
+
+        let anonymous_client = reqwest::Client::builder()
+            .cookie_store(true)
+            .build()
+            .unwrap();
+
+        // Email template contains frontend URL which is supposed to call this API endpoint
+        let api_email_verification_url = format!(
+            "{}users/{}/email_verification/{email_validation_token}",
+            app.api_address, user.id
+        );
+        let response = anonymous_client
+            .get(api_email_verification_url)
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), http::StatusCode::OK);
+
+        let user = get_current_user(&client, &app).await;
+
+        assert!(user.email_validated_at.is_some());
+        assert!(user.email_validation_sent_at.is_some());
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_verify_email_unknown_user(#[future] tested_app_with_local_auth: TestedApp) {
+        let app = tested_app_with_local_auth.await;
+
+        let (_, user) = register_user(
+            &app,
+            "John",
+            "Doe",
+            "john@doe.name".parse().unwrap(),
+            "Very-harD-pasSword-5",
+        )
+        .await;
+        let email_validation_token = get_user_email_validation_token(&app, user.id)
+            .await
+            .unwrap();
+
+        let anonymous_client = reqwest::Client::builder()
+            .cookie_store(true)
+            .build()
+            .unwrap();
+
+        let user_id = UserId(Uuid::new_v4());
+        // Email template contains frontend URL which is supposed to call this API endpoint
+        let api_email_verification_url = format!(
+            "{}users/{user_id}/email_verification/{email_validation_token}",
+            app.api_address,
+        );
+        let response = anonymous_client
+            .get(api_email_verification_url)
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
+        let body: HashMap<String, String> = response.json().await.unwrap();
+        assert_eq!(
+            body.get("message").unwrap(),
+            format!("Invalid input data: Invalid email validation token for user {user_id}")
+                .as_str()
+        );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_verify_email_invalid_token(#[future] tested_app_with_local_auth: TestedApp) {
+        let app = tested_app_with_local_auth.await;
+
+        let (_, user) = register_user(
+            &app,
+            "John",
+            "Doe",
+            "john@doe.name".parse().unwrap(),
+            "Very-harD-pasSword-5",
+        )
+        .await;
+        let email_validation_token = EmailValidationToken(Uuid::new_v4());
+
+        let anonymous_client = reqwest::Client::builder()
+            .cookie_store(true)
+            .build()
+            .unwrap();
+
+        // Email template contains frontend URL which is supposed to call this API endpoint
+        let api_email_verification_url = format!(
+            "{}users/{}/email_verification/{email_validation_token}",
+            app.api_address, user.id
+        );
+        let response = anonymous_client
+            .get(api_email_verification_url)
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
+        let body: HashMap<String, String> = response.json().await.unwrap();
+        assert_eq!(
+            body.get("message").unwrap(),
+            format!(
+                "Invalid input data: Invalid email validation token for user {}",
+                user.id
+            )
+            .as_str()
+        );
     }
 }

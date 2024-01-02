@@ -6,6 +6,7 @@ use rstest::*;
 use sqlx::{
     postgres::PgConnectOptions, ConnectOptions, Connection, Executor, PgConnection, PgPool,
 };
+use tokio::sync::RwLock;
 use tracing::info;
 use url::Url;
 use uuid::Uuid;
@@ -19,8 +20,11 @@ use universal_inbox_api::{
     repository::Repository,
 };
 
+use crate::helpers::mailer::MailerStub;
+
 pub mod auth;
 pub mod integration_connection;
+pub mod mailer;
 pub mod notification;
 pub mod rest;
 pub mod task;
@@ -36,6 +40,7 @@ pub struct TestedApp {
     pub todoist_mock_server: MockServer,
     pub oidc_issuer_mock_server: Option<MockServer>,
     pub nango_mock_server: MockServer,
+    pub mailer_stub: Arc<RwLock<MailerStub>>,
 }
 
 #[fixture]
@@ -147,6 +152,7 @@ pub async fn tested_app(
     )
     .expect("Failed to create new NangoService");
 
+    let mailer_stub = Arc::new(RwLock::new(MailerStub::new()));
     let (notification_service, task_service, user_service, integration_connection_service) =
         universal_inbox_api::build_services(
             pool.clone(),
@@ -156,6 +162,7 @@ pub async fn tested_app(
             Some(google_mail_mock_server_url.to_string()),
             Some(todoist_mock_server_url.to_string()),
             nango_service,
+            mailer_stub.clone(),
         )
         .await;
 
@@ -186,6 +193,7 @@ pub async fn tested_app(
         todoist_mock_server,
         oidc_issuer_mock_server: Some(oidc_issuer_mock_server),
         nango_mock_server,
+        mailer_stub,
     }
 }
 
@@ -229,6 +237,7 @@ pub async fn tested_app_with_local_auth(
     )
     .expect("Failed to create new NangoService");
 
+    let mailer_stub = Arc::new(RwLock::new(MailerStub::new()));
     let (notification_service, task_service, user_service, integration_connection_service) =
         universal_inbox_api::build_services(
             pool.clone(),
@@ -238,6 +247,7 @@ pub async fn tested_app_with_local_auth(
             Some(google_mail_mock_server_url.to_string()),
             Some(todoist_mock_server_url.to_string()),
             nango_service,
+            mailer_stub.clone(),
         )
         .await;
 
@@ -268,6 +278,7 @@ pub async fn tested_app_with_local_auth(
         todoist_mock_server,
         oidc_issuer_mock_server: None,
         nango_mock_server,
+        mailer_stub,
     }
 }
 

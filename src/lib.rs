@@ -54,3 +54,8 @@ pub enum FrontAuthenticationConfig {
 pub trait HasHtmlUrl {
     fn get_html_url(&self) -> Url;
 }
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Hash)]
+pub struct SuccessResponse {
+    pub message: String,
+}

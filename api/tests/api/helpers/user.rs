@@ -2,7 +2,11 @@ use email_address::EmailAddress;
 use reqwest::Client;
 use secrecy::Secret;
 
-use universal_inbox::user::{Credentials, Password, RegisterUserParameters, User};
+use universal_inbox::user::{
+    Credentials, EmailValidationToken, Password, RegisterUserParameters, User, UserId,
+};
+
+use universal_inbox_api::repository::user::UserRepository;
 
 use crate::helpers::TestedApp;
 
@@ -94,4 +98,18 @@ pub async fn logout_user_response(client: &Client, api_address: &str) -> reqwest
         .send()
         .await
         .unwrap()
+}
+
+pub async fn get_user_email_validation_token(
+    app: &TestedApp,
+    user_id: UserId,
+) -> Option<EmailValidationToken> {
+    let mut transaction = app.repository.begin().await.unwrap();
+    let token = app
+        .repository
+        .get_user_email_validation_token(&mut transaction, user_id)
+        .await
+        .unwrap();
+    transaction.commit().await.unwrap();
+    token
 }

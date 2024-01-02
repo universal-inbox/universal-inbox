@@ -64,13 +64,6 @@ pub fn NavBar(cx: Scope) -> Element {
         .and_then(|config| config.support_href.clone());
     let is_dark_mode = use_atom_state(cx, &IS_DARK_MODE);
 
-    use_future(cx, (), |()| {
-        to_owned![user_service];
-        async move {
-            user_service.send(UserCommand::GetUser);
-        }
-    });
-
     render! {
         div {
             class: "navbar shadow-lg z-10 h-12",

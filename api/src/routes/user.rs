@@ -7,6 +7,8 @@ use anyhow::anyhow;
 use anyhow::Context;
 use serde_json::json;
 use tokio::sync::RwLock;
+use universal_inbox::user::EmailValidationToken;
+use universal_inbox::SuccessResponse;
 use validator::Validate;
 
 use universal_inbox::user::{
@@ -30,6 +32,16 @@ pub fn scope() -> Scope {
             web::resource("me")
                 .route(web::get().to(get_user))
                 .route(web::post().to(login_user))
+                .route(web::method(http::Method::OPTIONS).to(option_wildcard)),
+        )
+        .service(
+            web::resource("/me/email_verification")
+                .route(web::post().to(send_verification_email))
+                .route(web::method(http::Method::OPTIONS).to(option_wildcard)),
+        )
+        .service(
+            web::resource("/{user_id}/email_verification/{email_validation_token}")
+                .route(web::get().to(verify_email))
                 .route(web::method(http::Method::OPTIONS).to(option_wildcard)),
         )
 }
@@ -147,4 +159,64 @@ pub async fn login_user(
     Ok(HttpResponse::Ok()
         .content_type("application/json")
         .body(serde_json::to_string(&user).context("Cannot serialize user")?))
+}
+
+pub async fn send_verification_email(
+    user_service: web::Data<Arc<RwLock<UserService>>>,
+    identity: Identity,
+) -> Result<HttpResponse, UniversalInboxError> {
+    let user_id: UserId = identity
+        .id()
+        .context("Missing `user_id` in session")?
+        .try_into()
+        .context("Wrong user ID format")?;
+    let service = user_service.read().await;
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while sending verification email")?;
+
+    service
+        .send_verification_email(&mut transaction, user_id, false)
+        .await?;
+
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit while sending verification email")?;
+
+    Ok(HttpResponse::Ok().content_type("application/json").body(
+        serde_json::to_string(&SuccessResponse {
+            message: "Email verification successfully sent".to_string(),
+        })
+        .context("Cannot serialize response")?,
+    ))
+}
+
+pub async fn verify_email(
+    user_service: web::Data<Arc<RwLock<UserService>>>,
+    path_info: web::Path<(UserId, EmailValidationToken)>,
+) -> Result<HttpResponse, UniversalInboxError> {
+    let (user_id, email_validation_token) = path_info.into_inner();
+    let service = user_service.read().await;
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while verifying email validation token")?;
+
+    service
+        .verify_email(&mut transaction, user_id, email_validation_token)
+        .await?;
+
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit while verifying email validation token")?;
+
+    Ok(HttpResponse::Ok().content_type("application/json").body(
+        serde_json::to_string(&SuccessResponse {
+            message: "Email successfully verified".to_string(),
+        })
+        .context("Cannot serialize response")?,
+    ))
 }

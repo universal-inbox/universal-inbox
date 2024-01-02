@@ -7,7 +7,7 @@ min_sync_notifications_interval_in_minutes = 0
 
 [application.observability.logging]
 log_directive = "debug"
-dependencies_log_directive = "debug"
+dependencies_log_directive = "info"
 
 [application.http_session]
 secret_key = "1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF"
