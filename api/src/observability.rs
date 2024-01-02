@@ -35,7 +35,8 @@ pub fn get_subscriber_with_telemetry(
     for (header_name, header_value) in config.otlp_exporter_headers.clone() {
         if !header_value.is_empty() {
             map.insert(
-                AsciiMetadataKey::from_str(header_name.as_str()).unwrap(),
+                // header names usually use dashes instead of underscores but env vars don't allow dashes
+                AsciiMetadataKey::from_str(header_name.replace('_', "-").as_str()).unwrap(),
                 header_value.parse().unwrap(),
             );
         }
