@@ -10,7 +10,7 @@ use crate::components::{
     CollapseCard, SmallCard, TagsInCard,
 };
 
-#[inline_props]
+#[component]
 pub fn GithubDiscussionPreview<'a>(cx: Scope, github_discussion: &'a GithubDiscussion) -> Element {
     render! {
         div {
@@ -56,7 +56,7 @@ pub fn GithubDiscussionPreview<'a>(cx: Scope, github_discussion: &'a GithubDiscu
     }
 }
 
-#[inline_props]
+#[component]
 fn GithubDiscussionDetails<'a>(cx: Scope, github_discussion: &'a GithubDiscussion) -> Element {
     render! {
         div {

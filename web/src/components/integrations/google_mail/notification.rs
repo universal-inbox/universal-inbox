@@ -17,7 +17,7 @@ use universal_inbox::notification::{
 
 use crate::components::icons::Mail;
 
-#[inline_props]
+#[component]
 pub fn GoogleMailThreadDisplay<'a>(
     cx: Scope,
     notif: &'a NotificationWithTask,
@@ -65,7 +65,7 @@ pub fn GoogleMailThreadDisplay<'a>(
     }
 }
 
-#[inline_props]
+#[component]
 pub fn GoogleMailNotificationDetailsDisplay<'a>(
     cx: Scope,
     google_mail_thread: &'a GoogleMailThread,

@@ -24,7 +24,7 @@ use crate::{
     },
 };
 
-#[inline_props]
+#[component]
 pub fn LinearIssuePreview<'a>(
     cx: Scope,
     linear_notification: &'a LinearNotification,
@@ -76,7 +76,7 @@ pub fn LinearIssuePreview<'a>(
     }
 }
 
-#[inline_props]
+#[component]
 fn LinearIssueDetails<'a>(cx: Scope, linear_issue: &'a LinearIssue) -> Element {
     let description = linear_issue
         .description
@@ -186,7 +186,7 @@ fn LinearIssueDetails<'a>(cx: Scope, linear_issue: &'a LinearIssue) -> Element {
     }
 }
 
-#[inline_props]
+#[component]
 pub fn LinearProjectCard<'a>(cx: Scope, project: &'a LinearProject) -> Element {
     let project_icon = match &project.icon {
         Some(icon) => render! {

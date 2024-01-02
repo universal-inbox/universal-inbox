@@ -11,7 +11,7 @@ use crate::theme::{
     DRAFT_TEXT_COLOR_CLASS, STARTED_TEXT_COLOR_CLASS,
 };
 
-#[inline_props]
+#[component]
 pub fn LinearIssueIcon<'a>(
     cx: Scope,
     linear_issue: &'a LinearIssue,
@@ -51,7 +51,7 @@ pub fn LinearIssueIcon<'a>(
     }
 }
 
-#[inline_props]
+#[component]
 pub fn LinearIssueTriageIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element {
     render! {
         svg {
@@ -68,7 +68,7 @@ pub fn LinearIssueTriageIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element {
     }
 }
 
-#[inline_props]
+#[component]
 pub fn LinearIssueBacklogIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element {
     render! {
         svg {
@@ -86,7 +86,7 @@ pub fn LinearIssueBacklogIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element 
     }
 }
 
-#[inline_props]
+#[component]
 pub fn LinearIssueCompletedIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element {
     render! {
         svg {
@@ -105,7 +105,7 @@ pub fn LinearIssueCompletedIcon<'a>(cx: Scope, class: Option<&'a str>) -> Elemen
     }
 }
 
-#[inline_props]
+#[component]
 pub fn LinearIssueCanceledIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element {
     render! {
         svg {
@@ -124,7 +124,7 @@ pub fn LinearIssueCanceledIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element
     }
 }
 
-#[inline_props]
+#[component]
 pub fn LinearIssueUnstartedIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element {
     render! {
         svg {
@@ -145,7 +145,7 @@ pub fn LinearIssueUnstartedIcon<'a>(cx: Scope, class: Option<&'a str>) -> Elemen
     }
 }
 
-#[inline_props]
+#[component]
 pub fn LinearIssueStartedIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element {
     render! {
         svg {
@@ -166,7 +166,7 @@ pub fn LinearIssueStartedIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element 
     }
 }
 
-#[inline_props]
+#[component]
 pub fn LinearProjectIcon<'a>(
     cx: Scope,
     linear_project: &'a LinearProject,
@@ -206,7 +206,7 @@ pub fn LinearProjectIcon<'a>(
     }
 }
 
-#[inline_props]
+#[component]
 pub fn LinearProjectPlannedIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element {
     render! {
         svg {
@@ -225,7 +225,7 @@ pub fn LinearProjectPlannedIcon<'a>(cx: Scope, class: Option<&'a str>) -> Elemen
     }
 }
 
-#[inline_props]
+#[component]
 pub fn LinearProjectBacklogIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element {
     render! {
         svg {
@@ -274,7 +274,7 @@ pub fn LinearProjectBacklogIcon<'a>(cx: Scope, class: Option<&'a str>) -> Elemen
     }
 }
 
-#[inline_props]
+#[component]
 pub fn LinearProjectCompletedIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element {
     render! {
         svg {
@@ -298,7 +298,7 @@ pub fn LinearProjectCompletedIcon<'a>(cx: Scope, class: Option<&'a str>) -> Elem
     }
 }
 
-#[inline_props]
+#[component]
 pub fn LinearProjectCanceledIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element {
     render! {
         svg {
@@ -320,7 +320,7 @@ pub fn LinearProjectCanceledIcon<'a>(cx: Scope, class: Option<&'a str>) -> Eleme
     }
 }
 
-#[inline_props]
+#[component]
 pub fn LinearProjectPausedIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element {
     render! {
         svg {
@@ -349,7 +349,7 @@ pub fn LinearProjectPausedIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element
     }
 }
 
-#[inline_props]
+#[component]
 pub fn LinearProjectStartedIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element {
     render! {
         svg {
@@ -389,7 +389,7 @@ pub fn LinearProjectStartedIcon<'a>(cx: Scope, class: Option<&'a str>) -> Elemen
     }
 }
 
-#[inline_props]
+#[component]
 pub fn LinearProjectMilestoneIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element {
     render! {
         svg {

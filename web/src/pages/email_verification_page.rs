@@ -13,7 +13,7 @@ use crate::{
     services::user_service::{UserCommand, CONNECTED_USER},
 };
 
-#[inline_props]
+#[component]
 #[allow(unused_variables)]
 pub fn EmailVerificationPage(
     cx: Scope,

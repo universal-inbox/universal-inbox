@@ -26,7 +26,7 @@ use crate::components::{
     CardWithHeaders, CollapseCardWithIcon, SmallCard, Tag, TagsInCard, UserWithAvatar,
 };
 
-#[inline_props]
+#[component]
 pub fn GithubPullRequestPreview<'a>(
     cx: Scope,
     github_pull_request: &'a GithubPullRequest,
@@ -88,7 +88,7 @@ impl From<GithubLabel> for Tag {
     }
 }
 
-#[inline_props]
+#[component]
 fn GithubPullRequestDetails<'a>(cx: Scope, github_pull_request: &'a GithubPullRequest) -> Element {
     let show_base_and_head_repositories = match (
         &github_pull_request.head_repository,
@@ -259,7 +259,7 @@ fn GithubPullRequestDetails<'a>(cx: Scope, github_pull_request: &'a GithubPullRe
     }
 }
 
-#[inline_props]
+#[component]
 pub fn ChecksGithubPullRequest<'a>(
     cx: Scope,
     latest_commit: &'a GithubCommitChecks,
@@ -322,7 +322,7 @@ pub fn ChecksGithubPullRequest<'a>(
     }
 }
 
-#[inline_props]
+#[component]
 fn ChecksGithubPullRequestDetails<'a>(cx: Scope, latest_commit: &'a GithubCommitChecks) -> Element {
     if let Some(check_suites) = &latest_commit.check_suites {
         render! {
@@ -354,7 +354,7 @@ fn ChecksGithubPullRequestDetails<'a>(cx: Scope, latest_commit: &'a GithubCommit
     }
 }
 
-#[inline_props]
+#[component]
 fn GithubCheckRunLine<'a>(
     cx: Scope,
     check_run: &'a GithubCheckRun,
@@ -500,7 +500,7 @@ fn compute_pull_request_checks_progress(
     })
 }
 
-#[inline_props]
+#[component]
 fn ReviewsGithubPullRequest<'a>(cx: Scope, github_pull_request: &'a GithubPullRequest) -> Element {
     let reviews_state = github_pull_request
         .review_decision
@@ -533,7 +533,7 @@ fn ReviewsGithubPullRequest<'a>(cx: Scope, github_pull_request: &'a GithubPullRe
     }
 }
 
-#[inline_props]
+#[component]
 fn ReviewsGithubPullRequestDetails<'a>(
     cx: Scope,
     github_pull_request: &'a GithubPullRequest,
@@ -556,7 +556,7 @@ fn ReviewsGithubPullRequestDetails<'a>(
     }
 }
 
-#[inline_props]
+#[component]
 fn GithubReviewLine(cx: Scope, review: GithubReview) -> Element {
     let (reviewer, review_body, review_status_icon) = match review {
         GithubReview::Requested { reviewer } => (
@@ -712,7 +712,7 @@ pub fn compute_pull_request_reviews(
         .collect()
 }
 
-#[inline_props]
+#[component]
 pub fn GithubCommentList<'a>(cx: Scope, comments: &'a [GithubIssueComment]) -> Element {
     render! {
         div {

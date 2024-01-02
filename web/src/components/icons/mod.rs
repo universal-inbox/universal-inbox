@@ -2,7 +2,7 @@
 
 use dioxus::prelude::*;
 
-#[inline_props]
+#[component]
 pub fn Todoist<'a>(cx: Scope, class: Option<&'a str>) -> Element {
     render! {
         svg {
@@ -20,7 +20,7 @@ pub fn Todoist<'a>(cx: Scope, class: Option<&'a str>) -> Element {
     }
 }
 
-#[inline_props]
+#[component]
 pub fn Linear<'a>(cx: Scope, class: Option<&'a str>) -> Element {
     render! {
         svg {
@@ -38,7 +38,7 @@ pub fn Linear<'a>(cx: Scope, class: Option<&'a str>) -> Element {
     }
 }
 
-#[inline_props]
+#[component]
 pub fn Notion<'a>(cx: Scope, class: Option<&'a str>) -> Element {
     render! {img {
         class: "{class.unwrap_or_default()}",
@@ -46,7 +46,7 @@ pub fn Notion<'a>(cx: Scope, class: Option<&'a str>) -> Element {
     }}
 }
 
-#[inline_props]
+#[component]
 pub fn GoogleDocs<'a>(cx: Scope, class: Option<&'a str>) -> Element {
     render! {
         svg {
@@ -63,7 +63,7 @@ pub fn GoogleDocs<'a>(cx: Scope, class: Option<&'a str>) -> Element {
     }
 }
 
-#[inline_props]
+#[component]
 pub fn GoogleMail<'a>(cx: Scope, class: Option<&'a str>) -> Element {
     render! {
         svg {
@@ -80,7 +80,7 @@ pub fn GoogleMail<'a>(cx: Scope, class: Option<&'a str>) -> Element {
     }
 }
 
-#[inline_props]
+#[component]
 pub fn Mail<'a>(cx: Scope, class: Option<&'a str>) -> Element {
     render! {
         svg {
@@ -106,7 +106,7 @@ pub fn Mail<'a>(cx: Scope, class: Option<&'a str>) -> Element {
     }
 }
 
-#[inline_props]
+#[component]
 pub fn TickTick<'a>(cx: Scope, class: Option<&'a str>) -> Element {
     render! {
         svg {

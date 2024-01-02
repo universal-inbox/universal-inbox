@@ -21,7 +21,7 @@ impl From<LinearLabel> for Tag {
     }
 }
 
-#[inline_props]
+#[component]
 pub fn LinearNotificationPreview(cx: Scope, linear_notification: LinearNotification) -> Element {
     match linear_notification {
         LinearNotification::IssueNotification { issue, .. } => render! {

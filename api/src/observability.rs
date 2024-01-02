@@ -5,9 +5,10 @@ use actix_identity::IdentityExt;
 use actix_web::dev::{ServiceRequest, ServiceResponse};
 use anyhow::{anyhow, Context};
 use log;
-use opentelemetry_api::KeyValue;
+use opentelemetry::KeyValue;
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::{
+    runtime,
     trace::{self, RandomIdGenerator, Sampler},
     Resource,
 };
@@ -62,8 +63,8 @@ pub fn get_subscriber_with_telemetry(
                 .with_timeout(Duration::from_secs(3))
                 .with_metadata(map),
         );
-    let telemetry = tracing_opentelemetry::layer()
-        .with_tracer(tracer.install_batch(opentelemetry::runtime::Tokio).unwrap());
+    let telemetry =
+        tracing_opentelemetry::layer().with_tracer(tracer.install_batch(runtime::Tokio).unwrap());
 
     let fmt = tracing_subscriber::fmt::layer().compact();
 

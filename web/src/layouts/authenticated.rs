@@ -17,7 +17,7 @@ use crate::{
     },
 };
 
-#[inline_props]
+#[component]
 pub fn AuthenticatedLayout(cx: Scope) -> Element {
     let ui_model_ref = use_atom_ref(cx, &UI_MODEL);
     let app_config_ref = use_atom_ref(cx, &APP_CONFIG);
@@ -45,7 +45,7 @@ pub fn AuthenticatedLayout(cx: Scope) -> Element {
     }
 }
 
-#[inline_props]
+#[component]
 pub fn AuthenticatedApp(cx: Scope) -> Element {
     let user_service = use_coroutine_handle::<UserCommand>(cx).unwrap();
     let integration_connections_ref = use_atom_ref(cx, &INTEGRATION_CONNECTIONS);

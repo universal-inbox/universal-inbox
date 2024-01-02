@@ -29,7 +29,7 @@ use crate::{
     model::{PreviewPane, UniversalInboxUIModel},
 };
 
-#[inline_props]
+#[component]
 pub fn NotificationPreview<'a>(
     cx: Scope,
     ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
@@ -106,7 +106,7 @@ pub fn NotificationPreview<'a>(
     }
 }
 
-#[inline_props]
+#[component]
 fn NotificationDetailsPreview<'a>(cx: Scope, notification: &'a NotificationWithTask) -> Element {
     if let Some(details) = &notification.details {
         return match details {
@@ -138,7 +138,7 @@ fn NotificationDetailsPreview<'a>(cx: Scope, notification: &'a NotificationWithT
     }
 }
 
-#[inline_props]
+#[component]
 fn NotificationDetailsPreviewIcon<'a>(
     cx: Scope,
     notification: &'a NotificationWithTask,
@@ -157,7 +157,7 @@ fn NotificationDetailsPreviewIcon<'a>(
     }
 }
 
-#[inline_props]
+#[component]
 fn TaskDetailsPreview<'a>(cx: Scope, notification: &'a NotificationWithTask) -> Element {
     match &notification.task {
         Some(
@@ -176,7 +176,7 @@ fn TaskDetailsPreview<'a>(cx: Scope, notification: &'a NotificationWithTask) -> 
     }
 }
 
-#[inline_props]
+#[component]
 fn TaskDetailsPreviewIcon<'a>(cx: Scope, notification: &'a NotificationWithTask) -> Element {
     match &notification.task {
         Some(Task {

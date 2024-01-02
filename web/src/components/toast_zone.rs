@@ -43,7 +43,7 @@ pub enum ToastKind {
     Failure,
 }
 
-#[inline_props]
+#[component]
 pub fn ToastZone(cx: Scope) -> Element {
     let toasts_ref = use_atom_ref(cx, &TOASTS);
     let toast_service = use_coroutine_handle::<ToastCommand>(cx).unwrap();
@@ -69,7 +69,7 @@ pub fn ToastZone(cx: Scope) -> Element {
     }
 }
 
-#[inline_props]
+#[component]
 fn Toast<'a>(
     cx: Scope,
     message: String,

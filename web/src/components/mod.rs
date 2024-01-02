@@ -20,7 +20,7 @@ pub mod task_planning_modal;
 pub mod toast_zone;
 pub mod universal_inbox_title;
 
-#[inline_props]
+#[component]
 fn CollapseCardWithIcon<'a>(
     cx: Scope,
     icon: Element<'a>,
@@ -35,7 +35,7 @@ fn CollapseCardWithIcon<'a>(
     }
 }
 
-#[inline_props]
+#[component]
 fn CollapseCard<'a>(cx: Scope, header: Element<'a>, children: Element<'a>) -> Element {
     render! {
         div {
@@ -57,7 +57,7 @@ fn CollapseCard<'a>(cx: Scope, header: Element<'a>, children: Element<'a>) -> El
     }
 }
 
-#[inline_props]
+#[component]
 fn SmallCard<'a>(
     cx: Scope,
     card_class: Option<&'a str>,
@@ -90,7 +90,7 @@ fn get_initials_from_name(name: &str) -> String {
         .to_ascii_uppercase()
 }
 
-#[inline_props]
+#[component]
 pub fn UserWithAvatar(
     cx: Scope,
     user_name: Option<String>,
@@ -182,7 +182,7 @@ impl Tag {
     }
 }
 
-#[inline_props]
+#[component]
 pub fn TagsInCard(cx: Scope, tags: Vec<Tag>) -> Element {
     if tags.is_empty() {
         return None;
@@ -198,7 +198,7 @@ pub fn TagsInCard(cx: Scope, tags: Vec<Tag>) -> Element {
     }
 }
 
-#[inline_props]
+#[component]
 pub fn TagDisplay<'a>(cx: Scope, tag: Tag, class: Option<&'a str>) -> Element {
     let badge_text_class = tag.get_text_class_color("text-white");
     let badge_class = tag.get_class().unwrap_or_default();
@@ -219,7 +219,7 @@ pub fn TagDisplay<'a>(cx: Scope, tag: Tag, class: Option<&'a str>) -> Element {
     }
 }
 
-#[inline_props]
+#[component]
 pub fn CardWithHeaders<'a>(cx: Scope, headers: Vec<Element<'a>>, children: Element<'a>) -> Element {
     render! {
         div {

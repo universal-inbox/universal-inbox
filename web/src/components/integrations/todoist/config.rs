@@ -5,7 +5,7 @@ use universal_inbox::integration_connection::{
     config::IntegrationConnectionConfig, integrations::todoist::TodoistConfig,
 };
 
-#[inline_props]
+#[component]
 pub fn TodoistProviderConfiguration<'a>(
     cx: Scope,
     config: TodoistConfig,

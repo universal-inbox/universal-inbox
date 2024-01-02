@@ -5,7 +5,7 @@ use universal_inbox::integration_connection::{
     config::IntegrationConnectionConfig, integrations::linear::LinearConfig,
 };
 
-#[inline_props]
+#[component]
 pub fn LinearProviderConfiguration<'a>(
     cx: Scope,
     config: LinearConfig,

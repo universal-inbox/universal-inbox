@@ -8,7 +8,7 @@ use crate::{
     route::Route,
 };
 
-#[inline_props]
+#[component]
 pub fn NavBarLayout(cx: Scope) -> Element {
     render! {
         div {

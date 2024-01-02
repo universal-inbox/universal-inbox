@@ -13,7 +13,7 @@ use universal_inbox::{
 
 use crate::components::{Tag, TagDisplay};
 
-#[inline_props]
+#[component]
 pub fn TodoistNotificationDisplay<'a>(
     cx: Scope,
     notif: &'a NotificationWithTask,
@@ -59,7 +59,7 @@ pub fn TodoistNotificationDisplay<'a>(
     }
 }
 
-#[inline_props]
+#[component]
 pub fn TodoistNotificationDetailsDisplay<'a>(cx: Scope, todoist_item: &'a TodoistItem) -> Element {
     render! {
         div {

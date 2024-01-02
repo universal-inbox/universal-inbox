@@ -12,7 +12,7 @@ use crate::components::{
     Tag, TagDisplay, UserWithAvatar,
 };
 
-#[inline_props]
+#[component]
 pub fn LinearNotificationDisplay<'a>(
     cx: Scope,
     notif: &'a NotificationWithTask,
@@ -59,7 +59,7 @@ pub fn LinearNotificationDisplay<'a>(
     }
 }
 
-#[inline_props]
+#[component]
 pub fn LinearNotificationDetailsDisplay<'a>(
     cx: Scope,
     linear_notification: &'a LinearNotification,
@@ -74,7 +74,7 @@ pub fn LinearNotificationDetailsDisplay<'a>(
     }
 }
 
-#[inline_props]
+#[component]
 pub fn LinearIssueDetailsDisplay<'a>(cx: Scope, linear_issue: &'a LinearIssue) -> Element {
     render! {
         div {
@@ -100,7 +100,7 @@ pub fn LinearIssueDetailsDisplay<'a>(cx: Scope, linear_issue: &'a LinearIssue) -
     }
 }
 
-#[inline_props]
+#[component]
 pub fn LinearProjectDetailsDisplay<'a>(cx: Scope, linear_project: &'a LinearProject) -> Element {
     render! {
         div {

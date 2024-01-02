@@ -15,7 +15,7 @@ use crate::components::integrations::github::{
     GithubActorDisplay,
 };
 
-#[inline_props]
+#[component]
 pub fn GithubNotificationDisplay<'a>(
     cx: Scope,
     notif: &'a NotificationWithTask,
@@ -53,7 +53,7 @@ pub fn GithubNotificationDisplay<'a>(
     }
 }
 
-#[inline_props]
+#[component]
 pub fn GithubPullRequestDetailsDisplay<'a>(
     cx: Scope,
     github_pull_request: &'a GithubPullRequest,
@@ -85,7 +85,7 @@ pub fn GithubPullRequestDetailsDisplay<'a>(
     }
 }
 
-#[inline_props]
+#[component]
 fn GithubReviewStatus<'a>(cx: Scope, github_pull_request: &'a GithubPullRequest) -> Element {
     github_pull_request
         .review_decision
@@ -104,7 +104,7 @@ fn GithubReviewStatus<'a>(cx: Scope, github_pull_request: &'a GithubPullRequest)
         .unwrap_or(None)
 }
 
-#[inline_props]
+#[component]
 pub fn GithubDiscussionDetailsDisplay<'a>(
     cx: Scope,
     github_discussion: &'a GithubDiscussion,
