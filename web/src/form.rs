@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
 use anyhow::anyhow;
+use email_address::EmailAddress;
 use secrecy::Secret;
-use universal_inbox::user::{Credentials, RegisterUserParameters};
+use universal_inbox::user::{Credentials, Password, RegisterUserParameters};
 
 pub struct FormValues(pub HashMap<String, Vec<String>>);
 
@@ -54,5 +55,37 @@ impl TryFrom<FormValues> for RegisterUserParameters {
             .to_string();
 
         Self::try_new(first_name, last_name, form_values.try_into()?)
+    }
+}
+
+impl TryFrom<FormValues> for EmailAddress {
+    type Error = anyhow::Error;
+
+    fn try_from(form_values: FormValues) -> Result<Self, Self::Error> {
+        let email = form_values
+            .0
+            .get("email")
+            .ok_or_else(|| anyhow!("email is required"))?
+            .first()
+            .ok_or_else(|| anyhow!("email is required"))?
+            .parse()?;
+
+        Ok(email)
+    }
+}
+
+impl TryFrom<FormValues> for Secret<Password> {
+    type Error = anyhow::Error;
+
+    fn try_from(form_values: FormValues) -> Result<Self, Self::Error> {
+        let password = form_values
+            .0
+            .get("password")
+            .ok_or_else(|| anyhow!("password is required"))?
+            .first()
+            .ok_or_else(|| anyhow!("password is required"))?
+            .parse()?;
+
+        Ok(Secret::new(password))
     }
 }

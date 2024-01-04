@@ -18,7 +18,7 @@ use rand;
 use secrecy::{ExposeSecret, Secret};
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
-use tracing::info;
+use tracing::{error, info, warn};
 use url::Url;
 use uuid::Uuid;
 
@@ -26,7 +26,7 @@ use universal_inbox::{
     auth::openidconnect::OpenidConnectProvider,
     user::{
         AuthUserId, Credentials, EmailValidationToken, LocalUserAuth, OpenIdConnectUserAuth,
-        Password, PasswordHash, User, UserAuth, UserId,
+        Password, PasswordHash, PasswordResetToken, User, UserAuth, UserId,
     },
 };
 
@@ -423,7 +423,10 @@ impl UserService {
             .get_user_by_email(executor, &credentials.email)
             .await?;
         if let Some(User {
-            auth: UserAuth::Local(LocalUserAuth { ref password_hash }),
+            auth:
+                UserAuth::Local(LocalUserAuth {
+                    ref password_hash, ..
+                }),
             ..
         }) = user
         {
@@ -564,6 +567,90 @@ impl UserService {
             _ => Err(UniversalInboxError::InvalidInputData {
                 source: None,
                 user_error: format!("Invalid email validation token for user {user_id}"),
+            }),
+        }
+    }
+
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    pub async fn send_password_reset_email<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        email_address: EmailAddress,
+        dry_run: bool,
+    ) -> Result<(), UniversalInboxError> {
+        let password_reset_token: PasswordResetToken = Uuid::new_v4().into();
+        let updated_user = self
+            .repository
+            .update_password_reset_parameters(
+                executor,
+                email_address.clone(),
+                Some(Utc::now()),
+                Some(password_reset_token.clone()),
+            )
+            .await?;
+
+        match updated_user {
+            UpdateStatus {
+                updated: true,
+                result: Some(user),
+            } => {
+                let password_reset_url = format!(
+                    "{}users/{}/password_reset/{password_reset_token}",
+                    self.application_settings.front_base_url, user.id,
+                )
+                .parse()
+                .context("Failed to build reset password URL")?;
+
+                let template = EmailTemplate::PasswordReset {
+                    first_name: user.first_name.clone(),
+                    password_reset_url,
+                };
+                self.mailer
+                    .read()
+                    .await
+                    .send_email(user, template, dry_run)
+                    .await?;
+            }
+            UpdateStatus {
+                updated: false,
+                result: None,
+            } => {
+                warn!("No user found for email address {email_address}");
+            }
+            _ => {
+                error!("User not updated while resetting password for email address {email_address}, should not happen");
+            }
+        }
+
+        Ok(())
+    }
+
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    pub async fn reset_password<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        user_id: UserId,
+        password_reset_token: PasswordResetToken,
+        new_password: Secret<Password>,
+    ) -> Result<(), UniversalInboxError> {
+        let new_password_hash = self.get_new_password_hash(new_password)?;
+        let updated_user = self
+            .repository
+            .update_password(
+                executor,
+                user_id,
+                new_password_hash,
+                Some(password_reset_token.clone()),
+            )
+            .await?;
+
+        match updated_user {
+            UpdateStatus {
+                result: Some(_), ..
+            } => Ok(()),
+            UpdateStatus { result: None, .. } => Err(UniversalInboxError::InvalidInputData {
+                source: None,
+                user_error: format!("Invalid password reset token for user {user_id}"),
             }),
         }
     }

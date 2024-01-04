@@ -36,12 +36,17 @@ pub enum EmailTemplate {
         first_name: String,
         email_verification_url: Url,
     },
+    PasswordReset {
+        first_name: String,
+        password_reset_url: Url,
+    },
 }
 
 impl EmailTemplate {
     pub fn subject(&self) -> String {
         match self {
             EmailTemplate::EmailVerification { .. } => "Verify your email".to_string(),
+            EmailTemplate::PasswordReset { .. } => "Reset your password".to_string(),
         }
     }
 
@@ -60,6 +65,20 @@ impl EmailTemplate {
                     ..Default::default()
                 })
                 .outro("Welcome to Universal Inbox")
+                .signature("Best")
+                .build(),
+            EmailTemplate::PasswordReset {
+                first_name,
+                password_reset_url,
+            } => EmailBuilder::new()
+                .greeting(Greeting::Name(first_name))
+                .intro("Reset your Universal Inbox password")
+                .action(Action {
+                    text: "Reset your password",
+                    link: password_reset_url.as_str(),
+                    color: Some(("#388FEF", "white")),
+                    ..Default::default()
+                })
                 .signature("Best")
                 .build(),
         }

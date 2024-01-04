@@ -57,5 +57,6 @@ pub trait HasHtmlUrl {
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Hash)]
 pub struct SuccessResponse {
+    pub success: bool,
     pub message: String,
 }

@@ -14,7 +14,6 @@ use crate::{
 };
 
 #[component]
-#[allow(unused_variables)]
 pub fn EmailVerificationPage(
     cx: Scope,
     user_id: UserId,
@@ -24,7 +23,6 @@ pub fn EmailVerificationPage(
     let ui_model_ref = use_atom_ref(cx, &UI_MODEL);
     let user_service = use_coroutine_handle::<UserCommand>(cx).unwrap();
     let nav = use_navigator(cx);
-    let authentication_state = ui_model_ref.read().authentication_state.clone();
 
     use_future(cx, (), |()| {
         to_owned![user_id];

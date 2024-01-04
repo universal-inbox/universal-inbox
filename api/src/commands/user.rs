@@ -59,3 +59,48 @@ pub async fn send_verification_email(
         }
     }
 }
+
+#[tracing::instrument(
+    name = "send-password-reset-email-command",
+    level = "info",
+    skip(user_service),
+    err
+)]
+pub async fn send_password_reset_email(
+    user_service: Arc<RwLock<UserService>>,
+    user_email: &EmailAddress,
+    dry_run: bool,
+) -> Result<(), UniversalInboxError> {
+    info!("Sending the password reset email to {user_email}");
+    let service = user_service.read().await;
+
+    let mut transaction = service.begin().await.context(format!(
+        "Failed to create new transaction while send the password reset email for {user_email}"
+    ))?;
+
+    let result = service
+        .send_password_reset_email(&mut transaction, user_email.clone(), dry_run)
+        .await;
+
+    match result {
+        Ok(_) => {
+            if dry_run {
+                transaction.rollback().await.context(
+                    format!("Failed to rollback (dry-run) transaction while send the password reset email for {user_email}")
+                )?;
+            } else {
+                transaction.commit().await.context(format!(
+                    "Failed to commit transaction while send the password reset email for {user_email}"
+                ))?;
+            }
+            Ok(())
+        }
+        Err(err) => {
+            error!("Failed to send the password reset email for {user_email}");
+            transaction.rollback().await.context(format!(
+                "Failed to rollback transaction while send the password reset email for {user_email}"
+            ))?;
+            Err(err)
+        }
+    }
+}

@@ -60,6 +60,13 @@ enum Commands {
         dry_run: bool,
     },
 
+    /// Send the password reset email to user
+    SendPasswordResetEmail {
+        user_email: EmailAddress,
+        #[arg(short, long)]
+        dry_run: bool,
+    },
+
     /// Run API server
     Serve,
 }
@@ -176,6 +183,10 @@ async fn main() -> std::io::Result<()> {
             user_email,
             dry_run,
         } => commands::user::send_verification_email(user_service, user_email, *dry_run).await,
+        Commands::SendPasswordResetEmail {
+            user_email,
+            dry_run,
+        } => commands::user::send_password_reset_email(user_service, user_email, *dry_run).await,
         Commands::Serve => {
             let listener = TcpListener::bind(format!(
                 "{}:{}",

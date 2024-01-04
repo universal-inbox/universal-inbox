@@ -140,6 +140,7 @@ pub fn Authenticated<'a>(cx: Scope<'a, AuthenticatedProps<'a>>) -> Element<'a> {
         };
     }
 
+    debug!("auth: Authentication state: {authentication_state:?}");
     match authentication_state {
         AuthenticationState::Authenticated => {
             if let FrontAuthenticationConfig::OIDCAuthorizationCodePKCEFlow {
@@ -163,7 +164,7 @@ pub fn Authenticated<'a>(cx: Scope<'a, AuthenticatedProps<'a>>) -> Element<'a> {
             if cx.props.authentication_config == FrontAuthenticationConfig::Local {
                 if history.current_route() != (Route::LoginPage {})
                     && history.current_route() != (Route::SignupPage {})
-                    && history.current_route() != (Route::RecoverPasswordPage {})
+                    && history.current_route() != (Route::PasswordResetPage {})
                 {
                     nav.replace(Route::LoginPage {});
                     cx.needs_update();

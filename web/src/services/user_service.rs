@@ -1,14 +1,19 @@
 use anyhow::Result;
 use dioxus::prelude::*;
+use email_address::EmailAddress;
 use fermi::{AtomRef, UseAtomRef};
 use futures_util::StreamExt;
 use log::error;
 use reqwest::Method;
+use secrecy::Secret;
 use url::Url;
 
 use universal_inbox::{
     auth::CloseSessionResponse,
-    user::{Credentials, EmailValidationToken, RegisterUserParameters, User, UserId},
+    user::{
+        Credentials, EmailValidationToken, Password, PasswordResetToken, RegisterUserParameters,
+        User, UserId,
+    },
     SuccessResponse,
 };
 
@@ -21,6 +26,8 @@ pub enum UserCommand {
     Logout,
     ResendVerificationEmail,
     VerifyEmail(UserId, EmailValidationToken),
+    SendPasswordResetEmail(EmailAddress),
+    ResetPassword(UserId, PasswordResetToken, Secret<Password>),
 }
 
 pub static CONNECTED_USER: AtomRef<Option<User>> = AtomRef(|_| None);
@@ -37,6 +44,7 @@ pub async fn user_service<'a>(
             Some(UserCommand::GetUser) => {
                 get_user(&api_base_url, connected_user.clone(), ui_model_ref.clone()).await;
             }
+
             Some(UserCommand::RegisterUser(parameters)) => {
                 let result: Result<User> = call_api(
                     Method::POST,
@@ -56,6 +64,7 @@ pub async fn user_service<'a>(
                     }
                 };
             }
+
             Some(UserCommand::Login(credentials)) => {
                 ui_model_ref.write().error_message = None;
                 let result: Result<User> = call_api(
@@ -101,7 +110,7 @@ pub async fn user_service<'a>(
                 .await;
 
                 match result {
-                    Ok(SuccessResponse { message }) => {
+                    Ok(SuccessResponse { message, .. }) => {
                         ui_model_ref.write().confirmation_message = Some(message);
                     }
                     Err(err) => {
@@ -120,10 +129,51 @@ pub async fn user_service<'a>(
                 .await;
 
                 match result {
-                    Ok(SuccessResponse { message }) => {
+                    Ok(SuccessResponse { message, .. }) => {
                         ui_model_ref.write().confirmation_message = Some(message);
                         // Refresh user as it should now have a validated email and either redirected to the
                         // to the app if it has a logged session or to the login form otherwise
+                        get_user(&api_base_url, connected_user.clone(), ui_model_ref.clone()).await
+                    }
+                    Err(err) => {
+                        ui_model_ref.write().error_message = Some(err.to_string());
+                    }
+                };
+            }
+
+            Some(UserCommand::SendPasswordResetEmail(email_address)) => {
+                let result: Result<SuccessResponse> = call_api(
+                    Method::POST,
+                    &api_base_url,
+                    "users/password_reset",
+                    Some(email_address),
+                    None,
+                )
+                .await;
+
+                match result {
+                    Ok(SuccessResponse { message, .. }) => {
+                        ui_model_ref.write().confirmation_message = Some(message);
+                    }
+                    Err(err) => {
+                        ui_model_ref.write().error_message = Some(err.to_string());
+                    }
+                };
+            }
+            Some(UserCommand::ResetPassword(user_id, password_reset_token, new_password)) => {
+                let result: Result<SuccessResponse> = call_api(
+                    Method::POST,
+                    &api_base_url,
+                    format!("users/{user_id}/password_reset/{password_reset_token}").as_str(),
+                    Some(new_password),
+                    None,
+                )
+                .await;
+
+                match result {
+                    Ok(SuccessResponse { message, .. }) => {
+                        ui_model_ref.write().confirmation_message = Some(message);
+                        // Refresh user as it should now be authenticated
                         get_user(&api_base_url, connected_user.clone(), ui_model_ref.clone()).await
                     }
                     Err(err) => {

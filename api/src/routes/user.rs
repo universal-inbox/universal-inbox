@@ -5,14 +5,18 @@ use actix_identity::Identity;
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Scope};
 use anyhow::anyhow;
 use anyhow::Context;
+use email_address::EmailAddress;
+use secrecy::Secret;
 use serde_json::json;
 use tokio::sync::RwLock;
-use universal_inbox::user::EmailValidationToken;
-use universal_inbox::SuccessResponse;
 use validator::Validate;
 
-use universal_inbox::user::{
-    Credentials, LocalUserAuth, RegisterUserParameters, User, UserAuth, UserId,
+use universal_inbox::{
+    user::{
+        Credentials, EmailValidationToken, LocalUserAuth, Password, PasswordResetToken,
+        RegisterUserParameters, User, UserAuth, UserId,
+    },
+    SuccessResponse,
 };
 
 use crate::{
@@ -29,6 +33,11 @@ pub fn scope() -> Scope {
                 .route(web::method(http::Method::OPTIONS).to(option_wildcard)),
         )
         .service(
+            web::resource("/password_reset")
+                .route(web::post().to(send_password_reset_email))
+                .route(web::method(http::Method::OPTIONS).to(option_wildcard)),
+        )
+        .service(
             web::resource("me")
                 .route(web::get().to(get_user))
                 .route(web::post().to(login_user))
@@ -42,6 +51,11 @@ pub fn scope() -> Scope {
         .service(
             web::resource("/{user_id}/email_verification/{email_validation_token}")
                 .route(web::get().to(verify_email))
+                .route(web::method(http::Method::OPTIONS).to(option_wildcard)),
+        )
+        .service(
+            web::resource("/{user_id}/password_reset/{password_reset_token}")
+                .route(web::post().to(reset_password))
                 .route(web::method(http::Method::OPTIONS).to(option_wildcard)),
         )
 }
@@ -99,6 +113,8 @@ pub async fn register_user(
                     password_hash: service.get_new_password_hash(
                         register_user_parameters.credentials.password.clone(),
                     )?,
+                    password_reset_at: None,
+                    password_reset_sent_at: None,
                 }),
             ),
         )
@@ -187,6 +203,7 @@ pub async fn send_verification_email(
 
     Ok(HttpResponse::Ok().content_type("application/json").body(
         serde_json::to_string(&SuccessResponse {
+            success: true,
             message: "Email verification successfully sent".to_string(),
         })
         .context("Cannot serialize response")?,
@@ -215,7 +232,69 @@ pub async fn verify_email(
 
     Ok(HttpResponse::Ok().content_type("application/json").body(
         serde_json::to_string(&SuccessResponse {
+            success: true,
             message: "Email successfully verified".to_string(),
+        })
+        .context("Cannot serialize response")?,
+    ))
+}
+
+pub async fn send_password_reset_email(
+    user_service: web::Data<Arc<RwLock<UserService>>>,
+    email_address: web::Json<EmailAddress>,
+) -> Result<HttpResponse, UniversalInboxError> {
+    let service = user_service.read().await;
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while sending password reset email")?;
+
+    service
+        .send_password_reset_email(&mut transaction, email_address.into_inner(), false)
+        .await?;
+
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit while sending password reset email")?;
+
+    Ok(HttpResponse::Ok().content_type("application/json").body(
+        serde_json::to_string(&SuccessResponse {
+            success: true,
+            message: "Reset password email successfully sent".to_string(),
+        })
+        .context("Cannot serialize response")?,
+    ))
+}
+
+pub async fn reset_password(
+    user_service: web::Data<Arc<RwLock<UserService>>>,
+    path_info: web::Path<(UserId, PasswordResetToken)>,
+    password: web::Json<Secret<Password>>,
+) -> Result<HttpResponse, UniversalInboxError> {
+    let (user_id, password_reset_token) = path_info.into_inner();
+    let service = user_service.read().await;
+    let mut transaction = service.begin().await.context(format!(
+        "Failed to create new transaction while resetting the password of {user_id}"
+    ))?;
+
+    service
+        .reset_password(
+            &mut transaction,
+            user_id,
+            password_reset_token,
+            password.into_inner(),
+        )
+        .await?;
+
+    transaction.commit().await.context(format!(
+        "Failed to commit while resetting the password of {user_id}"
+    ))?;
+
+    Ok(HttpResponse::Ok().content_type("application/json").body(
+        serde_json::to_string(&SuccessResponse {
+            success: true,
+            message: "Password successfully reset".to_string(),
         })
         .context("Cannot serialize response")?,
     ))
