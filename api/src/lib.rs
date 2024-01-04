@@ -14,6 +14,7 @@ use actix_web::{
     middleware, web, App, HttpServer,
 };
 use actix_web_lab::web::spa;
+use actix_web_opentelemetry::RequestMetrics;
 use anyhow::Context;
 use configuration::AuthenticationSettings;
 use csp::{Directive, Source, Sources, CSP};
@@ -110,8 +111,22 @@ pub async fn run(
 
         let csp_header_value = csp_header_value.clone();
         let mut app = App::new()
+            .wrap_fn(move |req, srv| {
+                let fut = srv.call(req);
+                async move {
+                    let res = fut.await?;
+                    info!(
+                        "{} {} {}",
+                        res.request().method(),
+                        res.request().uri().path(),
+                        res.status()
+                    );
+                    Ok(res)
+                }
+            })
             .wrap(cors)
             .wrap(TracingLogger::<AuthenticatedRootSpanBuilder>::new())
+            .wrap(RequestMetrics::default())
             .wrap(middleware::Compress::default())
             .wrap(
                 IdentityMiddleware::builder()

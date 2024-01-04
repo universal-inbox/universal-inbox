@@ -5,7 +5,7 @@ static_dir = "tests/api/statics"
 
 [application.observability.logging]
 log_directive = "debug"
-dependencies_log_directive = "debug"
+dependencies_log_level = "debug"
 
 [integrations.oauth2]
 nango_secret_key = "nango_test_key"

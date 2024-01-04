@@ -329,6 +329,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "actix-web-opentelemetry"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d164a9fe425132ff4ae92ce04912f7e31529b48a6e7cdce769ab45d272de285c"
+dependencies = [
+ "actix-http",
+ "actix-web",
+ "futures-util",
+ "opentelemetry 0.21.0",
+ "opentelemetry-semantic-conventions",
+ "serde",
+]
+
+[[package]]
 name = "addr2line"
 version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4220,6 +4234,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "opentelemetry-appender-tracing"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12c4bd073648dae8ac45cfc81588d74b3dc5f334119ac08567ddcbfe16f2d809"
+dependencies = [
+ "once_cell",
+ "opentelemetry 0.21.0",
+ "opentelemetry_sdk 0.21.1",
+ "tracing",
+ "tracing-core",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "opentelemetry-otlp"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6587,8 +6615,10 @@ checksum = "1fe0d5feac3f4ca21ba33496bcb1ccab58cca6412b1405ae80f0581541e0ca78"
 dependencies = [
  "actix-web",
  "mutually_exclusive_features",
+ "opentelemetry 0.21.0",
  "pin-project",
  "tracing",
+ "tracing-opentelemetry 0.22.0",
  "uuid",
 ]
 
@@ -6893,6 +6923,7 @@ dependencies = [
  "actix-session",
  "actix-web",
  "actix-web-lab",
+ "actix-web-opentelemetry",
  "anyhow",
  "argon2",
  "async-trait",
@@ -6918,8 +6949,8 @@ dependencies = [
  "mailgen",
  "openidconnect",
  "opentelemetry 0.21.0",
+ "opentelemetry-appender-tracing",
  "opentelemetry-otlp",
- "opentelemetry_api",
  "opentelemetry_sdk 0.21.1",
  "pretty_assertions",
  "rand 0.8.5",

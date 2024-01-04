@@ -56,7 +56,7 @@ fn tracing_setup(settings: Settings) {
                 .application
                 .observability
                 .logging
-                .dependencies_log_directive,
+                .dependencies_log_level,
         )
         .unwrap_or(log::LevelFilter::Error),
     );
