@@ -3,7 +3,8 @@ use reqwest::Client;
 use secrecy::Secret;
 
 use universal_inbox::user::{
-    Credentials, EmailValidationToken, Password, RegisterUserParameters, User, UserId,
+    Credentials, EmailValidationToken, Password, PasswordResetToken, RegisterUserParameters, User,
+    UserId,
 };
 
 use universal_inbox_api::repository::user::UserRepository;
@@ -108,6 +109,20 @@ pub async fn get_user_email_validation_token(
     let token = app
         .repository
         .get_user_email_validation_token(&mut transaction, user_id)
+        .await
+        .unwrap();
+    transaction.commit().await.unwrap();
+    token
+}
+
+pub async fn get_password_reset_token(
+    app: &TestedApp,
+    user_id: UserId,
+) -> Option<PasswordResetToken> {
+    let mut transaction = app.repository.begin().await.unwrap();
+    let token = app
+        .repository
+        .get_password_reset_token(&mut transaction, user_id)
         .await
         .unwrap();
     transaction.commit().await.unwrap();

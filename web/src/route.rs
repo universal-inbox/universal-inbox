@@ -1,33 +1,39 @@
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
-use universal_inbox::user::{EmailValidationToken, UserId};
+use universal_inbox::user::{EmailValidationToken, PasswordResetToken, UserId};
 
 use crate::{
     auth::AuthPage,
     layouts::{
         authenticated::AuthenticatedLayout, email_validated::EmailValidatedLayout,
-        nav_bar::NavBarLayout,
+        fullpage::FullpageLayout, nav_bar::NavBarLayout,
     },
     pages::{
         email_verification_page::EmailVerificationPage, login_page::LoginPage,
         notifications_page::NotificationsPage, page_not_found::PageNotFound,
-        recover_password_page::RecoverPasswordPage, settings_page::SettingsPage,
-        signup_page::SignupPage,
+        password_reset_page::PasswordResetPage, password_update_page::PasswordUpdatePage,
+        settings_page::SettingsPage, signup_page::SignupPage,
     },
 };
 
 #[derive(Routable, Clone, Debug, PartialEq)]
 #[rustfmt::skip]
 pub enum Route {
-    #[route("/users/:user_id/email_verification/:email_validation_token")]
-    EmailVerificationPage { user_id: UserId, email_validation_token: EmailValidationToken },
+    #[layout(FullpageLayout)]
+      #[route("/users/:user_id/email_verification/:email_validation_token")]
+      EmailVerificationPage { user_id: UserId, email_validation_token: EmailValidationToken },
+      #[route("/users/:user_id/password_reset/:password_reset_token")]
+      PasswordUpdatePage { user_id: UserId, password_reset_token: PasswordResetToken },
+    #[end_layout]
     #[layout(AuthenticatedLayout)]
-      #[route("/login")]
-      LoginPage {},
-      #[route("/signup")]
-      SignupPage {},
-      #[route("/recover-password")]
-      RecoverPasswordPage {},
+      #[layout(FullpageLayout)]
+        #[route("/login")]
+        LoginPage {},
+        #[route("/signup")]
+        SignupPage {},
+        #[route("/password-reset")]
+        PasswordResetPage {},
+      #[end_layout]
       #[route("/auth-oidc-callback?:query")]
       AuthPage { query: String },
       #[layout(EmailValidatedLayout)]

@@ -68,6 +68,8 @@ impl fmt::Display for UserAuth {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct LocalUserAuth {
     pub password_hash: Secret<PasswordHash>,
+    pub password_reset_at: Option<DateTime<Utc>>,
+    pub password_reset_sent_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -238,6 +240,44 @@ impl TryFrom<String> for EmailValidationToken {
 }
 
 impl FromStr for EmailValidationToken {
+    type Err = uuid::Error;
+
+    fn from_str(uuid: &str) -> Result<Self, Self::Err> {
+        Ok(Self(Uuid::parse_str(uuid)?))
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(transparent)]
+pub struct PasswordResetToken(pub Uuid);
+
+impl fmt::Display for PasswordResetToken {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<Uuid> for PasswordResetToken {
+    fn from(uuid: Uuid) -> Self {
+        Self(uuid)
+    }
+}
+
+impl From<PasswordResetToken> for Uuid {
+    fn from(password_reset_token: PasswordResetToken) -> Self {
+        password_reset_token.0
+    }
+}
+
+impl TryFrom<String> for PasswordResetToken {
+    type Error = uuid::Error;
+
+    fn try_from(uuid: String) -> Result<Self, Self::Error> {
+        Ok(Self(Uuid::parse_str(&uuid)?))
+    }
+}
+
+impl FromStr for PasswordResetToken {
     type Err = uuid::Error;
 
     fn from_str(uuid: &str) -> Result<Self, Self::Err> {

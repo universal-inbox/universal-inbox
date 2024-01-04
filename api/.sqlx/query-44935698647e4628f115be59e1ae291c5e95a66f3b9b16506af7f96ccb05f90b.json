@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT\n                  \"user\".id,\n                  \"user\".first_name,\n                  \"user\".last_name,\n                  \"user\".email,\n                  \"user\".email_validated_at,\n                  \"user\".email_validation_sent_at,\n                  \"user\".created_at,\n                  \"user\".updated_at,\n                  user_auth.kind as \"user_auth_kind: _\",\n                  user_auth.auth_user_id,\n                  user_auth.auth_id_token,\n                  user_auth.password_hash\n                FROM \"user\"\n                INNER JOIN user_auth ON user_auth.user_id = \"user\".id\n                WHERE user_auth.auth_user_id = $1\n            ",
+  "query": "\n                SELECT\n                  \"user\".id,\n                  \"user\".first_name,\n                  \"user\".last_name,\n                  \"user\".email,\n                  \"user\".email_validated_at,\n                  \"user\".email_validation_sent_at,\n                  \"user\".created_at,\n                  \"user\".updated_at,\n                  user_auth.kind as \"user_auth_kind: _\",\n                  user_auth.auth_user_id,\n                  user_auth.auth_id_token,\n                  user_auth.password_hash,\n                  user_auth.password_reset_at,\n                  user_auth.password_reset_sent_at\n                FROM \"user\"\n                INNER JOIN user_auth ON user_auth.user_id = \"user\".id\n            ",
   "describe": {
     "columns": [
       {
@@ -72,12 +72,20 @@
         "ordinal": 11,
         "name": "password_hash",
         "type_info": "Text"
+      },
+      {
+        "ordinal": 12,
+        "name": "password_reset_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 13,
+        "name": "password_reset_sent_at",
+        "type_info": "Timestamp"
       }
     ],
     "parameters": {
-      "Left": [
-        "Text"
-      ]
+      "Left": []
     },
     "nullable": [
       false,
@@ -91,8 +99,10 @@
       false,
       true,
       true,
+      true,
+      true,
       true
     ]
   },
-  "hash": "ab61b305a4acdfb5930a58ca433d3050b67813c2d76a1dc3ce272efa0319de26"
+  "hash": "44935698647e4628f115be59e1ae291c5e95a66f3b9b16506af7f96ccb05f90b"
 }

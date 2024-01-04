@@ -6,8 +6,8 @@ min_sync_tasks_interval_in_minutes = 0
 min_sync_notifications_interval_in_minutes = 0
 
 [application.observability.logging]
-log_directive = "debug,sqlx=debug,h2=info,tower=info,lettre=info,hyper=info,actix_identity=info,rustls=info"
-dependencies_log_level = "debug"
+log_directive = "info,universal_inbox_api=debug,sqlx=debug,lettre=debug"
+dependencies_log_level = "info"
 
 [application.http_session]
 secret_key = "1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF"

@@ -9,8 +9,8 @@ use uuid::Uuid;
 use universal_inbox::{
     auth::AuthIdToken,
     user::{
-        AuthUserId, EmailValidationToken, LocalUserAuth, OpenIdConnectUserAuth, PasswordHash, User,
-        UserAuth, UserId,
+        AuthUserId, EmailValidationToken, LocalUserAuth, OpenIdConnectUserAuth, PasswordHash,
+        PasswordResetToken, User, UserAuth, UserId,
     },
 };
 
@@ -48,12 +48,14 @@ pub trait UserRepository {
         executor: &mut Transaction<'a, Postgres>,
         user: User,
     ) -> Result<User, UniversalInboxError>;
+
     async fn update_user_auth_id_token<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
         auth_user_id: &AuthUserId,
         auth_id_token: &AuthIdToken,
     ) -> Result<UpdateStatus<User>, UniversalInboxError>;
+
     async fn update_email_validation_parameters<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -62,11 +64,34 @@ pub trait UserRepository {
         email_validation_sent_at: Option<DateTime<Utc>>,
         email_validation_token: Option<EmailValidationToken>,
     ) -> Result<UpdateStatus<User>, UniversalInboxError>;
+
     async fn get_user_email_validation_token<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
         user_id: UserId,
     ) -> Result<Option<EmailValidationToken>, UniversalInboxError>;
+
+    async fn update_password_reset_parameters<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        email_address: EmailAddress,
+        password_reset_sent_at: Option<DateTime<Utc>>,
+        password_reset_token: Option<PasswordResetToken>,
+    ) -> Result<UpdateStatus<User>, UniversalInboxError>;
+
+    async fn update_password<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        user_id: UserId,
+        password_hash: Secret<PasswordHash>,
+        password_reset_token: Option<PasswordResetToken>,
+    ) -> Result<UpdateStatus<User>, UniversalInboxError>;
+
+    async fn get_password_reset_token<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        user_id: UserId,
+    ) -> Result<Option<PasswordResetToken>, UniversalInboxError>;
 }
 
 #[async_trait]
@@ -92,7 +117,9 @@ impl UserRepository for Repository {
                   user_auth.kind as "user_auth_kind: _",
                   user_auth.auth_user_id,
                   user_auth.auth_id_token,
-                  user_auth.password_hash
+                  user_auth.password_hash,
+                  user_auth.password_reset_at,
+                  user_auth.password_reset_sent_at
                 FROM "user"
                 INNER JOIN user_auth ON user_auth.user_id = "user".id
                 WHERE "user".id = $1
@@ -126,7 +153,9 @@ impl UserRepository for Repository {
                   user_auth.kind as "user_auth_kind: _",
                   user_auth.auth_user_id,
                   user_auth.auth_id_token,
-                  user_auth.password_hash
+                  user_auth.password_hash,
+                  user_auth.password_reset_at,
+                  user_auth.password_reset_sent_at
                 FROM "user"
                 INNER JOIN user_auth ON user_auth.user_id = "user".id
             "#
@@ -159,7 +188,9 @@ impl UserRepository for Repository {
                   user_auth.kind as "user_auth_kind: _",
                   user_auth.auth_user_id,
                   user_auth.auth_id_token,
-                  user_auth.password_hash
+                  user_auth.password_hash,
+                  user_auth.password_reset_at,
+                  user_auth.password_reset_sent_at
                 FROM "user"
                 INNER JOIN user_auth ON user_auth.user_id = "user".id
                 WHERE user_auth.auth_user_id = $1
@@ -196,7 +227,9 @@ impl UserRepository for Repository {
                   user_auth.kind as "user_auth_kind: _",
                   user_auth.auth_user_id,
                   user_auth.auth_id_token,
-                  user_auth.password_hash
+                  user_auth.password_hash,
+                  user_auth.password_reset_at,
+                  user_auth.password_reset_sent_at
                 FROM "user"
                 INNER JOIN user_auth ON user_auth.user_id = "user".id
                 WHERE "user".email = $1
@@ -260,9 +293,9 @@ impl UserRepository for Repository {
                 ref auth_user_id,
                 ref auth_id_token,
             }) => (Some(auth_user_id), Some(auth_id_token), None),
-            UserAuth::Local(LocalUserAuth { ref password_hash }) => {
-                (None, None, Some(password_hash))
-            }
+            UserAuth::Local(LocalUserAuth {
+                ref password_hash, ..
+            }) => (None, None, Some(password_hash)),
         };
 
         let new_id = Uuid::new_v4();
@@ -339,6 +372,8 @@ impl UserRepository for Repository {
                   user_auth.auth_user_id,
                   user_auth.auth_id_token,
                   user_auth.password_hash,
+                  user_auth.password_reset_at,
+                  user_auth.password_reset_sent_at,
                   (SELECT"#,
             )
             .push(" auth_id_token != ")
@@ -426,6 +461,8 @@ impl UserRepository for Repository {
                   user_auth.auth_user_id,
                   user_auth.auth_id_token,
                   user_auth.password_hash,
+                  user_auth.password_reset_at,
+                  user_auth.password_reset_sent_at,
                   (SELECT"#,
         );
         let mut separated = query_builder.separated(" OR ");
@@ -493,6 +530,183 @@ impl UserRepository for Repository {
 
         Ok(row.and_then(|row| row.map(|token| token.into())))
     }
+
+    #[tracing::instrument(level = "debug", skip(self, executor))]
+    async fn update_password_reset_parameters<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        email_address: EmailAddress,
+        password_reset_sent_at: Option<DateTime<Utc>>,
+        password_reset_token: Option<PasswordResetToken>,
+    ) -> Result<UpdateStatus<User>, UniversalInboxError> {
+        if password_reset_sent_at.is_none() && password_reset_token.is_none() {
+            return Ok(UpdateStatus {
+                updated: false,
+                result: None,
+            });
+        }
+
+        let mut query_builder = QueryBuilder::new("UPDATE user_auth SET");
+        let mut separated = query_builder.separated(", ");
+        if let Some(password_reset_sent_at) = &password_reset_sent_at {
+            separated
+                .push(" password_reset_sent_at = ")
+                .push_bind_unseparated(password_reset_sent_at.naive_utc());
+        }
+        if let Some(password_reset_token) = &password_reset_token {
+            separated
+                .push(" password_reset_token = ")
+                .push_bind_unseparated(password_reset_token.0);
+        }
+        query_builder.push(r#" FROM "user" WHERE "#);
+        let mut separated = query_builder.separated(" AND ");
+        separated
+            .push(r#"user_auth.user_id = "user".id"#)
+            .push(r#""user".email = "#)
+            .push_bind_unseparated(email_address.as_str());
+
+        query_builder.push(
+            r#"
+                RETURNING
+                  "user".id,
+                  "user".first_name,
+                  "user".last_name,
+                  "user".email,
+                  "user".email_validated_at,
+                  "user".email_validation_sent_at,
+                  "user".created_at,
+                  "user".updated_at,
+                  user_auth.kind as user_auth_kind,
+                  user_auth.auth_user_id,
+                  user_auth.auth_id_token,
+                  user_auth.password_hash,
+                  user_auth.password_reset_at,
+                  user_auth.password_reset_sent_at,
+                  (SELECT true) as is_updated
+            "#,
+        );
+
+        let record: Option<UpdatedUserRow> = query_builder
+            .build_query_as::<UpdatedUserRow>()
+            .fetch_optional(&mut **executor)
+            .await
+            .context(format!(
+                "Failed to update password parameters with for user with email {email_address} from storage"
+            ))?;
+
+        if let Some(updated_user_row) = record {
+            Ok(UpdateStatus {
+                updated: true,
+                result: Some(updated_user_row.user_row.try_into()?),
+            })
+        } else {
+            Ok(UpdateStatus {
+                updated: false,
+                result: None,
+            })
+        }
+    }
+
+    #[tracing::instrument(level = "debug", skip(self, executor, password_hash))]
+    async fn update_password<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        user_id: UserId,
+        password_hash: Secret<PasswordHash>,
+        password_reset_token: Option<PasswordResetToken>,
+    ) -> Result<UpdateStatus<User>, UniversalInboxError> {
+        let mut query_builder = QueryBuilder::new("UPDATE user_auth SET");
+        let mut separated = query_builder.separated(", ");
+        separated
+            .push(" password_hash = ")
+            .push_bind_unseparated(password_hash.expose_secret().0.as_str())
+            .push(" password_reset_at = ")
+            .push_bind_unseparated(Utc::now().naive_utc())
+            .push(" password_reset_token = NULL ");
+        query_builder.push(r#" FROM "user" WHERE "#);
+        let mut separated = query_builder.separated(" AND ");
+        separated
+            .push(r#"user_auth.user_id = "user".id"#)
+            .push(r#""user".id = "#)
+            .push_bind_unseparated(user_id.0);
+
+        // If a password reset token was provided, we need to ensure that it matches the one in the database
+        // If no token is provider, it means that the user is changing their password without having requested a reset
+        if let Some(password_reset_token) = &password_reset_token {
+            separated
+                .push("user_auth.password_reset_token = ")
+                .push_bind_unseparated(password_reset_token.0);
+        }
+
+        query_builder.push(
+            r#"
+                RETURNING
+                  "user".id,
+                  "user".first_name,
+                  "user".last_name,
+                  "user".email,
+                  "user".email_validated_at,
+                  "user".email_validation_sent_at,
+                  "user".created_at,
+                  "user".updated_at,
+                  user_auth.kind as user_auth_kind,
+                  user_auth.auth_user_id,
+                  user_auth.auth_id_token,
+                  user_auth.password_hash,
+                  user_auth.password_reset_at,
+                  user_auth.password_reset_sent_at,
+                  (SELECT "#,
+        );
+        let mut separated = query_builder.separated(" OR ");
+        separated
+            .push("password_reset_token is not NULL")
+            .push("password_hash != ")
+            .push_bind_unseparated(password_hash.expose_secret().0.as_str());
+        query_builder
+            .push(" FROM user_auth WHERE user_id = ")
+            .push_bind(user_id.0)
+            .push(r#") as "is_updated""#);
+
+        let record: Option<UpdatedUserRow> = query_builder
+            .build_query_as::<UpdatedUserRow>()
+            .fetch_optional(&mut **executor)
+            .await
+            .context(format!(
+                "Failed to update password for user {} from storage",
+                user_id.0
+            ))?;
+
+        if let Some(updated_user_row) = record {
+            Ok(UpdateStatus {
+                updated: updated_user_row.is_updated,
+                result: Some(updated_user_row.user_row.try_into()?),
+            })
+        } else {
+            Ok(UpdateStatus {
+                updated: false,
+                result: None,
+            })
+        }
+    }
+
+    #[tracing::instrument(level = "debug", skip(self, executor))]
+    async fn get_password_reset_token<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        user_id: UserId,
+    ) -> Result<Option<PasswordResetToken>, UniversalInboxError> {
+        let row: Option<Option<Uuid>> = sqlx::query_scalar!(
+            "SELECT password_reset_token FROM user_auth WHERE user_id = $1",
+            user_id.0
+        )
+        .fetch_optional(&mut **executor)
+        .await
+        .with_context(|| {
+            format!("Failed to fetch password reset token for user ID {user_id} from storage")
+        })?;
+
+        Ok(row.and_then(|row| row.map(|token| token.into())))
+    }
 }
 
 #[derive(sqlx::Type, Debug)]
@@ -516,6 +730,8 @@ pub struct UserRow {
     auth_user_id: Option<String>,
     auth_id_token: Option<String>,
     password_hash: Option<String>,
+    password_reset_at: Option<NaiveDateTime>,
+    password_reset_sent_at: Option<NaiveDateTime>,
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -542,6 +758,12 @@ impl TryFrom<&UserRow> for User {
                 password_hash: Secret::new(PasswordHash(row.password_hash.clone().context(
                     "Expected to find password hash in storage with local authentication",
                 )?)),
+                password_reset_at: row
+                    .password_reset_at
+                    .map(|naive| DateTime::from_naive_utc_and_offset(naive, Utc)),
+                password_reset_sent_at: row
+                    .password_reset_sent_at
+                    .map(|naive| DateTime::from_naive_utc_and_offset(naive, Utc)),
             }),
             PgUserAuthKind::OpenIdConnect => UserAuth::OpenIdConnect(OpenIdConnectUserAuth {
                 auth_user_id: AuthUserId(row.auth_user_id.clone().context(

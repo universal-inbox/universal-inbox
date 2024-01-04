@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT\n                  \"user\".id,\n                  \"user\".first_name,\n                  \"user\".last_name,\n                  \"user\".email,\n                  \"user\".email_validated_at,\n                  \"user\".email_validation_sent_at,\n                  \"user\".created_at,\n                  \"user\".updated_at,\n                  user_auth.kind as \"user_auth_kind: _\",\n                  user_auth.auth_user_id,\n                  user_auth.auth_id_token,\n                  user_auth.password_hash\n                FROM \"user\"\n                INNER JOIN user_auth ON user_auth.user_id = \"user\".id\n                WHERE \"user\".email = $1\n            ",
+  "query": "\n                SELECT\n                  \"user\".id,\n                  \"user\".first_name,\n                  \"user\".last_name,\n                  \"user\".email,\n                  \"user\".email_validated_at,\n                  \"user\".email_validation_sent_at,\n                  \"user\".created_at,\n                  \"user\".updated_at,\n                  user_auth.kind as \"user_auth_kind: _\",\n                  user_auth.auth_user_id,\n                  user_auth.auth_id_token,\n                  user_auth.password_hash,\n                  user_auth.password_reset_at,\n                  user_auth.password_reset_sent_at\n                FROM \"user\"\n                INNER JOIN user_auth ON user_auth.user_id = \"user\".id\n                WHERE \"user\".email = $1\n            ",
   "describe": {
     "columns": [
       {
@@ -72,6 +72,16 @@
         "ordinal": 11,
         "name": "password_hash",
         "type_info": "Text"
+      },
+      {
+        "ordinal": 12,
+        "name": "password_reset_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 13,
+        "name": "password_reset_sent_at",
+        "type_info": "Timestamp"
       }
     ],
     "parameters": {
@@ -91,8 +101,10 @@
       false,
       true,
       true,
+      true,
+      true,
       true
     ]
   },
-  "hash": "9e9ac8f90be972192a4d12fc7698f1d9ac96638e3613c9ef40a8b564729a08f9"
+  "hash": "e3a23177428e14fdfdffafc1a0d4a2e217a2376d332efd84821f6655669c8267"
 }

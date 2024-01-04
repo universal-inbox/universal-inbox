@@ -35,6 +35,25 @@ pub async fn call_api<R: for<'de> serde::de::Deserialize<'de>, B: serde::Seriali
 
     let response: Response = request.send().await?;
 
+    if response.status().is_server_error() || response.status() == StatusCode::BAD_REQUEST {
+        let default_error_message = "Error calling Universal Inbox API".to_string();
+        if Some(HeaderValue::from_static("application/json"))
+            == response.headers().get("content-type").cloned()
+        {
+            let message: HashMap<String, String> = response.json().await?;
+            return Err(anyhow!(message
+                .get("message")
+                .cloned()
+                .unwrap_or(default_error_message)));
+        } else {
+            error!(
+                "Error calling Universal Inbox API: {:?}",
+                response.text().await?
+            );
+            return Err(anyhow!(default_error_message));
+        }
+    }
+
     if let Some(ui_model_ref) = ui_model_ref {
         if response.status() == StatusCode::UNAUTHORIZED {
             if ui_model_ref.read().authentication_state == AuthenticationState::Unknown
