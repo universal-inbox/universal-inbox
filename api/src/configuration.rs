@@ -60,7 +60,7 @@ pub struct TracingSettings {
 #[derive(Deserialize, Clone, Debug)]
 pub struct LoggingSettings {
     pub log_directive: String,
-    pub dependencies_log_directive: String,
+    pub dependencies_log_level: String,
 }
 
 #[derive(Deserialize, Clone, Debug)]

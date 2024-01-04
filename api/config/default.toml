@@ -66,7 +66,7 @@ max_age_inactive_days = 7
 [application.observability.logging]
 # See https://docs.rs/tracing-subscriber/latest/tracing_subscriber/struct.EnvFilter.html
 log_directive = "info"
-dependencies_log_directive = "error"
+dependencies_log_level = "error"
 
 # [application.observability.tracing]
 # otlp_exporter_endpoint = "https://otlp.host"

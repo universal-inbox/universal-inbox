@@ -12,7 +12,7 @@ COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" . .
 RUN devbox run -- cargo chef prepare --recipe-path recipe.json
 
 FROM rust:1.74.0-bookworm as tools
-RUN cargo install sqlx-cli --version 0.6.2
+RUN cargo install sqlx-cli --version 0.7.1
 
 FROM base as dep-web-builder
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/justfile web/justfile

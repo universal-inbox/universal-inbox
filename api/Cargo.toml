@@ -53,8 +53,8 @@ macro-attr = { workspace = true }
 mailgen = "0.2.0"
 openidconnect = { workspace = true }
 opentelemetry = { version = "0.21.0", features = ["trace", "logs", "metrics"] }
-opentelemetry_api = { version = "0.20.0", features = ["trace", "logs", "metrics"] }
 opentelemetry_sdk = { version = "0.21.0", features = ["trace", "logs", "metrics", "rt-tokio"] }
+opentelemetry-appender-tracing = "0.2.0"
 opentelemetry-otlp = { version = "0.14.0", features = ["grpc-tonic", "trace", "logs", "metrics", "reqwest-rustls", "tls"] }
 rand = { version = "0.8", features=["std_rng"] }
 regex = "1.5.0"
@@ -78,7 +78,7 @@ thiserror = { workspace = true }
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
 tonic = { version = "0.9.0", features = ["tls", "tls-roots", "gzip"] }
 tracing = { version = "0.1.0", features = ["log"] }
-tracing-actix-web = "0.7.0"
+tracing-actix-web = { version = "0.7.0", features = ["emit_event_on_error", "opentelemetry_0_21"] }
 tracing-log = "0.2.0"
 tracing-opentelemetry = { version = "0.22.0", features = ["tracing-log"] }
 tracing-subscriber = { version = "0.3.0", features = [
@@ -91,6 +91,7 @@ universal-inbox = { path = ".." }
 url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true, features = ["serde"] }
 validator = { workspace = true }
+actix-web-opentelemetry = { version = "0.16.0", features = ["metrics"] }
 
 [dev-dependencies]
 httpmock = "0.6.0"

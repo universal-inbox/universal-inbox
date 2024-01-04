@@ -71,32 +71,36 @@ async fn main() -> std::io::Result<()> {
     let cli = Cli::parse();
 
     let settings = Settings::new().expect("Cannot load Universal Inbox configuration");
-    let (log_level_filter, dep_log_level_filter) = match cli.verbose {
-        1 => (log::LevelFilter::Info, log::LevelFilter::Info),
-        2 => (log::LevelFilter::Debug, log::LevelFilter::Debug),
-        _ if cli.verbose > 1 => (log::LevelFilter::Trace, log::LevelFilter::Trace),
+    let (log_env_filter, dep_log_level_filter) = match cli.verbose {
+        1 => (log::LevelFilter::Info.as_str(), log::LevelFilter::Info),
+        2 => (log::LevelFilter::Debug.as_str(), log::LevelFilter::Debug),
+        _ if cli.verbose > 1 => (log::LevelFilter::Trace.as_str(), log::LevelFilter::Trace),
         _ => (
-            log::LevelFilter::from_str(&settings.application.observability.logging.log_directive)
-                .unwrap_or(log::LevelFilter::Info),
+            settings
+                .application
+                .observability
+                .logging
+                .log_directive
+                .as_str(),
             log::LevelFilter::from_str(
                 &settings
                     .application
                     .observability
                     .logging
-                    .dependencies_log_directive,
+                    .dependencies_log_level,
             )
-            .unwrap_or(log::LevelFilter::Error),
+            .unwrap(),
         ),
     };
     if let Some(tracing_settings) = &settings.application.observability.tracing {
         let subscriber = get_subscriber_with_telemetry(
             &settings.application.environment,
-            log_level_filter.as_str(),
+            log_env_filter,
             tracing_settings,
         );
         init_subscriber(subscriber, dep_log_level_filter);
     } else {
-        let subscriber = get_subscriber(log_level_filter.as_str());
+        let subscriber = get_subscriber(log_env_filter);
         init_subscriber(subscriber, dep_log_level_filter);
     };
 

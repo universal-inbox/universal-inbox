@@ -27,6 +27,7 @@ build-container:
     docker build -t dax42/universal-inbox:latest .
 
 publish-container:
+    # docker buildx create --use --driver docker-container
     docker buildx build \
       --push \
       --platform linux/arm64/v8,linux/amd64 \

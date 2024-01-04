@@ -6,8 +6,11 @@ use actix_web::dev::{ServiceRequest, ServiceResponse};
 use anyhow::{anyhow, Context};
 use log;
 use opentelemetry::KeyValue;
+use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::{
+    logs::{self},
+    metrics::reader::{DefaultAggregationSelector, DefaultTemporalitySelector},
     runtime,
     trace::{self, RandomIdGenerator, Sampler},
     Resource,
@@ -17,6 +20,7 @@ use tonic::metadata::{AsciiMetadataKey, MetadataMap};
 use tracing::{subscriber::set_global_default, Instrument, Span, Subscriber};
 use tracing_actix_web::{DefaultRootSpanBuilder, RootSpanBuilder};
 use tracing_log::LogTracer;
+use tracing_opentelemetry::MetricsLayer;
 use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Registry};
 
 use universal_inbox::user::UserId;
@@ -42,7 +46,7 @@ pub fn get_subscriber_with_telemetry(
         }
     }
 
-    let hostname = hostname::get().unwrap();
+    let hostname = hostname::get().unwrap().into_string().unwrap();
     let tracer = opentelemetry_otlp::new_pipeline()
         .tracing()
         .with_trace_config(
@@ -53,7 +57,7 @@ pub fn get_subscriber_with_telemetry(
                 .with_max_attributes_per_span(64)
                 .with_resource(Resource::new(vec![
                     KeyValue::new("service.name", "universal-inbox-api"),
-                    KeyValue::new("hostname", hostname.into_string().unwrap()),
+                    KeyValue::new("hostname", hostname.clone()),
                     KeyValue::new("environment", environment.to_string()),
                 ])),
         )
@@ -62,17 +66,62 @@ pub fn get_subscriber_with_telemetry(
                 .tonic()
                 .with_endpoint(config.otlp_exporter_endpoint.to_string())
                 .with_timeout(Duration::from_secs(3))
-                .with_metadata(map),
-        );
-    let telemetry =
-        tracing_opentelemetry::layer().with_tracer(tracer.install_batch(runtime::Tokio).unwrap());
+                .with_metadata(map.clone()),
+        )
+        .install_batch(runtime::Tokio)
+        .unwrap();
+    let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
 
+    let meter = opentelemetry_otlp::new_pipeline()
+        .metrics(opentelemetry_sdk::runtime::Tokio)
+        .with_resource(Resource::new(vec![
+            KeyValue::new("service.name", "universal-inbox-api"),
+            KeyValue::new("hostname", hostname.clone()),
+            KeyValue::new("environment", environment.to_string()),
+        ]))
+        .with_period(Duration::from_secs(3))
+        .with_timeout(Duration::from_secs(10))
+        .with_aggregation_selector(DefaultAggregationSelector::new())
+        .with_temporality_selector(DefaultTemporalitySelector::new())
+        .with_exporter(
+            opentelemetry_otlp::new_exporter()
+                .tonic()
+                .with_endpoint(config.otlp_exporter_endpoint.to_string())
+                .with_timeout(Duration::from_secs(3))
+                .with_metadata(map.clone()),
+        )
+        .build()
+        .unwrap();
+    let metrics = MetricsLayer::new(meter);
+
+    let logger = opentelemetry_otlp::new_pipeline()
+        .logging()
+        .with_log_config(logs::Config::default().with_resource(Resource::new(vec![
+            KeyValue::new("service.name", "universal-inbox-api"),
+            KeyValue::new("hostname", hostname.clone()),
+            KeyValue::new("environment", environment.to_string()),
+        ])))
+        .with_exporter(
+            opentelemetry_otlp::new_exporter()
+                .tonic()
+                .with_endpoint(config.otlp_exporter_endpoint.to_string())
+                .with_timeout(Duration::from_secs(3))
+                .with_metadata(map),
+        )
+        .install_batch(runtime::Tokio)
+        .unwrap();
+
+    // The bridge currently has a bug as it does not add the span_id and trace_id to the log record
+    // See https://github.com/open-telemetry/opentelemetry-rust/pull/1394
+    let logging = OpenTelemetryTracingBridge::new(&logger.provider().unwrap());
     let fmt = tracing_subscriber::fmt::layer().compact();
 
     Registry::default()
         .with(env_filter)
         .with(fmt)
         .with(telemetry)
+        .with(logging)
+        .with(metrics)
 }
 
 pub fn get_subscriber(env_filter_str: &str) -> impl Subscriber + Send + Sync {
@@ -108,11 +157,15 @@ impl RootSpanBuilder for AuthenticatedRootSpanBuilder {
             .map(|user_id| user_id.to_string())
         {
             Ok(session_user_id) => {
-                tracing_actix_web::root_span!(request, session_user_id)
+                tracing_actix_web::root_span!(
+                    level = tracing::Level::INFO,
+                    request,
+                    session_user_id
+                )
             }
             // No user authenticated
             Err(_) => {
-                tracing_actix_web::root_span!(request)
+                tracing_actix_web::root_span!(level = tracing::Level::INFO, request)
             }
         }
     }
