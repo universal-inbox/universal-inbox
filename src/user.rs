@@ -41,7 +41,10 @@ impl User {
     }
 
     pub fn is_email_validated(&self) -> bool {
-        self.email_validated_at.is_some()
+        match self.auth {
+            UserAuth::Local(_) => self.email_validated_at.is_some(),
+            UserAuth::OpenIdConnect(_) => true,
+        }
     }
 }
 
