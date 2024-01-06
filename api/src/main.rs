@@ -113,7 +113,7 @@ async fn main() -> std::io::Result<()> {
 
     info!(
         "Connecting to PostgreSQL on {}",
-        &settings.database.connection_string()
+        &settings.database.safe_connection_string()
     );
     let options = PgConnectOptions::new()
         .username(&settings.database.username)

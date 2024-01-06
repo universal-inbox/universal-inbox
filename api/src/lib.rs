@@ -76,10 +76,14 @@ pub async fn run(
     let max_age_days = settings.application.http_session.max_age_days;
     let max_age_inactive_days = settings.application.http_session.max_age_inactive_days;
     let csp_header_value = build_csp_header(&settings);
-    let settings_web_data = web::Data::new(settings);
 
-    info!("Connecting to Redis on {}", redis_connection_string);
+    info!(
+        "Connecting to Redis on {}",
+        settings.redis.safe_connection_string()
+    );
     let redis_store = RedisSessionStore::new(redis_connection_string.clone()).await?;
+
+    let settings_web_data = web::Data::new(settings);
 
     info!("Listening on {}", listen_address);
 

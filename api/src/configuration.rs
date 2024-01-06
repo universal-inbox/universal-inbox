@@ -207,6 +207,10 @@ impl DatabaseSettings {
         )
     }
 
+    pub fn safe_connection_string(&self) -> String {
+        self.connection_string().replace(&self.password, "********")
+    }
+
     pub fn connection_string_without_db(&self) -> String {
         format!(
             "postgres://{}:{}@{}:{}{}",
@@ -231,6 +235,14 @@ impl RedisSettings {
             )
         } else {
             format!("{scheme}://{}:{}", self.host, self.port)
+        }
+    }
+
+    pub fn safe_connection_string(&self) -> String {
+        if let Some(password) = &self.password {
+            self.connection_string().replace(password, "********")
+        } else {
+            self.connection_string()
         }
     }
 }
