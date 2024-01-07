@@ -29,7 +29,7 @@ chrono = { workspace = true, features = ["serde"] }
 clap = { workspace = true }
 color-backtrace = "0.6"
 config = "0.13.0"
-csp = { git = "https://github.com/dax/CSP-rs", rev = "bc58cceb983207caef08c3a5981a10f28ffacf6c" }
+csp = "2.0.0"
 email_address = { workspace = true }
 enum_derive = { workspace = true }
 enum-display = "0.1.0"
