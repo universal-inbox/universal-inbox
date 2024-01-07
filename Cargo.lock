@@ -1584,8 +1584,9 @@ dependencies = [
 
 [[package]]
 name = "csp"
-version = "1.1.0"
-source = "git+https://github.com/dax/CSP-rs?rev=bc58cceb983207caef08c3a5981a10f28ffacf6c#bc58cceb983207caef08c3a5981a10f28ffacf6c"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "39dcc950d79ad809d1b04831db8cd439d2ea3c5371df33e5dabc4ffee6bda6ac"
 
 [[package]]
 name = "css-inline"
