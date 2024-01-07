@@ -66,17 +66,7 @@ pub fn LoginPage(cx: Scope) -> Element {
             }
 
             div {
-                class: "flex items-center justify-between gap-3",
-                label {
-                    class: "flex cursor-pointer gap-3 text-xs",
-                    input {
-                        id: "remember-me",
-                        name: "remember-me",
-                        r#type: "checkbox",
-                        class: "toggle toggle-xs toggle-primary",
-                    }
-                    "Remember me"
-                }
+                class: "flex items-center justify-end",
                 div {
                     class: "label",
                     Link {
