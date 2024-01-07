@@ -62,7 +62,7 @@ test-all: test
     just api/test
 
 test-coverage:
-    cargo llvm-cov nextest --all-features --lcov --output-path lcov.info
+    cargo llvm-cov nextest --all-features --lcov --output-path lcov.info --profile ci
 
 ## Run recipes
 migrate-db:

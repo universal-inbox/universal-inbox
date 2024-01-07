@@ -6,6 +6,11 @@ on:
       - main
   pull_request:
 
+permissions:
+  contents: read
+  actions: read
+  checks: write
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -71,6 +76,13 @@ jobs:
         env:
           RUST_MIN_STACK: 4194304
         run: devbox run -- just test-coverage
+      - name: Shared test Report
+        uses: dorny/test-reporter@v1
+        if: success() || failure()
+        with:
+          name: Tests shared
+          path: target/nextest/ci/junit.xml
+          reporter: java-junit
       - name: Upload to Coveralls
         # upload only if push
         if: ${{ github.event_name == 'push' }}
@@ -147,6 +159,13 @@ jobs:
         env:
           RUST_MIN_STACK: 4194304
         run: devbox run -- just api/test-coverage
+      - name: API test Report
+        uses: dorny/test-reporter@v1
+        if: success() || failure()
+        with:
+          name: Tests API
+          path: target/nextest/ci/junit.xml
+          reporter: java-junit
       - name: Upload to Coveralls
         # upload only if push
         if: ${{ github.event_name == 'push' }}
