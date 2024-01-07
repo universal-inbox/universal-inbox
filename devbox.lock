@@ -32,10 +32,24 @@
       "version": "0.5.31"
     },
     "cargo-nextest@latest": {
-      "last_modified": "2023-06-29T16:20:38Z",
-      "resolved": "github:NixOS/nixpkgs/3c614fbc76fc152f3e1bc4b2263da6d90adf80fb#cargo-nextest",
+      "last_modified": "2023-12-18T02:58:18Z",
+      "resolved": "github:NixOS/nixpkgs/ca16221251951e9c6261a1a2bb4f9389038d3632#cargo-nextest",
       "source": "devbox-search",
-      "version": "0.9.54"
+      "version": "0.9.66",
+      "systems": {
+        "aarch64-darwin": {
+          "store_path": "/nix/store/dk7ks5gi8k3ik106j0npgcrzpbnyv3fa-cargo-nextest-0.9.66"
+        },
+        "aarch64-linux": {
+          "store_path": "/nix/store/vlj3fdhpw5isd8ns465v9p0ykc21hpn4-cargo-nextest-0.9.66"
+        },
+        "x86_64-darwin": {
+          "store_path": "/nix/store/ybn7bnal1j2pzkkmi5msniij0kjsb41h-cargo-nextest-0.9.66"
+        },
+        "x86_64-linux": {
+          "store_path": "/nix/store/3yl7vgm2qkp7skr5gskbfd457f6g43cg-cargo-nextest-0.9.66"
+        }
+      }
     },
     "cargo-outdated@latest": {
       "last_modified": "2023-06-29T16:20:38Z",
