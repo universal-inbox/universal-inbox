@@ -178,7 +178,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
         Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap()
     );
 
-    // Newly created task is not in the Inbox, thus no notification should have been created
+    // Newly created task is in the Inbox, thus a notification should be created
     let new_todoist_task_creation = task_creations
         .iter()
         .find(|task_creation| task_creation.task.source_id == todoist_items[0].id)
@@ -217,6 +217,71 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
             ..updated_integration_connection.clone()
         }
     );
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_sync_tasks_should_add_new_task_and_delete_notification_when_disabling_notification_creation_from_inbox_tasks(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    sync_todoist_items_response: TodoistSyncResponse,
+    sync_todoist_projects_response: TodoistSyncResponse,
+    nango_todoist_connection: Box<NangoConnection>,
+) {
+    // When disabling the creation of notifications from Inbox tasks, no notification should be created
+    let app = authenticated_app.await;
+    let todoist_items = sync_todoist_items_response.items.clone().unwrap();
+    let _integration_connection = create_and_mock_integration_connection(
+        &app,
+        &settings.integrations.oauth2.nango_secret_key,
+        IntegrationConnectionConfig::Todoist(TodoistConfig {
+            create_notification_from_inbox_task: false,
+            ..TodoistConfig::enabled()
+        }),
+        &settings,
+        nango_todoist_connection,
+    )
+    .await;
+
+    let todoist_tasks_mock = mock_todoist_sync_resources_service(
+        &app.todoist_mock_server,
+        "items",
+        &sync_todoist_items_response,
+        None,
+    );
+    let todoist_projects_mock = mock_todoist_sync_resources_service(
+        &app.todoist_mock_server,
+        "projects",
+        &sync_todoist_projects_response,
+        None,
+    );
+
+    let task_creations: Vec<TaskCreationResult> = sync_tasks(
+        &app.client,
+        &app.api_address,
+        Some(TaskSourceKind::Todoist),
+        false,
+    )
+    .await;
+
+    assert_eq!(task_creations.len(), todoist_items.len());
+    debug!("task_creations: {:?}", task_creations);
+    assert!(task_creations
+        .iter()
+        .all(|task_creation| { task_creation.notification.is_none() }));
+    todoist_tasks_mock.assert();
+    todoist_projects_mock.assert();
+
+    let notifications = list_notifications_with_tasks(
+        &app.client,
+        &app.api_address,
+        vec![NotificationStatus::Unread],
+        false,
+        None,
+    )
+    .await;
+
+    assert_eq!(notifications.len(), 0);
 }
 
 #[rstest]

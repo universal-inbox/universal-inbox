@@ -29,6 +29,7 @@ pub fn TodoistProviderConfiguration<'a>(
                         oninput: move |event| {
                             on_config_change.call(IntegrationConnectionConfig::Todoist(TodoistConfig {
                                 sync_tasks_enabled: event.value == "true",
+                                ..config.clone()
                             }))
                         },
                         checked: config.sync_tasks_enabled
@@ -47,8 +48,13 @@ pub fn TodoistProviderConfiguration<'a>(
                     input {
                         r#type: "checkbox",
                         class: "toggle toggle-ghost",
-                        disabled: true,
-                        checked: true
+                        oninput: move |event| {
+                            on_config_change.call(IntegrationConnectionConfig::Todoist(TodoistConfig {
+                                create_notification_from_inbox_task: event.value == "true",
+                                ..config.clone()
+                            }))
+                        },
+                        checked: config.create_notification_from_inbox_task
                     }
                 }
             }

@@ -236,13 +236,13 @@ impl TaskService {
             )
             .await?;
 
-        if let Some((_, integration_connection)) = result {
-            if !integration_connection.provider.is_sync_tasks_enabled() {
-                debug!("{integration_provider_kind} integration for user {user_id} is disabled, skipping tasks sync.");
-                return Ok(vec![]);
-            }
-        } else {
+        let Some((_, integration_connection)) = result else {
             debug!("No validated {integration_provider_kind} integration found for user {user_id}, skipping tasks sync.");
+            return Ok(vec![]);
+        };
+
+        if !integration_connection.provider.is_sync_tasks_enabled() {
+            debug!("{integration_provider_kind} integration for user {user_id} is disabled, skipping tasks sync.");
             return Ok(vec![]);
         }
 
@@ -268,40 +268,47 @@ impl TaskService {
                     )
                     .await?;
 
-                // Create/update notifications for tasks in the Inbox
-                let tasks_in_inbox: Vec<Task> = tasks
-                    .iter()
-                    .filter(|task| task.is_in_inbox())
-                    .cloned()
-                    .collect();
-
-                let upsert_inbox_notifications = self
-                    .notification_service
-                    .upgrade()
-                    .context("Unable to access notification_service from task_service")?
-                    .read()
-                    .await
-                    .save_notifications_from_source(
-                        executor,
-                        task_source_service.get_notification_source_kind(),
-                        tasks_in_inbox
-                            .into_iter()
-                            .map(|task| task.into_notification(user_id))
-                            .collect(),
-                        true,
-                        task_source_service.is_supporting_snoozed_notifications(),
-                        user_id,
-                    )
-                    .await?;
-
                 let mut notifications_by_task_id: HashMap<Option<TaskId>, Notification> =
-                    upsert_inbox_notifications
-                        .into_iter()
-                        .map(|upsert_notification| {
-                            let notification = upsert_notification.value();
-                            (notification.task_id, *notification)
-                        })
-                        .collect();
+                    if integration_connection
+                        .provider
+                        .should_create_notification_from_inbox_task()
+                    {
+                        // Create/update notifications for tasks in the Inbox
+                        let tasks_in_inbox: Vec<Task> = tasks
+                            .iter()
+                            .filter(|task| task.is_in_inbox())
+                            .cloned()
+                            .collect();
+
+                        let upsert_inbox_notifications = self
+                            .notification_service
+                            .upgrade()
+                            .context("Unable to access notification_service from task_service")?
+                            .read()
+                            .await
+                            .save_notifications_from_source(
+                                executor,
+                                task_source_service.get_notification_source_kind(),
+                                tasks_in_inbox
+                                    .into_iter()
+                                    .map(|task| task.into_notification(user_id))
+                                    .collect(),
+                                true,
+                                task_source_service.is_supporting_snoozed_notifications(),
+                                user_id,
+                            )
+                            .await?;
+
+                        upsert_inbox_notifications
+                            .into_iter()
+                            .map(|upsert_notification| {
+                                let notification = upsert_notification.value();
+                                (notification.task_id, *notification)
+                            })
+                            .collect()
+                    } else {
+                        HashMap::new()
+                    };
 
                 // Update existing notifications for tasks that are not in the Inbox anymore
                 for task in tasks.iter().filter(|task| !task.is_in_inbox()) {
