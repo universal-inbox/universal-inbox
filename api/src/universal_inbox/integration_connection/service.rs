@@ -275,7 +275,7 @@ impl IntegrationConnectionService {
                 .await?;
 
             return Err(UniversalInboxError::Recoverable(anyhow!(
-                "Unkown Nango connection: {}",
+                "Unknown Nango connection: {}",
                 integration_connection.connection_id
             )));
         }

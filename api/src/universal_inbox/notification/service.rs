@@ -301,12 +301,36 @@ impl NotificationService {
                                     &notification,
                                     user_id,
                                 )
-                                .await?;
-                            notification_details_synced += 1;
+                                .await;
+                            match notification_details {
+                                Ok(notification_details) => {
+                                    notification_details_synced += 1;
 
-                            Notification {
-                                details: notification_details,
-                                ..*notification
+                                    Notification {
+                                        details: notification_details,
+                                        ..*notification
+                                    }
+                                }
+                                Err(error @ UniversalInboxError::Recoverable(_)) => {
+                                    // A recoverable error is considered not transient and we should mark the integration connection as failed.
+                                    self.integration_connection_service
+                                        .read()
+                                        .await
+                                        .update_integration_connection_sync_status(
+                                            executor,
+                                            user_id,
+                                            integration_provider_kind,
+                                            Some(format!(
+                                                "Failed to fetch notification details from {integration_provider_kind}"
+                                            )),
+                                        )
+                                        .await?;
+                                    return Err(error);
+                                }
+                                // Making any other errors recoverable so that we can continue syncing other notifications.
+                                Err(error) => {
+                                    return Err(UniversalInboxError::Recoverable(error.into()))
+                                }
                             }
                         }
                         UpsertStatus::Untouched(notification) => *notification,

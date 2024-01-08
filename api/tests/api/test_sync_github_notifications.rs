@@ -1,6 +1,6 @@
 use actix_http::StatusCode;
 use chrono::{TimeZone, Utc};
-use graphql_client::Response;
+use graphql_client::{Error, Response};
 use rstest::*;
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
@@ -603,4 +603,94 @@ async fn test_sync_discussion_notification_with_details(
         }
         _ => unreachable!("Expected a GithubDiscussion notification"),
     }
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_sync_discussion_notification_with_error(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    mut github_notification: Box<GithubNotification>,
+    nango_github_connection: Box<NangoConnection>,
+) {
+    github_notification.subject = GithubNotificationSubject {
+        title: "test discussion".to_string(),
+        url: None,
+        latest_comment_url: None,
+        r#type: "Discussion".to_string(),
+    };
+
+    let app = authenticated_app.await;
+    create_and_mock_integration_connection(
+        &app,
+        &settings.integrations.oauth2.nango_secret_key,
+        IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+        &settings,
+        nango_github_connection,
+    )
+    .await;
+
+    let github_notifications_response = vec![*github_notification];
+    let github_notifications_mock = mock_github_notifications_service(
+        &app.github_mock_server,
+        "1",
+        &github_notifications_response,
+    );
+
+    let error_response = Response {
+        data: None,
+        errors: Some(vec![Error {
+            message: "Something went wrong".to_string(),
+            locations: None,
+            path: None,
+            extensions: None,
+        }]),
+        extensions: None,
+    };
+    let github_discussions_search_query_mock = mock_github_discussions_search_query(
+        &app.github_mock_server,
+        "repo:octocat/Hello-World \"test discussion\"",
+        &error_response,
+    );
+
+    let response = sync_notifications_response(
+        &app.client,
+        &app.api_address,
+        Some(NotificationSourceKind::Github),
+        false,
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    github_discussions_search_query_mock.assert();
+    github_notifications_mock.assert();
+
+    let notifications = list_notifications(
+        &app.client,
+        &app.api_address,
+        vec![NotificationStatus::Unread],
+        false,
+        None,
+    )
+    .await;
+
+    assert_eq!(notifications.len(), 1);
+    assert!(notifications[0].details.is_none());
+
+    let integration_connection = get_integration_connection_per_provider(
+        &app,
+        app.user.id,
+        IntegrationProviderKind::Github,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        integration_connection
+            .last_sync_failure_message
+            .unwrap()
+            .as_str(),
+        "Failed to fetch notification details from Github"
+    );
 }

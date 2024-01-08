@@ -180,7 +180,7 @@ mod patch_resource {
         let body = patch_response.text().await.unwrap();
         assert_eq!(
             body,
-            r#"{"message":"Errors occured while querying Linear API: Entity not found"}"#
+            r#"{"message":"Recoverable error: Errors occured while querying Linear API: Entity not found"}"#
         );
         linear_archive_notification_mock.assert();
     }

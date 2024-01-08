@@ -14,7 +14,9 @@ pub fn assert_no_error_in_graphql_response<T>(
                 .map(|error| error.message.clone())
                 .collect::<Vec<String>>()
                 .join(", ");
-            return Err(UniversalInboxError::Unexpected(anyhow!(
+            // If there is a well formated error, we can assume that the error is not transient
+            // and we should not retry the request.
+            return Err(UniversalInboxError::Recoverable(anyhow!(
                 "Errors occured while querying {} API: {}",
                 graphql_api_name,
                 error_messages

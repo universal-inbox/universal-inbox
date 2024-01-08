@@ -66,7 +66,7 @@ pub enum UniversalInboxError {
     Unauthorized(anyhow::Error),
     #[error("Forbidden access: {0}")]
     Forbidden(String),
-    #[error("Unknown Nango connection: {0}")]
+    #[error("Recoverable error: {0}")]
     Recoverable(anyhow::Error),
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
