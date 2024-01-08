@@ -617,7 +617,7 @@ async fn test_sync_tasks_with_synchronization_disabled(
     create_and_mock_integration_connection(
         &app,
         &settings.integrations.oauth2.nango_secret_key,
-        IntegrationConnectionConfig::Todoist(TodoistConfig::default()),
+        IntegrationConnectionConfig::Todoist(TodoistConfig::disabled()),
         &settings,
         nango_todoist_connection,
     )

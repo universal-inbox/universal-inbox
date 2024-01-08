@@ -446,7 +446,7 @@ async fn test_sync_all_notifications_with_synchronization_disabled(
     create_and_mock_integration_connection(
         &app,
         &settings.integrations.oauth2.nango_secret_key,
-        IntegrationConnectionConfig::Github(GithubConfig::default()), // Default config is disabled
+        IntegrationConnectionConfig::Github(GithubConfig::disabled()),
         &settings,
         nango_github_connection,
     )
