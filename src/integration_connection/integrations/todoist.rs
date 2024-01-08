@@ -32,12 +32,14 @@ impl From<String> for SyncToken {
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct TodoistConfig {
     pub sync_tasks_enabled: bool,
+    pub create_notification_from_inbox_task: bool,
 }
 
 impl Default for TodoistConfig {
     fn default() -> Self {
         Self {
             sync_tasks_enabled: true,
+            create_notification_from_inbox_task: false,
         }
     }
 }
@@ -46,12 +48,14 @@ impl TodoistConfig {
     pub fn enabled() -> Self {
         Self {
             sync_tasks_enabled: true,
+            create_notification_from_inbox_task: true,
         }
     }
 
     pub fn disabled() -> Self {
         Self {
             sync_tasks_enabled: false,
+            create_notification_from_inbox_task: false,
         }
     }
 }

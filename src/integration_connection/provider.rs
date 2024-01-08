@@ -130,6 +130,15 @@ impl IntegrationProvider {
             _ => false,
         }
     }
+
+    pub fn should_create_notification_from_inbox_task(&self) -> bool {
+        match self {
+            IntegrationProvider::Todoist { config, .. } => {
+                config.create_notification_from_inbox_task
+            }
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
