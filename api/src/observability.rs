@@ -57,8 +57,8 @@ pub fn get_subscriber_with_telemetry(
                 .with_max_attributes_per_span(64)
                 .with_resource(Resource::new(vec![
                     KeyValue::new("service.name", "universal-inbox-api"),
-                    KeyValue::new("hostname", hostname.clone()),
-                    KeyValue::new("environment", environment.to_string()),
+                    KeyValue::new("host.name", hostname.clone()),
+                    KeyValue::new("deployment.environment", environment.to_string()),
                 ])),
         )
         .with_exporter(
@@ -76,8 +76,8 @@ pub fn get_subscriber_with_telemetry(
         .metrics(opentelemetry_sdk::runtime::Tokio)
         .with_resource(Resource::new(vec![
             KeyValue::new("service.name", "universal-inbox-api"),
-            KeyValue::new("hostname", hostname.clone()),
-            KeyValue::new("environment", environment.to_string()),
+            KeyValue::new("host.name", hostname.clone()),
+            KeyValue::new("deployment.environment", environment.to_string()),
         ]))
         .with_period(Duration::from_secs(3))
         .with_timeout(Duration::from_secs(10))
@@ -98,8 +98,8 @@ pub fn get_subscriber_with_telemetry(
         .logging()
         .with_log_config(logs::Config::default().with_resource(Resource::new(vec![
             KeyValue::new("service.name", "universal-inbox-api"),
-            KeyValue::new("hostname", hostname.clone()),
-            KeyValue::new("environment", environment.to_string()),
+            KeyValue::new("host.name", hostname.clone()),
+            KeyValue::new("deployment.environment", environment.to_string()),
         ])))
         .with_exporter(
             opentelemetry_otlp::new_exporter()
