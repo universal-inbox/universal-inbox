@@ -20,7 +20,7 @@ impl TryFrom<notifications_query::NotificationsQueryNotificationsNodesOnIssueNot
     ) -> Result<Self, Self::Error> {
         Ok(LinearTeam {
             id: Uuid::parse_str(&value.id)
-                .context(format!("Failed to parse UUID from `{}`", value.id))?,
+                .with_context(|| format!("Failed to parse UUID from `{}`", value.id))?,
             key: value.key,
             name: value.name,
         })
@@ -44,13 +44,13 @@ impl
                 .map(|avatar_url| {
                     avatar_url
                         .parse()
-                        .context(format!("Failed to parse URL from `{avatar_url}`"))
+                        .with_context(|| format!("Failed to parse URL from `{avatar_url}`"))
                 })
                 .transpose()?,
             url: value
                 .url
                 .parse()
-                .context(format!("Failed to parse URL from `{}`", value.url))?,
+                .with_context(|| format!("Failed to parse URL from `{}`", value.url))?,
         })
     }
 }
@@ -67,12 +67,12 @@ impl
     ) -> Result<Self, Self::Error> {
         Ok(LinearProject {
             id: Uuid::parse_str(&value.id)
-                .context(format!("Failed to parse UUID from `{}`", value.id))?,
+                .with_context(|| format!("Failed to parse UUID from `{}`", value.id))?,
             name: value.name,
             url: value
                 .url
                 .parse()
-                .context(format!("Failed to parse URL from `{}`", value.url))?,
+                .with_context(|| format!("Failed to parse URL from `{}`", value.url))?,
             description: value.description,
             icon: value.icon,
             color: value.color,
@@ -111,13 +111,13 @@ impl
                 .map(|avatar_url| {
                     avatar_url
                         .parse()
-                        .context(format!("Failed to parse URL from `{avatar_url}`"))
+                        .with_context(|| format!("Failed to parse URL from `{avatar_url}`"))
                 })
                 .transpose()?,
             url: value
                 .url
                 .parse()
-                .context(format!("Failed to parse URL from `{}`", value.url))?,
+                .with_context(|| format!("Failed to parse URL from `{}`", value.url))?,
         })
     }
 }
@@ -139,13 +139,13 @@ impl
                 .map(|avatar_url| {
                     avatar_url
                         .parse()
-                        .context(format!("Failed to parse URL from `{avatar_url}`"))
+                        .with_context(|| format!("Failed to parse URL from `{avatar_url}`"))
                 })
                 .transpose()?,
             url: value
                 .url
                 .parse()
-                .context(format!("Failed to parse URL from `{}`", value.url))?,
+                .with_context(|| format!("Failed to parse URL from `{}`", value.url))?,
         })
     }
 }
@@ -167,13 +167,13 @@ impl
                 .map(|avatar_url| {
                     avatar_url
                         .parse()
-                        .context(format!("Failed to parse URL from `{avatar_url}`"))
+                        .with_context(|| format!("Failed to parse URL from `{avatar_url}`"))
                 })
                 .transpose()?,
             url: value
                 .url
                 .parse()
-                .context(format!("Failed to parse URL from `{}`", value.url))?,
+                .with_context(|| format!("Failed to parse URL from `{}`", value.url))?,
         })
     }
 }
@@ -215,7 +215,7 @@ impl TryFrom<notifications_query::NotificationsQueryNotificationsNodesOnIssueNot
     ) -> Result<Self, Self::Error> {
         Ok(LinearIssue {
             id: Uuid::parse_str(&value.id)
-                .context(format!("Failed to parse UUID from `{}`", value.id))?,
+                .with_context(|| format!("Failed to parse UUID from `{}`", value.id))?,
             created_at: value.created_at,
             updated_at: value.updated_at,
             completed_at: value.completed_at,
@@ -226,7 +226,7 @@ impl TryFrom<notifications_query::NotificationsQueryNotificationsNodesOnIssueNot
             url: value
                 .url
                 .parse()
-                .context(format!("Failed to parse URL from `{}`", value.url))?,
+                .with_context(|| format!("Failed to parse URL from `{}`", value.url))?,
             priority: value.priority.try_into()?,
             project: value
                 .project
@@ -266,18 +266,18 @@ impl TryFrom<notifications_query::NotificationsQueryNotificationsNodesOnProjectN
     ) -> Result<Self, Self::Error> {
         Ok(LinearProject {
             id: Uuid::parse_str(&value.id)
-                .context(format!("Failed to parse UUID from `{}`", value.id))?,
+                .with_context(|| format!("Failed to parse UUID from `{}`", value.id))?,
             name: value.name,
             url: value
                 .url
                 .parse()
-                .context(format!("Failed to parse URL from `{}`", value.url))?,
+                .with_context(|| format!("Failed to parse URL from `{}`", value.url))?,
             description: value.description,
             icon: value
                 .icon
                 .map(|icon| {
                     icon.parse()
-                        .context(format!("Failed to parse URL from `{icon}`"))
+                        .with_context(|| format!("Failed to parse URL from `{icon}`"))
                 })
                 .transpose()?,
             color: value.color,
@@ -302,7 +302,7 @@ impl TryFrom<notifications_query::ResponseData> for Vec<LinearNotification> {
             .map(|logo_url| {
                 logo_url
                     .parse()
-                    .context(format!("Failed to parse URL from `{logo_url}`"))
+                    .with_context(|| format!("Failed to parse URL from `{logo_url}`"))
             })
             .transpose()?;
 
@@ -321,7 +321,7 @@ impl TryFrom<notifications_query::ResponseData> for Vec<LinearNotification> {
                         issue,
                     }),
                 } => Ok(Some(LinearNotification::IssueNotification {
-                    id: Uuid::parse_str(&id).context(format!("Failed to parse UUID from `{id}`"))?,
+                    id: Uuid::parse_str(&id).with_context(|| format!("Failed to parse UUID from `{id}`"))?,
                     r#type: type_,
                     read_at,
                     updated_at,
@@ -343,7 +343,7 @@ impl TryFrom<notifications_query::ResponseData> for Vec<LinearNotification> {
                         project
                     }),
                 } => Ok(Some(LinearNotification::ProjectNotification {
-                    id: Uuid::parse_str(&id).context(format!("Failed to parse UUID from `{id}`"))?,
+                    id: Uuid::parse_str(&id).with_context(|| format!("Failed to parse UUID from `{id}`"))?,
                     r#type: type_,
                     read_at,
                     updated_at,

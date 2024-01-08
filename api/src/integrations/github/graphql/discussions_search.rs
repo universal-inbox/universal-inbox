@@ -54,14 +54,14 @@ impl TryFrom<discussions_search_query::DiscussionsSearchQuerySearchNodesOnDiscus
                 avatar_url: value
                     .avatar_url
                     .parse::<Url>()
-                    .context("Github actor should have a valid avatar URL")?,
+                    .with_context(|| format!("Github actor should have a valid avatar URL: {:?}", value.avatar_url))?,
             }),
             _ => GithubActor::Bot(GithubBotSummary {
                 login: value.login,
                 avatar_url: value
                     .avatar_url
                     .parse::<Url>()
-                    .context("Github actor should have a valid avatar URL")?,
+                    .with_context(|| format!("Github actor should have a valid avatar URL: {:?}", value.avatar_url))?,
             })
         })
     }
@@ -84,14 +84,14 @@ impl TryFrom<discussions_search_query::DiscussionsSearchQuerySearchNodesOnDiscus
                 avatar_url: value
                     .avatar_url
                     .parse::<Url>()
-                    .context("Github actor should have a valid avatar URL")?,
+                    .with_context(|| format!("Github actor should have a valid avatar URL: {:?}", value.avatar_url))?,
             }),
             _ => GithubActor::Bot(GithubBotSummary {
                 login: value.login,
                 avatar_url: value
                     .avatar_url
                     .parse::<Url>()
-                    .context("Github actor should have a valid avatar URL")?,
+                    .with_context(|| format!("Github actor should have a valid avatar URL: {:?}", value.avatar_url))?,
             })
         })
     }
@@ -114,14 +114,14 @@ impl TryFrom<discussions_search_query::DiscussionsSearchQuerySearchNodesOnDiscus
                 avatar_url: value
                     .avatar_url
                     .parse::<Url>()
-                    .context("Github actor should have a valid avatar URL")?,
+                    .with_context(|| format!("Github actor should have a valid avatar URL: {:?}", value.avatar_url))?,
             }),
             _ => GithubActor::Bot(GithubBotSummary {
                 login: value.login,
                 avatar_url: value
                     .avatar_url
                     .parse::<Url>()
-                    .context("Github actor should have a valid avatar URL")?,
+                    .with_context(|| format!("Github actor should have a valid avatar URL: {:?}", value.avatar_url))?,
             })
         })
     }
@@ -158,10 +158,12 @@ impl TryFrom<discussions_search_query::DiscussionsSearchQuerySearchNodesOnDiscus
         value: discussions_search_query::DiscussionsSearchQuerySearchNodesOnDiscussionAnswer,
     ) -> Result<Self, Self::Error> {
         Ok(GithubDiscussionComment {
-            url: value
-                .url
-                .parse()
-                .context("Unable to parse Github discussion comment URL")?,
+            url: value.url.parse().with_context(|| {
+                format!(
+                    "Unable to parse Github discussion comment URL: {:?}",
+                    value.url
+                )
+            })?,
             body: value.body_html,
             created_at: value.created_at,
             author: value.author.map(|author| author.try_into()).transpose()?,
@@ -178,10 +180,9 @@ impl TryFrom<discussions_search_query::DiscussionsSearchQuerySearchNodesOnDiscus
         value: discussions_search_query::DiscussionsSearchQuerySearchNodesOnDiscussionRepository,
     ) -> Result<Self, Self::Error> {
         Ok(GithubRepositorySummary {
-            url: value
-                .url
-                .parse()
-                .context("Unable to parse Github repository URL")?,
+            url: value.url.parse().with_context(|| {
+                format!("Unable to parse Github repository URL: {:?}", value.url)
+            })?,
             name_with_owner: value.name_with_owner,
         })
     }
@@ -206,10 +207,12 @@ impl TryFrom<discussions_search_query::ResponseData> for NotificationDetails {
         Ok(NotificationDetails::GithubDiscussion(GithubDiscussion {
             id: discussion.id,
             number: discussion.number,
-            url: discussion
-                .url
-                .parse()
-                .context("Unable to parse Github pull request URL")?,
+            url: discussion.url.parse().with_context(|| {
+                format!(
+                    "Unable to parse Github pull request URL: {:?}",
+                    discussion.url
+                )
+            })?,
             title: discussion.title,
             body: discussion.body_html,
             state_reason: discussion
