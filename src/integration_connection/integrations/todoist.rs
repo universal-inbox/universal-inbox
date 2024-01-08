@@ -29,15 +29,29 @@ impl From<String> for SyncToken {
     }
 }
 
-#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone, Default)]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct TodoistConfig {
     pub sync_tasks_enabled: bool,
+}
+
+impl Default for TodoistConfig {
+    fn default() -> Self {
+        Self {
+            sync_tasks_enabled: true,
+        }
+    }
 }
 
 impl TodoistConfig {
     pub fn enabled() -> Self {
         Self {
             sync_tasks_enabled: true,
+        }
+    }
+
+    pub fn disabled() -> Self {
+        Self {
+            sync_tasks_enabled: false,
         }
     }
 }

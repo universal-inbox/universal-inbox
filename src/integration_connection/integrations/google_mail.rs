@@ -13,7 +13,7 @@ pub struct GoogleMailConfig {
 impl Default for GoogleMailConfig {
     fn default() -> Self {
         Self {
-            sync_notifications_enabled: false,
+            sync_notifications_enabled: true,
             synced_label: GoogleMailLabel {
                 id: GOOGLE_MAIL_STARRED_LABEL.to_string(),
                 name: GOOGLE_MAIL_STARRED_LABEL.to_string(),
@@ -26,6 +26,13 @@ impl GoogleMailConfig {
     pub fn enabled() -> Self {
         Self {
             sync_notifications_enabled: true,
+            ..Default::default()
+        }
+    }
+
+    pub fn disabled() -> Self {
+        Self {
+            sync_notifications_enabled: false,
             ..Default::default()
         }
     }
