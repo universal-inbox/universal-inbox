@@ -9,7 +9,7 @@ cfg_if! {
     if #[cfg(debug_assertions)] {
         const LOG_LEVEL: Level = Level::Trace;
     } else {
-        const LOG_LEVEL: Level = Level::Info;
+        const LOG_LEVEL: Level = Level::Debug;
     }
 }
 
