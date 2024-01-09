@@ -24,17 +24,10 @@ build-release-all: build-release
     just api/build-release
 
 build-container:
-    docker build -t dax42/universal-inbox:latest .
+    just docker/build
 
 publish-container:
-    # docker buildx create --use --driver docker-container
-    docker buildx build \
-      --push \
-      --platform linux/arm64/v8,linux/amd64 \
-      --tag dax42/universal-inbox:latest \
-      --tag dax42/universal-inbox:$(git rev-parse HEAD) \
-      .
-    echo "🚀 Docker image dax42/universal-inbox published with tag $(git rev-parse HEAD)"
+    just docker/publish
 
 ## Dev recipes
 run-db:

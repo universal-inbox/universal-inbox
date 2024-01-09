@@ -9,7 +9,10 @@ node_modules
 .DS_Store
 tests/
 Dockerfile
-docker-compose.yml
+docker/docker-compose.yaml
+docker/justfile
+docker/cache
+docker/*.env
 universal-inbox.env
 devbox.d
 .devbox
