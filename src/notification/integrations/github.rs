@@ -675,8 +675,8 @@ pub enum GithubCheckStatusState {
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct GithubCheckSuiteApp {
     pub name: String,
-    #[serde_as(as = "DisplayFromStr")]
-    pub logo_url: Url,
+    #[serde_as(as = "Option<DisplayFromStr>")]
+    pub logo_url: Option<Url>,
     #[serde_as(as = "DisplayFromStr")]
     pub url: Url,
 }
