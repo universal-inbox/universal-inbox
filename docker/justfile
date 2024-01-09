@@ -1,0 +1,10 @@
+default:
+    @just --choose
+
+@build:
+    docker-compose build universal-inbox
+
+@publish:
+    docker buildx create --use --driver docker-container
+    docker buildx bake --push universal-inbox --set "*.tags=dax42/universal-inbox:$(git rev-parse HEAD)" --set "*.tags=dax42/universal-inbox:latest"
+    echo "🚀 Docker image dax42/universal-inbox published with tag $(git rev-parse HEAD)"

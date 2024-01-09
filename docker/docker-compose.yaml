@@ -43,6 +43,27 @@ services:
 
   universal-inbox:
     image: "dax42/universal-inbox:latest"
+    build:
+      context: ..
+      cache_from:
+        - "type=registry,ref=dax42/universal-inbox"
+        - "type=local,src=cache"
+      cache_to:
+        - "type=inline"
+        - "type=local,dest=cache"
+      x-bake:
+        platforms: ["linux/amd64", "linux/arm64"]
+      platforms:
+        - "linux/amd64"
+        - "linux/arm64"
+      tags:
+        - dax42/universal-inbox:latest
+      labels:
+        org.opencontainers.image.title: "universal-inbox"
+        org.opencontainers.image.source: "https://github.com/universal-inbox/universal-inbox"
+        org.opencontainers.image.version: "0.1.0"
+        org.opencontainers.image.licenses: "Apache-2.0"
+
     networks:
       - universal-inbox
     env_file:
