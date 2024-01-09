@@ -408,14 +408,20 @@ impl GithubNotification {
         Some(id.to_string())
     }
 
-    pub fn get_html_url_from_api_url(api_url: &Option<Url>) -> Option<Url> {
+    fn get_html_url_from_api_url(api_url: &Option<Url>) -> Option<Url> {
         api_url.as_ref().and_then(|url| {
             if url.host() == Some(Host::Domain("api.github.com"))
                 && url.path().starts_with("/repos")
             {
                 let mut result = url.clone();
                 result.set_host(Some("github.com")).unwrap(); // safe to unwrap
-                result.set_path(url.path().trim_start_matches("/repos"));
+                result.set_path(
+                    url.path()
+                        .trim_start_matches("/repos")
+                        // Pull requests have a different URL
+                        .replace("/pulls/", "/pull/")
+                        .as_str(),
+                );
                 return Some(result);
             }
             None
@@ -440,18 +446,19 @@ impl GithubNotification {
                 );
                 result
             }
-            _ => self.repository.html_url.clone(),
+            _ => GithubNotification::get_html_url_from_api_url(&self.subject.url)
+                .unwrap_or_else(|| self.repository.html_url.clone()),
         }
     }
 
     pub fn into_notification(self, user_id: UserId) -> Notification {
-        let source_html_url = GithubNotification::get_html_url_from_api_url(&self.subject.url);
+        let source_html_url = self.get_html_url_from_metadata();
 
         Notification {
             id: Uuid::new_v4().into(),
             title: self.subject.title.clone(),
             source_id: self.id.clone(),
-            source_html_url,
+            source_html_url: Some(source_html_url),
             status: if self.unread {
                 NotificationStatus::Unread
             } else {
@@ -876,7 +883,7 @@ mod tests {
         )]
         #[case(
             "https://api.github.com/repos/octokit/octokit.rb/pulls/123",
-            "https://github.com/octokit/octokit.rb/pulls/123"
+            "https://github.com/octokit/octokit.rb/pull/123"
         )]
         fn test_get_html_url_from_api_url_with_valid_api_url(
             #[case] api_url: &str,
@@ -935,7 +942,7 @@ mod tests {
         #[rstest]
         fn test_try_from_api_url_from_non_api_domain() {
             assert!(GithubUrl::try_from_api_url(
-                &"https://github.com/octokit/octokit.rb/pulls/123"
+                &"https://github.com/octokit/octokit.rb/pull/123"
                     .parse::<Url>()
                     .unwrap()
             )
