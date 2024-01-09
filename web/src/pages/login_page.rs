@@ -3,6 +3,7 @@
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 use email_address::EmailAddress;
+use fermi::use_atom_ref;
 use log::error;
 
 use universal_inbox::user::Password;
@@ -13,7 +14,7 @@ use crate::{
     },
     form::FormValues,
     route::Route,
-    services::user_service::UserCommand,
+    services::user_service::{UserCommand, CONNECTED_USER},
 };
 
 pub fn LoginPage(cx: Scope) -> Element {
@@ -21,6 +22,14 @@ pub fn LoginPage(cx: Scope) -> Element {
     let email = use_state(cx, || "".to_string());
     let password = use_state(cx, || "".to_string());
     let force_validation = use_state(cx, || false);
+    let connected_user_ref = use_atom_ref(cx, &CONNECTED_USER);
+    let nav = use_navigator(cx);
+
+    if connected_user_ref.read().is_some() {
+        nav.push(Route::NotificationsPage {});
+        cx.needs_update();
+        return None;
+    };
 
     render! {
         div {
