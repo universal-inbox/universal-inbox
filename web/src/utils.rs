@@ -3,7 +3,7 @@ use gloo_timers::future::TimeoutFuture;
 use gloo_utils::errors::JsError;
 use url::Url;
 use wasm_bindgen::JsCast;
-use web_sys::{Element, HtmlElement, HtmlInputElement};
+use web_sys::{Element, HtmlElement, HtmlInputElement, Window};
 
 pub async fn focus_and_select_input_element(id: &str) -> Result<HtmlInputElement> {
     let elt = get_element_by_id(id)?
@@ -86,4 +86,12 @@ pub fn compute_text_color_from_background_color(color: &str) -> String {
     } else {
         "text-white".to_string()
     }
+}
+
+pub fn open_link(url: &str) -> Result<Window> {
+    let window = web_sys::window().context("Unable to get the window object")?;
+    window
+        .open_with_url_and_target(url, "_blank")
+        .map_err(|err| JsError::try_from(err).unwrap())?
+        .context("Unable to open the link in a new tab")
 }
