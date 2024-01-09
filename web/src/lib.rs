@@ -13,7 +13,7 @@ use utils::get_element_by_id;
 use wasm_bindgen::{prelude::Closure, JsCast};
 use web_sys::KeyboardEvent;
 
-use universal_inbox::notification::NotificationWithTask;
+use universal_inbox::{notification::NotificationWithTask, HasHtmlUrl};
 
 use config::{get_api_base_url, get_app_config, APP_CONFIG};
 use model::{PreviewPane, UniversalInboxUIModel, UI_MODEL};
@@ -28,7 +28,7 @@ use services::{
 
 use crate::{
     theme::{toggle_dark_mode, IS_DARK_MODE},
-    utils::{current_location, get_local_storage},
+    utils::{current_location, get_local_storage, open_link},
 };
 
 mod auth;
@@ -251,6 +251,11 @@ fn setup_key_bindings(
                 }
                 "p" => ui_model_ref.write().task_planning_modal_opened = true,
                 "l" => ui_model_ref.write().task_link_modal_opened = true,
+                "Enter" => {
+                    if let Some(notification) = selected_notification {
+                        let _ = open_link(notification.get_html_url().as_str());
+                    }
+                }
                 "h" | "?" => ui_model_ref.write().toggle_help(),
                 _ => handled = false,
             }

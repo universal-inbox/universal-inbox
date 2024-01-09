@@ -127,7 +127,7 @@ pub fn NotificationsList<'a>(
 
                                     NotificationButton {
                                         title: "Link to task",
-                                        shortcut: "a",
+                                        shortcut: "l",
                                         selected: is_selected,
                                         disabled_label: is_task_actions_disabled.then_some("No task management service connected"),
                                         show_shortcut: is_help_enabled,
