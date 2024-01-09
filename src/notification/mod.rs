@@ -334,7 +334,9 @@ mod tests {
         fn test_get_html_url_for_github_notification_with_no_source_html_url(
             github_notification: Box<GithubNotification>,
         ) {
-            let expected_url: Url = "https://github.com/octocat/Hello-World".parse().unwrap();
+            let expected_url: Url = "https://github.com/octokit/octokit.rb/issues/123"
+                .parse()
+                .unwrap();
             let notification = Notification {
                 id: Uuid::new_v4().into(),
                 title: "notif1".to_string(),

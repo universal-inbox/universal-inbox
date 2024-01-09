@@ -76,9 +76,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
             title: "Greetings 2".to_string(),
             status: NotificationStatus::Unread,
             source_id: sync_github_notifications[1].id.clone(),
-            source_html_url: GithubNotification::get_html_url_from_api_url(
-                &sync_github_notifications[1].subject.url,
-            ),
+            source_html_url: Some(sync_github_notifications[1].get_html_url_from_metadata()),
             metadata: NotificationMetadata::Github(Box::new(sync_github_notifications[1].clone())),
             updated_at: Utc.with_ymd_and_hms(2014, 11, 6, 0, 0, 0).unwrap(),
             last_read_at: None,
@@ -202,9 +200,7 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
             title: "Greetings 3".to_string(),
             status: NotificationStatus::Unread,
             source_id: "789".to_string(),
-            source_html_url: GithubNotification::get_html_url_from_api_url(
-                &sync_github_notifications[1].subject.url,
-            ),
+            source_html_url: Some(sync_github_notifications[1].get_html_url_from_metadata()),
             metadata: NotificationMetadata::Github(Box::new(sync_github_notifications[1].clone())), // reusing github notification but not useful
             updated_at: Utc.with_ymd_and_hms(2014, 11, 6, 0, 0, 0).unwrap(),
             last_read_at: None,
@@ -279,9 +275,7 @@ async fn test_sync_all_notifications_asynchronously(
             title: "Greetings 2".to_string(),
             status: NotificationStatus::Unread,
             source_id: sync_github_notifications[1].id.clone(),
-            source_html_url: GithubNotification::get_html_url_from_api_url(
-                &sync_github_notifications[1].subject.url,
-            ),
+            source_html_url: Some(sync_github_notifications[1].get_html_url_from_metadata()),
             metadata: NotificationMetadata::Github(Box::new(sync_github_notifications[1].clone())),
             updated_at: Utc.with_ymd_and_hms(2014, 11, 6, 0, 0, 0).unwrap(),
             last_read_at: None,

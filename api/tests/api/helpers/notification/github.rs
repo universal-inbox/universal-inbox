@@ -39,9 +39,7 @@ pub async fn create_notification_from_github_notification(
             id: Uuid::new_v4().into(),
             title: github_notification.subject.title.clone(),
             source_id: github_notification.id.to_string(),
-            source_html_url: GithubNotification::get_html_url_from_api_url(
-                &github_notification.subject.url,
-            ),
+            source_html_url: Some(github_notification.get_html_url_from_metadata()),
             status: if github_notification.unread {
                 NotificationStatus::Unread
             } else {
@@ -152,7 +150,7 @@ pub fn assert_sync_notifications(
                 assert_eq!(
                     notification.source_html_url,
                     Some(
-                        "https://github.com/octokit/octokit.rb/pulls/123"
+                        "https://github.com/octokit/octokit.rb/pull/123"
                             .parse::<Url>()
                             .unwrap()
                     )
