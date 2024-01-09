@@ -401,11 +401,17 @@ fn GithubCheckRunLine<'a>(
                                 href: "{app.url}",
                                 target: "_blank",
 
-                                img {
-                                    class: "h-5 w-5 rounded-full",
-                                    alt: "{app.name}",
-                                    title: "{app.name}",
-                                    src: "{app.logo_url}"
+                                if let Some(logo_url) = &app.logo_url {
+                                    render! {
+                                        img {
+                                            class: "h-5 w-5 rounded-full",
+                                            alt: "{app.name}",
+                                            title: "{app.name}",
+                                            src: "{logo_url}"
+                                        }
+                                    }
+                                } else {
+                                    render! { Icon { class: "h-5 w-5 rounded-full", icon: BsQuestionCircleFill } }
                                 }
                             }
                         }

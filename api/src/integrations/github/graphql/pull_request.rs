@@ -175,12 +175,7 @@ impl
                                 app.url
                             )
                         })?,
-                        logo_url: app.logo_url.parse::<Url>().with_context(|| {
-                            format!(
-                                "Github check suite application should have a valid logo URL: {:?}",
-                                app.logo_url
-                            )
-                        })?,
+                        logo_url: app.logo_url.parse::<Url>().ok(),
                     })
                 })
                 .transpose()?,
