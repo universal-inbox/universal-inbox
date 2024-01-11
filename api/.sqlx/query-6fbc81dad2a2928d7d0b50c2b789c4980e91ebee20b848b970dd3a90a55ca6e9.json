@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                UPDATE\n                  task\n                SET\n                  status = $1::task_status,\n                  completed_at = $2\n                WHERE\n                  NOT source_id = ANY($3)\n                  AND kind::TEXT = $4\n                  AND (status = 'Active')\n                RETURNING\n                  id,\n                  source_id,\n                  title,\n                  body,\n                  status as \"status: _\",\n                  completed_at,\n                  priority,\n                  due_at as \"due_at: Json<Option<DueDate>>\",\n                  source_html_url,\n                  tags,\n                  parent_id,\n                  project,\n                  is_recurring,\n                  created_at,\n                  metadata as \"metadata: Json<TaskMetadata>\",\n                  user_id\n            ",
+  "query": "\n                UPDATE\n                  task\n                SET\n                  status = $1::task_status,\n                  completed_at = $2\n                WHERE\n                  NOT source_id = ANY($3)\n                  AND kind::TEXT = $4\n                  AND (status = 'Active')\n                  AND user_id = $5\n                RETURNING\n                  id,\n                  source_id,\n                  title,\n                  body,\n                  status as \"status: _\",\n                  completed_at,\n                  priority,\n                  due_at as \"due_at: Json<Option<DueDate>>\",\n                  source_html_url,\n                  tags,\n                  parent_id,\n                  project,\n                  is_recurring,\n                  created_at,\n                  metadata as \"metadata: Json<TaskMetadata>\",\n                  user_id\n            ",
   "describe": {
     "columns": [
       {
@@ -111,7 +111,8 @@
         },
         "Timestamp",
         "TextArray",
-        "Text"
+        "Text",
+        "Uuid"
       ]
     },
     "nullable": [
@@ -133,5 +134,5 @@
       false
     ]
   },
-  "hash": "2e6e95e026ff52952122ca0846793525e448ae57c50503db456fd15e29eb6d40"
+  "hash": "6fbc81dad2a2928d7d0b50c2b789c4980e91ebee20b848b970dd3a90a55ca6e9"
 }

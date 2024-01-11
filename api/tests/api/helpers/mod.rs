@@ -18,6 +18,7 @@ use universal_inbox_api::{
     integrations::oauth2::NangoService,
     observability::{get_subscriber, init_subscriber},
     repository::Repository,
+    universal_inbox::user::service::UserService,
 };
 
 use crate::helpers::mailer::MailerStub;
@@ -34,6 +35,7 @@ pub struct TestedApp {
     pub app_address: String,
     pub api_address: String,
     pub repository: Arc<Repository>,
+    pub user_service: Arc<RwLock<UserService>>,
     pub github_mock_server: MockServer,
     pub linear_mock_server: MockServer,
     pub google_mail_mock_server: MockServer,
@@ -173,7 +175,7 @@ pub async fn tested_app(
         settings,
         notification_service,
         task_service,
-        user_service,
+        user_service.clone(),
         integration_connection_service,
     )
     .await
@@ -187,6 +189,7 @@ pub async fn tested_app(
         app_address,
         api_address,
         repository,
+        user_service,
         github_mock_server,
         linear_mock_server,
         google_mail_mock_server,
@@ -258,7 +261,7 @@ pub async fn tested_app_with_local_auth(
         settings,
         notification_service,
         task_service,
-        user_service,
+        user_service.clone(),
         integration_connection_service,
     )
     .await
@@ -272,6 +275,7 @@ pub async fn tested_app_with_local_auth(
         app_address,
         api_address,
         repository,
+        user_service,
         github_mock_server,
         linear_mock_server,
         google_mail_mock_server,

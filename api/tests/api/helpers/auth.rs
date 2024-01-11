@@ -1,10 +1,5 @@
-use std::sync::Arc;
-
 use chrono::{Duration, TimeZone, Utc};
-use httpmock::{
-    Method::{GET, POST},
-    MockServer,
-};
+use httpmock::Method::{GET, POST};
 use openidconnect::{
     core::{CoreHmacKey, CoreIdToken, CoreIdTokenClaims, CoreJwsSigningAlgorithm},
     Audience, EmptyAdditionalClaims, EndUserEmail, IssuerUrl, StandardClaims, SubjectIdentifier,
@@ -14,22 +9,13 @@ use rstest::fixture;
 use serde_json::json;
 
 use universal_inbox::{auth::SessionAuthValidationParameters, user::User};
-use universal_inbox_api::repository::Repository;
 
 use super::{tested_app, TestedApp};
 
 pub struct AuthenticatedApp {
     pub client: Client,
-    pub app_address: String,
-    pub api_address: String,
+    pub app: TestedApp,
     pub user: User,
-    pub repository: Arc<Repository>,
-    pub github_mock_server: MockServer,
-    pub linear_mock_server: MockServer,
-    pub google_mail_mock_server: MockServer,
-    pub todoist_mock_server: MockServer,
-    pub oidc_issuer_mock_server: Option<MockServer>,
-    pub nango_mock_server: MockServer,
 }
 
 pub async fn authenticate_user(
@@ -55,11 +41,11 @@ pub async fn authenticate_user(
     let id_token = CoreIdToken::new(
         CoreIdTokenClaims::new(
             IssuerUrl::new(oidc_issuer_mock_server_url.to_string()).unwrap(),
-            vec![Audience::new("client-id-123".to_string())],
+            vec![Audience::new(format!("{email}-client-id-123"))],
             Utc::now() + Duration::seconds(120),
             Utc::now(),
-            StandardClaims::new(SubjectIdentifier::new("1234-abcd".to_string()))
-                .set_email(Some(EndUserEmail::new("foo@bar.com".to_string()))),
+            StandardClaims::new(SubjectIdentifier::new(format!("{first_name}-{last_name}")))
+                .set_email(Some(EndUserEmail::new(email.to_string()))),
             EmptyAdditionalClaims {},
         ),
         &signing_key,
@@ -97,19 +83,7 @@ pub async fn authenticated_app(#[future] tested_app: TestedApp) -> Authenticated
     let app = tested_app.await;
     let (client, user) = authenticate_user(&app, "1234", "John", "Doe", "test@example.com").await;
 
-    AuthenticatedApp {
-        client,
-        app_address: app.api_address.clone(),
-        api_address: app.api_address.clone(),
-        user,
-        repository: app.repository.clone(),
-        github_mock_server: app.github_mock_server,
-        linear_mock_server: app.linear_mock_server,
-        google_mail_mock_server: app.google_mail_mock_server,
-        todoist_mock_server: app.todoist_mock_server,
-        oidc_issuer_mock_server: app.oidc_issuer_mock_server,
-        nango_mock_server: app.nango_mock_server,
-    }
+    AuthenticatedApp { client, app, user }
 }
 
 pub fn mock_oidc_openid_configuration(app: &TestedApp) {

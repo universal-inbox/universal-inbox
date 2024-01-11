@@ -49,7 +49,8 @@ mod patch_resource {
     ) {
         let app = authenticated_app.await;
         create_and_mock_integration_connection(
-            &app,
+            &app.app,
+            app.user.id,
             &settings.integrations.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
@@ -57,7 +58,7 @@ mod patch_resource {
         )
         .await;
 
-        let github_mark_thread_as_read_mock = app.github_mock_server.mock(|when, then| {
+        let github_mark_thread_as_read_mock = app.app.github_mock_server.mock(|when, then| {
             when.method(PATCH)
                 .path("/notifications/threads/1234")
                 .header("accept", "application/vnd.github.v3+json")
@@ -66,7 +67,7 @@ mod patch_resource {
         });
         let existing_todoist_task = create_task_from_todoist_item(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             &todoist_item,
             "Project2".to_string(),
             app.user.id,
@@ -94,7 +95,7 @@ mod patch_resource {
         });
         let created_notification: Box<Notification> = create_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             expected_notification.clone(),
         )
@@ -110,7 +111,7 @@ mod patch_resource {
 
         let patched_notification = patch_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             created_notification.id.into(),
             &NotificationPatch {
@@ -131,7 +132,7 @@ mod patch_resource {
 
         let task: Box<Task> = get_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "tasks",
             existing_todoist_task.task.id.into(),
         )
@@ -150,7 +151,8 @@ mod patch_resource {
     ) {
         let app = authenticated_app.await;
         create_and_mock_integration_connection(
-            &app,
+            &app.app,
+            app.user.id,
             &settings.integrations.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
@@ -158,14 +160,14 @@ mod patch_resource {
         )
         .await;
 
-        let github_mark_thread_as_read_mock = app.github_mock_server.mock(|when, then| {
+        let github_mark_thread_as_read_mock = app.app.github_mock_server.mock(|when, then| {
             when.method(PATCH)
                 .path("/notifications/threads/1234")
                 .header("accept", "application/vnd.github.v3+json")
                 .header("authorization", "Bearer github_test_access_token");
             then.status(github_status_code);
         });
-        let github_unsubscribed_mock = app.github_mock_server.mock(|when, then| {
+        let github_unsubscribed_mock = app.app.github_mock_server.mock(|when, then| {
             when.method(PUT)
                 .path("/notifications/threads/1234/subscription")
                 .header("accept", "application/vnd.github.v3+json")
@@ -190,7 +192,7 @@ mod patch_resource {
         });
         let created_notification: Box<Notification> = create_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             expected_notification.clone(),
         )
@@ -200,7 +202,7 @@ mod patch_resource {
 
         let patched_notification = patch_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             created_notification.id.into(),
             &NotificationPatch {
@@ -231,7 +233,8 @@ mod patch_resource {
     ) {
         let app = authenticated_app.await;
         create_and_mock_integration_connection(
-            &app,
+            &app.app,
+            app.user.id,
             &settings.integrations.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
@@ -239,7 +242,7 @@ mod patch_resource {
         )
         .await;
 
-        let github_mark_thread_as_read_mock = app.github_mock_server.mock(|when, then| {
+        let github_mark_thread_as_read_mock = app.app.github_mock_server.mock(|when, then| {
             when.method(PATCH)
                 .path("/notifications/threads/1234")
                 .header("accept", "application/vnd.github.v3+json")
@@ -262,7 +265,7 @@ mod patch_resource {
         });
         let created_notification: Box<Notification> = create_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             expected_notification.clone(),
         )
@@ -272,7 +275,7 @@ mod patch_resource {
 
         let response = patch_resource_response(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             created_notification.id.into(),
             &NotificationPatch {
@@ -293,7 +296,7 @@ mod patch_resource {
 
         let notification: Box<Notification> = get_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             created_notification.id.into(),
         )
@@ -325,7 +328,7 @@ mod patch_resource {
         let snoozed_time = Utc.with_ymd_and_hms(2022, 1, 1, 1, 2, 3).unwrap();
         let created_notification: Box<Notification> = create_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             expected_notification.clone(),
         )
@@ -335,7 +338,7 @@ mod patch_resource {
 
         let patched_notification = patch_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             created_notification.id.into(),
             &NotificationPatch {
@@ -361,7 +364,7 @@ mod patch_resource {
         github_notification: Box<GithubNotification>,
     ) {
         let app = authenticated_app.await;
-        let github_api_mock = app.github_mock_server.mock(|when, then| {
+        let github_api_mock = app.app.github_mock_server.mock(|when, then| {
             when.any_request();
             then.status(200);
         });
@@ -382,7 +385,7 @@ mod patch_resource {
         });
         let created_notification: Box<Notification> = create_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             expected_notification.clone(),
         )
@@ -392,7 +395,7 @@ mod patch_resource {
 
         let response = patch_resource_response(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             created_notification.id.into(),
             &NotificationPatch {
@@ -414,7 +417,7 @@ mod patch_resource {
         github_notification: Box<GithubNotification>,
     ) {
         let app = authenticated_app.await;
-        let github_api_mock = app.github_mock_server.mock(|when, then| {
+        let github_api_mock = app.app.github_mock_server.mock(|when, then| {
             when.any_request();
             then.status(200);
         });
@@ -434,7 +437,7 @@ mod patch_resource {
         });
         let created_notification: Box<Notification> = create_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             expected_notification.clone(),
         )
@@ -444,7 +447,7 @@ mod patch_resource {
 
         let response = patch_resource_response(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             created_notification.id.into(),
             &NotificationPatch {
@@ -461,7 +464,7 @@ mod patch_resource {
     #[tokio::test]
     async fn test_patch_unknown_notification(#[future] authenticated_app: AuthenticatedApp) {
         let app = authenticated_app.await;
-        let github_api_mock = app.github_mock_server.mock(|when, then| {
+        let github_api_mock = app.app.github_mock_server.mock(|when, then| {
             when.any_request();
             then.status(200);
         });
@@ -469,7 +472,7 @@ mod patch_resource {
 
         let response = patch_resource_response(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             unknown_notification_id,
             &NotificationPatch {

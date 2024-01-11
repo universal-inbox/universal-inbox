@@ -44,6 +44,9 @@ use crate::helpers::{
     rest::{create_resource, get_resource},
     settings,
     task::todoist::{create_task_from_todoist_item, todoist_item},
+    tested_app_with_local_auth,
+    user::create_user_and_login,
+    TestedApp,
 };
 
 #[rstest]
@@ -60,7 +63,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     let app = authenticated_app.await;
     let existing_todoist_task = create_task_from_todoist_item(
         &app.client,
-        &app.api_address,
+        &app.app.api_address,
         &todoist_item,
         "Project2".to_string(),
         app.user.id,
@@ -68,7 +71,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     .await;
     let existing_notification: Box<Notification> = create_resource(
         &app.client,
-        &app.api_address,
+        &app.app.api_address,
         "notifications",
         Box::new(Notification {
             id: Uuid::new_v4().into(),
@@ -87,7 +90,8 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     )
     .await;
     create_and_mock_integration_connection(
-        &app,
+        &app.app,
+        app.user.id,
         &settings.integrations.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         &settings,
@@ -101,14 +105,17 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         .try_into()
         .unwrap();
 
-    let github_notifications_mock =
-        mock_github_notifications_service(&app.github_mock_server, "1", &sync_github_notifications);
+    let github_notifications_mock = mock_github_notifications_service(
+        &app.app.github_mock_server,
+        "1",
+        &sync_github_notifications,
+    );
     let empty_result = Vec::<GithubNotification>::new();
     let github_notifications_mock2 =
-        mock_github_notifications_service(&app.github_mock_server, "2", &empty_result);
+        mock_github_notifications_service(&app.app.github_mock_server, "2", &empty_result);
 
     let github_pull_request_123_query_mock = mock_github_pull_request_query(
-        &app.github_mock_server,
+        &app.app.github_mock_server,
         "octokit".to_string(),
         "octokit.rb".to_string(),
         123,
@@ -117,7 +124,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
 
     let notifications: Vec<Notification> = sync_notifications(
         &app.client,
-        &app.api_address,
+        &app.app.api_address,
         Some(NotificationSourceKind::Github),
         false,
     )
@@ -136,7 +143,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
 
     let updated_notification: Box<Notification> = get_resource(
         &app.client,
-        &app.api_address,
+        &app.app.api_address,
         "notifications",
         existing_notification.id.into(),
     )
@@ -174,29 +181,70 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
 #[tokio::test]
 async fn test_sync_notifications_should_mark_deleted_notification_without_subscription(
     settings: Settings,
-    #[future] authenticated_app: AuthenticatedApp,
+    #[future] tested_app_with_local_auth: TestedApp,
     // Vec[GithubNotification { source_id: "123", ... }, GithubNotification { source_id: "456", ... } ]
     sync_github_notifications: Vec<GithubNotification>,
     nango_github_connection: Box<NangoConnection>,
 ) {
-    let app = authenticated_app.await;
-    for github_notification in sync_github_notifications.iter() {
-        create_notification_from_github_notification(
-            &app.client,
-            &app.api_address,
-            github_notification,
-            app.user.id,
-        )
-        .await;
-    }
-    // to be deleted during sync
-    let existing_notification: Box<Notification> = create_resource(
-        &app.client,
+    let app = tested_app_with_local_auth.await;
+
+    let (other_client, other_user) = create_user_and_login(
+        &app,
+        "Jane",
+        "Doe",
+        "jane@doe.net".parse().unwrap(),
+        "password",
+    )
+    .await;
+
+    let other_user_existing_notification: Box<Notification> = create_resource(
+        &other_client,
         &app.api_address,
         "notifications",
         Box::new(Notification {
             id: Uuid::new_v4().into(),
-            user_id: app.user.id,
+            user_id: other_user.id,
+            title: "Greetings other".to_string(),
+            status: NotificationStatus::Unread,
+            source_id: "10798".to_string(),
+            source_html_url: Some(sync_github_notifications[1].get_html_url_from_metadata()),
+            metadata: NotificationMetadata::Github(Box::new(sync_github_notifications[1].clone())), // reusing github notification but not useful
+            updated_at: Utc.with_ymd_and_hms(2014, 11, 6, 0, 0, 0).unwrap(),
+            last_read_at: None,
+            snoozed_until: None,
+            details: None,
+            task_id: None,
+        }),
+    )
+    .await;
+
+    let (client, user) = create_user_and_login(
+        &app,
+        "John",
+        "Doe",
+        "john@doe.net".parse().unwrap(),
+        "password",
+    )
+    .await;
+
+    for github_notification in sync_github_notifications.iter() {
+        create_notification_from_github_notification(
+            &client,
+            &app.api_address,
+            github_notification,
+            user.id,
+        )
+        .await;
+    }
+
+    // to be deleted during sync
+    let existing_notification: Box<Notification> = create_resource(
+        &client,
+        &app.api_address,
+        "notifications",
+        Box::new(Notification {
+            id: Uuid::new_v4().into(),
+            user_id: user.id,
             title: "Greetings 3".to_string(),
             status: NotificationStatus::Unread,
             source_id: "789".to_string(),
@@ -212,6 +260,7 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
     .await;
     create_and_mock_integration_connection(
         &app,
+        user.id,
         &settings.integrations.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         &settings,
@@ -226,7 +275,7 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
         mock_github_notifications_service(&app.github_mock_server, "2", &empty_result);
 
     let notifications: Vec<Notification> = sync_notifications(
-        &app.client,
+        &client,
         &app.api_address,
         Some(NotificationSourceKind::Github),
         false,
@@ -234,17 +283,12 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
     .await;
 
     assert_eq!(notifications.len(), sync_github_notifications.len());
-    assert_sync_notifications(
-        &notifications,
-        &sync_github_notifications,
-        app.user.id,
-        None,
-    );
+    assert_sync_notifications(&notifications, &sync_github_notifications, user.id, None);
     github_notifications_mock.assert();
     github_notifications_mock2.assert();
 
     let deleted_notification: Box<Notification> = get_resource(
-        &app.client,
+        &client,
         &app.api_address,
         "notifications",
         existing_notification.id.into(),
@@ -252,6 +296,19 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
     .await;
     assert_eq!(deleted_notification.id, existing_notification.id);
     assert_eq!(deleted_notification.status, NotificationStatus::Deleted);
+
+    let refreshed_other_user_existing_notification: Box<Notification> = get_resource(
+        &other_client,
+        &app.api_address,
+        "notifications",
+        other_user_existing_notification.id.into(),
+    )
+    .await;
+    // Make sure other users notifications are not touched
+    assert_eq!(
+        refreshed_other_user_existing_notification.status,
+        NotificationStatus::Unread
+    );
 }
 
 #[rstest]
@@ -267,7 +324,7 @@ async fn test_sync_all_notifications_asynchronously(
     let app = authenticated_app.await;
     let _existing_notification: Box<Notification> = create_resource(
         &app.client,
-        &app.api_address,
+        &app.app.api_address,
         "notifications",
         Box::new(Notification {
             id: Uuid::new_v4().into(),
@@ -286,7 +343,8 @@ async fn test_sync_all_notifications_asynchronously(
     )
     .await;
     create_and_mock_integration_connection(
-        &app,
+        &app.app,
+        app.user.id,
         &settings.integrations.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         &settings,
@@ -294,13 +352,16 @@ async fn test_sync_all_notifications_asynchronously(
     )
     .await;
 
-    let mut github_notifications_mock =
-        mock_github_notifications_service(&app.github_mock_server, "1", &sync_github_notifications);
+    let mut github_notifications_mock = mock_github_notifications_service(
+        &app.app.github_mock_server,
+        "1",
+        &sync_github_notifications,
+    );
     let empty_result = Vec::<GithubNotification>::new();
     let mut github_notifications_mock2 =
-        mock_github_notifications_service(&app.github_mock_server, "2", &empty_result);
+        mock_github_notifications_service(&app.app.github_mock_server, "2", &empty_result);
     let mut github_pull_request_123_query_mock = mock_github_pull_request_query(
-        &app.github_mock_server,
+        &app.app.github_mock_server,
         "octokit".to_string(),
         "octokit.rb".to_string(),
         123,
@@ -310,7 +371,7 @@ async fn test_sync_all_notifications_asynchronously(
     let unauthenticated_client = reqwest::Client::new();
     let response = sync_notifications_response(
         &unauthenticated_client,
-        &app.api_address,
+        &app.app.api_address,
         Some(NotificationSourceKind::Github),
         true, // asynchronously
     )
@@ -320,7 +381,7 @@ async fn test_sync_all_notifications_asynchronously(
 
     let result = list_notifications(
         &app.client,
-        &app.api_address,
+        &app.app.api_address,
         vec![NotificationStatus::Read],
         false,
         None,
@@ -334,7 +395,7 @@ async fn test_sync_all_notifications_asynchronously(
     let synchronized = loop {
         let result = list_notifications(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             vec![NotificationStatus::Read],
             false,
             None,
@@ -365,7 +426,7 @@ async fn test_sync_all_notifications_asynchronously(
     github_pull_request_123_query_mock.delete();
 
     // Triggering a new sync should not actually sync again
-    let github_notifications_mock = app.github_mock_server.mock(|when, then| {
+    let github_notifications_mock = app.app.github_mock_server.mock(|when, then| {
         when.any_request();
         then.status(200);
     });
@@ -373,7 +434,7 @@ async fn test_sync_all_notifications_asynchronously(
     let unauthenticated_client = reqwest::Client::new();
     let response = sync_notifications_response(
         &unauthenticated_client,
-        &app.api_address,
+        &app.app.api_address,
         Some(NotificationSourceKind::Github),
         true, // asynchronously
     )
@@ -385,7 +446,7 @@ async fn test_sync_all_notifications_asynchronously(
 
     let result = list_notifications(
         &app.client,
-        &app.api_address,
+        &app.app.api_address,
         vec![NotificationStatus::Read],
         false,
         None,
@@ -405,21 +466,22 @@ async fn test_sync_all_notifications_with_no_validated_integration_connections(
 ) {
     let app = authenticated_app.await;
     create_integration_connection(
-        &app,
+        &app.app,
+        app.user.id,
         IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         IntegrationConnectionStatus::Created,
         None,
     )
     .await;
 
-    let github_notifications_mock = app.github_mock_server.mock(|when, then| {
+    let github_notifications_mock = app.app.github_mock_server.mock(|when, then| {
         when.any_request();
         then.status(200);
     });
 
     let response = sync_notifications_response(
         &app.client,
-        &app.api_address,
+        &app.app.api_address,
         Some(NotificationSourceKind::Github),
         false, // synchronously
     )
@@ -438,7 +500,8 @@ async fn test_sync_all_notifications_with_synchronization_disabled(
 ) {
     let app = authenticated_app.await;
     create_and_mock_integration_connection(
-        &app,
+        &app.app,
+        app.user.id,
         &settings.integrations.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Github(GithubConfig::disabled()),
         &settings,
@@ -446,14 +509,14 @@ async fn test_sync_all_notifications_with_synchronization_disabled(
     )
     .await;
 
-    let github_notifications_mock = app.github_mock_server.mock(|when, then| {
+    let github_notifications_mock = app.app.github_mock_server.mock(|when, then| {
         when.any_request();
         then.status(200);
     });
 
     let response = sync_notifications_response(
         &app.client,
-        &app.api_address,
+        &app.app.api_address,
         Some(NotificationSourceKind::Github),
         false, // synchronously
     )
@@ -472,7 +535,8 @@ async fn test_sync_all_notifications_asynchronously_in_error(
 ) {
     let app = authenticated_app.await;
     create_and_mock_integration_connection(
-        &app,
+        &app.app,
+        app.user.id,
         &settings.integrations.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         &settings,
@@ -480,7 +544,7 @@ async fn test_sync_all_notifications_asynchronously_in_error(
     )
     .await;
 
-    let github_notifications_mock = app.github_mock_server.mock(|when, then| {
+    let github_notifications_mock = app.app.github_mock_server.mock(|when, then| {
         when.any_request();
         then.status(500);
     });
@@ -488,7 +552,7 @@ async fn test_sync_all_notifications_asynchronously_in_error(
     let unauthenticated_client = reqwest::Client::new();
     let response = sync_notifications_response(
         &unauthenticated_client,
-        &app.api_address,
+        &app.app.api_address,
         Some(NotificationSourceKind::Github),
         true, // asynchronously
     )
@@ -500,7 +564,7 @@ async fn test_sync_all_notifications_asynchronously_in_error(
 
     let result = list_notifications(
         &app.client,
-        &app.api_address,
+        &app.app.api_address,
         vec![NotificationStatus::Read],
         false,
         None,
@@ -548,7 +612,8 @@ async fn test_sync_discussion_notification_with_details(
 
     let app = authenticated_app.await;
     create_and_mock_integration_connection(
-        &app,
+        &app.app,
+        app.user.id,
         &settings.integrations.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         &settings,
@@ -558,20 +623,20 @@ async fn test_sync_discussion_notification_with_details(
 
     let github_notifications_response = vec![*github_notification];
     let github_notifications_mock = mock_github_notifications_service(
-        &app.github_mock_server,
+        &app.app.github_mock_server,
         "1",
         &github_notifications_response,
     );
 
     let github_discussions_search_query_mock = mock_github_discussions_search_query(
-        &app.github_mock_server,
+        &app.app.github_mock_server,
         "repo:octocat/Hello-World \"test discussion\"",
         &github_discussion_123_response,
     );
 
     let notifications: Vec<Notification> = sync_notifications(
         &app.client,
-        &app.api_address,
+        &app.app.api_address,
         Some(NotificationSourceKind::Github),
         false,
     )
@@ -583,7 +648,7 @@ async fn test_sync_discussion_notification_with_details(
 
     let notifications = list_notifications(
         &app.client,
-        &app.api_address,
+        &app.app.api_address,
         vec![NotificationStatus::Unread],
         false,
         None,
@@ -616,7 +681,8 @@ async fn test_sync_discussion_notification_with_error(
 
     let app = authenticated_app.await;
     create_and_mock_integration_connection(
-        &app,
+        &app.app,
+        app.user.id,
         &settings.integrations.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         &settings,
@@ -626,7 +692,7 @@ async fn test_sync_discussion_notification_with_error(
 
     let github_notifications_response = vec![*github_notification];
     let github_notifications_mock = mock_github_notifications_service(
-        &app.github_mock_server,
+        &app.app.github_mock_server,
         "1",
         &github_notifications_response,
     );
@@ -642,14 +708,14 @@ async fn test_sync_discussion_notification_with_error(
         extensions: None,
     };
     let github_discussions_search_query_mock = mock_github_discussions_search_query(
-        &app.github_mock_server,
+        &app.app.github_mock_server,
         "repo:octocat/Hello-World \"test discussion\"",
         &error_response,
     );
 
     let response = sync_notifications_response(
         &app.client,
-        &app.api_address,
+        &app.app.api_address,
         Some(NotificationSourceKind::Github),
         false,
     )
@@ -661,7 +727,7 @@ async fn test_sync_discussion_notification_with_error(
 
     let notifications = list_notifications(
         &app.client,
-        &app.api_address,
+        &app.app.api_address,
         vec![NotificationStatus::Unread],
         false,
         None,

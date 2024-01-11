@@ -57,6 +57,7 @@ pub trait TaskRepository {
         active_source_task_ids: Vec<String>,
         kind: TaskSourceKind,
         status: TaskStatus,
+        user_id: UserId,
     ) -> Result<Vec<Task>, UniversalInboxError>;
     async fn create_or_update_task<'a>(
         &self,
@@ -349,6 +350,7 @@ impl TaskRepository for Repository {
         active_source_task_ids: Vec<String>,
         kind: TaskSourceKind,
         status: TaskStatus,
+        user_id: UserId,
     ) -> Result<Vec<Task>, UniversalInboxError> {
         let completed_at = if status == TaskStatus::Done {
             Some(Utc::now().naive_utc())
@@ -368,6 +370,7 @@ impl TaskRepository for Repository {
                   NOT source_id = ANY($3)
                   AND kind::TEXT = $4
                   AND (status = 'Active')
+                  AND user_id = $5
                 RETURNING
                   id,
                   source_id,
@@ -390,6 +393,7 @@ impl TaskRepository for Repository {
             completed_at,
             &active_source_task_ids[..],
             kind.to_string(),
+            user_id.0,
         )
         .fetch_all(&mut **executor)
         .await

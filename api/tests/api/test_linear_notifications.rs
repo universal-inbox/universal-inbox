@@ -52,7 +52,8 @@ mod patch_resource {
             .unwrap();
         let linear_notification = linear_notifications[2].clone(); // Get an IssueNotification
         create_and_mock_integration_connection(
-            &app,
+            &app.app,
+            app.user.id,
             &settings.integrations.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Linear(LinearConfig::enabled()),
             &settings,
@@ -62,7 +63,7 @@ mod patch_resource {
 
         let expected_notification = Box::new(linear_notification.into_notification(app.user.id));
         let linear_archive_notification_mock = mock_linear_archive_notification_query(
-            &app.linear_mock_server,
+            &app.app.linear_mock_server,
             expected_notification.source_id.clone(),
             true,
             None,
@@ -70,7 +71,7 @@ mod patch_resource {
 
         let existing_todoist_task = create_task_from_todoist_item(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             &todoist_item,
             "Project2".to_string(),
             app.user.id,
@@ -78,7 +79,7 @@ mod patch_resource {
         .await;
         let created_notification: Box<Notification> = create_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             expected_notification.clone(),
         )
@@ -88,7 +89,7 @@ mod patch_resource {
 
         let patched_notification = patch_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             created_notification.id.into(),
             &NotificationPatch {
@@ -109,7 +110,7 @@ mod patch_resource {
 
         let task: Box<Task> = get_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "tasks",
             existing_todoist_task.task.id.into(),
         )
@@ -133,7 +134,8 @@ mod patch_resource {
             .unwrap();
         let linear_notification = linear_notifications[2].clone(); // Get an IssueNotification
         create_and_mock_integration_connection(
-            &app,
+            &app.app,
+            app.user.id,
             &settings.integrations.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Linear(LinearConfig::enabled()),
             &settings,
@@ -143,7 +145,7 @@ mod patch_resource {
 
         let expected_notification = Box::new(linear_notification.into_notification(app.user.id));
         let linear_archive_notification_mock = mock_linear_archive_notification_query(
-            &app.linear_mock_server,
+            &app.app.linear_mock_server,
             expected_notification.source_id.clone(),
             true,
             Some(vec![Error {
@@ -156,7 +158,7 @@ mod patch_resource {
 
         let created_notification: Box<Notification> = create_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             expected_notification.clone(),
         )
@@ -166,7 +168,7 @@ mod patch_resource {
 
         let patch_response = patch_resource_response(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             created_notification.id.into(),
             &NotificationPatch {
@@ -201,7 +203,8 @@ mod patch_resource {
             .unwrap();
         let linear_notification = linear_notifications[2].clone(); // Get an IssueNotification
         create_and_mock_integration_connection(
-            &app,
+            &app.app,
+            app.user.id,
             &settings.integrations.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Linear(LinearConfig::enabled()),
             &settings,
@@ -211,7 +214,7 @@ mod patch_resource {
 
         let expected_notification = Box::new(linear_notification.into_notification(app.user.id));
         let linear_archive_notification_mock = mock_linear_archive_notification_query(
-            &app.linear_mock_server,
+            &app.app.linear_mock_server,
             expected_notification.source_id.clone(),
             false,
             None,
@@ -219,7 +222,7 @@ mod patch_resource {
 
         let created_notification: Box<Notification> = create_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             expected_notification.clone(),
         )
@@ -229,7 +232,7 @@ mod patch_resource {
 
         let patch_response = patch_resource_response(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             created_notification.id.into(),
             &NotificationPatch {
@@ -264,7 +267,8 @@ mod patch_resource {
             .unwrap();
         let linear_notification = linear_notifications[2].clone(); // Get an IssueNotification
         create_and_mock_integration_connection(
-            &app,
+            &app.app,
+            app.user.id,
             &settings.integrations.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Linear(LinearConfig::enabled()),
             &settings,
@@ -276,14 +280,14 @@ mod patch_resource {
 
         let linear_query_notification_subscribers_mock =
             mock_linear_issue_notification_subscribers_query(
-                &app.linear_mock_server,
+                &app.app.linear_mock_server,
                 expected_notification.source_id.clone(),
                 "user_id".to_string(),
                 vec!["user_id".to_string(), "other_user_id".to_string()],
             );
 
         let linear_update_issue_subscribers_mock = mock_linear_update_issue_subscribers_query(
-            &app.linear_mock_server,
+            &app.app.linear_mock_server,
             expected_notification.source_id.clone(),
             vec!["other_user_id".to_string()],
             true,
@@ -291,7 +295,7 @@ mod patch_resource {
         );
 
         let linear_archive_notification_mock = mock_linear_archive_notification_query(
-            &app.linear_mock_server,
+            &app.app.linear_mock_server,
             expected_notification.source_id.clone(),
             true,
             None,
@@ -299,7 +303,7 @@ mod patch_resource {
 
         let created_notification: Box<Notification> = create_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             expected_notification.clone(),
         )
@@ -309,7 +313,7 @@ mod patch_resource {
 
         let patched_notification = patch_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             created_notification.id.into(),
             &NotificationPatch {
@@ -349,7 +353,8 @@ mod patch_resource {
             .unwrap();
         let linear_notification = linear_notifications[0].clone(); // Get a ProjectNotification
         create_and_mock_integration_connection(
-            &app,
+            &app.app,
+            app.user.id,
             &settings.integrations.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Linear(LinearConfig::enabled()),
             &settings,
@@ -361,12 +366,12 @@ mod patch_resource {
 
         let linear_query_notification_subscribers_mock =
             mock_linear_project_notification_subscribers_query(
-                &app.linear_mock_server,
+                &app.app.linear_mock_server,
                 expected_notification.source_id.clone(),
             );
 
         let linear_archive_notification_mock = mock_linear_archive_notification_query(
-            &app.linear_mock_server,
+            &app.app.linear_mock_server,
             expected_notification.source_id.clone(),
             true,
             None,
@@ -374,7 +379,7 @@ mod patch_resource {
 
         let created_notification: Box<Notification> = create_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             expected_notification.clone(),
         )
@@ -384,7 +389,7 @@ mod patch_resource {
 
         let patched_notification = patch_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             created_notification.id.into(),
             &NotificationPatch {
@@ -422,7 +427,8 @@ mod patch_resource {
             .unwrap();
         let linear_notification = linear_notifications[0].clone(); // Get a ProjectNotification
         create_and_mock_integration_connection(
-            &app,
+            &app.app,
+            app.user.id,
             &settings.integrations.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Linear(LinearConfig::enabled()),
             &settings,
@@ -434,14 +440,14 @@ mod patch_resource {
         let snoozed_time = Utc.with_ymd_and_hms(2022, 1, 1, 1, 2, 3).unwrap();
         let linear_update_notification_snoozed_until_at_mock =
             mock_linear_update_notification_snoozed_until_at_query(
-                &app.linear_mock_server,
+                &app.app.linear_mock_server,
                 expected_notification.source_id.clone(),
                 snoozed_time,
             );
 
         let created_notification: Box<Notification> = create_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             expected_notification.clone(),
         )
@@ -451,7 +457,7 @@ mod patch_resource {
 
         let patched_notification = patch_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             created_notification.id.into(),
             &NotificationPatch {

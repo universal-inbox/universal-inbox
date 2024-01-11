@@ -56,6 +56,7 @@ pub trait NotificationRepository {
         active_source_notification_ids: Vec<String>,
         kind: NotificationSourceKind,
         status: NotificationStatus,
+        user_id: UserId,
     ) -> Result<Vec<Notification>, UniversalInboxError>;
     async fn create_or_update_notification<'a>(
         &self,
@@ -350,6 +351,7 @@ impl NotificationRepository for Repository {
         active_source_notification_ids: Vec<String>,
         kind: NotificationSourceKind,
         status: NotificationStatus,
+        user_id: UserId,
     ) -> Result<Vec<Notification>, UniversalInboxError> {
         let records = sqlx::query_as!(
             NotificationRow,
@@ -364,6 +366,7 @@ impl NotificationRepository for Repository {
                   NOT notification.source_id = ANY($2)
                   AND notification.kind = $3
                   AND (notification.status::TEXT = 'Read' OR notification.status::TEXT = 'Unread')
+                  AND notification.user_id = $4
                 RETURNING
                   notification.id,
                   notification.title,
@@ -381,6 +384,7 @@ impl NotificationRepository for Repository {
             status.to_string() as _,
             &active_source_notification_ids[..],
             kind.to_string(),
+            user_id.0,
         )
         .fetch_all(&mut **executor)
         .await

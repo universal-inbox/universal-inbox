@@ -46,7 +46,8 @@ mod patch_resource {
         let google_mail_config = GoogleMailConfig::enabled();
         let synced_label_id = google_mail_config.synced_label.id.clone();
         create_and_mock_integration_connection(
-            &app,
+            &app.app,
+            app.user.id,
             &settings.integrations.oauth2.nango_secret_key,
             IntegrationConnectionConfig::GoogleMail(google_mail_config.clone()),
             &settings,
@@ -60,7 +61,7 @@ mod patch_resource {
             &synced_label_id,
         ));
         let google_mail_thread_modify_mock = mock_google_mail_thread_modify_service(
-            &app.google_mail_mock_server,
+            &app.app.google_mail_mock_server,
             &expected_notification.source_id,
             vec![],
             vec![GOOGLE_MAIL_INBOX_LABEL, &synced_label_id],
@@ -68,7 +69,7 @@ mod patch_resource {
 
         let existing_todoist_task = create_task_from_todoist_item(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             &todoist_item,
             "Project2".to_string(),
             app.user.id,
@@ -76,7 +77,7 @@ mod patch_resource {
         .await;
         let created_notification: Box<Notification> = create_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             expected_notification.clone(),
         )
@@ -86,7 +87,7 @@ mod patch_resource {
 
         let patched_notification = patch_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             created_notification.id.into(),
             &NotificationPatch {
@@ -107,7 +108,7 @@ mod patch_resource {
 
         let task: Box<Task> = get_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "tasks",
             existing_todoist_task.task.id.into(),
         )
@@ -127,7 +128,8 @@ mod patch_resource {
         let google_mail_config = GoogleMailConfig::enabled();
         let synced_label_id = google_mail_config.synced_label.id.clone();
         create_and_mock_integration_connection(
-            &app,
+            &app.app,
+            app.user.id,
             &settings.integrations.oauth2.nango_secret_key,
             IntegrationConnectionConfig::GoogleMail(google_mail_config.clone()),
             &settings,
@@ -140,7 +142,7 @@ mod patch_resource {
             None,
             &synced_label_id,
         ));
-        let google_mail_thread_modify_mock = app.google_mail_mock_server.mock(|when, then| {
+        let google_mail_thread_modify_mock = app.app.google_mail_mock_server.mock(|when, then| {
             when.method(POST)
                 .path(format!(
                     "/users/me/threads/{}/modify",
@@ -159,7 +161,7 @@ mod patch_resource {
 
         let created_notification: Box<Notification> = create_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             expected_notification.clone(),
         )
@@ -169,7 +171,7 @@ mod patch_resource {
 
         let patch_response = patch_resource_response(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             created_notification.id.into(),
             &NotificationPatch {
@@ -200,7 +202,8 @@ mod patch_resource {
         let google_mail_config = GoogleMailConfig::enabled();
         let synced_label_id = google_mail_config.synced_label.id.clone();
         create_and_mock_integration_connection(
-            &app,
+            &app.app,
+            app.user.id,
             &settings.integrations.oauth2.nango_secret_key,
             IntegrationConnectionConfig::GoogleMail(google_mail_config.clone()),
             &settings,
@@ -216,7 +219,7 @@ mod patch_resource {
         // Unsubscribed notifications are only archived on Google Mail.
         // Universal Inbox will ignore new messages and archive them during the next sync
         let google_mail_thread_modify_mock = mock_google_mail_thread_modify_service(
-            &app.google_mail_mock_server,
+            &app.app.google_mail_mock_server,
             &expected_notification.source_id,
             vec![],
             vec![GOOGLE_MAIL_INBOX_LABEL, &synced_label_id],
@@ -224,7 +227,7 @@ mod patch_resource {
 
         let created_notification: Box<Notification> = create_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             expected_notification.clone(),
         )
@@ -234,7 +237,7 @@ mod patch_resource {
 
         let patched_notification = patch_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             created_notification.id.into(),
             &NotificationPatch {
@@ -272,7 +275,7 @@ mod patch_resource {
         let snoozed_time = Utc.with_ymd_and_hms(2022, 1, 1, 1, 2, 3).unwrap();
         let created_notification: Box<Notification> = create_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             expected_notification.clone(),
         )
@@ -282,7 +285,7 @@ mod patch_resource {
 
         let patched_notification = patch_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             created_notification.id.into(),
             &NotificationPatch {
