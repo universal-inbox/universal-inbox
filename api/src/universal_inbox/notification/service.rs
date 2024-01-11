@@ -404,6 +404,7 @@ impl NotificationService {
                     source_notification_ids,
                     notification_source_kind,
                     NotificationStatus::Deleted,
+                    user_id,
                 )
                 .await?;
             info!(

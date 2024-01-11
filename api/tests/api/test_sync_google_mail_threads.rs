@@ -86,7 +86,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     };
     let existing_todoist_task = create_task_from_todoist_item(
         &app.client,
-        &app.api_address,
+        &app.app.api_address,
         &todoist_item,
         "Project2".to_string(),
         app.user.id,
@@ -94,7 +94,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     .await;
     let existing_notification: Box<Notification> = create_resource(
         &app.client,
-        &app.api_address,
+        &app.app.api_address,
         "notifications",
         Box::new(Notification {
             id: Uuid::new_v4().into(),
@@ -116,7 +116,8 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     .await;
     let google_mail_config = GoogleMailConfig::enabled();
     let integration_connection = create_and_mock_integration_connection(
-        &app,
+        &app.app,
+        app.user.id,
         &settings.integrations.oauth2.nango_secret_key,
         IntegrationConnectionConfig::GoogleMail(google_mail_config.clone()),
         &settings,
@@ -125,15 +126,15 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     .await;
 
     let google_mail_get_user_profile_mock = mock_google_mail_get_user_profile_service(
-        &app.google_mail_mock_server,
+        &app.app.google_mail_mock_server,
         &google_mail_user_profile,
     );
     let google_mail_labels_list_mock = mock_google_mail_labels_list_service(
-        &app.google_mail_mock_server,
+        &app.app.google_mail_mock_server,
         &google_mail_labels_list,
     );
     let google_mail_threads_list_mock = mock_google_mail_threads_list_service(
-        &app.google_mail_mock_server,
+        &app.app.google_mail_mock_server,
         None,
         settings.integrations.google_mail.page_size,
         Some(vec![google_mail_config.synced_label.id.clone()]),
@@ -145,7 +146,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         next_page_token: None,
     };
     let google_mail_threads_list_mock2 = mock_google_mail_threads_list_service(
-        &app.google_mail_mock_server,
+        &app.app.google_mail_mock_server,
         Some("next_token"),
         settings.integrations.google_mail.page_size,
         Some(vec![google_mail_config.synced_label.id.clone()]),
@@ -153,20 +154,20 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     );
     let raw_google_mail_thread_get_123 = google_mail_thread_get_123.clone().into();
     let google_mail_thread_get_123_mock = mock_google_mail_thread_get_service(
-        &app.google_mail_mock_server,
+        &app.app.google_mail_mock_server,
         "123",
         &raw_google_mail_thread_get_123,
     );
     let raw_google_mail_thread_get_456 = google_mail_thread_get_456.clone().into();
     let google_mail_thread_get_456_mock = mock_google_mail_thread_get_service(
-        &app.google_mail_mock_server,
+        &app.app.google_mail_mock_server,
         "456",
         &raw_google_mail_thread_get_456,
     );
 
     let notifications: Vec<Notification> = sync_notifications(
         &app.client,
-        &app.api_address,
+        &app.app.api_address,
         Some(NotificationSourceKind::GoogleMail),
         false,
     )
@@ -188,7 +189,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
 
     let updated_notification: Box<Notification> = get_resource(
         &app.client,
-        &app.api_address,
+        &app.app.api_address,
         "notifications",
         existing_notification.id.into(),
     )
@@ -306,7 +307,7 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
 
     let existing_notification: Box<Notification> = create_resource(
         &app.client,
-        &app.api_address,
+        &app.app.api_address,
         "notifications",
         Box::new(Notification {
             id: Uuid::new_v4().into(),
@@ -338,7 +339,8 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
     };
 
     create_and_mock_integration_connection(
-        &app,
+        &app.app,
+        app.user.id,
         &settings.integrations.oauth2.nango_secret_key,
         IntegrationConnectionConfig::GoogleMail(google_mail_config.clone()),
         &settings,
@@ -347,15 +349,15 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
     .await;
 
     let google_mail_get_user_profile_mock = mock_google_mail_get_user_profile_service(
-        &app.google_mail_mock_server,
+        &app.app.google_mail_mock_server,
         &google_mail_user_profile,
     );
     let google_mail_labels_list_mock = mock_google_mail_labels_list_service(
-        &app.google_mail_mock_server,
+        &app.app.google_mail_mock_server,
         &google_mail_labels_list,
     );
     let google_mail_threads_list_mock = mock_google_mail_threads_list_service(
-        &app.google_mail_mock_server,
+        &app.app.google_mail_mock_server,
         None,
         settings.integrations.google_mail.page_size,
         Some(vec![synced_label_id.clone()]),
@@ -363,14 +365,14 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
     );
     let raw_google_mail_thread_get_456 = google_mail_thread_get_456.clone().into();
     let google_mail_thread_get_456_mock = mock_google_mail_thread_get_service(
-        &app.google_mail_mock_server,
+        &app.app.google_mail_mock_server,
         "456",
         &raw_google_mail_thread_get_456,
     );
     let google_mail_thread_modify_mock =
         (expected_notification_status_after_sync == NotificationStatus::Unsubscribed).then(|| {
             mock_google_mail_thread_modify_service(
-                &app.google_mail_mock_server,
+                &app.app.google_mail_mock_server,
                 &google_mail_thread_get_456.id,
                 vec![],
                 vec![GOOGLE_MAIL_INBOX_LABEL, &synced_label_id],
@@ -379,7 +381,7 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
 
     let notifications: Vec<Notification> = sync_notifications(
         &app.client,
-        &app.api_address,
+        &app.app.api_address,
         Some(NotificationSourceKind::GoogleMail),
         false,
     )
@@ -396,7 +398,7 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
 
     let updated_notification: Box<Notification> = get_resource(
         &app.client,
-        &app.api_address,
+        &app.app.api_address,
         "notifications",
         existing_notification.id.into(),
     )

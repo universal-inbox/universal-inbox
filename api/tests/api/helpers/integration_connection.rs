@@ -22,7 +22,7 @@ use universal_inbox_api::{
     universal_inbox::UpdateStatus,
 };
 
-use crate::helpers::{auth::AuthenticatedApp, load_json_fixture_file};
+use crate::helpers::{auth::AuthenticatedApp, load_json_fixture_file, TestedApp};
 
 pub async fn list_integration_connections_response(client: &Client, api_address: &str) -> Response {
     client
@@ -103,7 +103,8 @@ pub fn mock_nango_delete_connection_service<'a>(
 }
 
 pub async fn create_integration_connection(
-    app: &AuthenticatedApp,
+    app: &TestedApp,
+    user_id: UserId,
     config: IntegrationConnectionConfig,
     status: IntegrationConnectionStatus,
     context: Option<IntegrationConnectionContext>,
@@ -113,7 +114,7 @@ pub async fn create_integration_connection(
         .repository
         .create_integration_connection(
             &mut transaction,
-            Box::new(IntegrationConnection::new(app.user.id, config)),
+            Box::new(IntegrationConnection::new(user_id, config)),
         )
         .await
         .unwrap();
@@ -125,7 +126,7 @@ pub async fn create_integration_connection(
             integration_connection.id,
             status,
             None,
-            app.user.id,
+            user_id,
         )
         .await
         .unwrap();
@@ -147,8 +148,9 @@ pub async fn get_integration_connection_per_provider(
     synced_before: Option<DateTime<Utc>>,
     with_status: Option<IntegrationConnectionStatus>,
 ) -> Option<IntegrationConnection> {
-    let mut transaction = app.repository.begin().await.unwrap();
+    let mut transaction = app.app.repository.begin().await.unwrap();
     let integration_connection = app
+        .app
         .repository
         .get_integration_connection_per_provider(
             &mut transaction,
@@ -168,8 +170,9 @@ pub async fn get_integration_connection(
     app: &AuthenticatedApp,
     integration_connection_id: IntegrationConnectionId,
 ) -> Option<IntegrationConnection> {
-    let mut transaction = app.repository.begin().await.unwrap();
+    let mut transaction = app.app.repository.begin().await.unwrap();
     let integration_connection = app
+        .app
         .repository
         .get_integration_connection(&mut transaction, integration_connection_id)
         .await
@@ -184,8 +187,9 @@ pub async fn update_integration_connection_context(
     integration_connection_id: IntegrationConnectionId,
     context: IntegrationConnectionContext,
 ) -> UpdateStatus<Box<IntegrationConnection>> {
-    let mut transaction = app.repository.begin().await.unwrap();
+    let mut transaction = app.app.repository.begin().await.unwrap();
     let result = app
+        .app
         .repository
         .update_integration_connection_context(
             &mut transaction,
@@ -200,16 +204,22 @@ pub async fn update_integration_connection_context(
 }
 
 pub async fn create_and_mock_integration_connection(
-    app: &AuthenticatedApp,
+    app: &TestedApp,
+    user_id: UserId,
     nango_secret_key: &str,
     config: IntegrationConnectionConfig,
     settings: &Settings,
     nango_connection: Box<NangoConnection>,
 ) -> Box<IntegrationConnection> {
     let provider_kind = config.kind();
-    let integration_connection =
-        create_integration_connection(app, config, IntegrationConnectionStatus::Validated, None)
-            .await;
+    let integration_connection = create_integration_connection(
+        app,
+        user_id,
+        config,
+        IntegrationConnectionStatus::Validated,
+        None,
+    )
+    .await;
     let config_key = settings
         .integrations
         .oauth2

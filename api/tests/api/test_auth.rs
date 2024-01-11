@@ -132,11 +132,12 @@ mod close_session {
     ) {
         let app = authenticated_app.await;
         let tested_app = tested_app.await;
-        let oidc_issuer_mock_server_url = app.oidc_issuer_mock_server.as_ref().unwrap().base_url();
+        let oidc_issuer_mock_server_url =
+            app.app.oidc_issuer_mock_server.as_ref().unwrap().base_url();
 
         mock_oidc_openid_configuration(&tested_app);
 
-        let response = logout_user_response(&app.client, &app.api_address).await;
+        let response = logout_user_response(&app.client, &app.app.api_address).await;
 
         assert_eq!(response.status(), 200);
         for cookie in response.cookies() {

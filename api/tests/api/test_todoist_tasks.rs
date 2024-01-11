@@ -64,7 +64,7 @@ mod patch_task {
         let app = authenticated_app.await;
         let existing_todoist_task_creation = create_task_from_todoist_item(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             &todoist_item,
             "Inbox".to_string(),
             app.user.id,
@@ -74,7 +74,8 @@ mod patch_task {
         assert_eq!(existing_todoist_task.status, TaskStatus::Active);
         let existing_todoist_notification = existing_todoist_task_creation.notification.unwrap();
         create_and_mock_integration_connection(
-            &app,
+            &app.app,
+            app.user.id,
             &settings.integrations.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
@@ -83,13 +84,13 @@ mod patch_task {
         .await;
 
         let todoist_mock = mock_todoist_delete_item_service(
-            &app.todoist_mock_server,
+            &app.app.todoist_mock_server,
             &existing_todoist_task.source_id,
         );
 
         let patched_task = patch_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "tasks",
             existing_todoist_task.id.into(),
             &TaskPatch {
@@ -110,7 +111,7 @@ mod patch_task {
 
         let deleted_notification: Box<Notification> = get_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             existing_todoist_notification.id.into(),
         )
@@ -129,7 +130,7 @@ mod patch_task {
         let app = authenticated_app.await;
         let existing_todoist_task_creation = create_task_from_todoist_item(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             &todoist_item,
             "Inbox".to_string(),
             app.user.id,
@@ -139,7 +140,8 @@ mod patch_task {
         assert_eq!(existing_todoist_task.status, TaskStatus::Active);
         let existing_todoist_notification = existing_todoist_task_creation.notification.unwrap();
         create_and_mock_integration_connection(
-            &app,
+            &app.app,
+            app.user.id,
             &settings.integrations.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
@@ -148,13 +150,13 @@ mod patch_task {
         .await;
 
         let todoist_mock = mock_todoist_complete_item_service(
-            &app.todoist_mock_server,
+            &app.app.todoist_mock_server,
             &existing_todoist_task.source_id,
         );
 
         let patched_task: Box<Task> = patch_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "tasks",
             existing_todoist_task.id.into(),
             &TaskPatch {
@@ -177,7 +179,7 @@ mod patch_task {
 
         let deleted_notification: Box<Notification> = get_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             existing_todoist_notification.id.into(),
         )
@@ -197,7 +199,7 @@ mod patch_task {
         let app = authenticated_app.await;
         let existing_todoist_task_creation = create_task_from_todoist_item(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             &todoist_item,
             "Inbox".to_string(),
             app.user.id,
@@ -217,7 +219,8 @@ mod patch_task {
         let new_project = "Project1".to_string();
         let new_project_id = "3333".to_string();
         create_and_mock_integration_connection(
-            &app,
+            &app.app,
+            app.user.id,
             &settings.integrations.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
@@ -226,15 +229,18 @@ mod patch_task {
         .await;
 
         let todoist_projects_mock = mock_todoist_sync_resources_service(
-            &app.todoist_mock_server,
+            &app.app.todoist_mock_server,
             "projects",
             &sync_todoist_projects_response,
             None,
         );
-        let todoist_project_add_mock =
-            mock_todoist_sync_project_add(&app.todoist_mock_server, &new_project, &new_project_id);
+        let todoist_project_add_mock = mock_todoist_sync_project_add(
+            &app.app.todoist_mock_server,
+            &new_project,
+            &new_project_id,
+        );
         let todoist_sync_mock = mock_todoist_sync_service(
-            &app.todoist_mock_server,
+            &app.app.todoist_mock_server,
             vec![
                 TodoistSyncPartialCommand::ItemMove {
                     args: TodoistSyncCommandItemMoveArgs {
@@ -262,7 +268,7 @@ mod patch_task {
 
         let patched_task = patch_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "tasks",
             existing_todoist_task.id.into(),
             &TaskPatch {
@@ -290,7 +296,7 @@ mod patch_task {
 
         let deleted_notification: Box<Notification> = get_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             existing_todoist_notification.id.into(),
         )
@@ -315,7 +321,7 @@ mod patch_task {
 
         let notification = create_notification_from_github_notification(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             &github_notification,
             app.user.id,
         )
@@ -334,7 +340,8 @@ mod patch_task {
             notification.source_html_url.as_ref().unwrap()
         ));
         create_and_mock_integration_connection(
-            &app,
+            &app.app,
+            app.user.id,
             &settings.integrations.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
@@ -342,7 +349,8 @@ mod patch_task {
         )
         .await;
         create_and_mock_integration_connection(
-            &app,
+            &app.app,
+            app.user.id,
             &settings.integrations.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
@@ -350,7 +358,7 @@ mod patch_task {
         )
         .await;
 
-        let github_mark_thread_as_read_mock = app.github_mock_server.mock(|when, then| {
+        let github_mark_thread_as_read_mock = app.app.github_mock_server.mock(|when, then| {
             when.method(PATCH)
                 .path("/notifications/threads/1")
                 .header("accept", "application/vnd.github.v3+json")
@@ -358,13 +366,13 @@ mod patch_task {
             then.status(205);
         });
         let todoist_projects_mock = mock_todoist_sync_resources_service(
-            &app.todoist_mock_server,
+            &app.app.todoist_mock_server,
             "projects",
             &sync_todoist_projects_response,
             None,
         );
         let todoist_item_add_mock = mock_todoist_item_add_service(
-            &app.todoist_mock_server,
+            &app.app.todoist_mock_server,
             &todoist_item.id,
             todoist_item.content.clone(),
             body.clone(),
@@ -373,11 +381,11 @@ mod patch_task {
             todoist_item.priority,
         );
         let todoist_get_item_mock =
-            mock_todoist_get_item_service(&app.todoist_mock_server, todoist_item.clone());
+            mock_todoist_get_item_service(&app.app.todoist_mock_server, todoist_item.clone());
 
         let notification_with_task = create_task_from_notification(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             notification.id,
             &TaskCreation {
                 title: todoist_item.content.clone(),
@@ -425,7 +433,7 @@ mod patch_task {
 
         let deleted_notification: Box<Notification> = get_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             notification.id.into(),
         )
@@ -451,21 +459,22 @@ mod patch_notification {
         let app = authenticated_app.await;
         let notification = create_notification_from_github_notification(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             &github_notification,
             app.user.id,
         )
         .await;
         let existing_todoist_task = create_task_from_todoist_item(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             &todoist_item,
             "Project2".to_string(),
             app.user.id,
         )
         .await;
         create_and_mock_integration_connection(
-            &app,
+            &app.app,
+            app.user.id,
             &settings.integrations.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
@@ -473,7 +482,7 @@ mod patch_notification {
         )
         .await;
         let todoist_sync_mock = mock_todoist_sync_service(
-            &app.todoist_mock_server,
+            &app.app.todoist_mock_server,
             vec![TodoistSyncPartialCommand::ItemUpdate {
                 args: TodoistSyncCommandItemUpdateArgs {
                     id: existing_todoist_task.task.source_id.clone(),
@@ -490,7 +499,7 @@ mod patch_notification {
 
         let patched_notification = patch_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             notification.id.into(),
             &NotificationPatch {
@@ -511,7 +520,7 @@ mod patch_notification {
 
         let updated_notification = get_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             notification.id.into(),
         )

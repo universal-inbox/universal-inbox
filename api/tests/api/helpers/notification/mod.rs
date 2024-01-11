@@ -164,8 +164,9 @@ pub async fn create_or_update_notification_details(
     notification_id: NotificationId,
     details: NotificationDetails,
 ) -> NotificationDetails {
-    let mut transaction = app.repository.begin().await.unwrap();
+    let mut transaction = app.app.repository.begin().await.unwrap();
     let upsert_status = app
+        .app
         .repository
         .create_or_update_notification_details(&mut transaction, notification_id, details)
         .await

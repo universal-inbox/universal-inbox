@@ -406,6 +406,7 @@ impl TaskService {
                     source_task_ids,
                     task_source_service.get_task_source_kind(),
                     TaskStatus::Done,
+                    user_id,
                 )
                 .await?;
         }

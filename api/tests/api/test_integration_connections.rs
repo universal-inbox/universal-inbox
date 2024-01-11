@@ -46,7 +46,7 @@ mod list_integration_connections {
         #[future] authenticated_app: AuthenticatedApp,
     ) {
         let app = authenticated_app.await;
-        let result = list_integration_connections(&app.client, &app.api_address).await;
+        let result = list_integration_connections(&app.client, &app.app.api_address).await;
 
         assert!(result.is_empty());
     }
@@ -60,7 +60,7 @@ mod list_integration_connections {
         let app = authenticated_app.await;
         let integration_connection1: Box<IntegrationConnection> = create_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "integration-connections",
             Box::new(IntegrationConnectionCreation {
                 provider_kind: IntegrationProviderKind::Github,
@@ -69,7 +69,7 @@ mod list_integration_connections {
         .await;
         let integration_connection2: Box<IntegrationConnection> = create_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "integration-connections",
             Box::new(IntegrationConnectionCreation {
                 provider_kind: IntegrationProviderKind::Todoist,
@@ -77,7 +77,7 @@ mod list_integration_connections {
         )
         .await;
 
-        let result = list_integration_connections(&app.client, &app.api_address).await;
+        let result = list_integration_connections(&app.client, &app.app.api_address).await;
 
         assert_eq!(result.len(), 2);
         assert_eq!(result[0], *integration_connection1);
@@ -87,7 +87,7 @@ mod list_integration_connections {
         let (client, _user) =
             authenticate_user(&tested_app.await, "5678", "Jane", "Doe", "jane@example.com").await;
 
-        let result = list_integration_connections(&client, &app.api_address).await;
+        let result = list_integration_connections(&client, &app.app.api_address).await;
 
         assert_eq!(result.len(), 0);
     }
@@ -104,7 +104,7 @@ mod create_integration_connections {
 
         let integration_connection: Box<IntegrationConnection> = create_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "integration-connections",
             Box::new(IntegrationConnectionCreation {
                 provider_kind: IntegrationProviderKind::Github,
@@ -138,7 +138,7 @@ mod verify_integration_connections {
         let app = authenticated_app.await;
         let integration_connection: Box<IntegrationConnection> = create_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "integration-connections",
             Box::new(IntegrationConnectionCreation {
                 provider_kind: IntegrationProviderKind::Github,
@@ -152,25 +152,31 @@ mod verify_integration_connections {
             .get(&IntegrationProviderKind::Github)
             .unwrap();
         let nango_mock = mock_nango_connection_service(
-            &app.nango_mock_server,
+            &app.app.nango_mock_server,
             &settings.integrations.oauth2.nango_secret_key,
             &integration_connection.connection_id.to_string(),
             github_config_key,
             nango_github_connection.clone(),
         );
 
-        let result: IntegrationConnection =
-            verify_integration_connection(&app.client, &app.api_address, integration_connection.id)
-                .await;
+        let result: IntegrationConnection = verify_integration_connection(
+            &app.client,
+            &app.app.api_address,
+            integration_connection.id,
+        )
+        .await;
 
         assert_eq!(result.status, IntegrationConnectionStatus::Validated);
         assert_eq!(result.failure_message, None);
         nango_mock.assert();
 
         // Verifying again should keep validating the status with Nango and return the connection
-        let result: IntegrationConnection =
-            verify_integration_connection(&app.client, &app.api_address, integration_connection.id)
-                .await;
+        let result: IntegrationConnection = verify_integration_connection(
+            &app.client,
+            &app.app.api_address,
+            integration_connection.id,
+        )
+        .await;
 
         assert_eq!(result.status, IntegrationConnectionStatus::Validated);
         assert_eq!(result.failure_message, None);
@@ -186,7 +192,7 @@ mod verify_integration_connections {
 
         let response = verify_integration_connection_response(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             Uuid::new_v4().into(),
         )
         .await;
@@ -204,7 +210,7 @@ mod verify_integration_connections {
         let app = authenticated_app.await;
         let integration_connection: Box<IntegrationConnection> = create_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "integration-connections",
             Box::new(IntegrationConnectionCreation {
                 provider_kind: IntegrationProviderKind::Github,
@@ -220,23 +226,26 @@ mod verify_integration_connections {
             .get(&IntegrationProviderKind::Github)
             .unwrap();
         let mut nango_mock = mock_nango_connection_service(
-            &app.nango_mock_server,
+            &app.app.nango_mock_server,
             &settings.integrations.oauth2.nango_secret_key,
             &integration_connection.connection_id.to_string(),
             github_config_key,
             nango_github_connection.clone(),
         );
 
-        let result: IntegrationConnection =
-            verify_integration_connection(&app.client, &app.api_address, integration_connection.id)
-                .await;
+        let result: IntegrationConnection = verify_integration_connection(
+            &app.client,
+            &app.app.api_address,
+            integration_connection.id,
+        )
+        .await;
 
         assert_eq!(result.status, IntegrationConnectionStatus::Validated);
         assert_eq!(result.failure_message, None);
         nango_mock.assert();
 
         nango_mock.delete();
-        let mut nango_mock = app.nango_mock_server.mock(|when, then| {
+        let mut nango_mock = app.app.nango_mock_server.mock(|when, then| {
             when.method(GET)
                 .path(format!("/connection/{}", integration_connection.connection_id))
                 .header("authorization", format!("Bearer {}", settings.integrations.oauth2.nango_secret_key))
@@ -249,9 +258,12 @@ mod verify_integration_connections {
                 }));
         });
 
-        let result: IntegrationConnection =
-            verify_integration_connection(&app.client, &app.api_address, integration_connection.id)
-                .await;
+        let result: IntegrationConnection = verify_integration_connection(
+            &app.client,
+            &app.app.api_address,
+            integration_connection.id,
+        )
+        .await;
 
         assert_eq!(result.status, IntegrationConnectionStatus::Failing);
         assert_eq!(
@@ -269,16 +281,19 @@ mod verify_integration_connections {
             .get(&IntegrationProviderKind::Github)
             .unwrap();
         let nango_mock = mock_nango_connection_service(
-            &app.nango_mock_server,
+            &app.app.nango_mock_server,
             &settings.integrations.oauth2.nango_secret_key,
             &integration_connection.connection_id.to_string(),
             github_config_key,
             nango_github_connection.clone(),
         );
 
-        let result: IntegrationConnection =
-            verify_integration_connection(&app.client, &app.api_address, integration_connection.id)
-                .await;
+        let result: IntegrationConnection = verify_integration_connection(
+            &app.client,
+            &app.app.api_address,
+            integration_connection.id,
+        )
+        .await;
 
         assert_eq!(result.status, IntegrationConnectionStatus::Validated);
         assert_eq!(result.failure_message, None);
@@ -294,7 +309,7 @@ mod verify_integration_connections {
         let app = authenticated_app.await;
         let integration_connection: Box<IntegrationConnection> = create_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "integration-connections",
             Box::new(IntegrationConnectionCreation {
                 provider_kind: IntegrationProviderKind::Github,
@@ -306,7 +321,7 @@ mod verify_integration_connections {
             authenticate_user(&tested_app.await, "5678", "Jane", "Doe", "jane@example.com").await;
         let response = verify_integration_connection_response(
             &client,
-            &app.api_address,
+            &app.app.api_address,
             integration_connection.id,
         )
         .await;
@@ -329,7 +344,8 @@ mod disconnect_integration_connections {
     ) {
         let app = authenticated_app.await;
         let integration_connection = create_integration_connection(
-            &app,
+            &app.app,
+            app.user.id,
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             IntegrationConnectionStatus::Validated,
             None,
@@ -343,7 +359,7 @@ mod disconnect_integration_connections {
             .unwrap();
 
         let nango_mock = mock_nango_delete_connection_service(
-            &app.nango_mock_server,
+            &app.app.nango_mock_server,
             &settings.integrations.oauth2.nango_secret_key,
             &integration_connection.connection_id.to_string(),
             github_config_key,
@@ -351,7 +367,7 @@ mod disconnect_integration_connections {
 
         let disconnected_connection: Box<IntegrationConnection> = delete_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "integration-connections",
             integration_connection.id.into(),
         )
@@ -373,14 +389,15 @@ mod disconnect_integration_connections {
     ) {
         let app = authenticated_app.await;
         let integration_connection = create_integration_connection(
-            &app,
+            &app.app,
+            app.user.id,
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             IntegrationConnectionStatus::Validated,
             None,
         )
         .await;
 
-        let nango_mock = app.nango_mock_server.mock(|when, then| {
+        let nango_mock = app.app.nango_mock_server.mock(|when, then| {
             when.method(DELETE)
                 .path(format!("/connection/{}", integration_connection.connection_id))
                 .header("authorization", format!("Bearer {}", settings.integrations.oauth2.nango_secret_key))
@@ -395,7 +412,7 @@ mod disconnect_integration_connections {
 
         let disconnected_connection: Box<IntegrationConnection> = delete_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "integration-connections",
             integration_connection.id.into(),
         )
@@ -436,14 +453,15 @@ mod update_integration_connection_config {
         ));
         let _created_notification: Box<Notification> = create_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             existing_notification,
         )
         .await;
 
         let integration_connection1 = create_integration_connection(
-            &app,
+            &app.app,
+            app.user.id,
             IntegrationConnectionConfig::GoogleMail(google_mail_config),
             IntegrationConnectionStatus::Validated,
             Some(IntegrationConnectionContext::GoogleMail(
@@ -455,7 +473,8 @@ mod update_integration_connection_config {
         )
         .await;
         let integration_connection2 = create_integration_connection(
-            &app,
+            &app.app,
+            app.user.id,
             IntegrationConnectionConfig::Github(GithubConfig {
                 sync_notifications_enabled: true,
             }),
@@ -468,7 +487,7 @@ mod update_integration_connection_config {
             .client
             .put(&format!(
                 "{}integration-connections/{}/config",
-                app.api_address, integration_connection1.id
+                app.app.api_address, integration_connection1.id
             ))
             .json(&IntegrationConnectionConfig::GoogleMail(GoogleMailConfig {
                 sync_notifications_enabled: false,
@@ -524,7 +543,7 @@ mod update_integration_connection_config {
 
         // Verify notifications have been cleared
         let notifications: Vec<Notification> =
-            list_notifications(&app.client, &app.api_address, vec![], true, None).await;
+            list_notifications(&app.client, &app.app.api_address, vec![], true, None).await;
 
         assert!(notifications.is_empty());
     }
@@ -537,7 +556,8 @@ mod update_integration_connection_config {
     ) {
         let app = authenticated_app.await;
         let integration_connection = create_integration_connection(
-            &app,
+            &app.app,
+            app.user.id,
             IntegrationConnectionConfig::GoogleMail(GoogleMailConfig {
                 sync_notifications_enabled: true,
                 synced_label: GoogleMailLabel {
@@ -555,7 +575,7 @@ mod update_integration_connection_config {
         let response = client
             .put(&format!(
                 "{}integration-connections/{}/config",
-                app.api_address, integration_connection.id
+                app.app.api_address, integration_connection.id
             ))
             .json(&IntegrationConnectionConfig::GoogleMail(GoogleMailConfig {
                 sync_notifications_enabled: false,

@@ -62,7 +62,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
     let todoist_items = sync_todoist_items_response.items.clone().unwrap();
     let existing_todoist_task_creation: Box<TaskCreationResult> = create_resource(
         &app.client,
-        &app.api_address,
+        &app.app.api_address,
         "tasks",
         Box::new(Task {
             id: Uuid::new_v4().into(),
@@ -87,7 +87,8 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
     let existing_todoist_task = existing_todoist_task_creation.task;
     let existing_todoist_notification = existing_todoist_task_creation.notification.unwrap();
     let integration_connection = create_and_mock_integration_connection(
-        &app,
+        &app.app,
+        app.user.id,
         &settings.integrations.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
@@ -96,13 +97,13 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
     .await;
 
     let todoist_tasks_mock = mock_todoist_sync_resources_service(
-        &app.todoist_mock_server,
+        &app.app.todoist_mock_server,
         "items",
         &sync_todoist_items_response,
         None,
     );
     let todoist_projects_mock = mock_todoist_sync_resources_service(
-        &app.todoist_mock_server,
+        &app.app.todoist_mock_server,
         "projects",
         &sync_todoist_projects_response,
         None,
@@ -110,7 +111,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
 
     let task_creations: Vec<TaskCreationResult> = sync_tasks(
         &app.client,
-        &app.api_address,
+        &app.app.api_address,
         Some(TaskSourceKind::Todoist),
         false,
     )
@@ -123,7 +124,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
 
     let updated_todoist_task: Box<Task> = get_resource(
         &app.client,
-        &app.api_address,
+        &app.app.api_address,
         "tasks",
         existing_todoist_task.id.into(),
     )
@@ -150,7 +151,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
 
     let updated_todoist_notification: Box<Notification> = get_resource(
         &app.client,
-        &app.api_address,
+        &app.app.api_address,
         "notifications",
         existing_todoist_notification.id.into(),
     )
@@ -186,7 +187,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
     let new_task = &new_todoist_task_creation.task;
     let notifications = list_notifications_with_tasks(
         &app.client,
-        &app.api_address,
+        &app.app.api_address,
         vec![NotificationStatus::Unread],
         false,
         Some(new_task.id),
@@ -232,7 +233,8 @@ async fn test_sync_tasks_should_add_new_task_and_delete_notification_when_disabl
     let app = authenticated_app.await;
     let todoist_items = sync_todoist_items_response.items.clone().unwrap();
     let _integration_connection = create_and_mock_integration_connection(
-        &app,
+        &app.app,
+        app.user.id,
         &settings.integrations.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig {
             create_notification_from_inbox_task: false,
@@ -244,13 +246,13 @@ async fn test_sync_tasks_should_add_new_task_and_delete_notification_when_disabl
     .await;
 
     let todoist_tasks_mock = mock_todoist_sync_resources_service(
-        &app.todoist_mock_server,
+        &app.app.todoist_mock_server,
         "items",
         &sync_todoist_items_response,
         None,
     );
     let todoist_projects_mock = mock_todoist_sync_resources_service(
-        &app.todoist_mock_server,
+        &app.app.todoist_mock_server,
         "projects",
         &sync_todoist_projects_response,
         None,
@@ -258,7 +260,7 @@ async fn test_sync_tasks_should_add_new_task_and_delete_notification_when_disabl
 
     let task_creations: Vec<TaskCreationResult> = sync_tasks(
         &app.client,
-        &app.api_address,
+        &app.app.api_address,
         Some(TaskSourceKind::Todoist),
         false,
     )
@@ -274,7 +276,7 @@ async fn test_sync_tasks_should_add_new_task_and_delete_notification_when_disabl
 
     let notifications = list_notifications_with_tasks(
         &app.client,
-        &app.api_address,
+        &app.app.api_address,
         vec![NotificationStatus::Unread],
         false,
         None,
@@ -294,7 +296,8 @@ async fn test_sync_tasks_should_add_new_empty_task(
     // Somehow, Todoist may return empty TodoistItems not attached to any project
     let app = authenticated_app.await;
     create_and_mock_integration_connection(
-        &app,
+        &app.app,
+        app.user.id,
         &settings.integrations.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
@@ -303,7 +306,7 @@ async fn test_sync_tasks_should_add_new_empty_task(
     .await;
 
     let todoist_tasks_mock = mock_todoist_sync_resources_service(
-        &app.todoist_mock_server,
+        &app.app.todoist_mock_server,
         "items",
         &TodoistSyncResponse {
             items: Some(vec![TodoistItem {
@@ -337,7 +340,7 @@ async fn test_sync_tasks_should_add_new_empty_task(
         None,
     );
     let todoist_projects_mock = mock_todoist_sync_resources_service(
-        &app.todoist_mock_server,
+        &app.app.todoist_mock_server,
         "projects",
         &TodoistSyncResponse {
             items: None,
@@ -351,7 +354,7 @@ async fn test_sync_tasks_should_add_new_empty_task(
 
     let task_creations: Vec<TaskCreationResult> = sync_tasks(
         &app.client,
-        &app.api_address,
+        &app.app.api_address,
         Some(TaskSourceKind::Todoist),
         false,
     )
@@ -384,7 +387,8 @@ async fn test_sync_tasks_should_reuse_existing_sync_token(
 ) {
     let app = authenticated_app.await;
     let integration_connection = create_and_mock_integration_connection(
-        &app,
+        &app.app,
+        app.user.id,
         &settings.integrations.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
@@ -410,7 +414,7 @@ async fn test_sync_tasks_should_reuse_existing_sync_token(
         sync_token: SyncToken("new_sync_token".to_string()),
     };
     let todoist_tasks_mock = mock_todoist_sync_resources_service(
-        &app.todoist_mock_server,
+        &app.app.todoist_mock_server,
         "items",
         &sync_todoist_items_response,
         Some(sync_token),
@@ -418,7 +422,7 @@ async fn test_sync_tasks_should_reuse_existing_sync_token(
 
     let task_creations: Vec<TaskCreationResult> = sync_tasks(
         &app.client,
-        &app.api_address,
+        &app.app.api_address,
         Some(TaskSourceKind::Todoist),
         false,
     )
@@ -463,7 +467,7 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
         for todoist_item in todoist_items.iter() {
             let creation = create_task_from_todoist_item(
                 &app.client,
-                &app.api_address,
+                &app.app.api_address,
                 todoist_item,
                 "Inbox".to_string(),
                 app.user.id,
@@ -482,7 +486,8 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
     let todoist_items = sync_todoist_items_response.items.clone().unwrap();
 
     create_and_mock_integration_connection(
-        &app,
+        &app.app,
+        app.user.id,
         &settings.integrations.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
@@ -490,13 +495,13 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
     )
     .await;
     let todoist_sync_items_mock = mock_todoist_sync_resources_service(
-        &app.todoist_mock_server,
+        &app.app.todoist_mock_server,
         "items",
         &sync_todoist_items_response,
         None,
     );
     let todoist_projects_mock = mock_todoist_sync_resources_service(
-        &app.todoist_mock_server,
+        &app.app.todoist_mock_server,
         "projects",
         &sync_todoist_projects_response,
         None,
@@ -504,7 +509,7 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
 
     let task_creations: Vec<TaskCreationResult> = sync_tasks(
         &app.client,
-        &app.api_address,
+        &app.app.api_address,
         Some(TaskSourceKind::Todoist),
         false,
     )
@@ -517,7 +522,7 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
 
     let completed_task: Box<Task> = get_resource(
         &app.client,
-        &app.api_address,
+        &app.app.api_address,
         "tasks",
         task_creation.task.id.into(),
     )
@@ -528,7 +533,7 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
 
     let deleted_notification: Box<Notification> = get_resource(
         &app.client,
-        &app.api_address,
+        &app.app.api_address,
         "notifications",
         task_creation.notification.unwrap().id.into(),
     )
@@ -553,7 +558,7 @@ async fn test_sync_tasks_should_not_update_tasks_and_notifications_with_empty_in
         for todoist_item in todoist_items.iter() {
             let creation = create_task_from_todoist_item(
                 &app.client,
-                &app.api_address,
+                &app.app.api_address,
                 todoist_item,
                 "Inbox".to_string(),
                 app.user.id,
@@ -574,7 +579,8 @@ async fn test_sync_tasks_should_not_update_tasks_and_notifications_with_empty_in
     );
 
     create_and_mock_integration_connection(
-        &app,
+        &app.app,
+        app.user.id,
         &settings.integrations.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
@@ -582,13 +588,13 @@ async fn test_sync_tasks_should_not_update_tasks_and_notifications_with_empty_in
     )
     .await;
     let todoist_sync_items_mock = mock_todoist_sync_resources_service(
-        &app.todoist_mock_server,
+        &app.app.todoist_mock_server,
         "items",
         &sync_todoist_items_response,
         None,
     );
     let todoist_projects_mock = mock_todoist_sync_resources_service(
-        &app.todoist_mock_server,
+        &app.app.todoist_mock_server,
         "projects",
         &sync_todoist_projects_response,
         None,
@@ -596,7 +602,7 @@ async fn test_sync_tasks_should_not_update_tasks_and_notifications_with_empty_in
 
     let task_creations: Vec<TaskCreationResult> = sync_tasks(
         &app.client,
-        &app.api_address,
+        &app.app.api_address,
         Some(TaskSourceKind::Todoist),
         false,
     )
@@ -620,7 +626,7 @@ async fn test_sync_tasks_should_not_update_tasks_and_notifications_with_empty_in
     {
         let task: Box<Task> = get_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "tasks",
             task_creation.task.id.into(),
         )
@@ -631,7 +637,7 @@ async fn test_sync_tasks_should_not_update_tasks_and_notifications_with_empty_in
 
         let notification: Box<Notification> = get_resource(
             &app.client,
-            &app.api_address,
+            &app.app.api_address,
             "notifications",
             task_creation.notification.as_ref().unwrap().id.into(),
         )
@@ -648,20 +654,21 @@ async fn test_sync_tasks_with_no_validated_integration_connections(
 ) {
     let app = authenticated_app.await;
     create_integration_connection(
-        &app,
+        &app.app,
+        app.user.id,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         IntegrationConnectionStatus::Created,
         None,
     )
     .await;
-    let todoist_mock = app.todoist_mock_server.mock(|when, then| {
+    let todoist_mock = app.app.todoist_mock_server.mock(|when, then| {
         when.any_request();
         then.status(200);
     });
 
     let response = sync_tasks_response(
         &app.client,
-        &app.api_address,
+        &app.app.api_address,
         Some(TaskSourceKind::Todoist),
         false,
     )
@@ -680,21 +687,22 @@ async fn test_sync_tasks_with_synchronization_disabled(
 ) {
     let app = authenticated_app.await;
     create_and_mock_integration_connection(
-        &app,
+        &app.app,
+        app.user.id,
         &settings.integrations.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::disabled()),
         &settings,
         nango_todoist_connection,
     )
     .await;
-    let todoist_mock = app.todoist_mock_server.mock(|when, then| {
+    let todoist_mock = app.app.todoist_mock_server.mock(|when, then| {
         when.any_request();
         then.status(200);
     });
 
     let response = sync_tasks_response(
         &app.client,
-        &app.api_address,
+        &app.app.api_address,
         Some(TaskSourceKind::Todoist),
         false,
     )
@@ -717,7 +725,7 @@ async fn test_sync_all_tasks_asynchronously(
     let todoist_items = sync_todoist_items_response.items.clone().unwrap();
     let _existing_todoist_task_creation: Box<TaskCreationResult> = create_resource(
         &app.client,
-        &app.api_address,
+        &app.app.api_address,
         "tasks",
         Box::new(Task {
             id: Uuid::new_v4().into(),
@@ -740,7 +748,8 @@ async fn test_sync_all_tasks_asynchronously(
     )
     .await;
     create_and_mock_integration_connection(
-        &app,
+        &app.app,
+        app.user.id,
         &settings.integrations.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
@@ -749,13 +758,13 @@ async fn test_sync_all_tasks_asynchronously(
     .await;
 
     let mut todoist_tasks_mock = mock_todoist_sync_resources_service(
-        &app.todoist_mock_server,
+        &app.app.todoist_mock_server,
         "items",
         &sync_todoist_items_response,
         None,
     );
     let mut todoist_projects_mock = mock_todoist_sync_resources_service(
-        &app.todoist_mock_server,
+        &app.app.todoist_mock_server,
         "projects",
         &sync_todoist_projects_response,
         None,
@@ -764,7 +773,7 @@ async fn test_sync_all_tasks_asynchronously(
     let unauthenticated_client = reqwest::Client::new();
     let response = sync_tasks_response(
         &unauthenticated_client,
-        &app.api_address,
+        &app.app.api_address,
         Some(TaskSourceKind::Todoist),
         true, // asynchronously
     )
@@ -772,14 +781,14 @@ async fn test_sync_all_tasks_asynchronously(
 
     assert_eq!(response.status(), StatusCode::CREATED);
 
-    let result = list_tasks(&app.client, &app.api_address, TaskStatus::Active).await;
+    let result = list_tasks(&app.client, &app.app.api_address, TaskStatus::Active).await;
 
     // The existing task's status should not have been updated to Deleted yet
     assert_eq!(result.len(), 1);
 
     let mut i = 0;
     let synchronized = loop {
-        let result = list_tasks(&app.client, &app.api_address, TaskStatus::Active).await;
+        let result = list_tasks(&app.client, &app.app.api_address, TaskStatus::Active).await;
 
         debug!("result: {result:?}");
         if result.len() == 2 {
@@ -804,7 +813,7 @@ async fn test_sync_all_tasks_asynchronously(
     todoist_projects_mock.delete();
 
     // Triggering a new sync should not actually sync again
-    let todoist_mock = app.todoist_mock_server.mock(|when, then| {
+    let todoist_mock = app.app.todoist_mock_server.mock(|when, then| {
         when.any_request();
         then.status(200);
     });
@@ -812,7 +821,7 @@ async fn test_sync_all_tasks_asynchronously(
     let unauthenticated_client = reqwest::Client::new();
     let response = sync_tasks_response(
         &unauthenticated_client,
-        &app.api_address,
+        &app.app.api_address,
         Some(TaskSourceKind::Todoist),
         true, // asynchronously
     )
@@ -822,7 +831,7 @@ async fn test_sync_all_tasks_asynchronously(
 
     sleep(Duration::from_millis(1000)).await;
 
-    let result = list_tasks(&app.client, &app.api_address, TaskStatus::Active).await;
+    let result = list_tasks(&app.client, &app.app.api_address, TaskStatus::Active).await;
 
     // Even after 1s, the existing task's status should not have been updated
     // because the sync happen too soon after the previous one
@@ -839,7 +848,8 @@ async fn test_sync_all_tasks_asynchronously_in_error(
 ) {
     let app = authenticated_app.await;
     create_and_mock_integration_connection(
-        &app,
+        &app.app,
+        app.user.id,
         &settings.integrations.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
@@ -847,7 +857,7 @@ async fn test_sync_all_tasks_asynchronously_in_error(
     )
     .await;
 
-    let todoist_mock = app.todoist_mock_server.mock(|when, then| {
+    let todoist_mock = app.app.todoist_mock_server.mock(|when, then| {
         when.any_request();
         then.status(500);
     });
@@ -855,7 +865,7 @@ async fn test_sync_all_tasks_asynchronously_in_error(
     let unauthenticated_client = reqwest::Client::new();
     let response = sync_tasks_response(
         &unauthenticated_client,
-        &app.api_address,
+        &app.app.api_address,
         Some(TaskSourceKind::Todoist),
         true, // asynchronously
     )
@@ -865,7 +875,7 @@ async fn test_sync_all_tasks_asynchronously_in_error(
 
     sleep(Duration::from_millis(1000)).await;
 
-    let result = list_tasks(&app.client, &app.api_address, TaskStatus::Active).await;
+    let result = list_tasks(&app.client, &app.app.api_address, TaskStatus::Active).await;
 
     // Even after 1s, the existing task's status should not have been updated
     // because the sync was in error
