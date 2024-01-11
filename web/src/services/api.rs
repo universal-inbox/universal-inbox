@@ -58,6 +58,7 @@ pub async fn call_api<R: for<'de> serde::de::Deserialize<'de>, B: serde::Seriali
         if response.status() == StatusCode::UNAUTHORIZED {
             if ui_model_ref.read().authentication_state == AuthenticationState::Unknown
                 || ui_model_ref.read().authentication_state != AuthenticationState::Authenticated
+                || ui_model_ref.read().authentication_state != AuthenticationState::NotAuthenticated
             {
                 ui_model_ref.write().authentication_state = AuthenticationState::NotAuthenticated;
             }
