@@ -2,6 +2,7 @@
 .github
 target/
 api/config/local.*
+api/tests
 web/dist
 web/node_modules
 .local_envrc
@@ -17,3 +18,4 @@ universal-inbox.env
 devbox.d
 .devbox
 lcov.info
+.DS_Store

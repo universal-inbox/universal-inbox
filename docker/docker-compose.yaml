@@ -46,11 +46,9 @@ services:
     build:
       context: ..
       cache_from:
-        - "type=registry,ref=dax42/universal-inbox"
         - "type=local,src=cache"
       cache_to:
-        - "type=inline"
-        - "type=local,dest=cache"
+        - "type=local,mode=max,image-manifest=true,oci-mediatypes=true,dest=cache"
       x-bake:
         platforms: ["linux/amd64", "linux/arm64"]
       platforms:
