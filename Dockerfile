@@ -8,7 +8,9 @@ RUN sudo chown -R "${DEVBOX_USER}:${DEVBOX_USER}" /app
 RUN devbox run -- echo "Installed Packages."
 
 FROM base as planner
-COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" . .
+COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" Cargo.toml Cargo.lock ./
+COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/Cargo.toml web/Cargo.toml
+COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" api/Cargo.toml api/Cargo.toml
 RUN devbox run -- cargo chef prepare --recipe-path recipe.json
 
 FROM rust:1.74.0-bookworm as tools
@@ -47,7 +49,7 @@ RUN mkdir /data
 COPY docker/universal-inbox-entrypoint universal-inbox-entrypoint
 COPY --from=release-api-builder /app/target/release/universal-inbox-api universal-inbox
 RUN apt-get update \
-    && apt-get install -y ca-certificates patchelf \
+    && apt-get install -y ca-certificates patchelf curl \
     && patchelf --set-interpreter /usr/bin/ld.so universal-inbox \
     && apt-get purge -y patchelf \
     && rm -rf /var/lib/apt/lists/*
