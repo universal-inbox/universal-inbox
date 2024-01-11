@@ -319,13 +319,12 @@ impl UserService {
                             ))
                             .http_get_url())
                     }
-                    OIDCFlowSettings::GoogleAuthorizationCodeFlow => {
-                        Ok(
-                            "https://accounts.google.com/logout?continue=http://localhost:8000" // TODO: remove hardcoded continue value
-                                .parse::<Url>()
-                                .unwrap(),
-                        )
-                    }
+                    OIDCFlowSettings::GoogleAuthorizationCodeFlow => Ok(format!(
+                        "https://accounts.google.com/logout?continue={}",
+                        self.application_settings.front_base_url.clone()
+                    )
+                    .parse::<Url>()
+                    .unwrap()),
                 }
             }
             AuthenticationSettings::Local(_) => {
