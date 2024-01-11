@@ -11,6 +11,7 @@ use openidconnect::{core::CoreIdToken, AccessToken, AuthorizationCode, CsrfToken
 use serde::Deserialize;
 use tokio::sync::RwLock;
 use tracing::debug;
+use url::Url;
 
 use universal_inbox::{
     auth::{AuthorizeSessionResponse, CloseSessionResponse, SessionAuthValidationParameters},
@@ -120,6 +121,7 @@ pub async fn authenticate_session(
 
 const OIDC_CSRF_TOKEN_SESSION_KEY: &str = "oidc_csrf_token";
 const OIDC_NONCE_SESSION_KEY: &str = "oidc_nonce";
+const OIDC_AUTHORIZATION_URL_SESSION_KEY: &str = "authorization_url";
 
 /// Implement the Authorization Code flow and redirect the user to the OpenIDConnect
 /// auth provider.
@@ -128,6 +130,17 @@ pub async fn authorize_session(
     session: Session,
     settings: web::Data<Settings>,
 ) -> Result<HttpResponse, UniversalInboxError> {
+    if let Some(authorization_url) = session
+        .get::<Url>(OIDC_AUTHORIZATION_URL_SESSION_KEY)
+        .context("Failed to extract OIDC authorization URL from the session")?
+    {
+        debug!("Redirecting to authorization URL found in the user's session: {authorization_url}");
+        return Ok(HttpResponse::Ok().content_type("application/json").body(
+            serde_json::to_string(&AuthorizeSessionResponse { authorization_url })
+                .context("Failed to serialize the authorization URL")?,
+        ));
+    }
+
     let service = user_service.read().await;
     let AuthenticationSettings::OpenIDConnect(openid_connect_settings) =
         &settings.application.security.authentication
@@ -151,7 +164,14 @@ pub async fn authorize_session(
     session
         .insert(OIDC_NONCE_SESSION_KEY, nonce)
         .context("Failed to insert the Nonce into the session")?;
+    session
+        .insert(
+            OIDC_AUTHORIZATION_URL_SESSION_KEY,
+            authorization_url.clone(),
+        )
+        .context("Failed to insert OIDC authorization URL into the session")?;
 
+    debug!("Redirecting to newly built authorization URL: {authorization_url}");
     Ok(HttpResponse::Ok().content_type("application/json").body(
         serde_json::to_string(&AuthorizeSessionResponse { authorization_url })
             .context("Failed to serialize the authorization URL")?,
@@ -176,6 +196,9 @@ pub async fn authenticated_session(
     authenticated_session_request: web::Query<AuthenticatedSessionRequest>,
     user_service: web::Data<Arc<RwLock<UserService>>>,
 ) -> Result<Redirect, UniversalInboxError> {
+    session
+        .remove(OIDC_AUTHORIZATION_URL_SESSION_KEY)
+        .context("Failed to remove the OIDC authorization URL from the session")?;
     // 1. Get the authorization code from the request
     let csrf_token = session
         .get::<CsrfToken>(OIDC_CSRF_TOKEN_SESSION_KEY)
