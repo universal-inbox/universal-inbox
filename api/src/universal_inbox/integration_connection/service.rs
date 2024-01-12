@@ -290,6 +290,7 @@ impl IntegrationConnectionService {
         user_id: UserId,
         integration_provider_kind: IntegrationProviderKind,
         failure_message: Option<String>,
+        starting_sync: bool,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
         self.repository
             .update_integration_connection_sync_status(
@@ -297,6 +298,7 @@ impl IntegrationConnectionService {
                 user_id,
                 integration_provider_kind,
                 failure_message,
+                starting_sync,
             )
             .await
     }

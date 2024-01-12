@@ -268,6 +268,7 @@ impl NotificationService {
                 user_id,
                 integration_provider_kind,
                 None,
+                true,
             )
             .await?;
         match notification_source_service
@@ -291,6 +292,7 @@ impl NotificationService {
                 let mut notifications = vec![];
                 let mut notification_details_synced = 0;
                 for notification_upsert in notification_upserts {
+                    debug!("Notification upsert status: {notification_upsert:?}");
                     let notification = match notification_upsert {
                         UpsertStatus::Created(notification)
                         | UpsertStatus::Updated(notification) => {
@@ -323,6 +325,7 @@ impl NotificationService {
                                             Some(format!(
                                                 "Failed to fetch notification details from {integration_provider_kind}"
                                             )),
+                                            false,
                                         )
                                         .await?;
                                     return Err(error);
@@ -355,6 +358,7 @@ impl NotificationService {
                         Some(format!(
                             "Failed to fetch notifications from {integration_provider_kind}"
                         )),
+                        false,
                     )
                     .await?;
                 Err(UniversalInboxError::Recoverable(e.into()))
