@@ -102,7 +102,6 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
             title: "test subject 456".to_string(),
             status: NotificationStatus::Unread,
             source_id: google_mail_thread_get_456.id.clone(),
-            source_html_url: Some(google_mail_thread_get_456.get_html_url_from_metadata()),
             metadata: NotificationMetadata::GoogleMail(Box::new(
                 google_mail_thread_get_456.clone(),
             )),
@@ -315,7 +314,6 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
             title: "test subject 456".to_string(),
             status: NotificationStatus::Unsubscribed,
             source_id: google_mail_thread_get_456.id.clone(),
-            source_html_url: Some(google_mail_thread_get_456.get_html_url_from_metadata()),
             metadata: NotificationMetadata::GoogleMail(Box::new(
                 google_mail_thread_get_456.clone(),
             )),

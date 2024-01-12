@@ -2,7 +2,6 @@ use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use sqlx::{types::Json, Postgres, QueryBuilder, Transaction};
-use url::Url;
 use uuid::Uuid;
 
 use universal_inbox::{
@@ -93,7 +92,6 @@ impl TaskRepository for Repository {
                   completed_at,
                   priority,
                   due_at as "due_at: Json<Option<DueDate>>",
-                  source_html_url,
                   tags,
                   parent_id,
                   project,
@@ -150,7 +148,6 @@ impl TaskRepository for Repository {
                   completed_at,
                   priority,
                   due_at as "due_at: Json<Option<DueDate>>",
-                  source_html_url,
                   tags,
                   parent_id,
                   project,
@@ -190,7 +187,6 @@ impl TaskRepository for Repository {
                   completed_at,
                   priority,
                   due_at,
-                  source_html_url,
                   tags,
                   parent_id,
                   project,
@@ -287,7 +283,6 @@ impl TaskRepository for Repository {
                     completed_at,
                     priority,
                     due_at,
-                    source_html_url,
                     tags,
                     parent_id,
                     project,
@@ -297,7 +292,7 @@ impl TaskRepository for Repository {
                     user_id
                   )
                 VALUES
-                  ($1, $2, $3, $4, $5::task_status, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+                  ($1, $2, $3, $4, $5::task_status, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
             "#,
             task.id.0,
             task.source_id,
@@ -308,7 +303,6 @@ impl TaskRepository for Repository {
                 .map(|last_read_at| last_read_at.naive_utc()),
             priority as i32,
             Json(task.due_at.clone()) as Json<Option<DueDate>>,
-            task.source_html_url.as_ref().map(|url| url.to_string()),
             &task.tags,
             task.parent_id.map(|id| id.0),
             task.project,
@@ -380,7 +374,6 @@ impl TaskRepository for Repository {
                   completed_at,
                   priority,
                   due_at as "due_at: Json<Option<DueDate>>",
-                  source_html_url,
                   tags,
                   parent_id,
                   project,
@@ -426,7 +419,6 @@ impl TaskRepository for Repository {
                     completed_at,
                     priority,
                     due_at,
-                    source_html_url,
                     tags,
                     parent_id,
                     project,
@@ -436,7 +428,7 @@ impl TaskRepository for Repository {
                     user_id
                   )
                 VALUES
-                  ($1, $2, $3, $4, $5::task_status, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+                  ($1, $2, $3, $4, $5::task_status, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
                 ON CONFLICT (source_id, kind) DO UPDATE
                 SET
                   title = $3,
@@ -445,14 +437,13 @@ impl TaskRepository for Repository {
                   completed_at = $6,
                   priority = $7,
                   due_at = $8,
-                  source_html_url = $9,
-                  tags = $10,
-                  parent_id = $11,
-                  project = $12,
-                  is_recurring = $13,
-                  created_at = $14,
-                  metadata = $15,
-                  user_id = $16
+                  tags = $9,
+                  parent_id = $10,
+                  project = $11,
+                  is_recurring = $12,
+                  created_at = $13,
+                  metadata = $14,
+                  user_id = $15
                 RETURNING
                   id
             "#,
@@ -465,7 +456,6 @@ impl TaskRepository for Repository {
                     .map(|last_read_at| last_read_at.naive_utc()),
                 priority as i32,
                 Json(task.due_at.clone()) as Json<Option<DueDate>>,
-                task.source_html_url.as_ref().map(|url| url.to_string()),
                 &task.tags,
                 task.parent_id.map(|id| id.0),
                 task.project,
@@ -557,7 +547,6 @@ impl TaskRepository for Repository {
                   completed_at,
                   priority,
                   due_at,
-                  source_html_url,
                   tags,
                   parent_id,
                   project,
@@ -644,7 +633,6 @@ pub struct TaskRow {
     completed_at: Option<NaiveDateTime>,
     priority: i32,
     due_at: Json<Option<DueDate>>,
-    source_html_url: Option<String>,
     tags: Vec<String>,
     parent_id: Option<Uuid>,
     project: String,
@@ -690,17 +678,6 @@ impl TryFrom<&TaskRow> for Task {
         let status = (&row.status).try_into()?;
         let priority = TaskPriority::try_from(row.priority as u8)
             .with_context(|| format!("Failed to parse {} as TaskPriority", row.priority))?;
-        let source_html_url = row
-            .source_html_url
-            .as_ref()
-            .map(|url| {
-                url.parse::<Url>()
-                    .map_err(|e| UniversalInboxError::InvalidUrlData {
-                        source: e,
-                        output: url.clone(),
-                    })
-            })
-            .transpose()?;
 
         Ok(Task {
             id: row.id.into(),
@@ -713,7 +690,6 @@ impl TryFrom<&TaskRow> for Task {
                 .map(|completed_at| DateTime::from_naive_utc_and_offset(completed_at, Utc)),
             priority,
             due_at: row.due_at.0.clone(),
-            source_html_url,
             tags: row.tags.clone(),
             parent_id: row.parent_id.map(|id| id.into()),
             project: row.project.to_string(),

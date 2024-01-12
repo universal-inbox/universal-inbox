@@ -14,6 +14,7 @@ use universal_inbox::{
         Notification, NotificationMetadata, NotificationStatus,
     },
     user::UserId,
+    HasHtmlUrl,
 };
 
 use universal_inbox_api::integrations::google_mail::{
@@ -188,12 +189,10 @@ pub fn assert_sync_notifications(
                 assert_eq!(notification.title, "test subject 123".to_string());
                 assert_eq!(notification.status, NotificationStatus::Unread);
                 assert_eq!(
-                    notification.source_html_url,
-                    Some(
-                        "https://mail.google.com/mail/u/user@example.com/#inbox/123"
-                            .parse::<Url>()
-                            .unwrap()
-                    )
+                    notification.get_html_url(),
+                    "https://mail.google.com/mail/u/user@example.com/#inbox/123"
+                        .parse::<Url>()
+                        .unwrap()
                 );
                 assert_eq!(
                     notification.updated_at,
@@ -210,12 +209,10 @@ pub fn assert_sync_notifications(
                 assert_eq!(notification.title, "test 456".to_string());
                 assert_eq!(notification.status, NotificationStatus::Read);
                 assert_eq!(
-                    notification.source_html_url,
-                    Some(
-                        "https://mail.google.com/mail/u/user@example.com/#inbox/456"
-                            .parse::<Url>()
-                            .unwrap()
-                    )
+                    notification.get_html_url(),
+                    "https://mail.google.com/mail/u/user@example.com/#inbox/456"
+                        .parse::<Url>()
+                        .unwrap()
                 );
                 assert_eq!(
                     notification.updated_at,

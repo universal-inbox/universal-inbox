@@ -1,0 +1,47 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                INSERT INTO task\n                  (\n                    id,\n                    source_id,\n                    title,\n                    body,\n                    status,\n                    completed_at,\n                    priority,\n                    due_at,\n                    tags,\n                    parent_id,\n                    project,\n                    is_recurring,\n                    created_at,\n                    metadata,\n                    user_id\n                  )\n                VALUES\n                  ($1, $2, $3, $4, $5::task_status, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)\n                ON CONFLICT (source_id, kind) DO UPDATE\n                SET\n                  title = $3,\n                  body = $4,\n                  status = $5::task_status,\n                  completed_at = $6,\n                  priority = $7,\n                  due_at = $8,\n                  tags = $9,\n                  parent_id = $10,\n                  project = $11,\n                  is_recurring = $12,\n                  created_at = $13,\n                  metadata = $14,\n                  user_id = $15\n                RETURNING\n                  id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        {
+          "Custom": {
+            "name": "task_status",
+            "kind": {
+              "Enum": [
+                "Active",
+                "Done",
+                "Deleted"
+              ]
+            }
+          }
+        },
+        "Timestamp",
+        "Int4",
+        "Json",
+        "TextArray",
+        "Uuid",
+        "Text",
+        "Bool",
+        "Timestamp",
+        "Json",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "c3903452d8e9836163bbd913af228c9c48c5f6eb5916b504125747893d331c58"
+}

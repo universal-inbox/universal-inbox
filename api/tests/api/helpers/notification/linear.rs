@@ -10,6 +10,7 @@ use universal_inbox::{
         NotificationStatus,
     },
     user::UserId,
+    HasHtmlUrl,
 };
 
 use universal_inbox_api::integrations::linear::graphql::{
@@ -217,12 +218,10 @@ pub fn assert_sync_notifications(
                 assert_eq!(notification.title, "Test issue 3".to_string());
                 assert_eq!(notification.status, NotificationStatus::Read);
                 assert_eq!(
-                    notification.source_html_url,
-                    Some(
-                        "https://linear.app/universal-inbox/issue/UNI-13/test-issue-3"
-                            .parse::<Url>()
-                            .unwrap()
-                    )
+                    notification.get_html_url(),
+                    "https://linear.app/universal-inbox/issue/UNI-13/test-issue-3"
+                        .parse::<Url>()
+                        .unwrap()
                 );
                 assert_eq!(
                     notification.updated_at,
@@ -254,12 +253,10 @@ pub fn assert_sync_notifications(
                 assert_eq!(notification.title, "Test project".to_string());
                 assert_eq!(notification.status, NotificationStatus::Unread);
                 assert_eq!(
-                    notification.source_html_url,
-                    Some(
-                        "https://linear.app/universal-inbox/project/test-project-33065448b39c"
-                            .parse::<Url>()
-                            .unwrap()
-                    )
+                    notification.get_html_url(),
+                    "https://linear.app/universal-inbox/project/test-project-33065448b39c"
+                        .parse::<Url>()
+                        .unwrap()
                 );
                 assert_eq!(
                     notification.updated_at,
