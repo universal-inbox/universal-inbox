@@ -50,6 +50,7 @@ pub trait IntegrationConnectionRepository {
         user_id: UserId,
         integration_provider_kind: IntegrationProviderKind,
         failure_message: Option<String>,
+        starting_sync: bool,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError>;
 
     async fn fetch_all_integration_connections<'a>(
@@ -287,12 +288,15 @@ impl IntegrationConnectionRepository for Repository {
         user_id: UserId,
         integration_provider_kind: IntegrationProviderKind,
         failure_message: Option<String>,
+        starting_sync: bool,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
         let mut query_builder = QueryBuilder::new("UPDATE integration_connection SET");
         let mut separated = query_builder.separated(", ");
-        separated
-            .push(" last_sync_started_at = ")
-            .push_bind_unseparated(Utc::now());
+        if starting_sync {
+            separated
+                .push(" last_sync_started_at = ")
+                .push_bind_unseparated(Utc::now());
+        }
         separated
             .push(" last_sync_failure_message = ")
             .push_bind_unseparated(failure_message.clone());

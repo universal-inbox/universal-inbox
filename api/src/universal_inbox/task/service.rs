@@ -254,6 +254,7 @@ impl TaskService {
                 user_id,
                 integration_provider_kind,
                 None,
+                true,
             )
             .await?;
         match task_source_service.fetch_all_tasks(executor, user_id).await {
@@ -351,6 +352,7 @@ impl TaskService {
                         Some(format!(
                             "Failed to fetch tasks from {integration_provider_kind}"
                         )),
+                        false,
                     )
                     .await?;
                 Err(UniversalInboxError::Recoverable(e.into()))
