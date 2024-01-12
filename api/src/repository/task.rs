@@ -2,6 +2,7 @@ use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use sqlx::{types::Json, Postgres, QueryBuilder, Transaction};
+use tracing::debug;
 use uuid::Uuid;
 
 use universal_inbox::{
@@ -406,6 +407,13 @@ impl TaskRepository for Repository {
         let metadata = Json(task.metadata.clone());
         let priority: u8 = task.priority.into();
 
+        debug!(
+            "Upserting task {} {} (from {}) for {}",
+            task.get_task_source_kind(),
+            task.id,
+            task.source_id,
+            task.user_id
+        );
         let id: TaskId = TaskId(
             sqlx::query_scalar!(
                 r#"
