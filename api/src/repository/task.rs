@@ -429,7 +429,7 @@ impl TaskRepository for Repository {
                   )
                 VALUES
                   ($1, $2, $3, $4, $5::task_status, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-                ON CONFLICT (source_id, kind) DO UPDATE
+                ON CONFLICT (source_id, kind, user_id) DO UPDATE
                 SET
                   title = $3,
                   body = $4,

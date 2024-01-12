@@ -399,10 +399,14 @@ impl NotificationRepository for Repository {
             r#"
               SELECT id, updated_at
               FROM notification
-              WHERE source_id = $1 AND kind = $2
+              WHERE
+                source_id = $1
+                AND kind = $2
+                AND user_id = $3
             "#,
             notification.source_id,
-            kind.to_string()
+            kind.to_string(),
+            notification.user_id.0,
         )
         .fetch_optional(&mut **executor)
         .await

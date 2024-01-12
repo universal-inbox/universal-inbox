@@ -205,7 +205,7 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
             user_id: other_user.id,
             title: "Greetings other".to_string(),
             status: NotificationStatus::Unread,
-            source_id: "10798".to_string(),
+            source_id: "789".to_string(), // Same for both users as they may share the same source of notification
             metadata: NotificationMetadata::Github(Box::new(sync_github_notifications[1].clone())), // reusing github notification but not useful
             updated_at: Utc.with_ymd_and_hms(2014, 11, 6, 0, 0, 0).unwrap(),
             last_read_at: None,
