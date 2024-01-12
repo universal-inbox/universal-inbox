@@ -2,6 +2,7 @@ use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use sqlx::{postgres::PgRow, types::Json, FromRow, Postgres, QueryBuilder, Row, Transaction};
+use tracing::debug;
 use uuid::Uuid;
 
 use universal_inbox::{
@@ -425,6 +426,10 @@ impl NotificationRepository for Repository {
             .map(|snoozed_until| snoozed_until.naive_utc());
 
         let upsert_status = if let Some(existing_notification) = existing_notification {
+            debug!(
+                "Updating existing notification {} {} (from {}) for {}",
+                kind, existing_notification.id, notification.source_id, notification.user_id
+            );
             let mut query_builder = QueryBuilder::new("UPDATE notification SET ");
             let mut separated = query_builder.separated(", ");
             separated
@@ -474,6 +479,10 @@ impl NotificationRepository for Repository {
                 UpsertStatus::Untouched(notification_to_return)
             }
         } else {
+            debug!(
+                "Creating new notification {} {} (from {}) for {}",
+                kind, notification.id, notification.source_id, notification.user_id
+            );
             let query = sqlx::query_scalar!(
                 r#"
                 INSERT INTO notification
