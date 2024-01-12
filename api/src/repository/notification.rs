@@ -2,7 +2,6 @@ use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use sqlx::{postgres::PgRow, types::Json, FromRow, Postgres, QueryBuilder, Row, Transaction};
-use url::Url;
 use uuid::Uuid;
 
 use universal_inbox::{
@@ -113,7 +112,6 @@ impl NotificationRepository for Repository {
                   notification.title,
                   notification.status as "status: _",
                   notification.source_id,
-                  notification.source_html_url,
                   notification.metadata as "metadata: Json<NotificationMetadata>",
                   notification.updated_at,
                   notification.last_read_at,
@@ -149,7 +147,6 @@ impl NotificationRepository for Repository {
                   notification.title,
                   notification.status as "status: _",
                   notification.source_id,
-                  notification.source_html_url,
                   notification.metadata as "metadata: Json<NotificationMetadata>",
                   notification.updated_at,
                   notification.last_read_at,
@@ -207,7 +204,6 @@ impl NotificationRepository for Repository {
                   notification.title as notification_title,
                   notification.status as notification_status,
                   notification.source_id as notification_source_id,
-                  notification.source_html_url as notification_source_html_url,
                   notification.metadata as notification_metadata,
                   notification.updated_at as notification_updated_at,
                   notification.last_read_at as notification_last_read_at,
@@ -222,7 +218,6 @@ impl NotificationRepository for Repository {
                   task.completed_at,
                   task.priority,
                   task.due_at,
-                  task.source_html_url,
                   task.tags,
                   task.parent_id,
                   task.project,
@@ -294,7 +289,6 @@ impl NotificationRepository for Repository {
                     title,
                     status,
                     source_id,
-                    source_html_url,
                     metadata,
                     updated_at,
                     last_read_at,
@@ -303,16 +297,12 @@ impl NotificationRepository for Repository {
                     task_id
                   )
                 VALUES
-                  ($1, $2, $3::notification_status, $4, $5, $6, $7, $8, $9, $10, $11)
+                  ($1, $2, $3::notification_status, $4, $5, $6, $7, $8, $9, $10)
             "#,
             notification.id.0,
             notification.title,
             notification.status.to_string() as _,
             notification.source_id,
-            notification
-                .source_html_url
-                .as_ref()
-                .map(|url| url.to_string()),
             metadata as Json<NotificationMetadata>, // force the macro to ignore type checking
             notification.updated_at.naive_utc(),
             notification
@@ -372,7 +362,6 @@ impl NotificationRepository for Repository {
                   notification.title,
                   notification.status as "status: _",
                   notification.source_id,
-                  notification.source_html_url,
                   notification.metadata as "metadata: Json<NotificationMetadata>",
                   notification.updated_at,
                   notification.last_read_at,
@@ -424,10 +413,6 @@ impl NotificationRepository for Repository {
             )
         })?;
 
-        let source_html_url_str = notification
-            .source_html_url
-            .as_ref()
-            .map(|url| url.to_string());
         let last_read_at_naive_utc = notification
             .last_read_at
             .map(|last_read_at| last_read_at.naive_utc());
@@ -445,9 +430,6 @@ impl NotificationRepository for Repository {
                 .push("status = ")
                 .push_bind_unseparated(notification.status.to_string())
                 .push_unseparated("::notification_status");
-            separated
-                .push("source_html_url = ")
-                .push_bind_unseparated(source_html_url_str.clone());
             separated
                 .push("metadata = ")
                 .push_bind_unseparated(metadata.clone());
@@ -496,7 +478,6 @@ impl NotificationRepository for Repository {
                     title,
                     status,
                     source_id,
-                    source_html_url,
                     metadata,
                     updated_at,
                     last_read_at,
@@ -505,7 +486,7 @@ impl NotificationRepository for Repository {
                     task_id
                   )
                 VALUES
-                  ($1, $2, $3::notification_status, $4, $5, $6, $7, $8, $9, $10, $11)
+                  ($1, $2, $3::notification_status, $4, $5, $6, $7, $8, $9, $10)
                 RETURNING
                   id
                 "#,
@@ -513,7 +494,6 @@ impl NotificationRepository for Repository {
                 notification.title,
                 notification.status.to_string() as _,
                 notification.source_id,
-                source_html_url_str,
                 metadata as Json<NotificationMetadata>, // force the macro to ignore type checking
                 notification.updated_at.naive_utc(),
                 last_read_at_naive_utc,
@@ -644,7 +624,6 @@ impl NotificationRepository for Repository {
                   notification.title,
                   notification.status,
                   notification.source_id,
-                  notification.source_html_url,
                   notification.metadata,
                   notification.updated_at,
                   notification.last_read_at,
@@ -760,7 +739,6 @@ impl NotificationRepository for Repository {
                   notification.title,
                   notification.status,
                   notification.source_id,
-                  notification.source_html_url,
                   notification.metadata,
                   notification.updated_at,
                   notification.last_read_at,
@@ -891,7 +869,6 @@ struct NotificationRow {
     title: String,
     status: PgNotificationStatus,
     source_id: String,
-    source_html_url: Option<String>,
     metadata: Json<NotificationMetadata>,
     updated_at: NaiveDateTime,
     last_read_at: Option<NaiveDateTime>,
@@ -907,7 +884,6 @@ struct NotificationWithTaskRow {
     notification_title: String,
     notification_status: PgNotificationStatus,
     notification_source_id: String,
-    notification_source_html_url: Option<String>,
     notification_metadata: Json<NotificationMetadata>,
     notification_updated_at: NaiveDateTime,
     notification_last_read_at: Option<NaiveDateTime>,
@@ -925,7 +901,6 @@ impl FromRow<'_, PgRow> for NotificationWithTaskRow {
             notification_status: row
                 .try_get::<PgNotificationStatus, &str>("notification_status")?,
             notification_source_id: row.try_get("notification_source_id")?,
-            notification_source_html_url: row.try_get("notification_source_html_url")?,
             notification_metadata: row.try_get("notification_metadata")?,
             notification_updated_at: row.try_get("notification_updated_at")?,
             notification_last_read_at: row.try_get("notification_last_read_at")?,
@@ -960,24 +935,12 @@ impl TryFrom<&NotificationRow> for Notification {
 
     fn try_from(row: &NotificationRow) -> Result<Self, Self::Error> {
         let status = (&row.status).try_into()?;
-        let source_html_url = row
-            .source_html_url
-            .as_ref()
-            .map(|url| {
-                url.parse::<Url>()
-                    .map_err(|e| UniversalInboxError::InvalidUrlData {
-                        source: e,
-                        output: url.clone(),
-                    })
-            })
-            .transpose()?;
 
         Ok(Notification {
             id: row.id.into(),
             title: row.title.to_string(),
             status,
             source_id: row.source_id.clone(),
-            source_html_url,
             metadata: row.metadata.0.clone(),
             updated_at: DateTime::from_naive_utc_and_offset(row.updated_at, Utc),
             last_read_at: row
@@ -998,24 +961,12 @@ impl TryFrom<&NotificationWithTaskRow> for NotificationWithTask {
 
     fn try_from(row: &NotificationWithTaskRow) -> Result<Self, Self::Error> {
         let status = (&row.notification_status).try_into()?;
-        let source_html_url = row
-            .notification_source_html_url
-            .as_ref()
-            .map(|url| {
-                url.parse::<Url>()
-                    .map_err(|e| UniversalInboxError::InvalidUrlData {
-                        source: e,
-                        output: url.clone(),
-                    })
-            })
-            .transpose()?;
 
         Ok(NotificationWithTask {
             id: row.notification_id.into(),
             title: row.notification_title.to_string(),
             status,
             source_id: row.notification_source_id.clone(),
-            source_html_url,
             metadata: row.notification_metadata.0.clone(),
             updated_at: DateTime::from_naive_utc_and_offset(row.notification_updated_at, Utc),
             last_read_at: row

@@ -10,10 +10,7 @@ use universal_inbox::{
     notification::{
         service::NotificationPatch, Notification, NotificationMetadata, NotificationStatus,
     },
-    task::{
-        integrations::todoist::{get_task_html_url, TodoistItem},
-        Task, TaskStatus,
-    },
+    task::{integrations::todoist::TodoistItem, Task, TaskStatus},
 };
 
 use universal_inbox_api::{configuration::Settings, integrations::oauth2::NangoConnection};
@@ -160,7 +157,6 @@ mod patch_notification {
             title: "task 1".to_string(),
             status: NotificationStatus::Unread,
             source_id: "1234".to_string(),
-            source_html_url: get_task_html_url("1234"),
             metadata: NotificationMetadata::Todoist,
             updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
             last_read_at: None,

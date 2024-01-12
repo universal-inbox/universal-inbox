@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                UPDATE\n                  notification\n                SET\n                  status = $1::notification_status\n                FROM notification as n\n                LEFT JOIN notification_details ON notification_details.notification_id = n.id\n                WHERE\n                  NOT notification.source_id = ANY($2)\n                  AND notification.kind = $3\n                  AND (notification.status::TEXT = 'Read' OR notification.status::TEXT = 'Unread')\n                  AND notification.user_id = $4\n                RETURNING\n                  notification.id,\n                  notification.title,\n                  notification.status as \"status: _\",\n                  notification.source_id,\n                  notification.source_html_url,\n                  notification.metadata as \"metadata: Json<NotificationMetadata>\",\n                  notification.updated_at,\n                  notification.last_read_at,\n                  notification.snoozed_until,\n                  notification.user_id,\n                  notification_details.details as \"details: Option<Json<NotificationDetails>>\",\n                  notification.task_id\n            ",
+  "query": "\n                UPDATE\n                  notification\n                SET\n                  status = $1::notification_status\n                FROM notification as n\n                LEFT JOIN notification_details ON notification_details.notification_id = n.id\n                WHERE\n                  NOT notification.source_id = ANY($2)\n                  AND notification.kind = $3\n                  AND (notification.status::TEXT = 'Read' OR notification.status::TEXT = 'Unread')\n                  AND notification.user_id = $4\n                RETURNING\n                  notification.id,\n                  notification.title,\n                  notification.status as \"status: _\",\n                  notification.source_id,\n                  notification.metadata as \"metadata: Json<NotificationMetadata>\",\n                  notification.updated_at,\n                  notification.last_read_at,\n                  notification.snoozed_until,\n                  notification.user_id,\n                  notification_details.details as \"details: Option<Json<NotificationDetails>>\",\n                  notification.task_id\n            ",
   "describe": {
     "columns": [
       {
@@ -37,41 +37,36 @@
       },
       {
         "ordinal": 4,
-        "name": "source_html_url",
-        "type_info": "Text"
-      },
-      {
-        "ordinal": 5,
         "name": "metadata: Json<NotificationMetadata>",
         "type_info": "Json"
       },
       {
-        "ordinal": 6,
+        "ordinal": 5,
         "name": "updated_at",
         "type_info": "Timestamp"
       },
       {
-        "ordinal": 7,
+        "ordinal": 6,
         "name": "last_read_at",
         "type_info": "Timestamp"
       },
       {
-        "ordinal": 8,
+        "ordinal": 7,
         "name": "snoozed_until",
         "type_info": "Timestamp"
       },
       {
-        "ordinal": 9,
+        "ordinal": 8,
         "name": "user_id",
         "type_info": "Uuid"
       },
       {
-        "ordinal": 10,
+        "ordinal": 9,
         "name": "details: Option<Json<NotificationDetails>>",
         "type_info": "Json"
       },
       {
-        "ordinal": 11,
+        "ordinal": 10,
         "name": "task_id",
         "type_info": "Uuid"
       }
@@ -101,7 +96,6 @@
       false,
       false,
       false,
-      true,
       false,
       false,
       true,
@@ -111,5 +105,5 @@
       true
     ]
   },
-  "hash": "de9fe517882b8b8b7825523685f122c3256dc9f1f716d928894b6108b6fd10f0"
+  "hash": "cb213ffac8bcf8dd343e1d8552e587635b94251d0583f0d747e4912ced8b6ad1"
 }

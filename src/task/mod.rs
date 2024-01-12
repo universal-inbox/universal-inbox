@@ -8,7 +8,7 @@ use clap::ValueEnum;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
-use serde_with::{serde_as, DisplayFromStr};
+use serde_with::serde_as;
 use url::Url;
 use uuid::Uuid;
 
@@ -19,6 +19,8 @@ use crate::{
     user::UserId,
     HasHtmlUrl,
 };
+
+use self::integrations::todoist::get_task_html_url;
 
 pub mod integrations;
 pub mod service;
@@ -34,9 +36,6 @@ pub struct Task {
     pub completed_at: Option<DateTime<Utc>>,
     pub priority: TaskPriority,
     pub due_at: Option<DueDate>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[serde_as(as = "Option<DisplayFromStr>")]
-    pub source_html_url: Option<Url>,
     pub tags: Vec<String>,
     pub parent_id: Option<TaskId>,
     pub project: String,
@@ -94,7 +93,6 @@ impl Task {
             id: Uuid::new_v4().into(),
             title: self.title.clone(),
             source_id: self.source_id.clone(),
-            source_html_url: self.source_html_url.clone(),
             status: if self.status != TaskStatus::Active {
                 NotificationStatus::Deleted
             } else {
@@ -126,11 +124,10 @@ impl Task {
 
 impl HasHtmlUrl for Task {
     fn get_html_url(&self) -> Url {
-        self.source_html_url
-            .clone()
-            .unwrap_or_else(|| match self.metadata {
-                TaskMetadata::Todoist(_) => DEFAULT_TODOIST_HTML_URL.parse::<Url>().unwrap(),
-            })
+        match self.metadata {
+            TaskMetadata::Todoist(_) => get_task_html_url(self.source_id.as_str())
+                .unwrap_or_else(|| DEFAULT_TODOIST_HTML_URL.parse::<Url>().unwrap()),
+        }
     }
 }
 
@@ -275,7 +272,6 @@ impl From<Task> for NotificationWithTask {
             id: Uuid::new_v4().into(),
             title: task.title.clone(),
             source_id: task.source_id.clone(),
-            source_html_url: task.source_html_url.clone(),
             status: NotificationStatus::Unread,
             metadata: match task.metadata {
                 TaskMetadata::Todoist(_) => NotificationMetadata::Todoist,

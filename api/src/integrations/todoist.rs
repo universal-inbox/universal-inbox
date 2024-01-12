@@ -29,9 +29,7 @@ use universal_inbox::{
     },
     notification::{NotificationSource, NotificationSourceKind},
     task::{
-        integrations::todoist::{
-            self, TodoistItem, TodoistItemDue, TodoistItemPriority, TodoistProject,
-        },
+        integrations::todoist::{TodoistItem, TodoistItemDue, TodoistItemPriority, TodoistProject},
         service::TaskPatch,
         ProjectSummary, Task, TaskCreation, TaskMetadata, TaskSource, TaskSourceKind, TaskStatus,
     },
@@ -359,7 +357,6 @@ impl TodoistService {
             completed_at: source.completed_at,
             priority: source.priority.into(),
             due_at: source.due.as_ref().map(|due| due.into()),
-            source_html_url: todoist::get_task_html_url(&source.id),
             tags: source.labels.clone(),
             parent_id: None, // Unsupported for now
             project: project_name,

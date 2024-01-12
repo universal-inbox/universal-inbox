@@ -188,7 +188,6 @@ impl GoogleMailThread {
         let title = self
             .get_message_header(MessageSelection::First, "Subject")
             .unwrap_or_else(|| DEFAULT_SUBJECT.to_string());
-        let source_html_url = Some(self.get_html_url_from_metadata());
         let updated_at = self.messages[self.messages.len() - 1].internal_date;
         let first_unread_message_index = self
             .messages
@@ -230,7 +229,6 @@ impl GoogleMailThread {
             id: Uuid::new_v4().into(),
             title,
             source_id: self.id.clone(),
-            source_html_url,
             status,
             metadata: NotificationMetadata::GoogleMail(Box::new(self)),
             updated_at,
@@ -386,6 +384,8 @@ mod tests {
     }
 
     mod notification_conversion {
+        use crate::HasHtmlUrl;
+
         use super::*;
         use pretty_assertions::assert_eq;
 
@@ -444,12 +444,10 @@ mod tests {
                 "18a909f8178".to_string()
             );
             assert_eq!(
-                google_mail_notification.source_html_url,
-                Some(
-                    "https://mail.google.com/mail/u/test@example.com/#inbox/18a909f8178"
-                        .parse::<Url>()
-                        .unwrap()
-                )
+                google_mail_notification.get_html_url(),
+                "https://mail.google.com/mail/u/test@example.com/#inbox/18a909f8178"
+                    .parse::<Url>()
+                    .unwrap()
             );
             assert_eq!(google_mail_notification.status, NotificationStatus::Unread);
             assert_eq!(
@@ -501,12 +499,10 @@ mod tests {
 
             assert_eq!(google_mail_notification.title, DEFAULT_SUBJECT.to_string());
             assert_eq!(
-                google_mail_notification.source_html_url,
-                Some(
-                    "https://mail.google.com/mail/u/test@example.com/#inbox/18a909f8178"
-                        .parse::<Url>()
-                        .unwrap()
-                )
+                google_mail_notification.get_html_url(),
+                "https://mail.google.com/mail/u/test@example.com/#inbox/18a909f8178"
+                    .parse::<Url>()
+                    .unwrap()
             );
             assert_eq!(google_mail_notification.status, NotificationStatus::Unread);
             assert_eq!(google_mail_notification.last_read_at, None);

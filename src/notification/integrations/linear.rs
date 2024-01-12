@@ -296,7 +296,6 @@ impl LinearNotification {
                 id: Uuid::new_v4().into(),
                 title: issue.title.clone(),
                 source_id: id.to_string(),
-                source_html_url: Some(issue.url.clone()),
                 status: if read_at.is_some() {
                     NotificationStatus::Read
                 } else {
@@ -321,7 +320,6 @@ impl LinearNotification {
                 id: Uuid::new_v4().into(),
                 title: project.name.clone(),
                 source_id: id.to_string(),
-                source_html_url: Some(project.url.clone()),
                 status: if read_at.is_some() {
                     NotificationStatus::Read
                 } else {

@@ -52,6 +52,7 @@ use crate::helpers::{
 mod patch_task {
     use super::*;
     use pretty_assertions::assert_eq;
+    use universal_inbox::HasHtmlUrl;
 
     #[rstest]
     #[tokio::test]
@@ -337,7 +338,7 @@ mod patch_task {
         let body = Some(format!(
             "- [{}]({})",
             notification.title,
-            notification.source_html_url.as_ref().unwrap()
+            notification.get_html_url().as_ref()
         ));
         create_and_mock_integration_connection(
             &app.app,
@@ -446,6 +447,7 @@ mod patch_task {
 mod patch_notification {
     use super::*;
     use pretty_assertions::assert_eq;
+    use universal_inbox::HasHtmlUrl;
 
     #[rstest]
     #[tokio::test]
@@ -489,7 +491,7 @@ mod patch_notification {
                     description: Some(format!(
                         "\n- [{}]({})",
                         notification.title,
-                        notification.source_html_url.as_ref().unwrap()
+                        notification.get_html_url().as_ref()
                     )),
                     ..Default::default()
                 },

@@ -15,10 +15,11 @@ use universal_inbox::{
     integration_connection::integrations::todoist::SyncToken,
     notification::{NotificationMetadata, NotificationStatus},
     task::{
-        integrations::todoist::{self, TodoistItem, TodoistItemDue, TodoistItemPriority},
+        integrations::todoist::{TodoistItem, TodoistItemDue, TodoistItemPriority},
         DueDate, Task, TaskCreationResult, TaskMetadata, TaskStatus,
     },
     user::UserId,
+    HasHtmlUrl,
 };
 
 use universal_inbox_api::integrations::todoist::{
@@ -227,12 +228,10 @@ pub fn assert_sync_items(
                     Some(DueDate::Date(NaiveDate::from_ymd_opt(2016, 9, 1).unwrap()))
                 );
                 assert_eq!(
-                    task.source_html_url,
-                    Some(
-                        "https://todoist.com/showTask?id=1123"
-                            .parse::<Url>()
-                            .unwrap()
-                    )
+                    task.get_html_url(),
+                    "https://todoist.com/showTask?id=1123"
+                        .parse::<Url>()
+                        .unwrap()
                 );
                 assert_eq!(task.project, "Inbox".to_string());
                 assert_eq!(
@@ -256,7 +255,6 @@ pub fn assert_sync_items(
                         NotificationStatus::Unread
                     }
                 );
-                assert_eq!(notif.source_html_url, task.source_html_url);
                 assert_eq!(notif.updated_at, task.created_at);
                 assert_eq!(notif.metadata, NotificationMetadata::Todoist);
                 assert_eq!(notif.task_id, Some(task.id));
@@ -267,12 +265,10 @@ pub fn assert_sync_items(
                 assert_eq!(task.title, "Task 2".to_string());
                 assert_eq!(task.status, TaskStatus::Active);
                 assert_eq!(
-                    task.source_html_url,
-                    Some(
-                        "https://todoist.com/showTask?id=1456"
-                            .parse::<Url>()
-                            .unwrap()
-                    )
+                    task.get_html_url(),
+                    "https://todoist.com/showTask?id=1456"
+                        .parse::<Url>()
+                        .unwrap()
                 );
                 assert_eq!(task.project, "Project2".to_string());
                 assert_eq!(
@@ -317,7 +313,6 @@ pub async fn create_task_from_todoist_item(
             completed_at: todoist_item.completed_at,
             priority: todoist_item.priority.into(),
             due_at: todoist_item.due.as_ref().map(|due| due.date.clone()),
-            source_html_url: todoist::get_task_html_url(&todoist_item.id),
             tags: todoist_item.labels.clone(),
             parent_id: None,
             project,

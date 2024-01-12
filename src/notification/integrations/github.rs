@@ -452,13 +452,10 @@ impl GithubNotification {
     }
 
     pub fn into_notification(self, user_id: UserId) -> Notification {
-        let source_html_url = self.get_html_url_from_metadata();
-
         Notification {
             id: Uuid::new_v4().into(),
             title: self.subject.title.clone(),
             source_id: self.id.clone(),
-            source_html_url: Some(source_html_url),
             status: if self.unread {
                 NotificationStatus::Unread
             } else {
