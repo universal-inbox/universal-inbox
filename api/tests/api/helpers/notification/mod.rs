@@ -9,6 +9,7 @@ use universal_inbox::{
         NotificationStatus, NotificationWithTask,
     },
     task::{TaskCreation, TaskId},
+    Page,
 };
 
 use universal_inbox_api::repository::notification::NotificationRepository;
@@ -61,7 +62,7 @@ pub async fn list_notifications_with_tasks(
     include_snoozed_notifications: bool,
     task_id: Option<TaskId>,
 ) -> Vec<NotificationWithTask> {
-    list_notifications_response(
+    let notifications_page: Page<NotificationWithTask> = list_notifications_response(
         client,
         api_address,
         status_filter,
@@ -71,7 +72,9 @@ pub async fn list_notifications_with_tasks(
     .await
     .json()
     .await
-    .expect("Cannot parse JSON result")
+    .expect("Cannot parse JSON result");
+
+    notifications_page.content
 }
 
 pub async fn list_notifications(

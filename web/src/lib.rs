@@ -13,14 +13,14 @@ use utils::get_element_by_id;
 use wasm_bindgen::{prelude::Closure, JsCast};
 use web_sys::KeyboardEvent;
 
-use universal_inbox::{notification::NotificationWithTask, HasHtmlUrl};
+use universal_inbox::{notification::NotificationWithTask, HasHtmlUrl, Page};
 
 use config::{get_api_base_url, get_app_config, APP_CONFIG};
 use model::{PreviewPane, UniversalInboxUIModel, UI_MODEL};
 use route::Route;
 use services::{
     integration_connection_service::{integration_connnection_service, INTEGRATION_CONNECTIONS},
-    notification_service::{notification_service, NotificationCommand, NOTIFICATIONS},
+    notification_service::{notification_service, NotificationCommand, NOTIFICATIONS_PAGE},
     task_service::{task_service, TaskCommand},
     toast_service::{toast_service, TOASTS},
     user_service::{user_service, CONNECTED_USER},
@@ -45,7 +45,7 @@ mod utils;
 
 pub fn App(cx: Scope) -> Element {
     use_init_atom_root(cx);
-    let notifications_ref = use_atom_ref(cx, &NOTIFICATIONS);
+    let notifications_page_ref = use_atom_ref(cx, &NOTIFICATIONS_PAGE);
     let ui_model_ref: UseAtomRef<UniversalInboxUIModel> = use_atom_ref(cx, &UI_MODEL).clone();
     let toasts_ref = use_atom_ref(cx, &TOASTS);
     let app_config_ref = use_atom_ref(cx, &APP_CONFIG);
@@ -71,7 +71,7 @@ pub fn App(cx: Scope) -> Element {
         notification_service(
             rx,
             api_base_url.clone(),
-            notifications_ref.clone(),
+            notifications_page_ref.clone(),
             ui_model_ref.clone(),
             task_service_handle,
             toast_service_handle,
@@ -102,7 +102,7 @@ pub fn App(cx: Scope) -> Element {
         to_owned![ui_model_ref];
         to_owned![notification_service_handle];
         to_owned![task_service_handle];
-        to_owned![notifications_ref];
+        to_owned![notifications_page_ref];
         to_owned![app_config_ref];
         to_owned![is_dark_mode];
 
@@ -113,7 +113,7 @@ pub fn App(cx: Scope) -> Element {
                 ui_model_ref,
                 notification_service_handle.clone(),
                 task_service_handle,
-                notifications_ref,
+                notifications_page_ref,
             );
 
             let app_config = get_app_config().await.unwrap();
@@ -157,16 +157,17 @@ fn setup_key_bindings(
     ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
     notification_service_handle: Coroutine<NotificationCommand>,
     _task_service_handle: Coroutine<TaskCommand>,
-    notifications_ref: UseAtomRef<Vec<NotificationWithTask>>,
+    notifications_page_ref: UseAtomRef<Page<NotificationWithTask>>,
 ) -> Option<()> {
     let window = web_sys::window()?;
     let document = window.document()?;
 
     let handler = Closure::wrap(Box::new(move |evt: KeyboardEvent| {
-        let notifications = notifications_ref.read();
-        let list_length = notifications.len();
-        let selected_notification =
-            notifications.get(ui_model_ref.read().selected_notification_index);
+        let notifications_page = notifications_page_ref.read();
+        let list_length = notifications_page.content.len();
+        let selected_notification = notifications_page
+            .content
+            .get(ui_model_ref.read().selected_notification_index);
         let current_url = current_location().unwrap();
         let mut handled = true;
 

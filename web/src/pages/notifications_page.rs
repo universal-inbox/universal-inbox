@@ -13,11 +13,11 @@ use crate::{
     },
     config::get_api_base_url,
     model::UI_MODEL,
-    services::notification_service::{NotificationCommand, NOTIFICATIONS},
+    services::notification_service::{NotificationCommand, NOTIFICATIONS_PAGE},
 };
 
 pub fn NotificationsPage(cx: Scope) -> Element {
-    let notifications_ref = use_atom_ref(cx, &NOTIFICATIONS);
+    let notifications_page_ref = use_atom_ref(cx, &NOTIFICATIONS_PAGE);
     let ui_model_ref = use_atom_ref(cx, &UI_MODEL);
     let api_base_url = use_memo(cx, (), |()| get_api_base_url().unwrap());
 
@@ -40,10 +40,10 @@ pub fn NotificationsPage(cx: Scope) -> Element {
         cx,
         &(
             ui_model_ref.read().selected_notification_index,
-            notifications_ref.read().clone(),
+            notifications_page_ref.read().clone(),
         ),
-        |(selected_notification_index, notifications)| {
-            let selected_notification = notifications.get(selected_notification_index);
+        |(selected_notification_index, notifications_page)| {
+            let selected_notification = notifications_page.content.get(selected_notification_index);
             if let Some(notification) = selected_notification {
                 notification_to_plan.set(Some(notification.clone()));
                 notification_to_link.set(Some(notification.clone()));
@@ -57,7 +57,7 @@ pub fn NotificationsPage(cx: Scope) -> Element {
             id: "notifications-page",
             class: "h-full mx-auto flex flex-row px-4 divide-x divide-base-200",
 
-            if notifications_ref.read().is_empty() {
+            if notifications_page_ref.read().content.is_empty() {
                 render! {
                     img {
                         class: "w-screen h-full object-contain object-center object-top opacity-30 dark:opacity-10",
@@ -72,7 +72,7 @@ pub fn NotificationsPage(cx: Scope) -> Element {
                         class: "h-full basis-2/3 overflow-auto scroll-auto px-2 snap-y snap-mandatory",
 
                         NotificationsList {
-                            notifications: notifications_ref.read().clone(),
+                            notifications: notifications_page_ref.read().content.clone(),
                             ui_model_ref: ui_model_ref.clone(),
                             on_delete: |notification: &NotificationWithTask| {
                                 notification_service.send(NotificationCommand::DeleteFromNotification(notification.clone()));

@@ -11,7 +11,7 @@ pub struct UniversalInboxUIModel {
     pub task_link_modal_opened: bool,
     pub unhover_element: bool,
     pub authentication_state: AuthenticationState,
-    pub loaded_notifications: Option<Result<usize, String>>,
+    pub notifications_count: Option<Result<usize, String>>,
     pub selected_preview_pane: PreviewPane,
     pub error_message: Option<String>,
     pub confirmation_message: Option<String>,

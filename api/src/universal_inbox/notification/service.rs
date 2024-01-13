@@ -15,6 +15,7 @@ use universal_inbox::{
     },
     task::{service::TaskPatch, TaskCreation, TaskId, TaskStatus},
     user::UserId,
+    Page,
 };
 
 use crate::{
@@ -122,7 +123,7 @@ impl NotificationService {
         include_snoozed_notifications: bool,
         task_id: Option<TaskId>,
         user_id: UserId,
-    ) -> Result<Vec<NotificationWithTask>, UniversalInboxError> {
+    ) -> Result<Page<NotificationWithTask>, UniversalInboxError> {
         self.repository
             .fetch_all_notifications(
                 executor,

@@ -12,6 +12,7 @@ use universal_inbox::{
     },
     task::TaskId,
     user::UserId,
+    Page,
 };
 
 use crate::{
@@ -44,7 +45,7 @@ pub trait NotificationRepository {
         include_snoozed_notifications: bool,
         task_id: Option<TaskId>,
         user_id: UserId,
-    ) -> Result<Vec<NotificationWithTask>, UniversalInboxError>;
+    ) -> Result<Page<NotificationWithTask>, UniversalInboxError>;
     async fn create_notification<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -197,7 +198,61 @@ impl NotificationRepository for Repository {
         include_snoozed_notifications: bool,
         task_id: Option<TaskId>,
         user_id: UserId,
-    ) -> Result<Vec<NotificationWithTask>, UniversalInboxError> {
+    ) -> Result<Page<NotificationWithTask>, UniversalInboxError> {
+        fn add_filters(
+            query_builder: &mut QueryBuilder<Postgres>,
+            status: Vec<NotificationStatus>,
+            include_snoozed_notifications: bool,
+            task_id: Option<TaskId>,
+            user_id: UserId,
+        ) {
+            let mut separated = query_builder.separated(" AND ");
+            if !status.is_empty() {
+                separated
+                    .push("notification.status::TEXT = ANY(")
+                    .push_bind_unseparated(
+                        status
+                            .into_iter()
+                            .map(|s| s.to_string())
+                            .collect::<Vec<String>>(),
+                    )
+                    .push_unseparated(")");
+            }
+            separated
+                .push(" notification.user_id = ")
+                .push_bind_unseparated(user_id.0);
+
+            if !include_snoozed_notifications {
+                separated
+                    .push(" (notification.snoozed_until is NULL OR notification.snoozed_until <=")
+                    .push_bind_unseparated(Utc::now().naive_utc())
+                    .push_unseparated(")");
+            }
+
+            if let Some(id) = task_id {
+                separated
+                    .push(" notification.task_id = ")
+                    .push_bind_unseparated(id.0);
+            }
+        }
+
+        let mut count_query_builder =
+            QueryBuilder::new(r#"SELECT count(*) FROM notification WHERE "#);
+
+        add_filters(
+            &mut count_query_builder,
+            status.clone(),
+            include_snoozed_notifications,
+            task_id,
+            user_id,
+        );
+
+        let count = count_query_builder
+            .build_query_scalar::<i64>()
+            .fetch_one(&mut **executor)
+            .await
+            .context("Failed to fetch notifications count from storage")?;
+
         let mut query_builder = QueryBuilder::new(
             r#"
                 SELECT
@@ -234,34 +289,13 @@ impl NotificationRepository for Repository {
             "#,
         );
 
-        let mut separated = query_builder.separated(" AND ");
-        if !status.is_empty() {
-            separated
-                .push("notification.status::TEXT = ANY(")
-                .push_bind_unseparated(
-                    status
-                        .into_iter()
-                        .map(|s| s.to_string())
-                        .collect::<Vec<String>>(),
-                )
-                .push_unseparated(")");
-        }
-        separated
-            .push(" notification.user_id = ")
-            .push_bind_unseparated(user_id.0);
-
-        if !include_snoozed_notifications {
-            separated
-                .push(" (notification.snoozed_until is NULL OR notification.snoozed_until <=")
-                .push_bind_unseparated(Utc::now().naive_utc())
-                .push_unseparated(")");
-        }
-
-        if let Some(id) = task_id {
-            separated
-                .push(" notification.task_id = ")
-                .push_bind_unseparated(id.0);
-        }
+        add_filters(
+            &mut query_builder,
+            status,
+            include_snoozed_notifications,
+            task_id,
+            user_id,
+        );
 
         query_builder.push(" ORDER BY notification.updated_at ASC LIMIT 100");
 
@@ -271,7 +305,15 @@ impl NotificationRepository for Repository {
             .await
             .context("Failed to fetch notifications from storage")?;
 
-        records.iter().map(|r| r.try_into()).collect()
+        Ok(Page {
+            page: 1,
+            per_page: 100,
+            total: count.try_into().unwrap(), // count(*) cannot be negative
+            content: records
+                .iter()
+                .map(|r| r.try_into())
+                .collect::<Result<Vec<NotificationWithTask>, UniversalInboxError>>()?,
+        })
     }
 
     #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.to_string()))]

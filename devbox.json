@@ -25,7 +25,7 @@
     "fzf":              "latest",
     "process-compose":  "latest",
     "binaryen":         "latest",
-    "cargo-llvm-cov":   "latest",
+    "cargo-llvm-cov":   "0.5.31",
     "cargo-chef":       "latest",
     "openssl.dev":      "",
     "wasm-bindgen-cli": "0.2.89"

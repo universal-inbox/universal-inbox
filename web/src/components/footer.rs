@@ -53,7 +53,7 @@ pub fn Footer(cx: Scope) -> Element {
 
                 div { class: "divider divider-horizontal" }
 
-                match &ui_model_ref.read().loaded_notifications {
+                match &ui_model_ref.read().notifications_count {
                     Some(Ok(count)) => render! {
                         div {
                             class: "tooltip tooltip-left",
