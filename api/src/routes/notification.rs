@@ -17,6 +17,7 @@ use universal_inbox::{
     },
     task::{TaskCreation, TaskId},
     user::UserId,
+    Page,
 };
 
 use crate::{
@@ -74,7 +75,7 @@ pub async fn list_notifications(
         .begin()
         .await
         .context("Failed to create new transaction while listing notifications")?;
-    let result: Vec<NotificationWithTask> = service
+    let result: Page<NotificationWithTask> = service
         .list_notifications(
             &mut transaction,
             list_notification_request.status.clone().unwrap_or_default(),

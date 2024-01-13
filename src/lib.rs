@@ -60,3 +60,11 @@ pub struct SuccessResponse {
     pub success: bool,
     pub message: String,
 }
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Hash, Default)]
+pub struct Page<T> {
+    pub page: usize,
+    pub per_page: usize,
+    pub total: usize,
+    pub content: Vec<T>,
+}

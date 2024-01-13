@@ -13,6 +13,7 @@ use universal_inbox::{
         NotificationWithTask,
     },
     task::{TaskCreation, TaskId, TaskPlanning},
+    Page,
 };
 
 use crate::{
@@ -37,12 +38,17 @@ pub enum NotificationCommand {
     LinkNotificationWithTask(NotificationId, TaskId),
 }
 
-pub static NOTIFICATIONS: AtomRef<Vec<NotificationWithTask>> = AtomRef(|_| vec![]);
+pub static NOTIFICATIONS_PAGE: AtomRef<Page<NotificationWithTask>> = AtomRef(|_| Page {
+    page: 0,
+    per_page: 0,
+    total: 0,
+    content: vec![],
+});
 
 pub async fn notification_service<'a>(
     mut rx: UnboundedReceiver<NotificationCommand>,
     api_base_url: Url,
-    notifications: UseAtomRef<Vec<NotificationWithTask>>,
+    notifications_page: UseAtomRef<Page<NotificationWithTask>>,
     ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
     task_service: Coroutine<TaskCommand>,
     toast_service: Coroutine<ToastCommand>,
@@ -51,7 +57,7 @@ pub async fn notification_service<'a>(
         let msg = rx.next().await;
         match msg {
             Some(NotificationCommand::Refresh) => {
-                refresh_notifications(&api_base_url, &notifications, &ui_model_ref).await;
+                refresh_notifications(&api_base_url, &notifications_page, &ui_model_ref).await;
             }
             Some(NotificationCommand::Sync(source)) => {
                 let result: Result<Vec<Notification>> = call_api_and_notify(
@@ -69,18 +75,19 @@ pub async fn notification_service<'a>(
                 )
                 .await;
                 if result.is_ok() {
-                    refresh_notifications(&api_base_url, &notifications, &ui_model_ref).await;
+                    refresh_notifications(&api_base_url, &notifications_page, &ui_model_ref).await;
                 }
             }
             Some(NotificationCommand::DeleteFromNotification(notification)) => {
                 if let Some(ref task) = notification.task {
                     if notification.is_built_from_task() {
-                        delete_task(notification.id, task.id, &notifications, &task_service).await;
+                        delete_task(notification.id, task.id, &notifications_page, &task_service)
+                            .await;
                     } else {
                         delete_notification(
                             &api_base_url,
                             notification.id,
-                            &notifications,
+                            &notifications_page,
                             &ui_model_ref,
                             &toast_service,
                         )
@@ -90,7 +97,7 @@ pub async fn notification_service<'a>(
                     delete_notification(
                         &api_base_url,
                         notification.id,
-                        &notifications,
+                        &notifications_page,
                         &ui_model_ref,
                         &toast_service,
                     )
@@ -98,8 +105,9 @@ pub async fn notification_service<'a>(
                 }
             }
             Some(NotificationCommand::Unsubscribe(notification_id)) => {
-                notifications
+                notifications_page
                     .write()
+                    .content
                     .retain(|notif| notif.id != notification_id);
 
                 let _result: Result<Notification> = call_api_and_notify(
@@ -120,8 +128,9 @@ pub async fn notification_service<'a>(
             Some(NotificationCommand::Snooze(notification_id)) => {
                 let snoozed_time = compute_snoozed_until(Local::now(), 1, 6);
 
-                notifications
+                notifications_page
                     .write()
+                    .content
                     .retain(|notif| notif.id != notification_id);
 
                 let _result: Result<Notification> = call_api_and_notify(
@@ -142,8 +151,9 @@ pub async fn notification_service<'a>(
             Some(NotificationCommand::CompleteTaskFromNotification(notification)) => {
                 if let Some(ref task) = notification.task {
                     if notification.is_built_from_task() {
-                        notifications
+                        notifications_page
                             .write()
+                            .content
                             .retain(|notif| notif.id != notification.id);
 
                         task_service.send(TaskCommand::Complete(task.id));
@@ -151,15 +161,17 @@ pub async fn notification_service<'a>(
                 }
             }
             Some(NotificationCommand::PlanTask(notification, task_id, parameters)) => {
-                notifications
+                notifications_page
                     .write()
+                    .content
                     .retain(|notif| notif.id != notification.id);
 
                 task_service.send(TaskCommand::Plan(task_id, parameters));
             }
             Some(NotificationCommand::CreateTaskFromNotification(notification, parameters)) => {
-                notifications
+                notifications_page
                     .write()
+                    .content
                     .retain(|notif| notif.id != notification.id);
 
                 let _result: Result<Option<NotificationWithTask>> = call_api_and_notify(
@@ -175,8 +187,9 @@ pub async fn notification_service<'a>(
                 .await;
             }
             Some(NotificationCommand::LinkNotificationWithTask(notification_id, task_id)) => {
-                notifications
+                notifications_page
                     .write()
+                    .content
                     .retain(|notif| notif.id != notification_id);
 
                 let _result: Result<NotificationWithTask> = call_api_and_notify(
@@ -202,12 +215,12 @@ pub async fn notification_service<'a>(
 
 async fn refresh_notifications(
     api_base_url: &Url,
-    notifications: &UseAtomRef<Vec<NotificationWithTask>>,
+    notifications_page: &UseAtomRef<Page<NotificationWithTask>>,
     ui_model_ref: &UseAtomRef<UniversalInboxUIModel>,
 ) {
-    ui_model_ref.write().loaded_notifications = None;
+    ui_model_ref.write().notifications_count = None;
 
-    let result: Result<Vec<NotificationWithTask>> = call_api(
+    let result: Result<Page<NotificationWithTask>> = call_api(
         Method::GET,
         api_base_url,
         "notifications?status=Unread,Read&with_tasks=true",
@@ -218,14 +231,21 @@ async fn refresh_notifications(
     .await;
 
     match result {
-        Ok(new_notifications) => {
-            let mut notifications = notifications.write();
-            notifications.clear();
-            notifications.extend(new_notifications);
-            ui_model_ref.write().loaded_notifications = Some(Ok(notifications.len()));
+        Ok(new_notifications_page) => {
+            // Using notifications_page.set() breaks the UI with an already borrowed error
+            // Thus, copying each field manually
+            let mut notifications_page = notifications_page.write();
+            notifications_page.page = new_notifications_page.page;
+            notifications_page.total = new_notifications_page.total;
+            notifications_page.per_page = new_notifications_page.per_page;
+            notifications_page.content.clear();
+            notifications_page
+                .content
+                .extend(new_notifications_page.content);
+            ui_model_ref.write().notifications_count = Some(Ok(new_notifications_page.total));
         }
         Err(err) => {
-            ui_model_ref.write().loaded_notifications =
+            ui_model_ref.write().notifications_count =
                 Some(Err(format!("Failed to load notifications: {err}")));
         }
     }
@@ -234,16 +254,18 @@ async fn refresh_notifications(
 async fn delete_notification(
     api_base_url: &Url,
     notification_id: NotificationId,
-    notifications: &UseAtomRef<Vec<NotificationWithTask>>,
+    notifications_page: &UseAtomRef<Page<NotificationWithTask>>,
     ui_model_ref: &UseAtomRef<UniversalInboxUIModel>,
     toast_service: &Coroutine<ToastCommand>,
 ) {
     {
-        let mut notifications = notifications.write();
+        let mut notifications_page = notifications_page.write();
         let mut ui_model_ref = ui_model_ref.write();
 
-        notifications.retain(|notif| notif.id != notification_id);
-        let notifications_count = notifications.len();
+        notifications_page
+            .content
+            .retain(|notif| notif.id != notification_id);
+        let notifications_count = notifications_page.content.len();
 
         if notifications_count > 0
             && ui_model_ref.selected_notification_index >= notifications_count
@@ -271,11 +293,12 @@ async fn delete_notification(
 async fn delete_task(
     notification_id: NotificationId,
     task_id: TaskId,
-    notifications: &UseAtomRef<Vec<NotificationWithTask>>,
+    notifications_page: &UseAtomRef<Page<NotificationWithTask>>,
     task_service: &Coroutine<TaskCommand>,
 ) {
-    notifications
+    notifications_page
         .write()
+        .content
         .retain(|notif| notif.id != notification_id);
 
     task_service.send(TaskCommand::Delete(task_id));
