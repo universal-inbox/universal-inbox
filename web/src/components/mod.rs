@@ -213,7 +213,7 @@ pub fn TagDisplay<'a>(cx: Scope, tag: Tag, class: Option<&'a str>) -> Element {
 
     render! {
         div {
-            class: "badge {badge_text_class} {badge_class} {class.unwrap_or_default()}",
+            class: "badge {badge_text_class} {badge_class} {class.unwrap_or_default()} whitespace-nowrap",
             style: "{badge_style}",
             "{tag.get_name()}"
         }

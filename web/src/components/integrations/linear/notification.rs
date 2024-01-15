@@ -80,11 +80,14 @@ pub fn LinearIssueDetailsDisplay<'a>(cx: Scope, linear_issue: &'a LinearIssue) -
         div {
             class: "flex items-center gap-2",
 
-            for tag in linear_issue
-                .labels
-                .iter()
-                .map(|label| Into::<Tag>::into(label.clone())) {
-                render! { TagDisplay { tag: tag, class: "text-[10px]" } }
+            div {
+                class: "flex flex-wrap items-center gap-1",
+                for tag in linear_issue
+                    .labels
+                    .iter()
+                    .map(|label| Into::<Tag>::into(label.clone())) {
+                        render! { TagDisplay { tag: tag, class: "text-[10px]" } }
+                    }
             }
 
             if let Some(assignee) = &linear_issue.assignee {
