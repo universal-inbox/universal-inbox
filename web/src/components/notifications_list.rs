@@ -291,13 +291,14 @@ fn NotificationDisplay<'a>(
         }
     };
 
-    let button_style = use_memo(cx, (selected,), |(selected,)| {
-        if selected {
-            "swap-active"
-        } else {
-            "group-hover:swap-active"
-        }
-    });
+    let (button_active_style, details_style, button_style) =
+        use_memo(cx, (selected,), |(selected,)| {
+            if selected {
+                ("swap-active", "invisible", "")
+            } else {
+                ("", "", "invisible")
+            }
+        });
     let notif_updated_at = use_memo(cx, &(notif.updated_at,), |(updated_at,)| {
         Into::<DateTime<Local>>::into(updated_at).format("%Y-%m-%d %H:%M")
     });
@@ -327,13 +328,13 @@ fn NotificationDisplay<'a>(
         td {
             class: "px-2 py-0 rounded-none flex items-center justify-end",
             div {
-                class: "swap {button_style}",
+                class: "swap {button_active_style}",
                 div {
-                    class: "swap-on flex items-center justify-end",
+                    class: "swap-on flex items-center justify-end {button_style}",
                     children
                 }
                 div {
-                    class: "swap-off text-xs flex gap-2 items-center justify-end group-hover:invisible",
+                    class: "swap-off text-xs flex gap-2 items-center justify-end {details_style}",
 
                     NotificationDetailsDisplay { notification: notif }
                     span { class: "text-gray-400 whitespace-nowrap text-[10px] font-mono", "{notif_updated_at}" }
