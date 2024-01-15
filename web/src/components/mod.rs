@@ -7,6 +7,7 @@ use url::Url;
 use crate::utils::compute_text_color_from_background_color;
 
 pub mod floating_label_inputs;
+pub mod flowbite;
 pub mod footer;
 pub mod icons;
 pub mod integrations;
