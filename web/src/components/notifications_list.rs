@@ -217,7 +217,7 @@ fn Notification<'a>(
 
     render! {
         tr {
-            class: "hover py-1 {style} group snap-start cursor-pointer",
+            class: "hover flex items-center py-1 {style} group snap-start cursor-pointer",
             key: "{notif.id}",
             onmousemove: |_| {
                 if ui_model_ref.write_silent().set_unhover_element(false) {
@@ -321,7 +321,7 @@ fn NotificationDisplay<'a>(
             }
         }
         td {
-            class: "px-2 py-0",
+            class: "px-2 py-0 grow",
 
             notification_display
         }
