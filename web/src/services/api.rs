@@ -119,7 +119,7 @@ pub async fn call_api_and_notify<R: for<'de> serde::de::Deserialize<'de>, B: ser
                 id: toast_id,
                 kind: Some(ToastKind::Failure),
                 message: Some("An error occurred while calling the Universal Inbox API. Please, retry 🙏 If the issue keeps happening, please contact our support.".to_string()),
-                timeout: Some(Some(5_000)),
+                timeout: Some(Some(10_000)),
             };
             toast_service.send(ToastCommand::Update(toast_update));
             error
