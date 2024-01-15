@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 use crate::{
     integrations::linear::graphql::notifications_query, universal_inbox::UniversalInboxError,
+    utils::emoji::replace_emoji_code_with_emoji,
 };
 
 impl TryFrom<notifications_query::NotificationsQueryNotificationsNodesOnIssueNotificationIssueTeam>
@@ -74,7 +75,9 @@ impl
                 .parse()
                 .with_context(|| format!("Failed to parse URL from `{}`", value.url))?,
             description: value.description,
-            icon: value.icon,
+            icon: value
+                .icon
+                .and_then(|icon| replace_emoji_code_with_emoji(&icon)),
             color: value.color,
             state: value.state.try_into()?,
             progress: (value.progress * 100.0).round() as i64,
@@ -275,11 +278,7 @@ impl TryFrom<notifications_query::NotificationsQueryNotificationsNodesOnProjectN
             description: value.description,
             icon: value
                 .icon
-                .map(|icon| {
-                    icon.parse()
-                        .with_context(|| format!("Failed to parse URL from `{icon}`"))
-                })
-                .transpose()?,
+                .and_then(|icon| replace_emoji_code_with_emoji(&icon)),
             color: value.color,
             state: value.state.try_into()?,
             progress: (value.progress * 100.0).round() as i64,

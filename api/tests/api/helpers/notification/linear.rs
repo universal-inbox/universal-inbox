@@ -3,11 +3,12 @@ use graphql_client::{Error, GraphQLQuery, Response};
 use httpmock::{Method::POST, Mock, MockServer};
 use rstest::*;
 use url::Url;
+use uuid::Uuid;
 
 use universal_inbox::{
     notification::{
-        integrations::linear::LinearNotification, Notification, NotificationMetadata,
-        NotificationStatus,
+        integrations::linear::{LinearNotification, LinearProject},
+        Notification, NotificationMetadata, NotificationStatus,
     },
     user::UserId,
     HasHtmlUrl,
@@ -272,6 +273,30 @@ pub fn assert_sync_notifications(
                     notification.metadata,
                     NotificationMetadata::Linear(Box::new(sync_linear_notifications[0].clone()))
                 );
+                match &notification.metadata {
+                    NotificationMetadata::Linear(linear_notification) => {
+                        match &**linear_notification {
+                            LinearNotification::ProjectNotification {
+                                project: LinearProject { id, name, icon, .. },
+                                ..
+                            } => {
+                                assert_eq!(
+                                    id,
+                                    &Uuid::parse_str("c1b0f0f8-9e16-4335-a540-bda09cc491df")
+                                        .unwrap()
+                                );
+                                assert_eq!(name, "Test project");
+                                assert_eq!(icon, &Some("🚀".to_string()));
+                            }
+                            _ => {
+                                panic!("Expected Linear project notification metadata");
+                            }
+                        }
+                    }
+                    _ => {
+                        panic!("Expected Linear notification metadata");
+                    }
+                }
             }
             _ => {
                 // Ignore other notifications

@@ -31,6 +31,7 @@ color-backtrace = "0.6"
 config = "0.13.0"
 csp = "2.0.0"
 email_address = { workspace = true }
+emojis = "0.6.0"
 enum_derive = { workspace = true }
 enum-display = "0.1.0"
 format_serde_error = "0.3.0"

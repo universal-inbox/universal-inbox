@@ -24,7 +24,7 @@ pub fn LinearProjectPreview<'a>(cx: Scope, linear_project: &'a LinearProject) ->
                 LinearProjectIcon { class: "h-5 w-5", linear_project: linear_project }
 
                 if let Some(icon) = &linear_project.icon {
-                    render! { img { class: "h-5 w-5", src: "{icon}" } }
+                    render! { span { "{icon}" } }
                 }
 
                 a {
