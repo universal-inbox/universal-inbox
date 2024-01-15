@@ -6,5 +6,14 @@ default:
 
 @publish:
     docker buildx create --use --driver docker-container
-    docker buildx bake --push universal-inbox --set "*.tags=dax42/universal-inbox:$(git rev-parse HEAD)" --set "*.tags=dax42/universal-inbox:latest"
+    docker buildx build \
+      --push \
+      --platform linux/amd64,linux/arm64 \
+      -t dax42/universal-inbox:$(git rev-parse HEAD) \
+      -t dax42/universal-inbox:latest \
+      --cache-to type=local,mode=max,image-manifest=true,oci-mediatypes=true,dest=cache \
+      --cache-from type=local,src=cache \
+      --label service="universal-inbox" \
+      --file ../Dockerfile \
+      ..
     echo "🚀 Docker image dax42/universal-inbox published with tag $(git rev-parse HEAD)"
