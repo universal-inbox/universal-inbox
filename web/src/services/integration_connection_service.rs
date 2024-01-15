@@ -81,7 +81,7 @@ pub async fn integration_connnection_service<'a>(
                         toast_service.send(ToastCommand::Push(Toast {
                             kind: ToastKind::Failure,
                             message: format!("An error occurred while connecting with {integration_provider_kind}. Please, retry 🙏 If the issue keeps happening, please contact our support."),
-                            timeout: Some(5_000),
+                            timeout: Some(10_000),
                             ..Default::default()
                         }));
                     }
@@ -116,7 +116,7 @@ pub async fn integration_connnection_service<'a>(
                                 "An error occurred while updating integration connection {}. Please, retry 🙏 If the issue keeps happening, please contact our support.",
                                 integration_connection.id
                             ),
-                            timeout: Some(5_000),
+                            timeout: Some(10_000),
                             ..Default::default()
                         }));
                     }
@@ -148,7 +148,7 @@ pub async fn integration_connnection_service<'a>(
                             message: format!(
                                 "An error occurred while authenticating with {provider_kind}. Please, retry 🙏 If the issue keeps happening, please contact our support."
                             ),
-                            timeout: Some(5_000),
+                            timeout: Some(10_000),
                             ..Default::default()
                         }));
                     }
@@ -191,7 +191,7 @@ pub async fn integration_connnection_service<'a>(
                             message: format!(
                                 "An error occurred while reconnecting with {provider_kind}. Please, retry 🙏 If the issue keeps happening, please contact our support."
                             ),
-                            timeout: Some(5_000),
+                            timeout: Some(10_000),
                             ..Default::default()
                         }));
                     }

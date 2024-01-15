@@ -25,11 +25,8 @@ use services::{
     toast_service::{toast_service, TOASTS},
     user_service::{user_service, CONNECTED_USER},
 };
-
-use crate::{
-    theme::{toggle_dark_mode, IS_DARK_MODE},
-    utils::{current_location, get_local_storage, open_link},
-};
+use theme::{toggle_dark_mode, IS_DARK_MODE};
+use utils::{current_location, get_local_storage, open_link};
 
 mod auth;
 mod components;

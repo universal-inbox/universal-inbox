@@ -50,7 +50,7 @@ pub fn ToastZone(cx: Scope) -> Element {
 
     render! {
         div {
-            class: "toast",
+            class: "toast toast-bottom toast-end items-end",
 
             toasts_ref.read().clone().into_iter().map(move |(id, toast)| {
                 render! {
@@ -79,12 +79,35 @@ fn Toast<'a>(
     on_close: EventHandler<'a>,
 ) -> Element {
     let timeout_progress = use_state(cx, || 50.0);
-    let alert_style = use_memo(cx, kind, |kind| match kind {
-        ToastKind::Message => "alert-info",
-        ToastKind::Loading => "alert-info",
-        ToastKind::Success => "alert-success",
-        ToastKind::Failure => "alert-error",
-    });
+    let (alert_style, progress_style) = use_memo(
+        cx,
+        (kind, &timeout.flatten().is_some()),
+        |(kind, has_timeout)| {
+            let border_style = if has_timeout {
+                "border-0"
+            } else {
+                "border-t-4"
+            };
+            match kind {
+                ToastKind::Message => (
+                    format!("text-info bg-blue-50 border-info {border_style}"),
+                    "progress-info",
+                ),
+                ToastKind::Loading => (
+                    format!("text-info bg-blue-50 border-info {border_style}"),
+                    "progress-info",
+                ),
+                ToastKind::Success => (
+                    format!("text-success bg-green-50 border-success {border_style}"),
+                    "progress-success",
+                ),
+                ToastKind::Failure => (
+                    format!("text-error bg-red-50 border-error {border_style}"),
+                    "progress-error",
+                ),
+            }
+        },
+    );
 
     let timeout_future = use_future(cx, (timeout,), |(timeout,)| {
         to_owned![timeout_progress];
@@ -108,65 +131,54 @@ fn Toast<'a>(
         }
     }
 
-    let has_callback = on_undo.is_some();
     render! {
         div {
             id: "toast-undo",
-            class: "alert {alert_style} shadow-lg p-0 flex flex-col gap-0",
-            role: "alert",
+            class: "{alert_style} shadow-lg p-0 flex flex-col gap-0 dark:bg-gray-800 w-fit",
 
-            (timeout.flatten().is_some() && (**timeout_progress > 0.0)).then(|| render! {
-                progress {
-                    class: "progress progress-accent w-full h-1",
-                    value: "{timeout_progress}",
-                    max: "100"
+            if timeout.flatten().is_some() && (**timeout_progress > 0.0) {
+                render! {
+                    progress {
+                        class: "progress {progress_style} w-full h-1",
+                        value: "{timeout_progress}",
+                        max: "100"
+                    }
                 }
-            })
+            }
+
             div {
-                class: "w-full flex items-center divide-x p-2",
+                class: "w-full flex items-center px-4 py-2 h-12 gap-4",
 
                 match kind {
                     ToastKind::Message => None,
-                    ToastKind::Loading => render! { Spinner {} },
+                    ToastKind::Loading => render! {
+                        Spinner { class: "w-4 h-4" }
+                    },
                     ToastKind::Success => render! {
-                        Icon {
-                            class: "w-12 h-12 px-4", icon: BsCheckCircle
-                        }
+                        Icon { class: "w-4 h-4", icon: BsCheckCircle }
                     },
                     ToastKind::Failure => render! {
-                        Icon {
-                            class: "w-12 h-12 px-4", icon: BsExclamationTriangle
-                        }
+                        Icon { class: "w-4 h-4", icon: BsExclamationTriangle }
                     },
                 }
-                div {
-                    class: "py-1.5 grow px-2",
+
+                p {
+                    class: "max-w-full whitespace-normal",
                     "{message}"
                 }
-                div {
-                    class: "flex items-center",
 
-                    if has_callback {
-                        render! {
-                            a {
-                                class: "px-2 py-1.5",
-                                onclick: move |_| {
-                                    if let Some(handler) = on_undo.as_ref() {
-                                        handler.call(())
-                                    };
-                                },
-                                "Undo"
-                            }
-                        }
+                if let Some(handler) = on_undo.as_ref() {
+                    render! {
+                        a { onclick: move |_| handler.call(()), "Undo" }
                     }
+                }
 
-                    button {
-                        "type": "button",
-                        class: "btn btn-ghost",
-                        onclick: |_| on_close.call(()),
-                        span { class: "sr-only", "Close" }
-                        Icon { class: "w-5 h-5", icon: BsX }
-                    }
+                button {
+                    "type": "button",
+                    class: "rounded btn-ghost p-0 min-h-5 h-5",
+                    onclick: |_| on_close.call(()),
+                    span { class: "sr-only", "Close" }
+                    Icon { class: "w-5 h-5", icon: BsX }
                 }
             }
         }
