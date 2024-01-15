@@ -49,19 +49,22 @@ wasm-bindgen = "=0.2.89"
 [dependencies.web-sys]
 version = "0.3"
 features = [
-  'DomTokenList',
-  'Element',
-  'EventListener',
-  'EventTarget',
-  'Headers',
-  'HtmlInputElement',
-  'MediaQueryList',
-  'Request',
-  'RequestInit',
-  'RequestMode',
-  'Response',
-  'Storage',
-  'Window',
+  "CustomEvent",
+  "DomTokenList",
+  "Element",
+  "EventListener",
+  "EventTarget",
+  "Headers",
+  "HtmlInputElement",
+  "InputEvent",
+  "InputEventInit",
+  "MediaQueryList",
+  "Request",
+  "RequestInit",
+  "RequestMode",
+  "Response",
+  "Storage",
+  "Window",
 ]
 
 [dev-dependencies]

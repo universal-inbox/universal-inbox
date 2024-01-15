@@ -8,11 +8,10 @@ use log::error;
 use wasm_bindgen::{prelude::Closure, JsCast};
 use web_sys::KeyboardEvent;
 
-use crate::utils::focus_and_select_input_element;
-use crate::utils::get_element_by_id;
+use crate::utils::{focus_and_select_input_element, get_element_by_id};
 
-#[derive(PartialEq, Props)]
-pub struct InputProps<T: 'static> {
+#[derive(Props)]
+pub struct InputProps<'a, T: 'static> {
     name: String,
     label: String,
     required: bool,
@@ -24,13 +23,15 @@ pub struct InputProps<T: 'static> {
     #[props(default)]
     r#type: Option<String>,
     #[props(default)]
+    icon: Option<Element<'a>>,
+    #[props(default)]
     phantom: PhantomData<T>,
 }
 
 const INPUT_INVALID_STYLE: &str = "border-error focus:border-error";
 const FLOATING_LABEL_INVALID_STYLE: &str = "text-error peer-focus:text-error";
 
-pub fn FloatingLabelInputText<T>(cx: Scope<InputProps<T>>) -> Element
+pub fn FloatingLabelInputText<'a, T>(cx: Scope<'a, InputProps<'a, T>>) -> Element
 where
     T: FromStr,
     <T as FromStr>::Err: Display,
@@ -42,18 +43,36 @@ where
         .unwrap_or_default();
 
     let error_message = use_state(cx, || None);
-    let input_style = use_memo(cx, &(error_message.clone(),), |(error_message,)| {
-        error_message
-            .as_ref()
-            .and(Some(INPUT_INVALID_STYLE))
-            .unwrap_or("border-base-200 focus:border-primary")
-    });
-    let label_style = use_memo(cx, &(error_message.clone(),), |(error_message,)| {
-        error_message
-            .as_ref()
-            .and(Some(FLOATING_LABEL_INVALID_STYLE))
-            .unwrap_or_default()
-    });
+    let input_style = use_memo(
+        cx,
+        &(error_message.clone(), cx.props.icon.is_some()),
+        |(error_message, has_icon)| {
+            format!(
+                "{} {}",
+                error_message
+                    .as_ref()
+                    .and(Some(INPUT_INVALID_STYLE))
+                    .unwrap_or("border-base-200 focus:border-primary"),
+                if has_icon { "pl-7" } else { "pl-0" }
+            )
+        },
+    );
+    let label_style = use_memo(
+        cx,
+        &(error_message.clone(), cx.props.icon.is_some()),
+        |(error_message, has_icon)| {
+            format!(
+                "{} {}",
+                error_message
+                    .as_ref()
+                    .and(Some(FLOATING_LABEL_INVALID_STYLE))
+                    .unwrap_or_default(),
+                has_icon
+                    .then_some("peer-placeholder-shown:pl-7")
+                    .unwrap_or_default()
+            )
+        },
+    );
 
     let input_type = cx.props.r#type.clone().unwrap_or("text".to_string());
     let validate = use_state(cx, || false);
@@ -86,7 +105,17 @@ where
 
     render! {
         div {
-            class: "relative",
+            class: "relative w-full",
+
+            if let Some(icon) = &cx.props.icon {
+                render! {
+                    div {
+                        class: "absolute inset-y-0 start-0 flex py-2.5 pointer-events-none {label_style}",
+                        icon
+                    }
+                }
+            }
+
             input {
                 "type": "{input_type}",
                 name: "{cx.props.name}",
@@ -98,12 +127,15 @@ where
                 oninput: move |evt| {
                     cx.props.value.set(evt.value.clone());
                 },
+                onchange: move |evt| {
+                    cx.props.value.set(evt.value.clone());
+                },
                 onfocusout: |_| validate.set(true),
                 autofocus: cx.props.autofocus.unwrap_or_default(),
             }
             label {
                 "for": "{cx.props.name}",
-                class: "{label_style} {required_label_style} absolute duration-300 transform -translate-y-6 scale-75 top-3 origin-[0] peer-focus:left-0 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-6",
+                class: "{label_style} {required_label_style} absolute duration-300 transform -translate-y-6 scale-75 top-3 origin-[0] peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-6 peer-focus:left-0 peer-focus:pl-0",
                 "{cx.props.label}"
             }
             ErrorMessage { message: error_message }
@@ -111,92 +143,7 @@ where
     }
 }
 
-pub fn FloatingLabelInputDate<T>(cx: Scope<InputProps<T>>) -> Element
-where
-    T: FromStr,
-    <T as FromStr>::Err: Display,
-{
-    const IS_NOT_EMPTY_STYLE: &str = "isnotempty";
-    const IS_EMPTY_STYLE: &str = "isempty text-opacity-0 text-base-100";
-
-    let required_label_style = cx
-        .props
-        .required
-        .then_some("after:content-['*'] after:ml-0.5 after:text-error")
-        .unwrap_or_default();
-
-    let input_empty_style = use_memo(cx, &(cx.props.value.clone(),), |(value,)| {
-        if value.is_empty() {
-            IS_EMPTY_STYLE
-        } else {
-            IS_NOT_EMPTY_STYLE
-        }
-    });
-
-    let error_message = use_state(cx, || None);
-    let label_style = use_memo(cx, &error_message.clone(), |error_message| {
-        error_message
-            .as_ref()
-            .and(Some(FLOATING_LABEL_INVALID_STYLE))
-            .unwrap_or_default()
-    });
-    let input_style = use_memo(
-        cx,
-        &(error_message.clone(), input_empty_style.to_string()),
-        |(error_message, input_style)| {
-            format!(
-                "{input_style} {}",
-                error_message
-                    .as_ref()
-                    .and(Some(INPUT_INVALID_STYLE))
-                    .unwrap_or("border-base-200 focus:border-primary")
-            )
-        },
-    );
-
-    let validate = use_state(cx, || false);
-    let _ = use_memo(
-        cx,
-        &(
-            cx.props.value.clone(),
-            cx.props.force_validation,
-            validate.clone(),
-        ),
-        |(value, force_validation, validate)| {
-            to_owned![error_message];
-            if force_validation.unwrap_or_default() || *validate {
-                validate_value::<T>(&value, error_message, cx.props.required);
-            }
-        },
-    );
-
-    render! {
-        div {
-            class: "relative",
-            input {
-                "type": "date",
-                name: "{cx.props.name}",
-                id: "{cx.props.name}",
-                class: "{input_style} block py-2 px-0 w-full bg-transparent border-0 border-b-2 focus:text-opacity-1 focus:text-base-content focus:dark:text-base-content outline-none focus:ring-0 peer",
-                required: "{cx.props.required}",
-                value: "{cx.props.value}",
-                oninput: move |evt| {
-                    validate.set(true);
-                    cx.props.value.set(evt.value.clone());
-                },
-                autofocus: cx.props.autofocus.unwrap_or_default(),
-            }
-            label {
-                "for": "{cx.props.name}",
-                class: "{label_style} {required_label_style} absolute duration-300 transform -translate-y-0 scale-100 top-3 -z-10 origin-[0] peer-focus:left-0 peer-[.isnotempty]:left-0 peer-[.isnotempty]:scale-75 peer-[.isnotempty]:-translate-y-6 peer-focus:scale-75 peer-focus:-translate-y-6",
-                "{cx.props.label}"
-            }
-            ErrorMessage { message: error_message }
-        }
-    }
-}
-
-pub fn FloatingLabelSelect<T>(cx: Scope<InputProps<T>>) -> Element
+pub fn FloatingLabelSelect<'a, T>(cx: Scope<'a, InputProps<'a, T>>) -> Element
 where
     T: FromStr,
     <T as FromStr>::Err: Display,

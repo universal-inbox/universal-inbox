@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
+use chrono::NaiveDate;
 use dioxus::prelude::*;
 use dioxus_free_icons::{icons::bs_icons::BsX, Icon};
 use fermi::UseAtomRef;
@@ -19,9 +20,9 @@ use universal_inbox::{
 use crate::{
     components::{
         floating_label_inputs::{
-            FloatingLabelInputDate, FloatingLabelInputSearchSelect, FloatingLabelInputText,
-            FloatingLabelSelect, Searchable,
+            FloatingLabelInputSearchSelect, FloatingLabelInputText, FloatingLabelSelect, Searchable,
         },
+        flowbite::datepicker::DatePicker,
         icons::Todoist,
     },
     model::UniversalInboxUIModel,
@@ -39,7 +40,7 @@ pub fn TaskPlanningModal<'a>(
     on_task_planning: EventHandler<'a, (TaskPlanning, TaskId)>,
     on_task_creation: EventHandler<'a, TaskCreation>,
 ) -> Element {
-    let icon = render! { Todoist {} };
+    let icon = render! { div { class: "h-5 w-5 flex-none", Todoist {} } };
     let project = use_state(cx, || "".to_string());
     let due_at = use_state(cx, || "".to_string()); // TODO Set today as default
     let priority = use_state(cx, || "4".to_string());
@@ -91,7 +92,7 @@ pub fn TaskPlanningModal<'a>(
         dialog {
             id: "task-planning-modal",
             tabindex: "-1",
-            class: "modal modal-open text-base-content backdrop-blur-sm fixed top-0 left-0 w-full h-full",
+            class: "modal modal-open text-base-content backdrop-blur-sm fixed top-0 left-0 w-full h-full z-50",
             open: true,
 
             div {
@@ -130,22 +131,22 @@ pub fn TaskPlanningModal<'a>(
                         },
 
                         div {
-                            class: "flex flex-none items-center gap-2",
-                            div { class: "h-5 w-5 flex-none", icon }
-                            div {
-                                class: "grow",
-                                if task_to_plan.current().is_some() {
-                                    render! { "{task_title}" }
-                                } else {
-                                    render! {
-                                        FloatingLabelInputText::<String> {
-                                            name: "task-title-input".to_string(),
-                                            label: "Task's title".to_string(),
-                                            required: true,
-                                            value: task_title.clone(),
-                                            autofocus: true,
-                                            force_validation: *force_validation.current(),
-                                        }
+                            class: "flex flex-none items-center gap-2 w-full",
+                            if task_to_plan.current().is_some() {
+                                render! {
+                                    icon
+                                    span { class: "grow", "{task_title}" }
+                                }
+                            } else {
+                                render! {
+                                    FloatingLabelInputText::<String> {
+                                        name: "task-title-input".to_string(),
+                                        label: "Task's title".to_string(),
+                                        required: true,
+                                        value: task_title.clone(),
+                                        autofocus: true,
+                                        force_validation: *force_validation.current(),
+                                        icon: icon,
                                     }
                                 }
                             }
@@ -169,12 +170,15 @@ pub fn TaskPlanningModal<'a>(
                             },
                         }
 
-                        FloatingLabelInputDate::<DueDate> {
+                        DatePicker::<NaiveDate> {
                             name: "task-due_at-input".to_string(),
                             label: "Due at".to_string(),
                             required: false,
                             value: due_at.clone(),
                             force_validation: *force_validation.current(),
+                            autohide: true,
+                            today_button: true,
+                            today_highlight: true,
                         }
 
                         FloatingLabelSelect::<TaskPriority> {

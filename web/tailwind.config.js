@@ -2,11 +2,12 @@
 const colors = require('tailwindcss/colors')
 
 module.exports = {
-  content: ["index.html", "./src/**/*.rs", "./src/*.rs"],
+  content: ["index.html", "./src/**/*.rs", "./src/*.rs", "./node_modules/flowbite/**/*.js"],
   darkMode: "class",
   plugins: [
     require('@tailwindcss/typography'),
-    require("daisyui")
+    require("daisyui"),
+    require('flowbite/plugin')
   ],
 
   daisyui: {
