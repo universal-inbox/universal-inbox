@@ -524,18 +524,20 @@ fn ReviewsGithubPullRequest<'a>(cx: Scope, github_pull_request: &'a GithubPullRe
                 "Waiting for review",
                 render! { Icon { class: "h-5 w-5 text-info", icon: BsPauseCircleFill } },
             ),
+        })
+        .unwrap_or_else(|| {
+            (
+                "Waiting for review",
+                render! { Icon { class: "h-5 w-5 text-info", icon: BsPauseCircleFill } },
+            )
         });
 
-    if let Some(reviews_state) = reviews_state {
-        render! {
-            CollapseCardWithIcon {
-                title: "{reviews_state.0}",
-                icon: render! { reviews_state.1 },
-                ReviewsGithubPullRequestDetails { github_pull_request: github_pull_request }
-            }
+    render! {
+        CollapseCardWithIcon {
+            title: "{reviews_state.0}",
+            icon: reviews_state.1,
+            ReviewsGithubPullRequestDetails { github_pull_request: github_pull_request }
         }
-    } else {
-        None
     }
 }
 
@@ -548,6 +550,11 @@ fn ReviewsGithubPullRequestDetails<'a>(
         github_pull_request.reviews.as_ref(),
         github_pull_request.review_requests.as_ref(),
     );
+
+    if reviews.is_empty() {
+        return None;
+    }
+
     render! {
         table {
             class: "table table-auto table-xs w-full",
