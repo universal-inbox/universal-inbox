@@ -6,8 +6,9 @@ module.exports = {
   darkMode: "class",
   plugins: [
     require('@tailwindcss/typography'),
-    require("daisyui"),
-    require('flowbite/plugin')
+    require("daisyui")
+    // disabled for now as it makes the DaisyUI `toggle` glitch while switching
+    // require('flowbite/plugin')
   ],
 
   daisyui: {
