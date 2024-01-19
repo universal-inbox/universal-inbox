@@ -30,10 +30,16 @@ test-coverage:
 
 ## Run recipes
 run:
-    watchexec --debounce 500 --exts toml,rs --restart --watch src cargo run -- serve
+    watchexec --stop-timeout 5 --debounce 500 --exts toml,rs --restart --watch src cargo run -- serve
 
 sync-tasks $RUST_LOG="info":
     cargo run -- sync-tasks
 
 sync-notifications $RUST_LOG="info":
     cargo run -- sync-notifications
+
+generate-jwt-key-pair:
+    cargo run -- generate-jwt-key-pair
+
+generate-jwt-token user-email:
+        cargo run -- generate-jwt-token {{user-email}}

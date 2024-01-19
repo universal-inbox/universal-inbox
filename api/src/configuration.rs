@@ -117,8 +117,10 @@ pub struct OIDCAuthorizationCodePKCEFlowSettings {
 #[derive(Deserialize, Clone, Debug)]
 pub struct HttpSessionSettings {
     pub secret_key: String,
+    pub jwt_secret_key: String,
+    pub jwt_public_key: String,
+    pub jwt_token_expiration_in_days: i64,
     pub max_age_days: i64,
-    pub max_age_inactive_days: i64,
 }
 
 #[derive(Deserialize, Clone, Debug)]

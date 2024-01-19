@@ -60,8 +60,11 @@ argon2_parallelism = 1
 
 [application.http_session]
 # secret_key = ""
+# Generate new JWT key pair using `just generate-jwt-key-pair`
+jwt_secret_key = ""
+jwt_public_key = ""
+jwt_token_expiration_in_days = 30
 max_age_days = 30
-max_age_inactive_days = 7
 
 [application.observability.logging]
 # See https://docs.rs/tracing-subscriber/latest/tracing_subscriber/struct.EnvFilter.html

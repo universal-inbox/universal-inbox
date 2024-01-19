@@ -2,7 +2,8 @@ use chrono::{Duration, TimeZone, Utc};
 use httpmock::Method::{GET, POST};
 use openidconnect::{
     core::{CoreHmacKey, CoreIdToken, CoreIdTokenClaims, CoreJwsSigningAlgorithm},
-    Audience, EmptyAdditionalClaims, EndUserEmail, IssuerUrl, StandardClaims, SubjectIdentifier,
+    AccessToken, Audience, EmptyAdditionalClaims, EndUserEmail, IssuerUrl, StandardClaims,
+    SubjectIdentifier,
 };
 use reqwest::Client;
 use rstest::fixture;
@@ -56,9 +57,9 @@ pub async fn authenticate_user(
     .unwrap();
     let response = client
         .post(&format!("{}auth/session", app.api_address))
-        .bearer_auth("fake_token")
         .json(&SessionAuthValidationParameters {
             auth_id_token: id_token.to_string().into(),
+            access_token: AccessToken::new("fake_token".to_string()),
         })
         .send()
         .await

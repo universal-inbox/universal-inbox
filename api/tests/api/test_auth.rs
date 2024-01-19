@@ -1,5 +1,6 @@
 use std::time::SystemTime;
 
+use openidconnect::AccessToken;
 use rstest::*;
 
 use universal_inbox::{
@@ -41,9 +42,9 @@ mod authenticate_session {
             .unwrap();
         let response = client
             .post(&format!("{}auth/session", app.api_address))
-            .bearer_auth("fake_access_token")
             .json(&SessionAuthValidationParameters {
                 auth_id_token: ID_TOKEN.to_string().into(),
+                access_token: AccessToken::new("fake_access_token".to_string()),
             })
             .send()
             .await
@@ -70,9 +71,9 @@ mod authenticate_session {
         // Test a new ID token is updated
         let response = client
             .post(&format!("{}auth/session", app.api_address))
-            .bearer_auth("fake_access_token")
             .json(&SessionAuthValidationParameters {
                 auth_id_token: OTHER_ID_TOKEN.to_string().into(),
+                access_token: AccessToken::new("fake_access_token".to_string()),
             })
             .send()
             .await
@@ -108,9 +109,9 @@ mod authenticate_session {
 
         let response = reqwest::Client::new()
             .post(&format!("{}auth/session", app.api_address))
-            .bearer_auth("fake_access_token")
             .json(&SessionAuthValidationParameters {
                 auth_id_token: ID_TOKEN.to_string().into(),
+                access_token: AccessToken::new("fake_access_token".to_string()),
             })
             .send()
             .await

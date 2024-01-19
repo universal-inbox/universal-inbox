@@ -1,11 +1,12 @@
 use std::sync::Arc;
 
 use actix_http::body::BoxBody;
-use actix_identity::Identity;
-use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Scope};
-use anyhow::anyhow;
-use anyhow::Context;
+use actix_jwt_authc::{Authenticated, JWTSessionKey};
+use actix_session::Session;
+use actix_web::{web, HttpResponse, Scope};
+use anyhow::{anyhow, Context};
 use email_address::EmailAddress;
+use jsonwebtoken::EncodingKey;
 use secrecy::Secret;
 use serde_json::json;
 use tokio::sync::RwLock;
@@ -20,8 +21,8 @@ use universal_inbox::{
 };
 
 use crate::{
-    routes::option_wildcard,
     universal_inbox::{user::service::UserService, UniversalInboxError},
+    utils::jwt::{Claims, JWTttl},
 };
 
 pub fn scope() -> Scope {
@@ -29,45 +30,35 @@ pub fn scope() -> Scope {
         .service(
             web::resource("")
                 .name("users")
-                .route(web::post().to(register_user))
-                .route(web::method(http::Method::OPTIONS).to(option_wildcard)),
+                .route(web::post().to(register_user)),
         )
-        .service(
-            web::resource("/password_reset")
-                .route(web::post().to(send_password_reset_email))
-                .route(web::method(http::Method::OPTIONS).to(option_wildcard)),
-        )
+        .service(web::resource("/password_reset").route(web::post().to(send_password_reset_email)))
         .service(
             web::resource("me")
                 .route(web::get().to(get_user))
-                .route(web::post().to(login_user))
-                .route(web::method(http::Method::OPTIONS).to(option_wildcard)),
+                .route(web::post().to(login_user)),
         )
         .service(
-            web::resource("/me/email_verification")
-                .route(web::post().to(send_verification_email))
-                .route(web::method(http::Method::OPTIONS).to(option_wildcard)),
+            web::resource("/me/email_verification").route(web::post().to(send_verification_email)),
         )
         .service(
             web::resource("/{user_id}/email_verification/{email_validation_token}")
-                .route(web::get().to(verify_email))
-                .route(web::method(http::Method::OPTIONS).to(option_wildcard)),
+                .route(web::get().to(verify_email)),
         )
         .service(
             web::resource("/{user_id}/password_reset/{password_reset_token}")
-                .route(web::post().to(reset_password))
-                .route(web::method(http::Method::OPTIONS).to(option_wildcard)),
+                .route(web::post().to(reset_password)),
         )
 }
 
 pub async fn get_user(
     user_service: web::Data<Arc<RwLock<UserService>>>,
-    identity: Identity,
+    authenticated: Authenticated<Claims>,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    let user_id: UserId = identity
-        .id()
-        .context("Missing `user_id` in session")?
-        .try_into()
+    let user_id = authenticated
+        .claims
+        .sub
+        .parse::<UserId>()
         .context("Wrong user ID format")?;
     let service = user_service.read().await;
     let mut transaction = service
@@ -88,9 +79,12 @@ pub async fn get_user(
 }
 
 pub async fn register_user(
-    request: HttpRequest,
     user_service: web::Data<Arc<RwLock<UserService>>>,
     register_user_parameters: web::Json<RegisterUserParameters>,
+    jwt_encoding_key: web::Data<EncodingKey>,
+    jwt_session_key: web::Data<JWTSessionKey>,
+    ttl: web::Data<JWTttl>,
+    session: Session,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let service = user_service.read().await;
     let mut transaction = service
@@ -129,8 +123,14 @@ pub async fn register_user(
             }
         })?;
 
-    Identity::login(&request.extensions(), user.id.to_string())
-        .map_err(|err| UniversalInboxError::Unauthorized(anyhow!(err.to_string())))?;
+    let jwt_token = Claims::new_jwt_token(
+        user.id.to_string(),
+        &ttl.into_inner(),
+        &jwt_encoding_key.into_inner(),
+    )?;
+    session
+        .insert(&jwt_session_key.0, jwt_token)
+        .context("Failed to insert JWT token into the session")?;
 
     transaction
         .commit()
@@ -143,9 +143,12 @@ pub async fn register_user(
 }
 
 pub async fn login_user(
-    request: HttpRequest,
     user_service: web::Data<Arc<RwLock<UserService>>>,
     credentials: web::Json<Credentials>,
+    jwt_encoding_key: web::Data<EncodingKey>,
+    jwt_session_key: web::Data<JWTSessionKey>,
+    ttl: web::Data<JWTttl>,
+    session: Session,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let service = user_service.read().await;
     let mut transaction = service
@@ -164,8 +167,14 @@ pub async fn login_user(
             }
         })?;
 
-    Identity::login(&request.extensions(), user.id.to_string())
-        .map_err(|err| UniversalInboxError::Unauthorized(anyhow!(err.to_string())))?;
+    let jwt_token = Claims::new_jwt_token(
+        user.id.to_string(),
+        &ttl.into_inner(),
+        &jwt_encoding_key.into_inner(),
+    )?;
+    session
+        .insert(&jwt_session_key.0, jwt_token)
+        .context("Failed to insert JWT token into the session")?;
 
     transaction
         .commit()
@@ -179,12 +188,12 @@ pub async fn login_user(
 
 pub async fn send_verification_email(
     user_service: web::Data<Arc<RwLock<UserService>>>,
-    identity: Identity,
+    authenticated: Authenticated<Claims>,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    let user_id: UserId = identity
-        .id()
-        .context("Missing `user_id` in session")?
-        .try_into()
+    let user_id = authenticated
+        .claims
+        .sub
+        .parse::<UserId>()
         .context("Wrong user ID format")?;
     let service = user_service.read().await;
     let mut transaction = service

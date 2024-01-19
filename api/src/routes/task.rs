@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use actix_http::body::BoxBody;
-use actix_identity::Identity;
+use actix_jwt_authc::{Authenticated, MaybeAuthenticated};
 use actix_web::{web, HttpResponse, Scope};
 use anyhow::Context;
 use serde::Deserialize;
@@ -19,8 +19,8 @@ use universal_inbox::{
 
 use crate::{
     observability::spawn_with_tracing,
-    routes::option_wildcard,
     universal_inbox::{task::service::TaskService, UniversalInboxError, UpdateStatus},
+    utils::jwt::Claims,
 };
 
 pub fn scope() -> Scope {
@@ -31,14 +31,12 @@ pub fn scope() -> Scope {
             web::resource("")
                 .name("tasks")
                 .route(web::get().to(list_tasks))
-                .route(web::post().to(create_task))
-                .route(web::method(http::Method::OPTIONS).to(option_wildcard)),
+                .route(web::post().to(create_task)),
         )
         .service(
             web::resource("/{task_id}")
                 .route(web::get().to(get_task))
-                .route(web::patch().to(patch_task))
-                .route(web::method(http::Method::OPTIONS).to(option_wildcard)),
+                .route(web::patch().to(patch_task)),
         )
         .service(web::scope("/projects").route("/search", web::get().to(search_projects)))
 }
@@ -51,13 +49,13 @@ pub struct ListTaskRequest {
 pub async fn list_tasks(
     list_task_request: web::Query<ListTaskRequest>,
     task_service: web::Data<Arc<RwLock<TaskService>>>,
-    identity: Identity,
+    authenticated: Authenticated<Claims>,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    let user_id = identity
-        .id()
-        .context("No user ID found in identity")?
+    let user_id = authenticated
+        .claims
+        .sub
         .parse::<UserId>()
-        .context("User ID has wrong format")?;
+        .context("Wrong user ID format")?;
 
     let service = task_service.read().await;
     let mut transaction = service
@@ -81,13 +79,13 @@ pub struct SearchTaskRequest {
 pub async fn search_tasks(
     search_task_request: web::Query<SearchTaskRequest>,
     task_service: web::Data<Arc<RwLock<TaskService>>>,
-    identity: Identity,
+    authenticated: Authenticated<Claims>,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    let user_id = identity
-        .id()
-        .context("No user ID found in identity")?
+    let user_id = authenticated
+        .claims
+        .sub
         .parse::<UserId>()
-        .context("User ID has wrong format")?;
+        .context("Wrong user ID format")?;
 
     let service = task_service.read().await;
     let mut transaction = service
@@ -106,13 +104,13 @@ pub async fn search_tasks(
 pub async fn get_task(
     path: web::Path<TaskId>,
     task_service: web::Data<Arc<RwLock<TaskService>>>,
-    identity: Identity,
+    authenticated: Authenticated<Claims>,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    let user_id = identity
-        .id()
-        .context("No user ID found in identity")?
+    let user_id = authenticated
+        .claims
+        .sub
         .parse::<UserId>()
-        .context("User ID has wrong format")?;
+        .context("Wrong user ID format")?;
     let task_id = path.into_inner();
     let service = task_service.read().await;
     let mut transaction = service
@@ -135,13 +133,13 @@ pub async fn get_task(
 pub async fn create_task(
     task: web::Json<Box<Task>>,
     task_service: web::Data<Arc<RwLock<TaskService>>>,
-    identity: Identity,
+    authenticated: Authenticated<Claims>,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    let user_id = identity
-        .id()
-        .context("No user ID found in identity")?
+    let user_id = authenticated
+        .claims
+        .sub
         .parse::<UserId>()
-        .context("User ID has wrong format")?;
+        .context("Wrong user ID format")?;
     let service = task_service.read().await;
     let mut transaction = service
         .begin()
@@ -165,16 +163,16 @@ pub async fn create_task(
 pub async fn sync_tasks(
     params: web::Json<SyncTasksParameters>,
     task_service: web::Data<Arc<RwLock<TaskService>>>,
-    identity: Option<Identity>,
+    maybe_authenticated: MaybeAuthenticated<Claims>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let source = params.source;
 
-    if let Some(identity) = identity {
-        let user_id = identity
-            .id()
-            .context("No user ID found in identity")?
+    if let Some(authenticated) = maybe_authenticated.into_option() {
+        let user_id = authenticated
+            .claims
+            .sub
             .parse::<UserId>()
-            .context("User ID has wrong format")?;
+            .context("Wrong user ID format")?;
 
         if params.asynchronous.unwrap_or(true) {
             let task_service = task_service.get_ref().clone();
@@ -243,13 +241,13 @@ pub async fn patch_task(
     path: web::Path<TaskId>,
     patch: web::Json<TaskPatch>,
     task_service: web::Data<Arc<RwLock<TaskService>>>,
-    identity: Identity,
+    authenticated: Authenticated<Claims>,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    let user_id = identity
-        .id()
-        .context("No user ID found in identity")?
+    let user_id = authenticated
+        .claims
+        .sub
         .parse::<UserId>()
-        .context("User ID has wrong format")?;
+        .context("Wrong user ID format")?;
     let task_id = path.into_inner();
     let task_patch = patch.into_inner();
     let service = task_service.read().await;
@@ -297,13 +295,13 @@ pub struct SearchProjectRequest {
 pub async fn search_projects(
     search_project_request: web::Query<SearchProjectRequest>,
     task_service: web::Data<Arc<RwLock<TaskService>>>,
-    identity: Identity,
+    authenticated: Authenticated<Claims>,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    let user_id = identity
-        .id()
-        .context("No user ID found in identity")?
+    let user_id = authenticated
+        .claims
+        .sub
         .parse::<UserId>()
-        .context("User ID has wrong format")?;
+        .context("Wrong user ID format")?;
 
     let service = task_service.read().await;
     let mut transaction = service

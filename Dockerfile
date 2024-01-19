@@ -13,7 +13,7 @@ COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/Cargo.toml web/Cargo.toml
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" api/Cargo.toml api/Cargo.toml
 RUN devbox run -- cargo chef prepare --recipe-path recipe.json
 
-FROM rust:1.74.0-bookworm as tools
+FROM rust:1.75.0-bookworm as tools
 RUN cargo install sqlx-cli --version 0.7.1
 
 FROM base as dep-web-builder

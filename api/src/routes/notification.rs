@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use actix_http::body::BoxBody;
-use actix_identity::Identity;
+use actix_jwt_authc::{Authenticated, MaybeAuthenticated};
 use actix_web::{web, HttpResponse, Scope};
 use anyhow::Context;
 use serde::Deserialize;
@@ -22,10 +22,10 @@ use universal_inbox::{
 
 use crate::{
     observability::spawn_with_tracing,
-    routes::option_wildcard,
     universal_inbox::{
         notification::service::NotificationService, UniversalInboxError, UpdateStatus,
     },
+    utils::jwt::Claims,
 };
 
 pub fn scope() -> Scope {
@@ -35,19 +35,16 @@ pub fn scope() -> Scope {
             web::resource("")
                 .name("notifications")
                 .route(web::get().to(list_notifications))
-                .route(web::post().to(create_notification))
-                .route(web::method(http::Method::OPTIONS).to(option_wildcard)),
+                .route(web::post().to(create_notification)),
         )
         .service(
             web::resource("/{notification_id}")
                 .route(web::get().to(get_notification))
-                .route(web::patch().to(patch_notification))
-                .route(web::method(http::Method::OPTIONS).to(option_wildcard)),
+                .route(web::patch().to(patch_notification)),
         )
         .service(
             web::resource("/{notification_id}/task")
-                .route(web::post().to(create_task_from_notification))
-                .route(web::method(http::Method::OPTIONS).to(option_wildcard)),
+                .route(web::post().to(create_task_from_notification)),
         )
 }
 
@@ -63,13 +60,13 @@ pub struct ListNotificationRequest {
 pub async fn list_notifications(
     list_notification_request: web::Query<ListNotificationRequest>,
     notification_service: web::Data<Arc<RwLock<NotificationService>>>,
-    identity: Identity,
+    authenticated: Authenticated<Claims>,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    let user_id = identity
-        .id()
-        .context("No user ID found in identity")?
+    let user_id = authenticated
+        .claims
+        .sub
         .parse::<UserId>()
-        .context("User ID has wrong format")?;
+        .context("Wrong user ID format")?;
     let service = notification_service.read().await;
     let mut transaction = service
         .begin()
@@ -95,13 +92,13 @@ pub async fn list_notifications(
 pub async fn get_notification(
     path: web::Path<NotificationId>,
     notification_service: web::Data<Arc<RwLock<NotificationService>>>,
-    identity: Identity,
+    authenticated: Authenticated<Claims>,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    let user_id = identity
-        .id()
-        .context("No user ID found in identity")?
+    let user_id = authenticated
+        .claims
+        .sub
         .parse::<UserId>()
-        .context("User ID has wrong format")?;
+        .context("Wrong user ID format")?;
     let notification_id = path.into_inner();
     let service = notification_service.read().await;
     let mut transaction = service
@@ -128,13 +125,13 @@ pub async fn get_notification(
 pub async fn create_notification(
     notification: web::Json<Box<Notification>>,
     notification_service: web::Data<Arc<RwLock<NotificationService>>>,
-    identity: Identity,
+    authenticated: Authenticated<Claims>,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    let user_id = identity
-        .id()
-        .context("No user ID found in identity")?
+    let user_id = authenticated
+        .claims
+        .sub
         .parse::<UserId>()
-        .context("User ID has wrong format")?;
+        .context("Wrong user ID format")?;
     let service = notification_service.read().await;
     let mut transaction = service
         .begin()
@@ -158,16 +155,16 @@ pub async fn create_notification(
 pub async fn sync_notifications(
     params: web::Json<SyncNotificationsParameters>,
     notification_service: web::Data<Arc<RwLock<NotificationService>>>,
-    identity: Option<Identity>,
+    maybe_authenticated: MaybeAuthenticated<Claims>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let source = params.source;
 
-    if let Some(identity) = identity {
-        let user_id = identity
-            .id()
-            .context("No user ID found in identity")?
+    if let Some(authenticated) = maybe_authenticated.into_option() {
+        let user_id = authenticated
+            .claims
+            .sub
             .parse::<UserId>()
-            .context("User ID has wrong format")?;
+            .context("Wrong user ID format")?;
 
         if params.asynchronous.unwrap_or(true) {
             let notification_service = notification_service.get_ref().clone();
@@ -238,13 +235,13 @@ pub async fn patch_notification(
     path: web::Path<NotificationId>,
     patch: web::Json<NotificationPatch>,
     notification_service: web::Data<Arc<RwLock<NotificationService>>>,
-    identity: Identity,
+    authenticated: Authenticated<Claims>,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    let user_id = identity
-        .id()
-        .context("No user ID found in identity")?
+    let user_id = authenticated
+        .claims
+        .sub
         .parse::<UserId>()
-        .context("User ID has wrong format")?;
+        .context("Wrong user ID format")?;
     let notification_id = path.into_inner();
     let notification_patch = patch.into_inner();
     let service = notification_service.read().await;
@@ -296,13 +293,13 @@ pub async fn create_task_from_notification(
     path: web::Path<NotificationId>,
     task_creation: web::Json<TaskCreation>,
     notification_service: web::Data<Arc<RwLock<NotificationService>>>,
-    identity: Identity,
+    authenticated: Authenticated<Claims>,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    let user_id = identity
-        .id()
-        .context("No user ID found in identity")?
+    let user_id = authenticated
+        .claims
+        .sub
         .parse::<UserId>()
-        .context("User ID has wrong format")?;
+        .context("Wrong user ID format")?;
     let notification_id = path.into_inner();
     let task_creation = task_creation.into_inner();
     let service = notification_service.read().await;

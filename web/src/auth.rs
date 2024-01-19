@@ -308,10 +308,10 @@ async fn is_session_authenticated(
     let session_url = api_base_url.join("auth/session")?;
     let body = SessionAuthValidationParameters {
         auth_id_token: auth_id_token.clone(),
+        access_token: access_token.clone(),
     };
     let response = Client::new()
         .request(Method::POST, session_url.clone())
-        .bearer_auth(access_token.secret())
         .fetch_credentials_include()
         .json(&body)
         .send()

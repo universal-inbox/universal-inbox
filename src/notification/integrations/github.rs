@@ -834,7 +834,7 @@ mod tests {
                     name: "name1".to_string(),
                     url: "https://api.github.com/1".try_into().unwrap(),
                     body: "body1".to_string(),
-                    html_url: Some("https://api.github.com/1.html".try_into().unwrap()),
+                    html_url: Some("https://api.github.com/1.html".to_string()),
                 })
                 .unwrap()
             );
@@ -862,7 +862,7 @@ mod tests {
                 name: "name1".to_string(),
                 url: "https://api.github.com/1".try_into().unwrap(),
                 body: "body1".to_string(),
-                html_url: Some("https://api.github.com/1.html".try_into().unwrap()),
+                html_url: Some("https://api.github.com/1.html".to_string()),
             },
             serde_json::from_str(r#"{"key":"key1","name":"name1","url":"https://api.github.com/1","body":"body1","html_url":"https://api.github.com/1.html"}"#)
             .unwrap()

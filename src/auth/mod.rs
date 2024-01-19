@@ -1,5 +1,6 @@
 use std::fmt;
 
+use ::openidconnect::AccessToken;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -29,9 +30,10 @@ impl From<String> for AuthIdToken {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Hash)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SessionAuthValidationParameters {
     pub auth_id_token: AuthIdToken,
+    pub access_token: AccessToken,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Hash)]

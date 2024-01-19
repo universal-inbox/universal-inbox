@@ -1,23 +1,32 @@
 use std::{net::TcpListener, sync::Arc, sync::Weak};
 
+use ::http::StatusCode;
 use actix_cors::Cors;
-use actix_identity::IdentityMiddleware;
+use actix_jwt_authc::{
+    AuthenticateMiddlewareFactory, AuthenticateMiddlewareSettings, JWTSessionKey,
+};
 use actix_session::{
     config::{CookieContentSecurity, PersistentSession},
-    storage::RedisSessionStore,
+    storage::CookieSessionStore,
     SessionMiddleware,
 };
 use actix_web::{
-    cookie::{time::Duration, Key},
-    dev::{Server, Service},
+    cookie::{
+        time::{Duration, OffsetDateTime},
+        Cookie, Key, SameSite,
+    },
+    dev::{Server, Service, ServiceResponse},
     http::{self, header},
-    middleware, web, App, HttpServer,
+    middleware::{self, ErrorHandlerResponse, ErrorHandlers},
+    web, App, HttpServer, Result as ActixResult,
 };
 use actix_web_lab::web::spa;
 use actix_web_opentelemetry::RequestMetrics;
 use anyhow::Context;
 use configuration::AuthenticationSettings;
 use csp::{Directive, Source, Sources, CSP};
+use futures::channel::mpsc;
+use jsonwebtoken::{Algorithm, Validation};
 use mailer::Mailer;
 use sqlx::PgPool;
 use tokio::sync::RwLock;
@@ -37,6 +46,7 @@ use crate::{
         notification::service::NotificationService, task::service::TaskService,
         user::service::UserService, UniversalInboxError,
     },
+    utils::jwt::{Claims, JWTBase64EncodedSigningKeys, JWTSigningKeys, JWTttl},
 };
 
 pub mod commands;
@@ -71,17 +81,29 @@ pub async fn run(
         .clone()
         .unwrap_or_else(|| ".".to_string());
     let listen_address = listener.local_addr().unwrap();
-    let redis_connection_string = settings.redis.connection_string();
-    let session_secret_key = Key::from(settings.application.http_session.secret_key.as_bytes());
-    let max_age_days = settings.application.http_session.max_age_days;
-    let max_age_inactive_days = settings.application.http_session.max_age_inactive_days;
     let csp_header_value = build_csp_header(&settings);
 
-    info!(
-        "Connecting to Redis on {}",
-        settings.redis.safe_connection_string()
-    );
-    let redis_store = RedisSessionStore::new(redis_connection_string.clone()).await?;
+    // Setup HTTP session + JWT auth
+    let session_secret_key = Key::from(settings.application.http_session.secret_key.as_bytes());
+    let max_age_days = settings.application.http_session.max_age_days;
+    let jwt_token_expiration_in_days = settings
+        .application
+        .http_session
+        .jwt_token_expiration_in_days;
+    let jwt_signing_keys =
+        JWTSigningKeys::load_from_base64_encoded_keys(JWTBase64EncodedSigningKeys {
+            secret_key: settings.application.http_session.jwt_secret_key.clone(),
+            public_key: settings.application.http_session.jwt_public_key.clone(),
+        })?;
+    let jwt_session_key = JWTSessionKey("jwt-session".to_string());
+    let auth_middleware_settings = {
+        AuthenticateMiddlewareSettings {
+            jwt_decoding_key: jwt_signing_keys.decoding_key,
+            jwt_session_key: Some(jwt_session_key.clone()),
+            jwt_authorization_header_prefixes: Some(vec!["Bearer".to_string()]),
+            jwt_validator: Validation::new(Algorithm::EdDSA),
+        }
+    };
 
     let settings_web_data = web::Data::new(settings);
 
@@ -90,8 +112,15 @@ pub async fn run(
     let server = HttpServer::new(move || {
         info!("Mounting API on {}", api_path);
 
+        // Setup JWT invalidation with no way to send invalidated token for now
+        let (_, invalidation_events_stream) = mpsc::channel(100);
+
+        let auth_middleware_factory = AuthenticateMiddlewareFactory::<Claims>::new(
+            invalidation_events_stream,
+            auth_middleware_settings.clone(),
+        );
+
         let api_scope = web::scope(api_path.trim_end_matches('/'))
-            .route("/front_config", web::get().to(routes::config::front_config))
             .service(routes::auth::scope())
             .service(routes::integration_connection::scope())
             .service(routes::notification::scope())
@@ -100,7 +129,10 @@ pub async fn run(
             .app_data(web::Data::new(notification_service.clone()))
             .app_data(web::Data::new(task_service.clone()))
             .app_data(web::Data::new(user_service.clone()))
-            .app_data(web::Data::new(integration_connection_service.clone()));
+            .app_data(web::Data::new(integration_connection_service.clone()))
+            .app_data(web::Data::new(jwt_session_key.clone()))
+            .app_data(web::Data::new(jwt_signing_keys.encoding_key.clone()))
+            .app_data(web::Data::new(JWTttl(jwt_token_expiration_in_days)));
 
         let cors = Cors::default()
             .allowed_origin(&front_base_url)
@@ -128,26 +160,12 @@ pub async fn run(
                     Ok(res)
                 }
             })
-            .wrap(cors)
             .wrap(TracingLogger::<AuthenticatedRootSpanBuilder>::new())
             .wrap(RequestMetrics::default())
             .wrap(middleware::Compress::default())
-            .wrap(
-                IdentityMiddleware::builder()
-                    .login_deadline(Some(Duration::days(max_age_days).try_into().unwrap()))
-                    .visit_deadline(Some(
-                        Duration::days(max_age_inactive_days).try_into().unwrap(),
-                    ))
-                    .build(),
-            )
-            .wrap(
-                SessionMiddleware::builder(redis_store.clone(), session_secret_key.clone())
-                    .session_lifecycle(
-                        PersistentSession::default().session_ttl(Duration::days(max_age_days)),
-                    )
-                    .cookie_content_security(CookieContentSecurity::Signed)
-                    .build(),
-            )
+            .wrap(cors)
+            // Cookies are reset when returning an 401 because it can be due to an invalid JWT token
+            .wrap(ErrorHandlers::new().handler(StatusCode::UNAUTHORIZED, reset_cookies))
             .wrap_fn(move |req, srv| {
                 let csp_header_value = csp_header_value.clone();
                 let fut = srv.call(req);
@@ -173,7 +191,26 @@ pub async fn run(
                 }
             })
             .route("/ping", web::get().to(routes::health_check::ping))
-            .service(api_scope)
+            .route(
+                "/api/front_config",
+                web::get().to(routes::config::front_config),
+            )
+            .service(
+                api_scope.wrap(auth_middleware_factory.clone()).wrap(
+                    SessionMiddleware::builder(
+                        CookieSessionStore::default(),
+                        session_secret_key.clone(),
+                    )
+                    .session_lifecycle(
+                        PersistentSession::default().session_ttl(Duration::days(max_age_days)),
+                    )
+                    .cookie_secure(true)
+                    .cookie_http_only(true)
+                    .cookie_same_site(SameSite::Lax)
+                    .cookie_content_security(CookieContentSecurity::Signed)
+                    .build(),
+                ),
+            )
             .app_data(settings_web_data.clone());
 
         if let Some(path) = &static_path {
@@ -338,4 +375,18 @@ fn build_csp_header(settings: &Settings) -> String {
         ))
         .push(Directive::WorkerSrc(Sources::new()))
         .to_string()
+}
+
+fn reset_cookies<B>(mut res: ServiceResponse<B>) -> ActixResult<ErrorHandlerResponse<B>> {
+    res.response_mut().add_cookie(
+        &Cookie::build("id", "")
+            .path("/")
+            .http_only(true)
+            .secure(true)
+            .same_site(SameSite::Lax)
+            .expires(OffsetDateTime::now_utc())
+            .max_age(Duration::seconds(0))
+            .finish(),
+    )?;
+    Ok(ErrorHandlerResponse::Response(res.map_into_left_body()))
 }

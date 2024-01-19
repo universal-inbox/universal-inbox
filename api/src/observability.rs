@@ -1,9 +1,11 @@
 use std::{future::Future, str::FromStr, time::Duration};
 
 use actix_http::body::MessageBody;
-use actix_identity::IdentityExt;
-use actix_web::dev::{ServiceRequest, ServiceResponse};
-use anyhow::{anyhow, Context};
+use actix_jwt_authc::Authenticated;
+use actix_web::{
+    dev::{ServiceRequest, ServiceResponse},
+    HttpMessage,
+};
 use log;
 use opentelemetry::KeyValue;
 use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
@@ -25,7 +27,7 @@ use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Registry};
 
 use universal_inbox::user::UserId;
 
-use crate::configuration::TracingSettings;
+use crate::{configuration::TracingSettings, utils::jwt::Claims};
 
 pub fn get_subscriber_with_telemetry(
     environment: &str,
@@ -146,17 +148,12 @@ pub struct AuthenticatedRootSpanBuilder;
 /// span if the user is connected
 impl RootSpanBuilder for AuthenticatedRootSpanBuilder {
     fn on_request_start(request: &ServiceRequest) -> Span {
-        let identity = request.get_identity();
-        match identity
-            .and_then(|id| id.id())
-            .map_err(|err| anyhow!("Failed to fetch identity from request: {}", err))
-            .and_then(|id| {
-                id.parse::<UserId>()
-                    .context("Unable to parse user ID from {id}")
-            })
+        let authenticated_value = request.extensions().get::<Authenticated<Claims>>().cloned();
+        match authenticated_value
+            .and_then(|v| v.claims.sub.parse::<UserId>().ok())
             .map(|user_id| user_id.to_string())
         {
-            Ok(session_user_id) => {
+            Some(session_user_id) => {
                 tracing_actix_web::root_span!(
                     level = tracing::Level::INFO,
                     request,
@@ -164,7 +161,7 @@ impl RootSpanBuilder for AuthenticatedRootSpanBuilder {
                 )
             }
             // No user authenticated
-            Err(_) => {
+            _ => {
                 tracing_actix_web::root_span!(level = tracing::Level::INFO, request)
             }
         }
