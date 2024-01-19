@@ -11,3 +11,5 @@ dependencies_log_level = "info"
 
 [application.http_session]
 secret_key = "1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF"
+jwt_secret_key = "MFECAQEwBQYDK2VwBCIEIEjXs1FUT0f7vB/A0R4Sq8iK/PUv3qlVtbgTkOrCyzL7gSEASdnznKQYGbMZytQAlOQ0WEYvk8AWsb0KzEbYQp99nhA="
+jwt_public_key = "SdnznKQYGbMZytQAlOQ0WEYvk8AWsb0KzEbYQp99nhA="

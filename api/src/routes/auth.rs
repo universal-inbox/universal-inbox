@@ -1,13 +1,14 @@
 use std::{str::FromStr, sync::Arc};
 
-use actix_identity::Identity;
+use actix_jwt_authc::{Authenticated, JWTSessionKey};
 use actix_session::Session;
 use actix_web::{
     web::{self, Redirect},
-    HttpMessage, HttpRequest, HttpResponse, Scope,
+    HttpResponse, Scope,
 };
 use anyhow::{anyhow, Context};
-use openidconnect::{core::CoreIdToken, AccessToken, AuthorizationCode, CsrfToken, Nonce};
+use jsonwebtoken::EncodingKey;
+use openidconnect::{core::CoreIdToken, AuthorizationCode, CsrfToken, Nonce};
 use serde::Deserialize;
 use tokio::sync::RwLock;
 use tracing::debug;
@@ -20,29 +21,21 @@ use universal_inbox::{
 
 use crate::{
     configuration::{AuthenticationSettings, OIDCFlowSettings, Settings},
-    routes::option_wildcard,
     universal_inbox::{user::service::UserService, UniversalInboxError},
+    utils::jwt::JWTttl,
+    Claims,
 };
 
 pub fn scope() -> Scope {
     web::scope("/auth")
         // Authorization code flow
-        .service(
-            web::resource("session/authorize")
-                .route(web::get().to(authorize_session))
-                .route(web::method(http::Method::OPTIONS).to(option_wildcard)),
-        )
-        .service(
-            web::resource("session/authenticated")
-                .route(web::get().to(authenticated_session))
-                .route(web::method(http::Method::OPTIONS).to(option_wildcard)),
-        )
+        .service(web::resource("session/authorize").route(web::get().to(authorize_session)))
+        .service(web::resource("session/authenticated").route(web::get().to(authenticated_session)))
         .service(
             web::resource("session")
                 // Authorization code + PKCE flow
                 .route(web::post().to(authenticate_session))
-                .route(web::delete().to(close_session))
-                .route(web::method(http::Method::OPTIONS).to(option_wildcard)),
+                .route(web::delete().to(close_session)),
         )
 }
 
@@ -54,25 +47,16 @@ pub fn scope() -> Scope {
 /// It will also store the auth ID token given in the request body and associate it to
 /// the current user.
 /// If the user is unknown, it will create a new one.
+#[allow(clippy::too_many_arguments)]
 pub async fn authenticate_session(
-    request: HttpRequest,
     params: web::Json<SessionAuthValidationParameters>,
     user_service: web::Data<Arc<RwLock<UserService>>>,
     settings: web::Data<Settings>,
+    jwt_encoding_key: web::Data<EncodingKey>,
+    jwt_session_key: web::Data<JWTSessionKey>,
+    ttl: web::Data<JWTttl>,
+    session: Session,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    let access_token = AccessToken::new(
-        request
-            .headers()
-            .get("Authorization")
-            .context("Missing `Authorization` request header")?
-            .to_str()
-            .context("Failed to convert `Authorization` request header to a string")?
-            .split(' ')
-            .nth(1)
-            .context("Failed to extract the access token from the `Authorization` request header")?
-            .to_string(),
-    );
-
     let service = user_service.read().await;
     let mut transaction = service
         .begin()
@@ -98,6 +82,7 @@ pub async fn authenticate_session(
 
     let id_token = CoreIdToken::from_str(&params.auth_id_token.to_string())
         .context("Could not parse OIDC ID token")?;
+    let access_token = params.access_token.clone();
     let user = service
         .authenticate_for_auth_code_pkce_flow(
             &mut transaction,
@@ -113,8 +98,14 @@ pub async fn authenticate_session(
         .await
         .context("Failed to commit while authenticating user")?;
 
-    Identity::login(&request.extensions(), user.id.to_string())
-        .map_err(|err| UniversalInboxError::Unauthorized(anyhow!(err.to_string())))?;
+    let jwt_token = Claims::new_jwt_token(
+        user.id.to_string(),
+        &ttl.into_inner(),
+        &jwt_encoding_key.into_inner(),
+    )?;
+    session
+        .insert(&jwt_session_key.0, jwt_token)
+        .context("Failed to insert JWT token into the session")?;
 
     Ok(HttpResponse::Ok().finish())
 }
@@ -190,11 +181,13 @@ pub struct AuthenticatedSessionRequest {
 /// user if it does not exist.
 /// Finally it creates a new authenticated session.
 pub async fn authenticated_session(
-    request: HttpRequest,
     settings: web::Data<Settings>,
     session: Session,
     authenticated_session_request: web::Query<AuthenticatedSessionRequest>,
     user_service: web::Data<Arc<RwLock<UserService>>>,
+    jwt_encoding_key: web::Data<EncodingKey>,
+    jwt_session_key: web::Data<JWTSessionKey>,
+    ttl: web::Data<JWTttl>,
 ) -> Result<Redirect, UniversalInboxError> {
     session
         .remove(OIDC_AUTHORIZATION_URL_SESSION_KEY)
@@ -251,8 +244,14 @@ pub async fn authenticated_session(
         .context("Failed to commit while authenticating user")?;
 
     // 4. Create a new authenticated session
-    Identity::login(&request.extensions(), user.id.to_string())
-        .map_err(|err| UniversalInboxError::Unauthorized(anyhow!(err.to_string())))?;
+    let jwt_token = Claims::new_jwt_token(
+        user.id.to_string(),
+        &ttl.into_inner(),
+        &jwt_encoding_key.into_inner(),
+    )?;
+    session
+        .insert(&jwt_session_key.0, jwt_token)
+        .context("Failed to insert JWT token into the session")?;
 
     Ok(Redirect::to(
         settings.application.front_base_url.to_string(),
@@ -261,12 +260,13 @@ pub async fn authenticated_session(
 
 pub async fn close_session(
     user_service: web::Data<Arc<RwLock<UserService>>>,
-    identity: Identity,
+    authenticated: Authenticated<Claims>,
+    session: Session,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    let user_id: UserId = identity
-        .id()
-        .context("Missing `user_id` in session")?
-        .try_into()
+    let user_id = authenticated
+        .claims
+        .sub
+        .parse::<UserId>()
         .context("Wrong user ID format")?;
 
     let service = user_service.read().await;
@@ -282,7 +282,7 @@ pub async fn close_session(
         .await
         .context("Failed to commit while authenticating user")?;
 
-    identity.logout();
+    session.purge();
 
     Ok(HttpResponse::Ok().content_type("application/json").body(
         serde_json::to_string(&CloseSessionResponse { logout_url })

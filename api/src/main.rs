@@ -19,6 +19,7 @@ use universal_inbox_api::{
     mailer::SmtpMailer,
     observability::{get_subscriber, get_subscriber_with_telemetry, init_subscriber},
     run,
+    utils::jwt::JWTBase64EncodedSigningKeys,
 };
 
 /// Universal Inbox API server and associated commands
@@ -66,6 +67,12 @@ enum Commands {
         #[arg(short, long)]
         dry_run: bool,
     },
+
+    /// Generate a new JWT key pair (to be added to your configuration file)
+    GenerateJWTKeyPair,
+
+    /// Generate a new JWT token for given user
+    GenerateJWTToken { user_email: EmailAddress },
 
     /// Run API server
     Serve,
@@ -187,6 +194,28 @@ async fn main() -> std::io::Result<()> {
             user_email,
             dry_run,
         } => commands::user::send_password_reset_email(user_service, user_email, *dry_run).await,
+        Commands::GenerateJWTKeyPair => {
+            let jwt_signing_keys = JWTBase64EncodedSigningKeys::generate()
+                .expect("Failed to generate JWT signing keys");
+            println!("JWT signing keys:");
+            println!(
+                "application.http_session.jwt_secret_key={}",
+                jwt_signing_keys.secret_key
+            );
+            println!(
+                "application.http_session.jwt_public_key={}",
+                jwt_signing_keys.public_key
+            );
+            Ok(())
+        }
+        Commands::GenerateJWTToken { user_email } => {
+            commands::user::generate_jwt_token(
+                user_service,
+                settings.application.http_session,
+                user_email,
+            )
+            .await
+        }
         Commands::Serve => {
             let listener = TcpListener::bind(format!(
                 "{}:{}",

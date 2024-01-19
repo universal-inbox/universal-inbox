@@ -16,14 +16,16 @@ test = false
 
 [dependencies]
 actix-cors = "0.6.0"
-actix-identity = "0.6.0"
+actix-jwt-authc = { git = "https://github.com/dax/actix-jwt-authc", rev = "66412403a620b38ca1eb85b2b730bbdd5aa7895a", features = ["session", "tracing"] }
 actix-http = "3.0.0"
-actix-session = { version = "0.8.0", features = ["actix", "redis-rs-tls-session"] }
+actix-web-opentelemetry = { version = "0.16.0", features = ["metrics"] }
+actix-session = { version = "0.9.0", features = ["actix", "cookie-session"] }
 actix-web = "4.0.0"
 actix-web-lab = { version = "0.20.0", features = ["spa"] }
 anyhow = { workspace = true }
 argon2 = { version = "0.5", features = ["std"] }
 async-trait = "0.1.0"
+base64 = "0.21"
 cached = { version = "0.46.0", features = ["async_tokio_rt_multi_thread"] }
 chrono = { workspace = true, features = ["serde"] }
 clap = { workspace = true }
@@ -40,6 +42,7 @@ graphql_client = "0.13.0"
 hostname = "0.3.0"
 http = { workspace = true }
 itertools = { workspace = true }
+jsonwebtoken = "9"
 lettre = { version = "0.11.0", default-features = false, features = [
   "tokio1",
   "tokio1-rustls-tls",
@@ -58,6 +61,7 @@ opentelemetry_sdk = { version = "0.21.0", features = ["trace", "logs", "metrics"
 opentelemetry-appender-tracing = "0.2.0"
 opentelemetry-otlp = { version = "0.14.0", features = ["grpc-tonic", "trace", "logs", "metrics", "reqwest-rustls", "tls"] }
 rand = { version = "0.8", features=["std_rng"] }
+ring = "0.17.0"
 regex = "1.5.0"
 reqwest = { workspace = true, features = ["tokio-rustls", "gzip"] }
 reqwest-middleware = "0.2.0"
@@ -92,7 +96,6 @@ universal-inbox = { path = ".." }
 url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true, features = ["serde"] }
 validator = { workspace = true }
-actix-web-opentelemetry = { version = "0.16.0", features = ["metrics"] }
 
 [dev-dependencies]
 httpmock = "0.6.0"

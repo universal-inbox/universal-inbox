@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use actix_http::body::BoxBody;
-use actix_identity::Identity;
+use actix_jwt_authc::Authenticated;
 use actix_web::{web, HttpResponse, Scope};
 use anyhow::Context;
 use serde_json::json;
@@ -16,11 +16,11 @@ use universal_inbox::{
 };
 
 use crate::{
-    routes::option_wildcard,
     universal_inbox::{
         integration_connection::service::IntegrationConnectionService, UniversalInboxError,
         UpdateStatus,
     },
+    utils::jwt::Claims,
 };
 
 pub fn scope() -> Scope {
@@ -29,35 +29,31 @@ pub fn scope() -> Scope {
             web::resource("")
                 .name("integration-connections")
                 .route(web::get().to(list_integration_connections))
-                .route(web::post().to(create_integration_connection))
-                .route(web::method(http::Method::OPTIONS).to(option_wildcard)),
+                .route(web::post().to(create_integration_connection)),
         )
         .service(
             web::resource("/{integration_connection_id}")
-                .route(web::delete().to(disconnect_integration_connection))
-                .route(web::method(http::Method::OPTIONS).to(option_wildcard)),
+                .route(web::delete().to(disconnect_integration_connection)),
         )
         .service(
             web::resource("/{integration_connection_id}/config")
-                .route(web::put().to(update_integration_connection_config))
-                .route(web::method(http::Method::OPTIONS).to(option_wildcard)),
+                .route(web::put().to(update_integration_connection_config)),
         )
         .service(
             web::resource("/{integration_connection_id}/status")
-                .route(web::patch().to(verify_integration_connection))
-                .route(web::method(http::Method::OPTIONS).to(option_wildcard)),
+                .route(web::patch().to(verify_integration_connection)),
         )
 }
 
 pub async fn list_integration_connections(
     integration_connection_service: web::Data<Arc<RwLock<IntegrationConnectionService>>>,
-    identity: Identity,
+    authenticated: Authenticated<Claims>,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    let user_id = identity
-        .id()
-        .context("No user ID found in identity")?
+    let user_id = authenticated
+        .claims
+        .sub
         .parse::<UserId>()
-        .context("User ID has wrong format")?;
+        .context("Wrong user ID format")?;
     let service = integration_connection_service.read().await;
     let mut transaction = service
         .begin()
@@ -76,13 +72,13 @@ pub async fn list_integration_connections(
 pub async fn create_integration_connection(
     integration_connection_creation: web::Json<IntegrationConnectionCreation>,
     integration_connection_service: web::Data<Arc<RwLock<IntegrationConnectionService>>>,
-    identity: Identity,
+    authenticated: Authenticated<Claims>,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    let user_id = identity
-        .id()
-        .context("No user ID found in identity")?
+    let user_id = authenticated
+        .claims
+        .sub
         .parse::<UserId>()
-        .context("User ID has wrong format")?;
+        .context("Wrong user ID format")?;
     let service = integration_connection_service.read().await;
     let mut transaction = service
         .begin()
@@ -112,13 +108,13 @@ pub async fn update_integration_connection_config(
     path: web::Path<IntegrationConnectionId>,
     integration_connection_config: web::Json<IntegrationConnectionConfig>,
     integration_connection_service: web::Data<Arc<RwLock<IntegrationConnectionService>>>,
-    identity: Identity,
+    authenticated: Authenticated<Claims>,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    let user_id = identity
-        .id()
-        .context("No user ID found in identity")?
+    let user_id = authenticated
+        .claims
+        .sub
         .parse::<UserId>()
-        .context("User ID has wrong format")?;
+        .context("Wrong user ID format")?;
     let integration_connection_id = path.into_inner();
     let service = integration_connection_service.read().await;
     let mut transaction = service.begin().await.context(
@@ -167,13 +163,13 @@ pub async fn update_integration_connection_config(
 pub async fn verify_integration_connection(
     path: web::Path<IntegrationConnectionId>,
     integration_connection_service: web::Data<Arc<RwLock<IntegrationConnectionService>>>,
-    identity: Identity,
+    authenticated: Authenticated<Claims>,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    let user_id = identity
-        .id()
-        .context("No user ID found in identity")?
+    let user_id = authenticated
+        .claims
+        .sub
         .parse::<UserId>()
-        .context("User ID has wrong format")?;
+        .context("Wrong user ID format")?;
     let integration_connection_id = path.into_inner();
     let service = integration_connection_service.read().await;
     let mut transaction = service.begin().await.context(format!(
@@ -216,13 +212,13 @@ pub async fn verify_integration_connection(
 pub async fn disconnect_integration_connection(
     path: web::Path<IntegrationConnectionId>,
     integration_connection_service: web::Data<Arc<RwLock<IntegrationConnectionService>>>,
-    identity: Identity,
+    authenticated: Authenticated<Claims>,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    let user_id = identity
-        .id()
-        .context("No user ID found in identity")?
+    let user_id = authenticated
+        .claims
+        .sub
         .parse::<UserId>()
-        .context("User ID has wrong format")?;
+        .context("Wrong user ID format")?;
     let integration_connection_id = path.into_inner();
     let service = integration_connection_service.read().await;
     let mut transaction = service

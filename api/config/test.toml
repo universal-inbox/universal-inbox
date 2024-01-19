@@ -13,6 +13,8 @@ nango_public_key = "nango_public_test_key"
 
 [application.http_session]
 secret_key = "1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF"
+jwt_secret_key = "MFECAQEwBQYDK2VwBCIEIJre1+y6O3ENLgP53GgxG5OYptX2FsnxnKTfepdW2U9JgSEAX3oq4VhLrIerpUyWqHG8GjBqUTB5RC07Pf0XaacoEAA="
+jwt_public_key = "X3oq4VhLrIerpUyWqHG8GjBqUTB5RC07Pf0XaacoEAA="
 
 [application.security.authentication]
 type = "OpenIDConnect"
