@@ -15,7 +15,7 @@ name = "universal-inbox-api"
 test = false
 
 [dependencies]
-actix-cors = "0.6.0"
+actix-cors = "0.7.0"
 actix-jwt-authc = { git = "https://github.com/dax/actix-jwt-authc", rev = "66412403a620b38ca1eb85b2b730bbdd5aa7895a", features = ["session", "tracing"] }
 actix-http = "3.0.0"
 actix-web-opentelemetry = { version = "0.16.0", features = ["metrics"] }
@@ -98,7 +98,7 @@ uuid = { workspace = true, features = ["serde"] }
 validator = { workspace = true }
 
 [dev-dependencies]
-httpmock = "0.6.0"
+httpmock = "0.7.0"
 pretty_assertions = { workspace = true }
 rstest = { workspace = true }
 serde_urlencoded = { workspace = true }
