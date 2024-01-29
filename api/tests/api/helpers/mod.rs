@@ -155,18 +155,23 @@ pub async fn tested_app(
     .expect("Failed to create new NangoService");
 
     let mailer_stub = Arc::new(RwLock::new(MailerStub::new()));
-    let (notification_service, task_service, user_service, integration_connection_service) =
-        universal_inbox_api::build_services(
-            pool.clone(),
-            &settings,
-            Some(github_mock_server_url.to_string()),
-            Some(linear_mock_server_url.to_string()),
-            Some(google_mail_mock_server_url.to_string()),
-            Some(todoist_mock_server_url.to_string()),
-            nango_service,
-            mailer_stub.clone(),
-        )
-        .await;
+    let (
+        notification_service,
+        task_service,
+        user_service,
+        integration_connection_service,
+        auth_token_service,
+    ) = universal_inbox_api::build_services(
+        pool.clone(),
+        &settings,
+        Some(github_mock_server_url.to_string()),
+        Some(linear_mock_server_url.to_string()),
+        Some(google_mail_mock_server_url.to_string()),
+        Some(todoist_mock_server_url.to_string()),
+        nango_service,
+        mailer_stub.clone(),
+    )
+    .await;
 
     let app_address = format!("http://127.0.0.1:{port}");
     let api_address = format!("{app_address}{}", settings.application.api_path);
@@ -177,6 +182,7 @@ pub async fn tested_app(
         task_service,
         user_service.clone(),
         integration_connection_service,
+        auth_token_service,
     )
     .await
     .expect("Failed to bind address");
@@ -241,18 +247,23 @@ pub async fn tested_app_with_local_auth(
     .expect("Failed to create new NangoService");
 
     let mailer_stub = Arc::new(RwLock::new(MailerStub::new()));
-    let (notification_service, task_service, user_service, integration_connection_service) =
-        universal_inbox_api::build_services(
-            pool.clone(),
-            &settings,
-            Some(github_mock_server_url.to_string()),
-            Some(linear_mock_server_url.to_string()),
-            Some(google_mail_mock_server_url.to_string()),
-            Some(todoist_mock_server_url.to_string()),
-            nango_service,
-            mailer_stub.clone(),
-        )
-        .await;
+    let (
+        notification_service,
+        task_service,
+        user_service,
+        integration_connection_service,
+        auth_token_service,
+    ) = universal_inbox_api::build_services(
+        pool.clone(),
+        &settings,
+        Some(github_mock_server_url.to_string()),
+        Some(linear_mock_server_url.to_string()),
+        Some(google_mail_mock_server_url.to_string()),
+        Some(todoist_mock_server_url.to_string()),
+        nango_service,
+        mailer_stub.clone(),
+    )
+    .await;
 
     let app_address = format!("http://127.0.0.1:{port}");
     let api_address = format!("{app_address}{}", settings.application.api_path);
@@ -263,6 +274,7 @@ pub async fn tested_app_with_local_auth(
         task_service,
         user_service.clone(),
         integration_connection_service,
+        auth_token_service,
     )
     .await
     .expect("Failed to bind address");

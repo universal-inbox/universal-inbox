@@ -3,12 +3,12 @@ use std::sync::Arc;
 use anyhow::Context;
 use email_address::EmailAddress;
 use log::{error, info};
+use secrecy::ExposeSecret;
 use tokio::sync::RwLock;
 
-use crate::{
-    configuration::HttpSessionSettings,
-    universal_inbox::{user::service::UserService, UniversalInboxError},
-    utils::jwt::{Claims, JWTBase64EncodedSigningKeys, JWTSigningKeys, JWTttl},
+use crate::universal_inbox::{
+    auth_token::service::AuthenticationTokenService, user::service::UserService,
+    UniversalInboxError,
 };
 
 #[tracing::instrument(
@@ -112,12 +112,12 @@ pub async fn send_password_reset_email(
 #[tracing::instrument(
     name = "generate-jwt-token",
     level = "info",
-    skip(user_service, settings),
+    skip(user_service, auth_token_service),
     err
 )]
 pub async fn generate_jwt_token(
     user_service: Arc<RwLock<UserService>>,
-    settings: HttpSessionSettings,
+    auth_token_service: Arc<RwLock<AuthenticationTokenService>>,
     user_email: &EmailAddress,
 ) -> Result<(), UniversalInboxError> {
     let service = user_service.read().await;
@@ -133,18 +133,17 @@ pub async fn generate_jwt_token(
             "Unable to find user with email address {user_email}"
         ))?;
 
-    let jwt_signing_keys =
-        JWTSigningKeys::load_from_base64_encoded_keys(JWTBase64EncodedSigningKeys {
-            secret_key: settings.jwt_secret_key.clone(),
-            public_key: settings.jwt_public_key.clone(),
-        })?;
-    let jwt_token = Claims::new_jwt_token(
-        user.id.to_string(),
-        &JWTttl(settings.jwt_token_expiration_in_days),
-        &jwt_signing_keys.encoding_key,
-    )?;
+    let auth_token_service = auth_token_service.read().await;
 
-    info!("New JWT token for user {}: {}", user.id, jwt_token);
+    let auth_token = auth_token_service
+        .create_auth_token(&mut transaction, user.id)
+        .await?;
+
+    info!(
+        "New JWT token for user {}: {}",
+        user.id,
+        auth_token.jwt_token.expose_secret().0
+    );
 
     Ok(())
 }

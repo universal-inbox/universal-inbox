@@ -9,7 +9,12 @@ use reqwest::Client;
 use rstest::fixture;
 use serde_json::json;
 
-use universal_inbox::{auth::SessionAuthValidationParameters, user::User};
+use universal_inbox::{
+    auth::{auth_token::AuthenticationToken, SessionAuthValidationParameters},
+    user::{User, UserId},
+};
+
+use universal_inbox_api::repository::auth_token::AuthenticationTokenRepository;
 
 use super::{tested_app, TestedApp};
 
@@ -199,4 +204,18 @@ pub fn mock_oidc_user_info(
                     "email": email,
                 }));
         });
+}
+
+pub async fn fetch_auth_tokens_for_user(
+    app: &TestedApp,
+    user_id: UserId,
+) -> Vec<AuthenticationToken> {
+    let mut transaction = app.repository.begin().await.unwrap();
+    let auth_tokens = app
+        .repository
+        .fetch_auth_tokens_for_user(&mut transaction, user_id)
+        .await
+        .unwrap();
+    transaction.commit().await.unwrap();
+    auth_tokens
 }

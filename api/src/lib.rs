@@ -42,11 +42,12 @@ use crate::{
     observability::AuthenticatedRootSpanBuilder,
     repository::Repository,
     universal_inbox::{
+        auth_token::service::AuthenticationTokenService,
         integration_connection::service::IntegrationConnectionService,
         notification::service::NotificationService, task::service::TaskService,
         user::service::UserService, UniversalInboxError,
     },
-    utils::jwt::{Claims, JWTBase64EncodedSigningKeys, JWTSigningKeys, JWTttl},
+    utils::jwt::{Claims, JWTBase64EncodedSigningKeys, JWTSigningKeys, JWT_SESSION_KEY},
 };
 
 pub mod commands;
@@ -66,6 +67,7 @@ pub async fn run(
     task_service: Arc<RwLock<TaskService>>,
     user_service: Arc<RwLock<UserService>>,
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
+    auth_token_service: Arc<RwLock<AuthenticationTokenService>>,
 ) -> Result<Server, UniversalInboxError> {
     let api_path = settings.application.api_path.clone();
     let front_base_url = settings
@@ -86,20 +88,15 @@ pub async fn run(
     // Setup HTTP session + JWT auth
     let session_secret_key = Key::from(settings.application.http_session.secret_key.as_bytes());
     let max_age_days = settings.application.http_session.max_age_days;
-    let jwt_token_expiration_in_days = settings
-        .application
-        .http_session
-        .jwt_token_expiration_in_days;
     let jwt_signing_keys =
         JWTSigningKeys::load_from_base64_encoded_keys(JWTBase64EncodedSigningKeys {
             secret_key: settings.application.http_session.jwt_secret_key.clone(),
             public_key: settings.application.http_session.jwt_public_key.clone(),
         })?;
-    let jwt_session_key = JWTSessionKey("jwt-session".to_string());
     let auth_middleware_settings = {
         AuthenticateMiddlewareSettings {
             jwt_decoding_key: jwt_signing_keys.decoding_key,
-            jwt_session_key: Some(jwt_session_key.clone()),
+            jwt_session_key: Some(JWTSessionKey(JWT_SESSION_KEY.to_string())),
             jwt_authorization_header_prefixes: Some(vec!["Bearer".to_string()]),
             jwt_validator: Validation::new(Algorithm::EdDSA),
         }
@@ -130,9 +127,7 @@ pub async fn run(
             .app_data(web::Data::new(task_service.clone()))
             .app_data(web::Data::new(user_service.clone()))
             .app_data(web::Data::new(integration_connection_service.clone()))
-            .app_data(web::Data::new(jwt_session_key.clone()))
-            .app_data(web::Data::new(jwt_signing_keys.encoding_key.clone()))
-            .app_data(web::Data::new(JWTttl(jwt_token_expiration_in_days)));
+            .app_data(web::Data::new(auth_token_service.clone()));
 
         let cors = Cors::default()
             .allowed_origin(&front_base_url)
@@ -253,8 +248,14 @@ pub async fn build_services(
     Arc<RwLock<TaskService>>,
     Arc<RwLock<UserService>>,
     Arc<RwLock<IntegrationConnectionService>>,
+    Arc<RwLock<AuthenticationTokenService>>,
 ) {
     let repository = Arc::new(Repository::new(pool.clone()));
+
+    let auth_token_service = Arc::new(RwLock::new(AuthenticationTokenService::new(
+        repository.clone(),
+        settings.application.http_session.clone(),
+    )));
 
     let user_service = Arc::new(RwLock::new(UserService::new(
         repository.clone(),
@@ -330,6 +331,7 @@ pub async fn build_services(
         task_service,
         user_service,
         integration_connection_service,
+        auth_token_service,
     )
 }
 

@@ -21,6 +21,8 @@ use crate::helpers::{
 };
 
 mod authenticate_session {
+    use crate::helpers::auth::fetch_auth_tokens_for_user;
+
     use super::*;
 
     const ID_TOKEN: &str = "eyJhbGciOiJSUzI1NiIsImtpZCI6IjI0MTE5MDE1MjI5NzI1NDEyMSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL3Rlc3QteGJzYnMzLnppdGFkZWwuY2xvdWQiLCJzdWIiOiIxODE0MTE0MDYyODgwNjA2NzMiLCJhdWQiOlsiMjA1NjYyMjE0NDgzNDExMjAxQHVuaXZlcnNhbF9pbmJveCIsIjIwNDM1OTU2MDAyOTMzOTkwNUB1bml2ZXJzYWxfaW5ib3giLCIyMDQzNTkzMDAyNTA4NjE4MjUiXSwiZXhwIjoxNzAwMjk5Nzc3LCJpYXQiOjE3MDAyNTY1NzcsImF1dGhfdGltZSI6MTY5NzcyMDU1Nywibm9uY2UiOiI0bk1obE01bm5xbXFLcXJKcjVqTkd3IiwiYW1yIjpbInBhc3N3b3JkIiwicHdkIl0sImF6cCI6IjIwNDM1OTU2MDAyOTMzOTkwNUB1bml2ZXJzYWxfaW5ib3giLCJjbGllbnRfaWQiOiIyMDQzNTk1NjAwMjkzMzk5MDVAdW5pdmVyc2FsX2luYm94IiwiYXRfaGFzaCI6InJxMl81N3dacjJqNmlLY1dvZzhDNkEiLCJjX2hhc2giOiJUbE5jLXJzLVlkN2dHaVIwNkRjcGpBIn0.qoOPG0_Ia40xq0jzlOeMUtrxK5LjZhQJS3_RfUbtRZxXEGWd8krreN7J3qmIKHo_Xp8Ih5BZJon1GqSYUkdqjcVg-a8XNXE-1kqAqz2ViPbDGtmSfx8tl7ga_cIH2hXsYy1zNMxtdmCbCFaKGUt6XOs201gcx-2kyJLMvN0mcZ23W6VxcVuo9_CR_BXWFjc9WVw-Ws34UhWOxk0_sNRwpTg720KHOcmxXH118dKGhWNpFG9qJYbDaXuBJ1jwS4RTMbC5cruXfQiNAJ0aaeZM52yIno16YSN44_cpllRQgzoNIXF2i8GS7c2M2D1mEssilTI55t2W4VihahmrCUScZg";
@@ -67,6 +69,12 @@ mod authenticate_session {
             panic!("User auth is not OpenIdConnect");
         };
         assert_eq!(user_auth.auth_id_token, ID_TOKEN.to_string().into());
+
+        let auth_tokens = fetch_auth_tokens_for_user(&app, user.id).await;
+        assert_eq!(auth_tokens.len(), 1);
+        assert_eq!(auth_tokens[0].user_id, user.id);
+        assert!(!auth_tokens[0].is_revoked);
+        assert!(!auth_tokens[0].is_expired());
 
         // Test a new ID token is updated
         let response = client

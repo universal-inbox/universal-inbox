@@ -11,6 +11,7 @@ use universal_inbox::user::{
 use universal_inbox_api::{configuration::Settings, mailer::EmailTemplate};
 
 use crate::helpers::{
+    auth::fetch_auth_tokens_for_user,
     settings, tested_app_with_local_auth,
     user::{
         get_current_user, get_current_user_response, get_password_reset_token,
@@ -47,6 +48,12 @@ mod register_user {
         assert!(user.email_validated_at.is_none());
         assert!(!user.is_email_validated());
         assert!(user.email_validation_sent_at.is_some());
+
+        let auth_tokens = fetch_auth_tokens_for_user(&app, user.id).await;
+        assert_eq!(auth_tokens.len(), 1);
+        assert_eq!(auth_tokens[0].user_id, user.id);
+        assert!(!auth_tokens[0].is_revoked);
+        assert!(!auth_tokens[0].is_expired());
 
         let email_validation_token = get_user_email_validation_token(&app, user.id).await;
 
@@ -115,7 +122,7 @@ mod login_user {
     async fn test_login_user(#[future] tested_app_with_local_auth: TestedApp) {
         let app = tested_app_with_local_auth.await;
 
-        let (_client, _user) = register_user(
+        let (_client, user) = register_user(
             &app,
             "John",
             "Doe",
@@ -123,6 +130,12 @@ mod login_user {
             "Very-harD-pasSword-5",
         )
         .await;
+
+        let auth_tokens = fetch_auth_tokens_for_user(&app, user.id).await;
+        assert_eq!(auth_tokens.len(), 1);
+        assert_eq!(auth_tokens[0].user_id, user.id);
+        assert!(!auth_tokens[0].is_revoked);
+        assert!(!auth_tokens[0].is_expired());
 
         // Create a new client to avoid using the same session
         let client = reqwest::Client::builder()
@@ -149,6 +162,14 @@ mod login_user {
         .await;
 
         assert_eq!(login_response.status(), http::StatusCode::OK);
+
+        let auth_tokens = fetch_auth_tokens_for_user(&app, user.id).await;
+        assert_eq!(auth_tokens.len(), 2);
+        for auth_token in auth_tokens {
+            assert_eq!(auth_token.user_id, user.id);
+            assert!(!auth_token.is_revoked);
+            assert!(!auth_token.is_expired());
+        }
 
         let user = get_current_user(&client, &app).await;
 
