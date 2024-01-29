@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT\n                  id,\n                  created_at,\n                  updated_at,\n                  user_id,\n                  jwt_token,\n                  expire_at,\n                  is_revoked\n                FROM\n                  authentication_token\n                WHERE\n                  user_id = $1\n            ",
+  "query": "\n                SELECT\n                  id,\n                  created_at,\n                  updated_at,\n                  user_id,\n                  jwt_token,\n                  expire_at,\n                  is_revoked,\n                  is_session_token\n                FROM\n                  authentication_token\n                WHERE\n                  user_id = $1\n            ",
   "describe": {
     "columns": [
       {
@@ -37,6 +37,11 @@
         "ordinal": 6,
         "name": "is_revoked",
         "type_info": "Bool"
+      },
+      {
+        "ordinal": 7,
+        "name": "is_session_token",
+        "type_info": "Bool"
       }
     ],
     "parameters": {
@@ -51,8 +56,9 @@
       false,
       false,
       true,
+      false,
       false
     ]
   },
-  "hash": "44bf2d4f1c57378b4018782361c2ec9fd4cd8cf33820d10ffa385542835d0788"
+  "hash": "bc1d069c1f8925e34d3711ad5096e866d24de78c5c17dc0965c8a5328e228586"
 }

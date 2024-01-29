@@ -45,7 +45,8 @@ impl AuthenticationTokenRepository for Repository {
                     created_at,
                     updated_at,
                     user_id,
-                    jwt_token
+                    jwt_token,
+                    is_session_token
                   )
                 VALUES
                   (
@@ -53,7 +54,8 @@ impl AuthenticationTokenRepository for Repository {
                     $2,
                     $3,
                     $4,
-                    $5
+                    $5,
+                    $6
                   )
             "#,
             auth_token.id.0,
@@ -61,6 +63,7 @@ impl AuthenticationTokenRepository for Repository {
             auth_token.updated_at.naive_utc(),
             auth_token.user_id.0,
             auth_token.jwt_token.expose_secret().0,
+            auth_token.is_session_token,
         )
         .execute(&mut **executor)
         .await
@@ -85,7 +88,8 @@ impl AuthenticationTokenRepository for Repository {
                   user_id,
                   jwt_token,
                   expire_at,
-                  is_revoked
+                  is_revoked,
+                  is_session_token
                 FROM
                   authentication_token
                 WHERE
@@ -110,6 +114,7 @@ pub struct AuthenticationTokenRow {
     pub jwt_token: String,
     pub expire_at: Option<NaiveDateTime>,
     pub is_revoked: bool,
+    pub is_session_token: bool,
 }
 
 impl From<AuthenticationTokenRow> for AuthenticationToken {
@@ -130,6 +135,7 @@ impl From<&AuthenticationTokenRow> for AuthenticationToken {
                 .expire_at
                 .map(|expire_at| DateTime::from_naive_utc_and_offset(expire_at, Utc)),
             is_revoked: row.is_revoked,
+            is_session_token: row.is_session_token,
         }
     }
 }

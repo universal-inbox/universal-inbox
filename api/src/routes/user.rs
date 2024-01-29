@@ -126,7 +126,7 @@ pub async fn register_user(
     let auth_token_service = auth_token_service.read().await;
 
     let auth_token = auth_token_service
-        .create_auth_token(&mut transaction, user.id)
+        .create_auth_token(&mut transaction, true, user.id)
         .await?;
     session
         .insert(
@@ -171,7 +171,7 @@ pub async fn login_user(
     let auth_token_service = auth_token_service.read().await;
 
     let auth_token = auth_token_service
-        .create_auth_token(&mut transaction, user.id)
+        .create_auth_token(&mut transaction, true, user.id)
         .await?;
     session
         .insert(
