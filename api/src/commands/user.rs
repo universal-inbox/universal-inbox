@@ -136,7 +136,7 @@ pub async fn generate_jwt_token(
     let auth_token_service = auth_token_service.read().await;
 
     let auth_token = auth_token_service
-        .create_auth_token(&mut transaction, user.id)
+        .create_auth_token(&mut transaction, false, user.id)
         .await?;
 
     info!(

@@ -16,6 +16,7 @@ pub struct AuthenticationToken {
     pub jwt_token: Secret<JWTToken>,
     pub expire_at: Option<DateTime<Utc>>,
     pub is_revoked: bool,
+    pub is_session_token: bool,
 }
 
 impl AuthenticationToken {
@@ -23,6 +24,7 @@ impl AuthenticationToken {
         user_id: UserId,
         jwt_token: Secret<JWTToken>,
         expire_at: Option<DateTime<Utc>>,
+        is_session_token: bool,
     ) -> Self {
         Self {
             id: Uuid::new_v4().into(),
@@ -32,6 +34,7 @@ impl AuthenticationToken {
             jwt_token,
             expire_at,
             is_revoked: false,
+            is_session_token,
         }
     }
 

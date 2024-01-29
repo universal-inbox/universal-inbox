@@ -73,6 +73,7 @@ mod authenticate_session {
         let auth_tokens = fetch_auth_tokens_for_user(&app, user.id).await;
         assert_eq!(auth_tokens.len(), 1);
         assert_eq!(auth_tokens[0].user_id, user.id);
+        assert!(auth_tokens[0].is_session_token);
         assert!(!auth_tokens[0].is_revoked);
         assert!(!auth_tokens[0].is_expired());
 

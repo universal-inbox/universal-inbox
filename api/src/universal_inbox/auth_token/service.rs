@@ -44,6 +44,7 @@ impl AuthenticationTokenService {
     pub async fn create_auth_token<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
+        is_session_token: bool,
         user_id: UserId,
     ) -> Result<AuthenticationToken, UniversalInboxError> {
         let expire_at =
@@ -67,7 +68,7 @@ impl AuthenticationTokenService {
             .repository
             .create_auth_token(
                 executor,
-                AuthenticationToken::new(user_id, jwt_token, Some(expire_at)),
+                AuthenticationToken::new(user_id, jwt_token, Some(expire_at), is_session_token),
             )
             .await?;
         Ok(auth_token)
