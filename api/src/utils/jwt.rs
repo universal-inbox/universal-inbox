@@ -1,7 +1,6 @@
 use anyhow::Context;
 use base64::prelude::*;
-use chrono::{Duration, Utc};
-use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header};
+use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey};
 use ring::signature::KeyPair;
 use ring::{rand::SystemRandom, signature::Ed25519KeyPair};
 use serde::{Deserialize, Serialize};
@@ -9,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::universal_inbox::UniversalInboxError;
 
 pub const JWT_SIGNING_ALGO: Algorithm = Algorithm::EdDSA;
+pub const JWT_SESSION_KEY: &str = "jwt-session";
 
 pub struct JWTSigningKeys {
     pub encoding_key: EncodingKey,
@@ -63,24 +63,5 @@ pub struct Claims {
     pub exp: usize,
     pub iat: usize,
     pub sub: String,
+    pub jti: String,
 }
-
-impl Claims {
-    pub fn new_jwt_token(
-        sub: String,
-        ttl: &JWTttl,
-        encoding_key: &EncodingKey,
-    ) -> Result<String, UniversalInboxError> {
-        let claims = Claims {
-            iat: Utc::now().timestamp() as usize,
-            exp: (Utc::now() + Duration::days(ttl.0)).timestamp() as usize,
-            sub,
-        };
-        Ok(
-            jsonwebtoken::encode(&Header::new(JWT_SIGNING_ALGO), &claims, encoding_key)
-                .context("Failed to encode JSON web token")?,
-        )
-    }
-}
-
-pub struct JWTttl(pub i64);

@@ -6,6 +6,7 @@ use validator::ValidationErrors;
 
 use universal_inbox::task::TaskId;
 
+pub mod auth_token;
 pub mod integration_connection;
 pub mod notification;
 pub mod task;

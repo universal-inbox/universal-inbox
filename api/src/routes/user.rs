@@ -1,13 +1,12 @@
 use std::sync::Arc;
 
 use actix_http::body::BoxBody;
-use actix_jwt_authc::{Authenticated, JWTSessionKey};
+use actix_jwt_authc::Authenticated;
 use actix_session::Session;
 use actix_web::{web, HttpResponse, Scope};
 use anyhow::{anyhow, Context};
 use email_address::EmailAddress;
-use jsonwebtoken::EncodingKey;
-use secrecy::Secret;
+use secrecy::{ExposeSecret, Secret};
 use serde_json::json;
 use tokio::sync::RwLock;
 use validator::Validate;
@@ -21,8 +20,11 @@ use universal_inbox::{
 };
 
 use crate::{
-    universal_inbox::{user::service::UserService, UniversalInboxError},
-    utils::jwt::{Claims, JWTttl},
+    universal_inbox::{
+        auth_token::service::AuthenticationTokenService, user::service::UserService,
+        UniversalInboxError,
+    },
+    utils::jwt::{Claims, JWT_SESSION_KEY},
 };
 
 pub fn scope() -> Scope {
@@ -80,14 +82,12 @@ pub async fn get_user(
 
 pub async fn register_user(
     user_service: web::Data<Arc<RwLock<UserService>>>,
+    auth_token_service: web::Data<Arc<RwLock<AuthenticationTokenService>>>,
     register_user_parameters: web::Json<RegisterUserParameters>,
-    jwt_encoding_key: web::Data<EncodingKey>,
-    jwt_session_key: web::Data<JWTSessionKey>,
-    ttl: web::Data<JWTttl>,
     session: Session,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    let service = user_service.read().await;
-    let mut transaction = service
+    let user_service = user_service.read().await;
+    let mut transaction = user_service
         .begin()
         .await
         .context("Failed to create new transaction while registering user")?;
@@ -96,7 +96,7 @@ pub async fn register_user(
         .validate()
         .map_err(UniversalInboxError::InvalidParameters)?;
 
-    let user = service
+    let user = user_service
         .register_user(
             &mut transaction,
             User::new(
@@ -104,7 +104,7 @@ pub async fn register_user(
                 register_user_parameters.last_name.clone(),
                 register_user_parameters.credentials.email.clone(),
                 UserAuth::Local(LocalUserAuth {
-                    password_hash: service.get_new_password_hash(
+                    password_hash: user_service.get_new_password_hash(
                         register_user_parameters.credentials.password.clone(),
                     )?,
                     password_reset_at: None,
@@ -123,13 +123,16 @@ pub async fn register_user(
             }
         })?;
 
-    let jwt_token = Claims::new_jwt_token(
-        user.id.to_string(),
-        &ttl.into_inner(),
-        &jwt_encoding_key.into_inner(),
-    )?;
+    let auth_token_service = auth_token_service.read().await;
+
+    let auth_token = auth_token_service
+        .create_auth_token(&mut transaction, user.id)
+        .await?;
     session
-        .insert(&jwt_session_key.0, jwt_token)
+        .insert(
+            JWT_SESSION_KEY,
+            auth_token.jwt_token.expose_secret().0.clone(),
+        )
         .context("Failed to insert JWT token into the session")?;
 
     transaction
@@ -144,10 +147,8 @@ pub async fn register_user(
 
 pub async fn login_user(
     user_service: web::Data<Arc<RwLock<UserService>>>,
+    auth_token_service: web::Data<Arc<RwLock<AuthenticationTokenService>>>,
     credentials: web::Json<Credentials>,
-    jwt_encoding_key: web::Data<EncodingKey>,
-    jwt_session_key: web::Data<JWTSessionKey>,
-    ttl: web::Data<JWTttl>,
     session: Session,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let service = user_service.read().await;
@@ -167,13 +168,16 @@ pub async fn login_user(
             }
         })?;
 
-    let jwt_token = Claims::new_jwt_token(
-        user.id.to_string(),
-        &ttl.into_inner(),
-        &jwt_encoding_key.into_inner(),
-    )?;
+    let auth_token_service = auth_token_service.read().await;
+
+    let auth_token = auth_token_service
+        .create_auth_token(&mut transaction, user.id)
+        .await?;
     session
-        .insert(&jwt_session_key.0, jwt_token)
+        .insert(
+            JWT_SESSION_KEY,
+            auth_token.jwt_token.expose_secret().0.clone(),
+        )
         .context("Failed to insert JWT token into the session")?;
 
     transaction

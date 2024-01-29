@@ -1,14 +1,14 @@
 use std::{str::FromStr, sync::Arc};
 
-use actix_jwt_authc::{Authenticated, JWTSessionKey};
+use actix_jwt_authc::Authenticated;
 use actix_session::Session;
 use actix_web::{
     web::{self, Redirect},
     HttpResponse, Scope,
 };
 use anyhow::{anyhow, Context};
-use jsonwebtoken::EncodingKey;
 use openidconnect::{core::CoreIdToken, AuthorizationCode, CsrfToken, Nonce};
+use secrecy::ExposeSecret;
 use serde::Deserialize;
 use tokio::sync::RwLock;
 use tracing::debug;
@@ -21,8 +21,11 @@ use universal_inbox::{
 
 use crate::{
     configuration::{AuthenticationSettings, OIDCFlowSettings, Settings},
-    universal_inbox::{user::service::UserService, UniversalInboxError},
-    utils::jwt::JWTttl,
+    universal_inbox::{
+        auth_token::service::AuthenticationTokenService, user::service::UserService,
+        UniversalInboxError,
+    },
+    utils::jwt::JWT_SESSION_KEY,
     Claims,
 };
 
@@ -51,10 +54,8 @@ pub fn scope() -> Scope {
 pub async fn authenticate_session(
     params: web::Json<SessionAuthValidationParameters>,
     user_service: web::Data<Arc<RwLock<UserService>>>,
+    auth_token_service: web::Data<Arc<RwLock<AuthenticationTokenService>>>,
     settings: web::Data<Settings>,
-    jwt_encoding_key: web::Data<EncodingKey>,
-    jwt_session_key: web::Data<JWTSessionKey>,
-    ttl: web::Data<JWTttl>,
     session: Session,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let service = user_service.read().await;
@@ -93,19 +94,22 @@ pub async fn authenticate_session(
         )
         .await?;
 
+    let auth_token_service = auth_token_service.read().await;
+
+    let auth_token = auth_token_service
+        .create_auth_token(&mut transaction, user.id)
+        .await?;
+    session
+        .insert(
+            JWT_SESSION_KEY,
+            auth_token.jwt_token.expose_secret().0.clone(),
+        )
+        .context("Failed to insert JWT token into the session")?;
+
     transaction
         .commit()
         .await
         .context("Failed to commit while authenticating user")?;
-
-    let jwt_token = Claims::new_jwt_token(
-        user.id.to_string(),
-        &ttl.into_inner(),
-        &jwt_encoding_key.into_inner(),
-    )?;
-    session
-        .insert(&jwt_session_key.0, jwt_token)
-        .context("Failed to insert JWT token into the session")?;
 
     Ok(HttpResponse::Ok().finish())
 }
@@ -185,9 +189,7 @@ pub async fn authenticated_session(
     session: Session,
     authenticated_session_request: web::Query<AuthenticatedSessionRequest>,
     user_service: web::Data<Arc<RwLock<UserService>>>,
-    jwt_encoding_key: web::Data<EncodingKey>,
-    jwt_session_key: web::Data<JWTSessionKey>,
-    ttl: web::Data<JWTttl>,
+    auth_token_service: web::Data<Arc<RwLock<AuthenticationTokenService>>>,
 ) -> Result<Redirect, UniversalInboxError> {
     session
         .remove(OIDC_AUTHORIZATION_URL_SESSION_KEY)
@@ -238,20 +240,23 @@ pub async fn authenticated_session(
         )
         .await?;
 
+    // 4. Create a new authenticated session
+    let auth_token_service = auth_token_service.read().await;
+
+    let auth_token = auth_token_service
+        .create_auth_token(&mut transaction, user.id)
+        .await?;
+    session
+        .insert(
+            JWT_SESSION_KEY,
+            auth_token.jwt_token.expose_secret().0.clone(),
+        )
+        .context("Failed to insert JWT token into the session")?;
+
     transaction
         .commit()
         .await
         .context("Failed to commit while authenticating user")?;
-
-    // 4. Create a new authenticated session
-    let jwt_token = Claims::new_jwt_token(
-        user.id.to_string(),
-        &ttl.into_inner(),
-        &jwt_encoding_key.into_inner(),
-    )?;
-    session
-        .insert(&jwt_session_key.0, jwt_token)
-        .context("Failed to insert JWT token into the session")?;
 
     Ok(Redirect::to(
         settings.application.front_base_url.to_string(),

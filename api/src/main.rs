@@ -163,18 +163,23 @@ async fn main() -> std::io::Result<()> {
         .expect("Failed to build an SmtpMailer"),
     ));
 
-    let (notification_service, task_service, user_service, integration_connection_service) =
-        build_services(
-            pool,
-            &settings,
-            None,
-            None,
-            None,
-            None,
-            nango_service,
-            mailer,
-        )
-        .await;
+    let (
+        notification_service,
+        task_service,
+        user_service,
+        integration_connection_service,
+        auth_token_service,
+    ) = build_services(
+        pool,
+        &settings,
+        None,
+        None,
+        None,
+        None,
+        nango_service,
+        mailer,
+    )
+    .await;
 
     let result = match &cli.command {
         Commands::SyncNotifications { source } => {
@@ -209,12 +214,7 @@ async fn main() -> std::io::Result<()> {
             Ok(())
         }
         Commands::GenerateJWTToken { user_email } => {
-            commands::user::generate_jwt_token(
-                user_service,
-                settings.application.http_session,
-                user_email,
-            )
-            .await
+            commands::user::generate_jwt_token(user_service, auth_token_service, user_email).await
         }
         Commands::Serve => {
             let listener = TcpListener::bind(format!(
@@ -230,6 +230,7 @@ async fn main() -> std::io::Result<()> {
                 task_service,
                 user_service,
                 integration_connection_service,
+                auth_token_service,
             )
             .await
             .expect("Failed to start HTTP server")
