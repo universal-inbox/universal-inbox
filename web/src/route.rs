@@ -12,7 +12,7 @@ use crate::{
         email_verification_page::EmailVerificationPage, login_page::LoginPage,
         notifications_page::NotificationsPage, page_not_found::PageNotFound,
         password_reset_page::PasswordResetPage, password_update_page::PasswordUpdatePage,
-        settings_page::SettingsPage, signup_page::SignupPage,
+        settings_page::SettingsPage, signup_page::SignupPage, user_profile_page::UserProfilePage,
     },
 };
 
@@ -20,9 +20,9 @@ use crate::{
 #[rustfmt::skip]
 pub enum Route {
     #[layout(FullpageLayout)]
-      #[route("/users/:user_id/email_verification/:email_validation_token")]
+      #[route("/users/:user_id/email-verification/:email_validation_token")]
       EmailVerificationPage { user_id: UserId, email_validation_token: EmailValidationToken },
-      #[route("/users/:user_id/password_reset/:password_reset_token")]
+      #[route("/users/:user_id/password-reset/:password_reset_token")]
       PasswordUpdatePage { user_id: UserId, password_reset_token: PasswordResetToken },
     #[end_layout]
     #[layout(AuthenticatedLayout)]
@@ -42,6 +42,8 @@ pub enum Route {
           NotificationsPage {},
           #[route("/settings")]
           SettingsPage {},
+          #[route("/profile")]
+          UserProfilePage {},
         #[end_layout]
       #[end_layout]
     #[end_layout]

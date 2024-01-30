@@ -4,14 +4,17 @@ use email_address::EmailAddress;
 use rstest::*;
 use uuid::Uuid;
 
-use universal_inbox::user::{
-    EmailValidationToken, LocalUserAuth, Password, PasswordResetToken, User, UserAuth, UserId,
+use universal_inbox::{
+    auth::auth_token::AuthenticationToken,
+    user::{
+        EmailValidationToken, LocalUserAuth, Password, PasswordResetToken, User, UserAuth, UserId,
+    },
 };
 
 use universal_inbox_api::{configuration::Settings, mailer::EmailTemplate};
 
 use crate::helpers::{
-    auth::fetch_auth_tokens_for_user,
+    auth::{authenticated_app, fetch_auth_tokens_for_user, AuthenticatedApp},
     settings, tested_app_with_local_auth,
     user::{
         get_current_user, get_current_user_response, get_password_reset_token,
@@ -68,7 +71,7 @@ mod register_user {
             EmailTemplate::EmailVerification {
                 first_name: "John".to_string(),
                 email_verification_url: format!(
-                    "{}users/{}/email_verification/{}",
+                    "{}users/{}/email-verification/{}",
                     settings.application.front_base_url,
                     user.id,
                     email_validation_token.unwrap()
@@ -299,7 +302,7 @@ mod email_verification {
         assert_eq!(emails_sent.len(), 1);
 
         let response = client
-            .post(format!("{}users/me/email_verification", app.api_address))
+            .post(format!("{}users/me/email-verification", app.api_address))
             .send()
             .await
             .unwrap();
@@ -320,7 +323,7 @@ mod email_verification {
             EmailTemplate::EmailVerification {
                 first_name: "John".to_string(),
                 email_verification_url: format!(
-                    "{}users/{}/email_verification/{email_validation_token}",
+                    "{}users/{}/email-verification/{email_validation_token}",
                     settings.application.front_base_url, user.id
                 )
                 .parse()
@@ -353,7 +356,7 @@ mod email_verification {
 
         // Email template contains frontend URL which is supposed to call this API endpoint
         let api_email_verification_url = format!(
-            "{}users/{}/email_verification/{email_validation_token}",
+            "{}users/{}/email-verification/{email_validation_token}",
             app.api_address, user.id
         );
         let response = anonymous_client
@@ -395,7 +398,7 @@ mod email_verification {
         let user_id = UserId(Uuid::new_v4());
         // Email template contains frontend URL which is supposed to call this API endpoint
         let api_email_verification_url = format!(
-            "{}users/{user_id}/email_verification/{email_validation_token}",
+            "{}users/{user_id}/email-verification/{email_validation_token}",
             app.api_address,
         );
         let response = anonymous_client
@@ -435,7 +438,7 @@ mod email_verification {
 
         // Email template contains frontend URL which is supposed to call this API endpoint
         let api_email_verification_url = format!(
-            "{}users/{}/email_verification/{email_validation_token}",
+            "{}users/{}/email-verification/{email_validation_token}",
             app.api_address, user.id
         );
         let response = anonymous_client
@@ -479,7 +482,7 @@ mod password_reset {
             .unwrap();
 
         let response = anonymous_client
-            .post(format!("{}users/password_reset", app.api_address))
+            .post(format!("{}users/password-reset", app.api_address))
             .json(&email)
             .send()
             .await
@@ -497,7 +500,7 @@ mod password_reset {
             EmailTemplate::PasswordReset {
                 first_name: "John".to_string(),
                 password_reset_url: format!(
-                    "{}users/{}/password_reset/{password_reset_token}",
+                    "{}users/{}/password-reset/{password_reset_token}",
                     settings.application.front_base_url, user.id
                 )
                 .parse()
@@ -521,7 +524,7 @@ mod password_reset {
             .unwrap();
 
         let response = new_client
-            .post(format!("{}users/password_reset", app.api_address))
+            .post(format!("{}users/password-reset", app.api_address))
             .json(&email)
             .send()
             .await
@@ -531,7 +534,7 @@ mod password_reset {
         let password_reset_token = get_password_reset_token(&app, user.id).await.unwrap();
         // Email template contains frontend URL which is supposed to call this API endpoint
         let api_password_reset_url = format!(
-            "{}users/{}/password_reset/{password_reset_token}",
+            "{}users/{}/password-reset/{password_reset_token}",
             app.api_address, user.id
         );
         let response = new_client
@@ -582,7 +585,7 @@ mod password_reset {
             .unwrap();
 
         let response = anonymous_client
-            .post(format!("{}users/password_reset", app.api_address))
+            .post(format!("{}users/password-reset", app.api_address))
             .json(&email)
             .send()
             .await
@@ -592,7 +595,7 @@ mod password_reset {
         let password_reset_token = get_password_reset_token(&app, user.id).await.unwrap();
         let unknown_user_id = UserId(Uuid::new_v4());
         let api_password_reset_url = format!(
-            "{}users/{unknown_user_id}/password_reset/{password_reset_token}",
+            "{}users/{unknown_user_id}/password-reset/{password_reset_token}",
             app.api_address
         );
 
@@ -627,7 +630,7 @@ mod password_reset {
             .unwrap();
 
         let response = anonymous_client
-            .post(format!("{}users/password_reset", app.api_address))
+            .post(format!("{}users/password-reset", app.api_address))
             .json(&email)
             .send()
             .await
@@ -636,7 +639,7 @@ mod password_reset {
 
         let invalid_password_reset_token = PasswordResetToken(Uuid::new_v4());
         let api_password_reset_url = format!(
-            "{}users/{}/password_reset/{invalid_password_reset_token}",
+            "{}users/{}/password-reset/{invalid_password_reset_token}",
             app.api_address, user.id
         );
 
@@ -657,5 +660,38 @@ mod password_reset {
             )
             .as_str()
         );
+    }
+}
+
+mod create_authentication_token {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_create_authentication_token(#[future] authenticated_app: AuthenticatedApp) {
+        let app = authenticated_app.await;
+
+        let auth_token: AuthenticationToken = app
+            .client
+            .post(&format!(
+                "{}users/me/authentication-tokens",
+                app.app.api_address
+            ))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+
+        assert_eq!(auth_token.user_id, app.user.id);
+        assert!(!auth_token.is_session_token);
+        assert!(!auth_token.is_revoked);
+        assert!(!auth_token.is_expired());
+
+        let auth_tokens = fetch_auth_tokens_for_user(&app.app, app.user.id).await;
+        assert_eq!(auth_tokens.len(), 2);
+        assert_eq!(auth_tokens[0].id, auth_token.id);
     }
 }

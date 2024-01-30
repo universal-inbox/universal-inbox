@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Context;
+use chrono::{Duration, Utc};
 use email_address::EmailAddress;
 use log::{error, info};
 use secrecy::ExposeSecret;
@@ -123,7 +124,7 @@ pub async fn generate_jwt_token(
     let service = user_service.read().await;
 
     let mut transaction = service.begin().await.context(format!(
-        "Failed to create new transaction while send the password reset email for {user_email}"
+        "Failed to create new transaction while generating new authentication token for {user_email}"
     ))?;
 
     let user = service
@@ -136,8 +137,17 @@ pub async fn generate_jwt_token(
     let auth_token_service = auth_token_service.read().await;
 
     let auth_token = auth_token_service
-        .create_auth_token(&mut transaction, false, user.id)
+        .create_auth_token(
+            &mut transaction,
+            false,
+            user.id,
+            Some(Utc::now() + Duration::days(30 * 6)),
+        )
         .await?;
+
+    transaction.commit().await.context(format!(
+        "Failed to commit transaction while generating new authentication token for {user_email}"
+    ))?;
 
     info!(
         "New JWT token for user {}: {}",

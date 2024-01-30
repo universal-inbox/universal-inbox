@@ -213,7 +213,7 @@ pub async fn fetch_auth_tokens_for_user(
     let mut transaction = app.repository.begin().await.unwrap();
     let auth_tokens = app
         .repository
-        .fetch_auth_tokens_for_user(&mut transaction, user_id)
+        .fetch_auth_tokens_for_user(&mut transaction, user_id, false)
         .await
         .unwrap();
     transaction.commit().await.unwrap();

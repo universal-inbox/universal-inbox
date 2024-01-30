@@ -9,8 +9,8 @@ use dioxus_free_icons::Icon;
 use dioxus_router::prelude::*;
 use fermi::{use_atom_ref, use_atom_state};
 use gravatar::{Gravatar, Rating};
-use universal_inbox::FrontAuthenticationConfig;
 
+use crate::model::{DEFAULT_USER_AVATAR, NOT_CONNECTED_USER_NAME};
 use crate::theme::IS_DARK_MODE;
 use crate::{
     config::APP_CONFIG,
@@ -18,9 +18,6 @@ use crate::{
     services::user_service::{UserCommand, CONNECTED_USER},
     theme::toggle_dark_mode,
 };
-
-const DEFAULT_USER_AVATAR: &str = "https://avatars.githubusercontent.com/u/1062408?v=4";
-const NOT_CONNECTED_USER_NAME: &str = "Not connected";
 
 pub fn NavBar(cx: Scope) -> Element {
     let user_service = use_coroutine_handle::<UserCommand>(cx).unwrap();
@@ -43,21 +40,6 @@ pub fn NavBar(cx: Scope) -> Element {
         .unwrap_or_else(|| NOT_CONNECTED_USER_NAME.to_string());
 
     let app_config_ref = use_atom_ref(cx, &APP_CONFIG);
-    // Howto use use_memo with an Option?
-    let user_profile_url =
-        app_config_ref
-            .read()
-            .as_ref()
-            .and_then(|config| match &config.authentication_config {
-                FrontAuthenticationConfig::OIDCAuthorizationCodePKCEFlow {
-                    user_profile_url,
-                    ..
-                } => Some(user_profile_url.clone()),
-                FrontAuthenticationConfig::OIDCGoogleAuthorizationCodeFlow { user_profile_url } => {
-                    Some(user_profile_url.clone())
-                }
-                FrontAuthenticationConfig::Local => None,
-            });
     let support_href = app_config_ref
         .read()
         .as_ref()
@@ -151,16 +133,11 @@ pub fn NavBar(cx: Scope) -> Element {
                         class: "mt-3 p-2 shadow menu dropdown-content bg-base-100 rounded-box w-52",
                         tabindex: 0,
 
-                        if let Some(user_profile_url) = user_profile_url {
-                            render! {
-                                li {
-                                    a {
-                                        href: "{user_profile_url}",
-                                        target: "_blank",
-                                        Icon { class: "w-5 h-5", icon: BsPerson }
-                                        p { "Profile" }
-                                    }
-                                }
+                        li {
+                            Link {
+                                to: Route::UserProfilePage {},
+                                Icon { class: "w-5 h-5", icon: BsPerson }
+                                p { "Profile" }
                             }
                         }
                         li {

@@ -1,7 +1,7 @@
 use std::{fmt, str::FromStr};
 
 use chrono::{DateTime, Utc};
-use secrecy::{CloneableSecret, DebugSecret, Secret, SerializableSecret, Zeroize};
+use secrecy::{CloneableSecret, DebugSecret, ExposeSecret, Secret, SerializableSecret, Zeroize};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -87,11 +87,69 @@ impl FromStr for AuthenticationTokenId {
 #[serde(transparent)]
 pub struct JWTToken(pub String);
 
+impl fmt::Display for JWTToken {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 impl Zeroize for JWTToken {
     fn zeroize(&mut self) {
         self.0.zeroize();
     }
 }
+
 impl CloneableSecret for JWTToken {}
 impl DebugSecret for JWTToken {}
 impl SerializableSecret for JWTToken {}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TruncatedAuthenticationToken {
+    pub id: AuthenticationTokenId,
+    pub user_id: UserId,
+    pub truncated_jwt_token: String,
+    pub expire_at: Option<DateTime<Utc>>,
+    pub is_revoked: bool,
+    pub is_session_token: bool,
+}
+
+impl TruncatedAuthenticationToken {
+    pub fn new(authentication_token: AuthenticationToken) -> Self {
+        let mut truncated_jwt_token = authentication_token.jwt_token.expose_secret().to_string();
+        let keep = truncated_jwt_token.len() - 5;
+        truncated_jwt_token.drain(..keep);
+
+        Self {
+            id: authentication_token.id,
+            user_id: authentication_token.user_id,
+            truncated_jwt_token,
+            expire_at: authentication_token.expire_at,
+            is_revoked: authentication_token.is_revoked,
+            is_session_token: authentication_token.is_session_token,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    mod truncated_jwt_token {
+        use super::super::*;
+        use pretty_assertions::assert_eq;
+        use rstest::*;
+
+        #[rstest]
+        fn test_truncated_jwt_token_keep_secret() {
+            assert_eq!(
+                TruncatedAuthenticationToken::new(AuthenticationToken::new(
+                    UserId(Uuid::new_v4()),
+                    Secret::new(JWTToken("long_value".to_string())),
+                    Some(Utc::now()),
+                    false,
+                ))
+                .truncated_jwt_token,
+                "value".to_string()
+            );
+        }
+    }
+}

@@ -5,6 +5,7 @@ use actix_jwt_authc::Authenticated;
 use actix_session::Session;
 use actix_web::{web, HttpResponse, Scope};
 use anyhow::{anyhow, Context};
+use chrono::{Duration, Utc};
 use email_address::EmailAddress;
 use secrecy::{ExposeSecret, Secret};
 use serde_json::json;
@@ -12,6 +13,7 @@ use tokio::sync::RwLock;
 use validator::Validate;
 
 use universal_inbox::{
+    auth::auth_token::{AuthenticationToken, TruncatedAuthenticationToken},
     user::{
         Credentials, EmailValidationToken, LocalUserAuth, Password, PasswordResetToken,
         RegisterUserParameters, User, UserAuth, UserId,
@@ -34,21 +36,30 @@ pub fn scope() -> Scope {
                 .name("users")
                 .route(web::post().to(register_user)),
         )
-        .service(web::resource("/password_reset").route(web::post().to(send_password_reset_email)))
+        .service(web::resource("/password-reset").route(web::post().to(send_password_reset_email)))
         .service(
-            web::resource("me")
-                .route(web::get().to(get_user))
-                .route(web::post().to(login_user)),
+            web::scope("/me")
+                .service(
+                    web::resource("")
+                        .route(web::get().to(get_user))
+                        .route(web::post().to(login_user)),
+                )
+                .service(
+                    web::resource("/email-verification")
+                        .route(web::post().to(send_verification_email)),
+                )
+                .service(
+                    web::resource("/authentication-tokens")
+                        .route(web::get().to(list_authentication_tokens))
+                        .route(web::post().to(create_authentication_token)),
+                ),
         )
         .service(
-            web::resource("/me/email_verification").route(web::post().to(send_verification_email)),
-        )
-        .service(
-            web::resource("/{user_id}/email_verification/{email_validation_token}")
+            web::resource("/{user_id}/email-verification/{email_validation_token}")
                 .route(web::get().to(verify_email)),
         )
         .service(
-            web::resource("/{user_id}/password_reset/{password_reset_token}")
+            web::resource("/{user_id}/password-reset/{password_reset_token}")
                 .route(web::post().to(reset_password)),
         )
 }
@@ -126,7 +137,7 @@ pub async fn register_user(
     let auth_token_service = auth_token_service.read().await;
 
     let auth_token = auth_token_service
-        .create_auth_token(&mut transaction, true, user.id)
+        .create_auth_token(&mut transaction, true, user.id, None)
         .await?;
     session
         .insert(
@@ -171,7 +182,7 @@ pub async fn login_user(
     let auth_token_service = auth_token_service.read().await;
 
     let auth_token = auth_token_service
-        .create_auth_token(&mut transaction, true, user.id)
+        .create_auth_token(&mut transaction, true, user.id, None)
         .await?;
     session
         .insert(
@@ -310,5 +321,62 @@ pub async fn reset_password(
             message: "Password successfully reset".to_string(),
         })
         .context("Cannot serialize response")?,
+    ))
+}
+
+pub async fn list_authentication_tokens(
+    authentication_token_service: web::Data<Arc<RwLock<AuthenticationTokenService>>>,
+    authenticated: Authenticated<Claims>,
+) -> Result<HttpResponse, UniversalInboxError> {
+    let user_id = authenticated
+        .claims
+        .sub
+        .parse::<UserId>()
+        .context("Wrong user ID format")?;
+    let service = authentication_token_service.read().await;
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while listing authentication tokens")?;
+    let result: Vec<TruncatedAuthenticationToken> = service
+        .fetch_auth_tokens_for_user(&mut transaction, user_id)
+        .await?;
+
+    Ok(HttpResponse::Ok().content_type("application/json").body(
+        serde_json::to_string(&result)
+            .context("Cannot serialize authentication tokens list result")?,
+    ))
+}
+
+pub async fn create_authentication_token(
+    authentication_token_service: web::Data<Arc<RwLock<AuthenticationTokenService>>>,
+    authenticated: Authenticated<Claims>,
+) -> Result<HttpResponse, UniversalInboxError> {
+    let user_id = authenticated
+        .claims
+        .sub
+        .parse::<UserId>()
+        .context("Wrong user ID format")?;
+    let service = authentication_token_service.read().await;
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while creating authentication token")?;
+    let result: AuthenticationToken = service
+        .create_auth_token(
+            &mut transaction,
+            false,
+            user_id,
+            Some(Utc::now() + Duration::days(30 * 6)),
+        )
+        .await?;
+
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit while creating authentication token")?;
+
+    Ok(HttpResponse::Ok().content_type("application/json").body(
+        serde_json::to_string(&result).context("Cannot serialize created authentication token")?,
     ))
 }

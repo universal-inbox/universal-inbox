@@ -1,14 +1,14 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use chrono::{Duration, Utc};
+use chrono::{DateTime, Duration, Utc};
 use jsonwebtoken::{EncodingKey, Header};
 use secrecy::Secret;
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
 use universal_inbox::{
-    auth::auth_token::{AuthenticationToken, JWTToken},
+    auth::auth_token::{AuthenticationToken, JWTToken, TruncatedAuthenticationToken},
     user::UserId,
 };
 
@@ -40,15 +40,21 @@ impl AuthenticationTokenService {
         }
     }
 
+    pub async fn begin(&self) -> Result<Transaction<Postgres>, UniversalInboxError> {
+        self.repository.begin().await
+    }
+
     #[tracing::instrument(level = "debug", skip(self, executor), err)]
     pub async fn create_auth_token<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
         is_session_token: bool,
         user_id: UserId,
+        expire_at: Option<DateTime<Utc>>,
     ) -> Result<AuthenticationToken, UniversalInboxError> {
-        let expire_at =
-            Utc::now() + Duration::days(self.http_session_settings.jwt_token_expiration_in_days);
+        let expire_at = expire_at.unwrap_or_else(|| {
+            Utc::now() + Duration::days(self.http_session_settings.jwt_token_expiration_in_days)
+        });
         let claims = Claims {
             iat: Utc::now().timestamp() as usize,
             exp: expire_at.timestamp() as usize,
@@ -72,5 +78,21 @@ impl AuthenticationTokenService {
             )
             .await?;
         Ok(auth_token)
+    }
+
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    pub async fn fetch_auth_tokens_for_user<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        user_id: UserId,
+    ) -> Result<Vec<TruncatedAuthenticationToken>, UniversalInboxError> {
+        let authentication_tokens = self
+            .repository
+            .fetch_auth_tokens_for_user(executor, user_id, true)
+            .await?;
+        Ok(authentication_tokens
+            .into_iter()
+            .map(TruncatedAuthenticationToken::new)
+            .collect())
     }
 }

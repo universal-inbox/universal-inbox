@@ -5,7 +5,7 @@ use std::{collections::HashMap, default::Default};
 use dioxus::prelude::*;
 use dioxus_free_icons::{
     icons::bs_icons::{
-        BsArrowUpRightSquare, BsChatTextFill, BsCheckCircleFill, BsPauseCircleFill,
+        BsArrowUpRightSquare, BsChatTextFill, BsCheckCircleFill, BsClock, BsPauseCircleFill,
         BsQuestionCircleFill, BsSkipForwardCircleFill, BsXCircleFill,
     },
     Icon,
@@ -575,7 +575,7 @@ fn GithubReviewLine(cx: Scope, review: GithubReview) -> Element {
         GithubReview::Requested { reviewer } => (
             reviewer,
             None,
-            render! { Icon { class: "h-5 w-5 text-info", icon: BsPauseCircleFill } }, // TODO clock icon
+            render! { Icon { class: "h-5 w-5 text-info", icon: BsClock } },
         ),
         GithubReview::Completed {
             reviewer,
