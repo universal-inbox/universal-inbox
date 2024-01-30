@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- User profile page to create API keys
+
 ### Changed
 
 - Use JWT token as access authorization (via a cookie or the `Authorization` header)

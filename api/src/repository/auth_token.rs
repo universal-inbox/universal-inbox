@@ -2,7 +2,7 @@ use anyhow::Context;
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use secrecy::{ExposeSecret, Secret};
-use sqlx::{Postgres, Transaction};
+use sqlx::{Postgres, QueryBuilder, Transaction};
 
 use universal_inbox::{
     auth::auth_token::{AuthenticationToken, JWTToken},
@@ -26,6 +26,7 @@ pub trait AuthenticationTokenRepository {
         &self,
         executor: &mut Transaction<'a, Postgres>,
         user_id: UserId,
+        exclude_session_tokens: bool,
     ) -> Result<Vec<AuthenticationToken>, UniversalInboxError>;
 }
 
@@ -46,6 +47,7 @@ impl AuthenticationTokenRepository for Repository {
                     updated_at,
                     user_id,
                     jwt_token,
+                    expire_at,
                     is_session_token
                   )
                 VALUES
@@ -55,7 +57,8 @@ impl AuthenticationTokenRepository for Repository {
                     $3,
                     $4,
                     $5,
-                    $6
+                    $6,
+                    $7
                   )
             "#,
             auth_token.id.0,
@@ -63,6 +66,7 @@ impl AuthenticationTokenRepository for Repository {
             auth_token.updated_at.naive_utc(),
             auth_token.user_id.0,
             auth_token.jwt_token.expose_secret().0,
+            auth_token.expire_at.map(|expire_at| expire_at.naive_utc()),
             auth_token.is_session_token,
         )
         .execute(&mut **executor)
@@ -77,9 +81,9 @@ impl AuthenticationTokenRepository for Repository {
         &self,
         executor: &mut Transaction<'a, Postgres>,
         user_id: UserId,
+        exclude_session_tokens: bool,
     ) -> Result<Vec<AuthenticationToken>, UniversalInboxError> {
-        let rows = sqlx::query_as!(
-            AuthenticationTokenRow,
+        let mut query_builder = QueryBuilder::new(
             r#"
                 SELECT
                   id,
@@ -93,13 +97,20 @@ impl AuthenticationTokenRepository for Repository {
                 FROM
                   authentication_token
                 WHERE
-                  user_id = $1
+                  user_id =
             "#,
-            user_id.0,
-        )
-        .fetch_all(&mut **executor)
-        .await
-        .context("Failed to fetch authentication tokens from storage for user {user_id}")?;
+        );
+        query_builder.push_bind(user_id.0);
+        if exclude_session_tokens {
+            query_builder.push(" AND is_session_token = false");
+        }
+        query_builder.push(" ORDER BY created_at DESC");
+
+        let rows = query_builder
+            .build_query_as::<AuthenticationTokenRow>()
+            .fetch_all(&mut **executor)
+            .await
+            .context("Failed to fetch authentication tokens from storage")?;
 
         Ok(rows.into_iter().map(|r| r.into()).collect())
     }

@@ -6,6 +6,7 @@ use url::Url;
 
 use crate::utils::compute_text_color_from_background_color;
 
+pub mod authentication_tokens_card;
 pub mod floating_label_inputs;
 pub mod flowbite;
 pub mod footer;
@@ -20,6 +21,7 @@ pub mod task_link_modal;
 pub mod task_planning_modal;
 pub mod toast_zone;
 pub mod universal_inbox_title;
+pub mod user_profile_card;
 
 #[component]
 fn CollapseCardWithIcon<'a>(

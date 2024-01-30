@@ -19,6 +19,9 @@ use config::{get_api_base_url, get_app_config, APP_CONFIG};
 use model::{PreviewPane, UniversalInboxUIModel, UI_MODEL};
 use route::Route;
 use services::{
+    authentication_token_service::{
+        authentication_token_service, AUTHENTICATION_TOKENS, CREATED_AUTHENTICATION_TOKEN,
+    },
     integration_connection_service::{integration_connnection_service, INTEGRATION_CONNECTIONS},
     notification_service::{notification_service, NotificationCommand, NOTIFICATIONS_PAGE},
     task_service::{task_service, TaskCommand},
@@ -91,6 +94,19 @@ pub fn App(cx: Scope) -> Element {
             toast_service_handle.clone(),
             notification_service_handle.clone(),
             task_service_handle.clone(),
+        )
+    });
+
+    let authentication_tokens_ref = use_atom_ref(cx, &AUTHENTICATION_TOKENS);
+    let created_authentication_token_ref = use_atom_ref(cx, &CREATED_AUTHENTICATION_TOKEN);
+    let _authentication_token_service_handle = use_coroutine(cx, |rx| {
+        authentication_token_service(
+            rx,
+            api_base_url.clone(),
+            authentication_tokens_ref.clone(),
+            created_authentication_token_ref.clone(),
+            ui_model_ref.clone(),
+            toast_service_handle.clone(),
         )
     });
     let is_dark_mode = use_atom_state(cx, &IS_DARK_MODE);

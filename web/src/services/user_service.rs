@@ -103,7 +103,7 @@ pub async fn user_service<'a>(
                 let result: Result<SuccessResponse> = call_api(
                     Method::POST,
                     &api_base_url,
-                    "users/me/email_verification",
+                    "users/me/email-verification",
                     None::<i32>,
                     Some(ui_model_ref.clone()),
                 )
@@ -122,7 +122,7 @@ pub async fn user_service<'a>(
                 let result: Result<SuccessResponse> = call_api(
                     Method::GET,
                     &api_base_url,
-                    format!("users/{user_id}/email_verification/{email_validation_token}").as_str(),
+                    format!("users/{user_id}/email-verification/{email_validation_token}").as_str(),
                     None::<i32>,
                     None,
                 )
@@ -145,7 +145,7 @@ pub async fn user_service<'a>(
                 let result: Result<SuccessResponse> = call_api(
                     Method::POST,
                     &api_base_url,
-                    "users/password_reset",
+                    "users/password-reset",
                     Some(email_address),
                     None,
                 )
@@ -164,7 +164,7 @@ pub async fn user_service<'a>(
                 let result: Result<SuccessResponse> = call_api(
                     Method::POST,
                     &api_base_url,
-                    format!("users/{user_id}/password_reset/{password_reset_token}").as_str(),
+                    format!("users/{user_id}/password-reset/{password_reset_token}").as_str(),
                     Some(new_password),
                     None,
                 )

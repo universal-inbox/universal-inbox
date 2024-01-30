@@ -1,6 +1,8 @@
 use fermi::AtomRef;
 
 pub static UI_MODEL: AtomRef<UniversalInboxUIModel> = AtomRef(|_| Default::default());
+pub const DEFAULT_USER_AVATAR: &str = "https://avatars.githubusercontent.com/u/1062408?v=4";
+pub const NOT_CONNECTED_USER_NAME: &str = "Not connected";
 
 #[derive(Debug, Default)]
 pub struct UniversalInboxUIModel {
@@ -63,4 +65,12 @@ pub enum PreviewPane {
     #[default]
     Notification,
     Task,
+}
+
+#[derive(Debug)]
+pub enum LoadState<T> {
+    None,
+    Loading,
+    Loaded(T),
+    Error(String),
 }

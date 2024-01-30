@@ -518,7 +518,7 @@ impl UserService {
         } = updated_user
         {
             let email_verification_url = format!(
-                "{}users/{user_id}/email_verification/{email_validation_token}",
+                "{}users/{user_id}/email-verification/{email_validation_token}",
                 self.application_settings.front_base_url
             )
             .parse()
@@ -594,7 +594,7 @@ impl UserService {
                 result: Some(user),
             } => {
                 let password_reset_url = format!(
-                    "{}users/{}/password_reset/{password_reset_token}",
+                    "{}users/{}/password-reset/{password_reset_token}",
                     self.application_settings.front_base_url, user.id,
                 )
                 .parse()
