@@ -86,6 +86,7 @@ username = "postgres"
 password = "password"
 database_name = "universal-inbox"
 use_tls = false
+max_connections = 10
 
 [redis]
 host = "127.0.0.1"

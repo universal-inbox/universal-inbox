@@ -128,7 +128,8 @@ async fn main() -> std::io::Result<()> {
         .host(&settings.database.host)
         .port(settings.database.port)
         .database(&settings.database.database_name)
-        .log_statements(log::LevelFilter::Debug);
+        .log_statements(log::LevelFilter::Debug)
+        .max_connections(settings.database.max_connections);
     let pool = Arc::new(
         PgPool::connect_with(options)
             .await
