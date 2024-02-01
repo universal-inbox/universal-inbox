@@ -131,6 +131,7 @@ pub struct DatabaseSettings {
     pub host: String,
     pub database_name: String,
     pub use_tls: bool,
+    pub max_connections: u32,
 }
 
 #[derive(Deserialize, Clone, Debug)]

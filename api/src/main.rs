@@ -3,7 +3,10 @@ use std::{net::TcpListener, str::FromStr, sync::Arc};
 use clap::{Parser, Subcommand};
 use email_address::EmailAddress;
 use opentelemetry::global;
-use sqlx::{postgres::PgConnectOptions, ConnectOptions, PgPool};
+use sqlx::{
+    postgres::{PgConnectOptions, PgPoolOptions},
+    ConnectOptions,
+};
 use tokio::sync::RwLock;
 use tracing::{error, info};
 
@@ -130,7 +133,9 @@ async fn main() -> std::io::Result<()> {
         .database(&settings.database.database_name)
         .log_statements(log::LevelFilter::Debug);
     let pool = Arc::new(
-        PgPool::connect_with(options)
+        PgPoolOptions::new()
+            .max_connections(settings.database.max_connections)
+            .connect_with(options)
             .await
             .expect("Failed to connect to Postgresql"),
     );

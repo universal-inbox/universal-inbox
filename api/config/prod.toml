@@ -2,3 +2,6 @@
 environment = "production"
 static_dir = "./statics"
 static_path = ""
+
+[database]
+max_connections = 100
