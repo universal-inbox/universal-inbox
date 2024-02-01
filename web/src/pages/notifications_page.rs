@@ -59,10 +59,18 @@ pub fn NotificationsPage(cx: Scope) -> Element {
 
             if notifications_page_ref.read().content.is_empty() {
                 render! {
-                    img {
-                        class: "w-screen h-full object-contain object-center object-top opacity-30 dark:opacity-10",
-                        src: "images/ui-logo-symbol-transparent.svg",
-                        alt: "No notifications"
+                    div {
+                        class: "relative w-full h-full flex justify-center items-center",
+                        img {
+                            class: "h-full opacity-30 dark:opacity-10",
+                            src: "images/ui-logo-symbol-transparent.svg",
+                            alt: "No notifications"
+                        }
+                        div {
+                            class: "flex flex-col items-center absolute h-full object-center top-1/2 transform translate-y-1/4",
+                            p { class: "text-gray-500 font-semibold", "Congrats! You have reach zero inbox 🎉" }
+                            p { class: "text-gray-400", "You don't have any new notifications." }
+                        }
                     }
                 }
             } else {
