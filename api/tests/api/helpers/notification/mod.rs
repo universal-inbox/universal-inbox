@@ -26,6 +26,7 @@ pub async fn list_notifications_response(
     status_filter: Vec<NotificationStatus>,
     include_snoozed_notifications: bool,
     task_id: Option<TaskId>,
+    notification_kind: Option<NotificationSourceKind>,
 ) -> Response {
     let snoozed_notifications_parameter = if include_snoozed_notifications {
         "include_snoozed_notifications=true&"
@@ -33,7 +34,7 @@ pub async fn list_notifications_response(
         ""
     };
     let task_id_parameter = task_id
-        .map(|id| format!("task_id={id}"))
+        .map(|id| format!("task_id={id}&"))
         .unwrap_or_default();
     let status_parameter = if status_filter.is_empty() {
         "".to_string()
@@ -45,10 +46,13 @@ pub async fn list_notifications_response(
             .join(",");
         format!("status={filters}&")
     };
+    let notification_kind_parameter = notification_kind
+        .map(|kind| format!("notification_kind={kind}&"))
+        .unwrap_or_default();
 
     client
         .get(&format!(
-            "{api_address}notifications?{status_parameter}{snoozed_notifications_parameter}{task_id_parameter}"
+            "{api_address}notifications?{status_parameter}{snoozed_notifications_parameter}{task_id_parameter}{notification_kind_parameter}"
         ))
         .send()
         .await
@@ -61,6 +65,7 @@ pub async fn list_notifications_with_tasks(
     status_filter: Vec<NotificationStatus>,
     include_snoozed_notifications: bool,
     task_id: Option<TaskId>,
+    notification_kind: Option<NotificationSourceKind>,
 ) -> Vec<NotificationWithTask> {
     let notifications_page: Page<NotificationWithTask> = list_notifications_response(
         client,
@@ -68,6 +73,7 @@ pub async fn list_notifications_with_tasks(
         status_filter,
         include_snoozed_notifications,
         task_id,
+        notification_kind,
     )
     .await
     .json()
@@ -83,6 +89,7 @@ pub async fn list_notifications(
     status_filter: Vec<NotificationStatus>,
     include_snoozed_notifications: bool,
     task_id: Option<TaskId>,
+    notification_kind: Option<NotificationSourceKind>,
 ) -> Vec<Notification> {
     list_notifications_with_tasks(
         client,
@@ -90,6 +97,7 @@ pub async fn list_notifications(
         status_filter,
         include_snoozed_notifications,
         task_id,
+        notification_kind,
     )
     .await
     .into_iter()

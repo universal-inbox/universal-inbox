@@ -13,7 +13,8 @@ use tracing::{error, info};
 use universal_inbox::{
     notification::{
         service::{NotificationPatch, SyncNotificationsParameters},
-        Notification, NotificationId, NotificationStatus, NotificationWithTask,
+        Notification, NotificationId, NotificationSourceKind, NotificationStatus,
+        NotificationWithTask,
     },
     task::{TaskCreation, TaskId},
     user::UserId,
@@ -55,6 +56,7 @@ pub struct ListNotificationRequest {
     status: Option<Vec<NotificationStatus>>,
     include_snoozed_notifications: Option<bool>,
     task_id: Option<TaskId>,
+    notification_kind: Option<NotificationSourceKind>,
 }
 
 pub async fn list_notifications(
@@ -80,6 +82,7 @@ pub async fn list_notifications(
                 .include_snoozed_notifications
                 .unwrap_or(false),
             list_notification_request.task_id,
+            list_notification_request.notification_kind,
             user_id,
         )
         .await?;

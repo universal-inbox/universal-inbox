@@ -44,6 +44,7 @@ pub trait NotificationRepository {
         status: Vec<NotificationStatus>,
         include_snoozed_notifications: bool,
         task_id: Option<TaskId>,
+        notification_kind: Option<NotificationSourceKind>,
         user_id: UserId,
     ) -> Result<Page<NotificationWithTask>, UniversalInboxError>;
     async fn create_notification<'a>(
@@ -197,6 +198,7 @@ impl NotificationRepository for Repository {
         status: Vec<NotificationStatus>,
         include_snoozed_notifications: bool,
         task_id: Option<TaskId>,
+        notification_kind: Option<NotificationSourceKind>,
         user_id: UserId,
     ) -> Result<Page<NotificationWithTask>, UniversalInboxError> {
         fn add_filters(
@@ -204,6 +206,7 @@ impl NotificationRepository for Repository {
             status: Vec<NotificationStatus>,
             include_snoozed_notifications: bool,
             task_id: Option<TaskId>,
+            notification_kind: Option<NotificationSourceKind>,
             user_id: UserId,
         ) {
             let mut separated = query_builder.separated(" AND ");
@@ -234,6 +237,12 @@ impl NotificationRepository for Repository {
                     .push(" notification.task_id = ")
                     .push_bind_unseparated(id.0);
             }
+
+            if let Some(notification_kind) = notification_kind {
+                separated
+                    .push(" notification.kind = ")
+                    .push_bind_unseparated(notification_kind.to_string());
+            }
         }
 
         let mut count_query_builder =
@@ -244,6 +253,7 @@ impl NotificationRepository for Repository {
             status.clone(),
             include_snoozed_notifications,
             task_id,
+            notification_kind,
             user_id,
         );
 
@@ -294,6 +304,7 @@ impl NotificationRepository for Repository {
             status,
             include_snoozed_notifications,
             task_id,
+            notification_kind,
             user_id,
         );
 

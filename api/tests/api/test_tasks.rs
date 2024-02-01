@@ -97,6 +97,7 @@ mod create_task {
             vec![NotificationStatus::Unread],
             false,
             Some(creation_result.task.id),
+            None,
         )
         .await;
         assert_eq!(result.len(), 1);
@@ -164,6 +165,7 @@ mod create_task {
             vec![NotificationStatus::Unread],
             false,
             Some(creation_result.task.id),
+            None,
         )
         .await;
         assert!(result.is_empty());

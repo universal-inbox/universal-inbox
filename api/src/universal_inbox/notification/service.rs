@@ -122,6 +122,7 @@ impl NotificationService {
         status: Vec<NotificationStatus>,
         include_snoozed_notifications: bool,
         task_id: Option<TaskId>,
+        notification_kind: Option<NotificationSourceKind>,
         user_id: UserId,
     ) -> Result<Page<NotificationWithTask>, UniversalInboxError> {
         self.repository
@@ -130,6 +131,7 @@ impl NotificationService {
                 status,
                 include_snoozed_notifications,
                 task_id,
+                notification_kind,
                 user_id,
             )
             .await

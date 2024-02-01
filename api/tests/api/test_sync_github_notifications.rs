@@ -381,6 +381,7 @@ async fn test_sync_all_notifications_asynchronously(
         vec![NotificationStatus::Read],
         false,
         None,
+        None,
     )
     .await;
 
@@ -394,6 +395,7 @@ async fn test_sync_all_notifications_asynchronously(
             &app.app.api_address,
             vec![NotificationStatus::Read],
             false,
+            None,
             None,
         )
         .await;
@@ -445,6 +447,7 @@ async fn test_sync_all_notifications_asynchronously(
         &app.app.api_address,
         vec![NotificationStatus::Read],
         false,
+        None,
         None,
     )
     .await;
@@ -564,6 +567,7 @@ async fn test_sync_all_notifications_asynchronously_in_error(
         vec![NotificationStatus::Read],
         false,
         None,
+        None,
     )
     .await;
 
@@ -648,6 +652,7 @@ async fn test_sync_discussion_notification_with_details(
         vec![NotificationStatus::Unread],
         false,
         None,
+        None,
     )
     .await;
 
@@ -726,6 +731,7 @@ async fn test_sync_discussion_notification_with_error(
         &app.app.api_address,
         vec![NotificationStatus::Unread],
         false,
+        None,
         None,
     )
     .await;

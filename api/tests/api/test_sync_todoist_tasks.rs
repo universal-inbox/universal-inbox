@@ -190,6 +190,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
         vec![NotificationStatus::Unread],
         false,
         Some(new_task.id),
+        None,
     )
     .await;
 
@@ -278,6 +279,7 @@ async fn test_sync_tasks_should_add_new_task_and_delete_notification_when_disabl
         &app.app.api_address,
         vec![NotificationStatus::Unread],
         false,
+        None,
         None,
     )
     .await;

@@ -543,7 +543,7 @@ mod update_integration_connection_config {
 
         // Verify notifications have been cleared
         let notifications: Vec<Notification> =
-            list_notifications(&app.client, &app.app.api_address, vec![], true, None).await;
+            list_notifications(&app.client, &app.app.api_address, vec![], true, None, None).await;
 
         assert!(notifications.is_empty());
     }

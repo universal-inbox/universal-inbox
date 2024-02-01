@@ -1,18 +1,23 @@
 use chrono::{Duration, TimeZone, Timelike, Utc};
+use graphql_client::Response;
 use http::StatusCode;
 use rstest::*;
 use serde_json::json;
 use uuid::Uuid;
 
 use universal_inbox::notification::{
-    integrations::github::GithubNotification, service::NotificationPatch, Notification,
-    NotificationMetadata, NotificationStatus,
+    integrations::{github::GithubNotification, linear::LinearNotification},
+    service::NotificationPatch,
+    Notification, NotificationMetadata, NotificationSourceKind, NotificationStatus,
 };
+
+use universal_inbox_api::integrations::linear::graphql::notifications_query;
 
 use crate::helpers::{
     auth::{authenticate_user, authenticated_app, AuthenticatedApp},
     notification::{
         github::{create_notification_from_github_notification, github_notification},
+        linear::sync_linear_notifications_response,
         list_notifications,
     },
     rest::{
@@ -34,6 +39,7 @@ mod list_notifications {
             &app.app.api_address,
             vec![NotificationStatus::Unread],
             false,
+            None,
             None,
         )
         .await;
@@ -140,6 +146,7 @@ mod list_notifications {
             vec![NotificationStatus::Unread],
             false,
             None,
+            None,
         )
         .await;
 
@@ -151,6 +158,7 @@ mod list_notifications {
             &app.app.api_address,
             vec![NotificationStatus::Read, NotificationStatus::Unread],
             false,
+            None,
             None,
         )
         .await;
@@ -164,6 +172,7 @@ mod list_notifications {
             &app.app.api_address,
             vec![NotificationStatus::Read, NotificationStatus::Unread],
             true,
+            None,
             None,
         )
         .await;
@@ -179,6 +188,7 @@ mod list_notifications {
             vec![NotificationStatus::Deleted],
             false,
             None,
+            None,
         )
         .await;
 
@@ -190,6 +200,7 @@ mod list_notifications {
             &app.app.api_address,
             vec![NotificationStatus::Unsubscribed],
             false,
+            None,
             None,
         )
         .await;
@@ -206,10 +217,95 @@ mod list_notifications {
             vec![NotificationStatus::Unread],
             false,
             None,
+            None,
         )
         .await;
 
         assert_eq!(result.len(), 0);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_list_notifications_filtered_by_kind(
+        #[future] authenticated_app: AuthenticatedApp,
+        github_notification: Box<GithubNotification>,
+        sync_linear_notifications_response: Response<notifications_query::ResponseData>,
+    ) {
+        let mut github_notification2 = github_notification.clone();
+        github_notification2.id = "43".to_string();
+
+        let app = authenticated_app.await;
+        let expected_notification1: Box<Notification> = create_resource(
+            &app.client,
+            &app.app.api_address,
+            "notifications",
+            Box::new(Notification {
+                id: Uuid::new_v4().into(),
+                title: "notif1".to_string(),
+                status: NotificationStatus::Unread,
+                source_id: "1234".to_string(),
+                metadata: NotificationMetadata::Github(github_notification.clone()),
+                updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
+                last_read_at: None,
+                snoozed_until: None,
+                user_id: app.user.id,
+                details: None,
+                task_id: None,
+            }),
+        )
+        .await;
+
+        let linear_notifications: Vec<LinearNotification> = sync_linear_notifications_response
+            .data
+            .unwrap()
+            .try_into()
+            .unwrap();
+        let linear_notification = linear_notifications[2].clone(); // Get an IssueNotification
+        let expected_notification2: Box<Notification> = create_resource(
+            &app.client,
+            &app.app.api_address,
+            "notifications",
+            Box::new(linear_notification.into_notification(app.user.id)),
+        )
+        .await;
+
+        let result = list_notifications(
+            &app.client,
+            &app.app.api_address,
+            vec![NotificationStatus::Unread, NotificationStatus::Read],
+            false,
+            None,
+            Some(NotificationSourceKind::Github),
+        )
+        .await;
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], *expected_notification1);
+
+        let result = list_notifications(
+            &app.client,
+            &app.app.api_address,
+            vec![NotificationStatus::Unread, NotificationStatus::Read],
+            false,
+            None,
+            Some(NotificationSourceKind::Linear),
+        )
+        .await;
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], *expected_notification2);
+
+        let result = list_notifications(
+            &app.client,
+            &app.app.api_address,
+            vec![NotificationStatus::Unread, NotificationStatus::Read],
+            false,
+            None,
+            Some(NotificationSourceKind::Todoist),
+        )
+        .await;
+
+        assert!(result.is_empty());
     }
 }
 
