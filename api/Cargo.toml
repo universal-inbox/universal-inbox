@@ -26,11 +26,11 @@ anyhow = { workspace = true }
 argon2 = { version = "0.5", features = ["std"] }
 async-trait = "0.1.0"
 base64 = "0.21"
-cached = { version = "0.46.0", features = ["async_tokio_rt_multi_thread"] }
+cached = { version = "0.48.0", features = ["async_tokio_rt_multi_thread"] }
 chrono = { workspace = true, features = ["serde"] }
 clap = { workspace = true }
 color-backtrace = "0.6"
-config = "0.13.0"
+config = "0.14.0"
 csp = "2.0.0"
 email_address = { workspace = true }
 emojis = "0.6.0"
