@@ -6,14 +6,19 @@ use dioxus_free_icons::{
     Icon,
 };
 
-use universal_inbox::notification::integrations::linear::LinearProject;
+use universal_inbox::notification::integrations::linear::{LinearNotification, LinearProject};
 
 use crate::components::{
-    integrations::linear::icons::LinearProjectIcon, SmallCard, UserWithAvatar,
+    integrations::linear::{get_notification_type_label, icons::LinearProjectIcon},
+    SmallCard, Tag, TagDisplay, UserWithAvatar,
 };
 
 #[component]
-pub fn LinearProjectPreview<'a>(cx: Scope, linear_project: &'a LinearProject) -> Element {
+pub fn LinearProjectPreview<'a>(
+    cx: Scope,
+    linear_notification: &'a LinearNotification,
+    linear_project: &'a LinearProject,
+) -> Element {
     render! {
         div {
             class: "flex flex-col gap-2 w-full",
@@ -40,7 +45,10 @@ pub fn LinearProjectPreview<'a>(cx: Scope, linear_project: &'a LinearProject) ->
                 }
             }
 
-            LinearProjectDetails { linear_project: linear_project }
+            LinearProjectDetails {
+                linear_notification: linear_notification,
+                linear_project: linear_project
+            }
         }
     }
 }
@@ -48,6 +56,7 @@ pub fn LinearProjectPreview<'a>(cx: Scope, linear_project: &'a LinearProject) ->
 #[component]
 pub fn LinearProjectDetails<'a>(
     cx: Scope,
+    linear_notification: &'a LinearNotification,
     linear_project: &'a LinearProject,
     card_class: Option<&'a str>,
 ) -> Element {
@@ -56,6 +65,14 @@ pub fn LinearProjectDetails<'a>(
     render! {
         div {
             class: "flex flex-col gap-2 w-full",
+
+            SmallCard {
+                card_class: "{card_class.unwrap_or_default()}",
+                span { class: "text-gray-400", "Reason:" }
+                TagDisplay {
+                    tag: Into::<Tag>::into(get_notification_type_label(&linear_notification.get_type()))
+                }
+            }
 
             if let Some(lead) = &linear_project.lead {
                 render! {

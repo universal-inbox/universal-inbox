@@ -8,7 +8,10 @@ use universal_inbox::notification::{
 };
 
 use crate::components::{
-    integrations::linear::icons::{LinearIssueIcon, LinearProjectIcon},
+    integrations::linear::{
+        get_notification_type_label,
+        icons::{LinearIssueIcon, LinearProjectIcon},
+    },
     Tag, TagDisplay, UserWithAvatar,
 };
 
@@ -65,29 +68,33 @@ pub fn LinearNotificationDetailsDisplay<'a>(
     linear_notification: &'a LinearNotification,
 ) -> Element {
     match linear_notification {
-        LinearNotification::IssueNotification { issue, .. } => render! {
-            LinearIssueDetailsDisplay { linear_issue: issue }
+        LinearNotification::IssueNotification { issue, r#type, .. } => render! {
+            LinearIssueDetailsDisplay { notification_type: r#type.clone(),  linear_issue: issue }
         },
-        LinearNotification::ProjectNotification { project, .. } => render! {
-            LinearProjectDetailsDisplay { linear_project: project }
+        LinearNotification::ProjectNotification {
+            project, r#type, ..
+        } => render! {
+            LinearProjectDetailsDisplay { notification_type: r#type.clone(),  linear_project: project }
         },
     }
 }
 
 #[component]
-pub fn LinearIssueDetailsDisplay<'a>(cx: Scope, linear_issue: &'a LinearIssue) -> Element {
+pub fn LinearIssueDetailsDisplay<'a>(
+    cx: Scope,
+    notification_type: String,
+    linear_issue: &'a LinearIssue,
+) -> Element {
     render! {
         div {
             class: "flex items-center gap-2",
 
             div {
                 class: "flex flex-wrap items-center gap-1",
-                for tag in linear_issue
-                    .labels
-                    .iter()
-                    .map(|label| Into::<Tag>::into(label.clone())) {
-                        render! { TagDisplay { tag: tag, class: "text-[10px]" } }
-                    }
+                TagDisplay {
+                    class: "text-[10px]",
+                    tag: Into::<Tag>::into(get_notification_type_label(notification_type))
+                }
             }
 
             if let Some(assignee) = &linear_issue.assignee {
@@ -104,10 +111,22 @@ pub fn LinearIssueDetailsDisplay<'a>(cx: Scope, linear_issue: &'a LinearIssue) -
 }
 
 #[component]
-pub fn LinearProjectDetailsDisplay<'a>(cx: Scope, linear_project: &'a LinearProject) -> Element {
+pub fn LinearProjectDetailsDisplay<'a>(
+    cx: Scope,
+    notification_type: String,
+    linear_project: &'a LinearProject,
+) -> Element {
     render! {
         div {
-            class: "flex gap-2",
+            class: "flex items-center gap-2",
+
+            div {
+                class: "flex flex-wrap items-center gap-1",
+                TagDisplay {
+                    class: "text-[10px]",
+                    tag: Into::<Tag>::into(get_notification_type_label(notification_type))
+                }
+            }
 
             if let Some(lead) = &linear_project.lead {
                 render! {

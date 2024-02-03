@@ -13,10 +13,11 @@ use universal_inbox::notification::integrations::linear::{
 use crate::{
     components::{
         integrations::linear::{
+            get_notification_type_label,
             icons::{LinearIssueIcon, LinearProjectIcon, LinearProjectMilestoneIcon},
             preview::project::LinearProjectDetails,
         },
-        CollapseCard, SmallCard, TagsInCard, UserWithAvatar,
+        CollapseCard, SmallCard, Tag, TagDisplay, TagsInCard, UserWithAvatar,
     },
     theme::{
         PRIORITY_HIGH_COLOR_CLASS, PRIORITY_LOW_COLOR_CLASS, PRIORITY_NORMAL_COLOR_CLASS,
@@ -71,13 +72,20 @@ pub fn LinearIssuePreview<'a>(
                 }
             }
 
-            LinearIssueDetails { linear_issue: linear_issue }
+            LinearIssueDetails {
+                linear_notification: linear_notification,
+                linear_issue: linear_issue
+            }
         }
     }
 }
 
 #[component]
-fn LinearIssueDetails<'a>(cx: Scope, linear_issue: &'a LinearIssue) -> Element {
+fn LinearIssueDetails<'a>(
+    cx: Scope,
+    linear_notification: &'a LinearNotification,
+    linear_issue: &'a LinearIssue,
+) -> Element {
     let description = linear_issue
         .description
         .as_ref()
@@ -99,6 +107,13 @@ fn LinearIssueDetails<'a>(cx: Scope, linear_issue: &'a LinearIssue) -> Element {
 
                 "Created at ",
                 span { class: "text-primary", "{linear_issue.created_at}" }
+            }
+
+            SmallCard {
+                span { class: "text-gray-400", "Reason:" }
+                TagDisplay {
+                    tag: Into::<Tag>::into(get_notification_type_label(&linear_notification.get_type()))
+                }
             }
 
             if let Some(creator) = &linear_issue.creator {
@@ -161,7 +176,7 @@ fn LinearIssueDetails<'a>(cx: Scope, linear_issue: &'a LinearIssue) -> Element {
             }
 
             if let Some(project) = &linear_issue.project {
-                render! { LinearProjectCard { project: project } }
+                render! { LinearProjectCard { linear_notification: linear_notification, project: project } }
             }
 
             if let Some(project_milestone) = &linear_issue.project_milestone {
@@ -187,7 +202,11 @@ fn LinearIssueDetails<'a>(cx: Scope, linear_issue: &'a LinearIssue) -> Element {
 }
 
 #[component]
-pub fn LinearProjectCard<'a>(cx: Scope, project: &'a LinearProject) -> Element {
+pub fn LinearProjectCard<'a>(
+    cx: Scope,
+    linear_notification: &'a LinearNotification,
+    project: &'a LinearProject,
+) -> Element {
     let project_icon = match &project.icon {
         Some(icon) => render! {
             img { class: "h-5 w-5", src: "{icon}" }
@@ -220,6 +239,7 @@ pub fn LinearProjectCard<'a>(cx: Scope, project: &'a LinearProject) -> Element {
 
             LinearProjectDetails {
                 card_class: "bg-neutral text-neutral-content",
+                linear_notification: linear_notification,
                 linear_project: project,
             }
         }

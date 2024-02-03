@@ -28,7 +28,7 @@ pub fn LinearNotificationPreview(cx: Scope, linear_notification: LinearNotificat
             LinearIssuePreview { linear_notification: linear_notification, linear_issue: issue }
         },
         LinearNotification::ProjectNotification { project, .. } => render! {
-            LinearProjectPreview { linear_project: project }
+            LinearProjectPreview { linear_notification: linear_notification, linear_project: project }
         },
     }
 }
