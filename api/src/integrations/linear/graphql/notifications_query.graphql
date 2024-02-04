@@ -90,6 +90,17 @@ query NotificationsQuery {
             url
           }
         }
+        projectUpdate {
+          updatedAt
+          body
+          health
+          user {
+            displayName
+            avatarUrl
+            url
+          }
+          url
+        }
       }
     }
   }

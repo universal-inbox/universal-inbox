@@ -408,3 +408,22 @@ pub fn LinearProjectMilestoneIcon<'a>(cx: Scope, class: Option<&'a str>) -> Elem
         }
     }
 }
+
+#[component]
+pub fn LinearProjectHealtIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element {
+    render! {
+        svg {
+            "viewBox": "0 0 16 16",
+            fill: "none",
+            class: "{class.unwrap_or_default()}",
+            path {
+                stroke: "currentColor",
+                fill: "none",
+                "stroke-width": "1.75",
+                "stroke-linecap": "round",
+                "stroke-linejoin": "round",
+                d: "M1 9H4L6 13L10 3L12 7H15"
+            }
+        }
+    }
+}

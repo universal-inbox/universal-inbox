@@ -8,6 +8,7 @@
 - Show message when reaching inbox zero
 - Add notification kind filtering
 - Display Linear notification reason
+- Display Linear project updates
 
 ### Changed
 

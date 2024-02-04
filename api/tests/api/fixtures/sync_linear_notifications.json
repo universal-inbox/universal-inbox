@@ -25,7 +25,18 @@
               "avatarUrl": "https://avatar.url",
               "url": "https://linear.app/user/john-smith"
             }
-          }
+          },
+          "projectUpdate": {
+            "updatedAt": "2023-07-31T22:42:44.654Z",
+            "body": "Test update",
+            "health": "onTrack",
+            "user": {
+              "displayName": "John Smith",
+              "avatarUrl": "https://avatar.url",
+              "url": "https://linear.app/user/john-smith"
+            },
+            "url": "https://linear.app/universal-inbox/project/test-project-33065448b39c#projectUpdate-0d3d3a0d"
+}
         },
         {
           "__typename": "ProjectNotification",

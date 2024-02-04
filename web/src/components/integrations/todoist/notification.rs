@@ -69,7 +69,7 @@ pub fn TodoistNotificationDetailsDisplay<'a>(cx: Scope, todoist_item: &'a Todois
                 .labels
                 .iter()
                 .map(|label| Into::<Tag>::into(label.clone())) {
-                    render! { TagDisplay { tag: tag, class: "text-[10px]" } }
+                    render! { TagDisplay { tag: tag } }
                 }
         }
     }

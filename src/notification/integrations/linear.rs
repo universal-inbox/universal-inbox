@@ -35,6 +35,7 @@ pub enum LinearNotification {
         snoozed_until_at: Option<DateTime<Utc>>,
         organization: LinearOrganization,
         project: LinearProject,
+        project_update: Option<LinearProjectUpdate>,
     },
 }
 
@@ -342,5 +343,52 @@ impl LinearTeam {
         format!("https://linear.app/{}/team/{}", organization.key, self.key)
             .parse::<Url>()
             .unwrap()
+    }
+}
+
+#[serde_as]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct LinearProjectUpdate {
+    pub updated_at: DateTime<Utc>,
+    pub body: String,
+    pub health: LinearProjectUpdateHealthType,
+    pub user: LinearUser,
+    pub url: Url,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
+pub enum LinearProjectUpdateHealthType {
+    OnTrack,
+    AtRisk,
+    OffTrack,
+}
+
+impl TryFrom<String> for LinearProjectUpdateHealthType {
+    type Error = anyhow::Error;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        match value.as_str() {
+            "onTrack" => Ok(LinearProjectUpdateHealthType::OnTrack),
+            "atRisk" => Ok(LinearProjectUpdateHealthType::AtRisk),
+            "offTrack" => Ok(LinearProjectUpdateHealthType::OffTrack),
+            _ => Err(anyhow!(
+                "Unable to find LinearProjectUpdateHealthType value for `{}`",
+                value
+            )),
+        }
+    }
+}
+
+impl fmt::Display for LinearProjectUpdateHealthType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                LinearProjectUpdateHealthType::OnTrack => "onTrack",
+                LinearProjectUpdateHealthType::AtRisk => "atRisk",
+                LinearProjectUpdateHealthType::OffTrack => "offTrack",
+            }
+        )
     }
 }

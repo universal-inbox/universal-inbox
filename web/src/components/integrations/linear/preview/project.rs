@@ -6,11 +6,16 @@ use dioxus_free_icons::{
     Icon,
 };
 
-use universal_inbox::notification::integrations::linear::{LinearNotification, LinearProject};
+use universal_inbox::notification::integrations::linear::{
+    LinearNotification, LinearProject, LinearProjectUpdate, LinearProjectUpdateHealthType,
+};
 
 use crate::components::{
-    integrations::linear::{get_notification_type_label, icons::LinearProjectIcon},
-    SmallCard, Tag, TagDisplay, UserWithAvatar,
+    integrations::linear::{
+        get_notification_type_label,
+        icons::{LinearProjectHealtIcon, LinearProjectIcon},
+    },
+    CardWithHeaders, SmallCard, Tag, TagDisplay, UserWithAvatar,
 };
 
 #[component]
@@ -65,6 +70,11 @@ pub fn LinearProjectDetails<'a>(
     render! {
         div {
             class: "flex flex-col gap-2 w-full",
+
+            p {
+                class: "w-full prose prose-sm dark:prose-invert",
+                dangerous_inner_html: "{description}"
+            }
 
             SmallCard {
                 card_class: "{card_class.unwrap_or_default()}",
@@ -121,9 +131,46 @@ pub fn LinearProjectDetails<'a>(
                 }
             }
 
+            if let LinearNotification::ProjectNotification { project_update: Some(project_update), .. } = linear_notification {
+                render! {
+                    LinearProjectUpdateDetails { project_update: project_update }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn LinearProjectUpdateDetails<'a>(cx: Scope, project_update: &'a LinearProjectUpdate) -> Element {
+    let update_body = markdown::to_html(&project_update.body);
+    let updated_at = project_update
+        .updated_at
+        .format("%Y-%m-%d %H:%M")
+        .to_string();
+    let health_icon_style = match project_update.health {
+        LinearProjectUpdateHealthType::OnTrack => "text-success",
+        LinearProjectUpdateHealthType::AtRisk => "text-warning",
+        LinearProjectUpdateHealthType::OffTrack => "text-error",
+    };
+    let headers = vec![render! {
+        div {
+            class: "flex flex-row items-center gap-2",
+            LinearProjectHealtIcon { class: "h-3 w-3 {health_icon_style}" }
+            span { "{project_update.health}" }
+            span { class: "text-gray-400", "by" }
+            span { "{project_update.user.name}" }
+            span { class: "text-gray-400", "on" }
+            span { " {updated_at}" }
+        }
+    }];
+
+    render! {
+        CardWithHeaders {
+            headers: headers,
+
             p {
                 class: "w-full prose prose-sm dark:prose-invert",
-                dangerous_inner_html: "{description}"
+                dangerous_inner_html: "{update_body}"
             }
         }
     }

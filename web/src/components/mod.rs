@@ -123,7 +123,7 @@ pub fn UserWithAvatar(
                                     class: "avatar placeholder",
                                     div {
                                         class: "w-5 rounded-full bg-neutral text-neutral-content",
-                                        span { class: "text-[10px]", "{initials}" }
+                                        span { class: "text-xs", "{initials}" }
                                     }
                                 }
                             }
@@ -215,7 +215,7 @@ pub fn TagDisplay<'a>(cx: Scope, tag: Tag, class: Option<&'a str>) -> Element {
 
     render! {
         div {
-            class: "badge {badge_text_class} {badge_class} {class.unwrap_or_default()} whitespace-nowrap",
+            class: "badge {badge_text_class} {badge_class} text-xs text-light {class.unwrap_or_default()} whitespace-nowrap",
             style: "{badge_style}",
             "{tag.get_name()}"
         }

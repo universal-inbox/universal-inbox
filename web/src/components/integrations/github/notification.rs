@@ -92,13 +92,13 @@ fn GithubReviewStatus<'a>(cx: Scope, github_pull_request: &'a GithubPullRequest)
         .as_ref()
         .map(|review_decision| match review_decision {
             GithubPullRequestReviewDecision::Approved => {
-                render! { div { class: "badge p-1 whitespace-nowrap bg-success text-[10px] text-white", "Approved" } }
+                render! { div { class: "badge p-1 whitespace-nowrap bg-success text-xs text-white", "Approved" } }
             }
             GithubPullRequestReviewDecision::ChangesRequested => {
-                render! { div { class: "badge p-1 whitespace-nowrap bg-error text-[10px] text-white", "Changes requested" } }
+                render! { div { class: "badge p-1 whitespace-nowrap bg-error text-xs text-white", "Changes requested" } }
             }
             GithubPullRequestReviewDecision::ReviewRequired => {
-                render! { div { class: "badge p-1 whitespace-nowrap bg-info text-[10px] text-white", "Review required" } }
+                render! { div { class: "badge p-1 whitespace-nowrap bg-info text-xs text-white", "Review required" } }
             }
         })
         .unwrap_or(None)

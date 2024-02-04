@@ -92,7 +92,6 @@ pub fn LinearIssueDetailsDisplay<'a>(
             div {
                 class: "flex flex-wrap items-center gap-1",
                 TagDisplay {
-                    class: "text-[10px]",
                     tag: Into::<Tag>::into(get_notification_type_label(notification_type))
                 }
             }
@@ -123,7 +122,6 @@ pub fn LinearProjectDetailsDisplay<'a>(
             div {
                 class: "flex flex-wrap items-center gap-1",
                 TagDisplay {
-                    class: "text-[10px]",
                     tag: Into::<Tag>::into(get_notification_type_label(notification_type))
                 }
             }

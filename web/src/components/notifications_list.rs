@@ -337,7 +337,7 @@ fn NotificationDisplay<'a>(
                     class: "swap-off text-xs flex gap-2 items-center justify-end {details_style}",
 
                     NotificationDetailsDisplay { notification: notif }
-                    span { class: "text-gray-400 whitespace-nowrap text-[10px] font-mono", "{notif_updated_at}" }
+                    span { class: "text-gray-400 whitespace-nowrap text-xs font-mono", "{notif_updated_at}" }
                 }
             }
         }

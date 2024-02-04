@@ -2,7 +2,8 @@ use anyhow::Context;
 
 use universal_inbox::notification::integrations::linear::{
     LinearIssue, LinearLabel, LinearNotification, LinearOrganization, LinearProject,
-    LinearProjectMilestone, LinearTeam, LinearUser, LinearWorkflowState,
+    LinearProjectMilestone, LinearProjectUpdate, LinearProjectUpdateHealthType, LinearTeam,
+    LinearUser, LinearWorkflowState,
 };
 use uuid::Uuid;
 
@@ -289,6 +290,76 @@ impl TryFrom<notifications_query::NotificationsQueryNotificationsNodesOnProjectN
     }
 }
 
+impl From<notifications_query::ProjectUpdateHealthType> for LinearProjectUpdateHealthType {
+    fn from(value: notifications_query::ProjectUpdateHealthType) -> Self {
+        match value {
+            notifications_query::ProjectUpdateHealthType::onTrack => {
+                LinearProjectUpdateHealthType::OnTrack
+            }
+            notifications_query::ProjectUpdateHealthType::atRisk => {
+                LinearProjectUpdateHealthType::AtRisk
+            }
+            notifications_query::ProjectUpdateHealthType::offTrack => {
+                LinearProjectUpdateHealthType::OffTrack
+            }
+            notifications_query::ProjectUpdateHealthType::Other(_) => {
+                LinearProjectUpdateHealthType::OnTrack
+            }
+        }
+    }
+}
+
+impl
+    TryFrom<
+            notifications_query::NotificationsQueryNotificationsNodesOnProjectNotificationProjectUpdateUser,
+        > for LinearUser
+{
+    type Error = UniversalInboxError;
+
+    fn try_from(
+        value: notifications_query::NotificationsQueryNotificationsNodesOnProjectNotificationProjectUpdateUser,
+    ) -> Result<Self, Self::Error> {
+        Ok(LinearUser {
+            name: value.display_name,
+            avatar_url: value
+                .avatar_url
+                .map(|avatar_url| {
+                    avatar_url
+                        .parse()
+                        .with_context(|| format!("Failed to parse URL from `{avatar_url}`"))
+                })
+                .transpose()?,
+            url: value
+                .url
+                .parse()
+                .with_context(|| format!("Failed to parse URL from `{}`", value.url))?,
+        })
+    }
+}
+
+impl
+    TryFrom<
+        notifications_query::NotificationsQueryNotificationsNodesOnProjectNotificationProjectUpdate,
+    > for LinearProjectUpdate
+{
+    type Error = UniversalInboxError;
+
+    fn try_from(
+        value: notifications_query::NotificationsQueryNotificationsNodesOnProjectNotificationProjectUpdate,
+    ) -> Result<Self, Self::Error> {
+        Ok(LinearProjectUpdate {
+            updated_at: value.updated_at,
+            body: value.body,
+            health: value.health.into(),
+            user: value.user.try_into()?,
+            url: value
+                .url
+                .parse()
+                .with_context(|| format!("Failed to parse URL from `{}`", value.url))?,
+        })
+    }
+}
+
 impl TryFrom<notifications_query::ResponseData> for Vec<LinearNotification> {
     type Error = UniversalInboxError;
 
@@ -339,7 +410,8 @@ impl TryFrom<notifications_query::ResponseData> for Vec<LinearNotification> {
                     updated_at,
                     snoozed_until_at,
                     on: notifications_query::NotificationsQueryNotificationsNodesOn::ProjectNotification(notifications_query::NotificationsQueryNotificationsNodesOnProjectNotification {
-                        project
+                        project,
+                        project_update
                     }),
                 } => Ok(Some(LinearNotification::ProjectNotification {
                     id: Uuid::parse_str(&id).with_context(|| format!("Failed to parse UUID from `{id}`"))?,
@@ -353,6 +425,7 @@ impl TryFrom<notifications_query::ResponseData> for Vec<LinearNotification> {
                         logo_url: organization_logo_url.clone(),
                     },
                     project: project.try_into()?,
+                    project_update: project_update.map(|update| update.try_into()).transpose()?,
                 })),
                 // Ignoring any other type of notifications
                 _ => Ok(None)
