@@ -10,6 +10,7 @@
 - Display Linear notification reason
 - Display Linear project updates
 - Display Linear issue new comments
+- Display Linear project on notification item
 
 ### Changed
 

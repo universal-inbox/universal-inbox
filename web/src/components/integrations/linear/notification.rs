@@ -10,7 +10,7 @@ use universal_inbox::notification::{
 use crate::components::{
     integrations::linear::{
         get_notification_type_label,
-        icons::{LinearIssueIcon, LinearProjectIcon},
+        icons::{LinearIssueIcon, LinearProjectDefaultIcon, LinearProjectIcon},
     },
     Tag, TagDisplay, UserWithAvatar,
 };
@@ -50,10 +50,20 @@ pub fn LinearNotificationDisplay<'a>(
                         }
 
                         if let LinearNotification::IssueNotification {
-                            issue: LinearIssue { identifier, .. }, ..
+                            issue: LinearIssue { identifier, project, .. }, ..
                         } = linear_notification {
-                            render! {
-                                span { class: "text-xs text-gray-400", "#{identifier}" }
+                            if let Some(project) = project {
+                                render! {
+                                    div {
+                                        class: "flex flex-row items-center text-xs text-gray-400",
+                                        LinearProjectDefaultIcon { class: "w-3 h-3" },
+                                        "{project.name} #{identifier}"
+                                    }
+                                }
+                            } else {
+                                render! {
+                                    span { class: "text-xs text-gray-400", "#{identifier}" }
+                                }
                             }
                         }
                     }
