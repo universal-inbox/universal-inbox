@@ -13,13 +13,19 @@ use crate::{
     },
     config::get_api_base_url,
     model::UI_MODEL,
-    services::notification_service::{NotificationCommand, NOTIFICATIONS_PAGE},
+    services::{
+        integration_connection_service::TASK_SERVICE_INTEGRATION_CONNECTION,
+        notification_service::{NotificationCommand, NOTIFICATIONS_PAGE},
+    },
 };
 
 pub fn NotificationsPage(cx: Scope) -> Element {
     let notifications_page_ref = use_atom_ref(cx, &NOTIFICATIONS_PAGE);
     let ui_model_ref = use_atom_ref(cx, &UI_MODEL);
     let api_base_url = use_memo(cx, (), |()| get_api_base_url().unwrap());
+
+    let task_service_integration_connection_ref =
+        use_atom_ref(cx, &TASK_SERVICE_INTEGRATION_CONNECTION);
 
     let notification_service = use_coroutine_handle::<NotificationCommand>(cx).unwrap();
 
@@ -127,6 +133,7 @@ pub fn NotificationsPage(cx: Scope) -> Element {
                     TaskPlanningModal {
                         api_base_url: api_base_url.clone(),
                         notification_to_plan: notification_to_plan.clone(),
+                        task_service_integration_connection_ref: task_service_integration_connection_ref.clone(),
                         ui_model_ref: ui_model_ref.clone(),
                         on_close: |_| { ui_model_ref.write().task_planning_modal_opened = false; },
                         on_task_planning: |(params, task_id)| {

@@ -352,8 +352,8 @@ where
     // preventing an event conditionnaly (ie. in a handler).
     // This creates a `keydown` event handler using the DOM API on the `search-list` and set the
     // `select_value` flag to trigger the following `use_memo`.
-    // Indeed, it is not possible to do call `select_result` from the DOM event handler as it has a
-    // 'static lifetime where as `select_result` has a 'a lifetime.
+    // Indeed, it is not possible to call `select_result` from the DOM event handler as it has a
+    // 'static lifetime whereas `select_result` has a 'a lifetime.
     let select_value = use_state(cx, || false);
     use_future(cx, (), |()| {
         to_owned![select_value];
@@ -399,6 +399,7 @@ where
                 button {
                     id: "selected-result",
                     name: "selected-result",
+                    "type": "button",
                     class: "{border_style} {button_style} grow truncate block bg-transparent text-left border-0 border-b-2 focus:outline-none focus:ring-0 peer join-item",
                     onfocus: |_| {
                         let value = !*dropdown_opened.current();

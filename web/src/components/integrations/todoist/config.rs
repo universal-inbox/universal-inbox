@@ -1,8 +1,11 @@
 #![allow(non_snake_case)]
 use dioxus::prelude::*;
 
-use universal_inbox::integration_connection::{
-    config::IntegrationConnectionConfig, integrations::todoist::TodoistConfig,
+use universal_inbox::{
+    integration_connection::{
+        config::IntegrationConnectionConfig, integrations::todoist::TodoistConfig,
+    },
+    task::integrations::todoist::TODOIST_INBOX_PROJECT,
 };
 
 #[component]
@@ -41,9 +44,11 @@ pub fn TodoistProviderConfiguration<'a>(
                 class: "form-control",
                 label {
                     class: "cursor-pointer label",
-                    span {
-                        class: "label-text",
-                        "Synchronize Todoist tasks from Inbox as notifications"
+                    div {
+                        class: "flex items-center gap-2",
+                        span { class: "label-text", "Synchronize Todoist tasks from" }
+                        code { "#{TODOIST_INBOX_PROJECT}" }
+                        span { class: "label-text", "as notifications" }
                     }
                     input {
                         r#type: "checkbox",

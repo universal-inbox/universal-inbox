@@ -15,7 +15,7 @@ use uuid::Uuid;
 use crate::{
     integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
     notification::{Notification, NotificationMetadata, NotificationStatus, NotificationWithTask},
-    task::integrations::todoist::{TodoistItem, DEFAULT_TODOIST_HTML_URL},
+    task::integrations::todoist::{TodoistItem, DEFAULT_TODOIST_HTML_URL, TODOIST_INBOX_PROJECT},
     user::UserId,
     HasHtmlUrl,
 };
@@ -79,7 +79,9 @@ impl fmt::Display for ProjectSummary {
 
 impl Task {
     pub fn is_in_inbox(&self) -> bool {
-        self.project == "Inbox"
+        match &self.metadata {
+            TaskMetadata::Todoist(_) => self.project == TODOIST_INBOX_PROJECT,
+        }
     }
 
     pub fn get_task_source_kind(&self) -> TaskSourceKind {

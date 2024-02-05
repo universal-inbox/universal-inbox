@@ -3,18 +3,23 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
-use chrono::NaiveDate;
+use chrono::{NaiveDate, Utc};
 use dioxus::prelude::*;
 use dioxus_free_icons::{icons::bs_icons::BsX, Icon};
 use fermi::UseAtomRef;
-use gloo_timers::future::TimeoutFuture;
 use http::Method;
 use log::error;
 use url::Url;
 
 use universal_inbox::{
+    integration_connection::{
+        integrations::todoist::TodoistConfig, provider::IntegrationProvider, IntegrationConnection,
+    },
     notification::NotificationWithTask,
-    task::{DueDate, ProjectSummary, TaskCreation, TaskId, TaskPlanning, TaskPriority},
+    task::{
+        integrations::todoist::TODOIST_INBOX_PROJECT, DueDate, ProjectSummary, TaskCreation,
+        TaskId, TaskPlanning, TaskPriority,
+    },
 };
 
 use crate::{
@@ -25,7 +30,7 @@ use crate::{
         flowbite::datepicker::DatePicker,
         icons::Todoist,
     },
-    model::UniversalInboxUIModel,
+    model::{LoadState, UniversalInboxUIModel},
     services::api::call_api,
     utils::focus_element,
 };
@@ -35,39 +40,18 @@ pub fn TaskPlanningModal<'a>(
     cx: Scope,
     api_base_url: Url,
     notification_to_plan: NotificationWithTask,
+    task_service_integration_connection_ref: UseAtomRef<LoadState<Option<IntegrationConnection>>>,
     ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
     on_close: EventHandler<'a, ()>,
     on_task_planning: EventHandler<'a, (TaskPlanning, TaskId)>,
     on_task_creation: EventHandler<'a, TaskCreation>,
 ) -> Element {
     let icon = render! { div { class: "h-5 w-5 flex-none", Todoist {} } };
-    let project = use_state(cx, || "".to_string());
-    let due_at = use_state(cx, || "".to_string()); // TODO Set today as default
+    let default_project: &UseState<Option<String>> = use_state(cx, || None);
+    let due_at = use_state(cx, || Utc::now().format("%Y-%m-%d").to_string());
     let priority = use_state(cx, || "4".to_string());
     let task_title = use_state(cx, || "".to_string());
     let task_to_plan = use_state(cx, || None);
-
-    let _ = use_memo(cx, &notification_to_plan.clone(), |notification| {
-        if let Some(task) = notification.task {
-            task_title.set(task.title.clone());
-            project.set(task.project.clone());
-            due_at.set(
-                task.due_at
-                    .as_ref()
-                    .map(|datetime| match datetime {
-                        DueDate::DateTime(dt) => dt.format("%Y-%m-%d").to_string(),
-                        DueDate::Date(dt) => dt.format("%Y-%m-%d").to_string(),
-                        DueDate::DateTimeWithTz(dt) => dt.format("%Y-%m-%d").to_string(),
-                    })
-                    .unwrap_or_default(),
-            );
-            priority.set((task.priority as i32).to_string());
-            task_to_plan.set(Some(task));
-        } else {
-            task_to_plan.set(None);
-            task_title.set(notification.title);
-        }
-    });
 
     let force_validation = use_state(cx, || false);
 
@@ -75,16 +59,87 @@ pub fn TaskPlanningModal<'a>(
     let search_expression = use_state(cx, || "".to_string());
     let search_results: &UseState<Vec<ProjectSummary>> = use_state(cx, Vec::new);
 
+    let _ = use_memo(cx, &notification_to_plan.clone(), |notification| {
+        if let Some(task) = notification.task {
+            task_title.set(task.title.clone());
+            default_project.set(Some(task.project.clone()));
+            if let Some(task_due_at) = task.due_at.as_ref() {
+                due_at.set(match task_due_at {
+                    DueDate::DateTime(dt) => dt.format("%Y-%m-%d").to_string(),
+                    DueDate::Date(dt) => dt.format("%Y-%m-%d").to_string(),
+                    DueDate::DateTimeWithTz(dt) => dt.format("%Y-%m-%d").to_string(),
+                });
+            }
+            priority.set((task.priority as i32).to_string());
+            task_to_plan.set(Some(task));
+        } else {
+            task_to_plan.set(None);
+            task_title.set(notification.title);
+
+            if let LoadState::Loaded(Some(IntegrationConnection {
+                provider:
+                    IntegrationProvider::Todoist {
+                        config:
+                            TodoistConfig {
+                                create_notification_from_inbox_task,
+                                ..
+                            },
+                        ..
+                    },
+                ..
+            })) = *task_service_integration_connection_ref.read()
+            {
+                if !create_notification_from_inbox_task {
+                    default_project.set(Some(TODOIST_INBOX_PROJECT.to_string()));
+                }
+            }
+        }
+    });
+
+    let filter_out_inbox = if let LoadState::Loaded(Some(IntegrationConnection {
+        provider:
+            IntegrationProvider::Todoist {
+                config:
+                    TodoistConfig {
+                        create_notification_from_inbox_task,
+                        ..
+                    },
+                ..
+            },
+        ..
+    })) = *task_service_integration_connection_ref.read()
+    {
+        create_notification_from_inbox_task
+    } else {
+        false
+    };
+
     use_future(cx, &search_expression.clone(), |search_expression| {
         to_owned![search_results];
+        to_owned![selected_project];
+        to_owned![default_project];
         to_owned![api_base_url];
         to_owned![ui_model_ref];
 
         async move {
-            TimeoutFuture::new(500).await;
-            search_results.set(
-                search_projects(&api_base_url, &search_expression.current(), ui_model_ref).await,
-            );
+            let projects = search_projects(
+                &api_base_url,
+                &search_expression.current(),
+                ui_model_ref,
+                filter_out_inbox,
+            )
+            .await;
+            if let Some(default_project) = &*default_project.current() {
+                if selected_project.is_none() {
+                    if let Some(project) = projects
+                        .iter()
+                        .find(|project| project.name == *default_project)
+                    {
+                        selected_project.set(Some(project.clone()));
+                    }
+                }
+            }
+            search_results.set(projects);
         }
     });
 
@@ -261,6 +316,7 @@ async fn search_projects(
     api_base_url: &Url,
     search: &str,
     ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
+    filter_out_inbox: bool,
 ) -> Vec<ProjectSummary> {
     let search_result: Result<Vec<ProjectSummary>> = call_api(
         Method::GET,
@@ -272,7 +328,16 @@ async fn search_projects(
     .await;
 
     match search_result {
-        Ok(projects) => projects.into_iter().filter(|p| p.name != "Inbox").collect(),
+        Ok(projects) => {
+            if filter_out_inbox {
+                projects
+                    .into_iter()
+                    .filter(|p| p.name != TODOIST_INBOX_PROJECT)
+                    .collect()
+            } else {
+                projects
+            }
+        }
         Err(error) => {
             error!("Error searching projects: {error:?}");
             Vec::new()

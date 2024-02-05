@@ -31,6 +31,8 @@ use services::{
 use theme::{toggle_dark_mode, IS_DARK_MODE};
 use utils::{current_location, get_local_storage, open_link};
 
+use crate::services::integration_connection_service::TASK_SERVICE_INTEGRATION_CONNECTION;
+
 mod auth;
 mod components;
 mod config;
@@ -51,6 +53,8 @@ pub fn App(cx: Scope) -> Element {
     let app_config_ref = use_atom_ref(cx, &APP_CONFIG);
     let connected_user_ref = use_atom_ref(cx, &CONNECTED_USER);
     let integration_connections_ref = use_atom_ref(cx, &INTEGRATION_CONNECTIONS);
+    let task_service_integration_connection_ref =
+        use_atom_ref(cx, &TASK_SERVICE_INTEGRATION_CONNECTION);
     let api_base_url = use_memo(cx, (), |()| get_api_base_url().unwrap());
 
     let toast_service_handle = use_coroutine(cx, |rx| toast_service(rx, toasts_ref.clone()));
@@ -90,6 +94,7 @@ pub fn App(cx: Scope) -> Element {
             rx,
             app_config_ref.clone(),
             integration_connections_ref.clone(),
+            task_service_integration_connection_ref.clone(),
             ui_model_ref.clone(),
             toast_service_handle.clone(),
             notification_service_handle.clone(),

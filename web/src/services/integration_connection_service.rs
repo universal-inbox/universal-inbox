@@ -18,7 +18,7 @@ use universal_inbox::{
 use crate::{
     components::toast_zone::{Toast, ToastKind},
     config::AppConfig,
-    model::UniversalInboxUIModel,
+    model::{LoadState, UniversalInboxUIModel},
     services::{
         api::call_api, nango::nango_auth, notification_service::NotificationCommand,
         task_service::TaskCommand, toast_service::ToastCommand,
@@ -36,11 +36,15 @@ pub enum IntegrationConnectionCommand {
 }
 
 pub static INTEGRATION_CONNECTIONS: AtomRef<Option<Vec<IntegrationConnection>>> = AtomRef(|_| None);
+pub static TASK_SERVICE_INTEGRATION_CONNECTION: AtomRef<LoadState<Option<IntegrationConnection>>> =
+    AtomRef(|_| LoadState::None);
 
+#[allow(clippy::too_many_arguments)]
 pub async fn integration_connnection_service<'a>(
     mut rx: UnboundedReceiver<IntegrationConnectionCommand>,
     app_config_ref: UseAtomRef<Option<AppConfig>>,
     integration_connections_ref: UseAtomRef<Option<Vec<IntegrationConnection>>>,
+    task_service_integration_connection_ref: UseAtomRef<LoadState<Option<IntegrationConnection>>>,
     ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
     toast_service: Coroutine<ToastCommand>,
     notification_service: Coroutine<NotificationCommand>,
@@ -52,6 +56,7 @@ pub async fn integration_connnection_service<'a>(
             Some(IntegrationConnectionCommand::Refresh) => {
                 if let Err(error) = refresh_integration_connection(
                     &integration_connections_ref,
+                    &task_service_integration_connection_ref,
                     &app_config_ref,
                     &ui_model_ref,
                 )
@@ -66,6 +71,7 @@ pub async fn integration_connnection_service<'a>(
                 match create_integration_connection(
                     integration_provider_kind,
                     &integration_connections_ref,
+                    &task_service_integration_connection_ref,
                     &app_config_ref,
                     &ui_model_ref,
                 )
@@ -95,6 +101,7 @@ pub async fn integration_connnection_service<'a>(
                     integration_connection.id,
                     config,
                     &integration_connections_ref,
+                    &task_service_integration_connection_ref,
                     &app_config_ref,
                     &ui_model_ref,
                 )
@@ -128,6 +135,7 @@ pub async fn integration_connnection_service<'a>(
                 match authenticate_integration_connection(
                     &integration_connection,
                     &integration_connections_ref,
+                    &task_service_integration_connection_ref,
                     &app_config_ref,
                     &ui_model_ref,
                 )
@@ -160,6 +168,7 @@ pub async fn integration_connnection_service<'a>(
                 let _result = disconnect_integration_connection(
                     integration_connection_id,
                     &integration_connections_ref,
+                    &task_service_integration_connection_ref,
                     &app_config_ref,
                     &ui_model_ref,
                 )
@@ -171,6 +180,7 @@ pub async fn integration_connnection_service<'a>(
                 match reconnect_integration_connection(
                     &integration_connection,
                     &integration_connections_ref,
+                    &task_service_integration_connection_ref,
                     &app_config_ref,
                     &ui_model_ref,
                 )
@@ -204,6 +214,7 @@ pub async fn integration_connnection_service<'a>(
 
 async fn refresh_integration_connection(
     integration_connections_ref: &UseAtomRef<Option<Vec<IntegrationConnection>>>,
+    task_service_integration_connection_ref: &UseAtomRef<LoadState<Option<IntegrationConnection>>>,
     app_config_ref: &UseAtomRef<Option<AppConfig>>,
     ui_model_ref: &UseAtomRef<UniversalInboxUIModel>,
 ) -> Result<()> {
@@ -219,9 +230,12 @@ async fn refresh_integration_connection(
     )
     .await?;
 
-    ui_model_ref.write().is_task_actions_enabled = new_integration_connections
+    let task_service_integration_connection = new_integration_connections
         .iter()
-        .any(|c| c.is_connected_task_service());
+        .find(|c| c.is_connected_task_service());
+    ui_model_ref.write().is_task_actions_enabled = task_service_integration_connection.is_some();
+    *task_service_integration_connection_ref.write() =
+        LoadState::Loaded(task_service_integration_connection.cloned());
 
     integration_connections_ref
         .write()
@@ -233,6 +247,7 @@ async fn refresh_integration_connection(
 async fn create_integration_connection(
     integration_provider_kind: IntegrationProviderKind,
     integration_connections_ref: &UseAtomRef<Option<Vec<IntegrationConnection>>>,
+    task_service_integration_connection_ref: &UseAtomRef<LoadState<Option<IntegrationConnection>>>,
     app_config_ref: &UseAtomRef<Option<AppConfig>>,
     ui_model_ref: &UseAtomRef<UniversalInboxUIModel>,
 ) -> Result<IntegrationConnection> {
@@ -262,6 +277,7 @@ async fn create_integration_connection(
     authenticate_integration_connection(
         &new_connection,
         integration_connections_ref,
+        task_service_integration_connection_ref,
         app_config_ref,
         ui_model_ref,
     )
@@ -271,6 +287,7 @@ async fn create_integration_connection(
 async fn authenticate_integration_connection(
     integration_connection: &IntegrationConnection,
     integration_connections_ref: &UseAtomRef<Option<Vec<IntegrationConnection>>>,
+    task_service_integration_connection_ref: &UseAtomRef<LoadState<Option<IntegrationConnection>>>,
     app_config_ref: &UseAtomRef<Option<AppConfig>>,
     ui_model_ref: &UseAtomRef<UniversalInboxUIModel>,
 ) -> Result<IntegrationConnection> {
@@ -293,6 +310,7 @@ async fn authenticate_integration_connection(
     verify_integration_connection(
         integration_connection.id,
         integration_connections_ref,
+        task_service_integration_connection_ref,
         app_config_ref,
         ui_model_ref,
     )
@@ -302,6 +320,7 @@ async fn authenticate_integration_connection(
 async fn verify_integration_connection(
     integration_connection_id: IntegrationConnectionId,
     integration_connections_ref: &UseAtomRef<Option<Vec<IntegrationConnection>>>,
+    task_service_integration_connection_ref: &UseAtomRef<LoadState<Option<IntegrationConnection>>>,
     app_config_ref: &UseAtomRef<Option<AppConfig>>,
     ui_model_ref: &UseAtomRef<UniversalInboxUIModel>,
 ) -> Result<IntegrationConnection> {
@@ -325,8 +344,13 @@ async fn verify_integration_connection(
         integration_connections_ref,
     );
 
-    refresh_integration_connection(integration_connections_ref, app_config_ref, ui_model_ref)
-        .await?;
+    refresh_integration_connection(
+        integration_connections_ref,
+        task_service_integration_connection_ref,
+        app_config_ref,
+        ui_model_ref,
+    )
+    .await?;
 
     Ok(result)
 }
@@ -334,6 +358,7 @@ async fn verify_integration_connection(
 async fn disconnect_integration_connection(
     integration_connection_id: IntegrationConnectionId,
     integration_connections_ref: &UseAtomRef<Option<Vec<IntegrationConnection>>>,
+    task_service_integration_connection_ref: &UseAtomRef<LoadState<Option<IntegrationConnection>>>,
     app_config_ref: &UseAtomRef<Option<AppConfig>>,
     ui_model_ref: &UseAtomRef<UniversalInboxUIModel>,
 ) -> Result<()> {
@@ -357,18 +382,26 @@ async fn disconnect_integration_connection(
         integration_connections_ref,
     );
 
-    refresh_integration_connection(integration_connections_ref, app_config_ref, ui_model_ref).await
+    refresh_integration_connection(
+        integration_connections_ref,
+        task_service_integration_connection_ref,
+        app_config_ref,
+        ui_model_ref,
+    )
+    .await
 }
 
 async fn reconnect_integration_connection(
     integration_connection: &IntegrationConnection,
     integration_connections_ref: &UseAtomRef<Option<Vec<IntegrationConnection>>>,
+    task_service_integration_connection_ref: &UseAtomRef<LoadState<Option<IntegrationConnection>>>,
     app_config_ref: &UseAtomRef<Option<AppConfig>>,
     ui_model_ref: &UseAtomRef<UniversalInboxUIModel>,
 ) -> Result<IntegrationConnection> {
     disconnect_integration_connection(
         integration_connection.id,
         integration_connections_ref,
+        task_service_integration_connection_ref,
         app_config_ref,
         ui_model_ref,
     )
@@ -377,6 +410,7 @@ async fn reconnect_integration_connection(
     authenticate_integration_connection(
         integration_connection,
         integration_connections_ref,
+        task_service_integration_connection_ref,
         app_config_ref,
         ui_model_ref,
     )
@@ -449,6 +483,7 @@ async fn update_integration_connection_config(
     integration_connection_id: IntegrationConnectionId,
     config: IntegrationConnectionConfig,
     integration_connections_ref: &UseAtomRef<Option<Vec<IntegrationConnection>>>,
+    task_service_integration_connection_ref: &UseAtomRef<LoadState<Option<IntegrationConnection>>>,
     app_config_ref: &UseAtomRef<Option<AppConfig>>,
     ui_model_ref: &UseAtomRef<UniversalInboxUIModel>,
 ) -> Result<()> {
@@ -464,8 +499,13 @@ async fn update_integration_connection_config(
     )
     .await?;
 
-    refresh_integration_connection(integration_connections_ref, app_config_ref, ui_model_ref)
-        .await?;
+    refresh_integration_connection(
+        integration_connections_ref,
+        task_service_integration_connection_ref,
+        app_config_ref,
+        ui_model_ref,
+    )
+    .await?;
 
     Ok(())
 }

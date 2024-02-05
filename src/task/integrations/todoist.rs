@@ -6,6 +6,7 @@ use url::Url;
 use crate::task::{DueDate, TaskPriority};
 
 pub static DEFAULT_TODOIST_HTML_URL: &str = "https://todoist.com/app/";
+pub static TODOIST_INBOX_PROJECT: &str = "Inbox";
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct TodoistItem {
