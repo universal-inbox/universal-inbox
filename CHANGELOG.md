@@ -9,6 +9,7 @@
 - Add notification kind filtering
 - Display Linear notification reason
 - Display Linear project updates
+- Display Linear issue new comments
 
 ### Changed
 

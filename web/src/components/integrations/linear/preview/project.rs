@@ -15,7 +15,7 @@ use crate::components::{
         get_notification_type_label,
         icons::{LinearProjectHealtIcon, LinearProjectIcon},
     },
-    CardWithHeaders, SmallCard, Tag, TagDisplay, UserWithAvatar,
+    CardWithHeaders, CollapseCard, SmallCard, Tag, TagDisplay, UserWithAvatar,
 };
 
 #[component]
@@ -63,21 +63,30 @@ pub fn LinearProjectDetails<'a>(
     cx: Scope,
     linear_notification: &'a LinearNotification,
     linear_project: &'a LinearProject,
-    card_class: Option<&'a str>,
+    dark_bg: Option<bool>,
 ) -> Element {
     let description = markdown::to_html(&linear_project.description);
+    let (cards_style, proses_style) = if dark_bg.unwrap_or_default() {
+        ("bg-neutral text-neutral-content", "!prose-invert")
+    } else {
+        ("bg-base-200 text-base-content", "dark:prose-invert")
+    };
 
     render! {
         div {
             class: "flex flex-col gap-2 w-full",
 
-            p {
-                class: "w-full prose prose-sm dark:prose-invert",
-                dangerous_inner_html: "{description}"
+            CollapseCard {
+                class: "{cards_style}",
+                header: render! { span { class: "text-gray-400 ", "Description" } },
+                p {
+                    class: "w-full prose prose-sm {proses_style}",
+                    dangerous_inner_html: "{description}"
+                }
             }
 
             SmallCard {
-                card_class: "{card_class.unwrap_or_default()}",
+                card_class: "{cards_style}",
                 span { class: "text-gray-400", "Reason:" }
                 TagDisplay {
                     tag: Into::<Tag>::into(get_notification_type_label(&linear_notification.get_type()))
@@ -87,7 +96,7 @@ pub fn LinearProjectDetails<'a>(
             if let Some(lead) = &linear_project.lead {
                 render! {
                     SmallCard {
-                        card_class: "{card_class.unwrap_or_default()}",
+                        card_class: "{cards_style}",
                         span { class: "text-gray-400", "Led by" }
                         UserWithAvatar {
                             user_name: lead.name.clone(),
@@ -99,7 +108,7 @@ pub fn LinearProjectDetails<'a>(
             }
 
             SmallCard {
-                card_class: "{card_class.unwrap_or_default()}",
+                card_class: "{cards_style}",
                 LinearProjectIcon { class: "h-5 w-5", linear_project: linear_project }
                 "{linear_project.state}",
                 if linear_project.progress > 0 {
@@ -117,7 +126,7 @@ pub fn LinearProjectDetails<'a>(
             if let Some(start_date) = linear_project.start_date {
                 render! {
                     SmallCard {
-                        card_class: "{card_class.unwrap_or_default()}",
+                        card_class: "{cards_style}",
                         Icon { class: "h-5 w-5 text-gray-400", icon: BsCalendar2Event }
                         span { "{start_date}" }
                         Icon { class: "h-5 w-5 text-gray-400", icon: BsArrowRight }
@@ -158,7 +167,11 @@ fn LinearProjectUpdateDetails<'a>(cx: Scope, project_update: &'a LinearProjectUp
             LinearProjectHealtIcon { class: "h-3 w-3 {health_icon_style}" }
             span { "{project_update.health}" }
             span { class: "text-gray-400", "by" }
-            span { "{project_update.user.name}" }
+            UserWithAvatar {
+                user_name: project_update.user.name.clone(),
+                avatar_url: project_update.user.avatar_url.clone(),
+                initials_from: project_update.user.name.clone(),
+            }
             span { class: "text-gray-400", "on" }
             span { " {updated_at}" }
         }

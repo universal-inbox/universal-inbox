@@ -249,6 +249,7 @@ pub fn assert_sync_notifications(
                     NotificationMetadata::Linear(Box::new(sync_linear_notifications[2].clone()))
                 );
             }
+
             // Project notification
             "df45c8cf-c717-4db7-abb9-5c5b73b50cc9" => {
                 assert_eq!(notification.title, "Test project".to_string());

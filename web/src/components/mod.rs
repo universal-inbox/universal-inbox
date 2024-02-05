@@ -39,17 +39,25 @@ fn CollapseCardWithIcon<'a>(
 }
 
 #[component]
-fn CollapseCard<'a>(cx: Scope, header: Element<'a>, children: Element<'a>) -> Element {
+fn CollapseCard<'a>(
+    cx: Scope,
+    header: Element<'a>,
+    children: Element<'a>,
+    class: Option<&'a str>,
+) -> Element {
+    let card_style = class.unwrap_or("bg-base-200 text-base-content");
+
     render! {
         div {
-            class: "card w-full bg-base-200 text-base-content",
+            class: "card w-full {card_style}",
 
             div {
                 class: "card-body p-0",
-                details {
+                div {
                     class: "collapse collapse-arrow",
-                    summary {
-                        class: "collapse-title min-h-min p-2",
+                    input { "class": "min-h-0 p-2", "type": "checkbox" },
+                    div {
+                        class: "collapse-title min-h-0 p-2",
                         div { class: "flex items-center gap-2", header }
                     }
 
@@ -122,7 +130,7 @@ pub fn UserWithAvatar(
                                 div {
                                     class: "avatar placeholder",
                                     div {
-                                        class: "w-5 rounded-full bg-neutral text-neutral-content",
+                                        class: "w-5 rounded-full bg-accent text-accent-content",
                                         span { class: "text-xs", "{initials}" }
                                     }
                                 }

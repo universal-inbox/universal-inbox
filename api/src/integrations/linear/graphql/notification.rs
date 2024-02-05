@@ -1,7 +1,7 @@
 use anyhow::Context;
 
 use universal_inbox::notification::integrations::linear::{
-    LinearIssue, LinearLabel, LinearNotification, LinearOrganization, LinearProject,
+    LinearComment, LinearIssue, LinearLabel, LinearNotification, LinearOrganization, LinearProject,
     LinearProjectMilestone, LinearProjectUpdate, LinearProjectUpdateHealthType, LinearTeam,
     LinearUser, LinearWorkflowState,
 };
@@ -360,6 +360,162 @@ impl
     }
 }
 
+impl TryFrom<notifications_query::NotificationsQueryNotificationsNodesOnIssueNotificationComment>
+    for LinearComment
+{
+    type Error = UniversalInboxError;
+
+    fn try_from(
+        value: notifications_query::NotificationsQueryNotificationsNodesOnIssueNotificationComment,
+    ) -> Result<Self, Self::Error> {
+        if let Some(parent) = value.parent {
+            parent.try_into()
+        } else {
+            Ok(LinearComment {
+                updated_at: value.updated_at,
+                body: value.body,
+                url: value
+                    .url
+                    .parse()
+                    .with_context(|| format!("Failed to parse URL from `{}`", value.url))?,
+                user: value.user.map(|user| user.try_into()).transpose()?,
+                children: vec![],
+            })
+        }
+    }
+}
+
+impl
+    TryFrom<notifications_query::NotificationsQueryNotificationsNodesOnIssueNotificationCommentUser>
+    for LinearUser
+{
+    type Error = UniversalInboxError;
+
+    fn try_from(
+        value: notifications_query::NotificationsQueryNotificationsNodesOnIssueNotificationCommentUser,
+    ) -> Result<Self, Self::Error> {
+        Ok(LinearUser {
+            name: value.display_name,
+            avatar_url: value
+                .avatar_url
+                .map(|avatar_url| {
+                    avatar_url
+                        .parse()
+                        .with_context(|| format!("Failed to parse URL from `{avatar_url}`"))
+                })
+                .transpose()?,
+            url: value
+                .url
+                .parse()
+                .with_context(|| format!("Failed to parse URL from `{}`", value.url))?,
+        })
+    }
+}
+
+impl
+    TryFrom<
+        notifications_query::NotificationsQueryNotificationsNodesOnIssueNotificationCommentParent,
+    > for LinearComment
+{
+    type Error = UniversalInboxError;
+
+    fn try_from(
+        value: notifications_query::NotificationsQueryNotificationsNodesOnIssueNotificationCommentParent,
+    ) -> Result<Self, Self::Error> {
+        Ok(LinearComment {
+            updated_at: value.updated_at,
+            body: value.body,
+            url: value
+                .url
+                .parse()
+                .with_context(|| format!("Failed to parse URL from `{}`", value.url))?,
+            user: value.user.map(|user| user.try_into()).transpose()?,
+            children: value
+                .children
+                .nodes
+                .into_iter()
+                .map(|comment| comment.try_into())
+                .collect::<Result<Vec<LinearComment>, UniversalInboxError>>()?,
+        })
+    }
+}
+
+impl
+    TryFrom<
+            notifications_query::NotificationsQueryNotificationsNodesOnIssueNotificationCommentParentUser,
+        > for LinearUser
+{
+    type Error = UniversalInboxError;
+
+    fn try_from(
+        value: notifications_query::NotificationsQueryNotificationsNodesOnIssueNotificationCommentParentUser,
+    ) -> Result<Self, Self::Error> {
+        Ok(LinearUser {
+            name: value.display_name,
+            avatar_url: value
+                .avatar_url
+                .map(|avatar_url| {
+                    avatar_url
+                        .parse()
+                        .with_context(|| format!("Failed to parse URL from `{avatar_url}`"))
+                })
+                .transpose()?,
+            url: value
+                .url
+                .parse()
+                .with_context(|| format!("Failed to parse URL from `{}`", value.url))?,
+        })
+    }
+}
+
+impl TryFrom<notifications_query::NotificationsQueryNotificationsNodesOnIssueNotificationCommentParentChildrenNodes>
+    for LinearComment
+{
+    type Error = UniversalInboxError;
+
+    fn try_from(
+        value: notifications_query::NotificationsQueryNotificationsNodesOnIssueNotificationCommentParentChildrenNodes,
+    ) -> Result<Self, Self::Error> {
+        Ok(LinearComment {
+            updated_at: value.updated_at,
+            body: value.body,
+            url: value
+                .url
+                .parse()
+                .with_context(|| format!("Failed to parse URL from `{}`", value.url))?,
+            user: value.user.map(|user| user.try_into()).transpose()?,
+            children: vec![]
+        })
+    }
+}
+
+impl
+    TryFrom<notifications_query::NotificationsQueryNotificationsNodesOnIssueNotificationCommentParentChildrenNodesUser>
+    for LinearUser
+{
+    type Error = UniversalInboxError;
+
+    fn try_from(
+        value: notifications_query::NotificationsQueryNotificationsNodesOnIssueNotificationCommentParentChildrenNodesUser,
+    ) -> Result<Self, Self::Error> {
+        Ok(LinearUser {
+            name: value.display_name,
+            avatar_url: value
+                .avatar_url
+                .map(|avatar_url| {
+                    avatar_url
+                        .parse()
+                        .with_context(|| format!("Failed to parse URL from `{avatar_url}`"))
+                })
+                .transpose()?,
+            url: value
+                .url
+                .parse()
+                .with_context(|| format!("Failed to parse URL from `{}`", value.url))?,
+        })
+    }
+}
+
 impl TryFrom<notifications_query::ResponseData> for Vec<LinearNotification> {
     type Error = UniversalInboxError;
 
@@ -389,6 +545,7 @@ impl TryFrom<notifications_query::ResponseData> for Vec<LinearNotification> {
                     snoozed_until_at,
                     on: notifications_query::NotificationsQueryNotificationsNodesOn::IssueNotification(notifications_query::NotificationsQueryNotificationsNodesOnIssueNotification {
                         issue,
+                        comment,
                     }),
                 } => Ok(Some(LinearNotification::IssueNotification {
                     id: Uuid::parse_str(&id).with_context(|| format!("Failed to parse UUID from `{id}`"))?,
@@ -402,6 +559,7 @@ impl TryFrom<notifications_query::ResponseData> for Vec<LinearNotification> {
                         logo_url: organization_logo_url.clone(),
                     },
                     issue: issue.try_into()?,
+                    comment: comment.map(|comment| comment.try_into()).transpose()?,
                 })),
                 notifications_query::NotificationsQueryNotificationsNodes {
                     id,

@@ -7,7 +7,7 @@ use dioxus_free_icons::{
 };
 
 use universal_inbox::notification::integrations::linear::{
-    LinearIssue, LinearIssuePriority, LinearNotification, LinearProject,
+    LinearComment, LinearIssue, LinearIssuePriority, LinearNotification, LinearProject,
 };
 
 use crate::{
@@ -109,6 +109,18 @@ fn LinearIssueDetails<'a>(
                 span { class: "text-primary", "{linear_issue.created_at}" }
             }
 
+            if let Some(description) = &description {
+                render! {
+                    CollapseCard {
+                        header: render! { span { class: "text-gray-400", "Description" } },
+                        p {
+                            class: "w-full prose prose-sm dark:prose-invert",
+                            dangerous_inner_html: "{description}"
+                        }
+                    }
+                }
+            }
+
             SmallCard {
                 span { class: "text-gray-400", "Reason:" }
                 TagDisplay {
@@ -189,11 +201,14 @@ fn LinearIssueDetails<'a>(
                 }
             }
 
-            if let Some(description) = &description {
+            if let LinearNotification::IssueNotification { comment: Some(comment), .. } = linear_notification {
                 render! {
-                    p {
-                        class: "w-full prose prose-sm dark:prose-invert",
-                        dangerous_inner_html: "{description}"
+                    div {
+                        class: "card w-full bg-base-200 text-base-content",
+                        div {
+                            class: "card-body flex flex-col gap-2 p-2",
+                            LinearCommentDisplay { linear_comment: comment }
+                        }
                     }
                 }
             }
@@ -238,9 +253,60 @@ pub fn LinearProjectCard<'a>(
             },
 
             LinearProjectDetails {
-                card_class: "bg-neutral text-neutral-content",
                 linear_notification: linear_notification,
                 linear_project: project,
+                dark_bg: true
+            }
+        }
+    }
+}
+
+#[component]
+fn LinearCommentDisplay<'a>(
+    cx: Scope,
+    linear_comment: &'a LinearComment,
+    class: Option<&'a str>,
+) -> Element {
+    let comment_body = markdown::to_html(&linear_comment.body);
+    let updated_at = linear_comment
+        .updated_at
+        .format("%Y-%m-%d %H:%M")
+        .to_string();
+
+    render! {
+        div {
+            class: "flex flex-col gap-2 {class.unwrap_or_default()}",
+
+            SmallCard {
+                class: "flex flex-row items-center gap-2 text-xs",
+                card_class: "bg-neutral text-neutral-content",
+
+                if let Some(user) = &linear_comment.user {
+                    render! {
+                        span { class: "text-gray-400", "From" }
+                        UserWithAvatar {
+                            user_name: user.name.clone(),
+                            avatar_url: user.avatar_url.clone(),
+                            initials_from: user.name.clone(),
+                        }
+                    }
+                }
+                span { class: "text-gray-400", "on" }
+                span { " {updated_at}" }
+            }
+
+            p {
+                class: "w-full prose prose-sm dark:prose-invert",
+                dangerous_inner_html: "{comment_body}"
+            }
+
+            for child_comment in linear_comment.children.iter() {
+                render! {
+                    LinearCommentDisplay {
+                        class: "pl-2",
+                        linear_comment: child_comment
+                    }
+                }
             }
         }
     }

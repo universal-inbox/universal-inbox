@@ -58,6 +58,39 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         .unwrap()
         .try_into()
         .unwrap();
+
+    // Assert parsing of comments is correct
+    // This notification has comment with a parent comment and children
+    // Only the parent comment and its children should be parsed
+    match &sync_linear_notifications[2] {
+        LinearNotification::IssueNotification {
+            comment: Some(comment),
+            ..
+        } => {
+            assert_eq!(comment.body, "Initial comment".to_string());
+            assert_eq!(comment.children.len(), 2);
+            assert_eq!(comment.children[0].body, "other comment".to_string());
+            assert_eq!(comment.children[1].body, "answer comment".to_string());
+        }
+        _ => {
+            unreachable!("Expected Linear issue notification");
+        }
+    }
+
+    // This notification has comment with no parent, thus we don't fetch its children
+    match &sync_linear_notifications[3] {
+        LinearNotification::IssueNotification {
+            comment: Some(comment),
+            ..
+        } => {
+            assert_eq!(comment.body, "comment without parent".to_string());
+            assert!(comment.children.is_empty());
+        }
+        _ => {
+            unreachable!("Expected Linear issue notification");
+        }
+    }
+
     let existing_notification: Box<Notification> = match &sync_linear_notifications[2] {
         notif @ LinearNotification::IssueNotification { id, .. } => {
             create_resource(

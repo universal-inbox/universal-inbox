@@ -26,6 +26,7 @@ pub enum LinearNotification {
         snoozed_until_at: Option<DateTime<Utc>>,
         organization: LinearOrganization,
         issue: LinearIssue,
+        comment: Option<LinearComment>,
     },
     ProjectNotification {
         id: Uuid,
@@ -391,4 +392,14 @@ impl fmt::Display for LinearProjectUpdateHealthType {
             }
         )
     }
+}
+
+#[serde_as]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct LinearComment {
+    pub updated_at: DateTime<Utc>,
+    pub body: String,
+    pub user: Option<LinearUser>,
+    pub url: Url,
+    pub children: Vec<LinearComment>,
 }

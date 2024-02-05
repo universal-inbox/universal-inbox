@@ -126,6 +126,53 @@
               "key": "UNI",
               "name": "Universal inbox"
             }
+          },
+          "comment": {
+            "updatedAt": "2023-07-31T06:03:27.112Z",
+            "body": "ignored answer comment as it should be a child of its parent",
+            "parent": {
+              "updatedAt": "2023-07-31T06:02:27.112Z",
+              "body": "Initial comment",
+              "user": {
+                "displayName": "John Smith",
+                "avatarUrl": null,
+                "url": "https://linear.app/user/john-smith"
+              },
+              "url": "https://linear.app/universal-inbox/issue/UNI-13/test-issue-3#comment-0c00f34aa",
+              "children": {
+                "nodes": [
+                  {
+                    "updatedAt": "2023-07-31T06:03:27.112Z",
+                    "body": "other comment",
+                    "user": {
+                      "displayName": "John Smith",
+                      "avatarUrl": null,
+                      "url": "https://linear.app/user/john-smith"
+                    },
+                    "url": "https://linear.app/universal-inbox/issue/UNI-13/test-issue-3#comment-0c00f34bb"
+                  },
+                  {
+                    "updatedAt": "2023-07-31T06:03:27.112Z",
+                    "body": "answer comment",
+                    "user": {
+                      "displayName": "John Smith",
+                      "avatarUrl": null,
+                      "url": "https://linear.app/user/john-smith"
+                    },
+                    "url": "https://linear.app/universal-inbox/issue/UNI-13/test-issue-3#comment-0c00f34fd"
+                  }
+                ]
+              }
+            },
+            "children": {
+              "nodes": []
+            },
+            "user": {
+              "displayName": "John Smith",
+              "avatarUrl": null,
+              "url": "https://linear.app/user/john-smith"
+            },
+            "url": "https://linear.app/universal-inbox/issue/UNI-13/test-issue-3#comment-0c00f34fd"
           }
         },
         {
@@ -191,6 +238,40 @@
               "id": "ee20be3f-6558-4586-b610-6c44738e362f",
               "key": "UNI",
               "name": "Universal inbox"
+            }
+          },
+          "comment": {
+            "updatedAt": "2023-07-31T06:02:27.112Z",
+            "body": "comment without parent",
+            "user": {
+              "displayName": "John Smith",
+              "avatarUrl": null,
+              "url": "https://linear.app/user/john-smith"
+            },
+            "url": "https://linear.app/universal-inbox/issue/UNI-13/test-issue-3#comment-0c00f34aa",
+            "children": {
+              "nodes": [
+                {
+                  "updatedAt": "2023-07-31T06:03:27.112Z",
+                  "body": "child comment1",
+                  "user": {
+                    "displayName": "John Smith",
+                    "avatarUrl": null,
+                    "url": "https://linear.app/user/john-smith"
+                  },
+                  "url": "https://linear.app/universal-inbox/issue/UNI-13/test-issue-3#comment-0c00f34bb"
+                },
+                {
+                  "updatedAt": "2023-07-31T06:03:27.112Z",
+                  "body": "child comment2",
+                  "user": {
+                    "displayName": "John Smith",
+                    "avatarUrl": null,
+                    "url": "https://linear.app/user/john-smith"
+                  },
+                  "url": "https://linear.app/universal-inbox/issue/UNI-13/test-issue-3#comment-0c00f34fd"
+                }
+              ]
             }
           }
         },

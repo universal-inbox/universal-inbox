@@ -8,3 +8,7 @@
         --rounded-box: 0.5rem;
     }
 }
+
+.collapse-arrow > .collapse-title:after {
+    top: 1.2rem;
+}

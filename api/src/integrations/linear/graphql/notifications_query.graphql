@@ -71,6 +71,38 @@ query NotificationsQuery {
             name
           }
         }
+        comment {
+          body
+          updatedAt
+          user {
+            displayName
+            avatarUrl
+            url
+          }
+          url
+          parent {
+            body
+            updatedAt
+            user {
+              displayName
+              avatarUrl
+              url
+            }
+            url
+            children(last: 40) {
+              nodes {
+                body
+                updatedAt
+                user {
+                  displayName
+                  avatarUrl
+                  url
+                }
+                url
+              }
+            }
+          }
+        }
       }
       ... on ProjectNotification {
         project {
