@@ -69,6 +69,7 @@ query NotificationsQuery {
             id
             key
             name
+            icon
           }
         }
         comment {

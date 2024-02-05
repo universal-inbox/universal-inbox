@@ -26,7 +26,12 @@ pub fn replace_emoji_code_in_string_with_emoji(string: &str) -> String {
 }
 
 pub fn replace_emoji_code_with_emoji(string: &str) -> Option<String> {
-    emojis::get_by_shortcode(&string.to_lowercase()).map(|emoji| emoji.to_string())
+    let replace_from = if string.starts_with(':') && string.ends_with(':') {
+        &string[1..string.len() - 1]
+    } else {
+        string
+    };
+    emojis::get_by_shortcode(&replace_from.to_lowercase()).map(|emoji| emoji.to_string())
 }
 
 #[cfg(test)]
@@ -91,6 +96,27 @@ mod tests {
         fn test_replace_known_emoji_random_case() {
             assert_eq!(
                 replace_emoji_code_with_emoji("RoCkEt"),
+                Some("🚀".to_string())
+            );
+        }
+
+        #[rstest]
+        fn test_replace_unknown_emoji_with_suffix_and_prefix() {
+            assert!(replace_emoji_code_with_emoji(":Noemoji:").is_none(),);
+        }
+
+        #[rstest]
+        fn test_replace_known_emoji_with_suffix_and_prefix() {
+            assert_eq!(
+                replace_emoji_code_with_emoji(":rocket:"),
+                Some("🚀".to_string())
+            );
+        }
+
+        #[rstest]
+        fn test_replace_known_emoji_random_case_with_suffix_and_prefix() {
+            assert_eq!(
+                replace_emoji_code_with_emoji(":RoCkEt:"),
                 Some("🚀".to_string())
             );
         }

@@ -25,6 +25,9 @@ impl TryFrom<notifications_query::NotificationsQueryNotificationsNodesOnIssueNot
                 .with_context(|| format!("Failed to parse UUID from `{}`", value.id))?,
             key: value.key,
             name: value.name,
+            icon: value
+                .icon
+                .and_then(|icon| replace_emoji_code_with_emoji(&icon)),
         })
     }
 }

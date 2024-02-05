@@ -11,6 +11,7 @@
 - Display Linear project updates
 - Display Linear issue new comments
 - Display Linear project on notification item
+- Display Linear Project and Team icons
 
 ### Changed
 

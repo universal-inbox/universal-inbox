@@ -222,23 +222,18 @@ pub fn LinearProjectCard<'a>(
     linear_notification: &'a LinearNotification,
     project: &'a LinearProject,
 ) -> Element {
-    let project_icon = match &project.icon {
-        Some(icon) => render! {
-            img { class: "h-5 w-5", src: "{icon}" }
-        },
-        None => render! {
-            div {
-                style: "color: {project.color}",
-                LinearProjectIcon { class: "h-5 w-5", linear_project: project }
-            }
-        },
-    };
-
     render! {
         CollapseCard {
             header: render! {
-                project_icon,
+                div {
+                    style: "color: {project.color}",
+                    LinearProjectIcon { class: "h-5 w-5", linear_project: project }
+                },
                 span { class: "text-gray-400", "Project:" }
+
+                if let Some(icon) = &project.icon {
+                    render! { span { "{icon}" } }
+                }
                 a {
                     href: "{project.url}",
                     target: "_blank",

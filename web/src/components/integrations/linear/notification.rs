@@ -39,25 +39,44 @@ pub fn LinearNotificationDisplay<'a>(
                 div {
                     class: "flex flex-col grow",
 
-                    span { "{notif.title}" }
+                    if let LinearNotification::ProjectNotification {
+                        project: LinearProject { icon: Some(project_icon), .. }, ..
+                    } = linear_notification {
+                        render! { span { "{project_icon} {notif.title}" } }
+                    } else {
+                        render! {
+                            span { "{notif.title}" }
+                        }
+                    }
+
                     div {
                         class: "flex gap-2",
 
                         if let Some(team) = linear_notification.get_team() {
-                            render! {
-                                span { class: "text-xs text-gray-400", "{team.name}" }
+                            if let Some(team_icon) = team.icon {
+                                render! {
+                                    span { class: "text-xs text-gray-400", "{team_icon} {team.name}" }
+                                }
+                            } else {
+                                render! {
+                                    span { class: "text-xs text-gray-400", "{team.name}" }
+                                }
                             }
                         }
 
                         if let LinearNotification::IssueNotification {
                             issue: LinearIssue { identifier, project, .. }, ..
                         } = linear_notification {
-                            if let Some(project) = project {
+                            if let Some(LinearProject { name, icon, .. }) = project {
                                 render! {
                                     div {
-                                        class: "flex flex-row items-center text-xs text-gray-400",
-                                        LinearProjectDefaultIcon { class: "w-3 h-3" },
-                                        "{project.name} #{identifier}"
+                                        class: "flex flex-row items-center gap-1 text-xs text-gray-400",
+                                        if let Some(project_icon) = icon {
+                                            render! { span { "{project_icon}" } }
+                                        } else {
+                                            render! { LinearProjectDefaultIcon { class: "w-3 h-3" } }
+                                        }
+                                        "{name} #{identifier}"
                                     }
                                 }
                             } else {

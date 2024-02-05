@@ -124,7 +124,8 @@
             "team": {
               "id": "ee20be3f-6558-4586-b610-6c44738e362f",
               "key": "UNI",
-              "name": "Universal inbox"
+              "name": "Universal inbox",
+              "icon": "Inbox"
             }
           },
           "comment": {
@@ -237,7 +238,8 @@
             "team": {
               "id": "ee20be3f-6558-4586-b610-6c44738e362f",
               "key": "UNI",
-              "name": "Universal inbox"
+              "name": "Universal inbox",
+              "icon": "Inbox"
             }
           },
           "comment": {
@@ -330,7 +332,8 @@
             "team": {
               "id": "ee20be3f-6558-4586-b610-6c44738e362f",
               "key": "UNI",
-              "name": "Universal inbox"
+              "name": "Universal inbox",
+              "icon": "Inbox"
             }
           }
         }

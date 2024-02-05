@@ -113,6 +113,7 @@ pub struct LinearTeam {
     pub id: Uuid,
     pub key: String,
     pub name: String,
+    pub icon: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
