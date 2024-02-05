@@ -115,9 +115,12 @@ for GithubCheckRun {
         Ok(GithubCheckRun {
             name: value.name,
             conclusion: value.conclusion.map(|conclusion| conclusion.into()),
-            url: value.details_url.map(|details_url| details_url.parse::<Url>().context(
-                "Github check run details URL could not be parsed into a URL",
-            )).transpose()?,
+            url: value.details_url.map(|details_url| {
+                details_url
+                    .parse::<Url>()
+                    .with_context(|| format!("Github check run details URL could not be parsed: {:?}", details_url))
+            })
+                .transpose()?,
             status: value.status.into(),
         })
     }
@@ -620,13 +623,15 @@ impl TryFrom<pull_request_query::ResponseData> for NotificationDetails {
             .context("Github repository not found")?
             .pull_request
             .context("Github pull request not found")?;
+        let pr_url: Url = pr
+            .url
+            .parse()
+            .with_context(|| format!("Unable to parse Github pull request URL: {:?}", pr.url))?;
 
         Ok(NotificationDetails::GithubPullRequest(GithubPullRequest {
             id: pr.id,
             number: pr.number,
-            url: pr.url.parse().with_context(|| {
-                format!("Unable to parse Github pull request URL: {:?}", pr.url)
-            })?,
+            url: pr_url.clone(),
             title: pr.title_html,
             body: pr.body_html,
             state: pr.state.into(),
@@ -657,7 +662,11 @@ impl TryFrom<pull_request_query::ResponseData> for NotificationDetails {
                 })
                 .unwrap_or_default(),
             latest_commit: TryInto::<Option<GithubCommitChecks>>::try_into(pr.commits)?
-                .context("Expected at least 1 commit associated with a Github pull request")?,
+                .with_context(|| {
+                    format!(
+                        "Expected at least 1 commit associated with a Github pull request {pr_url}"
+                    )
+                })?,
             base_ref_name: pr.base_ref_name,
             base_repository: pr
                 .base_repository
