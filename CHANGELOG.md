@@ -12,6 +12,7 @@
 - Display Linear issue new comments
 - Display Linear project on notification item
 - Display Linear Project and Team icons
+- Connect to Slack and receive "save for later" (aka. "stars") events
 
 ### Changed
 

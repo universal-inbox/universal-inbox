@@ -35,6 +35,13 @@ pub trait IntegrationConnectionRepository {
         with_status: Option<IntegrationConnectionStatus>,
     ) -> Result<Option<IntegrationConnection>, UniversalInboxError>;
 
+    async fn get_integration_connection_per_provider_user_id<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        integration_provider_kind: IntegrationProviderKind,
+        provider_user_id: String,
+    ) -> Result<Option<IntegrationConnection>, UniversalInboxError>;
+
     async fn update_integration_connection_status<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -85,6 +92,13 @@ pub trait IntegrationConnectionRepository {
         config: IntegrationConnectionConfig,
         for_user_id: UserId,
     ) -> Result<UpdateStatus<Box<IntegrationConnectionConfig>>, UniversalInboxError>;
+
+    async fn update_integration_connection_provider_user_id<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        integration_connection_id: IntegrationConnectionId,
+        provider_user_id: Option<String>,
+    ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError>;
 }
 
 #[async_trait]
@@ -101,6 +115,7 @@ impl IntegrationConnectionRepository for Repository {
                 SELECT
                   integration_connection.id,
                   integration_connection.user_id,
+                  integration_connection.provider_user_id,
                   integration_connection.connection_id,
                   integration_connection.status as "status: _",
                   integration_connection.failure_message,
@@ -142,6 +157,7 @@ impl IntegrationConnectionRepository for Repository {
                 SELECT
                   integration_connection.id,
                   integration_connection.user_id,
+                  integration_connection.provider_user_id,
                   integration_connection.connection_id,
                   integration_connection.status,
                   integration_connection.failure_message,
@@ -191,6 +207,50 @@ impl IntegrationConnectionRepository for Repository {
     }
 
     #[tracing::instrument(level = "debug", skip(self, executor))]
+    async fn get_integration_connection_per_provider_user_id<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        integration_provider_kind: IntegrationProviderKind,
+        provider_user_id: String,
+    ) -> Result<Option<IntegrationConnection>, UniversalInboxError> {
+        let row = sqlx::query_as!(
+            IntegrationConnectionRow,
+            r#"
+                SELECT
+                  integration_connection.id,
+                  integration_connection.user_id,
+                  integration_connection.provider_user_id,
+                  integration_connection.connection_id,
+                  integration_connection.status as "status: _",
+                  integration_connection.failure_message,
+                  integration_connection.created_at,
+                  integration_connection.updated_at,
+                  integration_connection.last_sync_started_at,
+                  integration_connection.last_sync_failure_message,
+                  integration_connection_config.config as "config: Json<IntegrationConnectionConfig>",
+                  integration_connection.context as "context: Json<IntegrationConnectionContext>"
+                FROM integration_connection
+                INNER JOIN integration_connection_config
+                  ON integration_connection.id = integration_connection_config.integration_connection_id
+                WHERE
+                    integration_connection.provider_user_id = $1
+                    AND integration_connection.provider_kind::TEXT = $2
+            "#,
+            provider_user_id,
+            integration_provider_kind.to_string()
+        )
+            .fetch_optional(&mut **executor)
+            .await
+            .with_context(|| {
+                format!(
+                    "Failed to fetch integration connection for {integration_provider_kind} user {provider_user_id} from storage"
+                )
+            })?;
+
+        row.map(|r| r.try_into()).transpose()
+    }
+
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn update_integration_connection_status<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -224,6 +284,7 @@ impl IntegrationConnectionRepository for Repository {
                 RETURNING
                   integration_connection.id,
                   integration_connection.user_id,
+                  integration_connection.provider_user_id,
                   integration_connection.connection_id,
                   integration_connection.status,
                   integration_connection.failure_message,
@@ -316,6 +377,7 @@ impl IntegrationConnectionRepository for Repository {
                 RETURNING
                   integration_connection.id,
                   integration_connection.user_id,
+                  integration_connection.provider_user_id,
                   integration_connection.connection_id,
                   integration_connection.status,
                   integration_connection.failure_message,
@@ -377,6 +439,7 @@ impl IntegrationConnectionRepository for Repository {
                 RETURNING
                   integration_connection.id,
                   integration_connection.user_id,
+                  integration_connection.provider_user_id,
                   integration_connection.connection_id,
                   integration_connection.status,
                   integration_connection.failure_message,
@@ -428,6 +491,7 @@ impl IntegrationConnectionRepository for Repository {
                 SELECT
                   integration_connection.id,
                   integration_connection.user_id,
+                  integration_connection.provider_user_id,
                   integration_connection.connection_id,
                   integration_connection.status as "status: _",
                   integration_connection.failure_message,
@@ -595,6 +659,7 @@ impl IntegrationConnectionRepository for Repository {
                 RETURNING
                   integration_connection.id,
                   integration_connection.user_id,
+                  integration_connection.provider_user_id,
                   integration_connection.connection_id,
                   integration_connection.status,
                   integration_connection.failure_message,
@@ -628,6 +693,69 @@ impl IntegrationConnectionRepository for Repository {
             })
         }
     }
+
+    #[tracing::instrument(level = "debug", skip(self, executor))]
+    async fn update_integration_connection_provider_user_id<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        integration_connection_id: IntegrationConnectionId,
+        provider_user_id: Option<String>,
+    ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
+        let mut query_builder =
+            QueryBuilder::new("UPDATE integration_connection SET provider_user_id = ");
+        query_builder
+            .push_bind(provider_user_id)
+            .push(" FROM integration_connection_config ")
+            .push(" WHERE ")
+            .separated(" AND ")
+            .push(" integration_connection_config.integration_connection_id = integration_connection.id ")
+            .push(" integration_connection.id = ")
+            .push_bind_unseparated(integration_connection_id.0);
+
+        query_builder.push(
+            r#"
+                RETURNING
+                  integration_connection.id,
+                  integration_connection.user_id,
+                  integration_connection.provider_user_id,
+                  integration_connection.connection_id,
+                  integration_connection.status,
+                  integration_connection.failure_message,
+                  integration_connection.created_at,
+                  integration_connection.updated_at,
+                  integration_connection.last_sync_started_at,
+                  integration_connection.last_sync_failure_message,
+                  integration_connection_config.config as config,
+                  integration_connection.context,
+                  true as "is_updated"
+               "#,
+        );
+
+        let row: Option<UpdatedIntegrationConnectionRow> = query_builder
+            .build_query_as::<UpdatedIntegrationConnectionRow>()
+            .fetch_optional(&mut **executor)
+            .await
+            .with_context(|| {
+                format!("Failed to update integration connection {integration_connection_id} context from storage")
+            })?;
+
+        if let Some(updated_integration_connection_row) = row {
+            Ok(UpdateStatus {
+                updated: updated_integration_connection_row.is_updated,
+                result: Some(Box::new(
+                    updated_integration_connection_row
+                        .integration_connection_row
+                        .try_into()
+                        .unwrap(),
+                )),
+            })
+        } else {
+            Ok(UpdateStatus {
+                updated: false,
+                result: None,
+            })
+        }
+    }
 }
 
 #[derive(sqlx::Type, Debug)]
@@ -642,6 +770,7 @@ enum PgIntegrationConnectionStatus {
 pub struct IntegrationConnectionRow {
     id: Uuid,
     user_id: Uuid,
+    provider_user_id: Option<String>,
     connection_id: Uuid,
     status: PgIntegrationConnectionStatus,
     failure_message: Option<String>,
@@ -682,6 +811,7 @@ impl TryFrom<IntegrationConnectionRow> for IntegrationConnection {
         Ok(IntegrationConnection {
             id: row.id.into(),
             user_id: row.user_id.into(),
+            provider_user_id: row.provider_user_id,
             connection_id: row.connection_id.into(),
             status,
             failure_message: row.failure_message,

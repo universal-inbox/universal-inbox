@@ -134,6 +134,7 @@ fn NotificationDetailsPreview<'a>(cx: Scope, notification: &'a NotificationWithT
                 google_mail_thread: *google_mail_thread.clone()
             }
         },
+        NotificationMetadata::Slack(_) => None, // TODO
         NotificationMetadata::Todoist => None,
     }
 }

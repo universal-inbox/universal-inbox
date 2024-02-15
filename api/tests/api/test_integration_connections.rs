@@ -125,6 +125,8 @@ mod create_integration_connections {
 }
 
 mod verify_integration_connections {
+    use crate::helpers::integration_connection::nango_slack_connection;
+
     use super::*;
     use pretty_assertions::assert_eq;
 
@@ -181,6 +183,50 @@ mod verify_integration_connections {
         assert_eq!(result.status, IntegrationConnectionStatus::Validated);
         assert_eq!(result.failure_message, None);
         nango_mock.assert_hits(2);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_verify_valid_slack_integration_connection(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        nango_slack_connection: Box<NangoConnection>,
+    ) {
+        let app = authenticated_app.await;
+        let integration_connection: Box<IntegrationConnection> = create_resource(
+            &app.client,
+            &app.app.api_address,
+            "integration-connections",
+            Box::new(IntegrationConnectionCreation {
+                provider_kind: IntegrationProviderKind::Slack,
+            }),
+        )
+        .await;
+        let slack_config_key = settings
+            .integrations
+            .oauth2
+            .nango_provider_keys
+            .get(&IntegrationProviderKind::Slack)
+            .unwrap();
+        let nango_mock = mock_nango_connection_service(
+            &app.app.nango_mock_server,
+            &settings.integrations.oauth2.nango_secret_key,
+            &integration_connection.connection_id.to_string(),
+            slack_config_key,
+            nango_slack_connection.clone(),
+        );
+
+        let result: IntegrationConnection = verify_integration_connection(
+            &app.client,
+            &app.app.api_address,
+            integration_connection.id,
+        )
+        .await;
+
+        assert_eq!(result.status, IntegrationConnectionStatus::Validated);
+        assert_eq!(result.failure_message, None);
+        assert_eq!(result.provider_user_id, Some("U05XXX".to_string()));
+        nango_mock.assert();
     }
 
     #[rstest]
@@ -349,6 +395,7 @@ mod disconnect_integration_connections {
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             IntegrationConnectionStatus::Validated,
             None,
+            None,
         )
         .await;
         let github_config_key = settings
@@ -393,6 +440,7 @@ mod disconnect_integration_connections {
             app.user.id,
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             IntegrationConnectionStatus::Validated,
+            None,
             None,
         )
         .await;
@@ -470,6 +518,7 @@ mod update_integration_connection_config {
                     labels: vec![],
                 },
             )),
+            None,
         )
         .await;
         let integration_connection2 = create_integration_connection(
@@ -479,6 +528,7 @@ mod update_integration_connection_config {
                 sync_notifications_enabled: true,
             }),
             IntegrationConnectionStatus::Validated,
+            None,
             None,
         )
         .await;
@@ -566,6 +616,7 @@ mod update_integration_connection_config {
                 },
             }),
             IntegrationConnectionStatus::Validated,
+            None,
             None,
         )
         .await;

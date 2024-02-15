@@ -7,6 +7,7 @@ mod test_integration_connections;
 mod test_linear_notifications;
 mod test_misc;
 mod test_notifications;
+mod test_slack_webhook;
 mod test_sync_github_notifications;
 mod test_sync_google_mail_threads;
 mod test_sync_linear_notifications;

@@ -108,6 +108,7 @@ pub async fn create_integration_connection(
     config: IntegrationConnectionConfig,
     status: IntegrationConnectionStatus,
     context: Option<IntegrationConnectionContext>,
+    provider_user_id: Option<String>,
 ) -> Box<IntegrationConnection> {
     let mut transaction = app.repository.begin().await.unwrap();
     let integration_connection = app
@@ -118,6 +119,17 @@ pub async fn create_integration_connection(
         )
         .await
         .unwrap();
+
+    if let Some(provider_user_id) = provider_user_id {
+        app.repository
+            .update_integration_connection_provider_user_id(
+                &mut transaction,
+                integration_connection.id,
+                Some(provider_user_id),
+            )
+            .await
+            .unwrap();
+    }
 
     let _update_result = app
         .repository
@@ -218,6 +230,7 @@ pub async fn create_and_mock_integration_connection(
         config,
         IntegrationConnectionStatus::Validated,
         None,
+        nango_connection.get_provider_user_id(),
     )
     .await;
     let config_key = settings
@@ -250,6 +263,11 @@ pub fn nango_linear_connection() -> Box<NangoConnection> {
 #[fixture]
 pub fn nango_google_mail_connection() -> Box<NangoConnection> {
     load_json_fixture_file("/tests/api/fixtures/nango_google_mail_connection.json")
+}
+
+#[fixture]
+pub fn nango_slack_connection() -> Box<NangoConnection> {
+    load_json_fixture_file("/tests/api/fixtures/nango_slack_connection.json")
 }
 
 #[fixture]

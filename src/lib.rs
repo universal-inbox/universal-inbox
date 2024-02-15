@@ -16,6 +16,7 @@ pub mod integration_connection;
 pub mod notification;
 pub mod task;
 pub mod user;
+pub mod utils;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
 pub struct FrontConfig {
@@ -34,6 +35,7 @@ pub struct IntegrationProviderStaticConfig {
     pub warning_message: Option<String>,
     pub doc_for_actions: HashMap<String, String>,
     pub is_implemented: bool,
+    pub oauth_user_scopes: Vec<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]

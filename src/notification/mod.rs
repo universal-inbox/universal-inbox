@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
+use slack_morphism::prelude::SlackPushEventCallback;
 use url::Url;
 use uuid::Uuid;
 
@@ -25,7 +26,7 @@ pub mod integrations;
 pub mod service;
 
 #[serde_as]
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct Notification {
     pub id: NotificationId,
     pub title: String,
@@ -57,13 +58,19 @@ impl HasHtmlUrl for Notification {
                 NotificationMetadata::GoogleMail(google_mail_thread) => {
                     google_mail_thread.get_html_url_from_metadata()
                 }
+                NotificationMetadata::Slack(_) => {
+                    // TODO: it requires to call Slack API to get the message URL
+                    // See https://api.slack.com/methods/chat.getPermalink
+                    // Hardcoding it for now
+                    "https://slack.com".parse::<Url>().unwrap()
+                }
             }
         }
     }
 }
 
 #[serde_as]
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct NotificationWithTask {
     pub id: NotificationId,
     pub title: String,
@@ -93,8 +100,7 @@ impl HasHtmlUrl for NotificationWithTask {
 
 impl From<NotificationWithTask> for Notification {
     fn from(notification: NotificationWithTask) -> Self {
-        let user_id = notification.user_id;
-        notification.into_notification(user_id)
+        notification.into_notification()
     }
 }
 
@@ -119,7 +125,7 @@ impl NotificationWithTask {
         matches!(self.metadata, NotificationMetadata::Todoist)
     }
 
-    pub fn into_notification(self, user_id: UserId) -> Notification {
+    pub fn into_notification(self) -> Notification {
         Notification {
             id: self.id,
             title: self.title.clone(),
@@ -129,7 +135,7 @@ impl NotificationWithTask {
             updated_at: self.updated_at,
             last_read_at: self.last_read_at,
             snoozed_until: self.snoozed_until,
-            user_id,
+            user_id: self.user_id,
             details: self.details,
             task_id: self.task.as_ref().map(|task| task.id),
         }
@@ -137,13 +143,14 @@ impl NotificationWithTask {
 }
 
 // tag: New notification integration
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 #[serde(tag = "type", content = "content")]
 pub enum NotificationMetadata {
     Github(Box<GithubNotification>),
     Todoist,
     Linear(Box<LinearNotification>),
     GoogleMail(Box<GoogleMailThread>),
+    Slack(Box<SlackPushEventCallback>),
 }
 
 // tag: New notification integration
@@ -215,7 +222,8 @@ macro_attr! {
         Github,
         Todoist,
         Linear,
-        GoogleMail
+        GoogleMail,
+        Slack
     }
 }
 
@@ -228,6 +236,22 @@ impl TryFrom<IntegrationProviderKind> for NotificationSyncSourceKind {
             IntegrationProviderKind::Github => Ok(Self::Github),
             IntegrationProviderKind::Linear => Ok(Self::Linear),
             IntegrationProviderKind::GoogleMail => Ok(Self::GoogleMail),
+            _ => Err(()),
+        }
+    }
+}
+
+impl TryFrom<IntegrationProviderKind> for NotificationSourceKind {
+    type Error = ();
+
+    // tag: New notification integration
+    fn try_from(provider_kind: IntegrationProviderKind) -> Result<Self, Self::Error> {
+        match provider_kind {
+            IntegrationProviderKind::Github => Ok(Self::Github),
+            IntegrationProviderKind::Linear => Ok(Self::Linear),
+            IntegrationProviderKind::GoogleMail => Ok(Self::GoogleMail),
+            IntegrationProviderKind::Todoist => Ok(Self::Todoist),
+            IntegrationProviderKind::Slack => Ok(Self::Slack),
             _ => Err(()),
         }
     }

@@ -49,6 +49,19 @@ pub struct NangoConnectionCredentials {
     pub raw: Value,
 }
 
+impl NangoConnection {
+    pub fn get_provider_user_id(&self) -> Option<String> {
+        match self.provider_config_key.0.as_str() {
+            "slack" => Some(
+                self.credentials.raw["authed_user"]["id"]
+                    .as_str()?
+                    .to_string(),
+            ),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Hash, Default)]
 #[serde(transparent)]
 pub struct AccessToken(pub String);

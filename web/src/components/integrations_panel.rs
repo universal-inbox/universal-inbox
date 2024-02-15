@@ -28,6 +28,7 @@ use crate::components::{
         github::{config::GithubProviderConfiguration, icons::Github},
         google_mail::config::GoogleMailProviderConfiguration,
         linear::config::LinearProviderConfiguration,
+        slack::config::SlackProviderConfiguration,
         todoist::config::TodoistProviderConfiguration,
     },
 };
@@ -179,13 +180,24 @@ pub fn IntegrationSettings<'a>(
         IntegrationProviderKind::GoogleMail => render! { GoogleMail { class: "w-8 h-8" } },
         IntegrationProviderKind::Notion => render! { Notion { class: "w-8 h-8" } },
         IntegrationProviderKind::GoogleDocs => render! { GoogleDocs { class: "w-8 h-8" } },
-        IntegrationProviderKind::Slack => render! { Icon { class: "w-8 h-8", icon: BsSlack }},
+        IntegrationProviderKind::Slack => render! { Icon { class: "w-8 h-8", icon: BsSlack } },
         IntegrationProviderKind::Todoist => render! { Todoist { class: "w-8 h-8" } },
         IntegrationProviderKind::TickTick => render! { TickTick { class: "w-8 h-8" } },
     };
 
     let (connection_button_label, connection_button_style, sync_message, provider) =
         use_memo(cx, &connection.clone(), |connection| match connection {
+            Some(Some(IntegrationConnection {
+                status: IntegrationConnectionStatus::Validated,
+                provider: p @ IntegrationProvider::Slack { .. },
+                provider_user_id: Some(_),
+                ..
+            })) => (
+                "Disconnect",
+                "btn-success",
+                Some("🟢 Integration is ready to receive events from Slack".to_string()),
+                Some(p),
+            ),
             Some(Some(IntegrationConnection {
                 status: IntegrationConnectionStatus::Validated,
                 last_sync_started_at: Some(ref started_at),
@@ -423,6 +435,12 @@ pub fn IntegrationConnectionProviderConfiguration<'a>(
             LinearProviderConfiguration {
                 on_config_change: |c| on_config_change.call(c),
                 config: config.clone()
+            }
+        },
+        IntegrationProvider::Slack { config } => render! {
+            SlackProviderConfiguration {
+                on_config_change: |c| on_config_change.call(c),
+                config: config.clone(),
             }
         },
         _ => None,

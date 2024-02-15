@@ -1,0 +1,38 @@
+{
+  "id": 123,
+  "created_at": "2023-01-01T01:01:01.000Z",
+  "updated_at": "2023-01-01T01:01:01.000Z",
+  "deleted": false,
+  "environment_id": 1,
+  "provider_config_key": "slack",
+  "connection_id": "AC7218C6-A1DD-4A50-9A87-C7C768CAF91D",
+  "credentials": {
+    "type": "OAUTH2",
+    "access_token": "slack_test_access_token",
+    "expires_at": "2024-01-01T01:01:01.000Z",
+    "raw": {
+      "ok": true,
+      "app_id": "A04XXX",
+      "scope": "reminders:read",
+      "token_type": "bot",
+      "access_token": "slack_test_access_token",
+      "bot_user_id": "U06XXX",
+      "team": {
+        "id": "T05XXX",
+        "name": "Universal Inbox"
+      },
+      "authed_user": {
+        "id": "U05XXX",
+        "scope": "stars:read,stars:write",
+        "access_token": "slack_test_user_access_token",
+        "token_type": "user"
+      },
+      "scope": "public_repo,user"
+    }
+  },
+  "connection_config": {},
+  "metadata": {},
+  "credentials_iv": {},
+  "credentials_tag": {}
+}
+

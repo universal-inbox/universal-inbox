@@ -150,6 +150,7 @@ pub struct IntegrationsSettings {
     pub github: GithubIntegrationSettings,
     pub linear: DefaultIntegrationSettings,
     pub google_mail: GoogleMailIntegrationSettings,
+    pub slack: SlackIntegrationSettings,
     pub todoist: DefaultIntegrationSettings,
 }
 
@@ -176,6 +177,13 @@ pub struct GoogleMailIntegrationSettings {
     pub page_size: usize,
     pub doc: String,
     pub warning_message: Option<String>,
+    pub doc_for_actions: HashMap<String, String>,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct SlackIntegrationSettings {
+    pub name: String,
+    pub doc: String,
     pub doc_for_actions: HashMap<String, String>,
 }
 

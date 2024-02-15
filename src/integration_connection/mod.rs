@@ -22,6 +22,7 @@ pub mod provider;
 pub struct IntegrationConnection {
     pub id: IntegrationConnectionId,
     pub user_id: UserId,
+    pub provider_user_id: Option<String>,
     pub connection_id: ConnectionId,
     pub status: IntegrationConnectionStatus,
     pub failure_message: Option<String>,
@@ -38,6 +39,7 @@ impl IntegrationConnection {
             id: Uuid::new_v4().into(),
             connection_id: Uuid::new_v4().into(),
             user_id,
+            provider_user_id: None,
             status: IntegrationConnectionStatus::Created,
             failure_message: None,
             created_at: Utc::now().with_nanosecond(0).unwrap(),

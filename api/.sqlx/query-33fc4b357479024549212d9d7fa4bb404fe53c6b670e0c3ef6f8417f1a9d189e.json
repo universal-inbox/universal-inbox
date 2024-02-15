@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT\n                  integration_connection.id,\n                  integration_connection.user_id,\n                  integration_connection.connection_id,\n                  integration_connection.status as \"status: _\",\n                  integration_connection.failure_message,\n                  integration_connection.created_at,\n                  integration_connection.updated_at,\n                  integration_connection.last_sync_started_at,\n                  integration_connection.last_sync_failure_message,\n                  integration_connection_config.config as \"config: Json<IntegrationConnectionConfig>\",\n                  integration_connection.context as \"context: Json<IntegrationConnectionContext>\"\n                FROM integration_connection\n                INNER JOIN integration_connection_config\n                  ON integration_connection.id = integration_connection_config.integration_connection_id\n                WHERE user_id = $1\n            ",
+  "query": "\n                SELECT\n                  integration_connection.id,\n                  integration_connection.user_id,\n                  integration_connection.provider_user_id,\n                  integration_connection.connection_id,\n                  integration_connection.status as \"status: _\",\n                  integration_connection.failure_message,\n                  integration_connection.created_at,\n                  integration_connection.updated_at,\n                  integration_connection.last_sync_started_at,\n                  integration_connection.last_sync_failure_message,\n                  integration_connection_config.config as \"config: Json<IntegrationConnectionConfig>\",\n                  integration_connection.context as \"context: Json<IntegrationConnectionContext>\"\n                FROM integration_connection\n                INNER JOIN integration_connection_config\n                  ON integration_connection.id = integration_connection_config.integration_connection_id\n                WHERE integration_connection.id = $1\n            ",
   "describe": {
     "columns": [
       {
@@ -15,11 +15,16 @@
       },
       {
         "ordinal": 2,
+        "name": "provider_user_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
         "name": "connection_id",
         "type_info": "Uuid"
       },
       {
-        "ordinal": 3,
+        "ordinal": 4,
         "name": "status: _",
         "type_info": {
           "Custom": {
@@ -35,37 +40,37 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "failure_message",
         "type_info": "Text"
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "created_at",
         "type_info": "Timestamp"
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "updated_at",
         "type_info": "Timestamp"
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "last_sync_started_at",
         "type_info": "Timestamp"
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "last_sync_failure_message",
         "type_info": "Text"
       },
       {
-        "ordinal": 9,
+        "ordinal": 10,
         "name": "config: Json<IntegrationConnectionConfig>",
         "type_info": "Json"
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "context: Json<IntegrationConnectionContext>",
         "type_info": "Json"
       }
@@ -78,6 +83,7 @@
     "nullable": [
       false,
       false,
+      true,
       false,
       false,
       true,
@@ -89,5 +95,5 @@
       true
     ]
   },
-  "hash": "0656d95af27ca7f93365f3f9c3f6f58defa654ac401d192ed4acc3393de6bc50"
+  "hash": "33fc4b357479024549212d9d7fa4bb404fe53c6b670e0c3ef6f8417f1a9d189e"
 }

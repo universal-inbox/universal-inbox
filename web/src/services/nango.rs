@@ -12,6 +12,7 @@ extern "C" {
         public_key: &str,
         config_key: &str,
         connection_id: &str,
+        oauth_user_scopes: Vec<String>,
     ) -> Result<JsValue, JsValue>;
 }
 
@@ -27,12 +28,14 @@ pub async fn nango_auth(
     nango_public_key: &NangoPublicKey,
     nango_provider_key: &NangoProviderKey,
     nango_connection_id: &ConnectionId,
+    oauth_user_scopes: Vec<String>,
 ) -> Result<NangoAuthResult> {
     let result = auth_provider(
         nango_base_url.as_ref(),
         nango_public_key.to_string().as_str(),
         nango_provider_key.to_string().as_str(),
         nango_connection_id.to_string().as_str(),
+        oauth_user_scopes,
     )
     .await
     .map_err(|err| anyhow!("Failed to authorize integration: {:?}", err))?;

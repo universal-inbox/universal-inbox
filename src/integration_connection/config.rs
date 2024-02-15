@@ -4,7 +4,7 @@ use crate::{
     integration_connection::{
         integrations::{
             github::GithubConfig, google_mail::GoogleMailConfig, linear::LinearConfig,
-            todoist::TodoistConfig,
+            slack::SlackConfig, todoist::TodoistConfig,
         },
         provider::IntegrationProviderKind,
     },
@@ -21,7 +21,7 @@ pub enum IntegrationConnectionConfig {
     Github(GithubConfig),
     Notion,
     GoogleDocs,
-    Slack,
+    Slack(SlackConfig),
     TickTick,
 }
 
@@ -34,7 +34,7 @@ impl IntegrationConnectionConfig {
             Self::Github(_) => IntegrationProviderKind::Github,
             Self::Notion => IntegrationProviderKind::Notion,
             Self::GoogleDocs => IntegrationProviderKind::GoogleDocs,
-            Self::Slack => IntegrationProviderKind::Slack,
+            Self::Slack(_) => IntegrationProviderKind::Slack,
             Self::TickTick => IntegrationProviderKind::TickTick,
         }
     }
@@ -47,7 +47,7 @@ impl IntegrationConnectionConfig {
             Self::Github(_) => Some(NotificationSourceKind::Github),
             Self::Notion => None,
             Self::GoogleDocs => None,
-            Self::Slack => None,
+            Self::Slack(_) => Some(NotificationSourceKind::Slack),
             Self::TickTick => None,
         }
     }

@@ -318,7 +318,7 @@ pub trait TaskSource: IntegrationProviderSource {
     fn get_task_source_kind(&self) -> TaskSourceKind;
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct TaskCreationResult {
     pub task: Task,
     pub notification: Option<Notification>,

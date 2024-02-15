@@ -30,7 +30,7 @@ test-coverage:
 
 ## Run recipes
 run:
-    watchexec --stop-timeout 5 --debounce 500 --exts toml,rs --restart --watch src cargo run -- serve
+    watchexec --stop-timeout 5 --debounce 500 --exts toml,rs --restart --watch src cargo run --color always -- serve
 
 sync-tasks $RUST_LOG="info":
     cargo run -- sync-tasks

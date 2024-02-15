@@ -37,7 +37,7 @@ pub struct NotificationService {
     linear_service: LinearService,
     google_mail_service: Arc<RwLock<GoogleMailService>>,
     task_service: Weak<RwLock<TaskService>>,
-    integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
+    pub integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     user_service: Arc<RwLock<UserService>>,
     min_sync_notifications_interval_in_minutes: i64,
 }
@@ -288,7 +288,6 @@ impl NotificationService {
                         source_notifications,
                         false,
                         notification_source_service.is_supporting_snoozed_notifications(),
-                        user_id,
                     )
                     .await?;
 
@@ -377,8 +376,14 @@ impl NotificationService {
         source_notifications: Vec<Notification>,
         is_incremental_update: bool,
         update_snoozed_until: bool,
-        user_id: UserId,
     ) -> Result<Vec<UpsertStatus<Box<Notification>>>, UniversalInboxError> {
+        let Some(user_id) = source_notifications
+            .first()
+            .map(|notification| notification.user_id)
+        else {
+            return Ok(vec![]);
+        };
+
         let mut upsert_notifications: Vec<UpsertStatus<Box<Notification>>> = vec![];
         for notification in source_notifications {
             let upsert_notification = self
@@ -591,6 +596,9 @@ impl NotificationService {
                             for_user_id,
                         )
                         .await?
+                    }
+                    NotificationMetadata::Slack(_) => {
+                        // TODO: Implement side effects for Slack notifications
                     }
                     NotificationMetadata::Todoist => {
                         if let Some(NotificationStatus::Deleted) = patch.status {

@@ -33,7 +33,6 @@ color-backtrace = "0.6"
 config = "0.14.0"
 csp = "2.0.0"
 email_address = { workspace = true }
-emojis = "0.6.0"
 enum_derive = { workspace = true }
 enum-display = "0.1.0"
 format_serde_error = "0.3.0"
@@ -70,6 +69,7 @@ secrecy = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true, features = ["unbounded_depth"] }
 serde_with = { workspace = true }
+slack-morphism = { workspace = true }
 sqlx = { version = "0.7.0", default-features = false, features = [
   "runtime-tokio-rustls",
   "macros",

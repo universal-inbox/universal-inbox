@@ -470,6 +470,7 @@ async fn test_sync_all_notifications_with_no_validated_integration_connections(
         IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         IntegrationConnectionStatus::Created,
         None,
+        None,
     )
     .await;
 

@@ -296,7 +296,6 @@ impl TaskService {
                                     .collect(),
                                 true,
                                 task_source_service.is_supporting_snoozed_notifications(),
-                                user_id,
                             )
                             .await?;
 
