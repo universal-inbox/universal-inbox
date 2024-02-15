@@ -7,6 +7,7 @@ use crate::integration_connection::{
         github::GithubConfig,
         google_mail::{GoogleMailConfig, GoogleMailContext},
         linear::LinearConfig,
+        slack::SlackConfig,
         todoist::{TodoistConfig, TodoistContext},
     },
 };
@@ -26,7 +27,9 @@ pub enum IntegrationProvider {
     },
     Notion,
     GoogleDocs,
-    Slack,
+    Slack {
+        config: SlackConfig,
+    },
     Todoist {
         context: Option<TodoistContext>,
         config: TodoistConfig,
@@ -56,7 +59,7 @@ impl IntegrationProvider {
             }),
             IntegrationConnectionConfig::Notion => Ok(Self::Notion),
             IntegrationConnectionConfig::GoogleDocs => Ok(Self::GoogleDocs),
-            IntegrationConnectionConfig::Slack => Ok(Self::Slack),
+            IntegrationConnectionConfig::Slack(config) => Ok(Self::Slack { config }),
             IntegrationConnectionConfig::Todoist(config) => Ok(Self::Todoist {
                 context: context
                     .map(|c| {
@@ -88,7 +91,7 @@ impl IntegrationProvider {
             IntegrationProvider::GoogleMail { .. } => IntegrationProviderKind::GoogleMail,
             IntegrationProvider::Notion => IntegrationProviderKind::Notion,
             IntegrationProvider::GoogleDocs => IntegrationProviderKind::GoogleDocs,
-            IntegrationProvider::Slack => IntegrationProviderKind::Slack,
+            IntegrationProvider::Slack { .. } => IntegrationProviderKind::Slack,
             IntegrationProvider::Todoist { .. } => IntegrationProviderKind::Todoist,
             IntegrationProvider::TickTick => IntegrationProviderKind::TickTick,
         }
@@ -110,7 +113,9 @@ impl IntegrationProvider {
             }
             IntegrationProvider::Notion => IntegrationConnectionConfig::Notion,
             IntegrationProvider::GoogleDocs => IntegrationConnectionConfig::GoogleDocs,
-            IntegrationProvider::Slack => IntegrationConnectionConfig::Slack,
+            IntegrationProvider::Slack { config } => {
+                IntegrationConnectionConfig::Slack(config.clone())
+            }
             IntegrationProvider::TickTick => IntegrationConnectionConfig::TickTick,
         }
     }
@@ -120,6 +125,7 @@ impl IntegrationProvider {
             IntegrationProvider::Github { config } => config.sync_notifications_enabled,
             IntegrationProvider::Linear { config } => config.sync_notifications_enabled,
             IntegrationProvider::GoogleMail { config, .. } => config.sync_notifications_enabled,
+            IntegrationProvider::Slack { config } => config.sync_stars_as_notifications,
             _ => false,
         }
     }
@@ -195,7 +201,9 @@ impl IntegrationProviderKind {
             }
             IntegrationProviderKind::Notion => IntegrationConnectionConfig::Notion,
             IntegrationProviderKind::GoogleDocs => IntegrationConnectionConfig::GoogleDocs,
-            IntegrationProviderKind::Slack => IntegrationConnectionConfig::Slack,
+            IntegrationProviderKind::Slack => {
+                IntegrationConnectionConfig::Slack(Default::default())
+            }
             IntegrationProviderKind::Todoist => {
                 IntegrationConnectionConfig::Todoist(Default::default())
             }

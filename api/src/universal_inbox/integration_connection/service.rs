@@ -131,52 +131,64 @@ impl IntegrationConnectionService {
         integration_connection_id: IntegrationConnectionId,
         for_user_id: UserId,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
-        if let Some(integration_connection) = self
+        let Some(integration_connection) = self
             .repository
             .get_integration_connection(executor, integration_connection_id)
             .await?
-        {
-            if integration_connection.user_id != for_user_id {
-                return Err(UniversalInboxError::Forbidden(format!("Only the owner of the integration connection {integration_connection_id} can verify it")));
-            }
+        else {
+            return Ok(UpdateStatus {
+                updated: false,
+                result: None,
+            });
+        };
 
-            let provider_kind = integration_connection.provider.kind();
-            let provider_config_key =
-                self.nango_provider_keys
-                    .get(&provider_kind)
-                    .context(format!(
-                        "No Nango provider config key found for {provider_kind}"
-                    ))?;
+        if integration_connection.user_id != for_user_id {
+            return Err(UniversalInboxError::Forbidden(format!("Only the owner of the integration connection {integration_connection_id} can verify it")));
+        }
 
-            let nango_connection_exists = self
-                .nango_service
-                .get_connection(integration_connection.connection_id, provider_config_key)
-                .await?
-                .is_some();
-            let new_status = if nango_connection_exists {
-                IntegrationConnectionStatus::Validated
-            } else {
-                IntegrationConnectionStatus::Failing
-            };
-            let failure_message = (!nango_connection_exists)
-                .then(|| UNKNOWN_NANGO_CONNECTION_ERROR_MESSAGE.to_string());
+        let provider_kind = integration_connection.provider.kind();
+        let provider_config_key = self
+            .nango_provider_keys
+            .get(&provider_kind)
+            .context(format!(
+                "No Nango provider config key found for {provider_kind}"
+            ))?;
 
+        let nango_connection = self
+            .nango_service
+            .get_connection(integration_connection.connection_id, provider_config_key)
+            .await?;
+        let Some(nango_connection) = nango_connection else {
             return self
                 .repository
                 .update_integration_connection_status(
                     executor,
                     integration_connection_id,
-                    new_status,
-                    failure_message,
+                    IntegrationConnectionStatus::Failing,
+                    Some(UNKNOWN_NANGO_CONNECTION_ERROR_MESSAGE.to_string()),
                     for_user_id,
                 )
                 .await;
-        }
+        };
 
-        Ok(UpdateStatus {
-            updated: false,
-            result: None,
-        })
+        if let Some(provider_user_id) = nango_connection.get_provider_user_id() {
+            self.repository
+                .update_integration_connection_provider_user_id(
+                    executor,
+                    integration_connection_id,
+                    Some(provider_user_id),
+                )
+                .await?;
+        }
+        self.repository
+            .update_integration_connection_status(
+                executor,
+                integration_connection_id,
+                IntegrationConnectionStatus::Validated,
+                None,
+                for_user_id,
+            )
+            .await
     }
 
     #[tracing::instrument(level = "debug", skip(self, executor), err)]
@@ -258,6 +270,7 @@ impl IntegrationConnectionService {
                 .get_connection(integration_connection.connection_id, provider_config_key)
                 .await?
             {
+                // TODO For Slack, we want the access token in raw["authed_user"]["access_token"]
                 return Ok(Some((
                     nango_connection.credentials.access_token,
                     integration_connection,
@@ -315,6 +328,22 @@ impl IntegrationConnectionService {
                 executor,
                 integration_connection_id,
                 Some(context),
+            )
+            .await
+    }
+
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    pub async fn get_integration_connection_per_provider_user_id<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        integration_provider_kind: IntegrationProviderKind,
+        provider_user_id: String,
+    ) -> Result<Option<IntegrationConnection>, UniversalInboxError> {
+        self.repository
+            .get_integration_connection_per_provider_user_id(
+                executor,
+                integration_provider_kind,
+                provider_user_id,
             )
             .await
     }

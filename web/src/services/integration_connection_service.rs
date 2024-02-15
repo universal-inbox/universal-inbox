@@ -304,6 +304,7 @@ async fn authenticate_integration_connection(
         &nango_public_key,
         &provider_config.nango_config_key,
         &integration_connection.connection_id,
+        provider_config.oauth_user_scopes.clone(),
     )
     .await?;
 

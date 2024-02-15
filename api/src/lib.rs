@@ -123,6 +123,7 @@ pub async fn run(
             .service(routes::notification::scope())
             .service(routes::task::scope())
             .service(routes::user::scope())
+            .service(routes::webhook::scope())
             .app_data(web::Data::new(notification_service.clone()))
             .app_data(web::Data::new(task_service.clone()))
             .app_data(web::Data::new(user_service.clone()))
@@ -292,6 +293,7 @@ pub async fn build_services(
         )
         .expect("Failed to create new GoogleMailService"),
     ));
+    // TODO: Add Slack service
 
     // tag: New notification integration
     let notification_service = Arc::new(RwLock::new(NotificationService::new(

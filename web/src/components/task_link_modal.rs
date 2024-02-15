@@ -1,7 +1,10 @@
 use log::error;
 
 use dioxus::prelude::*;
-use dioxus_free_icons::{icons::bs_icons::BsX, Icon};
+use dioxus_free_icons::{
+    icons::bs_icons::{BsSlack, BsX},
+    Icon,
+};
 use fermi::UseAtomRef;
 use gloo_timers::future::TimeoutFuture;
 use reqwest::Method;
@@ -40,6 +43,7 @@ pub fn TaskLinkModal<'a>(
         NotificationMetadata::Linear(_) => render! { Linear { class: "h-5 w-5" } },
         NotificationMetadata::GoogleMail(_) => render! { GoogleMail { class: "h-5 w-5" } },
         NotificationMetadata::Todoist => render! { Todoist { class: "h-5 w-5" } },
+        NotificationMetadata::Slack(_) => render! { Icon { class: "w-5 h-5", icon: BsSlack } },
     };
     let selected_task: &UseState<Option<TaskSummary>> = use_state(cx, || None);
     let search_expression = use_state(cx, || "".to_string());

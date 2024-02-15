@@ -190,6 +190,9 @@ pub fn IntegrationConnectionStatus(cx: Scope, connection: IntegrationConnection)
         IntegrationProviderKind::GoogleMail => Some(render! {
             GoogleMail { class: "w-4 h-4 {connection_style}" }
         }),
+        IntegrationProviderKind::Slack => Some(render! {
+            Icon { class: "w-4 h-4 {connection_style}", icon: BsPlug }
+        }),
         _ => None,
     };
 

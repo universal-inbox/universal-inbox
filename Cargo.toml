@@ -21,6 +21,7 @@ anyhow = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
 clap = { workspace = true }
 email_address = { workspace = true }
+emojis = "0.6.0"
 enum_derive = { workspace = true }
 git-url-parse = "0.4.0"
 http = { workspace = true }
@@ -33,6 +34,7 @@ serde_json = { workspace = true, features = ["preserve_order"] }
 serde_repr = "0.1.0"
 serde_urlencoded = { workspace = true }
 serde_with = { workspace = true }
+slack-morphism = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true, features = ["serde"] }
 validator = { workspace = true }
@@ -60,6 +62,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 serde_urlencoded = { version = "0.7.0" }
 serde_with = { version = "2.3.0" }
+slack-morphism = { git = "https://github.com/dax/slack-morphism-rust", rev = "411bf378992232aefac1daf676ad34606bc8d383" }
 thiserror = { version = "1.0" }
 url = { version = "2.5.0" }
 uuid = { version = "1.0", features = ["v4"] }

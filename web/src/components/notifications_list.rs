@@ -5,7 +5,7 @@ use dioxus::{events::MouseEvent, prelude::*};
 use dioxus_free_icons::{
     icons::bs_icons::{
         BsBellSlash, BsBookmarkCheck, BsCalendar2Check, BsCheck2, BsClockHistory, BsLink45deg,
-        BsTrash,
+        BsSlack, BsTrash,
     },
     Icon,
 };
@@ -254,6 +254,7 @@ fn NotificationDisplay<'a>(
         NotificationMetadata::Linear(_) => render! { Linear { class: "h-5 w-5" } },
         NotificationMetadata::GoogleMail(_) => render! { GoogleMail { class: "h-5 w-5" } },
         NotificationMetadata::Todoist => render! { Todoist { class: "h-5 w-5" } },
+        NotificationMetadata::Slack(_) => render! { Icon { class: "h-5 w-5", icon: BsSlack } },
     };
     // tag: New notification integration
     let notification_display = match &notif.metadata {
@@ -274,6 +275,9 @@ fn NotificationDisplay<'a>(
                 notif: notif,
                 google_mail_thread: *google_mail_thread.clone()
             }
+        },
+        NotificationMetadata::Slack(_) => render! {
+            DefaultNotificationDisplay { notif: notif }, // TODO
         },
         NotificationMetadata::Todoist => {
             if let Some(task) = &notif.task {
@@ -482,5 +486,6 @@ pub fn NotificationDetailsDisplay<'a>(
             GoogleMailNotificationDetailsDisplay { google_mail_thread: google_mail_thread }
         },
         NotificationMetadata::Github(_) => None,
+        NotificationMetadata::Slack(_) => None, // TODO
     }
 }

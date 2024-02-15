@@ -5,6 +5,7 @@ pub mod integration_connection;
 pub mod notification;
 pub mod task;
 pub mod user;
+pub mod webhook;
 
 use actix_http::{body::BoxBody, header::TryIntoHeaderValue, StatusCode};
 use actix_web::{

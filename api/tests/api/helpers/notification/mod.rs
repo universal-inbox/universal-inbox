@@ -19,6 +19,7 @@ use crate::helpers::auth::AuthenticatedApp;
 pub mod github;
 pub mod google_mail;
 pub mod linear;
+pub mod slack;
 
 pub async fn list_notifications_response(
     client: &Client,

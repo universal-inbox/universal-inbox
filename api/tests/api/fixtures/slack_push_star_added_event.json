@@ -1,0 +1,52 @@
+{
+  "type": "event_callback",
+  "team_id": "T05XXX",
+  "api_app_id": "A05XXX",
+  "event": {
+    "type": "star_added",
+    "user": "U05XXX",
+    "item": {
+      "type": "message",
+      "message": {
+        "ts": "1707686216.825719",
+        "client_msg_id": "4b5a82e0-e533-41fb-a4f3-9b99cf5f0021",
+        "text": ":wave: Bonjour à tous !",
+        "blocks": [
+          {
+            "type": "rich_text",
+            "block_id": "EAr/U",
+            "elements": [
+              {
+                "type": "rich_text_section",
+                "elements": [
+                  {
+                    "type": "emoji",
+                    "name": "wave",
+                    "unicode": "1f44b"
+                  },
+                  {
+                    "type": "text",
+                    "text": " Bonjour à tous !"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "user": "U05YYY"
+      },
+      "channel": "C05XXX",
+      "date_create": 1707743384
+    },
+    "event_ts": "1707743384.739427"
+  },
+  "event_id": "Ev06JEA7VCUC",
+  "event_time": 1707743384,
+  "authorizations": [
+    {
+      "team_id": "T05XXX",
+      "user_id": "U05XXX",
+      "is_bot": false
+    }
+  ]
+}

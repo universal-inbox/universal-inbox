@@ -142,7 +142,7 @@
       }
     },
     "darwin.apple_sdk.frameworks.Foundation": {
-      "resolved": "github:NixOS/nixpkgs/57695599bdc4f7bfe5d28cfa23f14b3d8bdf8a5f#darwin.apple_sdk.frameworks.Foundation",
+      "resolved": "github:NixOS/nixpkgs/75a52265bda7fd25e06e3a67dee3f0354e73243c#darwin.apple_sdk.frameworks.Foundation",
       "source": "nixpkg"
     },
     "fzf@latest": {

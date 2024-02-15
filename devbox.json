@@ -38,5 +38,8 @@
       "rustup component list --installed | grep -q '^rust-analyzer-' || rustup component add rust-analyzer",
       "rustup component list --installed | grep -q '^llvm-tools-' || rustup component add llvm-tools-preview"
     ]
+  },
+  "env": {
+    "TARGET_CC": "cc"
   }
 }

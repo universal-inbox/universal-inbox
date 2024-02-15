@@ -1,15 +1,17 @@
 use anyhow::Context;
-
-use universal_inbox::notification::integrations::linear::{
-    LinearComment, LinearIssue, LinearLabel, LinearNotification, LinearOrganization, LinearProject,
-    LinearProjectMilestone, LinearProjectUpdate, LinearProjectUpdateHealthType, LinearTeam,
-    LinearUser, LinearWorkflowState,
-};
 use uuid::Uuid;
+
+use universal_inbox::{
+    notification::integrations::linear::{
+        LinearComment, LinearIssue, LinearLabel, LinearNotification, LinearOrganization,
+        LinearProject, LinearProjectMilestone, LinearProjectUpdate, LinearProjectUpdateHealthType,
+        LinearTeam, LinearUser, LinearWorkflowState,
+    },
+    utils::emoji::replace_emoji_code_with_emoji,
+};
 
 use crate::{
     integrations::linear::graphql::notifications_query, universal_inbox::UniversalInboxError,
-    utils::emoji::replace_emoji_code_with_emoji,
 };
 
 impl TryFrom<notifications_query::NotificationsQueryNotificationsNodesOnIssueNotificationIssueTeam>

@@ -133,6 +133,15 @@ delete = "The Todoist task will be deleted."
 complete = "The task associated with the notification (or the task from the Todoist inbox) will be marked as complete."
 snooze = "The Todoist task will not be modified. The notification in Universal Inbox will only reappear the next day."
 
+[integrations.slack]
+name = "Slack"
+doc = "Slack notifications are synchronized 1 for 1 with Universal Inbox notifications."
+
+[integrations.slack.doc_for_actions]
+delete = "The Slack notification will be deleted."
+unsubscribe = "Unsubscribe from the Slack notification."
+snooze = "The Slack notification will be snoozed and will only reappear the next day."
+
 [integrations.oauth2]
 nango_base_url = "http://localhost:3003"
 # nango_public_key = "get it from Nango/project-settings page"
@@ -145,3 +154,4 @@ Github = "github"
 Linear = "linear"
 GoogleMail = "google-mail"
 Todoist = "todoist"
+Slack = "slack"
