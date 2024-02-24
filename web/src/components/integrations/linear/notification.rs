@@ -23,10 +23,10 @@ pub fn LinearNotificationDisplay<'a>(
 ) -> Element {
     let type_icon = match linear_notification {
         LinearNotification::IssueNotification { issue, .. } => render! {
-            LinearIssueIcon { class: "h-5 w-5", linear_issue: issue }
+            LinearIssueIcon { class: "h-5 w-5 min-w-5", linear_issue: issue }
         },
         LinearNotification::ProjectNotification { project, .. } => render! {
-            LinearProjectIcon { class: "h-5 w-5", linear_project: project }
+            LinearProjectIcon { class: "h-5 w-5 min-w-5", linear_project: project }
         },
     };
 

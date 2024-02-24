@@ -46,7 +46,7 @@ pub fn GoogleMailThreadDisplay<'a>(
         div {
             class: "flex items-center gap-2",
 
-            Mail { class: "h-5 w-5 {mail_icon_style}" }
+            Mail { class: "h-5 w-5 min-w-5 {mail_icon_style}" }
 
             div {
                 class: "flex flex-col grow",
