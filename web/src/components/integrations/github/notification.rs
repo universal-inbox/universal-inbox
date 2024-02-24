@@ -29,7 +29,7 @@ pub fn GithubNotificationDisplay<'a>(
             class: "flex items-center gap-2",
 
             GithubNotificationIcon {
-                class: "h-5 w-5",
+                class: "h-5 w-5 min-w-5",
                 notif: notif,
                 github_notification: github_notification
             }

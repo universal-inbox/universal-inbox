@@ -354,7 +354,7 @@ fn DefaultNotificationDisplay<'a>(cx: Scope, notif: &'a NotificationWithTask) ->
         div {
             class: "flex items-center gap-2",
 
-            div { class: "flex flex-col h-5 w-5" }
+            div { class: "flex flex-col h-5 w-5 min-w-5" }
 
             div {
                 class: "flex flex-col grow",

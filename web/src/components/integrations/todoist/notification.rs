@@ -31,7 +31,7 @@ pub fn TodoistNotificationDisplay<'a>(
         div {
             class: "flex items-center gap-2",
 
-            Icon { class: "h-5 w-5 {task_icon_style}", icon: BsCardChecklist }
+            Icon { class: "h-5 w-5 min-w-5 {task_icon_style}", icon: BsCardChecklist }
 
             div {
                 class: "flex flex-col grow",
