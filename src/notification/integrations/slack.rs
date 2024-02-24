@@ -1,11 +1,13 @@
 use anyhow::{anyhow, Result};
+use serde::{Deserialize, Serialize};
+use serde_with::serde_as;
 use slack_morphism::prelude::*;
 use uuid::Uuid;
 
 use crate::{
     notification::{Notification, NotificationMetadata, NotificationStatus},
     user::UserId,
-    utils::emoji::replace_emoji_code_in_string_with_emoji,
+    utils::{emoji::replace_emoji_code_in_string_with_emoji, truncate::truncate_with_ellipse},
 };
 
 pub trait SlackPushEventCallbackExt {
@@ -63,10 +65,12 @@ impl SlackPushEventCallbackExt for SlackPushEventCallback {
             ),
             _ => return Err(anyhow!("Unsupported Slack event {self:?}")),
         };
+        let title_with_emojis = replace_emoji_code_in_string_with_emoji(&title);
+        let title = truncate_with_ellipse(&title_with_emojis, 50, "...");
 
         Ok(Notification {
             id: Uuid::new_v4().into(),
-            title: replace_emoji_code_in_string_with_emoji(&title),
+            title,
             source_id,
             status,
             metadata: NotificationMetadata::Slack(Box::new(self.clone())),
@@ -78,4 +82,53 @@ impl SlackPushEventCallbackExt for SlackPushEventCallback {
             task_id: None,
         })
     }
+}
+
+#[serde_as]
+#[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
+pub struct SlackMessageDetails {
+    message: SlackHistoryMessage,
+    channel: SlackChannelInfo,
+    user: SlackUser,
+    team: SlackTeamInfo,
+}
+
+#[serde_as]
+#[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
+pub struct SlackFileDetails {
+    file: SlackFile,
+    channel: SlackChannelInfo,
+    user: SlackUser,
+    team: SlackTeamInfo,
+}
+
+#[serde_as]
+#[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
+pub struct SlackFileCommentDetails {
+    file: SlackFile,
+    comment: String,
+    channel: SlackChannelInfo,
+    user: SlackUser,
+    team: SlackTeamInfo,
+}
+
+#[serde_as]
+#[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
+pub struct SlackChannelDetails {
+    channel: SlackChannelInfo,
+    team: SlackTeamInfo,
+}
+
+#[serde_as]
+#[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
+pub struct SlackImDetails {
+    channel: SlackChannelInfo,
+    team: SlackTeamInfo,
+}
+
+#[serde_as]
+#[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
+pub struct SlackGroupDetails {
+    channel: SlackChannelInfo,
+    team: SlackTeamInfo,
 }
