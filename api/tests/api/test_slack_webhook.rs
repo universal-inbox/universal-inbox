@@ -175,7 +175,7 @@ async fn test_receive_star_added_event(
 
     assert_eq!(notifications.len(), 1);
     assert_eq!(notifications[0].source_id, "1707686216.825719");
-    assert_eq!(notifications[0].title, "👋 Bonjour à tous !");
+    assert_eq!(notifications[0].title, "🔴  *Test title* 🔴...");
     assert!(notifications[0].last_read_at.is_none());
     assert!(notifications[0].task_id.is_none());
     assert!(notifications[0].snoozed_until.is_none());
@@ -293,7 +293,7 @@ async fn test_receive_star_removed_event(
     assert_eq!(notifications.len(), 1);
     assert_eq!(notifications[0].id, star_added_notification_id);
     assert_eq!(notifications[0].source_id, "1707686216.825719");
-    assert_eq!(notifications[0].title, "👋 Bonjour à tous !");
+    assert_eq!(notifications[0].title, "🔴  *Test title* 🔴...");
     assert!(notifications[0].last_read_at.is_none());
     assert!(notifications[0].task_id.is_none());
     assert!(notifications[0].snoozed_until.is_none());

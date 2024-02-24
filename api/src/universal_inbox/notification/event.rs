@@ -60,7 +60,7 @@ impl NotificationEventService<SlackPushEventCallback> for NotificationService {
             executor,
             NotificationSourceKind::Slack,
             vec![notification],
-            false,
+            true,
             false,
         )
         .await
