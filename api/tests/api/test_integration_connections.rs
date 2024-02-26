@@ -33,7 +33,7 @@ use crate::helpers::{
     },
     notification::{google_mail::google_mail_thread_get_123, list_notifications},
     rest::{create_resource, delete_resource},
-    settings, tested_app, TestedApp,
+    settings,
 };
 
 mod list_integration_connections {
@@ -53,10 +53,7 @@ mod list_integration_connections {
 
     #[rstest]
     #[tokio::test]
-    async fn test_list_integration_connections(
-        #[future] tested_app: TestedApp,
-        #[future] authenticated_app: AuthenticatedApp,
-    ) {
+    async fn test_list_integration_connections(#[future] authenticated_app: AuthenticatedApp) {
         let app = authenticated_app.await;
         let integration_connection1: Box<IntegrationConnection> = create_resource(
             &app.client,
@@ -85,8 +82,9 @@ mod list_integration_connections {
 
         // Test listing notifications of another user
         let (client, _user) =
-            authenticate_user(&tested_app.await, "5678", "Jane", "Doe", "jane@example.com").await;
+            authenticate_user(&app.app, "5678", "Jane", "Doe", "jane@example.com").await;
 
+        println!("User: {:?}", _user);
         let result = list_integration_connections(&client, &app.app.api_address).await;
 
         assert_eq!(result.len(), 0);
@@ -349,7 +347,6 @@ mod verify_integration_connections {
     #[rstest]
     #[tokio::test]
     async fn test_verify_integration_connection_of_another_user(
-        #[future] tested_app: TestedApp,
         #[future] authenticated_app: AuthenticatedApp,
     ) {
         let app = authenticated_app.await;
@@ -364,7 +361,7 @@ mod verify_integration_connections {
         .await;
 
         let (client, _user) =
-            authenticate_user(&tested_app.await, "5678", "Jane", "Doe", "jane@example.com").await;
+            authenticate_user(&app.app, "5678", "Jane", "Doe", "jane@example.com").await;
         let response = verify_integration_connection_response(
             &client,
             &app.app.api_address,
@@ -601,7 +598,6 @@ mod update_integration_connection_config {
     #[rstest]
     #[tokio::test]
     async fn test_update_integration_connection_config_of_another_user(
-        #[future] tested_app: TestedApp,
         #[future] authenticated_app: AuthenticatedApp,
     ) {
         let app = authenticated_app.await;
@@ -621,7 +617,7 @@ mod update_integration_connection_config {
         )
         .await;
         let (client, _user) =
-            authenticate_user(&tested_app.await, "5678", "Jane", "Doe", "jane@example.com").await;
+            authenticate_user(&app.app, "5678", "Jane", "Doe", "jane@example.com").await;
 
         let response = client
             .put(&format!(

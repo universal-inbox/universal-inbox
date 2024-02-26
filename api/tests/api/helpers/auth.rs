@@ -31,6 +31,7 @@ pub async fn authenticate_user(
     last_name: &str,
     email: &str,
 ) -> (Client, User) {
+    app.oidc_issuer_mock_server.as_ref().unwrap().reset().await;
     mock_oidc_openid_configuration(app);
     mock_oidc_keys(app);
     mock_oidc_introspection(app, auth_provider_user_id, true);

@@ -1,7 +1,7 @@
-use std::{net::TcpListener, sync::Arc, sync::Weak};
+use std::{net::TcpListener, num::NonZeroUsize, sync::Arc, sync::Weak, thread};
 
-use ::http::StatusCode;
 use actix_cors::Cors;
+use actix_http::StatusCode;
 use actix_jwt_authc::{
     AuthenticateMiddlewareFactory, AuthenticateMiddlewareSettings, JWTSessionKey,
 };
@@ -23,14 +23,20 @@ use actix_web::{
 use actix_web_lab::web::spa;
 use actix_web_opentelemetry::RequestMetrics;
 use anyhow::Context;
+use apalis::{
+    layers::tracing::{DefaultOnRequest, DefaultOnResponse, TraceLayer},
+    prelude::*,
+    redis::RedisStorage,
+};
 use configuration::AuthenticationSettings;
 use csp::{Directive, Source, Sources, CSP};
 use futures::channel::mpsc;
+use jobs::slack::SlackPushEventCallbackJob;
 use jsonwebtoken::{Algorithm, Validation};
 use mailer::Mailer;
 use sqlx::PgPool;
 use tokio::sync::RwLock;
-use tracing::info;
+use tracing::{error, info, Level};
 use tracing_actix_web::TracingLogger;
 
 use crate::{
@@ -39,6 +45,7 @@ use crate::{
         github::GithubService, google_mail::GoogleMailService, linear::LinearService,
         oauth2::NangoService, todoist::TodoistService,
     },
+    jobs::slack::handle_slack_push_event,
     observability::AuthenticatedRootSpanBuilder,
     repository::Repository,
     universal_inbox::{
@@ -53,6 +60,7 @@ use crate::{
 pub mod commands;
 pub mod configuration;
 pub mod integrations;
+pub mod jobs;
 pub mod mailer;
 pub mod observability;
 pub mod repository;
@@ -60,8 +68,10 @@ pub mod routes;
 pub mod universal_inbox;
 pub mod utils;
 
-pub async fn run(
+#[allow(clippy::too_many_arguments)]
+pub async fn run_server(
     listener: TcpListener,
+    redis_storage: RedisStorage<SlackPushEventCallbackJob>,
     settings: Settings,
     notification_service: Arc<RwLock<NotificationService>>,
     task_service: Arc<RwLock<TaskService>>,
@@ -101,6 +111,8 @@ pub async fn run(
             jwt_validator: Validation::new(Algorithm::EdDSA),
         }
     };
+
+    let storage_data = web::Data::new(redis_storage.clone());
 
     let settings_web_data = web::Data::new(settings);
 
@@ -207,7 +219,8 @@ pub async fn run(
                     .build(),
                 ),
             )
-            .app_data(settings_web_data.clone());
+            .app_data(settings_web_data.clone())
+            .app_data(storage_data.clone());
 
         if let Some(path) = &static_path {
             info!(
@@ -232,6 +245,48 @@ pub async fn run(
     .context(format!("Failed to listen on {listen_address}"))?;
 
     Ok(server.run())
+}
+
+pub async fn run_worker(
+    workers_count: Option<usize>,
+    redis_storage: RedisStorage<SlackPushEventCallbackJob>,
+    notification_service: Arc<RwLock<NotificationService>>,
+) -> Monitor<TokioExecutor> {
+    let count = workers_count.unwrap_or_else(|| {
+        thread::available_parallelism()
+            .unwrap_or(NonZeroUsize::new(1).unwrap())
+            .get()
+    });
+    info!("Starting {count} asynchronous Workers");
+    Monitor::new()
+        .register_with_count(
+            count,
+            WorkerBuilder::new("slack-push-event-worker")
+                .layer(
+                    TraceLayer::new()
+                        .on_request(DefaultOnRequest::default().level(Level::INFO))
+                        .on_response(DefaultOnResponse::default().level(Level::INFO)),
+                )
+                .with_storage(redis_storage.clone())
+                .data(notification_service)
+                .build_fn(handle_slack_push_event),
+        )
+        .on_event(|e| {
+            let worker_id = e.id();
+            match e.inner() {
+                Event::Start => {
+                    info!("Worker [{worker_id}] started");
+                }
+                Event::Error(e) => {
+                    error!("Worker [{worker_id}] encountered an error: {e}");
+                }
+
+                Event::Exit => {
+                    info!("Worker [{worker_id}] exited");
+                }
+                _ => {}
+            }
+        })
 }
 
 #[allow(clippy::too_many_arguments)] // ignore for now, to revisit later

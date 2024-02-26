@@ -23,6 +23,8 @@ actix-session = { version = "0.9.0", features = ["actix", "cookie-session"] }
 actix-web = "4.0.0"
 actix-web-lab = { version = "0.20.0", features = ["spa"] }
 anyhow = { workspace = true }
+apalis = { git = "https://github.com/dax/apalis", rev = "b167a87a36ff5fae9a8c53896d14bd8adf840973", features = ["redis"] }
+apalis-redis = { git = "https://github.com/dax/apalis", rev = "b167a87a36ff5fae9a8c53896d14bd8adf840973" }
 argon2 = { version = "0.5", features = ["std"] }
 async-trait = "0.1.0"
 base64 = "0.21"
@@ -98,7 +100,7 @@ uuid = { workspace = true, features = ["serde"] }
 validator = { workspace = true }
 
 [dev-dependencies]
-httpmock = "0.7.0"
+httpmock = { git = "https://github.com/dax/httpmock", rev = "334aa67d402a11054f7f942b9df5b2f53ff773d1" }
 pretty_assertions = { workspace = true }
 rstest = { workspace = true }
 serde_urlencoded = { workspace = true }

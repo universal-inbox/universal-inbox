@@ -36,7 +36,6 @@ use crate::helpers::{
             sync_todoist_projects_response, todoist_item,
         },
     },
-    tested_app, TestedApp,
 };
 
 mod create_task {
@@ -211,7 +210,7 @@ mod create_task {
 
     #[rstest]
     #[tokio::test]
-    async fn test_create_task_as_done_with_not_completed_at_value(
+    async fn test_create_task_as_donealue(
         #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
     ) {
@@ -326,7 +325,6 @@ mod get_task {
     #[rstest]
     #[tokio::test]
     async fn test_get_task_of_another_user(
-        #[future] tested_app: TestedApp,
         #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
     ) {
@@ -343,7 +341,7 @@ mod get_task {
         let task_id = creation_result.task.id.0;
 
         let (client, _user) =
-            authenticate_user(&tested_app.await, "5678", "Jane", "Doe", "jane@example.com").await;
+            authenticate_user(&app.app, "5678", "Jane", "Doe", "jane@example.com").await;
         let response = get_resource_response(&client, &app.app.api_address, "tasks", task_id).await;
 
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
@@ -375,7 +373,6 @@ mod list_tasks {
     #[rstest]
     #[tokio::test]
     async fn test_list_tasks(
-        #[future] tested_app: TestedApp,
         #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
     ) {
@@ -417,7 +414,7 @@ mod list_tasks {
 
         // Test listing tasks of another user
         let (client, _user) =
-            authenticate_user(&tested_app.await, "5678", "Jane", "Doe", "jane@example.com").await;
+            authenticate_user(&app.app, "5678", "Jane", "Doe", "jane@example.com").await;
 
         let result = list_tasks(&client, &app.app.api_address, TaskStatus::Done).await;
 
@@ -464,7 +461,6 @@ mod patch_task {
     #[rstest]
     #[tokio::test]
     async fn test_patch_task_of_another_user(
-        #[future] tested_app: TestedApp,
         #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
     ) {
@@ -479,7 +475,7 @@ mod patch_task {
         )
         .await;
         let (client, _user) =
-            authenticate_user(&tested_app.await, "5678", "Jane", "Doe", "jane@example.com").await;
+            authenticate_user(&app.app, "5678", "Jane", "Doe", "jane@example.com").await;
 
         let response = patch_resource_response(
             &client,
@@ -584,7 +580,6 @@ mod search_tasks {
     #[rstest]
     #[tokio::test]
     async fn test_search_tasks(
-        #[future] tested_app: TestedApp,
         #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
     ) {
@@ -640,7 +635,7 @@ mod search_tasks {
 
         // Test searching tasks of another user
         let (client, _user) =
-            authenticate_user(&tested_app.await, "5678", "Jane", "Doe", "jane@example.com").await;
+            authenticate_user(&app.app, "5678", "Jane", "Doe", "jane@example.com").await;
 
         let result = search_tasks(&client, &app.app.api_address, "Task").await;
 

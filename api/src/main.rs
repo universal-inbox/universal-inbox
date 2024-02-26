@@ -1,7 +1,9 @@
 use std::{net::TcpListener, str::FromStr, sync::Arc};
 
+use apalis::redis::RedisStorage;
 use clap::{Parser, Subcommand};
 use email_address::EmailAddress;
+use futures::future;
 use opentelemetry::global;
 use sqlx::{
     postgres::{PgConnectOptions, PgPoolOptions},
@@ -21,7 +23,7 @@ use universal_inbox_api::{
     integrations::oauth2::NangoService,
     mailer::SmtpMailer,
     observability::{get_subscriber, get_subscriber_with_telemetry, init_subscriber},
-    run,
+    run_server, run_worker,
     utils::jwt::JWTBase64EncodedSigningKeys,
 };
 
@@ -78,7 +80,21 @@ enum Commands {
     GenerateJWTToken { user_email: EmailAddress },
 
     /// Run API server
-    Serve,
+    Serve {
+        /// Start ASYNC_WORKERS_COUNT asynchronous workers from the API server process
+        #[arg(short, long)]
+        async_workers_count: Option<usize>,
+        /// Start asynchronous workers from the API server process (count depends on the available cores or the value of `--async-workers-count` option)
+        #[arg(short, long)]
+        embed_async_workers: bool,
+    },
+
+    /// Run asynchronous workers
+    StartWorkers {
+        /// Start COUNT asynchronous workers (if not set, workers count will depends on the available cores)
+        #[arg(short, long)]
+        count: Option<usize>,
+    },
 }
 
 #[tokio::main]
@@ -221,25 +237,62 @@ async fn main() -> std::io::Result<()> {
         Commands::GenerateJWTToken { user_email } => {
             commands::user::generate_jwt_token(user_service, auth_token_service, user_email).await
         }
-        Commands::Serve => {
+        Commands::Serve {
+            async_workers_count,
+            embed_async_workers,
+        } => {
+            let redis_storage = RedisStorage::new(
+                apalis::redis::connect(settings.redis.connection_string())
+                    .await
+                    .expect("Redis storage connection failed"),
+            );
+
             let listener = TcpListener::bind(format!(
                 "{}:{}",
                 settings.application.listen_address, settings.application.listen_port
             ))
             .expect("Failed to bind port");
 
-            let _ = run(
+            let server = run_server(
                 listener,
+                redis_storage.clone(),
                 settings,
-                notification_service,
+                notification_service.clone(),
                 task_service,
                 user_service,
                 integration_connection_service,
                 auth_token_service,
             )
             .await
-            .expect("Failed to start HTTP server")
-            .await;
+            .expect("Failed to start HTTP server");
+
+            if async_workers_count.is_some() || *embed_async_workers {
+                let worker =
+                    run_worker(*async_workers_count, redis_storage, notification_service).await;
+
+                future::try_join(server, worker.run_with_signal(tokio::signal::ctrl_c()))
+                    .await
+                    .expect("Failed to wait for Server and asynchronous Workers");
+            } else {
+                server.await.expect("Failed to start HTTP server");
+            }
+
+            Ok(())
+        }
+        Commands::StartWorkers { count } => {
+            let redis_storage = RedisStorage::new(
+                apalis::redis::connect(settings.redis.connection_string())
+                    .await
+                    .expect("Redis storage connection failed"),
+            );
+
+            let worker = run_worker(*count, redis_storage, notification_service).await;
+
+            worker
+                .run_with_signal(tokio::signal::ctrl_c())
+                .await
+                .expect("Failed to run asynchronous Workers");
+
             Ok(())
         }
     };

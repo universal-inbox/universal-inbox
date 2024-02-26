@@ -1,5 +1,6 @@
 use std::{env, fs, net::TcpListener, str::FromStr, sync::Arc};
 
+use apalis::redis::RedisStorage;
 use httpmock::MockServer;
 use openidconnect::{ClientId, IntrospectionUrl, IssuerUrl};
 use rstest::*;
@@ -16,6 +17,7 @@ use universal_inbox_api::{
         AuthenticationSettings, LocalAuthenticationSettings, OIDCFlowSettings, Settings,
     },
     integrations::oauth2::NangoService,
+    jobs::slack::SlackPushEventCallbackJob,
     observability::{get_subscriber, init_subscriber},
     repository::Repository,
     universal_inbox::user::service::UserService,
@@ -25,6 +27,7 @@ use crate::helpers::mailer::MailerStub;
 
 pub mod auth;
 pub mod integration_connection;
+pub mod job;
 pub mod mailer;
 pub mod notification;
 pub mod rest;
@@ -43,6 +46,7 @@ pub struct TestedApp {
     pub oidc_issuer_mock_server: Option<MockServer>,
     pub nango_mock_server: MockServer,
     pub mailer_stub: Arc<RwLock<MailerStub>>,
+    pub redis_storage: RedisStorage<SlackPushEventCallbackJob>,
 }
 
 #[fixture]
@@ -98,6 +102,18 @@ async fn db_connection(mut settings: Settings) -> Arc<PgPool> {
 }
 
 #[fixture]
+async fn redis_storage(settings: Settings) -> RedisStorage<SlackPushEventCallbackJob> {
+    let mut config = apalis_redis::Config::default();
+    config.set_queue_name_prefix(Some(Uuid::new_v4().to_string()));
+    RedisStorage::new_with_config(
+        apalis::redis::connect(settings.redis.connection_string())
+            .await
+            .expect("Redis storage connection failed"),
+        config,
+    )
+}
+
+#[fixture]
 pub fn settings() -> Settings {
     Settings::new_from_file(Some("config/test".to_string()))
         .expect("Cannot load test configuration")
@@ -108,6 +124,7 @@ pub async fn tested_app(
     mut settings: Settings,
     #[allow(unused, clippy::let_unit_value)] tracing_setup: (),
     #[future] db_connection: Arc<PgPool>,
+    #[future] redis_storage: RedisStorage<SlackPushEventCallbackJob>,
 ) -> TestedApp {
     info!("Setting up server");
     let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
@@ -173,12 +190,15 @@ pub async fn tested_app(
     )
     .await;
 
+    let redis_storage = redis_storage.await;
+
     let app_address = format!("http://127.0.0.1:{port}");
     let api_address = format!("{app_address}{}", settings.application.api_path);
-    let server = universal_inbox_api::run(
+    let server = universal_inbox_api::run_server(
         listener,
+        redis_storage.clone(),
         settings,
-        notification_service,
+        notification_service.clone(),
         task_service,
         user_service.clone(),
         integration_connection_service,
@@ -188,6 +208,11 @@ pub async fn tested_app(
     .expect("Failed to bind address");
 
     tokio::spawn(server);
+
+    let worker =
+        universal_inbox_api::run_worker(Some(1), redis_storage.clone(), notification_service).await;
+
+    tokio::spawn(worker.run());
 
     let repository = Arc::new(Repository::new(pool.clone()));
 
@@ -203,6 +228,7 @@ pub async fn tested_app(
         oidc_issuer_mock_server: Some(oidc_issuer_mock_server),
         nango_mock_server,
         mailer_stub,
+        redis_storage,
     }
 }
 
@@ -211,6 +237,7 @@ pub async fn tested_app_with_local_auth(
     mut settings: Settings,
     #[allow(unused, clippy::let_unit_value)] tracing_setup: (),
     #[future] db_connection: Arc<PgPool>,
+    #[future] redis_storage: RedisStorage<SlackPushEventCallbackJob>,
 ) -> TestedApp {
     info!("Setting up server");
     let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
@@ -265,12 +292,15 @@ pub async fn tested_app_with_local_auth(
     )
     .await;
 
+    let redis_storage = redis_storage.await;
+
     let app_address = format!("http://127.0.0.1:{port}");
     let api_address = format!("{app_address}{}", settings.application.api_path);
-    let server = universal_inbox_api::run(
+    let server = universal_inbox_api::run_server(
         listener,
+        redis_storage.clone(),
         settings,
-        notification_service,
+        notification_service.clone(),
         task_service,
         user_service.clone(),
         integration_connection_service,
@@ -280,6 +310,11 @@ pub async fn tested_app_with_local_auth(
     .expect("Failed to bind address");
 
     tokio::spawn(server);
+
+    let worker =
+        universal_inbox_api::run_worker(Some(1), redis_storage.clone(), notification_service).await;
+
+    tokio::spawn(worker.run());
 
     let repository = Arc::new(Repository::new(pool.clone()));
 
@@ -295,6 +330,7 @@ pub async fn tested_app_with_local_auth(
         oidc_issuer_mock_server: None,
         nango_mock_server,
         mailer_stub,
+        redis_storage,
     }
 }
 
