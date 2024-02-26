@@ -135,17 +135,10 @@ mod close_session {
 
     #[rstest]
     #[tokio::test]
-    async fn test_close_session(
-        settings: Settings,
-        #[future] tested_app: TestedApp,
-        #[future] authenticated_app: AuthenticatedApp,
-    ) {
+    async fn test_close_session(settings: Settings, #[future] authenticated_app: AuthenticatedApp) {
         let app = authenticated_app.await;
-        let tested_app = tested_app.await;
         let oidc_issuer_mock_server_url =
             app.app.oidc_issuer_mock_server.as_ref().unwrap().base_url();
-
-        mock_oidc_openid_configuration(&tested_app);
 
         let response = logout_user_response(&app.client, &app.app.api_address).await;
 

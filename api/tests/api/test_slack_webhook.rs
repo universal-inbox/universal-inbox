@@ -17,6 +17,7 @@ use universal_inbox_api::{configuration::Settings, integrations::oauth2::NangoCo
 use crate::helpers::{
     auth::{authenticated_app, AuthenticatedApp},
     integration_connection::{create_and_mock_integration_connection, nango_slack_connection},
+    job::wait_for_jobs_completion,
     notification::{
         list_notifications,
         slack::{slack_push_star_added_event, slack_push_star_removed_event},
@@ -115,8 +116,9 @@ async fn test_receive_star_added_event_for_unknown_user(
     )
     .await;
 
-    // Return no error to Slack
     assert_eq!(response.status(), 200);
+
+    assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
 
     let notifications = list_notifications(
         &app.client,
@@ -162,6 +164,7 @@ async fn test_receive_star_added_event(
     .await;
 
     assert_eq!(response.status(), 200);
+    assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
 
     let notifications = list_notifications(
         &app.client,
@@ -197,6 +200,7 @@ async fn test_receive_star_added_event(
     )
     .await;
     assert_eq!(response.status(), 200);
+    assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
 
     let notifications = list_notifications(
         &app.client,
@@ -240,6 +244,7 @@ async fn test_receive_star_removed_event(
     )
     .await;
     assert_eq!(response.status(), 200);
+    assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
 
     let notifications = list_notifications(
         &app.client,
@@ -267,6 +272,7 @@ async fn test_receive_star_removed_event(
     )
     .await;
     assert_eq!(response.status(), 200);
+    assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
 
     // No unread notification, it should have been deleted
     let notifications = list_notifications(

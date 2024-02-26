@@ -24,7 +24,6 @@ use crate::helpers::{
         create_resource, create_resource_response, get_resource, get_resource_response,
         patch_resource, patch_resource_response,
     },
-    tested_app, TestedApp,
 };
 
 mod list_notifications {
@@ -50,7 +49,6 @@ mod list_notifications {
     #[rstest]
     #[tokio::test]
     async fn test_list_notifications(
-        #[future] tested_app: TestedApp,
         #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
     ) {
@@ -209,7 +207,7 @@ mod list_notifications {
 
         // Test listing notifications of another user
         let (client, _user) =
-            authenticate_user(&tested_app.await, "5678", "Jane", "Doe", "jane@example.com").await;
+            authenticate_user(&app.app, "5678", "Jane", "Doe", "jane@example.com").await;
 
         let result = list_notifications(
             &client,
@@ -440,7 +438,6 @@ mod get_notification {
     #[rstest]
     #[tokio::test]
     async fn test_get_notification_of_another_user(
-        #[future] tested_app: TestedApp,
         #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
     ) {
@@ -455,7 +452,7 @@ mod get_notification {
         .await;
 
         let (client, _user) =
-            authenticate_user(&tested_app.await, "5678", "Jane", "Doe", "jane@example.com").await;
+            authenticate_user(&app.app, "5678", "Jane", "Doe", "jane@example.com").await;
         let response = get_resource_response(
             &client,
             &app.app.api_address,
@@ -608,7 +605,6 @@ mod patch_notification {
     #[rstest]
     #[tokio::test]
     async fn test_patch_notification_of_another_user(
-        #[future] tested_app: TestedApp,
         #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
     ) {
@@ -621,7 +617,7 @@ mod patch_notification {
         )
         .await;
         let (client, _user) =
-            authenticate_user(&tested_app.await, "5678", "Jane", "Doe", "jane@example.com").await;
+            authenticate_user(&app.app, "5678", "Jane", "Doe", "jane@example.com").await;
 
         let response = patch_resource_response(
             &client,
