@@ -6,8 +6,7 @@ use chrono::{Local, SecondsFormat};
 use dioxus::prelude::*;
 use dioxus_free_icons::{
     icons::bs_icons::{
-        BsBellSlash, BsCheck2, BsClockHistory, BsExclamationTriangle, BsInfoCircle, BsPlug,
-        BsSlack, BsTrash,
+        BsBellSlash, BsCheck2, BsClockHistory, BsExclamationTriangle, BsInfoCircle, BsPlug, BsTrash,
     },
     Icon,
 };
@@ -22,15 +21,11 @@ use universal_inbox::{
     IntegrationProviderStaticConfig,
 };
 
-use crate::components::{
-    icons::{GoogleDocs, GoogleMail, Linear, Notion, TickTick, Todoist},
-    integrations::{
-        github::{config::GithubProviderConfiguration, icons::Github},
-        google_mail::config::GoogleMailProviderConfiguration,
-        linear::config::LinearProviderConfiguration,
-        slack::config::SlackProviderConfiguration,
-        todoist::config::TodoistProviderConfiguration,
-    },
+use crate::components::integrations::{
+    github::config::GithubProviderConfiguration,
+    google_mail::config::GoogleMailProviderConfiguration, icons::IntegrationProviderIcon,
+    linear::config::LinearProviderConfiguration, slack::config::SlackProviderConfiguration,
+    todoist::config::TodoistProviderConfiguration,
 };
 
 #[component]
@@ -173,18 +168,6 @@ pub fn IntegrationSettings<'a>(
     on_reconnect: EventHandler<'a, &'a IntegrationConnection>,
     on_config_change: EventHandler<'a, (&'a IntegrationConnection, IntegrationConnectionConfig)>,
 ) -> Element {
-    // tag: New notification integration
-    let icon = match kind {
-        IntegrationProviderKind::Github => render! { Github { class: "w-8 h-8" } },
-        IntegrationProviderKind::Linear => render! { Linear { class: "w-8 h-8" } },
-        IntegrationProviderKind::GoogleMail => render! { GoogleMail { class: "w-8 h-8" } },
-        IntegrationProviderKind::Notion => render! { Notion { class: "w-8 h-8" } },
-        IntegrationProviderKind::GoogleDocs => render! { GoogleDocs { class: "w-8 h-8" } },
-        IntegrationProviderKind::Slack => render! { Icon { class: "w-8 h-8", icon: BsSlack } },
-        IntegrationProviderKind::Todoist => render! { Todoist { class: "w-8 h-8" } },
-        IntegrationProviderKind::TickTick => render! { TickTick { class: "w-8 h-8" } },
-    };
-
     let (connection_button_label, connection_button_style, sync_message, provider) =
         use_memo(cx, &connection.clone(), |connection| match connection {
             Some(Some(IntegrationConnection {
@@ -262,7 +245,7 @@ pub fn IntegrationSettings<'a>(
 
                     div {
                         class: "card-title",
-                        figure { class: "p-2", icon }
+                        figure { class: "p-2", IntegrationProviderIcon { class: "w-8 h-8", provider_kind: *kind } }
                         "{config.name}"
                     }
                     div {

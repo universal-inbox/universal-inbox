@@ -1,26 +1,20 @@
 use log::error;
 
 use dioxus::prelude::*;
-use dioxus_free_icons::{
-    icons::bs_icons::{BsSlack, BsX},
-    Icon,
-};
+use dioxus_free_icons::{icons::bs_icons::BsX, Icon};
 use fermi::UseAtomRef;
 use gloo_timers::future::TimeoutFuture;
 use reqwest::Method;
 use url::Url;
 
 use universal_inbox::{
-    notification::{NotificationMetadata, NotificationWithTask},
+    notification::NotificationWithTask,
     task::{TaskId, TaskSummary},
 };
 
 use crate::{
     components::floating_label_inputs::FloatingLabelInputSearchSelect,
-    components::{
-        icons::{GoogleMail, Linear, Todoist},
-        integrations::github::icons::Github,
-    },
+    components::integrations::{icons::NotificationMetadataIcon, todoist::icons::Todoist},
     model::UniversalInboxUIModel,
     services::api::call_api,
     utils::focus_element,
@@ -37,14 +31,6 @@ pub fn TaskLinkModal<'a>(
     on_close: EventHandler<'a, ()>,
     on_task_link: EventHandler<'a, TaskId>,
 ) -> Element {
-    // tag: New notification integration
-    let notification_icon = match notification_to_link.metadata {
-        NotificationMetadata::Github(_) => render! { Github { class: "h-5 w-5" } },
-        NotificationMetadata::Linear(_) => render! { Linear { class: "h-5 w-5" } },
-        NotificationMetadata::GoogleMail(_) => render! { GoogleMail { class: "h-5 w-5" } },
-        NotificationMetadata::Todoist => render! { Todoist { class: "h-5 w-5" } },
-        NotificationMetadata::Slack(_) => render! { Icon { class: "w-5 h-5", icon: BsSlack } },
-    };
     let selected_task: &UseState<Option<TaskSummary>> = use_state(cx, || None);
     let search_expression = use_state(cx, || "".to_string());
     let search_results: &UseState<Vec<TaskSummary>> = use_state(cx, Vec::new);
@@ -101,7 +87,10 @@ pub fn TaskLinkModal<'a>(
 
                         div {
                             class: "flex flex-none items-center",
-                            div { class: "block py-2 px-4 bg-transparent", notification_icon }
+                            div {
+                                class: "block py-2 px-4 bg-transparent",
+                                NotificationMetadataIcon { class: "h-5 w-5", notification_metadata: &notification_to_link.metadata }
+                            }
                             div {
                                 id: "notification-to-link",
                                 class: "grow truncate block",
