@@ -68,7 +68,7 @@ pub enum UniversalInboxError {
     #[error("Forbidden access: {0}")]
     Forbidden(String),
     #[error("Recoverable error: {0}")]
-    Recoverable(anyhow::Error),
+    Recoverable(#[source] anyhow::Error),
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
 }

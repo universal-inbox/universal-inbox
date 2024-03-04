@@ -23,6 +23,11 @@ use crate::{
             },
             google_mail::preview::GoogleMailThreadPreview,
             linear::preview::LinearNotificationPreview,
+            slack::preview::{
+                channel::SlackChannelPreview, file::SlackFilePreview,
+                file_comment::SlackFileCommentPreview, group::SlackGroupPreview,
+                im::SlackImPreview, message::SlackMessagePreview,
+            },
             todoist::preview::TodoistTaskPreview,
         },
     },
@@ -116,6 +121,24 @@ fn NotificationDetailsPreview<'a>(cx: Scope, notification: &'a NotificationWithT
             NotificationDetails::GithubDiscussion(github_discussion) => render! {
                 GithubDiscussionPreview { github_discussion: github_discussion }
             },
+            NotificationDetails::SlackMessage(slack_message) => render! {
+                SlackMessagePreview { _slack_message: slack_message }
+            },
+            NotificationDetails::SlackFile(slack_file) => render! {
+                SlackFilePreview { _slack_file: slack_file }
+            },
+            NotificationDetails::SlackFileComment(slack_file_comment) => render! {
+                SlackFileCommentPreview { _slack_file_comment: slack_file_comment }
+            },
+            NotificationDetails::SlackChannel(slack_channel) => render! {
+                SlackChannelPreview { _slack_channel: slack_channel }
+            },
+            NotificationDetails::SlackIm(slack_im) => render! {
+                SlackImPreview { _slack_im: slack_im }
+            },
+            NotificationDetails::SlackGroup(slack_group) => render! {
+                SlackGroupPreview { _slack_group: slack_group }
+            },
         };
     }
     match &notification.metadata {
@@ -134,7 +157,7 @@ fn NotificationDetailsPreview<'a>(cx: Scope, notification: &'a NotificationWithT
                 google_mail_thread: *google_mail_thread.clone()
             }
         },
-        NotificationMetadata::Slack(_) => None, // TODO
+        NotificationMetadata::Slack(_) => None,
         NotificationMetadata::Todoist => None,
     }
 }

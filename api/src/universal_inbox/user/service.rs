@@ -14,7 +14,6 @@ use openidconnect::{
     LogoutRequest, Nonce, PostLogoutRedirectUrl, ProviderMetadataWithLogout, RedirectUrl,
     SubjectIdentifier, TokenIntrospectionResponse,
 };
-use rand;
 use secrecy::{ExposeSecret, Secret};
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;

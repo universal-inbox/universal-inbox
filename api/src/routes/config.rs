@@ -117,7 +117,21 @@ pub async fn front_config(
                 IntegrationProviderStaticConfig {
                     name: "Slack".to_string(),
                     nango_config_key: "slack".to_string().into(),
-                    oauth_user_scopes: vec!["stars:read".to_string(), "stars:write".to_string()],
+                    oauth_user_scopes: vec![
+                        // Read/write "Saved for later"
+                        "stars:read".to_string(),
+                        "stars:write".to_string(),
+                        // Read messages & channel infos
+                        "channels:read".to_string(),
+                        "channels:history".to_string(),
+                        "groups:read".to_string(),
+                        "im:read".to_string(),
+                        "mpim:read".to_string(),
+                        // Read user info
+                        "users:read".to_string(),
+                        // Read team info
+                        "team:read".to_string(),
+                    ],
                     doc: settings.integrations.slack.doc.clone(),
                     warning_message: None,
                     doc_for_actions: settings.integrations.slack.doc_for_actions.clone(),

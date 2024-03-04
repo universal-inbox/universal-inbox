@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use url::Url;
 
@@ -93,9 +93,7 @@ impl From<TaskPriority> for TodoistItemPriority {
 }
 
 mod due_date_format {
-    use serde::{self, Deserialize, Deserializer, Serializer};
-
-    use crate::task::DueDate;
+    use super::*;
 
     pub fn serialize<S>(due_date: &DueDate, serializer: S) -> Result<S::Ok, S::Error>
     where

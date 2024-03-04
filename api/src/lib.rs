@@ -1,4 +1,9 @@
-use std::{net::TcpListener, num::NonZeroUsize, sync::Arc, sync::Weak, thread};
+#![feature(trait_upcasting)]
+
+use std::{
+    net::TcpListener, num::NonZeroUsize, sync::Arc, sync::Weak, thread,
+    time::Duration as StdDuration,
+};
 
 use actix_cors::Cors;
 use actix_http::StatusCode;
@@ -24,19 +29,20 @@ use actix_web_lab::web::spa;
 use actix_web_opentelemetry::RequestMetrics;
 use anyhow::Context;
 use apalis::{
-    layers::tracing::{DefaultOnRequest, DefaultOnResponse, TraceLayer},
+    layers::tracing::{DefaultOnRequest, DefaultOnResponse, OnFailure, TraceLayer},
     prelude::*,
     redis::RedisStorage,
 };
 use configuration::AuthenticationSettings;
 use csp::{Directive, Source, Sources, CSP};
 use futures::channel::mpsc;
+use integrations::slack::SlackService;
 use jobs::slack::SlackPushEventCallbackJob;
 use jsonwebtoken::{Algorithm, Validation};
 use mailer::Mailer;
 use sqlx::PgPool;
 use tokio::sync::RwLock;
-use tracing::{error, info, Level};
+use tracing::{error, event, info, Level, Span};
 use tracing_actix_web::TracingLogger;
 
 use crate::{
@@ -247,6 +253,20 @@ pub async fn run_server(
     Ok(server.run())
 }
 
+#[derive(Clone, Debug)]
+struct WorkerOnFailure {}
+
+impl OnFailure for WorkerOnFailure {
+    fn on_failure(&mut self, error: &Error, latency: StdDuration, span: &Span) {
+        event!(
+            parent: span,
+            Level::ERROR,
+            done_in = format!("{} ms", latency.as_millis()),
+            "{:?}", error
+        );
+    }
+}
+
 pub async fn run_worker(
     workers_count: Option<usize>,
     redis_storage: RedisStorage<SlackPushEventCallbackJob>,
@@ -265,7 +285,8 @@ pub async fn run_worker(
                 .layer(
                     TraceLayer::new()
                         .on_request(DefaultOnRequest::default().level(Level::INFO))
-                        .on_response(DefaultOnResponse::default().level(Level::INFO)),
+                        .on_response(DefaultOnResponse::default().level(Level::INFO))
+                        .on_failure(WorkerOnFailure {}),
                 )
                 .with_storage(redis_storage.clone())
                 .data(notification_service)
@@ -296,6 +317,7 @@ pub async fn build_services(
     github_address: Option<String>,
     linear_graphql_url: Option<String>,
     google_mail_base_url: Option<String>,
+    slack_base_url: Option<String>,
     todoist_address: Option<String>,
     nango_service: NangoService,
     mailer: Arc<RwLock<dyn Mailer + Send + Sync>>,
@@ -348,7 +370,7 @@ pub async fn build_services(
         )
         .expect("Failed to create new GoogleMailService"),
     ));
-    // TODO: Add Slack service
+    let slack_service = SlackService::new(slack_base_url, integration_connection_service.clone());
 
     // tag: New notification integration
     let notification_service = Arc::new(RwLock::new(NotificationService::new(
@@ -356,6 +378,7 @@ pub async fn build_services(
         github_service,
         linear_service,
         google_mail_service.clone(),
+        slack_service.clone(),
         Weak::new(),
         integration_connection_service.clone(),
         user_service.clone(),

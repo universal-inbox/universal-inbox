@@ -39,6 +39,7 @@ secrecy = { workspace = true }
 serde = { workspace = true }
 serde_urlencoded = { workspace = true }
 serde-wasm-bindgen = "0.6.0"
+slack-morphism = { workspace = true }
 thiserror = { workspace = true }
 universal-inbox = { path = ".." }
 url = { workspace = true }

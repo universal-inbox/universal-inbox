@@ -332,7 +332,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{FixedOffset, TimeZone};
+    use chrono::FixedOffset;
     use wasm_bindgen_test::*;
 
     #[wasm_bindgen_test]

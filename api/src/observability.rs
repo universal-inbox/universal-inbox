@@ -6,7 +6,6 @@ use actix_web::{
     dev::{ServiceRequest, ServiceResponse},
     HttpMessage,
 };
-use log;
 use opentelemetry::KeyValue;
 use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
 use opentelemetry_otlp::WithExportConfig;

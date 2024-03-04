@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use sqlx::{Postgres, Transaction};
 
 use universal_inbox::{
-    notification::NotificationSource,
+    notification::{Notification, NotificationDetails, NotificationSource},
     task::{service::TaskPatch, Task, TaskCreation, TaskSource},
     user::UserId,
 };
@@ -19,20 +19,14 @@ pub mod github;
 pub mod google_mail;
 pub mod linear;
 pub mod oauth2;
+pub mod slack;
 pub mod todoist;
 
 pub mod notification {
-    use universal_inbox::notification::{Notification, NotificationDetails};
-
     use super::*;
 
     #[async_trait]
     pub trait NotificationSourceService: NotificationSource {
-        async fn fetch_all_notifications<'a>(
-            &self,
-            executor: &mut Transaction<'a, Postgres>,
-            user_id: UserId,
-        ) -> Result<Vec<Notification>, UniversalInboxError>;
         async fn delete_notification_from_source<'a>(
             &self,
             executor: &mut Transaction<'a, Postgres>,
@@ -58,6 +52,15 @@ pub mod notification {
             notification: &Notification,
             user_id: UserId,
         ) -> Result<Option<NotificationDetails>, UniversalInboxError>;
+    }
+
+    #[async_trait]
+    pub trait NotificationSyncSourceService: NotificationSourceService {
+        async fn fetch_all_notifications<'a>(
+            &self,
+            executor: &mut Transaction<'a, Postgres>,
+            user_id: UserId,
+        ) -> Result<Vec<Notification>, UniversalInboxError>;
     }
 }
 

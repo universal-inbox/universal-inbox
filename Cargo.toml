@@ -54,7 +54,7 @@ itertools = { version = "0.11.0" }
 lazy_static = { version = "1.4.0" }
 log = { version = "0.4.0" }
 macro-attr = { version = "0.2.0" }
-openidconnect = { version = "3.4.0" }
+openidconnect = { version = "3.5.0" }
 pretty_assertions = { version = "1.3.0" }
 reqwest = { version = "0.11", features = ["json", "cookies"] }
 rstest = { version = "0.13.0" }
@@ -63,7 +63,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 serde_urlencoded = { version = "0.7.0" }
 serde_with = { version = "2.3.0" }
-slack-morphism = { git = "https://github.com/dax/slack-morphism-rust", rev = "411bf378992232aefac1daf676ad34606bc8d383" }
+slack-morphism = { git = "https://github.com/abdolence/slack-morphism-rust", rev = "b036d76c34c52a40c89734532db1918d4c8ae996" }
 thiserror = { version = "1.0" }
 url = { version = "2.5.0" }
 uuid = { version = "1.0", features = ["v4"] }

@@ -308,5 +308,5 @@ pub fn assert_sync_notifications(
 
 #[fixture]
 pub fn sync_linear_notifications_response() -> Response<notifications_query::ResponseData> {
-    load_json_fixture_file("/tests/api/fixtures/sync_linear_notifications.json")
+    load_json_fixture_file("sync_linear_notifications.json")
 }

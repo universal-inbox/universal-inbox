@@ -24,7 +24,7 @@ use universal_inbox_api::{
     mailer::SmtpMailer,
     observability::{get_subscriber, get_subscriber_with_telemetry, init_subscriber},
     run_server, run_worker,
-    utils::jwt::JWTBase64EncodedSigningKeys,
+    utils::{cache::Cache, jwt::JWTBase64EncodedSigningKeys},
 };
 
 /// Universal Inbox API server and associated commands
@@ -94,6 +94,22 @@ enum Commands {
         /// Start COUNT asynchronous workers (if not set, workers count will depends on the available cores)
         #[arg(short, long)]
         count: Option<usize>,
+    },
+
+    /// Manage cached results
+    Cache {
+        #[clap(subcommand)]
+        command: CacheCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum CacheCommands {
+    /// Clear cached results
+    Clear {
+        /// Clear cached results with given prefix (after `universal-inbox::cache` prefix)
+        #[arg(short, long)]
+        prefix: Option<String>,
     },
 }
 
@@ -197,6 +213,7 @@ async fn main() -> std::io::Result<()> {
         None,
         None,
         None,
+        None,
         nango_service,
         mailer,
     )
@@ -295,6 +312,15 @@ async fn main() -> std::io::Result<()> {
 
             Ok(())
         }
+        Commands::Cache { command } => match command {
+            CacheCommands::Clear { prefix } => {
+                let cache = Cache::new(settings.redis.connection_string())
+                    .await
+                    .expect("Failed to create cache");
+                cache.clear(prefix).await.expect("Failed to clear cache");
+                Ok(())
+            }
+        },
     };
     global::shutdown_tracer_provider();
 

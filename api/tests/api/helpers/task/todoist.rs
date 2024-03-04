@@ -33,12 +33,12 @@ use crate::helpers::{load_json_fixture_file, rest::create_resource};
 
 #[fixture]
 pub fn sync_todoist_items_response() -> TodoistSyncResponse {
-    load_json_fixture_file("/tests/api/fixtures/sync_todoist_items_response.json")
+    load_json_fixture_file("sync_todoist_items_response.json")
 }
 
 #[fixture]
 pub fn sync_todoist_projects_response() -> TodoistSyncResponse {
-    load_json_fixture_file("/tests/api/fixtures/sync_todoist_projects_response.json")
+    load_json_fixture_file("sync_todoist_projects_response.json")
 }
 
 pub fn mock_todoist_item_add_service<'a>(
@@ -199,7 +199,7 @@ pub fn mock_todoist_sync_resources_service<'a>(
 
 #[fixture]
 pub fn todoist_item() -> Box<TodoistItem> {
-    load_json_fixture_file("/tests/api/fixtures/todoist_item.json")
+    load_json_fixture_file("todoist_item.json")
 }
 
 pub fn assert_sync_items(

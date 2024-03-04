@@ -19,6 +19,17 @@ processes:
       restart: no
     namespace: "universal-inbox"
 
+  ui-workers:
+    command: "just run-workers"
+    depends_on:
+      postgresql:
+        condition: process_started
+      redis:
+        condition: process_started
+    availability:
+      restart: no
+    namespace: "universal-inbox"
+
   ui-web:
     command: "just run-web"
     depends_on:

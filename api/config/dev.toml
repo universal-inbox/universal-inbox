@@ -6,7 +6,7 @@ min_sync_tasks_interval_in_minutes = 0
 min_sync_notifications_interval_in_minutes = 0
 
 [application.observability.logging]
-log_directive = "info,universal_inbox_api=debug,sqlx=debug,lettre=debug"
+log_directive = "info,universal_inbox_api=debug,sqlx=debug,lettre=info,slack_morphism=debug"
 dependencies_log_level = "info"
 
 [application.http_session]

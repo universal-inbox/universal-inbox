@@ -16,7 +16,7 @@ use crate::universal_inbox::{
 pub struct SlackPushEventCallbackJob(pub SlackPushEventCallback);
 
 impl Job for SlackPushEventCallbackJob {
-    const NAME: &'static str = "universal-inbox::slack::SlackPushEventCallbackJob";
+    const NAME: &'static str = "universal-inbox:jobs:slack:SlackPushEventCallbackJob";
 }
 
 fn fail_if_needed<T>(
@@ -29,7 +29,7 @@ fn fail_if_needed<T>(
     }
 }
 
-#[tracing::instrument(level = "debug", skip(notification_service), err)]
+#[tracing::instrument(level = "debug", skip(event, notification_service), err)]
 pub async fn handle_slack_push_event(
     event: SlackPushEventCallbackJob,
     notification_service: Data<Arc<RwLock<NotificationService>>>,

@@ -1,4 +1,4 @@
-use std::{default::Default, fmt};
+use std::fmt;
 
 use serde::{Deserialize, Serialize};
 

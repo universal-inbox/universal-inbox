@@ -1,7 +1,7 @@
 use std::fmt;
 
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use chrono::{DateTime, NaiveDateTime, Utc};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_with::serde_as;
 use url::Url;
 use uuid::Uuid;
@@ -97,8 +97,7 @@ pub struct GoogleMailLabel {
 }
 
 mod message_date_format {
-    use chrono::{DateTime, NaiveDateTime, Utc};
-    use serde::{self, Deserialize, Deserializer, Serializer};
+    use super::*;
 
     pub fn serialize<S>(message_date: &DateTime<Utc>, serializer: S) -> Result<S::Ok, S::Error>
     where

@@ -1,6 +1,5 @@
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use serde_with::serde_as;
 use slack_morphism::prelude::*;
 use uuid::Uuid;
 
@@ -22,7 +21,7 @@ impl SlackPushEventCallbackExt for SlackPushEventCallback {
                 event:
                     SlackEventCallbackBody::StarAdded(SlackStarAddedEvent {
                         item:
-                            SlackStarsItem::Message {
+                            SlackStarsItem::Message(SlackStarsItemMessage {
                                 message:
                                     SlackHistoryMessage {
                                         origin: SlackMessageOrigin { ts, .. },
@@ -30,7 +29,7 @@ impl SlackPushEventCallbackExt for SlackPushEventCallback {
                                         ..
                                     },
                                 ..
-                            },
+                            }),
                         ..
                     }),
                 ..
@@ -45,7 +44,7 @@ impl SlackPushEventCallbackExt for SlackPushEventCallback {
                 event:
                     SlackEventCallbackBody::StarRemoved(SlackStarRemovedEvent {
                         item:
-                            SlackStarsItem::Message {
+                            SlackStarsItem::Message(SlackStarsItemMessage {
                                 message:
                                     SlackHistoryMessage {
                                         origin: SlackMessageOrigin { ts, .. },
@@ -53,7 +52,7 @@ impl SlackPushEventCallbackExt for SlackPushEventCallback {
                                         ..
                                     },
                                 ..
-                            },
+                            }),
                         ..
                     }),
                 ..
@@ -84,51 +83,50 @@ impl SlackPushEventCallbackExt for SlackPushEventCallback {
     }
 }
 
-#[serde_as]
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
 pub struct SlackMessageDetails {
-    message: SlackHistoryMessage,
-    channel: SlackChannelInfo,
-    user: SlackUser,
-    team: SlackTeamInfo,
+    pub message: SlackHistoryMessage,
+    pub channel: SlackChannelInfo,
+    pub sender: SlackMessageSenderDetails,
+    pub team: SlackTeamInfo,
 }
 
-#[serde_as]
+#[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
+#[serde(tag = "type", content = "content")]
+pub enum SlackMessageSenderDetails {
+    User(Box<SlackUser>),
+    Bot(SlackBotInfo),
+}
+
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
 pub struct SlackFileDetails {
-    file: SlackFile,
-    channel: SlackChannelInfo,
-    user: SlackUser,
-    team: SlackTeamInfo,
+    pub channel: SlackChannelInfo,
+    pub sender: Option<SlackUser>,
+    pub team: SlackTeamInfo,
 }
 
-#[serde_as]
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
 pub struct SlackFileCommentDetails {
-    file: SlackFile,
-    comment: String,
-    channel: SlackChannelInfo,
-    user: SlackUser,
-    team: SlackTeamInfo,
+    pub channel: SlackChannelInfo,
+    pub comment: String,
+    pub sender: Option<SlackUser>,
+    pub team: SlackTeamInfo,
 }
 
-#[serde_as]
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
 pub struct SlackChannelDetails {
-    channel: SlackChannelInfo,
-    team: SlackTeamInfo,
+    pub channel: SlackChannelInfo,
+    pub team: SlackTeamInfo,
 }
 
-#[serde_as]
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
 pub struct SlackImDetails {
-    channel: SlackChannelInfo,
-    team: SlackTeamInfo,
+    pub channel: SlackChannelInfo,
+    pub team: SlackTeamInfo,
 }
 
-#[serde_as]
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
 pub struct SlackGroupDetails {
-    channel: SlackChannelInfo,
-    team: SlackTeamInfo,
+    pub channel: SlackChannelInfo,
+    pub team: SlackTeamInfo,
 }

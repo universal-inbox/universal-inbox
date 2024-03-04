@@ -62,7 +62,13 @@ migrate-db:
     just api/migrate-db
 
 run-api:
-    just api/run
+    just api/run-api
+
+run-workers:
+    just api/run-workers
+
+clear-cache:
+    just api/clear-cache
 
 run-web:
     just web/run

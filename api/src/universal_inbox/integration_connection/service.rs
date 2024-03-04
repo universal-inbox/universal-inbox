@@ -270,7 +270,16 @@ impl IntegrationConnectionService {
                 .get_connection(integration_connection.connection_id, provider_config_key)
                 .await?
             {
-                // TODO For Slack, we want the access token in raw["authed_user"]["access_token"]
+                if integration_provider_kind == IntegrationProviderKind::Slack {
+                    if let Some(access_token) =
+                        nango_connection.credentials.raw["authed_user"]["access_token"].as_str()
+                    {
+                        return Ok(Some((
+                            AccessToken(access_token.to_string()),
+                            integration_connection,
+                        )));
+                    }
+                }
                 return Ok(Some((
                     nango_connection.credentials.access_token,
                     integration_connection,

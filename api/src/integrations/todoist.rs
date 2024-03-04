@@ -414,6 +414,7 @@ fn build_todoist_client(
 
 #[async_trait]
 impl TaskSourceService<TodoistItem> for TodoistService {
+    #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(level = "debug", skip(self, executor), err)]
     async fn fetch_all_tasks<'a>(
         &self,
@@ -460,6 +461,7 @@ impl TaskSourceService<TodoistItem> for TodoistService {
         })
     }
 
+    #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(level = "debug", skip(self, executor), err)]
     async fn fetch_task<'a>(
         &self,
@@ -477,6 +479,7 @@ impl TaskSourceService<TodoistItem> for TodoistService {
         self.get_item(source_id, &access_token).await
     }
 
+    #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(level = "debug", skip(self, executor, source), fields(source_id = source.id), err)]
     async fn build_task<'a>(
         &self,
@@ -501,6 +504,7 @@ impl TaskSourceService<TodoistItem> for TodoistService {
         Ok(TodoistService::build_task_with_project_name(source, project_name, user_id).await)
     }
 
+    #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(level = "debug", skip(self, executor), err)]
     async fn create_task<'a>(
         &self,
@@ -550,6 +554,7 @@ impl TaskSourceService<TodoistItem> for TodoistService {
         })
     }
 
+    #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(level = "debug", skip(self, executor), err)]
     async fn delete_task<'a>(
         &self,
@@ -574,6 +579,7 @@ impl TaskSourceService<TodoistItem> for TodoistService {
         .await
     }
 
+    #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(level = "debug", skip(self, executor), err)]
     async fn complete_task<'a>(
         &self,
@@ -598,6 +604,7 @@ impl TaskSourceService<TodoistItem> for TodoistService {
         .await
     }
 
+    #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(level = "debug", skip(self, executor), err)]
     async fn update_task<'a>(
         &self,
@@ -655,6 +662,7 @@ impl TaskSourceService<TodoistItem> for TodoistService {
         }
     }
 
+    #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(level = "debug", skip(self, executor), err)]
     async fn search_projects<'a, 'b>(
         &self,

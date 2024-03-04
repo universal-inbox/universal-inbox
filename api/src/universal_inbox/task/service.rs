@@ -214,14 +214,14 @@ impl TaskService {
         Ok(created_task)
     }
 
-    async fn sync_source_tasks_and_notifications<'a, T: Debug, U: Send + Sync>(
+    async fn sync_source_tasks_and_notifications<'a, T: Debug, U>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
         task_source_service: &U,
         user_id: UserId,
     ) -> Result<Vec<TaskCreationResult>, UniversalInboxError>
     where
-        U: TaskSourceService<T> + NotificationSource,
+        U: TaskSourceService<T> + NotificationSource + Send + Sync,
     {
         let integration_provider_kind = task_source_service.get_integration_provider_kind();
         let result = self

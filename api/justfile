@@ -30,13 +30,22 @@ test-coverage:
 
 ## Run recipes
 run:
+    watchexec --stop-timeout 5 --debounce 500 --exts toml,rs --restart --watch src cargo run --color always -- serve --embed-async-workers
+
+run-api:
     watchexec --stop-timeout 5 --debounce 500 --exts toml,rs --restart --watch src cargo run --color always -- serve
+
+run-workers:
+    watchexec --stop-timeout 5 --debounce 500 --exts toml,rs --restart --watch src cargo run --color always -- start-workers
 
 sync-tasks $RUST_LOG="info":
     cargo run -- sync-tasks
 
 sync-notifications $RUST_LOG="info":
     cargo run -- sync-notifications
+
+clear-cache:
+    cargo run -- cache clear
 
 generate-jwt-key-pair:
     cargo run -- generate-jwt-key-pair
