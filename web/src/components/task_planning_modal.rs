@@ -28,7 +28,7 @@ use crate::{
             FloatingLabelInputSearchSelect, FloatingLabelInputText, FloatingLabelSelect, Searchable,
         },
         flowbite::datepicker::DatePicker,
-        icons::Todoist,
+        integrations::todoist::icons::Todoist,
     },
     model::{LoadState, UniversalInboxUIModel},
     services::api::call_api,

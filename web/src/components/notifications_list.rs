@@ -5,7 +5,7 @@ use dioxus::prelude::*;
 use dioxus_free_icons::{
     icons::bs_icons::{
         BsBellSlash, BsBookmarkCheck, BsCalendar2Check, BsCheck2, BsClockHistory, BsLink45deg,
-        BsSlack, BsTrash,
+        BsTrash,
     },
     Icon,
 };
@@ -18,29 +18,22 @@ use universal_inbox::{
 };
 
 use crate::{
-    components::{
-        icons::{GoogleMail, Linear, Todoist},
-        integrations::{
-            github::{
-                icons::Github,
-                notification::{
-                    GithubDiscussionDetailsDisplay, GithubNotificationDisplay,
-                    GithubPullRequestDetailsDisplay,
-                },
-            },
-            google_mail::notification::{
-                GoogleMailNotificationDetailsDisplay, GoogleMailThreadDisplay,
-            },
-            linear::notification::{LinearNotificationDetailsDisplay, LinearNotificationDisplay},
-            slack::notification::{
-                SlackChannelDetailsDisplay, SlackEventDetailsDisplay,
-                SlackFileCommentDetailsDisplay, SlackFileDetailsDisplay, SlackGroupDetailsDisplay,
-                SlackImDetailsDisplay, SlackMessageDetailsDisplay, SlackNotificationDisplay,
-            },
-            todoist::notification::{
-                TodoistNotificationDetailsDisplay, TodoistNotificationDisplay,
-            },
+    components::integrations::{
+        github::notification::{
+            GithubDiscussionDetailsDisplay, GithubNotificationDisplay,
+            GithubPullRequestDetailsDisplay,
         },
+        google_mail::notification::{
+            GoogleMailNotificationDetailsDisplay, GoogleMailThreadDisplay,
+        },
+        icons::NotificationMetadataIcon,
+        linear::notification::{LinearNotificationDetailsDisplay, LinearNotificationDisplay},
+        slack::notification::{
+            SlackChannelDetailsDisplay, SlackEventDetailsDisplay, SlackFileCommentDetailsDisplay,
+            SlackFileDetailsDisplay, SlackGroupDetailsDisplay, SlackImDetailsDisplay,
+            SlackMessageDetailsDisplay, SlackNotificationDisplay,
+        },
+        todoist::notification::{TodoistNotificationDetailsDisplay, TodoistNotificationDisplay},
     },
     model::UniversalInboxUIModel,
 };
@@ -254,14 +247,6 @@ fn NotificationDisplay<'a>(
         "invisible"
     };
     // tag: New notification integration
-    let icon = match notif.metadata {
-        NotificationMetadata::Github(_) => render! { Github { class: "h-5 w-5" } },
-        NotificationMetadata::Linear(_) => render! { Linear { class: "h-5 w-5" } },
-        NotificationMetadata::GoogleMail(_) => render! { GoogleMail { class: "h-5 w-5" } },
-        NotificationMetadata::Todoist => render! { Todoist { class: "h-5 w-5" } },
-        NotificationMetadata::Slack(_) => render! { Icon { class: "h-5 w-5", icon: BsSlack } },
-    };
-    // tag: New notification integration
     let notification_display = match &notif.metadata {
         NotificationMetadata::Github(github_notification) => render! {
             GithubNotificationDisplay {
@@ -327,7 +312,10 @@ fn NotificationDisplay<'a>(
                 "▼"
             }
 
-            div { class: "flex justify-center", icon }
+            div {
+                class: "flex justify-center",
+                NotificationMetadataIcon { class: "h-5 w-5", notification_metadata: &notif.metadata}
+            }
             if let Some(ref task) = notif.task {
                 render! { TaskHint { task: task } }
             }

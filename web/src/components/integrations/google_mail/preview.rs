@@ -16,7 +16,7 @@ use universal_inbox::{
     HasHtmlUrl,
 };
 
-use crate::components::{icons::Mail, CardWithHeaders, Tag, TagsInCard};
+use crate::components::{integrations::google_mail::icons::Mail, CardWithHeaders, Tag, TagsInCard};
 
 #[component]
 pub fn GoogleMailThreadPreview<'a>(

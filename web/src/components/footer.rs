@@ -6,15 +6,10 @@ use dioxus_free_icons::{icons::bs_icons::BsPlug, Icon};
 use dioxus_router::prelude::*;
 use fermi::use_atom_ref;
 
-use universal_inbox::integration_connection::{
-    provider::IntegrationProviderKind, IntegrationConnection, IntegrationConnectionStatus,
-};
+use universal_inbox::integration_connection::{IntegrationConnection, IntegrationConnectionStatus};
 
 use crate::{
-    components::{
-        icons::{GoogleMail, Linear, Todoist},
-        integrations::github::icons::Github,
-    },
+    components::integrations::icons::IntegrationProviderIcon,
     model::UI_MODEL,
     route::Route,
     services::{
@@ -176,39 +171,15 @@ pub fn IntegrationConnectionStatus(cx: Scope, connection: IntegrationConnection)
             ),
         });
 
-    // tag: New notification integration
-    let icon = match provider_kind {
-        IntegrationProviderKind::Github => Some(render! {
-            Github { class: "w-4 h-4 {connection_style}" }
-        }),
-        IntegrationProviderKind::Todoist => Some(render! {
-            Todoist { class: "w-4 h-4 {connection_style}" }
-        }),
-        IntegrationProviderKind::Linear => Some(render! {
-            Linear { class: "w-4 h-4 {connection_style}" }
-        }),
-        IntegrationProviderKind::GoogleMail => Some(render! {
-            GoogleMail { class: "w-4 h-4 {connection_style}" }
-        }),
-        IntegrationProviderKind::Slack => Some(render! {
-            Icon { class: "w-4 h-4 {connection_style}", icon: BsPlug }
-        }),
-        _ => None,
-    };
+    render! {
+        div {
+            class: "tooltip tooltip-left text-xs",
+            "data-tip": "{tooltip}",
 
-    if let Some(icon) = icon {
-        return render! {
-            div {
-                class: "tooltip tooltip-left text-xs",
-                "data-tip": "{tooltip}",
-
-                Link {
-                    to: Route::SettingsPage {},
-                    icon
-                }
+            Link {
+                to: Route::SettingsPage {},
+                IntegrationProviderIcon { class: "w-4 h-4 {connection_style}", provider_kind: provider_kind },
             }
-        };
+        }
     }
-
-    render! { div {} }
 }

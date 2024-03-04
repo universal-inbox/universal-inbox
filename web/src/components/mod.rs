@@ -10,7 +10,6 @@ pub mod authentication_tokens_card;
 pub mod floating_label_inputs;
 pub mod flowbite;
 pub mod footer;
-pub mod icons;
 pub mod integrations;
 pub mod integrations_panel;
 pub mod nav_bar;

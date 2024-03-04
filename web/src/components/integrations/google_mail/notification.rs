@@ -15,7 +15,7 @@ use universal_inbox::notification::{
     NotificationWithTask,
 };
 
-use crate::components::icons::Mail;
+use crate::components::integrations::google_mail::icons::Mail;
 
 #[component]
 pub fn GoogleMailThreadDisplay<'a>(

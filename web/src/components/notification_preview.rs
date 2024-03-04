@@ -11,25 +11,20 @@ use universal_inbox::{
 };
 
 use crate::{
-    components::{
-        icons::{GoogleMail, Linear, Todoist},
-        integrations::{
-            github::{
-                icons::Github,
-                preview::{
-                    discussion::GithubDiscussionPreview, pull_request::GithubPullRequestPreview,
-                    GithubNotificationDefaultPreview,
-                },
-            },
-            google_mail::preview::GoogleMailThreadPreview,
-            linear::preview::LinearNotificationPreview,
-            slack::preview::{
-                channel::SlackChannelPreview, file::SlackFilePreview,
-                file_comment::SlackFileCommentPreview, group::SlackGroupPreview,
-                im::SlackImPreview, message::SlackMessagePreview,
-            },
-            todoist::preview::TodoistTaskPreview,
+    components::integrations::{
+        github::preview::{
+            discussion::GithubDiscussionPreview, pull_request::GithubPullRequestPreview,
+            GithubNotificationDefaultPreview,
         },
+        google_mail::preview::GoogleMailThreadPreview,
+        icons::{NotificationMetadataIcon, TaskMetadataIcon},
+        linear::preview::LinearNotificationPreview,
+        slack::preview::{
+            channel::SlackChannelPreview, file::SlackFilePreview,
+            file_comment::SlackFileCommentPreview, group::SlackGroupPreview, im::SlackImPreview,
+            message::SlackMessagePreview,
+        },
+        todoist::preview::TodoistTaskPreview,
     },
     model::{PreviewPane, UniversalInboxUIModel},
 };
@@ -77,7 +72,7 @@ pub fn NotificationPreview<'a>(
                             onclick: move |_| { ui_model_ref.write().selected_preview_pane = PreviewPane::Notification },
                             div {
                                 class: "flex gap-2",
-                                NotificationDetailsPreviewIcon { notification: notification }
+                                NotificationMetadataIcon { class: "h-5 w-5", notification_metadata: &notification.metadata }
                                 "Notification"
                             }
                         }
@@ -91,7 +86,11 @@ pub fn NotificationPreview<'a>(
                             onclick: move |_| { ui_model_ref.write().selected_preview_pane = PreviewPane::Task },
                             div {
                                 class: "flex gap-2",
-                                TaskDetailsPreviewIcon { notification: notification }
+                                if let Some(task) = &notification.task {
+                                    render! {
+                                        TaskMetadataIcon { class: "h-5 w-5", _task_metadata: &task.metadata }
+                                    }
+                                }
                                 "Task"
                             }
                         }
@@ -163,25 +162,6 @@ fn NotificationDetailsPreview<'a>(cx: Scope, notification: &'a NotificationWithT
 }
 
 #[component]
-fn NotificationDetailsPreviewIcon<'a>(
-    cx: Scope,
-    notification: &'a NotificationWithTask,
-) -> Element {
-    match &notification.metadata {
-        NotificationMetadata::Github(_) => {
-            render! { Github { class: "h-5 w-5" } }
-        }
-        NotificationMetadata::Linear(_) => {
-            render! { Linear { class: "h-5 w-5" } }
-        }
-        NotificationMetadata::GoogleMail(_) => {
-            render! { GoogleMail { class: "h-5 w-5" } }
-        }
-        _ => None,
-    }
-}
-
-#[component]
 fn TaskDetailsPreview<'a>(cx: Scope, notification: &'a NotificationWithTask) -> Element {
     match &notification.task {
         Some(
@@ -196,17 +176,6 @@ fn TaskDetailsPreview<'a>(cx: Scope, notification: &'a NotificationWithTask) -> 
                 todoist_task: todoist_task.clone(),
             }
         },
-        _ => None,
-    }
-}
-
-#[component]
-fn TaskDetailsPreviewIcon<'a>(cx: Scope, notification: &'a NotificationWithTask) -> Element {
-    match &notification.task {
-        Some(Task {
-            metadata: TaskMetadata::Todoist(_),
-            ..
-        }) => render! { Todoist { class: "h-5 w-5" } },
         _ => None,
     }
 }
