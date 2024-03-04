@@ -20,8 +20,12 @@ use universal_inbox::{
 
 use crate::{
     integrations::{
-        github::GithubService, google_mail::GoogleMailService, linear::LinearService,
-        notification::NotificationSourceService, oauth2::AccessToken,
+        github::GithubService,
+        google_mail::GoogleMailService,
+        linear::LinearService,
+        notification::{NotificationSourceService, NotificationSyncSourceService},
+        oauth2::AccessToken,
+        slack::SlackService,
     },
     repository::{notification::NotificationRepository, Repository},
     universal_inbox::{
@@ -36,6 +40,7 @@ pub struct NotificationService {
     github_service: GithubService,
     linear_service: LinearService,
     google_mail_service: Arc<RwLock<GoogleMailService>>,
+    pub(super) slack_service: SlackService,
     task_service: Weak<RwLock<TaskService>>,
     pub integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     user_service: Arc<RwLock<UserService>>,
@@ -49,6 +54,7 @@ impl NotificationService {
         github_service: GithubService,
         linear_service: LinearService,
         google_mail_service: Arc<RwLock<GoogleMailService>>,
+        slack_service: SlackService,
         task_service: Weak<RwLock<TaskService>>,
         integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
         user_service: Arc<RwLock<UserService>>,
@@ -59,6 +65,7 @@ impl NotificationService {
             github_service,
             linear_service,
             google_mail_service,
+            slack_service,
             task_service,
             integration_connection_service,
             user_service,
@@ -231,7 +238,7 @@ impl NotificationService {
     async fn sync_source_notifications<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        notification_source_service: &(dyn NotificationSourceService + Send + Sync),
+        notification_source_service: &(dyn NotificationSyncSourceService + Send + Sync),
         user_id: UserId,
     ) -> Result<Vec<Notification>, UniversalInboxError> {
         let integration_provider_kind = notification_source_service.get_integration_provider_kind();
@@ -279,75 +286,13 @@ impl NotificationService {
             .await
         {
             Ok(source_notifications) => {
-                let notification_source_kind =
-                    notification_source_service.get_notification_source_kind();
-                let notification_upserts = self
-                    .save_notifications_from_source(
-                        executor,
-                        notification_source_kind,
-                        source_notifications,
-                        false,
-                        notification_source_service.is_supporting_snoozed_notifications(),
-                    )
-                    .await?;
-
-                let mut notifications = vec![];
-                let mut notification_details_synced = 0;
-                for notification_upsert in notification_upserts {
-                    debug!("Notification upsert status: {notification_upsert:?}");
-                    let notification = match notification_upsert {
-                        UpsertStatus::Created(notification)
-                        | UpsertStatus::Updated(notification) => {
-                            let notification_details = self
-                                .sync_source_notification_details(
-                                    executor,
-                                    notification_source_service,
-                                    &notification,
-                                    user_id,
-                                )
-                                .await;
-                            match notification_details {
-                                Ok(notification_details) => {
-                                    notification_details_synced += 1;
-
-                                    Notification {
-                                        details: notification_details,
-                                        ..*notification
-                                    }
-                                }
-                                Err(error @ UniversalInboxError::Recoverable(_)) => {
-                                    // A recoverable error is considered not transient and we should mark the integration connection as failed.
-                                    self.integration_connection_service
-                                        .read()
-                                        .await
-                                        .update_integration_connection_sync_status(
-                                            executor,
-                                            user_id,
-                                            integration_provider_kind,
-                                            Some(format!(
-                                                "Failed to fetch notification details from {integration_provider_kind}"
-                                            )),
-                                            false,
-                                        )
-                                        .await?;
-                                    return Err(error);
-                                }
-                                // Making any other errors recoverable so that we can continue syncing other notifications.
-                                Err(error) => {
-                                    return Err(UniversalInboxError::Recoverable(error.into()))
-                                }
-                            }
-                        }
-                        UpsertStatus::Untouched(notification) => *notification,
-                    };
-                    notifications.push(notification);
-                }
-
-                info!(
-                    "{} {notification_source_kind} notification details successfully synced for user {user_id}.",
-                    notification_details_synced
-                );
-                Ok(notifications)
+                self.save_notifications_and_sync_details(
+                    executor,
+                    notification_source_service,
+                    source_notifications,
+                    user_id,
+                )
+                .await
             }
             Err(e) => {
                 self.integration_connection_service
@@ -426,6 +371,85 @@ impl NotificationService {
         }
 
         Ok(upsert_notifications)
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, executor, notification_source_service, source_notifications),
+        err
+    )]
+    pub async fn save_notifications_and_sync_details<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        notification_source_service: &(dyn NotificationSourceService + Send + Sync),
+        source_notifications: Vec<Notification>,
+        user_id: UserId,
+    ) -> Result<Vec<Notification>, UniversalInboxError> {
+        let integration_provider_kind = notification_source_service.get_integration_provider_kind();
+        let notification_source_kind = notification_source_service.get_notification_source_kind();
+        let notification_upserts = self
+            .save_notifications_from_source(
+                executor,
+                notification_source_kind,
+                source_notifications,
+                false,
+                notification_source_service.is_supporting_snoozed_notifications(),
+            )
+            .await?;
+
+        let mut notifications = vec![];
+        let mut notification_details_synced = 0;
+        for notification_upsert in notification_upserts {
+            debug!("Notification upsert status: {notification_upsert:?}");
+            let notification = match notification_upsert {
+                UpsertStatus::Created(notification) | UpsertStatus::Updated(notification) => {
+                    let notification_details = self
+                        .sync_source_notification_details(
+                            executor,
+                            notification_source_service,
+                            &notification,
+                            user_id,
+                        )
+                        .await;
+                    match notification_details {
+                        Ok(notification_details) => {
+                            notification_details_synced += 1;
+
+                            Notification {
+                                details: notification_details,
+                                ..*notification
+                            }
+                        }
+                        Err(error @ UniversalInboxError::Recoverable(_)) => {
+                            // A recoverable error is considered not transient and we should mark the integration connection as failed.
+                            self.integration_connection_service
+                                    .read()
+                                    .await
+                                    .update_integration_connection_sync_status(
+                                        executor,
+                                        user_id,
+                                        integration_provider_kind,
+                                        Some(format!(
+                                            "Failed to fetch notification details from {integration_provider_kind}"
+                                        )),
+                                        false,
+                                    )
+                                    .await?;
+                            return Err(error);
+                        }
+                        // Making any other errors recoverable so that we can continue syncing other notifications.
+                        Err(error) => return Err(UniversalInboxError::Recoverable(error.into())),
+                    }
+                }
+                UpsertStatus::Untouched(notification) => *notification,
+            };
+            notifications.push(notification);
+        }
+
+        info!(
+            "{notification_details_synced} {notification_source_kind} notification details successfully synced for user {user_id}."
+        );
+        Ok(notifications)
     }
 
     #[tracing::instrument(level = "debug", skip(self, executor), err)]

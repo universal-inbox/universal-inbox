@@ -252,25 +252,25 @@ pub async fn create_and_mock_integration_connection(
 
 #[fixture]
 pub fn nango_github_connection() -> Box<NangoConnection> {
-    load_json_fixture_file("/tests/api/fixtures/nango_github_connection.json")
+    load_json_fixture_file("nango_github_connection.json")
 }
 
 #[fixture]
 pub fn nango_linear_connection() -> Box<NangoConnection> {
-    load_json_fixture_file("/tests/api/fixtures/nango_linear_connection.json")
+    load_json_fixture_file("nango_linear_connection.json")
 }
 
 #[fixture]
 pub fn nango_google_mail_connection() -> Box<NangoConnection> {
-    load_json_fixture_file("/tests/api/fixtures/nango_google_mail_connection.json")
+    load_json_fixture_file("nango_google_mail_connection.json")
 }
 
 #[fixture]
 pub fn nango_slack_connection() -> Box<NangoConnection> {
-    load_json_fixture_file("/tests/api/fixtures/nango_slack_connection.json")
+    load_json_fixture_file("nango_slack_connection.json")
 }
 
 #[fixture]
 pub fn nango_todoist_connection() -> Box<NangoConnection> {
-    load_json_fixture_file("/tests/api/fixtures/nango_todoist_connection.json")
+    load_json_fixture_file("nango_todoist_connection.json")
 }

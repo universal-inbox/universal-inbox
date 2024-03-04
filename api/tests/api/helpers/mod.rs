@@ -42,6 +42,7 @@ pub struct TestedApp {
     pub github_mock_server: MockServer,
     pub linear_mock_server: MockServer,
     pub google_mail_mock_server: MockServer,
+    pub slack_mock_server: MockServer,
     pub todoist_mock_server: MockServer,
     pub oidc_issuer_mock_server: Option<MockServer>,
     pub nango_mock_server: MockServer,
@@ -137,6 +138,8 @@ pub async fn tested_app(
     let linear_mock_server_url = &linear_mock_server.base_url();
     let google_mail_mock_server = MockServer::start();
     let google_mail_mock_server_url = &google_mail_mock_server.base_url();
+    let slack_mock_server = MockServer::start();
+    let slack_mock_server_url = &slack_mock_server.base_url();
     let todoist_mock_server = MockServer::start();
     let todoist_mock_server_url = &todoist_mock_server.base_url();
 
@@ -184,6 +187,7 @@ pub async fn tested_app(
         Some(github_mock_server_url.to_string()),
         Some(linear_mock_server_url.to_string()),
         Some(google_mail_mock_server_url.to_string()),
+        Some(slack_mock_server_url.to_string()),
         Some(todoist_mock_server_url.to_string()),
         nango_service,
         mailer_stub.clone(),
@@ -224,6 +228,7 @@ pub async fn tested_app(
         github_mock_server,
         linear_mock_server,
         google_mail_mock_server,
+        slack_mock_server,
         todoist_mock_server,
         oidc_issuer_mock_server: Some(oidc_issuer_mock_server),
         nango_mock_server,
@@ -250,6 +255,8 @@ pub async fn tested_app_with_local_auth(
     let linear_mock_server_url = &linear_mock_server.base_url();
     let google_mail_mock_server = MockServer::start();
     let google_mail_mock_server_url = &google_mail_mock_server.base_url();
+    let slack_mock_server = MockServer::start();
+    let slack_mock_server_url = &slack_mock_server.base_url();
     let todoist_mock_server = MockServer::start();
     let todoist_mock_server_url = &todoist_mock_server.base_url();
 
@@ -286,6 +293,7 @@ pub async fn tested_app_with_local_auth(
         Some(github_mock_server_url.to_string()),
         Some(linear_mock_server_url.to_string()),
         Some(google_mail_mock_server_url.to_string()),
+        Some(slack_mock_server_url.to_string()),
         Some(todoist_mock_server_url.to_string()),
         nango_service,
         mailer_stub.clone(),
@@ -326,6 +334,7 @@ pub async fn tested_app_with_local_auth(
         github_mock_server,
         linear_mock_server,
         google_mail_mock_server,
+        slack_mock_server,
         todoist_mock_server,
         oidc_issuer_mock_server: None,
         nango_mock_server,
@@ -334,13 +343,16 @@ pub async fn tested_app_with_local_auth(
     }
 }
 
-pub fn load_json_fixture_file<T: for<'de> serde::de::Deserialize<'de>>(
-    project_file_path: &str,
-) -> T {
-    let fixture_path = format!(
-        "{}{project_file_path}",
+pub fn fixture_path(fixture_file_name: &str) -> String {
+    format!(
+        "{}/tests/api/fixtures/{fixture_file_name}",
         env::var("CARGO_MANIFEST_DIR").unwrap()
-    );
-    let input_str = fs::read_to_string(fixture_path).unwrap();
+    )
+}
+
+pub fn load_json_fixture_file<T: for<'de> serde::de::Deserialize<'de>>(
+    fixture_file_name: &str,
+) -> T {
+    let input_str = fs::read_to_string(fixture_path(fixture_file_name)).unwrap();
     serde_json::from_str::<T>(&input_str).unwrap()
 }

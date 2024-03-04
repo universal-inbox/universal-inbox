@@ -34,7 +34,11 @@ use universal_inbox::{
 };
 
 use crate::{
-    integrations::{notification::NotificationSourceService, oauth2::AccessToken, APP_USER_AGENT},
+    integrations::{
+        notification::{NotificationSourceService, NotificationSyncSourceService},
+        oauth2::AccessToken,
+        APP_USER_AGENT,
+    },
     universal_inbox::{
         integration_connection::service::IntegrationConnectionService,
         notification::service::NotificationService, UniversalInboxError,
@@ -386,7 +390,8 @@ fn build_google_mail_client(
 }
 
 #[async_trait]
-impl NotificationSourceService for GoogleMailService {
+impl NotificationSyncSourceService for GoogleMailService {
+    #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(level = "debug", skip(self, executor), err)]
     async fn fetch_all_notifications<'a>(
         &self,
@@ -508,7 +513,11 @@ impl NotificationSourceService for GoogleMailService {
 
         Ok(notifications)
     }
+}
 
+#[async_trait]
+impl NotificationSourceService for GoogleMailService {
+    #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(level = "debug", skip(self, executor), err)]
     async fn delete_notification_from_source<'a>(
         &self,
@@ -531,6 +540,7 @@ impl NotificationSourceService for GoogleMailService {
             .await
     }
 
+    #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(level = "debug", skip(self, executor), err)]
     async fn unsubscribe_notification_from_source<'a>(
         &self,
@@ -564,6 +574,7 @@ impl NotificationSourceService for GoogleMailService {
         Ok(())
     }
 
+    #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(level = "debug", skip(self, _executor, _notification), fields(notification_id = _notification.id.0.to_string()), err)]
     async fn fetch_notification_details<'a>(
         &self,

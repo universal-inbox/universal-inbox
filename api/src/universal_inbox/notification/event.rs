@@ -4,24 +4,23 @@ use sqlx::{Postgres, Transaction};
 
 use universal_inbox::{
     integration_connection::provider::IntegrationProviderKind,
-    notification::{
-        integrations::slack::SlackPushEventCallbackExt, Notification, NotificationSourceKind,
-    },
+    notification::{integrations::slack::SlackPushEventCallbackExt, Notification},
 };
 
 use crate::universal_inbox::{
     notification::{service::NotificationService, NotificationEventService},
-    UniversalInboxError, UpsertStatus,
+    UniversalInboxError,
 };
 
 #[async_trait]
 impl NotificationEventService<SlackPushEventCallback> for NotificationService {
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[allow(clippy::blocks_in_conditions)]
+    #[tracing::instrument(level = "debug", skip(self, executor, event), err)]
     async fn save_notification_from_event<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
         event: SlackPushEventCallback,
-    ) -> Result<Vec<UpsertStatus<Box<Notification>>>, UniversalInboxError> {
+    ) -> Result<Vec<Notification>, UniversalInboxError> {
         let provider_user_id = match &event {
             SlackPushEventCallback {
                 event: SlackEventCallbackBody::StarAdded(SlackStarAddedEvent { user, .. }),
@@ -56,12 +55,11 @@ impl NotificationEventService<SlackPushEventCallback> for NotificationService {
 
         let notification = event.into_notification(integration_connection.user_id)?;
 
-        self.save_notifications_from_source(
+        self.save_notifications_and_sync_details(
             executor,
-            NotificationSourceKind::Slack,
+            &self.slack_service,
             vec![notification],
-            true,
-            false,
+            integration_connection.user_id,
         )
         .await
     }

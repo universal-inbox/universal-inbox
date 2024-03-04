@@ -56,7 +56,7 @@ pub fn GithubNotificationIcon<'a>(
         Some(NotificationDetails::GithubDiscussion(discussion)) => render! {
             GithubDiscussionIcon { class: "{class}", github_discussion: discussion }
         },
-        None => match github_notification.subject.r#type.as_str() {
+        Some(_) | None => match github_notification.subject.r#type.as_str() {
             "PullRequest" => render! { GithubPullRequestIcon { class: "{class}" } },
             "Issue" => render! { Icon { class: "{class}", icon: BsRecordCircle } },
             "Discussion" => render! { GithubDiscussionIcon { class: "{class}" } },

@@ -9,7 +9,10 @@ use universal_inbox::{
     integration_connection::{
         config::IntegrationConnectionConfig, integrations::slack::SlackConfig,
     },
-    notification::{NotificationMetadata, NotificationStatus},
+    notification::{
+        integrations::slack::SlackMessageSenderDetails, NotificationDetails, NotificationMetadata,
+        NotificationStatus,
+    },
 };
 
 use universal_inbox_api::{configuration::Settings, integrations::oauth2::NangoConnection};
@@ -20,7 +23,10 @@ use crate::helpers::{
     job::wait_for_jobs_completion,
     notification::{
         list_notifications,
-        slack::{slack_push_star_added_event, slack_push_star_removed_event},
+        slack::{
+            mock_slack_fetch_channel, mock_slack_fetch_message, mock_slack_fetch_team,
+            mock_slack_fetch_user, slack_push_star_added_event, slack_push_star_removed_event,
+        },
     },
     rest::create_resource_response,
     settings,
@@ -151,6 +157,28 @@ async fn test_receive_star_added_event(
     )
     .await;
 
+    let slack_fetch_user_mock = mock_slack_fetch_user(
+        &app.app.slack_mock_server,
+        "U05YYY", // The message's creator, not the user who starred the message
+        "slack_fetch_user_response.json",
+    );
+    let slack_fetch_message_mock = mock_slack_fetch_message(
+        &app.app.slack_mock_server,
+        "C05XXX",
+        "1707686216.825719",
+        "slack_fetch_message_response.json",
+    );
+    let slack_fetch_channel_mock = mock_slack_fetch_channel(
+        &app.app.slack_mock_server,
+        "C05XXX",
+        "slack_fetch_channel_response.json",
+    );
+    let slack_fetch_team_mock = mock_slack_fetch_team(
+        &app.app.slack_mock_server,
+        "T05XXX",
+        "slack_fetch_team_response.json",
+    );
+
     let SlackPushEvent::EventCallback(event) = &*slack_push_star_added_event else {
         unreachable!("Unexpected event type");
     };
@@ -165,6 +193,11 @@ async fn test_receive_star_added_event(
 
     assert_eq!(response.status(), 200);
     assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
+
+    slack_fetch_user_mock.assert();
+    slack_fetch_message_mock.assert();
+    slack_fetch_channel_mock.assert();
+    slack_fetch_team_mock.assert();
 
     let notifications = list_notifications(
         &app.client,
@@ -190,6 +223,20 @@ async fn test_receive_star_added_event(
         notifications[0].metadata,
         NotificationMetadata::Slack(Box::new(event.clone()))
     );
+    match &notifications[0].details {
+        Some(NotificationDetails::SlackMessage(details)) => {
+            assert_eq!(details.message.origin.ts, "1707686216.825719".into());
+            assert_eq!(details.channel.id, "C05XXX".into());
+            match &details.sender {
+                SlackMessageSenderDetails::User(user) => {
+                    assert_eq!(user.id, "U05YYY".into());
+                }
+                _ => unreachable!("Expected a SlackMessageSenderDetails::User"),
+            }
+            assert_eq!(details.team.id, "T05XXX".into());
+        }
+        _ => unreachable!("Expected a GithubDiscussion notification"),
+    }
 
     // A duplicated event should not create a new notification
     let response = create_resource_response(
@@ -201,6 +248,11 @@ async fn test_receive_star_added_event(
     .await;
     assert_eq!(response.status(), 200);
     assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
+
+    slack_fetch_user_mock.assert_hits(1);
+    slack_fetch_message_mock.assert_hits(1);
+    slack_fetch_channel_mock.assert_hits(1);
+    slack_fetch_team_mock.assert_hits(1);
 
     let notifications = list_notifications(
         &app.client,
@@ -236,6 +288,28 @@ async fn test_receive_star_removed_event(
     )
     .await;
 
+    let slack_fetch_user_mock = mock_slack_fetch_user(
+        &app.app.slack_mock_server,
+        "U05YYY", // The message's creator, not the user who starred the message
+        "slack_fetch_user_response.json",
+    );
+    let slack_fetch_message_mock = mock_slack_fetch_message(
+        &app.app.slack_mock_server,
+        "C05XXX",
+        "1707686216.825719",
+        "slack_fetch_message_response.json",
+    );
+    let slack_fetch_channel_mock = mock_slack_fetch_channel(
+        &app.app.slack_mock_server,
+        "C05XXX",
+        "slack_fetch_channel_response.json",
+    );
+    let slack_fetch_team_mock = mock_slack_fetch_team(
+        &app.app.slack_mock_server,
+        "T05XXX",
+        "slack_fetch_team_response.json",
+    );
+
     let response = create_resource_response(
         &app.client,
         &app.app.api_address,
@@ -245,6 +319,11 @@ async fn test_receive_star_removed_event(
     .await;
     assert_eq!(response.status(), 200);
     assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
+
+    slack_fetch_user_mock.assert();
+    slack_fetch_message_mock.assert();
+    slack_fetch_channel_mock.assert();
+    slack_fetch_team_mock.assert();
 
     let notifications = list_notifications(
         &app.client,
@@ -273,6 +352,11 @@ async fn test_receive_star_removed_event(
     .await;
     assert_eq!(response.status(), 200);
     assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
+
+    slack_fetch_user_mock.assert_hits(1);
+    slack_fetch_message_mock.assert_hits(1);
+    slack_fetch_channel_mock.assert_hits(1);
+    slack_fetch_team_mock.assert_hits(1);
 
     // No unread notification, it should have been deleted
     let notifications = list_notifications(

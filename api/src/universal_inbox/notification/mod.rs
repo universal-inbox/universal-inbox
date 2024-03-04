@@ -3,7 +3,7 @@ use sqlx::{Postgres, Transaction};
 
 use universal_inbox::notification::Notification;
 
-use crate::universal_inbox::{UniversalInboxError, UpsertStatus};
+use crate::universal_inbox::UniversalInboxError;
 
 pub mod event;
 pub mod service;
@@ -14,5 +14,5 @@ pub trait NotificationEventService<T> {
         &self,
         executor: &mut Transaction<'a, Postgres>,
         event: T,
-    ) -> Result<Vec<UpsertStatus<Box<Notification>>>, UniversalInboxError>;
+    ) -> Result<Vec<Notification>, UniversalInboxError>;
 }

@@ -26,7 +26,7 @@ use crate::{
         github::graphql::{
             discussions_search_query, pull_request_query, DiscussionsSearchQuery, PullRequestQuery,
         },
-        notification::NotificationSourceService,
+        notification::{NotificationSourceService, NotificationSyncSourceService},
         oauth2::AccessToken,
         APP_USER_AGENT,
     },
@@ -264,7 +264,8 @@ fn build_github_client(
 }
 
 #[async_trait]
-impl NotificationSourceService for GithubService {
+impl NotificationSyncSourceService for GithubService {
+    #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(level = "debug", skip(self, executor), err)]
     async fn fetch_all_notifications<'a>(
         &self,
@@ -304,7 +305,11 @@ impl NotificationSourceService for GithubService {
         .map(|github_notif| github_notif.into_notification(user_id))
         .collect())
     }
+}
 
+#[async_trait]
+impl NotificationSourceService for GithubService {
+    #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(level = "debug", skip(self, executor), err)]
     async fn delete_notification_from_source<'a>(
         &self,
@@ -323,6 +328,7 @@ impl NotificationSourceService for GithubService {
         self.mark_thread_as_read(source_id, &access_token).await
     }
 
+    #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(level = "debug", skip(self, executor), err)]
     async fn unsubscribe_notification_from_source<'a>(
         &self,
@@ -355,6 +361,7 @@ impl NotificationSourceService for GithubService {
         Ok(())
     }
 
+    #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.0.to_string()), err)]
     async fn fetch_notification_details<'a>(
         &self,

@@ -27,7 +27,7 @@ use crate::{
             NotificationArchive, NotificationSubscribersQuery, NotificationUpdateSnoozedUntilAt,
             NotificationsQuery,
         },
-        notification::NotificationSourceService,
+        notification::{NotificationSourceService, NotificationSyncSourceService},
         oauth2::AccessToken,
         APP_USER_AGENT,
     },
@@ -262,7 +262,8 @@ fn build_linear_client(access_token: &AccessToken) -> Result<ClientWithMiddlewar
 }
 
 #[async_trait]
-impl NotificationSourceService for LinearService {
+impl NotificationSyncSourceService for LinearService {
+    #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(level = "debug", skip(self, executor), err)]
     async fn fetch_all_notifications<'a>(
         &self,
@@ -286,7 +287,11 @@ impl NotificationSourceService for LinearService {
                 .collect()
         })
     }
+}
 
+#[async_trait]
+impl NotificationSourceService for LinearService {
+    #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(level = "debug", skip(self, executor), err)]
     async fn delete_notification_from_source<'a>(
         &self,
@@ -308,6 +313,7 @@ impl NotificationSourceService for LinearService {
         Ok(())
     }
 
+    #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(level = "debug", skip(self, executor), err)]
     async fn unsubscribe_notification_from_source<'a>(
         &self,
@@ -361,6 +367,7 @@ impl NotificationSourceService for LinearService {
             .await
     }
 
+    #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(level = "debug", skip(self, executor), err)]
     async fn snooze_notification_from_source<'a>(
         &self,
@@ -385,6 +392,7 @@ impl NotificationSourceService for LinearService {
         .await
     }
 
+    #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(level = "debug", skip(self, _executor, _notification), fields(notification_id = _notification.id.to_string()), err)]
     async fn fetch_notification_details<'a>(
         &self,

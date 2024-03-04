@@ -1,5 +1,3 @@
-use std::{env, fs};
-
 use chrono::{TimeZone, Utc};
 use graphql_client::{GraphQLQuery, Response};
 use httpmock::{
@@ -122,17 +120,17 @@ pub fn mock_github_discussions_search_query<'a>(
 
 #[fixture]
 pub fn sync_github_notifications() -> Vec<GithubNotification> {
-    load_json_fixture_file("/tests/api/fixtures/sync_github_notifications.json")
+    load_json_fixture_file("sync_github_notifications.json")
 }
 
 #[fixture]
 pub fn github_pull_request_123_response() -> Response<pull_request_query::ResponseData> {
-    load_json_fixture_file("/tests/api/fixtures/github_pull_request_123_response.json")
+    load_json_fixture_file("github_pull_request_123_response.json")
 }
 
 #[fixture]
 pub fn github_discussion_123_response() -> Response<discussions_search_query::ResponseData> {
-    load_json_fixture_file("/tests/api/fixtures/github_discussion_123_response.json")
+    load_json_fixture_file("github_discussion_123_response.json")
 }
 
 pub fn assert_sync_notifications(
@@ -202,10 +200,5 @@ pub fn assert_sync_notifications(
 
 #[fixture]
 pub fn github_notification() -> Box<GithubNotification> {
-    let fixture_path = format!(
-        "{}/tests/api/fixtures/github_notification.json",
-        env::var("CARGO_MANIFEST_DIR").unwrap(),
-    );
-    let input_str = fs::read_to_string(fixture_path).unwrap();
-    serde_json::from_str(&input_str).unwrap()
+    load_json_fixture_file("github_notification.json")
 }

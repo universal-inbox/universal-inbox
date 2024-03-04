@@ -157,6 +157,7 @@ impl SmtpMailer {
 
 #[async_trait]
 impl Mailer for SmtpMailer {
+    #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(level = "info", skip(self), err)]
     async fn send_email(
         &self,

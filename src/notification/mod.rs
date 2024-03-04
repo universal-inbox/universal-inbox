@@ -11,16 +11,18 @@ use uuid::Uuid;
 use crate::{
     integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
     notification::integrations::{
-        github::{GithubNotification, GithubPullRequest},
+        github::{GithubDiscussion, GithubNotification, GithubPullRequest},
         google_mail::GoogleMailThread,
         linear::LinearNotification,
+        slack::{
+            SlackChannelDetails, SlackFileCommentDetails, SlackFileDetails, SlackGroupDetails,
+            SlackImDetails, SlackMessageDetails,
+        },
     },
     task::{integrations::todoist::DEFAULT_TODOIST_HTML_URL, Task, TaskId},
     user::UserId,
     HasHtmlUrl,
 };
-
-use self::integrations::github::GithubDiscussion;
 
 pub mod integrations;
 pub mod service;
@@ -154,11 +156,17 @@ pub enum NotificationMetadata {
 }
 
 // tag: New notification integration
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 #[serde(tag = "type", content = "content")]
 pub enum NotificationDetails {
     GithubPullRequest(GithubPullRequest),
     GithubDiscussion(GithubDiscussion),
+    SlackMessage(SlackMessageDetails),
+    SlackFile(SlackFileDetails),
+    SlackFileComment(SlackFileCommentDetails),
+    SlackChannel(SlackChannelDetails),
+    SlackIm(SlackImDetails),
+    SlackGroup(SlackGroupDetails),
 }
 
 impl HasHtmlUrl for NotificationDetails {
@@ -167,6 +175,12 @@ impl HasHtmlUrl for NotificationDetails {
         match &self {
             NotificationDetails::GithubPullRequest(GithubPullRequest { url, .. }) => url.clone(),
             NotificationDetails::GithubDiscussion(GithubDiscussion { url, .. }) => url.clone(),
+            NotificationDetails::SlackMessage(SlackMessageDetails { .. }) => todo!(),
+            NotificationDetails::SlackFile(SlackFileDetails { .. }) => todo!(),
+            NotificationDetails::SlackFileComment(SlackFileCommentDetails { .. }) => todo!(),
+            NotificationDetails::SlackChannel(SlackChannelDetails { .. }) => todo!(),
+            NotificationDetails::SlackIm(SlackImDetails { .. }) => todo!(),
+            NotificationDetails::SlackGroup(SlackGroupDetails { .. }) => todo!(),
         }
     }
 }

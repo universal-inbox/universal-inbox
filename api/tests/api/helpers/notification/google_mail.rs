@@ -140,17 +140,17 @@ pub fn mock_google_mail_thread_modify_service<'a>(
 
 #[fixture]
 pub fn google_mail_user_profile() -> GoogleMailUserProfile {
-    load_json_fixture_file("/tests/api/fixtures/google_mail_user_profile.json")
+    load_json_fixture_file("google_mail_user_profile.json")
 }
 
 #[fixture]
 pub fn google_mail_labels_list() -> GoogleMailLabelList {
-    load_json_fixture_file("/tests/api/fixtures/google_mail_labels_list.json")
+    load_json_fixture_file("google_mail_labels_list.json")
 }
 
 #[fixture]
 pub fn raw_google_mail_thread_get_123() -> RawGoogleMailThread {
-    load_json_fixture_file("/tests/api/fixtures/google_mail_thread_get_123.json")
+    load_json_fixture_file("google_mail_thread_get_123.json")
 }
 
 #[fixture]
@@ -164,7 +164,7 @@ pub fn google_mail_thread_get_123(
 
 #[fixture]
 pub fn raw_google_mail_thread_get_456() -> RawGoogleMailThread {
-    load_json_fixture_file("/tests/api/fixtures/google_mail_thread_get_456.json")
+    load_json_fixture_file("google_mail_thread_get_456.json")
 }
 
 #[fixture]

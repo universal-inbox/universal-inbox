@@ -307,7 +307,7 @@ pub fn IntegrationSettings<'a>(
                     if let Some(Some(connection)) = connection {
                         render! {
                             IntegrationConnectionProviderConfiguration {
-                                on_config_change: move |config| on_config_change.call((&connection, config)),
+                                on_config_change: move |config| on_config_change.call((connection, config)),
                                 provider: provider.clone(),
                             }
                         }
