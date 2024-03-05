@@ -1,8 +1,25 @@
 use anyhow::Context;
+use cached::AsyncRedisCache;
+use once_cell::sync::Lazy;
 use redis::{aio::ConnectionManager, Client, Script};
-use tracing::debug;
+use serde::{de::DeserializeOwned, Serialize};
+use tracing::{debug, info};
 
-use crate::universal_inbox::UniversalInboxError;
+use crate::{configuration::Settings, universal_inbox::UniversalInboxError};
+
+struct Config {
+    settings: Settings,
+}
+
+impl Config {
+    fn load() -> Self {
+        Self {
+            settings: Settings::new().unwrap(),
+        }
+    }
+}
+
+static CONFIG: Lazy<Config> = Lazy::new(Config::load);
 
 pub struct Cache {
     pub connection_manager: ConnectionManager,
@@ -39,4 +56,22 @@ impl Cache {
         debug!("Cleared Redis {deleted_keys_count} cache entries with pattern: `{pattern}`");
         Ok(())
     }
+}
+
+pub async fn build_redis_cache<T>(namespace: &str, ttl: u64) -> AsyncRedisCache<String, T>
+where
+    T: Serialize + DeserializeOwned + Send + Sync,
+{
+    let settings = &CONFIG.settings;
+    info!(
+        "Connecting to Redis server for caching on {}",
+        &settings.redis.safe_connection_string()
+    );
+    AsyncRedisCache::new(namespace, ttl)
+        .set_refresh(true)
+        .set_namespace(CACHE_NAMESPACE)
+        .set_connection_string(&settings.redis.connection_string())
+        .build()
+        .await
+        .expect("error building Redis cache")
 }
