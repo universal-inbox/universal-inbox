@@ -3,7 +3,7 @@ use std::{collections::HashMap, env};
 use anyhow::Context;
 use config::{Config, ConfigError, Environment, File};
 use openidconnect::{ClientId, ClientSecret, IntrospectionUrl, IssuerUrl};
-use secrecy::Secret;
+use secrecy::{ExposeSecret, Secret};
 use serde::{Deserialize, Deserializer};
 use serde_with::{serde_as, DisplayFromStr};
 use universal_inbox::integration_connection::{
@@ -203,6 +203,23 @@ pub struct EmailSettings {
     pub smtp_password: Secret<String>,
     pub from_header: String,
     pub reply_to_header: String,
+}
+
+impl EmailSettings {
+    pub fn connection_string(&self) -> String {
+        format!(
+            "smtp://{}:{}@{}:{}",
+            self.smtp_username,
+            self.smtp_password.expose_secret(),
+            self.smtp_server,
+            self.smtp_port,
+        )
+    }
+
+    pub fn safe_connection_string(&self) -> String {
+        self.connection_string()
+            .replace(self.smtp_password.expose_secret(), "********")
+    }
 }
 
 impl DatabaseSettings {

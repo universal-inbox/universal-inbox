@@ -172,12 +172,20 @@ async fn main() -> std::io::Result<()> {
             .expect("Failed to connect to Postgresql"),
     );
 
+    info!(
+        "Connecting to Nango on {}",
+        &settings.integrations.oauth2.nango_base_url
+    );
     let nango_service = NangoService::new(
         settings.integrations.oauth2.nango_base_url.clone(),
         &settings.integrations.oauth2.nango_secret_key,
     )
     .expect("Failed to create new GithubService");
 
+    info!(
+        "Connecting to SMTP server on {}",
+        &settings.application.email.safe_connection_string()
+    );
     let mailer = Arc::new(RwLock::new(
         SmtpMailer::build(
             settings.application.email.smtp_server.clone(),
@@ -258,6 +266,10 @@ async fn main() -> std::io::Result<()> {
             async_workers_count,
             embed_async_workers,
         } => {
+            info!(
+                "Connecting to Redis server for job queuing on {}",
+                &settings.redis.safe_connection_string()
+            );
             let redis_storage = RedisStorage::new(
                 apalis::redis::connect(settings.redis.connection_string())
                     .await
@@ -297,6 +309,10 @@ async fn main() -> std::io::Result<()> {
             Ok(())
         }
         Commands::StartWorkers { count } => {
+            info!(
+                "Connecting to Redis server for job queuing on {}",
+                &settings.redis.safe_connection_string()
+            );
             let redis_storage = RedisStorage::new(
                 apalis::redis::connect(settings.redis.connection_string())
                     .await
