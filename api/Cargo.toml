@@ -64,7 +64,7 @@ opentelemetry-appender-tracing = "0.2.0"
 opentelemetry-otlp = { version = "0.14.0", features = ["grpc-tonic", "trace", "logs", "metrics", "reqwest-rustls", "tls"] }
 rand = { version = "0.8", features=["std_rng"] }
 ring = "0.17.0"
-redis = { version = "0.24.0", features = ["tokio-comp", "tokio-rustls-comp", "connection-manager"] }
+redis = { version = "0.24.0", features = ["tokio-comp", "tokio-native-tls-comp", "connection-manager", ] }
 regex = "1.5.0"
 reqwest = { workspace = true, features = ["tokio-rustls", "gzip"] }
 reqwest-middleware = "0.2.0"
