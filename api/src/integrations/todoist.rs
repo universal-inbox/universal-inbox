@@ -293,19 +293,21 @@ impl TodoistService {
     #[tracing::instrument(level = "debug", skip(self), err)]
     pub async fn fetch_all_projects(
         &self,
+        user_id: UserId,
         access_token: &AccessToken,
         sync_token: Option<SyncToken>,
     ) -> Result<Vec<TodoistProject>, UniversalInboxError> {
-        cached_fetch_all_projects(self, access_token, sync_token).await
+        cached_fetch_all_projects(self, user_id, access_token, sync_token).await
     }
 
     #[tracing::instrument(level = "debug", skip(self), err)]
     async fn get_or_create_project_id(
         &self,
+        user_id: UserId,
         project_name: &str,
         access_token: &AccessToken,
     ) -> Result<String, UniversalInboxError> {
-        let projects = self.fetch_all_projects(access_token, None).await?;
+        let projects = self.fetch_all_projects(user_id, access_token, None).await?;
         if let Some(id) = projects
             .iter()
             .find(|project| project.name == *project_name)
@@ -378,10 +380,11 @@ impl TodoistService {
     size = 1,
     time = 600,
     key = "String",
-    convert = r#"{ format!("{}{}", service.projects_cache_index.load(Ordering::Relaxed), service.todoist_sync_base_url.clone()) }"#
+    convert = r#"{ format!("{}{}{}", _user_id, service.projects_cache_index.load(Ordering::Relaxed), service.todoist_sync_base_url.clone()) }"#
 )]
 async fn cached_fetch_all_projects(
     service: &TodoistService,
+    _user_id: UserId,
     access_token: &AccessToken,
     sync_token: Option<SyncToken>,
 ) -> Result<Vec<TodoistProject>, UniversalInboxError> {
@@ -494,7 +497,9 @@ impl TaskSourceService<TodoistItem> for TodoistService {
             .find_access_token(executor, IntegrationProviderKind::Todoist, None, user_id)
             .await?
             .ok_or_else(|| anyhow!("Cannot build a Todoist task without an access token"))?;
-        let projects = self.fetch_all_projects(&access_token, None).await?;
+        let projects = self
+            .fetch_all_projects(user_id, &access_token, None)
+            .await?;
         let project_name = projects
             .iter()
             .find(|project| project.id == source.project_id)
@@ -623,7 +628,7 @@ impl TaskSourceService<TodoistItem> for TodoistService {
         let mut commands: Vec<TodoistSyncCommand> = vec![];
         if let Some(ref project_name) = patch.project {
             let project_id = self
-                .get_or_create_project_id(project_name, &access_token)
+                .get_or_create_project_id(user_id, project_name, &access_token)
                 .await?;
             commands.push(TodoistSyncCommand::ItemMove {
                 uuid: Uuid::new_v4(),
@@ -678,7 +683,9 @@ impl TaskSourceService<TodoistItem> for TodoistService {
             .await?
             .ok_or_else(|| anyhow!("Cannot search Todoist projects without an access token"))?;
 
-        let projects = self.fetch_all_projects(&access_token, None).await?;
+        let projects = self
+            .fetch_all_projects(user_id, &access_token, None)
+            .await?;
         let search_regex = RegexBuilder::new(matches)
             .case_insensitive(true)
             .size_limit(100_000)
