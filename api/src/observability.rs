@@ -152,12 +152,8 @@ impl RootSpanBuilder for AuthenticatedRootSpanBuilder {
             .and_then(|v| v.claims.sub.parse::<UserId>().ok())
             .map(|user_id| user_id.to_string())
         {
-            Some(session_user_id) => {
-                tracing_actix_web::root_span!(
-                    level = tracing::Level::INFO,
-                    request,
-                    session_user_id
-                )
+            Some(user_id) => {
+                tracing_actix_web::root_span!(level = tracing::Level::INFO, request, enduser.id = %user_id)
             }
             // No user authenticated
             _ => {

@@ -122,7 +122,7 @@ dependencies = [
 [[package]]
 name = "actix-jwt-authc"
 version = "0.2.0"
-source = "git+https://github.com/dax/actix-jwt-authc?rev=66412403a620b38ca1eb85b2b730bbdd5aa7895a#66412403a620b38ca1eb85b2b730bbdd5aa7895a"
+source = "git+https://github.com/dax/actix-jwt-authc?rev=b09f0688f876eabe8c6685bc5beea2c8e0f437a8#b09f0688f876eabe8c6685bc5beea2c8e0f437a8"
 dependencies = [
  "actix-session",
  "actix-web",

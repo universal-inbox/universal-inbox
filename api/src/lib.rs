@@ -175,6 +175,19 @@ pub async fn run_server(
                 }
             })
             .wrap(TracingLogger::<AuthenticatedRootSpanBuilder>::new())
+            .wrap(auth_middleware_factory.clone())
+            .wrap(
+                SessionMiddleware::builder(
+                    CookieSessionStore::default(),
+                    session_secret_key.clone(),
+                )
+                .session_lifecycle(
+                    PersistentSession::default().session_ttl(Duration::days(max_age_days)),
+                )
+                .cookie_same_site(SameSite::Lax)
+                .cookie_content_security(CookieContentSecurity::Signed)
+                .build(),
+            )
             .wrap(RequestMetrics::default())
             .wrap(middleware::Compress::default())
             .wrap(cors)
@@ -209,22 +222,7 @@ pub async fn run_server(
                 "/api/front_config",
                 web::get().to(routes::config::front_config),
             )
-            .service(
-                api_scope.wrap(auth_middleware_factory.clone()).wrap(
-                    SessionMiddleware::builder(
-                        CookieSessionStore::default(),
-                        session_secret_key.clone(),
-                    )
-                    .session_lifecycle(
-                        PersistentSession::default().session_ttl(Duration::days(max_age_days)),
-                    )
-                    .cookie_secure(true)
-                    .cookie_http_only(true)
-                    .cookie_same_site(SameSite::Lax)
-                    .cookie_content_security(CookieContentSecurity::Signed)
-                    .build(),
-                ),
-            )
+            .service(api_scope)
             .app_data(settings_web_data.clone())
             .app_data(storage_data.clone());
 
