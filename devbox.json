@@ -33,7 +33,8 @@
   "shell": {
     "init_hook": [
       "bash -c '[ -d .devbox/virtenv/postgresql_15/data ] || initdb --username=postgres --pwfile=<(echo password)'",
-      "rustup toolchain list | grep default | grep -q '^nightly-2024-03-04' || rustup default nightly-2024-03-04",
+      "rustup show active-toolchain | grep -q '^1.75-' || rustup default 1.75",
+      "rustup toolchain list | grep -q '^nightly-2024-03-04' || rustup toolchain install nightly-2024-03-04",
       "rustup target list --installed | grep -q '^wasm32-unknown-unknown$' || rustup target add wasm32-unknown-unknown",
       "rustup component list --installed | grep -q '^rust-analyzer-' || rustup component add rust-analyzer",
       "rustup component list --installed | grep -q '^llvm-tools-' || rustup component add llvm-tools-preview"
