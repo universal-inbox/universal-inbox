@@ -1,5 +1,4 @@
 #![allow(non_snake_case)]
-#![allow(clippy::empty_docs)] // Clippy raises on #[wasm_bindgen]?!?
 
 use std::{fmt::Display, marker::PhantomData, str::FromStr};
 
