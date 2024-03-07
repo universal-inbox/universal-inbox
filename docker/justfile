@@ -4,10 +4,18 @@ default:
 @build:
     docker-compose build universal-inbox
 
-@publish:
-    docker buildx ls | grep -q ^universal-inbox || docker buildx create --use --driver docker-container --name universal-inbox
+publish:
+    #!/usr/bin/env bash
+
+    if [ -z "$DOCKER_BUILDX_BUILDER" ]; then
+        echo "ℹ️ Using local Docker buildx builder"
+        docker buildx ls | grep -q ^universal-inbox || docker buildx create --use --driver docker-container --name universal-inbox
+        DOCKER_BUILDX_BUILDER=universal-inbox
+    else
+        echo "ℹ️ Using Docker buildx builder $DOCKER_BUILDX_BUILDER"
+    fi
     docker buildx build \
-      --builder universal-inbox \
+      --builder "$DOCKER_BUILDX_BUILDER" \
       --push \
       --platform linux/amd64,linux/arm64 \
       -t dax42/universal-inbox:$(git rev-parse HEAD) \
