@@ -93,16 +93,12 @@ impl NotificationService {
         match patch.status {
             Some(NotificationStatus::Deleted) => {
                 notification_source_service
-                    .delete_notification_from_source(executor, &notification.source_id, user_id)
+                    .delete_notification_from_source(executor, &notification, user_id)
                     .await
             }
             Some(NotificationStatus::Unsubscribed) => {
                 notification_source_service
-                    .unsubscribe_notification_from_source(
-                        executor,
-                        &notification.source_id,
-                        user_id,
-                    )
+                    .unsubscribe_notification_from_source(executor, &notification, user_id)
                     .await
             }
             _ => {
@@ -110,7 +106,7 @@ impl NotificationService {
                     notification_source_service
                         .snooze_notification_from_source(
                             executor,
-                            &notification.source_id,
+                            &notification,
                             snoozed_until,
                             user_id,
                         )
@@ -622,7 +618,14 @@ impl NotificationService {
                         .await?
                     }
                     NotificationMetadata::Slack(_) => {
-                        // TODO: Implement side effects for Slack notifications
+                        self.apply_updated_notification_side_effect(
+                            executor,
+                            &self.slack_service,
+                            patch,
+                            notification.clone(),
+                            for_user_id,
+                        )
+                        .await?
                     }
                     NotificationMetadata::Todoist => {
                         if let Some(NotificationStatus::Deleted) = patch.status {

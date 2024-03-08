@@ -292,11 +292,11 @@ impl NotificationSyncSourceService for LinearService {
 #[async_trait]
 impl NotificationSourceService for LinearService {
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.0.to_string()), err)]
     async fn delete_notification_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        source_id: &str,
+        notification: &Notification,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
         let (access_token, _) = self
@@ -307,18 +307,18 @@ impl NotificationSourceService for LinearService {
             .await?
             .ok_or_else(|| anyhow!("Cannot delete Linear notification without an access token"))?;
 
-        self.archive_notification(&access_token, source_id.to_string())
+        self.archive_notification(&access_token, notification.source_id.to_string())
             .await?;
 
         Ok(())
     }
 
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.0.to_string()), err)]
     async fn unsubscribe_notification_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        source_id: &str,
+        notification: &Notification,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
         let (access_token, _) = self
@@ -332,7 +332,7 @@ impl NotificationSourceService for LinearService {
             })?;
 
         let subscribers_response = self
-            .query_notification_subscribers(&access_token, source_id.to_string())
+            .query_notification_subscribers(&access_token, notification.source_id.to_string())
             .await?;
 
         // Only Issue notification have subscribers and can be unsubscribed
@@ -358,21 +358,21 @@ impl NotificationSourceService for LinearService {
                 ).collect();
             if initial_subscribers_count > subscriber_ids.len() {
                 self
-                    .update_issue_subscribers(&access_token, source_id.to_string(), subscriber_ids)
+                    .update_issue_subscribers(&access_token, notification.source_id.to_string(), subscriber_ids)
                     .await?;
             }
         }
 
-        self.delete_notification_from_source(executor, source_id, user_id)
+        self.delete_notification_from_source(executor, notification, user_id)
             .await
     }
 
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.0.to_string()), err)]
     async fn snooze_notification_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        source_id: &str,
+        notification: &Notification,
         snoozed_until_at: DateTime<Utc>,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
@@ -386,7 +386,7 @@ impl NotificationSourceService for LinearService {
 
         self.update_notification_snoozed_until_at(
             &access_token,
-            source_id.to_string(),
+            notification.source_id.to_string(),
             snoozed_until_at,
         )
         .await

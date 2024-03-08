@@ -175,12 +175,14 @@ impl HasHtmlUrl for NotificationDetails {
         match &self {
             NotificationDetails::GithubPullRequest(GithubPullRequest { url, .. }) => url.clone(),
             NotificationDetails::GithubDiscussion(GithubDiscussion { url, .. }) => url.clone(),
-            NotificationDetails::SlackMessage(SlackMessageDetails { .. }) => todo!(),
-            NotificationDetails::SlackFile(SlackFileDetails { .. }) => todo!(),
-            NotificationDetails::SlackFileComment(SlackFileCommentDetails { .. }) => todo!(),
-            NotificationDetails::SlackChannel(SlackChannelDetails { .. }) => todo!(),
-            NotificationDetails::SlackIm(SlackImDetails { .. }) => todo!(),
-            NotificationDetails::SlackGroup(SlackGroupDetails { .. }) => todo!(),
+            NotificationDetails::SlackMessage(SlackMessageDetails { url, .. }) => url.clone(),
+            NotificationDetails::SlackFile(f @ SlackFileDetails { .. }) => f.get_html_url(),
+            NotificationDetails::SlackFileComment(fc @ SlackFileCommentDetails { .. }) => {
+                fc.get_html_url()
+            }
+            NotificationDetails::SlackChannel(c @ SlackChannelDetails { .. }) => c.get_html_url(),
+            NotificationDetails::SlackIm(im @ SlackImDetails { .. }) => im.get_html_url(),
+            NotificationDetails::SlackGroup(g @ SlackGroupDetails { .. }) => g.get_html_url(),
         }
     }
 }
