@@ -13,6 +13,7 @@ use universal_inbox::{
         integrations::slack::SlackMessageSenderDetails, NotificationDetails, NotificationMetadata,
         NotificationStatus,
     },
+    HasHtmlUrl,
 };
 
 use universal_inbox_api::{configuration::Settings, integrations::oauth2::NangoConnection};
@@ -25,7 +26,8 @@ use crate::helpers::{
         list_notifications,
         slack::{
             mock_slack_fetch_channel, mock_slack_fetch_message, mock_slack_fetch_team,
-            mock_slack_fetch_user, slack_push_star_added_event, slack_push_star_removed_event,
+            mock_slack_fetch_user, mock_slack_get_chat_permalink, slack_push_star_added_event,
+            slack_push_star_removed_event,
         },
     },
     rest::create_resource_response,
@@ -157,6 +159,12 @@ async fn test_receive_star_added_event(
     )
     .await;
 
+    let slack_get_chat_permalink_mock = mock_slack_get_chat_permalink(
+        &app.app.slack_mock_server,
+        "C05XXX",
+        "1707686216.825719",
+        "slack_get_chat_permalink_response.json",
+    );
     let slack_fetch_user_mock = mock_slack_fetch_user(
         &app.app.slack_mock_server,
         "U05YYY", // The message's creator, not the user who starred the message
@@ -194,6 +202,7 @@ async fn test_receive_star_added_event(
     assert_eq!(response.status(), 200);
     assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
 
+    slack_get_chat_permalink_mock.assert();
     slack_fetch_user_mock.assert();
     slack_fetch_message_mock.assert();
     slack_fetch_channel_mock.assert();
@@ -223,8 +232,21 @@ async fn test_receive_star_added_event(
         notifications[0].metadata,
         NotificationMetadata::Slack(Box::new(event.clone()))
     );
+    assert_eq!(
+        notifications[0].get_html_url(),
+        "https://slack.com/archives/C05XXX/p1234567890"
+            .parse()
+            .unwrap()
+    );
+
     match &notifications[0].details {
         Some(NotificationDetails::SlackMessage(details)) => {
+            assert_eq!(
+                details.url,
+                "https://slack.com/archives/C05XXX/p1234567890"
+                    .parse()
+                    .unwrap()
+            );
             assert_eq!(details.message.origin.ts, "1707686216.825719".into());
             assert_eq!(details.channel.id, "C05XXX".into());
             match &details.sender {
@@ -249,6 +271,7 @@ async fn test_receive_star_added_event(
     assert_eq!(response.status(), 200);
     assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
 
+    slack_get_chat_permalink_mock.assert_hits(1);
     slack_fetch_user_mock.assert_hits(1);
     slack_fetch_message_mock.assert_hits(1);
     slack_fetch_channel_mock.assert_hits(1);
@@ -288,6 +311,12 @@ async fn test_receive_star_removed_event(
     )
     .await;
 
+    let slack_get_chat_permalink_mock = mock_slack_get_chat_permalink(
+        &app.app.slack_mock_server,
+        "C05XXX",
+        "1707686216.825719",
+        "slack_get_chat_permalink_response.json",
+    );
     let slack_fetch_user_mock = mock_slack_fetch_user(
         &app.app.slack_mock_server,
         "U05YYY", // The message's creator, not the user who starred the message
@@ -320,6 +349,7 @@ async fn test_receive_star_removed_event(
     assert_eq!(response.status(), 200);
     assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
 
+    slack_get_chat_permalink_mock.assert();
     slack_fetch_user_mock.assert();
     slack_fetch_message_mock.assert();
     slack_fetch_channel_mock.assert();
@@ -353,6 +383,7 @@ async fn test_receive_star_removed_event(
     assert_eq!(response.status(), 200);
     assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
 
+    slack_get_chat_permalink_mock.assert_hits(1);
     slack_fetch_user_mock.assert_hits(1);
     slack_fetch_message_mock.assert_hits(1);
     slack_fetch_channel_mock.assert_hits(1);

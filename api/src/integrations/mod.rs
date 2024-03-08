@@ -30,19 +30,19 @@ pub mod notification {
         async fn delete_notification_from_source<'a>(
             &self,
             executor: &mut Transaction<'a, Postgres>,
-            source_id: &str,
+            notification: &Notification,
             user_id: UserId,
         ) -> Result<(), UniversalInboxError>;
         async fn unsubscribe_notification_from_source<'a>(
             &self,
             executor: &mut Transaction<'a, Postgres>,
-            source_id: &str,
+            notification: &Notification,
             user_id: UserId,
         ) -> Result<(), UniversalInboxError>;
         async fn snooze_notification_from_source<'a>(
             &self,
             executor: &mut Transaction<'a, Postgres>,
-            source_id: &str,
+            notification: &Notification,
             snoozed_until_at: DateTime<Utc>,
             user_id: UserId,
         ) -> Result<(), UniversalInboxError>;

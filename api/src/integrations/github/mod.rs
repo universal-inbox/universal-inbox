@@ -310,11 +310,11 @@ impl NotificationSyncSourceService for GithubService {
 #[async_trait]
 impl NotificationSourceService for GithubService {
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.0.to_string()), err)]
     async fn delete_notification_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        source_id: &str,
+        notification: &Notification,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
         let (access_token, _) = self
@@ -325,15 +325,16 @@ impl NotificationSourceService for GithubService {
             .await?
             .ok_or_else(|| anyhow!("Cannot delete Github notification without an access token"))?;
 
-        self.mark_thread_as_read(source_id, &access_token).await
+        self.mark_thread_as_read(&notification.source_id, &access_token)
+            .await
     }
 
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.0.to_string()), err)]
     async fn unsubscribe_notification_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        source_id: &str,
+        notification: &Notification,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
         let (access_token, _) = self
@@ -346,14 +347,16 @@ impl NotificationSourceService for GithubService {
                 anyhow!("Cannot unsubscribe from Github notifications without an access token")
             })?;
 
-        self.mark_thread_as_read(source_id, &access_token).await?;
-        self.unsubscribe_from_thread(source_id, &access_token).await
+        self.mark_thread_as_read(&notification.source_id, &access_token)
+            .await?;
+        self.unsubscribe_from_thread(&notification.source_id, &access_token)
+            .await
     }
 
     async fn snooze_notification_from_source<'a>(
         &self,
         _executor: &mut Transaction<'a, Postgres>,
-        _source_id: &str,
+        _notification: &Notification,
         _snoozed_until_at: DateTime<Utc>,
         _user_id: UserId,
     ) -> Result<(), UniversalInboxError> {

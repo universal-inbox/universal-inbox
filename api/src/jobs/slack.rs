@@ -34,7 +34,7 @@ pub async fn handle_slack_push_event(
     event: SlackPushEventCallbackJob,
     notification_service: Data<Arc<RwLock<NotificationService>>>,
 ) -> Result<(), UniversalInboxError> {
-    info!("Processing Slack push event");
+    info!(?event, "Processing Slack push event");
     let service = notification_service.read().await;
     let mut transaction = service
         .begin()

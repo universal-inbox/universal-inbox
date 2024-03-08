@@ -518,11 +518,11 @@ impl NotificationSyncSourceService for GoogleMailService {
 #[async_trait]
 impl NotificationSourceService for GoogleMailService {
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.0.to_string()), err)]
     async fn delete_notification_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        source_id: &str,
+        notification: &Notification,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
         let (access_token, integration_connection) = self
@@ -536,16 +536,20 @@ impl NotificationSourceService for GoogleMailService {
             })?;
         let config = GoogleMailService::get_config(&integration_connection)?;
 
-        self.archive_thread(source_id, &config.synced_label.id, &access_token)
-            .await
+        self.archive_thread(
+            &notification.source_id,
+            &config.synced_label.id,
+            &access_token,
+        )
+        .await
     }
 
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.0.to_string()), err)]
     async fn unsubscribe_notification_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        source_id: &str,
+        notification: &Notification,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
         let (access_token, integration_connection) = self
@@ -559,14 +563,18 @@ impl NotificationSourceService for GoogleMailService {
             })?;
         let config = GoogleMailService::get_config(&integration_connection)?;
 
-        self.archive_thread(source_id, &config.synced_label.id, &access_token)
-            .await
+        self.archive_thread(
+            &notification.source_id,
+            &config.synced_label.id,
+            &access_token,
+        )
+        .await
     }
 
     async fn snooze_notification_from_source<'a>(
         &self,
         _executor: &mut Transaction<'a, Postgres>,
-        _source_id: &str,
+        _notification: &Notification,
         _snoozed_until_at: DateTime<Utc>,
         _user_id: UserId,
     ) -> Result<(), UniversalInboxError> {

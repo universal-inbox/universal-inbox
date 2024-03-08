@@ -1,12 +1,14 @@
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use slack_morphism::prelude::*;
+use url::Url;
 use uuid::Uuid;
 
 use crate::{
     notification::{Notification, NotificationMetadata, NotificationStatus},
     user::UserId,
     utils::{emoji::replace_emoji_code_in_string_with_emoji, truncate::truncate_with_ellipse},
+    HasHtmlUrl,
 };
 
 pub trait SlackPushEventCallbackExt {
@@ -85,6 +87,7 @@ impl SlackPushEventCallbackExt for SlackPushEventCallback {
 
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
 pub struct SlackMessageDetails {
+    pub url: Url,
     pub message: SlackHistoryMessage,
     pub channel: SlackChannelInfo,
     pub sender: SlackMessageSenderDetails,
@@ -105,6 +108,17 @@ pub struct SlackFileDetails {
     pub team: SlackTeamInfo,
 }
 
+impl HasHtmlUrl for SlackFileDetails {
+    fn get_html_url(&self) -> Url {
+        format!(
+            "https://app.slack.com/client/{}/{}",
+            self.team.id, self.channel.id
+        )
+        .parse()
+        .unwrap()
+    }
+}
+
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
 pub struct SlackFileCommentDetails {
     pub channel: SlackChannelInfo,
@@ -113,10 +127,32 @@ pub struct SlackFileCommentDetails {
     pub team: SlackTeamInfo,
 }
 
+impl HasHtmlUrl for SlackFileCommentDetails {
+    fn get_html_url(&self) -> Url {
+        format!(
+            "https://app.slack.com/client/{}/{}",
+            self.team.id, self.channel.id
+        )
+        .parse()
+        .unwrap()
+    }
+}
+
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
 pub struct SlackChannelDetails {
     pub channel: SlackChannelInfo,
     pub team: SlackTeamInfo,
+}
+
+impl HasHtmlUrl for SlackChannelDetails {
+    fn get_html_url(&self) -> Url {
+        format!(
+            "https://app.slack.com/client/{}/{}",
+            self.team.id, self.channel.id
+        )
+        .parse()
+        .unwrap()
+    }
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
@@ -125,8 +161,30 @@ pub struct SlackImDetails {
     pub team: SlackTeamInfo,
 }
 
+impl HasHtmlUrl for SlackImDetails {
+    fn get_html_url(&self) -> Url {
+        format!(
+            "https://app.slack.com/client/{}/{}",
+            self.team.id, self.channel.id
+        )
+        .parse()
+        .unwrap()
+    }
+}
+
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
 pub struct SlackGroupDetails {
     pub channel: SlackChannelInfo,
     pub team: SlackTeamInfo,
+}
+
+impl HasHtmlUrl for SlackGroupDetails {
+    fn get_html_url(&self) -> Url {
+        format!(
+            "https://app.slack.com/client/{}/{}",
+            self.team.id, self.channel.id
+        )
+        .parse()
+        .unwrap()
+    }
 }
