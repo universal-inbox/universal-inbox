@@ -10,9 +10,12 @@ use universal_inbox::notification::{
     NotificationWithTask,
 };
 
-use crate::components::integrations::github::{
-    icons::GithubNotificationIcon, preview::pull_request::ChecksGithubPullRequest,
-    GithubActorDisplay,
+use crate::components::{
+    integrations::github::{
+        icons::GithubNotificationIcon, preview::pull_request::ChecksGithubPullRequest,
+        GithubActorDisplay,
+    },
+    markdown::Markdown,
 };
 
 #[component]
@@ -22,7 +25,6 @@ pub fn GithubNotificationDisplay<'a>(
     github_notification: &'a GithubNotification,
 ) -> Element {
     let github_notification_id = github_notification.extract_id();
-    let title = markdown::to_html(&notif.title);
 
     render! {
         div {
@@ -37,7 +39,7 @@ pub fn GithubNotificationDisplay<'a>(
             div {
                 class: "flex flex-col grow",
 
-                span { dangerous_inner_html: "{title}" }
+                Markdown { text: notif.title.clone() }
                 div {
                     class: "flex gap-2 text-xs text-gray-400",
 
@@ -77,7 +79,7 @@ pub fn GithubPullRequestDetailsDisplay<'a>(
             GithubReviewStatus { github_pull_request: github_pull_request }
 
             if let Some(actor) = &github_pull_request.author {
-                render! { GithubActorDisplay { actor: actor, without_name: true } }
+                render! { GithubActorDisplay { actor: actor } }
             } else {
                 None
             }
@@ -124,7 +126,7 @@ pub fn GithubDiscussionDetailsDisplay<'a>(
             }
 
             if let Some(actor) = &github_discussion.author {
-                render! { GithubActorDisplay { actor: actor, without_name: true } }
+                render! { GithubActorDisplay { actor: actor } }
             } else {
                 None
             }

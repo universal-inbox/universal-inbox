@@ -15,6 +15,7 @@ use crate::components::{
         get_notification_type_label,
         icons::{LinearProjectHealtIcon, LinearProjectIcon},
     },
+    markdown::Markdown,
     CardWithHeaders, CollapseCard, SmallCard, Tag, TagDisplay, UserWithAvatar,
 };
 
@@ -65,7 +66,6 @@ pub fn LinearProjectDetails<'a>(
     linear_project: &'a LinearProject,
     dark_bg: Option<bool>,
 ) -> Element {
-    let description = markdown::to_html(&linear_project.description);
     let (cards_style, proses_style) = if dark_bg.unwrap_or_default() {
         ("bg-neutral text-neutral-content", "!prose-invert")
     } else {
@@ -79,10 +79,7 @@ pub fn LinearProjectDetails<'a>(
             CollapseCard {
                 class: "{cards_style}",
                 header: render! { span { class: "text-gray-400 ", "Description" } },
-                p {
-                    class: "w-full prose prose-sm {proses_style}",
-                    dangerous_inner_html: "{description}"
-                }
+                Markdown { class: "{proses_style}", text: linear_project.description.clone() }
             }
 
             SmallCard {
@@ -101,7 +98,7 @@ pub fn LinearProjectDetails<'a>(
                         UserWithAvatar {
                             user_name: lead.name.clone(),
                             avatar_url: lead.avatar_url.clone(),
-                            initials_from: lead.name.clone(),
+                            display_name: true,
                         }
                     }
                 }
@@ -151,7 +148,6 @@ pub fn LinearProjectDetails<'a>(
 
 #[component]
 fn LinearProjectUpdateDetails<'a>(cx: Scope, project_update: &'a LinearProjectUpdate) -> Element {
-    let update_body = markdown::to_html(&project_update.body);
     let updated_at = project_update
         .updated_at
         .format("%Y-%m-%d %H:%M")
@@ -170,7 +166,7 @@ fn LinearProjectUpdateDetails<'a>(cx: Scope, project_update: &'a LinearProjectUp
             UserWithAvatar {
                 user_name: project_update.user.name.clone(),
                 avatar_url: project_update.user.avatar_url.clone(),
-                initials_from: project_update.user.name.clone(),
+                display_name: true,
             }
             span { class: "text-gray-400", "on" }
             span { " {updated_at}" }
@@ -181,10 +177,7 @@ fn LinearProjectUpdateDetails<'a>(cx: Scope, project_update: &'a LinearProjectUp
         CardWithHeaders {
             headers: headers,
 
-            p {
-                class: "w-full prose prose-sm dark:prose-invert",
-                dangerous_inner_html: "{update_body}"
-            }
+            Markdown { text: project_update.body.clone() }
         }
     }
 }

@@ -11,7 +11,7 @@ use universal_inbox::{
     task::integrations::todoist::{TodoistItem, TodoistItemPriority},
 };
 
-use crate::components::{Tag, TagDisplay};
+use crate::components::{markdown::Markdown, Tag, TagDisplay};
 
 #[component]
 pub fn TodoistNotificationDisplay<'a>(
@@ -19,7 +19,6 @@ pub fn TodoistNotificationDisplay<'a>(
     notif: &'a NotificationWithTask,
     todoist_task: TodoistItem,
 ) -> Element {
-    let title = markdown::to_html(&notif.title);
     let task_icon_style = match todoist_task.priority {
         TodoistItemPriority::P1 => "",
         TodoistItemPriority::P2 => "text-yellow-500",
@@ -36,7 +35,7 @@ pub fn TodoistNotificationDisplay<'a>(
             div {
                 class: "flex flex-col grow",
 
-                span { dangerous_inner_html: "{title}" }
+                Markdown { text: notif.title.clone() }
                 div {
                     class: "flex gap-2",
 

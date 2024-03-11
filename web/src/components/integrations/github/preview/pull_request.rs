@@ -204,7 +204,7 @@ fn GithubPullRequestDetails<'a>(cx: Scope, github_pull_request: &'a GithubPullRe
                 render! {
                     SmallCard {
                         span { class: "text-gray-400", "Opened by" }
-                        GithubActorDisplay { actor: actor }
+                        GithubActorDisplay { actor: actor, display_name: true }
                     }
                 }
             }
@@ -217,7 +217,7 @@ fn GithubPullRequestDetails<'a>(cx: Scope, github_pull_request: &'a GithubPullRe
                             class: "flex flex-col",
                             for assignee in &github_pull_request.assignees {
                                 render! {
-                                    GithubActorDisplay { actor: assignee }
+                                    GithubActorDisplay { actor: assignee, display_name: true }
                                 }
                             }
                         }
@@ -229,7 +229,7 @@ fn GithubPullRequestDetails<'a>(cx: Scope, github_pull_request: &'a GithubPullRe
                 render! {
                     SmallCard {
                         span { class: "text-gray-400", "Merged by" }
-                        GithubActorDisplay { actor: merged_by }
+                        GithubActorDisplay { actor: merged_by, display_name: true }
                     }
                 }
             }
@@ -635,7 +635,7 @@ fn GithubReviewLine(cx: Scope, review: GithubReview) -> Element {
                                     UserWithAvatar {
                                         user_name: reviewer_display_name.clone(),
                                         avatar_url: reviewer_avatar_url,
-                                        initials_from: reviewer_display_name,
+                                        display_name: true,
                                     },
                                 }
                             }
@@ -655,7 +655,7 @@ fn GithubReviewLine(cx: Scope, review: GithubReview) -> Element {
                             UserWithAvatar {
                                 user_name: reviewer_display_name.clone(),
                                 avatar_url: reviewer_avatar_url,
-                                initials_from: reviewer_display_name,
+                                display_name: true,
                             },
                         }
                     }
@@ -735,7 +735,7 @@ pub fn GithubCommentList<'a>(cx: Scope, comments: &'a [GithubIssueComment]) -> E
                     CardWithHeaders {
                         headers: if let Some(author) = &comment.author {
                             vec![render! {
-                                GithubActorDisplay { actor: author },
+                                GithubActorDisplay { actor: author, display_name: true },
                                 span { class: "text-gray-400", "at {comment.created_at}" }
                             }]
                         } else { vec![] },

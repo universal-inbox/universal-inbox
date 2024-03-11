@@ -81,7 +81,7 @@ fn GithubDiscussionDetails<'a>(cx: Scope, github_discussion: &'a GithubDiscussio
                 render! {
                     SmallCard {
                         span { class: "text-gray-400", "Opened by" }
-                        GithubActorDisplay { actor: actor }
+                        GithubActorDisplay { actor: actor, display_name: true }
                     }
                 }
             }
@@ -92,7 +92,7 @@ fn GithubDiscussionDetails<'a>(cx: Scope, github_discussion: &'a GithubDiscussio
                         CollapseCard {
                             header: render! {
                                 span { class: "text-gray-400", "Answered by" }
-                                GithubActorDisplay { actor: actor }
+                                GithubActorDisplay { actor: actor, display_name: true }
                             },
 
                             p {

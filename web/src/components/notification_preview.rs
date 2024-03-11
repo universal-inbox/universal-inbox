@@ -121,22 +121,22 @@ fn NotificationDetailsPreview<'a>(cx: Scope, notification: &'a NotificationWithT
                 GithubDiscussionPreview { github_discussion: github_discussion }
             },
             NotificationDetails::SlackMessage(slack_message) => render! {
-                SlackMessagePreview { _slack_message: slack_message }
+                SlackMessagePreview { notification: notification, slack_message: slack_message }
             },
             NotificationDetails::SlackFile(slack_file) => render! {
-                SlackFilePreview { _slack_file: slack_file }
+                SlackFilePreview { notification: notification, slack_file: slack_file }
             },
             NotificationDetails::SlackFileComment(slack_file_comment) => render! {
-                SlackFileCommentPreview { _slack_file_comment: slack_file_comment }
+                SlackFileCommentPreview { notification: notification, slack_file_comment: slack_file_comment }
             },
             NotificationDetails::SlackChannel(slack_channel) => render! {
-                SlackChannelPreview { _slack_channel: slack_channel }
+                SlackChannelPreview { notification: notification, slack_channel: slack_channel }
             },
             NotificationDetails::SlackIm(slack_im) => render! {
-                SlackImPreview { _slack_im: slack_im }
+                SlackImPreview { notification: notification, slack_im: slack_im }
             },
             NotificationDetails::SlackGroup(slack_group) => render! {
-                SlackGroupPreview { _slack_group: slack_group }
+                SlackGroupPreview { notification: notification, slack_group: slack_group }
             },
         };
     }

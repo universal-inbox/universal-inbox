@@ -17,6 +17,7 @@ use crate::{
             icons::{LinearIssueIcon, LinearProjectIcon, LinearProjectMilestoneIcon},
             preview::project::LinearProjectDetails,
         },
+        markdown::Markdown,
         CollapseCard, SmallCard, Tag, TagDisplay, TagsInCard, UserWithAvatar,
     },
     theme::{
@@ -31,8 +32,6 @@ pub fn LinearIssuePreview<'a>(
     linear_notification: &'a LinearNotification,
     linear_issue: &'a LinearIssue,
 ) -> Element {
-    let title = markdown::to_html(&linear_issue.title);
-
     render! {
         div {
             class: "flex flex-col gap-2 w-full",
@@ -62,7 +61,7 @@ pub fn LinearIssuePreview<'a>(
                 a {
                     href: "{linear_issue.url}",
                     target: "_blank",
-                    dangerous_inner_html: "{title}"
+                    Markdown { text: linear_issue.title.clone() }
                 }
                 a {
                     class: "flex-none",
@@ -86,10 +85,6 @@ fn LinearIssueDetails<'a>(
     linear_notification: &'a LinearNotification,
     linear_issue: &'a LinearIssue,
 ) -> Element {
-    let description = linear_issue
-        .description
-        .as_ref()
-        .map(|description| markdown::to_html(description));
     let issue_priority_style = match linear_issue.priority {
         LinearIssuePriority::Low => PRIORITY_LOW_COLOR_CLASS,
         LinearIssuePriority::Normal => PRIORITY_NORMAL_COLOR_CLASS,
@@ -109,14 +104,11 @@ fn LinearIssueDetails<'a>(
                 span { class: "text-primary", "{linear_issue.created_at}" }
             }
 
-            if let Some(description) = &description {
+            if let Some(description) = &linear_issue.description {
                 render! {
                     CollapseCard {
                         header: render! { span { class: "text-gray-400", "Description" } },
-                        p {
-                            class: "w-full prose prose-sm dark:prose-invert",
-                            dangerous_inner_html: "{description}"
-                        }
+                        Markdown { text: description.clone() }
                     }
                 }
             }
@@ -135,7 +127,7 @@ fn LinearIssueDetails<'a>(
                         UserWithAvatar {
                             user_name: creator.name.clone(),
                             avatar_url: creator.avatar_url.clone(),
-                            initials_from: creator.name.clone(),
+                            display_name: true
                         }
                     }
                 }
@@ -148,7 +140,7 @@ fn LinearIssueDetails<'a>(
                         UserWithAvatar {
                             user_name: assignee.name.clone(),
                             avatar_url: assignee.avatar_url.clone(),
-                            initials_from: assignee.name.clone(),
+                            display_name: true
                         }
                     }
                 }
@@ -262,7 +254,6 @@ fn LinearCommentDisplay<'a>(
     linear_comment: &'a LinearComment,
     class: Option<&'a str>,
 ) -> Element {
-    let comment_body = markdown::to_html(&linear_comment.body);
     let updated_at = linear_comment
         .updated_at
         .format("%Y-%m-%d %H:%M")
@@ -282,7 +273,7 @@ fn LinearCommentDisplay<'a>(
                         UserWithAvatar {
                             user_name: user.name.clone(),
                             avatar_url: user.avatar_url.clone(),
-                            initials_from: user.name.clone(),
+                            display_name: true
                         }
                     }
                 }
@@ -290,10 +281,7 @@ fn LinearCommentDisplay<'a>(
                 span { " {updated_at}" }
             }
 
-            p {
-                class: "w-full prose prose-sm dark:prose-invert",
-                dangerous_inner_html: "{comment_body}"
-            }
+            Markdown { text: linear_comment.body.clone() }
 
             for child_comment in linear_comment.children.iter() {
                 render! {

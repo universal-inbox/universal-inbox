@@ -94,6 +94,23 @@ pub struct SlackMessageDetails {
     pub team: SlackTeamInfo,
 }
 
+impl HasHtmlUrl for SlackMessageDetails {
+    fn get_html_url(&self) -> Url {
+        self.url.clone()
+    }
+}
+
+impl SlackMessageDetails {
+    pub fn get_channel_html_url(&self) -> Url {
+        format!(
+            "https://app.slack.com/client/{}/{}",
+            self.team.id, self.channel.id
+        )
+        .parse()
+        .unwrap()
+    }
+}
+
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
 #[serde(tag = "type", content = "content")]
 pub enum SlackMessageSenderDetails {
