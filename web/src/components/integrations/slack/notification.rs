@@ -1,7 +1,6 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
-use dioxus_free_icons::{icons::bs_icons::BsEnvelope, Icon};
 use slack_morphism::prelude::*;
 
 use universal_inbox::notification::{
@@ -12,7 +11,12 @@ use universal_inbox::notification::{
     NotificationWithTask,
 };
 
-use crate::components::integrations::slack::icons::SlackNotificationIcon;
+use crate::components::{
+    integrations::slack::{
+        icons::SlackNotificationIcon, SlackMessageActorDisplay, SlackTeamDisplay, SlackUserDisplay,
+    },
+    markdown::Markdown,
+};
 
 #[component]
 pub fn SlackNotificationDisplay<'a>(
@@ -20,8 +24,6 @@ pub fn SlackNotificationDisplay<'a>(
     notif: &'a NotificationWithTask,
     slack_push_event_callback: SlackPushEventCallback,
 ) -> Element {
-    let title = markdown::to_html(&notif.title);
-    // : SlackStarsItem::Message { channel, .. },
     let subtitle = match &slack_push_event_callback.event {
         SlackEventCallbackBody::StarAdded(SlackStarAddedEvent { item, .. })
         | SlackEventCallbackBody::StarRemoved(SlackStarRemovedEvent { item, .. }) => match item {
@@ -47,7 +49,7 @@ pub fn SlackNotificationDisplay<'a>(
             div {
                 class: "flex flex-col grow",
 
-                span { dangerous_inner_html: "{title}" }
+                Markdown { text: notif.title.clone() }
                 span {
                     class: "flex gap-2 text-xs text-gray-400",
                     "{subtitle}"
@@ -58,55 +60,30 @@ pub fn SlackNotificationDisplay<'a>(
 }
 
 #[component]
-pub fn SlackEventDetailsDisplay<'a>(
-    cx: Scope,
-    slack_push_event_callback: &'a SlackPushEventCallback,
-) -> Element {
-    let item = (match &slack_push_event_callback.event {
-        SlackEventCallbackBody::StarAdded(SlackStarAddedEvent { item, .. })
-        | SlackEventCallbackBody::StarRemoved(SlackStarRemovedEvent { item, .. }) => Some(item),
-        _ => None,
-    })?;
-
-    let item_icon = match &item {
-        SlackStarsItem::Message { .. } => render! { Icon { class: "h-5 w-5", icon: BsEnvelope } },
-        SlackStarsItem::File { .. } => render! { Icon { class: "h-5 w-5", icon: BsEnvelope } },
-        SlackStarsItem::FileComment { .. } => {
-            render! { Icon { class: "h-5 w-5", icon: BsEnvelope } }
-        }
-        SlackStarsItem::Channel { .. } => render! { Icon { class: "h-5 w-5", icon: BsEnvelope } },
-        SlackStarsItem::Im { .. } => render! { Icon { class: "h-5 w-5", icon: BsEnvelope } },
-        SlackStarsItem::Group { .. } => render! { Icon { class: "h-5 w-5", icon: BsEnvelope } },
-    };
-
-    render! {
-        div {
-            class: "flex items-center gap-2",
-
-            item_icon
-        }
-    }
-}
-
-#[component]
 pub fn SlackMessageDetailsDisplay<'a>(
     cx: Scope,
-    _slack_message: &'a SlackMessageDetails,
+    slack_message: &'a SlackMessageDetails,
 ) -> Element {
     render! {
         div {
             class: "flex items-center gap-2",
 
+            SlackTeamDisplay { team: &slack_message.team }
+            SlackMessageActorDisplay { slack_message: &slack_message }
         }
     }
 }
 
 #[component]
-pub fn SlackFileDetailsDisplay<'a>(cx: Scope, _slack_file: &'a SlackFileDetails) -> Element {
+pub fn SlackFileDetailsDisplay<'a>(cx: Scope, slack_file: &'a SlackFileDetails) -> Element {
     render! {
         div {
             class: "flex items-center gap-2",
 
+            SlackTeamDisplay { team: &slack_file.team }
+            if let Some(ref user) = slack_file.sender {
+                render! { SlackUserDisplay { user: user } }
+            }
         }
     }
 }
@@ -114,12 +91,16 @@ pub fn SlackFileDetailsDisplay<'a>(cx: Scope, _slack_file: &'a SlackFileDetails)
 #[component]
 pub fn SlackFileCommentDetailsDisplay<'a>(
     cx: Scope,
-    _slack_file_comment: &'a SlackFileCommentDetails,
+    slack_file_comment: &'a SlackFileCommentDetails,
 ) -> Element {
     render! {
         div {
             class: "flex items-center gap-2",
 
+            SlackTeamDisplay { team: &slack_file_comment.team }
+            if let Some(ref user) = slack_file_comment.sender {
+                render! { SlackUserDisplay { user: user } }
+            }
         }
     }
 }
@@ -127,32 +108,35 @@ pub fn SlackFileCommentDetailsDisplay<'a>(
 #[component]
 pub fn SlackChannelDetailsDisplay<'a>(
     cx: Scope,
-    _slack_channel: &'a SlackChannelDetails,
+    slack_channel: &'a SlackChannelDetails,
 ) -> Element {
     render! {
-    div {
-    class: "flex items-center gap-2",
+        div {
+            class: "flex items-center gap-2",
 
+            SlackTeamDisplay { team: &slack_channel.team }
         }
     }
 }
 
 #[component]
-pub fn SlackImDetailsDisplay<'a>(cx: Scope, _slack_im: &'a SlackImDetails) -> Element {
+pub fn SlackImDetailsDisplay<'a>(cx: Scope, slack_im: &'a SlackImDetails) -> Element {
     render! {
         div {
             class: "flex items-center gap-2",
 
+            SlackTeamDisplay { team: &slack_im.team }
         }
     }
 }
 
 #[component]
-pub fn SlackGroupDetailsDisplay<'a>(cx: Scope, _slack_group: &'a SlackGroupDetails) -> Element {
+pub fn SlackGroupDetailsDisplay<'a>(cx: Scope, slack_group: &'a SlackGroupDetails) -> Element {
     render! {
         div {
             class: "flex items-center gap-2",
 
+            SlackTeamDisplay { team: &slack_group.team }
         }
     }
 }

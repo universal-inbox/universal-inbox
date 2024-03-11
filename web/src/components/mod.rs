@@ -12,6 +12,7 @@ pub mod flowbite;
 pub mod footer;
 pub mod integrations;
 pub mod integrations_panel;
+pub mod markdown;
 pub mod nav_bar;
 pub mod notification_preview;
 pub mod notifications_list;
@@ -105,8 +106,11 @@ pub fn UserWithAvatar(
     cx: Scope,
     user_name: Option<String>,
     avatar_url: Option<Option<Url>>,
-    initials_from: Option<String>,
+    display_name: Option<bool>,
 ) -> Element {
+    let display_name = display_name.unwrap_or_default();
+    let initials = user_name.as_ref().map(|name| get_initials_from_name(name));
+
     render! {
         div {
             class: "flex gap-2 items-center",
@@ -122,27 +126,41 @@ pub fn UserWithAvatar(
                     }
                 },
                 Some(None) => {
-                    if let Some(initials) = initials_from
-                        .as_ref()
-                        .map(|initials_from| get_initials_from_name(initials_from)) {
-                            render! {
+                    if let Some(initials) = initials {
+                        render! {
+                            div {
+                                class: "avatar placeholder",
                                 div {
-                                    class: "avatar placeholder",
-                                    div {
-                                        class: "w-5 rounded-full bg-accent text-accent-content",
-                                        span { class: "text-xs", "{initials}" }
-                                    }
+                                    class: "w-5 rounded-full bg-accent text-accent-content",
+                                    span { class: "text-xs", "{initials}" }
                                 }
                             }
-                        } else {
-                            render! { Icon { class: "h-5 w-5 text-gray-400", icon: BsPersonCircle } }
                         }
+                    } else {
+                        render! {
+                            div {
+                                class: "avatar placeholder",
+                                div {
+                                    class: "w-5 rounded-full bg-accent text-accent-content",
+                                    Icon { class: "h-5 w-5", icon: BsPersonCircle }
+                                }
+                            }
+                        }
+                    }
                 }
                 None => None
             }
 
-            if let Some(user_name) = user_name {
-                render! { span { class: "text-sm", "{user_name}" } }
+            if display_name {
+                render! {
+                    if let Some(user_name) = user_name {
+                        render! {
+                            span { class: "text-sm", "{user_name}" }
+                        }
+                    }
+                }
+            } else {
+                None
             }
         }
     }

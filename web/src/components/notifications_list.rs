@@ -29,9 +29,9 @@ use crate::{
         icons::NotificationMetadataIcon,
         linear::notification::{LinearNotificationDetailsDisplay, LinearNotificationDisplay},
         slack::notification::{
-            SlackChannelDetailsDisplay, SlackEventDetailsDisplay, SlackFileCommentDetailsDisplay,
-            SlackFileDetailsDisplay, SlackGroupDetailsDisplay, SlackImDetailsDisplay,
-            SlackMessageDetailsDisplay, SlackNotificationDisplay,
+            SlackChannelDetailsDisplay, SlackFileCommentDetailsDisplay, SlackFileDetailsDisplay,
+            SlackGroupDetailsDisplay, SlackImDetailsDisplay, SlackMessageDetailsDisplay,
+            SlackNotificationDisplay,
         },
         todoist::notification::{TodoistNotificationDetailsDisplay, TodoistNotificationDisplay},
     },
@@ -462,22 +462,22 @@ pub fn NotificationDetailsDisplay<'a>(
                 GithubDiscussionDetailsDisplay { github_discussion: github_discussion }
             },
             NotificationDetails::SlackMessage(slack_message) => render! {
-                SlackMessageDetailsDisplay { _slack_message: slack_message }
+                SlackMessageDetailsDisplay { slack_message: slack_message }
             },
             NotificationDetails::SlackChannel(slack_channel) => render! {
-                SlackChannelDetailsDisplay { _slack_channel: slack_channel }
+                SlackChannelDetailsDisplay { slack_channel: slack_channel }
             },
             NotificationDetails::SlackFile(slack_file) => render! {
-                SlackFileDetailsDisplay { _slack_file: slack_file }
+                SlackFileDetailsDisplay { slack_file: slack_file }
             },
             NotificationDetails::SlackFileComment(slack_file_comment) => render! {
-                SlackFileCommentDetailsDisplay { _slack_file_comment: slack_file_comment }
+                SlackFileCommentDetailsDisplay { slack_file_comment: slack_file_comment }
             },
             NotificationDetails::SlackIm(slack_im) => render! {
-                SlackImDetailsDisplay { _slack_im: slack_im }
+                SlackImDetailsDisplay { slack_im: slack_im }
             },
             NotificationDetails::SlackGroup(slack_group) => render! {
-                SlackGroupDetailsDisplay { _slack_group: slack_group }
+                SlackGroupDetailsDisplay { slack_group: slack_group }
             },
         };
     }
@@ -500,8 +500,6 @@ pub fn NotificationDetailsDisplay<'a>(
             GoogleMailNotificationDetailsDisplay { google_mail_thread: google_mail_thread }
         },
         NotificationMetadata::Github(_) => None,
-        NotificationMetadata::Slack(slack_push_event_callback) => render! {
-            SlackEventDetailsDisplay { slack_push_event_callback: slack_push_event_callback } // TODO: remove
-        },
+        NotificationMetadata::Slack(_) => None,
     }
 }

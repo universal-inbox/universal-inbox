@@ -16,7 +16,7 @@ use universal_inbox::{
 };
 
 use crate::{
-    components::{SmallCard, TagsInCard},
+    components::{markdown::Markdown, SmallCard, TagsInCard},
     theme::{
         PRIORITY_HIGH_COLOR_CLASS, PRIORITY_LOW_COLOR_CLASS, PRIORITY_NORMAL_COLOR_CLASS,
         PRIORITY_URGENT_COLOR_CLASS,
@@ -32,8 +32,6 @@ pub fn TodoistTaskPreview<'a>(
 ) -> Element {
     let link = notification.get_html_url();
     let project_link = task.get_html_project_url();
-    let title = markdown::to_html(&notification.title);
-    let body = markdown::to_html(&task.body);
     let priority: u8 = task.priority.into();
     let task_priority_style = match todoist_task.priority {
         TodoistItemPriority::P1 => PRIORITY_LOW_COLOR_CLASS,
@@ -64,7 +62,7 @@ pub fn TodoistTaskPreview<'a>(
                 a {
                     href: "{link}",
                     target: "_blank",
-                    dangerous_inner_html: "{title}"
+                    Markdown { text: notification.title.clone() }
                 }
                 a {
                     class: "flex-none",
@@ -112,10 +110,7 @@ pub fn TodoistTaskPreview<'a>(
                 }
             }
 
-            p {
-                class: "w-full prose prose-sm",
-                dangerous_inner_html: "{body}"
-            }
+            Markdown { text: task.body.clone() }
         }
     }
 }

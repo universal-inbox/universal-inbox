@@ -127,11 +127,11 @@ pub fn LinearIssueDetailsDisplay<'a>(
 
             if let Some(assignee) = &linear_issue.assignee {
                 render! {
-                    UserWithAvatar { avatar_url: assignee.avatar_url.clone(), initials_from: assignee.name.clone() }
+                    UserWithAvatar { avatar_url: assignee.avatar_url.clone(), user_name: assignee.name.clone() }
                 }
             } else {
                 render! {
-                    UserWithAvatar { avatar_url: None }
+                    UserWithAvatar {}
                 }
             }
         }
@@ -157,7 +157,7 @@ pub fn LinearProjectDetailsDisplay<'a>(
 
             if let Some(lead) = &linear_project.lead {
                 render! {
-                    UserWithAvatar { avatar_url: lead.avatar_url.clone(), initials_from: lead.name.clone() }
+                    UserWithAvatar { avatar_url: lead.avatar_url.clone(), user_name: lead.name.clone() }
                 }
             }
         }
