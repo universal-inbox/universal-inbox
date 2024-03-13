@@ -13,6 +13,7 @@
 - Display Linear project on notification item
 - Display Linear Project and Team icons
 - Connect to Slack and receive "save for later" (aka. "stars") events
+- Add Slack "saved for later" as notifications
 
 ### Changed
 
@@ -21,6 +22,8 @@
 ### Fixed
 
 - Increase the number of connection to Postgres in production
+- Split the Todoist projects cache per user
+- Trace user ID in logs and traces
 
 ## [Initial Version] - 2024-01-27
 
