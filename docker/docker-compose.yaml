@@ -69,6 +69,14 @@ services:
     ports:
       - "8000:8000"
 
+  universal-inbox-worker:
+    image: "dax42/universal-inbox:latest"
+    command: ["start-workers"]
+    networks:
+      - universal-inbox
+    env_file:
+      - universal-inbox.env
+
 networks:
   universal-inbox:
 
