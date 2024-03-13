@@ -8,7 +8,7 @@ use universal_inbox::notification::{
         SlackChannelDetails, SlackFileCommentDetails, SlackFileDetails, SlackGroupDetails,
         SlackImDetails, SlackMessageDetails,
     },
-    NotificationWithTask,
+    NotificationDetails, NotificationWithTask,
 };
 
 use crate::components::{
@@ -24,16 +24,21 @@ pub fn SlackNotificationDisplay<'a>(
     notif: &'a NotificationWithTask,
     slack_push_event_callback: SlackPushEventCallback,
 ) -> Element {
-    let subtitle = match &slack_push_event_callback.event {
-        SlackEventCallbackBody::StarAdded(SlackStarAddedEvent { item, .. })
-        | SlackEventCallbackBody::StarRemoved(SlackStarRemovedEvent { item, .. }) => match item {
-            SlackStarsItem::Message(SlackStarsItemMessage { channel, .. })
-            | SlackStarsItem::File(SlackStarsItemFile { channel, .. })
-            | SlackStarsItem::FileComment(SlackStarsItemFileComment { channel, .. })
-            | SlackStarsItem::Channel(SlackStarsItemChannel { channel, .. })
-            | SlackStarsItem::Im(SlackStarsItemIm { channel, .. }) => format!("#{channel}"),
-            SlackStarsItem::Group(SlackStarsItemGroup { group, .. }) => format!("@{group}"),
-        },
+    let subtitle = match &notif.details {
+        Some(NotificationDetails::SlackMessage(SlackMessageDetails { channel, .. }))
+        | Some(NotificationDetails::SlackFile(SlackFileDetails { channel, .. }))
+        | Some(NotificationDetails::SlackFileComment(SlackFileCommentDetails {
+            channel, ..
+        }))
+        | Some(NotificationDetails::SlackChannel(SlackChannelDetails { channel, .. }))
+        | Some(NotificationDetails::SlackIm(SlackImDetails { channel, .. }))
+        | Some(NotificationDetails::SlackGroup(SlackGroupDetails { channel, .. })) => {
+            if let Some(channel_name) = &channel.name {
+                format!("#{}", channel_name)
+            } else {
+                format!("#{}", channel.id)
+            }
+        }
         _ => "".to_string(),
     };
 
