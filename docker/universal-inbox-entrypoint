@@ -7,5 +7,10 @@ export DATABASE_URL="postgresql://$UNIVERSAL_INBOX__DATABASE__USERNAME:$UNIVERSA
 echo "Migrating Database schema"
 /usr/local/bin/sqlx migrate run
 
+if [ -n "$UNIVERSAL_INBOX__APPLICATION__FRONT_BASE_URL" ]; then
+  echo "Updating index.html with canonical link to $UNIVERSAL_INBOX__APPLICATION__FRONT_BASE_URL"
+  sed -i "s#</head>#<link href=\"$UNIVERSAL_INBOX__APPLICATION__FRONT_BASE_URL\" rel=\"canonical\" /></head>#" /app/statics/index.html
+fi
+
 echo "Starting Universal Inbox"
 exec /app/universal-inbox "$*"
