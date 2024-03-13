@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, TimeDelta, Utc};
 use jsonwebtoken::{EncodingKey, Header};
 use secrecy::Secret;
 use sqlx::{Postgres, Transaction};
@@ -53,7 +53,14 @@ impl AuthenticationTokenService {
         expire_at: Option<DateTime<Utc>>,
     ) -> Result<AuthenticationToken, UniversalInboxError> {
         let expire_at = expire_at.unwrap_or_else(|| {
-            Utc::now() + Duration::days(self.http_session_settings.jwt_token_expiration_in_days)
+            Utc::now()
+                + TimeDelta::try_days(self.http_session_settings.jwt_token_expiration_in_days)
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "Invalid `jwt_token_expiration_in_days` value: {}",
+                            self.http_session_settings.jwt_token_expiration_in_days
+                        )
+                    })
         });
         let claims = Claims {
             iat: Utc::now().timestamp() as usize,

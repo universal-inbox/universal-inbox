@@ -1,4 +1,4 @@
-use chrono::{Duration, TimeZone, Timelike, Utc};
+use chrono::{TimeDelta, TimeZone, Timelike, Utc};
 use graphql_client::Response;
 use http::StatusCode;
 use rstest::*;
@@ -89,7 +89,9 @@ mod list_notifications {
                 updated_at: Utc.with_ymd_and_hms(2022, 2, 1, 0, 0, 0).unwrap(),
                 last_read_at: Some(Utc.with_ymd_and_hms(2022, 2, 1, 1, 0, 0).unwrap()),
                 // Snooze time has expired
-                snoozed_until: Some(Utc::now().with_nanosecond(0).unwrap() - Duration::minutes(1)),
+                snoozed_until: Some(
+                    Utc::now().with_nanosecond(0).unwrap() - TimeDelta::try_minutes(1).unwrap(),
+                ),
                 user_id: app.user.id,
                 details: None,
                 task_id: None,
@@ -130,7 +132,9 @@ mod list_notifications {
                 updated_at: Utc.with_ymd_and_hms(2022, 2, 1, 0, 0, 0).unwrap(),
                 last_read_at: Some(Utc.with_ymd_and_hms(2022, 2, 1, 1, 0, 0).unwrap()),
                 // Snooze time in the future
-                snoozed_until: Some(Utc::now().with_nanosecond(0).unwrap() + Duration::minutes(1)),
+                snoozed_until: Some(
+                    Utc::now().with_nanosecond(0).unwrap() + TimeDelta::try_minutes(1).unwrap(),
+                ),
                 user_id: app.user.id,
                 details: None,
                 task_id: None,

@@ -1,5 +1,5 @@
 use anyhow::Result;
-use chrono::{DateTime, Duration, Local, TimeZone, Timelike, Utc};
+use chrono::{DateTime, Local, TimeDelta, TimeZone, Timelike, Utc};
 use dioxus::prelude::*;
 use fermi::{AtomRef, UseAtomRef};
 use futures_util::StreamExt;
@@ -315,7 +315,7 @@ where
     let day_adjusted_time = if from.hour() < reset_hour {
         from
     } else {
-        from + Duration::days(days_offset)
+        from + TimeDelta::try_days(days_offset).unwrap()
     };
     day_adjusted_time
         .with_hour(reset_hour)

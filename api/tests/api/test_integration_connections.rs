@@ -84,7 +84,6 @@ mod list_integration_connections {
         let (client, _user) =
             authenticate_user(&app.app, "5678", "Jane", "Doe", "jane@example.com").await;
 
-        println!("User: {:?}", _user);
         let result = list_integration_connections(&client, &app.app.api_address).await;
 
         assert_eq!(result.len(), 0);

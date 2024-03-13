@@ -5,7 +5,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Context};
-use chrono::{Duration, Utc};
+use chrono::{TimeDelta, Utc};
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info};
@@ -231,7 +231,16 @@ impl TaskService {
             .find_access_token(
                 executor,
                 integration_provider_kind,
-                Some(Utc::now() - Duration::minutes(self.min_sync_tasks_interval_in_minutes)),
+                Some(
+                    Utc::now()
+                        - TimeDelta::try_minutes(self.min_sync_tasks_interval_in_minutes)
+                            .unwrap_or_else(|| {
+                                panic!(
+                                    "Invalid `min_sync_tasks_interval_in_minutes` value: {}",
+                                    self.min_sync_tasks_interval_in_minutes
+                                )
+                            }),
+                ),
                 user_id,
             )
             .await?;

@@ -1,6 +1,6 @@
 use std::fmt;
 
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_with::serde_as;
 use url::Url;
@@ -114,11 +114,10 @@ mod message_date_format {
         s.parse::<i64>()
             .map_err(|err| format!("Failed to parse i64: {err}"))
             .and_then(|timestamp| {
-                let Some(naive_datetime) = NaiveDateTime::from_timestamp_opt(timestamp / 1000, 0)
-                else {
+                let Some(datetime) = DateTime::from_timestamp(timestamp / 1000, 0) else {
                     return Err(format!("Invalid timestamp {timestamp}"));
                 };
-                Ok(DateTime::from_naive_utc_and_offset(naive_datetime, Utc))
+                Ok(datetime)
             })
             .map_err(serde::de::Error::custom)
     }

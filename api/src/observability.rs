@@ -114,7 +114,7 @@ pub fn get_subscriber_with_telemetry(
 
     // The bridge currently has a bug as it does not add the span_id and trace_id to the log record
     // See https://github.com/open-telemetry/opentelemetry-rust/pull/1394
-    let logging = OpenTelemetryTracingBridge::new(&logger.provider().unwrap());
+    let logging = OpenTelemetryTracingBridge::new(logger.provider());
     let fmt = tracing_subscriber::fmt::layer().pretty();
 
     Registry::default()
