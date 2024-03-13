@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use chrono::{Duration, Utc};
+use chrono::{TimeDelta, Utc};
 use email_address::EmailAddress;
 use log::{error, info};
 use secrecy::ExposeSecret;
@@ -141,7 +141,7 @@ pub async fn generate_jwt_token(
             &mut transaction,
             false,
             user.id,
-            Some(Utc::now() + Duration::days(30 * 6)),
+            Some(Utc::now() + TimeDelta::try_days(30 * 6).unwrap()),
         )
         .await?;
 

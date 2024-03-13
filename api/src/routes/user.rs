@@ -5,7 +5,7 @@ use actix_jwt_authc::Authenticated;
 use actix_session::Session;
 use actix_web::{web, HttpResponse, Scope};
 use anyhow::{anyhow, Context};
-use chrono::{Duration, Utc};
+use chrono::{TimeDelta, Utc};
 use email_address::EmailAddress;
 use secrecy::{ExposeSecret, Secret};
 use serde_json::json;
@@ -367,7 +367,7 @@ pub async fn create_authentication_token(
             &mut transaction,
             false,
             user_id,
-            Some(Utc::now() + Duration::days(30 * 6)),
+            Some(Utc::now() + TimeDelta::try_days(30 * 6).unwrap()),
         )
         .await?;
 

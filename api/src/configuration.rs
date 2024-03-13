@@ -285,7 +285,7 @@ impl Settings {
 
         let default_config_file = format!("{config_path}/default");
         let local_config_file = format!("{config_path}/local");
-        println!(
+        eprintln!(
             "Trying to load {:?} config files",
             vec![&default_config_file, &local_config_file, &config_file]
         );

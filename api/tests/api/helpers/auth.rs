@@ -1,4 +1,4 @@
-use chrono::{Duration, TimeZone, Utc};
+use chrono::{TimeDelta, TimeZone, Utc};
 use httpmock::Method::{GET, POST};
 use openidconnect::{
     core::{CoreHmacKey, CoreIdToken, CoreIdTokenClaims, CoreJwsSigningAlgorithm},
@@ -49,7 +49,7 @@ pub async fn authenticate_user(
         CoreIdTokenClaims::new(
             IssuerUrl::new(oidc_issuer_mock_server_url.to_string()).unwrap(),
             vec![Audience::new(format!("{email}-client-id-123"))],
-            Utc::now() + Duration::seconds(120),
+            Utc::now() + TimeDelta::try_seconds(120).unwrap(),
             Utc::now(),
             StandardClaims::new(SubjectIdentifier::new(format!("{first_name}-{last_name}")))
                 .set_email(Some(EndUserEmail::new(email.to_string()))),
