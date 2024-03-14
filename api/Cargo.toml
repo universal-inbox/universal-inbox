@@ -32,7 +32,7 @@ cached = { version = "0.49.0", features = ["async_tokio_rt_multi_thread", "redis
 chrono = { workspace = true, features = ["serde"] }
 clap = { workspace = true }
 color-backtrace = "0.6"
-config = "0.14.0"
+config = { version = "0.14.0", default-features = false, features = ["toml", "convert-case", "async"] }
 csp = "2.0.0"
 email_address = { workspace = true }
 enum_derive = { workspace = true }
