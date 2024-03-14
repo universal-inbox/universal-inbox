@@ -15,6 +15,7 @@ use tracing::{error, info};
 use universal_inbox::{
     notification::{NotificationSourceKind, NotificationSyncSourceKind},
     task::TaskSyncSourceKind,
+    user::UserId,
 };
 
 use universal_inbox_api::{
@@ -43,19 +44,25 @@ struct Cli {
 enum Commands {
     /// Synchronize sources of notifications
     SyncNotifications {
-        #[clap(value_enum, value_parser)]
+        /// Sync notifications for given user
+        #[clap(short, long)]
+        user_id: Option<UserId>,
+        #[clap(short, long, value_enum, value_parser)]
         source: Option<NotificationSyncSourceKind>,
     },
 
     /// Synchronize sources of tasks
     SyncTasks {
-        #[clap(value_enum, value_parser)]
+        /// Sync notifications for given user
+        #[clap(short, long)]
+        user_id: Option<UserId>,
+        #[clap(short, long, value_enum, value_parser)]
         source: Option<TaskSyncSourceKind>,
     },
 
     /// Clear notifications details from the database. Useful when stored data is no longer valid.
     DeleteNotificationDetails {
-        #[clap(value_enum, value_parser)]
+        #[clap(short, long, value_enum, value_parser)]
         source: NotificationSourceKind,
     },
 
@@ -228,11 +235,16 @@ async fn main() -> std::io::Result<()> {
     .await;
 
     let result = match &cli.command {
-        Commands::SyncNotifications { source } => {
-            commands::sync::sync_notifications_for_all_users(notification_service, *source).await
+        Commands::SyncNotifications { source, user_id } => {
+            commands::sync::sync_notifications_for_all_users(
+                notification_service,
+                *source,
+                *user_id,
+            )
+            .await
         }
-        Commands::SyncTasks { source } => {
-            commands::sync::sync_tasks_for_all_users(task_service, *source).await
+        Commands::SyncTasks { source, user_id } => {
+            commands::sync::sync_tasks_for_all_users(task_service, *source, *user_id).await
         }
         Commands::DeleteNotificationDetails { source } => {
             commands::migration::delete_notification_details(notification_service, *source).await

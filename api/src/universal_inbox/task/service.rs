@@ -305,6 +305,7 @@ impl TaskService {
                                     .collect(),
                                 true,
                                 task_source_service.is_supporting_snoozed_notifications(),
+                                user_id,
                             )
                             .await?;
 
@@ -496,22 +497,35 @@ impl TaskService {
             .await
             .context("Failed to create new transaction while syncing tasks for all users")?;
         let users = service.fetch_all_users(&mut transaction).await?;
+
         for user in users {
-            let user_id = user.id;
-            info!("Syncing tasks for user {user_id}");
-            let sync_result = if let Some(source) = source {
-                self.sync_tasks_with_transaction(source, user_id).await
-            } else {
-                self.sync_all_tasks(user_id).await
-            };
-            match sync_result {
-                Ok(tasks) => info!(
-                    "{} tasks successfully synced for user {user_id}",
-                    tasks.len()
-                ),
-                Err(err) => error!("Failed to sync tasks for user {user_id}: {err:?}"),
-            };
+            let _ = self.sync_tasks_for_user(source, user.id).await;
         }
+
+        Ok(())
+    }
+
+    #[tracing::instrument(level = "debug", skip(self), err)]
+    pub async fn sync_tasks_for_user<'a>(
+        &self,
+        source: Option<TaskSyncSourceKind>,
+        user_id: UserId,
+    ) -> Result<(), UniversalInboxError> {
+        info!("Syncing tasks for user {user_id}");
+
+        let sync_result = if let Some(source) = source {
+            self.sync_tasks_with_transaction(source, user_id).await
+        } else {
+            self.sync_all_tasks(user_id).await
+        };
+        match sync_result {
+            Ok(tasks) => info!(
+                "{} tasks successfully synced for user {user_id}",
+                tasks.len()
+            ),
+            Err(err) => error!("Failed to sync tasks for user {user_id}: {err:?}"),
+        };
+
         Ok(())
     }
 

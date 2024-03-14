@@ -324,14 +324,8 @@ impl NotificationService {
         source_notifications: Vec<Notification>,
         is_incremental_update: bool,
         update_snoozed_until: bool,
+        user_id: UserId,
     ) -> Result<Vec<UpsertStatus<Box<Notification>>>, UniversalInboxError> {
-        let Some(user_id) = source_notifications
-            .first()
-            .map(|notification| notification.user_id)
-        else {
-            return Ok(vec![]);
-        };
-
         let mut upsert_notifications: Vec<UpsertStatus<Box<Notification>>> = vec![];
         for notification in source_notifications {
             let upsert_notification = self
@@ -397,6 +391,7 @@ impl NotificationService {
                 source_notifications,
                 false,
                 notification_source_service.is_supporting_snoozed_notifications(),
+                user_id,
             )
             .await?;
 
@@ -553,23 +548,36 @@ impl NotificationService {
             "Failed to create new transaction while syncing notifications for all users",
         )?;
         let users = service.fetch_all_users(&mut transaction).await?;
+
         for user in users {
-            let user_id = user.id;
-            info!("Syncing notifications for user {user_id}");
-            let sync_result = if let Some(source) = source {
-                self.sync_notifications_with_transaction(source, user_id)
-                    .await
-            } else {
-                self.sync_all_notifications(user_id).await
-            };
-            match sync_result {
-                Ok(notifications) => info!(
-                    "{} notifications successfully synced for user {user_id}",
-                    notifications.len()
-                ),
-                Err(err) => error!("Failed to sync notifications for user {user_id}: {err:?}"),
-            };
+            let _ = self.sync_notifications_for_user(source, user.id).await;
         }
+
+        Ok(())
+    }
+
+    #[tracing::instrument(level = "debug", skip(self), err)]
+    pub async fn sync_notifications_for_user<'a>(
+        &self,
+        source: Option<NotificationSyncSourceKind>,
+        user_id: UserId,
+    ) -> Result<(), UniversalInboxError> {
+        info!("Syncing notifications for user {user_id}");
+
+        let sync_result = if let Some(source) = source {
+            self.sync_notifications_with_transaction(source, user_id)
+                .await
+        } else {
+            self.sync_all_notifications(user_id).await
+        };
+        match sync_result {
+            Ok(notifications) => info!(
+                "{} notifications successfully synced for user {user_id}",
+                notifications.len()
+            ),
+            Err(err) => error!("Failed to sync notifications for user {user_id}: {err:?}"),
+        };
+
         Ok(())
     }
 
