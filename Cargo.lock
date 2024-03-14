@@ -132,7 +132,6 @@ dependencies = [
  "serde",
  "time",
  "tokio",
- "tracing",
 ]
 
 [[package]]
