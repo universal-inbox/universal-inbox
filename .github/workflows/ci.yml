@@ -158,6 +158,7 @@ jobs:
       - name: Collect API coverage data
         env:
           RUST_MIN_STACK: 4194304
+          RUST_BACKTRACE: "full"
         run: devbox run -- just api/test-coverage
       - name: API test Report
         uses: dorny/test-reporter@v1
