@@ -16,7 +16,7 @@ test = false
 
 [dependencies]
 actix-cors = "0.7.0"
-actix-jwt-authc = { git = "https://github.com/dax/actix-jwt-authc", rev = "b09f0688f876eabe8c6685bc5beea2c8e0f437a8", features = ["session", "tracing"] }
+actix-jwt-authc = { git = "https://github.com/dax/actix-jwt-authc", rev = "b09f0688f876eabe8c6685bc5beea2c8e0f437a8", features = ["session"] }
 actix-http = "3.0.0"
 actix-web-opentelemetry = { version = "0.17.0", features = ["metrics"] }
 actix-session = { version = "0.9.0", features = ["actix", "cookie-session"] }
