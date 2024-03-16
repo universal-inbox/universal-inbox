@@ -53,8 +53,15 @@ pub struct ObservabilitySettings {
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct TracingSettings {
+    pub otlp_exporter_protocol: OtlpExporterProtocol,
     pub otlp_exporter_endpoint: Url,
     pub otlp_exporter_headers: HashMap<String, String>,
+}
+
+#[derive(Deserialize, Clone, Debug, PartialEq, Copy)]
+pub enum OtlpExporterProtocol {
+    Http,
+    Grpc,
 }
 
 #[derive(Deserialize, Clone, Debug)]
