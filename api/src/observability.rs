@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::{future::Future, str::FromStr, time::Duration};
 
 use actix_http::body::MessageBody;
@@ -8,7 +9,9 @@ use actix_web::{
 };
 use opentelemetry::KeyValue;
 use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
-use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_otlp::{
+    LogExporterBuilder, MetricsExporterBuilder, SpanExporterBuilder, WithExportConfig,
+};
 use opentelemetry_sdk::{
     logs::{self},
     metrics::reader::{DefaultAggregationSelector, DefaultTemporalitySelector},
@@ -26,7 +29,10 @@ use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Registry};
 
 use universal_inbox::user::UserId;
 
-use crate::{configuration::TracingSettings, utils::jwt::Claims};
+use crate::{
+    configuration::{OtlpExporterProtocol, TracingSettings},
+    utils::jwt::Claims,
+};
 
 pub fn get_subscriber_with_telemetry(
     environment: &str,
@@ -35,17 +41,6 @@ pub fn get_subscriber_with_telemetry(
 ) -> impl Subscriber + Send + Sync {
     let env_filter =
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(env_filter_str));
-
-    let mut map = MetadataMap::with_capacity(config.otlp_exporter_headers.len());
-    for (header_name, header_value) in config.otlp_exporter_headers.clone() {
-        if !header_value.is_empty() {
-            map.insert(
-                // header names usually use dashes instead of underscores but env vars don't allow dashes
-                AsciiMetadataKey::from_str(header_name.replace('_', "-").as_str()).unwrap(),
-                header_value.parse().unwrap(),
-            );
-        }
-    }
 
     let hostname = hostname::get().unwrap().into_string().unwrap();
     let tracer = opentelemetry_otlp::new_pipeline()
@@ -62,13 +57,11 @@ pub fn get_subscriber_with_telemetry(
                     KeyValue::new("deployment.environment", environment.to_string()),
                 ])),
         )
-        .with_exporter(
-            opentelemetry_otlp::new_exporter()
-                .tonic()
-                .with_endpoint(config.otlp_exporter_endpoint.to_string())
-                .with_timeout(Duration::from_secs(3))
-                .with_metadata(map.clone()),
-        )
+        .with_exporter(build_exporter_builder::<SpanExporterBuilder>(
+            config.otlp_exporter_protocol,
+            config.otlp_exporter_endpoint.to_string(),
+            config.otlp_exporter_headers.clone(),
+        ))
         .install_batch(runtime::Tokio)
         .unwrap();
     let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
@@ -84,13 +77,11 @@ pub fn get_subscriber_with_telemetry(
         .with_timeout(Duration::from_secs(10))
         .with_aggregation_selector(DefaultAggregationSelector::new())
         .with_temporality_selector(DefaultTemporalitySelector::new())
-        .with_exporter(
-            opentelemetry_otlp::new_exporter()
-                .tonic()
-                .with_endpoint(config.otlp_exporter_endpoint.to_string())
-                .with_timeout(Duration::from_secs(3))
-                .with_metadata(map.clone()),
-        )
+        .with_exporter(build_exporter_builder::<MetricsExporterBuilder>(
+            config.otlp_exporter_protocol,
+            config.otlp_exporter_endpoint.to_string(),
+            config.otlp_exporter_headers.clone(),
+        ))
         .build()
         .unwrap();
     let metrics = MetricsLayer::new(meter);
@@ -102,13 +93,11 @@ pub fn get_subscriber_with_telemetry(
             KeyValue::new("host.name", hostname.clone()),
             KeyValue::new("deployment.environment", environment.to_string()),
         ])))
-        .with_exporter(
-            opentelemetry_otlp::new_exporter()
-                .tonic()
-                .with_endpoint(config.otlp_exporter_endpoint.to_string())
-                .with_timeout(Duration::from_secs(3))
-                .with_metadata(map),
-        )
+        .with_exporter(build_exporter_builder::<LogExporterBuilder>(
+            config.otlp_exporter_protocol,
+            config.otlp_exporter_endpoint.to_string(),
+            config.otlp_exporter_headers.clone(),
+        ))
         .install_batch(runtime::Tokio)
         .unwrap();
 
@@ -186,4 +175,53 @@ where
 {
     let current_span = tracing::Span::current();
     tokio::spawn(f.instrument(current_span))
+}
+
+fn build_exporter_builder<B>(
+    otlp_exporter_protocol: OtlpExporterProtocol,
+    otlp_exporter_endpoint: String,
+    otlp_exporter_headers: HashMap<String, String>,
+) -> B
+where
+    B: std::convert::From<opentelemetry_otlp::HttpExporterBuilder>
+        + std::convert::From<opentelemetry_otlp::TonicExporterBuilder>,
+{
+    if otlp_exporter_protocol == OtlpExporterProtocol::Http {
+        let mut headers = HashMap::with_capacity(2);
+        for (header_name, header_value) in &otlp_exporter_headers {
+            if !header_value.is_empty() {
+                headers.insert(
+                    // header names usually use dashes instead of underscores but env vars don't allow dashes
+                    header_name.replace('_', "-"),
+                    header_value.parse().unwrap(),
+                );
+            }
+        }
+
+        opentelemetry_otlp::new_exporter()
+            .http()
+            .with_http_client(reqwest::Client::new())
+            .with_endpoint(otlp_exporter_endpoint)
+            .with_timeout(Duration::from_secs(3))
+            .with_headers(headers.clone())
+            .into()
+    } else {
+        let mut headers = MetadataMap::with_capacity(otlp_exporter_headers.len());
+        for (header_name, header_value) in &otlp_exporter_headers {
+            if !header_value.is_empty() {
+                headers.insert(
+                    // header names usually use dashes instead of underscores but env vars don't allow dashes
+                    AsciiMetadataKey::from_str(header_name.replace('_', "-").as_str()).unwrap(),
+                    header_value.parse().unwrap(),
+                );
+            }
+        }
+
+        opentelemetry_otlp::new_exporter()
+            .tonic()
+            .with_endpoint(otlp_exporter_endpoint)
+            .with_timeout(Duration::from_secs(3))
+            .with_metadata(headers.clone())
+            .into()
+    }
 }

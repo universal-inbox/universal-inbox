@@ -72,6 +72,7 @@ log_directive = "info"
 dependencies_log_level = "error"
 
 # [application.observability.tracing]
+# otlp_exporter_protocol = "Grpc" # or Http
 # otlp_exporter_endpoint = "https://otlp.host"
 
 # Depending on the OTLP provider, the header may be different or may not be
