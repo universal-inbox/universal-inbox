@@ -46,7 +46,7 @@ pub fn PasswordUpdatePage(
 
             FloatingLabelInputText::<Password> {
                 name: "password".to_string(),
-                label: "Password".to_string(),
+                label: Some("Password"),
                 required: true,
                 value: password.clone(),
                 force_validation: *force_validation.current(),

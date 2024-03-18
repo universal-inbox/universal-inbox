@@ -3,7 +3,7 @@ use std::{
     str::FromStr,
 };
 
-use chrono::{DateTime, NaiveDate, NaiveDateTime, ParseError, Utc};
+use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, ParseError, TimeDelta, Utc};
 use clap::ValueEnum;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use serde::{Deserialize, Serialize};
@@ -202,6 +202,52 @@ impl Display for DueDate {
 }
 
 macro_attr! {
+    #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, EnumFromStr!, EnumDisplay!)]
+    #[serde(tag = "type", content = "content")]
+    pub enum PresetDueDate {
+        Today,
+        Tomorrow,
+        ThisWeekend,
+        NextWeek,
+    }
+}
+
+impl DueDate {
+    pub fn from_preset(current_date: NaiveDate, preset: PresetDueDate) -> Self {
+        match preset {
+            PresetDueDate::Today => DueDate::Date(current_date),
+            PresetDueDate::Tomorrow => {
+                DueDate::Date(current_date + TimeDelta::try_days(1).unwrap())
+            }
+            PresetDueDate::ThisWeekend => {
+                let today = current_date;
+                let days_until_saturday = if today.weekday().num_days_from_monday() == 5 {
+                    7
+                } else {
+                    5 - today.weekday().num_days_from_monday()
+                };
+                let next_saturday =
+                    today + TimeDelta::try_days(days_until_saturday as i64).unwrap();
+                DueDate::Date(next_saturday)
+            }
+            PresetDueDate::NextWeek => {
+                let today = current_date;
+                let days_until_next_monday = 7 - today.weekday().num_days_from_monday();
+                let next_monday =
+                    today + TimeDelta::try_days(days_until_next_monday as i64).unwrap();
+                DueDate::Date(next_monday)
+            }
+        }
+    }
+}
+
+impl From<PresetDueDate> for DueDate {
+    fn from(preset: PresetDueDate) -> Self {
+        DueDate::from_preset(Utc::now().naive_utc().date(), preset)
+    }
+}
+
+macro_attr! {
     #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy, Eq, EnumFromStr!, EnumDisplay!)]
     pub enum TaskStatus {
         Active,
@@ -258,6 +304,12 @@ impl FromStr for TaskPriority {
             "4" => Ok(TaskPriority::P4),
             _ => Err(format!("Invalid task priority: {s}")),
         }
+    }
+}
+
+impl Display for TaskPriority {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", (*self as i32))
     }
 }
 
@@ -403,6 +455,89 @@ mod tests {
         #[rstest]
         fn test_parse_due_date_for_wrong_date_format() {
             assert_eq!("5".parse::<TaskPriority>().is_err(), true);
+        }
+    }
+
+    mod from_preset_due_date {
+        use super::super::*;
+        use pretty_assertions::assert_eq;
+        use rstest::*;
+
+        #[rstest]
+        fn test_from_today_preset_to_due_date() {
+            assert_eq!(
+                DueDate::from_preset(
+                    NaiveDate::from_ymd_opt(2024, 1, 10).unwrap(),
+                    PresetDueDate::Today
+                ),
+                DueDate::Date(NaiveDate::from_ymd_opt(2024, 1, 10).unwrap())
+            );
+        }
+
+        #[rstest]
+        fn test_from_tomorrow_preset_to_due_date() {
+            assert_eq!(
+                DueDate::from_preset(
+                    NaiveDate::from_ymd_opt(2024, 1, 10).unwrap(),
+                    PresetDueDate::Tomorrow
+                ),
+                DueDate::Date(NaiveDate::from_ymd_opt(2024, 1, 11).unwrap())
+            );
+        }
+
+        #[rstest]
+        fn test_from_tomorrow_preset_to_due_date_end_of_year() {
+            assert_eq!(
+                DueDate::from_preset(
+                    NaiveDate::from_ymd_opt(2023, 12, 31).unwrap(),
+                    PresetDueDate::Tomorrow
+                ),
+                DueDate::Date(NaiveDate::from_ymd_opt(2024, 1, 1).unwrap())
+            );
+        }
+
+        #[rstest]
+        fn test_from_this_weekend_preset_to_due_date() {
+            assert_eq!(
+                DueDate::from_preset(
+                    NaiveDate::from_ymd_opt(2024, 1, 10).unwrap(), // Wednesday
+                    PresetDueDate::ThisWeekend
+                ),
+                DueDate::Date(NaiveDate::from_ymd_opt(2024, 1, 13).unwrap())
+            );
+        }
+
+        #[rstest]
+        fn test_from_this_weekend_preset_to_due_date_on_saturday() {
+            assert_eq!(
+                DueDate::from_preset(
+                    NaiveDate::from_ymd_opt(2024, 1, 6).unwrap(), // Saturday
+                    PresetDueDate::ThisWeekend
+                ),
+                DueDate::Date(NaiveDate::from_ymd_opt(2024, 1, 13).unwrap())
+            );
+        }
+
+        #[rstest]
+        fn test_from_next_week_preset_to_due_date() {
+            assert_eq!(
+                DueDate::from_preset(
+                    NaiveDate::from_ymd_opt(2024, 1, 10).unwrap(), // Wednesday
+                    PresetDueDate::NextWeek
+                ),
+                DueDate::Date(NaiveDate::from_ymd_opt(2024, 1, 15).unwrap())
+            );
+        }
+
+        #[rstest]
+        fn test_from_next_week_preset_to_due_date_on_monday() {
+            assert_eq!(
+                DueDate::from_preset(
+                    NaiveDate::from_ymd_opt(2024, 1, 8).unwrap(), // Monday
+                    PresetDueDate::NextWeek
+                ),
+                DueDate::Date(NaiveDate::from_ymd_opt(2024, 1, 15).unwrap())
+            );
         }
     }
 }

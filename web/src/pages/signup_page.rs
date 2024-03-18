@@ -63,7 +63,7 @@ pub fn SignupPage(cx: Scope) -> Element {
 
                 FloatingLabelInputText::<String> {
                     name: "first_name".to_string(),
-                    label: "First name".to_string(),
+                    label: Some("First name"),
                     required: true,
                     value: first_name.clone(),
                     autofocus: true,
@@ -72,7 +72,7 @@ pub fn SignupPage(cx: Scope) -> Element {
 
                 FloatingLabelInputText::<String> {
                     name: "last_name".to_string(),
-                    label: "Last name".to_string(),
+                    label: Some("Last name"),
                     required: true,
                     value: last_name.clone(),
                     force_validation: *force_validation.current(),
@@ -81,7 +81,7 @@ pub fn SignupPage(cx: Scope) -> Element {
 
             FloatingLabelInputText::<EmailAddress> {
                 name: "email".to_string(),
-                label: "Email".to_string(),
+                label: Some("Email"),
                 required: true,
                 value: email.clone(),
                 force_validation: *force_validation.current(),
@@ -90,7 +90,7 @@ pub fn SignupPage(cx: Scope) -> Element {
 
             FloatingLabelInputText::<Password> {
                 name: "password".to_string(),
-                label: "Password".to_string(),
+                label: Some("Password"),
                 required: true,
                 value: password.clone(),
                 force_validation: *force_validation.current(),

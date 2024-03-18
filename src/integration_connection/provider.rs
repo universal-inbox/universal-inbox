@@ -7,7 +7,7 @@ use crate::integration_connection::{
         github::GithubConfig,
         google_mail::{GoogleMailConfig, GoogleMailContext},
         linear::LinearConfig,
-        slack::SlackConfig,
+        slack::{SlackConfig, SlackSyncType},
         todoist::{TodoistConfig, TodoistContext},
     },
 };
@@ -125,7 +125,9 @@ impl IntegrationProvider {
             IntegrationProvider::Github { config } => config.sync_notifications_enabled,
             IntegrationProvider::Linear { config } => config.sync_notifications_enabled,
             IntegrationProvider::GoogleMail { config, .. } => config.sync_notifications_enabled,
-            IntegrationProvider::Slack { config } => config.sync_stars_as_notifications,
+            IntegrationProvider::Slack { config } => {
+                config.sync_enabled && config.sync_type == SlackSyncType::AsNotifications
+            }
             _ => false,
         }
     }

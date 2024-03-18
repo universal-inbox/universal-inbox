@@ -40,7 +40,7 @@ pub fn PasswordResetPage(cx: Scope) -> Element {
 
             FloatingLabelInputText::<EmailAddress> {
                 name: "email".to_string(),
-                label: "Email".to_string(),
+                label: Some("Email"),
                 required: true,
                 value: email.clone(),
                 autofocus: true,

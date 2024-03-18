@@ -2,14 +2,11 @@
 
 use std::collections::HashMap;
 
-use anyhow::Result;
 use chrono::{NaiveDate, Utc};
 use dioxus::prelude::*;
 use dioxus_free_icons::{icons::bs_icons::BsX, Icon};
 use fermi::UseAtomRef;
-use http::Method;
 use log::error;
-use url::Url;
 
 use universal_inbox::{
     integration_connection::{
@@ -24,21 +21,17 @@ use universal_inbox::{
 
 use crate::{
     components::{
-        floating_label_inputs::{
-            FloatingLabelInputSearchSelect, FloatingLabelInputText, FloatingLabelSelect, Searchable,
-        },
+        floating_label_inputs::{FloatingLabelInputText, FloatingLabelSelect},
         flowbite::datepicker::DatePicker,
-        integrations::todoist::icons::Todoist,
+        integrations::{task_project_search::TaskProjectSearch, todoist::icons::Todoist},
     },
     model::{LoadState, UniversalInboxUIModel},
-    services::api::call_api,
     utils::focus_element,
 };
 
 #[component]
 pub fn TaskPlanningModal<'a>(
     cx: Scope,
-    api_base_url: Url,
     notification_to_plan: NotificationWithTask,
     task_service_integration_connection_ref: UseAtomRef<LoadState<Option<IntegrationConnection>>>,
     ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
@@ -49,15 +42,13 @@ pub fn TaskPlanningModal<'a>(
     let icon = render! { div { class: "h-5 w-5 flex-none", Todoist {} } };
     let default_project: &UseState<Option<String>> = use_state(cx, || None);
     let due_at = use_state(cx, || Utc::now().format("%Y-%m-%d").to_string());
-    let priority = use_state(cx, || "4".to_string());
+    let priority = use_state(cx, || Some(TaskPriority::P4));
     let task_title = use_state(cx, || "".to_string());
     let task_to_plan = use_state(cx, || None);
 
     let force_validation = use_state(cx, || false);
 
     let selected_project: &UseState<Option<ProjectSummary>> = use_state(cx, || None);
-    let search_expression = use_state(cx, || "".to_string());
-    let search_results: &UseState<Vec<ProjectSummary>> = use_state(cx, Vec::new);
 
     let _ = use_memo(cx, &notification_to_plan.clone(), |notification| {
         if let Some(task) = notification.task {
@@ -70,7 +61,7 @@ pub fn TaskPlanningModal<'a>(
                     DueDate::DateTimeWithTz(dt) => dt.format("%Y-%m-%d").to_string(),
                 });
             }
-            priority.set((task.priority as i32).to_string());
+            priority.set(Some(task.priority));
             task_to_plan.set(Some(task));
         } else {
             task_to_plan.set(None);
@@ -113,35 +104,6 @@ pub fn TaskPlanningModal<'a>(
     } else {
         false
     };
-
-    use_future(cx, &search_expression.clone(), |search_expression| {
-        to_owned![search_results];
-        to_owned![selected_project];
-        to_owned![default_project];
-        to_owned![api_base_url];
-        to_owned![ui_model_ref];
-
-        async move {
-            let projects = search_projects(
-                &api_base_url,
-                &search_expression.current(),
-                ui_model_ref,
-                filter_out_inbox,
-            )
-            .await;
-            if let Some(default_project) = &*default_project.current() {
-                if selected_project.is_none() {
-                    if let Some(project) = projects
-                        .iter()
-                        .find(|project| project.name == *default_project)
-                    {
-                        selected_project.set(Some(project.clone()));
-                    }
-                }
-            }
-            search_results.set(projects);
-        }
-    });
 
     render! {
         dialog {
@@ -196,7 +158,7 @@ pub fn TaskPlanningModal<'a>(
                                 render! {
                                     FloatingLabelInputText::<String> {
                                         name: "task-title-input".to_string(),
-                                        label: "Task's title".to_string(),
+                                        label: Some("Task's title"),
                                         required: true,
                                         value: task_title.clone(),
                                         autofocus: true,
@@ -207,13 +169,12 @@ pub fn TaskPlanningModal<'a>(
                             }
                         }
 
-                        FloatingLabelInputSearchSelect {
-                            name: "project-search-input".to_string(),
-                            label: "Project".to_string(),
+                        TaskProjectSearch {
+                            label: "Project",
                             required: true,
-                            value: selected_project.clone(),
-                            search_expression: search_expression.clone(),
-                            search_results: search_results.clone(),
+                            selected_project: selected_project.clone(),
+                            ui_model_ref: ui_model_ref.clone(),
+                            filter_out_inbox: filter_out_inbox,
                             on_select: move |_project| {
                                 cx.spawn({
                                     async move {
@@ -227,7 +188,7 @@ pub fn TaskPlanningModal<'a>(
 
                         DatePicker::<NaiveDate> {
                             name: "task-due_at-input".to_string(),
-                            label: "Due at".to_string(),
+                            label: "Due at",
                             required: false,
                             value: due_at.clone(),
                             force_validation: *force_validation.current(),
@@ -238,10 +199,15 @@ pub fn TaskPlanningModal<'a>(
 
                         FloatingLabelSelect::<TaskPriority> {
                             name: "task-priority-input".to_string(),
-                            label: "Priority".to_string(),
+                            label: Some("Priority"),
                             required: false,
                             value: priority.clone(),
                             force_validation: *force_validation.current(),
+
+                            option { value: "1", "🔴 Priority 1" }
+                            option { value: "2", "🟠 Priority 2" }
+                            option { value: "3", "🟡 Priority 3" }
+                            option { value: "4", "🔵 Priority 4" }
                         }
 
                         div {
@@ -310,47 +276,4 @@ fn validate_creation_form(
     }
 
     None
-}
-
-async fn search_projects(
-    api_base_url: &Url,
-    search: &str,
-    ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
-    filter_out_inbox: bool,
-) -> Vec<ProjectSummary> {
-    let search_result: Result<Vec<ProjectSummary>> = call_api(
-        Method::GET,
-        api_base_url,
-        &format!("tasks/projects/search?matches={search}"),
-        None::<i32>,
-        Some(ui_model_ref),
-    )
-    .await;
-
-    match search_result {
-        Ok(projects) => {
-            if filter_out_inbox {
-                projects
-                    .into_iter()
-                    .filter(|p| p.name != TODOIST_INBOX_PROJECT)
-                    .collect()
-            } else {
-                projects
-            }
-        }
-        Err(error) => {
-            error!("Error searching projects: {error:?}");
-            Vec::new()
-        }
-    }
-}
-
-impl Searchable for ProjectSummary {
-    fn get_title(&self) -> String {
-        self.name.clone()
-    }
-
-    fn get_id(&self) -> String {
-        self.source_id.clone()
-    }
 }

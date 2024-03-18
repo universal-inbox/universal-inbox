@@ -21,7 +21,7 @@ pub fn TodoistProviderConfiguration<'a>(
             div {
                 class: "form-control",
                 label {
-                    class: "cursor-pointer label",
+                    class: "cursor-pointer label py-1",
                     span {
                         class: "label-text",
                         "Synchronize Todoist tasks"
@@ -43,7 +43,7 @@ pub fn TodoistProviderConfiguration<'a>(
             div {
                 class: "form-control",
                 label {
-                    class: "cursor-pointer label",
+                    class: "cursor-pointer label py-1",
                     div {
                         class: "flex items-center gap-2",
                         span { class: "label-text", "Synchronize Todoist tasks from" }

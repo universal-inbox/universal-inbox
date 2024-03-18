@@ -131,7 +131,6 @@ pub fn NotificationsPage(cx: Scope) -> Element {
             notification_to_plan.as_ref().map(|notification_to_plan| {
                 render! {
                     TaskPlanningModal {
-                        api_base_url: api_base_url.clone(),
                         notification_to_plan: notification_to_plan.clone(),
                         task_service_integration_connection_ref: task_service_integration_connection_ref.clone(),
                         ui_model_ref: ui_model_ref.clone(),

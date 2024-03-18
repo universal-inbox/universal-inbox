@@ -10,6 +10,7 @@ use dioxus_free_icons::{
     },
     Icon,
 };
+use fermi::UseAtomRef;
 use itertools::Itertools;
 
 use universal_inbox::{
@@ -21,16 +22,20 @@ use universal_inbox::{
     IntegrationProviderStaticConfig,
 };
 
-use crate::components::integrations::{
-    github::config::GithubProviderConfiguration,
-    google_mail::config::GoogleMailProviderConfiguration, icons::IntegrationProviderIcon,
-    linear::config::LinearProviderConfiguration, slack::config::SlackProviderConfiguration,
-    todoist::config::TodoistProviderConfiguration,
+use crate::{
+    components::integrations::{
+        github::config::GithubProviderConfiguration,
+        google_mail::config::GoogleMailProviderConfiguration, icons::IntegrationProviderIcon,
+        linear::config::LinearProviderConfiguration, slack::config::SlackProviderConfiguration,
+        todoist::config::TodoistProviderConfiguration,
+    },
+    model::UniversalInboxUIModel,
 };
 
 #[component]
 pub fn IntegrationsPanel<'a>(
     cx: Scope,
+    ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
     integration_providers: HashMap<IntegrationProviderKind, IntegrationProviderStaticConfig>,
     integration_connections: Vec<IntegrationConnection>,
     on_connect: EventHandler<'a, (IntegrationProviderKind, Option<&'a IntegrationConnection>)>,
@@ -84,6 +89,7 @@ pub fn IntegrationsPanel<'a>(
                 if kind.is_notification_service() && config.is_implemented {
                     render! {
                         IntegrationSettings {
+                            ui_model_ref: ui_model_ref.clone(),
                             kind: **kind,
                             config: (*config).clone(),
                             connection: integration_connections.iter().find(|c| c.provider.kind() == **kind).cloned(),
@@ -100,6 +106,7 @@ pub fn IntegrationsPanel<'a>(
                 if kind.is_notification_service() && !config.is_implemented {
                     render! {
                         IntegrationSettings {
+                            ui_model_ref: ui_model_ref.clone(),
                             kind: **kind,
                             config: (*config).clone(),
                             connection: integration_connections.iter().find(|c| c.provider.kind() == **kind).cloned(),
@@ -126,6 +133,7 @@ pub fn IntegrationsPanel<'a>(
                 if kind.is_task_service() && config.is_implemented {
                     render! {
                         IntegrationSettings {
+                            ui_model_ref: ui_model_ref.clone(),
                             kind: **kind,
                             config: (*config).clone(),
                             connection: integration_connections.iter().find(|c| c.provider.kind() == **kind).cloned(),
@@ -142,6 +150,7 @@ pub fn IntegrationsPanel<'a>(
                 if kind.is_task_service() && !config.is_implemented {
                     render! {
                         IntegrationSettings {
+                            ui_model_ref: ui_model_ref.clone(),
                             kind: **kind,
                             config: (*config).clone(),
                             connection: integration_connections.iter().find(|c| c.provider.kind() == **kind).cloned(),
@@ -160,6 +169,7 @@ pub fn IntegrationsPanel<'a>(
 #[component]
 pub fn IntegrationSettings<'a>(
     cx: Scope,
+    ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
     kind: IntegrationProviderKind,
     config: IntegrationProviderStaticConfig,
     connection: Option<Option<IntegrationConnection>>,
@@ -290,6 +300,7 @@ pub fn IntegrationSettings<'a>(
                     if let Some(Some(connection)) = connection {
                         render! {
                             IntegrationConnectionProviderConfiguration {
+                                ui_model_ref: ui_model_ref.clone(),
                                 on_config_change: move |config| on_config_change.call((connection, config)),
                                 provider: provider.clone(),
                             }
@@ -392,6 +403,7 @@ pub fn IconForAction(cx: Scope, action: String) -> Element {
 pub fn IntegrationConnectionProviderConfiguration<'a>(
     cx: Scope,
     provider: IntegrationProvider,
+    ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
     on_config_change: EventHandler<'a, IntegrationConnectionConfig>,
 ) -> Element {
     match provider {
@@ -422,6 +434,7 @@ pub fn IntegrationConnectionProviderConfiguration<'a>(
         },
         IntegrationProvider::Slack { config } => render! {
             SlackProviderConfiguration {
+                ui_model_ref: ui_model_ref.clone(),
                 on_config_change: |c| on_config_change.call(c),
                 config: config.clone(),
             }

@@ -33,9 +33,9 @@ extern "C" {
 }
 
 #[derive(Props)]
-pub struct DatePickerProps<T: 'static> {
+pub struct DatePickerProps<'a, T: 'static> {
     name: String,
-    label: String,
+    label: Option<&'a str>,
     required: bool,
     value: UseState<String>,
     #[props(default)]
@@ -53,7 +53,7 @@ pub struct DatePickerProps<T: 'static> {
 }
 
 #[component]
-pub fn DatePicker<T>(cx: Scope<DatePickerProps<T>>) -> Element
+pub fn DatePicker<'a, T>(cx: Scope<'a, DatePickerProps<'a, T>>) -> Element
 where
     T: FromStr,
     <T as FromStr>::Err: Display,
@@ -107,7 +107,7 @@ where
     render! {
         FloatingLabelInputText::<T> {
             name: cx.props.name.clone(),
-            label: cx.props.label.clone(),
+            label: cx.props.label,
             icon: icon,
             required: cx.props.required,
             value: cx.props.value.clone(),
