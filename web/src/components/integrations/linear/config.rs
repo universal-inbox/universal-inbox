@@ -18,7 +18,7 @@ pub fn LinearProviderConfiguration<'a>(
             div {
                 class: "form-control",
                 label {
-                    class: "cursor-pointer label",
+                    class: "cursor-pointer label py-1",
                     span {
                         class: "label-text",
                         "Synchronize Linear notifications"

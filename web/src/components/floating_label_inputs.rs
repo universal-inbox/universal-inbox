@@ -13,8 +13,9 @@ use crate::utils::{focus_and_select_input_element, get_element_by_id};
 #[derive(Props)]
 pub struct InputProps<'a, T: 'static> {
     name: String,
-    label: String,
-    required: bool,
+    #[props(!optional)]
+    label: Option<&'a str>,
+    required: Option<bool>,
     value: UseState<String>,
     #[props(default)]
     autofocus: Option<bool>,
@@ -36,9 +37,8 @@ where
     T: FromStr,
     <T as FromStr>::Err: Display,
 {
-    let required_label_style = cx
-        .props
-        .required
+    let required = cx.props.required.unwrap_or_default();
+    let required_label_style = required
         .then_some("after:content-['*'] after:ml-0.5 after:text-error")
         .unwrap_or_default();
 
@@ -86,7 +86,7 @@ where
         |(value, force_validation, validate)| {
             to_owned![error_message];
             if force_validation.unwrap_or_default() || *validate {
-                validate_value::<T>(&value, error_message, cx.props.required);
+                validate_value::<T>(&value, error_message, required);
             }
         },
     );
@@ -120,9 +120,9 @@ where
                 "type": "{input_type}",
                 name: "{cx.props.name}",
                 id: "{cx.props.name}",
-                class: "{input_style} block py-2 px-0 w-full bg-transparent border-0 border-b-2 focus:outline-none focus:ring-0 peer",
+                class: "{input_style} block py-2 px-3 w-full bg-transparent border-0 border-b-2 focus:outline-none focus:ring-0 peer",
                 placeholder: " ",
-                required: "{cx.props.required}",
+                required: "{required}",
                 value: "{cx.props.value}",
                 oninput: move |evt| {
                     cx.props.value.set(evt.value.clone());
@@ -133,24 +133,49 @@ where
                 onfocusout: |_| validate.set(true),
                 autofocus: cx.props.autofocus.unwrap_or_default(),
             }
-            label {
-                "for": "{cx.props.name}",
-                class: "{label_style} {required_label_style} absolute duration-300 transform -translate-y-6 scale-75 top-3 origin-[0] peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-6 peer-focus:left-0 peer-focus:pl-0",
-                "{cx.props.label}"
+
+            if let Some(label) = cx.props.label {
+                render! {
+                    label {
+                        "for": "{cx.props.name}",
+                        class: "{label_style} {required_label_style} absolute duration-300 transform -translate-y-6 scale-75 top-3 origin-[0] peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-6 peer-focus:left-0 peer-focus:pl-0",
+                        "{label}"
+                    }
+                }
             }
+
             ErrorMessage { message: error_message }
         }
     }
 }
 
-pub fn FloatingLabelSelect<'a, T>(cx: Scope<'a, InputProps<'a, T>>) -> Element
+#[derive(Props)]
+pub struct InputSelectProps<'a, T: 'static> {
+    name: String,
+    #[props(!optional)]
+    label: Option<&'a str>,
+    #[props(default)]
+    class: Option<&'a str>,
+    #[props(default)]
+    required: Option<bool>,
+    value: UseState<Option<T>>,
+    #[props(default)]
+    autofocus: Option<bool>,
+    #[props(default)]
+    force_validation: Option<bool>,
+    on_select: Option<EventHandler<'a, Option<T>>>,
+    children: Element<'a>,
+    #[props(default)]
+    phantom: PhantomData<T>,
+}
+
+pub fn FloatingLabelSelect<'a, T>(cx: Scope<'a, InputSelectProps<'a, T>>) -> Element
 where
-    T: FromStr,
+    T: FromStr + Display,
     <T as FromStr>::Err: Display,
 {
-    let required_label_style = cx
-        .props
-        .required
+    let required = cx.props.required.unwrap_or_default();
+    let required_label_style = required
         .then_some("after:content-['*'] after:ml-0.5 after:text-error")
         .unwrap_or_default();
 
@@ -167,47 +192,61 @@ where
             .and(Some(FLOATING_LABEL_INVALID_STYLE))
             .unwrap_or_default()
     });
+    let value_to_validate = use_state(cx, || "".to_string());
+    let _ = use_memo(cx, &(cx.props.value.clone(),), |(value,)| {
+        value_to_validate.set(value.as_ref().map(|v| v.to_string()).unwrap_or_default())
+    });
 
     let validate = use_state(cx, || false);
     let _ = use_memo(
         cx,
         &(
-            cx.props.value.clone(),
+            value_to_validate.clone(),
             cx.props.force_validation,
             validate.clone(),
         ),
         |(value, force_validation, validate)| {
             to_owned![error_message];
             if force_validation.unwrap_or_default() || *validate {
-                validate_value::<T>(&value, error_message, cx.props.required);
+                validate_value::<T>(&value, error_message, required);
             }
         },
     );
 
     render! {
         div {
-            class: "relative",
+            class: "relative {cx.props.class.unwrap_or_default()}",
             select {
                 id: "{cx.props.name}",
                 name: "{cx.props.name}",
-                class: "{input_style} block py-2 px-0 w-full bg-transparent bg-right border-0 border-b-2 appearance-none focus:outline-none focus:ring-0 peer",
+                class: "{input_style} block py-2 px-3 w-full bg-transparent bg-right border-0 border-b-2 appearance-none focus:outline-none focus:ring-0 peer",
                 oninput: move |evt| {
                     validate.set(true);
-                    cx.props.value.set(evt.data.value.clone());
+                    value_to_validate.set(evt.data.value.clone());
+                    if let Some(on_select) = &cx.props.on_select {
+                        on_select.call(T::from_str(&evt.data.value).ok());
+                    }
                 },
                 onfocusout: |_| validate.set(true),
-                value: "{cx.props.value}",
+                value: "{value_to_validate}",
                 autofocus: cx.props.autofocus.unwrap_or_default(),
-                option { value: "1", "🔴 Priority 1" }
-                option { value: "2", "🟠 Priority 2" }
-                option { value: "3", "🟡 Priority 3" }
-                option { value: "4", "🔵 Priority 4" }
+
+                if !required {
+                    render! { option { "" } }
+                }
+                &cx.props.children
             }
-            label {
-                "for": "{cx.props.name}",
-                class: "{label_style} {required_label_style} absolute duration-300 transform -translate-y-6 scale-75 top-3 -z-10 origin-[0]",
-                "{cx.props.label}"
+
+            if let Some(label) = cx.props.label {
+                render! {
+                    label {
+                        "for": "{cx.props.name}",
+                        class: "{label_style} {required_label_style} absolute duration-300 transform -translate-y-6 scale-75 top-3 -z-10 origin-[0]",
+                        "{label}"
+                    }
+                }
             }
+
             ErrorMessage { message: error_message }
         }
     }
@@ -226,7 +265,8 @@ where
     T: Clone + Searchable + 'static,
 {
     name: String,
-    label: String,
+    #[props(!optional)]
+    label: Option<&'a str>,
     value: UseState<Option<T>>,
     search_expression: UseState<String>,
     search_results: UseState<Vec<T>>,
@@ -235,6 +275,8 @@ where
     #[props(default)]
     autofocus: Option<bool>,
     on_select: EventHandler<'a, T>,
+    #[props(default)]
+    class: Option<&'a str>,
     children: Element<'a>,
 }
 
@@ -243,10 +285,8 @@ where
     T: Clone + Searchable + 'static,
 {
     let dropdown_opened = use_state(cx, || false);
-    let required_label_style = cx
-        .props
-        .required
-        .unwrap_or_default()
+    let required = cx.props.required.unwrap_or_default();
+    let required_label_style = required
         .then_some("after:content-['*'] after:ml-0.5 after:text-error")
         .unwrap_or_default();
 
@@ -331,7 +371,22 @@ where
         },
     );
 
-    let select_result = |result: Option<T>| {
+    let button_just_got_focus = use_state(cx, || false);
+    let _ = use_memo(
+        cx,
+        &(dropdown_opened.clone(), cx.props.name.clone()),
+        |(dropdown_opened, id)| {
+            if *dropdown_opened.current() {
+                cx.spawn(async move {
+                    if let Err(error) = focus_and_select_input_element(&id).await {
+                        error!("Error focusing element {id}: {error:?}");
+                    }
+                });
+            }
+        },
+    );
+
+    let select_result = move |result: Option<T>| {
         dropdown_opened.set(false);
 
         match result {
@@ -343,7 +398,12 @@ where
                 cx.props.on_select.call(result);
             }
             None => {
-                error_message.set(Some(format!("{} value required", cx.props.label)));
+                if required {
+                    error_message.set(Some(format!(
+                        "{} value required",
+                        cx.props.label.unwrap_or_default()
+                    )));
+                }
             }
         }
     };
@@ -388,7 +448,7 @@ where
 
     render! {
         div {
-            class: "dropdown bg-base-100 group",
+            class: "dropdown group {cx.props.class.unwrap_or_default()}",
 
             label {
                 class: "join h-10 group w-full",
@@ -400,18 +460,19 @@ where
                     id: "selected-result",
                     name: "selected-result",
                     "type": "button",
-                    class: "{border_style} {button_style} grow truncate block bg-transparent text-left border-0 border-b-2 focus:outline-none focus:ring-0 peer join-item",
-                    onfocus: |_| {
-                        let value = !*dropdown_opened.current();
-                        let id = cx.props.name.clone();
-                        dropdown_opened.set(value);
-                        if value {
-                            cx.spawn(async move {
-                                if let Err(error) = focus_and_select_input_element(&id).await {
-                                    error!("Error focusing element {id}: {error:?}");
-                                }
-                            });
+                    class: "{border_style} {button_style} grow truncate block bg-transparent text-left border-0 border-b-2 focus:outline-none focus:ring-0 peer join-item px-3",
+                    onclick: |_| {
+                        if *button_just_got_focus.current() {
+                            // Focus has already opened the dropdown, no need to handle click
+                            // and close it
+                            button_just_got_focus.set(false);
+                            return;
                         }
+                        dropdown_opened.set(!*dropdown_opened.current());
+                    },
+                    onfocus: |_| {
+                        button_just_got_focus.set(true);
+                        dropdown_opened.set(!*dropdown_opened.current());
                     },
 
                     "{selected_result_title}"
@@ -420,72 +481,82 @@ where
                     class: "{border_style} block py-2 bg-transparent border-0 border-b-2 join-item",
                     ArrowDown { class: "h-5 w-5 group-hover:visible invisible" }
                 }
-                label {
-                    "for": "selected-result",
-                    class: "{label_style} {required_label_style} absolute duration-300 transform -translate-y-0 scale-100 top-2 z-10 origin-[0] peer-[.isnotempty]:scale-75 peer-[.isnotempty]:-translate-y-6 peer-[.issearching]:scale-75 peer-[.issearching]:-translate-y-6 peer-focus:scale-75 peer-focus:-translate-y-6",
-                    "{cx.props.label}"
+
+                if let Some(label) = &cx.props.label {
+                    render! {
+                        label {
+                            "for": "selected-result",
+                            class: "{label_style} {required_label_style} absolute duration-300 transform -translate-y-0 scale-100 top-2 z-10 origin-[0] peer-[.isnotempty]:scale-75 peer-[.isnotempty]:-translate-y-6 peer-[.issearching]:scale-75 peer-[.issearching]:-translate-y-6 peer-focus:scale-75 peer-focus:-translate-y-6",
+                            "{label}"
+                        }
+                    }
                 }
             }
+
             ErrorMessage { message: error_message }
 
-            ul {
-                id: "search-list",
-                tabindex: -1,
-                class: "{dropdown_style} group-focus:visible group-focus:opacity-100 w-full my-2 shadow-sm menu bg-base-200 divide-y rounded-box absolute z-50 ",
-                onkeydown: move |evt| {
-                    match evt.key() {
-                        Key::ArrowDown => {
-                            let value = *selected_index.current();
-                            if value < cx.props.search_results.len() - 1 {
-                                selected_index.set(value + 1);
+            div {
+                class: "{dropdown_style} rounded-box absolute z-50 group-focus:visible group-focus:opacity-100 w-full my-2 shadow-sm menu bg-base-200 overflow-y-scroll max-h-64",
+                ul {
+                    id: "search-list",
+                    tabindex: -1,
+                    class: "divide-y",
+                    onkeydown: move |evt| {
+                        match evt.key() {
+                            Key::ArrowDown => {
+                                let value = *selected_index.current();
+                                if value < cx.props.search_results.len() - 1 {
+                                    selected_index.set(value + 1);
+                                }
+                            }
+                            Key::ArrowUp => {
+                                let value = *selected_index.current();
+                                if value > 0 {
+                                    selected_index.set(value - 1);
+                                }
+                            }
+                            Key::Tab | Key::Escape => {
+                                select_result(None);
+                            }
+                            _ => {}
+                        }
+                    },
+
+                    li {
+                        class: "w-full bg-base-400",
+
+                        input {
+                            "type": "text",
+                            name: "{cx.props.name}",
+                            id: "{cx.props.name}",
+                            class: "input bg-transparent w-full pl-12 focus:ring-0 focus:outline-none h-10",
+                            placeholder: " ",
+                            value: "{cx.props.search_expression}",
+                            autocomplete: "off",
+                            oninput: |evt| {
+                                cx.props.search_expression.set(evt.value.clone());
+                            },
+                            autofocus: cx.props.autofocus.unwrap_or_default(),
+                        }
+                        Icon {
+                            class: "p-0 w-6 h-6 absolute my-2 ml-2 opacity-60 text-base-content",
+                            icon: BsSearch
+                        }
+                    }
+
+                    cx.props.search_results.iter().enumerate().map(|(i, result)| {
+                        render! {
+                            SearchResultRow {
+                                key: "{result.get_id()}",
+                                title: "{result.get_title()}",
+                                selected: i == *selected_index.current(),
+                                on_select: move |_| {
+                                    select_result(Some(result.clone()));
+                                },
                             }
                         }
-                        Key::ArrowUp => {
-                            let value = *selected_index.current();
-                            if value > 0 {
-                                selected_index.set(value - 1);
-                            }
-                        }
-                        Key::Tab => {
-                            select_result(None);
-                        }
-                        _ => {}
-                    }
-                },
-
-                li {
-                    class: "w-full bg-base-400",
-
-                    input {
-                        "type": "text",
-                        name: "{cx.props.name}",
-                        id: "{cx.props.name}",
-                        class: "input bg-transparent w-full pl-12 focus:ring-0 focus:outline-none h-10",
-                        placeholder: " ",
-                        value: "{cx.props.search_expression}",
-                        autocomplete: "off",
-                        oninput: |evt| {
-                            cx.props.search_expression.set(evt.value.clone());
-                        },
-                        autofocus: cx.props.autofocus.unwrap_or_default(),
-                    }
-                    Icon {
-                        class: "p-0 w-6 h-6 absolute my-2 ml-2 opacity-60 text-base-content",
-                        icon: BsSearch
-                    }
-
+                    })
                 }
-
-                cx.props.search_results.iter().enumerate().map(|(i, result)| {
-                    render! {
-                        SearchResultRow {
-                            key: "{result.get_id()}",
-                            title: "{result.get_title()}",
-                            selected: i == *selected_index.current(),
-                            on_select: move |_| { select_result(Some(result.clone())); },
-                        }
-                    }
-                })
             }
         }
     }
@@ -552,6 +623,7 @@ fn SearchResultRow<'a>(
     render! {
         li {
             class: "w-full inline-block",
+            prevent_default: "onclick",
             onclick: move |_| {
                 on_select.call(());
             },

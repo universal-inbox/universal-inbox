@@ -105,7 +105,7 @@ pub fn TaskLinkModal<'a>(
 
                         FloatingLabelInputSearchSelect {
                             name: "task-search-input".to_string(),
-                            label: "with".to_string(),
+                            label: Some("with"),
                             value: selected_task.clone(),
                             search_expression: search_expression.clone(),
                             search_results: search_results.clone(),

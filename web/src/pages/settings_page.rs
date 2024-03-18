@@ -11,6 +11,7 @@ use universal_inbox::integration_connection::{
 use crate::{
     components::{integrations_panel::IntegrationsPanel, spinner::Spinner},
     config::APP_CONFIG,
+    model::UI_MODEL,
     services::integration_connection_service::{
         IntegrationConnectionCommand, INTEGRATION_CONNECTIONS,
     },
@@ -21,6 +22,7 @@ pub fn SettingsPage(cx: Scope) -> Element {
     let integration_connections_ref = use_atom_ref(cx, &INTEGRATION_CONNECTIONS);
     let integration_connection_service =
         use_coroutine_handle::<IntegrationConnectionCommand>(cx).unwrap();
+    let ui_model_ref = use_atom_ref(cx, &UI_MODEL);
 
     debug!("Rendering settings page");
 
@@ -42,6 +44,7 @@ pub fn SettingsPage(cx: Scope) -> Element {
                         class: "h-full w-full overflow-auto scroll-auto px-2",
 
                         IntegrationsPanel {
+                            ui_model_ref: ui_model_ref.clone(),
                             integration_providers: app_config.integration_providers.clone(),
                             integration_connections: integration_connections.clone(),
                             on_connect: |(provider_kind, connection): (IntegrationProviderKind, Option<&IntegrationConnection>)| {

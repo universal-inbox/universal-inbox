@@ -7,6 +7,8 @@ use universal_inbox::integration_connection::{
     integrations::google_mail::{GoogleMailConfig, GoogleMailContext},
 };
 
+use crate::components::floating_label_inputs::FloatingLabelSelect;
+
 #[component]
 pub fn GoogleMailProviderConfiguration<'a>(
     cx: Scope,
@@ -14,6 +16,11 @@ pub fn GoogleMailProviderConfiguration<'a>(
     context: Option<Option<GoogleMailContext>>,
     on_config_change: EventHandler<'a, IntegrationConnectionConfig>,
 ) -> Element {
+    let selected_label_id = use_state(cx, || None);
+    let _ = use_memo(cx, config, |config| {
+        selected_label_id.set(Some(config.synced_label.id.clone()));
+    });
+
     render! {
         div {
             class: "flex flex-col",
@@ -21,7 +28,7 @@ pub fn GoogleMailProviderConfiguration<'a>(
             div {
                 class: "form-control",
                 label {
-                    class: "cursor-pointer label",
+                    class: "cursor-pointer label py-1",
                     span {
                         class: "label-text",
                         "Synchronize Google Mail threads as notification"
@@ -48,16 +55,26 @@ pub fn GoogleMailProviderConfiguration<'a>(
                         class: "label-text",
                         "Google Mail label to synchronize"
                     }
-                    select {
-                        class:"select select-sm select-ghost text-xs",
-                        oninput: move |event| {
+
+                    FloatingLabelSelect::<String> {
+                        label: None,
+                        class: "w-full max-w-xs bg-base-100 rounded",
+                        name: "google-mail-label".to_string(),
+                        value: selected_label_id.clone(),
+                        required: true,
+                        on_select: move |label_id| {
                             if let Some(Some(context)) = context {
-                                let selected_label = context.labels.iter().find(|label| label.id == event.value);
-                                if let Some(selected_label) = selected_label {
-                                    on_config_change.call(IntegrationConnectionConfig::GoogleMail(GoogleMailConfig {
-                                        synced_label: selected_label.clone(),
-                                        ..config.clone()
-                                    }));
+                                if let Some(label_id) = label_id {
+                                    let label = context
+                                        .labels
+                                        .iter()
+                                        .find(|label| label.id == label_id);
+                                    if let Some(label) = label {
+                                        on_config_change.call(IntegrationConnectionConfig::GoogleMail(GoogleMailConfig {
+                                            synced_label: label.clone(),
+                                            ..config.clone()
+                                        }));
+                                    }
                                 }
                             }
                         },
@@ -66,11 +83,7 @@ pub fn GoogleMailProviderConfiguration<'a>(
                             render! {
                                 for label in &context.labels {
                                     render! {
-                                        option {
-                                            selected: *label.id == config.synced_label.id,
-                                            value: "{label.id}",
-                                            "{label.name}"
-                                        }
+                                        option { value: "{label.id}", "{label.name}" }
                                     }
                                 }
                             }
