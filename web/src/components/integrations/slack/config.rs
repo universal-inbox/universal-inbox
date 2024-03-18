@@ -33,7 +33,7 @@ pub fn SlackProviderConfiguration<'a>(
         if let SlackSyncType::AsTasks(config) = config.sync_type {
             default_priority.set(Some(config.default_priority));
             default_due_at.set(config.default_due_at.clone());
-            default_project.set(Some(config.target_project.clone()));
+            default_project.set(config.target_project.map(|p| p.name.clone()));
             task_config_enabled.set(true);
         } else {
             task_config_enabled.set(false);
@@ -149,7 +149,7 @@ pub fn SlackProviderConfiguration<'a>(
                                     on_config_change.call(IntegrationConnectionConfig::Slack(SlackConfig {
                                         sync_type: SlackSyncType::AsTasks(match &config.sync_type {
                                             SlackSyncType::AsTasks(config) => SlackSyncTaskConfig {
-                                                target_project: project.name.clone(),
+                                                target_project: Some(project.clone()),
                                                 ..config.clone()
                                             },
                                             _ => Default::default(),

@@ -653,4 +653,16 @@ impl TaskService {
             .search_projects(executor, matches, user_id)
             .await
     }
+
+    #[tracing::instrument(level = "debug", skip(self), err)]
+    pub async fn get_or_create_project<'a, 'b>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        project_name: &'b str,
+        user_id: UserId,
+    ) -> Result<ProjectSummary, UniversalInboxError> {
+        self.todoist_service
+            .get_or_create_project(executor, project_name, user_id, None)
+            .await
+    }
 }

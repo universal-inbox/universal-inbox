@@ -9,7 +9,8 @@ use universal_inbox::{
 };
 
 use crate::{
-    integrations::todoist::TodoistSyncStatusResponse, universal_inbox::UniversalInboxError,
+    integrations::{oauth2::AccessToken, todoist::TodoistSyncStatusResponse},
+    universal_inbox::UniversalInboxError,
 };
 
 static APP_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
@@ -119,5 +120,12 @@ pub mod task {
             matches: &'b str,
             user_id: UserId,
         ) -> Result<Vec<ProjectSummary>, UniversalInboxError>;
+        async fn get_or_create_project<'a, 'b>(
+            &self,
+            executor: &mut Transaction<'a, Postgres>,
+            project_name: &'b str,
+            user_id: UserId,
+            access_token: Option<&'b AccessToken>,
+        ) -> Result<ProjectSummary, UniversalInboxError>;
     }
 }

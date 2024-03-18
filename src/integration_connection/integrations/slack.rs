@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::task::{PresetDueDate, TaskPriority};
+use crate::task::{PresetDueDate, ProjectSummary, TaskPriority};
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct SlackConfig {
@@ -25,10 +25,17 @@ impl Default for SlackConfig {
 }
 
 impl SlackConfig {
-    pub fn enabled() -> Self {
+    pub fn enabled_as_notifications() -> Self {
         Self {
             sync_enabled: true,
             sync_type: SlackSyncType::AsNotifications,
+        }
+    }
+
+    pub fn enabled_as_tasks() -> Self {
+        Self {
+            sync_enabled: true,
+            sync_type: SlackSyncType::AsTasks(SlackSyncTaskConfig::default()),
         }
     }
 
@@ -42,7 +49,7 @@ impl SlackConfig {
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct SlackSyncTaskConfig {
-    pub target_project: String,
+    pub target_project: Option<ProjectSummary>,
     pub default_due_at: Option<PresetDueDate>,
     pub default_priority: TaskPriority,
 }
@@ -50,7 +57,7 @@ pub struct SlackSyncTaskConfig {
 impl Default for SlackSyncTaskConfig {
     fn default() -> Self {
         Self {
-            target_project: "Inbox".to_string(),
+            target_project: None,
             default_due_at: None,
             default_priority: TaskPriority::P4,
         }

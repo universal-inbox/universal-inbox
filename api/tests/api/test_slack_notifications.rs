@@ -51,7 +51,7 @@ mod patch_resource {
             &app.app,
             app.user.id,
             &settings.integrations.oauth2.nango_secret_key,
-            IntegrationConnectionConfig::Slack(SlackConfig::enabled()),
+            IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
             &settings,
             nango_slack_connection,
         )
@@ -148,7 +148,7 @@ mod patch_resource {
             &app.app,
             app.user.id,
             &settings.integrations.oauth2.nango_secret_key,
-            IntegrationConnectionConfig::Slack(SlackConfig::enabled()),
+            IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
             &settings,
             nango_slack_connection,
         )
@@ -227,7 +227,7 @@ mod patch_resource {
             &app.app,
             app.user.id,
             &settings.integrations.oauth2.nango_secret_key,
-            IntegrationConnectionConfig::Slack(SlackConfig::enabled()),
+            IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
             &settings,
             nango_slack_connection,
         )
@@ -317,7 +317,7 @@ mod patch_resource {
             &app.app,
             app.user.id,
             &settings.integrations.oauth2.nango_secret_key,
-            IntegrationConnectionConfig::Slack(SlackConfig::enabled()),
+            IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
             &settings,
             nango_slack_connection,
         )
