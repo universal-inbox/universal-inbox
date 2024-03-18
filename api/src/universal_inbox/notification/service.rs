@@ -41,7 +41,7 @@ pub struct NotificationService {
     linear_service: LinearService,
     google_mail_service: Arc<RwLock<GoogleMailService>>,
     pub(super) slack_service: SlackService,
-    task_service: Weak<RwLock<TaskService>>,
+    pub(super) task_service: Weak<RwLock<TaskService>>,
     pub integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     user_service: Arc<RwLock<UserService>>,
     min_sync_notifications_interval_in_minutes: i64,
@@ -85,7 +85,7 @@ impl NotificationService {
     pub async fn apply_updated_notification_side_effect<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        notification_source_service: &dyn NotificationSourceService,
+        notification_source_service: &(dyn NotificationSourceService + Send + Sync),
         patch: &NotificationPatch,
         notification: Box<Notification>,
         user_id: UserId,
@@ -588,12 +588,17 @@ impl NotificationService {
         notification_id: NotificationId,
         patch: &'b NotificationPatch,
         apply_task_side_effects: bool,
+        apply_notification_side_effects: bool,
         for_user_id: UserId,
     ) -> Result<UpdateStatus<Box<Notification>>, UniversalInboxError> {
         let updated_notification = self
             .repository
             .update_notification(executor, notification_id, patch, for_user_id)
             .await?;
+
+        if !apply_notification_side_effects {
+            return Ok(updated_notification);
+        }
 
         match updated_notification {
             UpdateStatus {
@@ -734,6 +739,7 @@ impl NotificationService {
         executor: &mut Transaction<'a, Postgres>,
         notification_id: NotificationId,
         task_creation: &'b TaskCreation,
+        apply_notification_side_effects: bool,
         for_user_id: UserId,
     ) -> Result<Option<NotificationWithTask>, UniversalInboxError> {
         let notification = self
@@ -757,7 +763,14 @@ impl NotificationService {
             ..Default::default()
         };
         let updated_notification = self
-            .patch_notification(executor, notification_id, &delete_patch, false, for_user_id)
+            .patch_notification(
+                executor,
+                notification_id,
+                &delete_patch,
+                false,
+                apply_notification_side_effects,
+                for_user_id,
+            )
             .await?;
 
         if let UpdateStatus {

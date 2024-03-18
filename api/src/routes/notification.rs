@@ -259,6 +259,7 @@ pub async fn patch_notification(
             notification_id,
             &notification_patch,
             true,
+            true,
             user_id,
         )
         .await?;
@@ -312,7 +313,13 @@ pub async fn create_task_from_notification(
         .context(format!("Failed to create task from {notification_id}"))?;
 
     let notification_with_task = service
-        .create_task_from_notification(&mut transaction, notification_id, &task_creation, user_id)
+        .create_task_from_notification(
+            &mut transaction,
+            notification_id,
+            &task_creation,
+            true,
+            user_id,
+        )
         .await?;
 
     transaction.commit().await.context(format!(

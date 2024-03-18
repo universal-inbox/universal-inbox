@@ -300,45 +300,6 @@ impl TodoistService {
         cached_fetch_all_projects(self, user_id, access_token, sync_token).await
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
-    async fn get_or_create_project_id(
-        &self,
-        user_id: UserId,
-        project_name: &str,
-        access_token: &AccessToken,
-    ) -> Result<String, UniversalInboxError> {
-        let projects = self.fetch_all_projects(user_id, access_token, None).await?;
-        if let Some(id) = projects
-            .iter()
-            .find(|project| project.name == *project_name)
-            .map(|project| project.id.clone())
-        {
-            Ok(id)
-        } else {
-            let command_id = Uuid::new_v4();
-            let response = self
-                .send_sync_commands(
-                    vec![TodoistSyncCommand::ProjectAdd {
-                        uuid: command_id,
-                        temp_id: Uuid::new_v4(),
-                        args: TodoistSyncCommandProjectAddArgs {
-                            name: project_name.to_string(),
-                        },
-                    }],
-                    access_token,
-                )
-                .await?;
-            self.projects_cache_index.fetch_add(1, Ordering::Relaxed);
-
-            Ok(response
-                .temp_id_mapping
-                .values()
-                .next()
-                .context("Cannot find newly added project's ID".to_string())?
-                .to_string())
-        }
-    }
-
     pub async fn build_task_with_project_name(
         source: &TodoistItem,
         project_name: String,
@@ -627,14 +588,14 @@ impl TaskSourceService<TodoistItem> for TodoistService {
             .ok_or_else(|| anyhow!("Cannot update a Todoist task without an access token"))?;
         let mut commands: Vec<TodoistSyncCommand> = vec![];
         if let Some(ref project_name) = patch.project {
-            let project_id = self
-                .get_or_create_project_id(user_id, project_name, &access_token)
+            let project = self
+                .get_or_create_project(executor, project_name, user_id, Some(&access_token))
                 .await?;
             commands.push(TodoistSyncCommand::ItemMove {
                 uuid: Uuid::new_v4(),
                 args: TodoistSyncCommandItemMoveArgs {
                     id: id.to_string(),
-                    project_id,
+                    project_id: project.source_id.clone(),
                 },
             });
         }
@@ -702,6 +663,72 @@ impl TaskSourceService<TodoistItem> for TodoistService {
                 name: todoist_project.name,
             })
             .collect())
+    }
+
+    #[allow(clippy::blocks_in_conditions)]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    async fn get_or_create_project<'a, 'b>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        project_name: &'b str,
+        user_id: UserId,
+        access_token: Option<&'b AccessToken>,
+    ) -> Result<ProjectSummary, UniversalInboxError> {
+        let access_token = match access_token {
+            Some(access_token) => access_token.clone(),
+            None => {
+                self.integration_connection_service
+                    .read()
+                    .await
+                    .find_access_token(executor, IntegrationProviderKind::Todoist, None, user_id)
+                    .await?
+                    .ok_or_else(|| {
+                        anyhow!(
+                            "Cannot create Todoist project {project_name} without an access token"
+                        )
+                    })?
+                    .0
+            }
+        };
+
+        let projects = self
+            .fetch_all_projects(user_id, &access_token, None)
+            .await?;
+        if let Some(project) = projects
+            .iter()
+            .find(|project| project.name == *project_name)
+        {
+            return Ok(ProjectSummary {
+                source_id: project.id.clone(),
+                name: project.name.clone(),
+            });
+        }
+
+        let command_id = Uuid::new_v4();
+        let response = self
+            .send_sync_commands(
+                vec![TodoistSyncCommand::ProjectAdd {
+                    uuid: command_id,
+                    temp_id: Uuid::new_v4(),
+                    args: TodoistSyncCommandProjectAddArgs {
+                        name: project_name.to_string(),
+                    },
+                }],
+                &access_token,
+            )
+            .await?;
+        self.projects_cache_index.fetch_add(1, Ordering::Relaxed);
+
+        let project_id = response
+            .temp_id_mapping
+            .values()
+            .next()
+            .context("Cannot find newly added project's ID".to_string())?
+            .to_string();
+        Ok(ProjectSummary {
+            source_id: project_id,
+            name: project_name.to_string(),
+        })
     }
 }
 
