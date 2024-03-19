@@ -25,8 +25,9 @@ use universal_inbox::{
 use universal_inbox_api::integrations::todoist::{
     TodoistCommandStatus, TodoistItemInfoResponse, TodoistSyncCommandItemAddArgs,
     TodoistSyncCommandItemCompleteArgs, TodoistSyncCommandItemDeleteArgs,
-    TodoistSyncCommandItemMoveArgs, TodoistSyncCommandItemUpdateArgs,
-    TodoistSyncCommandProjectAddArgs, TodoistSyncResponse, TodoistSyncStatusResponse,
+    TodoistSyncCommandItemMoveArgs, TodoistSyncCommandItemUncompleteArgs,
+    TodoistSyncCommandItemUpdateArgs, TodoistSyncCommandProjectAddArgs, TodoistSyncResponse,
+    TodoistSyncStatusResponse,
 };
 
 use crate::helpers::{load_json_fixture_file, rest::create_resource};
@@ -113,6 +114,21 @@ pub fn mock_todoist_complete_item_service<'a>(
         todoist_mock_server,
         vec![TodoistSyncPartialCommand::ItemComplete {
             args: TodoistSyncCommandItemCompleteArgs {
+                id: task_id.to_string(),
+            },
+        }],
+        None,
+    )
+}
+
+pub fn mock_todoist_uncomplete_item_service<'a>(
+    todoist_mock_server: &'a MockServer,
+    task_id: &str,
+) -> Mock<'a> {
+    mock_todoist_sync_service(
+        todoist_mock_server,
+        vec![TodoistSyncPartialCommand::ItemUncomplete {
+            args: TodoistSyncCommandItemUncompleteArgs {
                 id: task_id.to_string(),
             },
         }],
@@ -340,6 +356,10 @@ pub enum TodoistSyncPartialCommand {
     #[serde(rename = "item_complete")]
     ItemComplete {
         args: TodoistSyncCommandItemCompleteArgs,
+    },
+    #[serde(rename = "item_uncomplete")]
+    ItemUncomplete {
+        args: TodoistSyncCommandItemUncompleteArgs,
     },
     #[serde(rename = "item_update")]
     ItemUpdate {

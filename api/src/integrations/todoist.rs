@@ -72,6 +72,11 @@ pub enum TodoistSyncCommand {
         uuid: Uuid,
         args: TodoistSyncCommandItemCompleteArgs,
     },
+    #[serde(rename = "item_uncomplete")]
+    ItemUncomplete {
+        uuid: Uuid,
+        args: TodoistSyncCommandItemUncompleteArgs,
+    },
     #[serde(rename = "item_update")]
     ItemUpdate {
         uuid: Uuid,
@@ -106,6 +111,11 @@ pub struct TodoistSyncCommandItemDeleteArgs {
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct TodoistSyncCommandItemCompleteArgs {
+    pub id: String,
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct TodoistSyncCommandItemUncompleteArgs {
     pub id: String,
 }
 
@@ -564,6 +574,31 @@ impl TaskSourceService<TodoistItem> for TodoistService {
             vec![TodoistSyncCommand::ItemComplete {
                 uuid: Uuid::new_v4(),
                 args: TodoistSyncCommandItemCompleteArgs { id: id.to_string() },
+            }],
+            &access_token,
+        )
+        .await
+    }
+
+    #[allow(clippy::blocks_in_conditions)]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    async fn uncomplete_task<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        id: &str,
+        user_id: UserId,
+    ) -> Result<TodoistSyncStatusResponse, UniversalInboxError> {
+        let (access_token, _) = self
+            .integration_connection_service
+            .read()
+            .await
+            .find_access_token(executor, IntegrationProviderKind::Todoist, None, user_id)
+            .await?
+            .ok_or_else(|| anyhow!("Cannot complete a Todoist task without an access token"))?;
+        self.send_sync_commands(
+            vec![TodoistSyncCommand::ItemUncomplete {
+                uuid: Uuid::new_v4(),
+                args: TodoistSyncCommandItemUncompleteArgs { id: id.to_string() },
             }],
             &access_token,
         )

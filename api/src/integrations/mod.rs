@@ -107,6 +107,12 @@ pub mod task {
             source_id: &str,
             user_id: UserId,
         ) -> Result<TodoistSyncStatusResponse, UniversalInboxError>;
+        async fn uncomplete_task<'a>(
+            &self,
+            executor: &mut Transaction<'a, Postgres>,
+            source_id: &str,
+            user_id: UserId,
+        ) -> Result<TodoistSyncStatusResponse, UniversalInboxError>;
         async fn update_task<'a>(
             &self,
             executor: &mut Transaction<'a, Postgres>,

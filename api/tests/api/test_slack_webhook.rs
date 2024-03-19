@@ -47,7 +47,7 @@ use crate::helpers::{
         todoist::{
             mock_todoist_complete_item_service, mock_todoist_get_item_service,
             mock_todoist_item_add_service, mock_todoist_sync_resources_service,
-            sync_todoist_projects_response, todoist_item,
+            mock_todoist_uncomplete_item_service, sync_todoist_projects_response, todoist_item,
         },
     },
 };
@@ -609,7 +609,7 @@ async fn test_receive_star_added_event_as_task(
 #[rstest]
 #[tokio::test]
 #[allow(clippy::too_many_arguments)]
-async fn test_receive_star_removed_event_as_task(
+async fn test_receive_star_removed_and_added_event_as_task(
     settings: Settings,
     #[future] authenticated_app: AuthenticatedApp,
     slack_push_star_added_event: Box<SlackPushEvent>,
@@ -687,6 +687,7 @@ async fn test_receive_star_removed_event_as_task(
     let todoist_get_item_mock =
         mock_todoist_get_item_service(&app.app.todoist_mock_server, todoist_item.clone());
 
+    // First creation of a deleted notification and an active task
     let response = create_resource_response(
         &app.client,
         &app.app.api_address,
@@ -726,6 +727,7 @@ async fn test_receive_star_removed_event_as_task(
         &star_added_task.source_id,
     );
 
+    // Notification should still be marked as deleted and associated task as done
     let response = create_resource_response(
         &app.client,
         &app.app.api_address,
@@ -743,7 +745,6 @@ async fn test_receive_star_removed_event_as_task(
     slack_fetch_team_mock.assert_hits(1);
     todoist_complete_item_mock.assert();
 
-    // notification should still be marked as deleted
     let notifications = list_notifications(
         &app.client,
         &app.app.api_address,
@@ -758,6 +759,42 @@ async fn test_receive_star_removed_event_as_task(
     assert_eq!(notifications[0].id, star_added_notification.id);
 
     let tasks = list_tasks(&app.client, &app.app.api_address, TaskStatus::Done).await;
+
+    assert_eq!(tasks.len(), 1);
+    assert_eq!(tasks[0].id, star_added_task.id);
+
+    let todoist_uncomplete_item_mock = mock_todoist_uncomplete_item_service(
+        &app.app.todoist_mock_server,
+        &star_added_task.source_id,
+    );
+
+    // Task should be marked as active again
+    let response = create_resource_response(
+        &app.client,
+        &app.app.api_address,
+        "hooks/slack/events",
+        slack_push_star_added_event.clone(),
+    )
+    .await;
+    assert_eq!(response.status(), 200);
+    assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
+
+    todoist_uncomplete_item_mock.assert();
+
+    let notifications = list_notifications(
+        &app.client,
+        &app.app.api_address,
+        vec![NotificationStatus::Deleted],
+        false,
+        None,
+        None,
+    )
+    .await;
+
+    assert_eq!(notifications.len(), 1);
+    assert_eq!(notifications[0].id, star_added_notification.id);
+
+    let tasks = list_tasks(&app.client, &app.app.api_address, TaskStatus::Active).await;
 
     assert_eq!(tasks.len(), 1);
     assert_eq!(tasks[0].id, star_added_task.id);
