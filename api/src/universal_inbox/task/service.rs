@@ -85,6 +85,11 @@ impl TaskService {
                     .complete_task(executor, &task.source_id, user_id)
                     .await?;
             }
+            Some(TaskStatus::Active) => {
+                task_source_service
+                    .uncomplete_task(executor, &task.source_id, user_id)
+                    .await?;
+            }
             _ => (),
         }
 
