@@ -451,7 +451,7 @@ impl NotificationRepository for Repository {
 
         let existing_notification = sqlx::query!(
             r#"
-              SELECT id, updated_at
+              SELECT id, updated_at, task_id
               FROM notification
               WHERE
                 source_id = $1
@@ -524,6 +524,7 @@ impl NotificationRepository for Repository {
 
             let notification_to_return = Box::new(Notification {
                 id: NotificationId(existing_notification.id),
+                task_id: existing_notification.task_id.map(TaskId),
                 ..*notification
             });
             if existing_notification.updated_at != notification.updated_at.naive_utc() {

@@ -9,8 +9,12 @@ use universal_inbox::{
         integrations::slack::{SlackSyncTaskConfig, SlackSyncType},
         provider::{IntegrationProvider, IntegrationProviderKind},
     },
-    notification::{integrations::slack::SlackPushEventCallbackExt, Notification},
-    task::{integrations::todoist::TODOIST_INBOX_PROJECT, TaskCreation},
+    notification::{
+        integrations::slack::SlackPushEventCallbackExt, Notification, NotificationStatus,
+    },
+    task::{
+        integrations::todoist::TODOIST_INBOX_PROJECT, service::TaskPatch, TaskCreation, TaskStatus,
+    },
 };
 
 use crate::universal_inbox::{
@@ -27,15 +31,15 @@ impl NotificationEventService<SlackPushEventCallback> for NotificationService {
         executor: &mut Transaction<'a, Postgres>,
         event: SlackPushEventCallback,
     ) -> Result<Vec<Notification>, UniversalInboxError> {
-        let provider_user_id = match &event {
+        let (provider_user_id, task_status) = match &event {
             SlackPushEventCallback {
                 event: SlackEventCallbackBody::StarAdded(SlackStarAddedEvent { user, .. }),
                 ..
-            } => user.to_string(),
+            } => (user.to_string(), TaskStatus::Active),
             SlackPushEventCallback {
                 event: SlackEventCallbackBody::StarRemoved(SlackStarRemovedEvent { user, .. }),
                 ..
-            } => user.to_string(),
+            } => (user.to_string(), TaskStatus::Done),
             _ => {
                 return Err(UniversalInboxError::UnsupportedAction(format!(
                     "Unsupported Slack event {event:?}"
@@ -70,7 +74,11 @@ impl NotificationEventService<SlackPushEventCallback> for NotificationService {
             return Ok(vec![]);
         }
 
-        let notification = event.into_notification(integration_connection.user_id)?;
+        let mut notification = event.into_notification(integration_connection.user_id)?;
+        if let SlackSyncType::AsTasks(_) = &slack_config.sync_type {
+            // When syncing notifications as tasks, we keep the notification status as deleted.
+            notification.status = NotificationStatus::Deleted;
+        }
 
         let saved_notifications = self
             .save_notifications_and_sync_details(
@@ -92,6 +100,30 @@ impl NotificationEventService<SlackPushEventCallback> for NotificationService {
             default_priority,
         }) = &slack_config.sync_type
         {
+            if let Some(task_id) = saved_notification.task_id {
+                info!(
+                    "Updating task to status {task_status} from Slack notification {} for user {}",
+                    saved_notification.id, integration_connection.user_id
+                );
+                let task_patch = TaskPatch {
+                    status: Some(task_status),
+                    ..Default::default()
+                };
+                self.task_service
+                    .upgrade()
+                    .context("Unable to access task_service from notification_service")?
+                    .read()
+                    .await
+                    .patch_task(
+                        executor,
+                        task_id,
+                        &task_patch,
+                        integration_connection.user_id,
+                    )
+                    .await?;
+                return Ok(saved_notifications);
+            }
+
             info!(
                 "Creating task from Slack notification {} for user {}",
                 saved_notification.id, integration_connection.user_id
