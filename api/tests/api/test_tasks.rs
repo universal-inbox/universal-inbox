@@ -77,8 +77,8 @@ mod create_task {
 
         assert_eq!(creation_result.task, *expected_minimal_task);
         // A notification should have been created for tasks in the inbox (project)
-        assert!(creation_result.notification.is_some());
-        let created_notification = creation_result.notification.unwrap();
+        assert_eq!(creation_result.notifications.len(), 1);
+        let created_notification = &creation_result.notifications[0];
         assert_eq!(created_notification.task_id, Some(creation_result.task.id));
 
         let task = get_resource(
@@ -146,7 +146,7 @@ mod create_task {
         .await;
 
         assert_eq!(creation_result.task, *expected_task);
-        assert!(creation_result.notification.is_none());
+        assert!(creation_result.notifications.is_empty());
 
         let task = get_resource(
             &app.client,

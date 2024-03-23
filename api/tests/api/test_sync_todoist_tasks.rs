@@ -84,7 +84,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
     )
     .await;
     let existing_todoist_task = existing_todoist_task_creation.task;
-    let existing_todoist_notification = existing_todoist_task_creation.notification.unwrap();
+    let existing_todoist_notification = &existing_todoist_task_creation.notifications[0];
     let integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
@@ -198,8 +198,8 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
     assert_eq!(notifications[0].source_id, new_task.source_id);
     assert_eq!(notifications[0].task, Some(new_task.clone()));
     assert_eq!(
-        Some(notifications[0].clone().into()),
-        new_todoist_task_creation.notification
+        Into::<Notification>::into(notifications[0].clone()),
+        new_todoist_task_creation.notifications[0]
     );
 
     let updated_integration_connection =
@@ -267,10 +267,9 @@ async fn test_sync_tasks_should_add_new_task_and_delete_notification_when_disabl
     .await;
 
     assert_eq!(task_creations.len(), todoist_items.len());
-    debug!("task_creations: {:?}", task_creations);
     assert!(task_creations
         .iter()
-        .all(|task_creation| { task_creation.notification.is_none() }));
+        .all(|task_creation| { task_creation.notifications.is_empty() }));
     todoist_tasks_mock.assert();
     todoist_projects_mock.assert();
 
@@ -362,7 +361,7 @@ async fn test_sync_tasks_should_add_new_empty_task(
     .await;
 
     assert_eq!(task_creations.len(), 1);
-    assert!(task_creations[0].notification.is_none());
+    assert!(task_creations[0].notifications.is_empty());
     assert_eq!(task_creations[0].task.body, "".to_string());
     assert!(task_creations[0].task.completed_at.is_none());
     assert!(task_creations[0].task.due_at.is_none());
@@ -536,7 +535,7 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
         &app.client,
         &app.app.api_address,
         "notifications",
-        task_creation.notification.unwrap().id.into(),
+        task_creation.notifications[0].id.into(),
     )
     .await;
     assert_eq!(deleted_notification.task_id, Some(task_creation.task.id));
@@ -615,7 +614,7 @@ async fn test_sync_tasks_should_not_update_tasks_and_notifications_with_empty_in
         sync_todoist_items_response.items.unwrap()[0].id
     );
     assert_eq!(task_creations[0].task.status, TaskStatus::Active);
-    assert!(task_creations[0].notification.is_none());
+    assert_eq!(task_creations[0].notifications.len(), 1);
     todoist_sync_items_mock.assert();
     todoist_projects_mock.assert();
 
@@ -640,7 +639,7 @@ async fn test_sync_tasks_should_not_update_tasks_and_notifications_with_empty_in
             &app.client,
             &app.app.api_address,
             "notifications",
-            task_creation.notification.as_ref().unwrap().id.into(),
+            task_creation.notifications[0].id.into(),
         )
         .await;
         assert_eq!(notification.task_id, Some(task_creation.task.id));

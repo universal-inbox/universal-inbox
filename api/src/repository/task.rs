@@ -13,7 +13,7 @@ use universal_inbox::{
     user::UserId,
 };
 
-use crate::universal_inbox::{UniversalInboxError, UpdateStatus};
+use crate::universal_inbox::{UniversalInboxError, UpdateStatus, UpsertStatus};
 
 use super::Repository;
 
@@ -63,7 +63,7 @@ pub trait TaskRepository {
         &self,
         executor: &mut Transaction<'a, Postgres>,
         task: Box<Task>,
-    ) -> Result<Task, UniversalInboxError>;
+    ) -> Result<UpsertStatus<Box<Task>>, UniversalInboxError>;
     async fn update_task<'a, 'b>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -403,20 +403,115 @@ impl TaskRepository for Repository {
         &self,
         executor: &mut Transaction<'a, Postgres>,
         task: Box<Task>,
-    ) -> Result<Task, UniversalInboxError> {
-        let metadata = Json(task.metadata.clone());
+    ) -> Result<UpsertStatus<Box<Task>>, UniversalInboxError> {
+        let metadata: Json<TaskMetadata> = Json(task.metadata.clone());
         let priority: u8 = task.priority.into();
 
-        debug!(
-            "Upserting task {} {} (from {}) for {}",
-            task.get_task_source_kind(),
-            task.id,
+        let existing_task = sqlx::query!(
+            r#"
+              SELECT id
+              FROM task
+              WHERE
+                source_id = $1
+                AND kind::TEXT = $2
+                AND user_id = $3
+            "#,
             task.source_id,
-            task.user_id
-        );
-        let id: TaskId = TaskId(
-            sqlx::query_scalar!(
-                r#"
+            task.get_task_source_kind().to_string(),
+            task.user_id.0,
+        )
+        .fetch_optional(&mut **executor)
+        .await
+        .with_context(|| {
+            format!(
+                "Failed to search for task with source ID {} from storage",
+                task.source_id
+            )
+        })?;
+
+        let completed_at = task
+            .completed_at
+            .map(|completed_at| completed_at.naive_utc());
+        let due_at: Json<Option<DueDate>> = Json(task.due_at.clone());
+        let parent_id = task.parent_id.map(|id| id.0);
+        let created_at = task.created_at.naive_utc();
+
+        let upsert_status = if let Some(existing_task) = existing_task {
+            debug!(
+                "Updating existing task {} {} (from {}) for {}",
+                task.get_task_source_kind(),
+                existing_task.id,
+                task.source_id,
+                task.user_id
+            );
+            let mut query_builder = QueryBuilder::new("UPDATE task SET ");
+            let mut separated = query_builder.separated(", ");
+            separated
+                .push("title = ")
+                .push_bind_unseparated(task.title.clone());
+            separated
+                .push("body = ")
+                .push_bind_unseparated(task.body.clone());
+            separated
+                .push("status = ")
+                .push_bind_unseparated(task.status.to_string())
+                .push_unseparated("::task_status");
+            separated
+                .push("completed_at = ")
+                .push_bind_unseparated(completed_at);
+            separated
+                .push("priority = ")
+                .push_bind_unseparated(priority as i32);
+            separated.push("due_at = ").push_bind_unseparated(due_at);
+            separated.push("tags = ").push_bind_unseparated(&task.tags);
+            separated
+                .push("parent_id = ")
+                .push_bind_unseparated(parent_id);
+            separated
+                .push("project = ")
+                .push_bind_unseparated(task.project.clone());
+            separated
+                .push("is_recurring = ")
+                .push_bind_unseparated(task.is_recurring);
+            separated
+                .push("created_at = ")
+                .push_bind_unseparated(created_at);
+            separated
+                .push("metadata = ")
+                .push_bind_unseparated(metadata);
+            separated
+                .push("user_id = ")
+                .push_bind_unseparated(task.user_id.0);
+            query_builder
+                .push(" WHERE id = ")
+                .push_bind(existing_task.id);
+
+            query_builder
+                .build()
+                .execute(&mut **executor)
+                .await
+                .context(format!(
+                    "Failed to update task {} from storage",
+                    existing_task.id
+                ))?;
+
+            let task_to_return = Box::new(Task {
+                id: TaskId(existing_task.id),
+                ..*task
+            });
+
+            UpsertStatus::Updated(task_to_return)
+        } else {
+            debug!(
+                "Creating new task {} {} (from {}) for {}",
+                task.get_task_source_kind(),
+                task.id,
+                task.source_id,
+                task.user_id
+            );
+            let task_id: TaskId = TaskId(
+                sqlx::query_scalar!(
+                    r#"
                 INSERT INTO task
                   (
                     id,
@@ -437,52 +532,42 @@ impl TaskRepository for Repository {
                   )
                 VALUES
                   ($1, $2, $3, $4, $5::task_status, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-                ON CONFLICT (source_id, kind, user_id) DO UPDATE
-                SET
-                  title = $3,
-                  body = $4,
-                  status = $5::task_status,
-                  completed_at = $6,
-                  priority = $7,
-                  due_at = $8,
-                  tags = $9,
-                  parent_id = $10,
-                  project = $11,
-                  is_recurring = $12,
-                  created_at = $13,
-                  metadata = $14,
-                  user_id = $15
                 RETURNING
                   id
             "#,
-                task.id.0,
-                task.source_id,
-                task.title,
-                task.body,
-                task.status.to_string() as _,
-                task.completed_at
-                    .map(|last_read_at| last_read_at.naive_utc()),
-                priority as i32,
-                Json(task.due_at.clone()) as Json<Option<DueDate>>,
-                &task.tags,
-                task.parent_id.map(|id| id.0),
-                task.project,
-                task.is_recurring,
-                task.created_at.naive_utc(),
-                metadata as Json<TaskMetadata>,
-                task.user_id.0
-            )
-            .fetch_one(&mut **executor)
-            .await
-            .with_context(|| {
-                format!(
-                    "Failed to update task with source ID {} from storage",
-                    task.source_id
+                    task.id.0,
+                    task.source_id,
+                    task.title,
+                    task.body,
+                    task.status.to_string() as _,
+                    completed_at,
+                    priority as i32,
+                    due_at as Json<Option<DueDate>>,
+                    &task.tags,
+                    parent_id,
+                    task.project,
+                    task.is_recurring,
+                    created_at,
+                    metadata as Json<TaskMetadata>,
+                    task.user_id.0
                 )
-            })?,
-        );
+                .fetch_one(&mut **executor)
+                .await
+                .with_context(|| {
+                    format!(
+                        "Failed to update task with source ID {} from storage",
+                        task.source_id
+                    )
+                })?,
+            );
 
-        Ok(Task { id, ..*task })
+            UpsertStatus::Created(Box::new(Task {
+                id: task_id,
+                ..*task
+            }))
+        };
+
+        Ok(upsert_status)
     }
 
     #[tracing::instrument(level = "debug", skip(self, executor))]

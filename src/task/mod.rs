@@ -373,7 +373,7 @@ pub trait TaskSource: IntegrationProviderSource {
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct TaskCreationResult {
     pub task: Task,
-    pub notification: Option<Notification>,
+    pub notifications: Vec<Notification>,
 }
 
 #[cfg(test)]

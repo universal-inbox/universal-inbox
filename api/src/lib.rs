@@ -1,4 +1,5 @@
 #![feature(trait_upcasting)]
+#![feature(box_patterns)]
 
 use std::{
     net::TcpListener, num::NonZeroUsize, sync::Arc, sync::Weak, thread,
@@ -394,6 +395,7 @@ pub async fn build_services(
         repository,
         todoist_service.clone(),
         Arc::downgrade(&notification_service),
+        slack_service.clone(),
         integration_connection_service.clone(),
         user_service.clone(),
         settings.application.min_sync_tasks_interval_in_minutes,
