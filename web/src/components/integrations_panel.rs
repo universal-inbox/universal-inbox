@@ -23,11 +23,14 @@ use universal_inbox::{
 };
 
 use crate::{
-    components::integrations::{
-        github::config::GithubProviderConfiguration,
-        google_mail::config::GoogleMailProviderConfiguration, icons::IntegrationProviderIcon,
-        linear::config::LinearProviderConfiguration, slack::config::SlackProviderConfiguration,
-        todoist::config::TodoistProviderConfiguration,
+    components::{
+        integrations::{
+            github::config::GithubProviderConfiguration,
+            google_mail::config::GoogleMailProviderConfiguration, icons::IntegrationProviderIcon,
+            linear::config::LinearProviderConfiguration, slack::config::SlackProviderConfiguration,
+            todoist::config::TodoistProviderConfiguration,
+        },
+        markdown::Markdown,
     },
     model::UniversalInboxUIModel,
 };
@@ -352,7 +355,7 @@ pub fn Documentation(cx: Scope, config: IntegrationProviderStaticConfig) -> Elem
                     div {
                         class: "collapse-content flex flex-col gap-2",
 
-                        p { class: "py-2", "{config.doc}"}
+                        Markdown { class: "!prose-invert", text: config.doc.clone() }
 
                         div { class: "text-base", "Actions on notifications" }
                         if !doc_for_actions.is_empty() {

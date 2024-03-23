@@ -8,7 +8,7 @@ pub fn Markdown<'a>(cx: Scope, text: String, class: Option<&'a str>) -> Element 
     let class = class.unwrap_or("dark:prose-invert");
     render! {
         p {
-            class: "w-full prose prose-sm {class}",
+            class: "w-full max-w-full prose prose-sm {class}",
             dangerous_inner_html: "{markdown_to_html(&text)}"
         }
     }

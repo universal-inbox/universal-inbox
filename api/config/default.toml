@@ -136,12 +136,17 @@ snooze = "The Todoist task will not be modified. The notification in Universal I
 
 [integrations.slack]
 name = "Slack"
-doc = "Slack notifications are synchronized 1 for 1 with Universal Inbox notifications."
+doc = """
+Slack \"saved for later\" items can be synchronized 1 for 1 with a Universal Inbox notifications or a tasks in the task management service.<br>
+When synchronized as tasks, the synchronization is two way:
+- completed tasks will delete the \"saved for later\" item in Slack.<br>
+- ⚠️ uncompleted tasks will partially mark the \"saved for later\" item in Slack. Indeed, due to some Slack public API limitations, the original marked message will be marked again but it won't appear in the \"saved for later\" list.
+"""
 
 [integrations.slack.doc_for_actions]
-delete = "The Slack notification will be deleted."
-unsubscribe = "Unsubscribe from the Slack notification."
-snooze = "The Slack notification will be snoozed and will only reappear the next day."
+delete = "The Slack \"saved for later\" item will be deleted."
+unsubscribe = "The Slack \"saved for later\" item will be deleted."
+snooze = "The notification will be snoozed and will only reappear the next day. It won't change the Slack \"saved for later\" item."
 
 [integrations.oauth2]
 nango_base_url = "http://localhost:3003"

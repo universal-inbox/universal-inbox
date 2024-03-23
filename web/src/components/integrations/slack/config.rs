@@ -58,7 +58,7 @@ pub fn SlackProviderConfiguration<'a>(
                     class: "cursor-pointer label py-1",
                     span {
                         class: "label-text",
-                        "Synchronize Slack \"saved for later\""
+                        "Synchronize Slack \"saved for later\" items"
                     }
                     input {
                         r#type: "checkbox",
@@ -80,7 +80,7 @@ pub fn SlackProviderConfiguration<'a>(
                     class: "cursor-pointer label py-1",
                     span {
                         class: "label-text",
-                        "Synchronize Slack stars as notifications"
+                        "Synchronize Slack \"saved for later\" items as notifications"
                     }
                     input {
                         r#type: "radio",
@@ -107,7 +107,7 @@ pub fn SlackProviderConfiguration<'a>(
                         class: "cursor-pointer label py-1",
                         span {
                             class: "label-text",
-                            "Synchronize Slack stars as tasks"
+                            "Synchronize Slack \"saved for later\" items as tasks"
                         }
                         input {
                             r#type: "radio",
