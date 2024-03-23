@@ -1,6 +1,6 @@
 {
   "packages": {
-    "sqlx-cli":       "0.7.1",
+    "sqlx-cli":       "0.7.4",
     "trunk":          "latest",
     "pre-commit":     "latest",
     "rustup":         "latest",
@@ -25,9 +25,9 @@
     "fzf":              "latest",
     "process-compose":  "latest",
     "binaryen":         "latest",
-    "cargo-llvm-cov":   "0.5.31",
     "cargo-chef":       "latest",
-    "openssl.dev":      "",
+    "cargo-binstall": "latest",
+    "openssl.dev": "",
     "wasm-bindgen-cli": "0.2.89"
   },
   "shell": {
@@ -37,7 +37,8 @@
       "rustup toolchain list | grep -q '^nightly-2024-03-04' || rustup toolchain install nightly-2024-03-04",
       "rustup target list --installed | grep -q '^wasm32-unknown-unknown$' || rustup target add wasm32-unknown-unknown",
       "rustup component list --installed | grep -q '^rust-analyzer-' || rustup component add rust-analyzer",
-      "rustup component list --installed | grep -q '^llvm-tools-' || rustup component add llvm-tools-preview"
+      "rustup component list --installed | grep -q '^llvm-tools-' || rustup component add llvm-tools-preview",
+      "cargo binstall -y cargo-llvm-cov --version 0.6.8"
     ]
   },
   "env": {
