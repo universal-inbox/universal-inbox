@@ -239,7 +239,11 @@ pub fn IntegrationSettings<'a>(
             })) => ("Reconnect", "btn-error", None, None),
             _ => {
                 if config.is_implemented {
-                    ("Connect", "btn-primary", None, None)
+                    if let Some(Some(_)) = connection {
+                        ("Connect", "btn-primary", None, None)
+                    } else {
+                        ("Not yet configured", "btn-disabled btn-ghost", None, None)
+                    }
                 } else {
                     ("Not yet implemented", "btn-disabled btn-ghost", None, None)
                 }
