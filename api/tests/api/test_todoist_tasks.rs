@@ -73,7 +73,7 @@ mod patch_task {
         .await;
         let existing_todoist_task = existing_todoist_task_creation.task;
         assert_eq!(existing_todoist_task.status, TaskStatus::Active);
-        let existing_todoist_notification = existing_todoist_task_creation.notification.unwrap();
+        let existing_todoist_notification = &existing_todoist_task_creation.notifications[0];
         create_and_mock_integration_connection(
             &app.app,
             app.user.id,
@@ -139,7 +139,7 @@ mod patch_task {
         .await;
         let existing_todoist_task = existing_todoist_task_creation.task;
         assert_eq!(existing_todoist_task.status, TaskStatus::Active);
-        let existing_todoist_notification = existing_todoist_task_creation.notification.unwrap();
+        let existing_todoist_notification = &existing_todoist_task_creation.notifications[0];
         create_and_mock_integration_connection(
             &app.app,
             app.user.id,
@@ -213,7 +213,7 @@ mod patch_task {
         );
         assert_eq!(existing_todoist_task.priority, TaskPriority::P4);
         assert_eq!(existing_todoist_task.project, "Inbox".to_string());
-        let existing_todoist_notification = existing_todoist_task_creation.notification.unwrap();
+        let existing_todoist_notification = &existing_todoist_task_creation.notifications[0];
 
         let new_due_at = DueDate::Date(NaiveDate::from_ymd_opt(2022, 1, 1).unwrap());
         let new_priority = TodoistItemPriority::P2;

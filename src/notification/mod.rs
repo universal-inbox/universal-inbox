@@ -43,6 +43,19 @@ pub struct Notification {
     pub details: Option<NotificationDetails>,
 }
 
+impl Notification {
+    pub fn get_source_kind(&self) -> NotificationSourceKind {
+        // tag: New notification integration
+        match &self.metadata {
+            NotificationMetadata::Github(_) => NotificationSourceKind::Github,
+            NotificationMetadata::Todoist => NotificationSourceKind::Todoist,
+            NotificationMetadata::Linear(_) => NotificationSourceKind::Linear,
+            NotificationMetadata::GoogleMail(_) => NotificationSourceKind::GoogleMail,
+            NotificationMetadata::Slack(_) => NotificationSourceKind::Slack,
+        }
+    }
+}
+
 impl HasHtmlUrl for Notification {
     // tag: New notification integration
     fn get_html_url(&self) -> Url {

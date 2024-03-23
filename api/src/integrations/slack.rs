@@ -9,6 +9,7 @@ use slack_morphism::{
         SlackApiBotsInfoRequest, SlackApiConversationsHistoryRequest,
         SlackApiConversationsInfoRequest, SlackApiTeamInfoRequest, SlackApiUsersInfoRequest,
     },
+    errors::{SlackClientApiError, SlackClientError},
     events::{SlackEventCallbackBody, SlackStarAddedEvent, SlackStarRemovedEvent},
     hyper_tokio::SlackClientHyperHttpsConnector,
     prelude::{
@@ -190,6 +191,17 @@ impl SlackService {
         session
             .stars_add(&request)
             .await
+            .map(|_| ())
+            .or_else(|e| match &e {
+                SlackClientError::ApiError(SlackClientApiError { code, .. }) => {
+                    if code == "already_starred" {
+                        Ok(())
+                    } else {
+                        Err(e)
+                    }
+                }
+                _ => Err(e),
+            })
             .context("Failed to add Slack star")?;
 
         Ok(())
@@ -229,6 +241,77 @@ impl SlackService {
             .stars_remove(&request)
             .await
             .context("Failed to remove Slack star")?;
+
+        Ok(())
+    }
+
+    #[allow(clippy::blocks_in_conditions)]
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, executor, notification),
+        fields(notification_id = notification.id.0.to_string()),
+        err
+    )]
+    pub async fn undelete_notification_from_source<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        notification: &Notification,
+        user_id: UserId,
+    ) -> Result<(), UniversalInboxError> {
+        let (access_token, _) = self
+            .integration_connection_service
+            .read()
+            .await
+            .find_access_token(executor, IntegrationProviderKind::Slack, None, user_id)
+            .await?
+            .ok_or_else(|| {
+                anyhow!("Cannot fetch Slack notification details without an access token")
+            })?;
+        let NotificationMetadata::Slack(ref slack_push_event_callback) = notification.metadata
+        else {
+            return Err(UniversalInboxError::Unexpected(anyhow!(
+                "Given notification must have been built from a Slack notification"
+            )));
+        };
+        let slack_api_token = SlackApiToken::new(SlackApiTokenValue(access_token.to_string()));
+
+        let (channel, message, file, file_comment) = match &slack_push_event_callback.event {
+            SlackEventCallbackBody::StarAdded(SlackStarAddedEvent { item, .. })
+            | SlackEventCallbackBody::StarRemoved(SlackStarRemovedEvent { item, .. }) => match item
+            {
+                SlackStarsItem::Message(SlackStarsItemMessage {
+                    message:
+                        SlackHistoryMessage {
+                            origin: SlackMessageOrigin { ts, .. },
+                            ..
+                        },
+                    channel,
+                    ..
+                }) => (Some(channel), Some(ts), None, None),
+                SlackStarsItem::File(SlackStarsItemFile {
+                    channel,
+                    file: SlackFile { id, .. },
+                    ..
+                }) => (Some(channel), None, Some(id), None),
+                SlackStarsItem::FileComment(SlackStarsItemFileComment {
+                    channel, comment, ..
+                }) => (Some(channel), None, None, Some(comment)),
+                SlackStarsItem::Channel(SlackStarsItemChannel { channel, .. }) => {
+                    (Some(channel), None, None, None)
+                }
+                SlackStarsItem::Im(SlackStarsItemIm { channel, .. }) => {
+                    (Some(channel), None, None, None)
+                }
+                SlackStarsItem::Group(SlackStarsItemGroup { group, .. }) => {
+                    (Some(group), None, None, None)
+                }
+            },
+            // Not yet implemented resource type
+            _ => return Ok(()),
+        };
+
+        self.stars_add(&slack_api_token, channel, message, file, file_comment)
+            .await?;
 
         Ok(())
     }
@@ -452,7 +535,12 @@ impl NotificationSource for SlackService {
 #[async_trait]
 impl NotificationSourceService for SlackService {
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.0.to_string()), err)]
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, executor, notification),
+        fields(notification_id = notification.id.0.to_string()),
+        err
+    )]
     async fn delete_notification_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,

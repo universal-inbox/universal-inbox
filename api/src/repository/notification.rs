@@ -136,6 +136,7 @@ impl NotificationRepository for Repository {
             .transpose()
     }
 
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn get_notification_for_source_id<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,

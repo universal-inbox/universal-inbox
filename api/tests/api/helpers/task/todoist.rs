@@ -225,7 +225,7 @@ pub fn assert_sync_items(
 ) {
     for task_creation in task_creations.iter() {
         let task = &task_creation.task;
-        let notification = task_creation.notification.clone();
+        let notification = task_creation.notifications.first();
 
         assert_eq!(task.user_id, expected_user_id);
         match task.source_id.as_ref() {
@@ -295,7 +295,9 @@ pub fn assert_sync_items(
                     task.metadata,
                     TaskMetadata::Todoist(sync_todoist_items[1].clone())
                 );
-                assert!(notification.is_none());
+                assert!(notification.is_some());
+                let notif = notification.unwrap();
+                assert_eq!(notif.status, NotificationStatus::Deleted);
             }
             _ => {
                 unreachable!("Unexpected task title '{}'", &task.title);

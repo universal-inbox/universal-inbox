@@ -57,7 +57,7 @@ mod patch_notification {
         .await;
         let existing_todoist_task = existing_todoist_task_creation.task;
         assert_eq!(existing_todoist_task.status, TaskStatus::Active);
-        let existing_todoist_notification = existing_todoist_task_creation.notification.unwrap();
+        let existing_todoist_notification = &existing_todoist_task_creation.notifications[0];
         let todoist_mock = mock_todoist_delete_item_service(
             &app.app.todoist_mock_server,
             &existing_todoist_task.source_id,
@@ -79,7 +79,7 @@ mod patch_notification {
             patched_notification,
             Box::new(Notification {
                 status: NotificationStatus::Deleted,
-                ..existing_todoist_notification
+                ..existing_todoist_notification.clone()
             })
         );
         todoist_mock.assert();
@@ -123,7 +123,7 @@ mod patch_notification {
         .await;
         let existing_todoist_task = existing_todoist_task_creation.task;
         assert_eq!(existing_todoist_task.status, TaskStatus::Active);
-        let existing_todoist_notification = existing_todoist_task_creation.notification.unwrap();
+        let existing_todoist_notification = &existing_todoist_task_creation.notifications[0];
         let snoozed_time = Utc.with_ymd_and_hms(2022, 1, 1, 1, 2, 3).unwrap();
 
         let patched_notification = patch_resource(
@@ -142,7 +142,7 @@ mod patch_notification {
             patched_notification,
             Box::new(Notification {
                 snoozed_until: Some(snoozed_time),
-                ..existing_todoist_notification
+                ..existing_todoist_notification.clone()
             })
         );
     }

@@ -14,6 +14,7 @@
 - Display Linear Project and Team icons
 - Connect to Slack and receive "save for later" (aka. "stars") events
 - Add Slack "saved for later" as notifications
+- 2 way sync Slack "saved for later" and Todoist tasks
 
 ### Changed
 
