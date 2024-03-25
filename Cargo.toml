@@ -64,7 +64,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 serde_urlencoded = { version = "0.7.0" }
 serde_with = { version = "2.3.0" }
-slack-morphism = { git = "https://github.com/dax/slack-morphism-rust", rev = "f45dd9141bc783bda1e71f1c35462219ec72d972" }
+slack-morphism = { git = "https://github.com/dax/slack-morphism-rust", rev = "eaa80d54b7f50e1dc92e0d90a1b846ad6e65fc79" }
 thiserror = { version = "1.0" }
 url = { version = "2.5.0" }
 uuid = { version = "1.0", features = ["v4"] }

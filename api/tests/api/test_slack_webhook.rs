@@ -35,8 +35,9 @@ use crate::helpers::{
     notification::{
         list_notifications, list_notifications_with_tasks,
         slack::{
-            mock_slack_fetch_channel, mock_slack_fetch_message, mock_slack_fetch_team,
-            mock_slack_fetch_user, mock_slack_get_chat_permalink, slack_push_star_added_event,
+            mock_slack_fetch_bot, mock_slack_fetch_channel, mock_slack_fetch_message,
+            mock_slack_fetch_team, mock_slack_fetch_user, mock_slack_get_chat_permalink,
+            slack_push_bot_star_added_event, slack_push_star_added_event,
             slack_push_star_removed_event,
         },
     },
@@ -291,6 +292,157 @@ async fn test_receive_star_added_event_as_notification(
 
     slack_get_chat_permalink_mock.assert_hits(1);
     slack_fetch_user_mock.assert_hits(1);
+    slack_fetch_message_mock.assert_hits(1);
+    slack_fetch_channel_mock.assert_hits(1);
+    slack_fetch_team_mock.assert_hits(1);
+
+    let notifications = list_notifications(
+        &app.client,
+        &app.app.api_address,
+        vec![NotificationStatus::Unread],
+        false,
+        None,
+        None,
+    )
+    .await;
+
+    assert_eq!(notifications.len(), 1);
+    assert_eq!(notifications[0].source_id, "1707686216.825719");
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_receive_bot_star_added_event_as_notification(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    slack_push_bot_star_added_event: Box<SlackPushEvent>,
+    nango_slack_connection: Box<NangoConnection>,
+) {
+    let app = authenticated_app.await;
+    create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        &settings.integrations.oauth2.nango_secret_key,
+        IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
+        &settings,
+        nango_slack_connection,
+    )
+    .await;
+
+    let slack_get_chat_permalink_mock = mock_slack_get_chat_permalink(
+        &app.app.slack_mock_server,
+        "C05XXX",
+        "1707686216.825719",
+        "slack_get_chat_permalink_response.json",
+    );
+    let slack_fetch_bot_mock = mock_slack_fetch_bot(
+        &app.app.slack_mock_server,
+        "B05YYY", // The message's creator, not the user who starred the message
+        "slack_fetch_bot_response.json",
+    );
+    let slack_fetch_message_mock = mock_slack_fetch_message(
+        &app.app.slack_mock_server,
+        "C05XXX",
+        "1707686216.825719",
+        "slack_fetch_message_response.json",
+    );
+    let slack_fetch_channel_mock = mock_slack_fetch_channel(
+        &app.app.slack_mock_server,
+        "C05XXX",
+        "slack_fetch_channel_response.json",
+    );
+    let slack_fetch_team_mock = mock_slack_fetch_team(
+        &app.app.slack_mock_server,
+        "T05XXX",
+        "slack_fetch_team_response.json",
+    );
+
+    let SlackPushEvent::EventCallback(event) = &*slack_push_bot_star_added_event else {
+        unreachable!("Unexpected event type");
+    };
+
+    let response = create_resource_response(
+        &app.client,
+        &app.app.api_address,
+        "hooks/slack/events",
+        slack_push_bot_star_added_event.clone(),
+    )
+    .await;
+
+    assert_eq!(response.status(), 200);
+    assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
+
+    slack_get_chat_permalink_mock.assert();
+    slack_fetch_bot_mock.assert();
+    slack_fetch_message_mock.assert();
+    slack_fetch_channel_mock.assert();
+    slack_fetch_team_mock.assert();
+
+    let notifications = list_notifications(
+        &app.client,
+        &app.app.api_address,
+        vec![NotificationStatus::Unread],
+        false,
+        None,
+        None,
+    )
+    .await;
+
+    assert_eq!(notifications.len(), 1);
+    assert_eq!(notifications[0].source_id, "1707686216.825719");
+    assert_eq!(notifications[0].title, "🔴  *Test title* 🔴...");
+    assert!(notifications[0].last_read_at.is_none());
+    assert!(notifications[0].task_id.is_none());
+    assert!(notifications[0].snoozed_until.is_none());
+    assert_eq!(
+        notifications[0].updated_at,
+        Utc.with_ymd_and_hms(2024, 2, 12, 13, 9, 44).unwrap()
+    );
+    assert_eq!(
+        notifications[0].metadata,
+        NotificationMetadata::Slack(Box::new(event.clone()))
+    );
+    assert_eq!(
+        notifications[0].get_html_url(),
+        "https://slack.com/archives/C05XXX/p1234567890"
+            .parse()
+            .unwrap()
+    );
+
+    match &notifications[0].details {
+        Some(NotificationDetails::SlackMessage(details)) => {
+            assert_eq!(
+                details.url,
+                "https://slack.com/archives/C05XXX/p1234567890"
+                    .parse()
+                    .unwrap()
+            );
+            assert_eq!(details.message.origin.ts, "1707686216.825719".into());
+            assert_eq!(details.channel.id, "C05XXX".into());
+            match &details.sender {
+                SlackMessageSenderDetails::Bot(bot) => {
+                    assert_eq!(bot.id, Some("B05YYY".into()));
+                }
+                _ => unreachable!("Expected a SlackMessageSenderDetails::Bot"),
+            }
+            assert_eq!(details.team.id, "T05XXX".into());
+        }
+        _ => unreachable!("Expected a GithubDiscussion notification"),
+    }
+
+    // A duplicated event should not create a new notification
+    let response = create_resource_response(
+        &app.client,
+        &app.app.api_address,
+        "hooks/slack/events",
+        slack_push_bot_star_added_event.clone(),
+    )
+    .await;
+    assert_eq!(response.status(), 200);
+    assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
+
+    slack_get_chat_permalink_mock.assert_hits(1);
+    slack_fetch_bot_mock.assert_hits(1);
     slack_fetch_message_mock.assert_hits(1);
     slack_fetch_channel_mock.assert_hits(1);
     slack_fetch_team_mock.assert_hits(1);
