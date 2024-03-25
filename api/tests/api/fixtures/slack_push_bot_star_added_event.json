@@ -1,0 +1,217 @@
+{
+  "type": "event_callback",
+  "team_id": "T05XXX",
+  "api_app_id": "A05XXX",
+  "event": {
+    "type": "star_added",
+    "user": "U05XXX",
+    "item": {
+      "type": "message",
+      "message": {
+        "ts": "1707686216.825719",
+        "client_msg_id": "4b5a82e0-e533-41fb-a4f3-9b99cf5f0021",
+        "text": ":red_circle:  *Test title* :red_circle:\n\n• list 1\n• list 2\n1. number 1\n2. number 2\n&gt; quote\n```$ echo Hello world```\n_Some_ `formatted` ~text~.\n\nHere is a <https://www.universal-inbox.com|link>",
+        "blocks": [
+          {
+            "type": "rich_text",
+            "block_id": "Iz0yu",
+            "elements": [
+              {
+                "type": "rich_text_section",
+                "elements": [
+                  {
+                    "name": "red_circle",
+                    "type": "emoji",
+                    "unicode": "1f534"
+                  },
+                  {
+                    "text": "  ",
+                    "type": "text"
+                  },
+                  {
+                    "text": "Test title",
+                    "type": "text",
+                    "style": {
+                      "bold": true
+                    }
+                  },
+                  {
+                    "text": " ",
+                    "type": "text"
+                  },
+                  {
+                    "name": "red_circle",
+                    "type": "emoji",
+                    "unicode": "1f534"
+                  },
+                  {
+                    "text": "\n\n",
+                    "type": "text"
+                  }
+                ]
+              },
+              {
+                "type": "rich_text_list",
+                "style": "bullet",
+                "border": 0,
+                "indent": 0,
+                "elements": [
+                  {
+                    "type": "rich_text_section",
+                    "elements": [
+                      {
+                        "text": "list 1",
+                        "type": "text"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "rich_text_section",
+                    "elements": [
+                      {
+                        "text": "list 2",
+                        "type": "text"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "rich_text_section",
+                "elements": [
+                  {
+                    "text": "\n",
+                    "type": "text"
+                  }
+                ]
+              },
+              {
+                "type": "rich_text_list",
+                "style": "ordered",
+                "border": 0,
+                "indent": 0,
+                "elements": [
+                  {
+                    "type": "rich_text_section",
+                    "elements": [
+                      {
+                        "text": "number 1",
+                        "type": "text"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "rich_text_section",
+                    "elements": [
+                      {
+                        "text": "number 2",
+                        "type": "text"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "rich_text_section",
+                "elements": [
+                  {
+                    "text": "\n",
+                    "type": "text"
+                  }
+                ]
+              },
+              {
+                "type": "rich_text_quote",
+                "elements": [
+                  {
+                    "text": "quote",
+                    "type": "text"
+                  }
+                ]
+              },
+              {
+                "type": "rich_text_section",
+                "elements": [
+                  {
+                    "text": "\n",
+                    "type": "text"
+                  }
+                ]
+              },
+              {
+                "type": "rich_text_preformatted",
+                "border": 0,
+                "elements": [
+                  {
+                    "text": "$ echo Hello world",
+                    "type": "text"
+                  }
+                ]
+              },
+              {
+                "type": "rich_text_section",
+                "elements": [
+                  {
+                    "text": "\n",
+                    "type": "text"
+                  },
+                  {
+                    "text": "Some",
+                    "type": "text",
+                    "style": {
+                      "italic": true
+                    }
+                  },
+                  {
+                    "text": " ",
+                    "type": "text"
+                  },
+                  {
+                    "text": "formatted",
+                    "type": "text",
+                    "style": {
+                      "code": true
+                    }
+                  },
+                  {
+                    "text": " ",
+                    "type": "text"
+                  },
+                  {
+                    "text": "text",
+                    "type": "text",
+                    "style": {
+                      "strike": true
+                    }
+                  },
+                  {
+                    "text": ".\n\nHere is a ",
+                    "type": "text"
+                  },
+                  {
+                    "url": "https://www.universal-inbox.com",
+                    "text": "link",
+                    "type": "link"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "bot_id": "B05YYY"
+      },
+      "channel": "C05XXX",
+      "date_create": 1707743384
+    },
+    "event_ts": "1707743384.739427"
+  },
+  "event_id": "Ev06JEA7VCUC",
+  "event_time": 1707743384,
+  "authorizations": [
+    {
+      "team_id": "T05XXX",
+      "user_id": "U05XXX",
+      "is_bot": false
+    }
+  ]
+}

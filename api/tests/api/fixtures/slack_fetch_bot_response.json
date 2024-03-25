@@ -1,0 +1,15 @@
+{
+  "ok": true,
+  "bot": {
+    "id": "B05YYY",
+    "deleted": false,
+    "name": "test-bot",
+    "updated": 1594304711,
+    "app_id": "A00",
+    "icons": {
+      "image_36": "https:\/\/a.slack-edge.com\/service_36.png",
+      "image_48": "https:\/\/a.slack-edge.com\/service_48.png",
+      "image_72": "https:\/\/a.slack-edge.com\/service_72.png"
+    }
+  }
+}

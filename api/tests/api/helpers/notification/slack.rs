@@ -22,6 +22,11 @@ pub fn slack_push_star_added_event() -> Box<SlackPushEvent> {
 }
 
 #[fixture]
+pub fn slack_push_bot_star_added_event() -> Box<SlackPushEvent> {
+    load_json_fixture_file("slack_push_bot_star_added_event.json")
+}
+
+#[fixture]
 pub fn slack_push_star_removed_event() -> Box<SlackPushEvent> {
     load_json_fixture_file("slack_push_star_removed_event.json")
 }
@@ -57,6 +62,22 @@ pub fn mock_slack_fetch_user<'a>(
             .path("/users.info")
             .header("authorization", "Bearer slack_test_user_access_token")
             .query_param("user", user_id);
+        then.status(200)
+            .header("content-type", "application/json")
+            .body_from_file(fixture_path(fixture_response_file));
+    })
+}
+
+pub fn mock_slack_fetch_bot<'a>(
+    slack_mock_server: &'a MockServer,
+    bot_id: &'a str,
+    fixture_response_file: &'a str,
+) -> Mock<'a> {
+    slack_mock_server.mock(|when, then| {
+        when.method(GET)
+            .path("/bots.info")
+            .header("authorization", "Bearer slack_test_user_access_token")
+            .query_param("bot", bot_id);
         then.status(200)
             .header("content-type", "application/json")
             .body_from_file(fixture_path(fixture_response_file));
