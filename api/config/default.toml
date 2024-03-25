@@ -150,8 +150,8 @@ snooze = "The notification will be snoozed and will only reappear the next day. 
 
 [integrations.oauth2]
 nango_base_url = "http://localhost:3003"
-# nango_public_key = "get it from Nango/project-settings page"
-# nango_secret_key = "To be generated"
+nango_public_key = "get it from Nango/project-settings page"
+nango_secret_key = "To be generated"
 
 # Integration provider to be created on Nango
 # 1 key/value pair must be declared per IntegrationProviderKind enum value
