@@ -99,6 +99,9 @@ fn GoogleMailThreadMessage<'a>(cx: Scope, message: &'a GoogleMailMessage) -> Ele
     if let Some(to) = message.get_header("To") {
         headers.push(render! { span { class: "text-gray-400", "To:" }, span { "{to}" } });
     }
+    if let Some(cc) = message.get_header("Cc") {
+        headers.push(render! { span { class: "text-gray-400", "Cc:" }, span { "{cc}" } });
+    }
     if let Some(date) = message.get_header("Date") {
         headers.push(render! { span { class: "text-gray-400", "Date:" }, span { "{date}" } });
     }
