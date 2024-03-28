@@ -1,10 +1,8 @@
-name: CI
+name: ci-pr
 
 on:
   push:
-    branches:
-      - main
-  pull_request:
+    pull_request:
 
 permissions:
   contents: read
@@ -60,7 +58,7 @@ jobs:
 
   test-ui:
     needs: build
-    name: Test shared package with coverage
+    name: Test shared package
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -72,10 +70,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci
-      - name: Collect shared package coverage data
+      - name: Run tests
         env:
           RUST_MIN_STACK: 4194304
-        run: devbox run -- just test-coverage
+        run: devbox run -- just test
       - name: Shared test Report
         uses: dorny/test-reporter@v1
         if: success() || failure()
@@ -83,13 +81,6 @@ jobs:
           name: Tests shared
           path: target/nextest/ci/junit.xml
           reporter: java-junit
-      - name: Upload to Coveralls
-        # upload only if push
-        if: ${{ github.event_name == 'push' }}
-        uses: coverallsapp/github-action@master
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          path-to-lcov: './lcov.info'
 
   test-ui-web:
     needs: build
@@ -105,14 +96,14 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci
-      - name: Collect API coverage data
+      - name: Run web tests
         env:
           RUST_MIN_STACK: 4194304
         run: devbox run -- just web/test
 
-  test-api:
+  test-ui-api:
     needs: build
-    name: Test API with coverage
+    name: Test API
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -155,11 +146,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci
-      - name: Collect API coverage data
+      - name: Run API tests
         env:
           RUST_MIN_STACK: 4194304
           RUST_BACKTRACE: "full"
-        run: devbox run -- just api/test-coverage
+        run: devbox run -- just api/test
       - name: API test Report
         uses: dorny/test-reporter@v1
         if: success() || failure()
@@ -167,10 +158,3 @@ jobs:
           name: Tests API
           path: target/nextest/ci/junit.xml
           reporter: java-junit
-      - name: Upload to Coveralls
-        # upload only if push
-        if: ${{ github.event_name == 'push' }}
-        uses: coverallsapp/github-action@master
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          path-to-lcov: './api/lcov.info'

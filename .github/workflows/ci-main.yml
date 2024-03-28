@@ -1,0 +1,203 @@
+name: ci-main
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  actions: read
+  checks: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  base:
+    name: Base
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Install Devbox
+        uses: jetpack-io/devbox-install-action@v0.7.0
+        with:
+          enable-cache: 'true'
+
+  rustfmt:
+    needs: base
+    name: Rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Install Devbox
+        uses: jetpack-io/devbox-install-action@v0.7.0
+        with:
+          enable-cache: 'true'
+      - name: Check formatting
+        run: devbox run -- just check-format
+
+  build:
+    needs: base
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Install Devbox
+        uses: jetpack-io/devbox-install-action@v0.7.0
+        with:
+          enable-cache: 'true'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci
+      - name: Clippy check
+        run: devbox run -- just check-all
+
+  test-ui:
+    needs: build
+    name: Test shared package with coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Install Devbox
+        uses: jetpack-io/devbox-install-action@v0.7.0
+        with:
+          enable-cache: 'true'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci
+      - name: Collect shared package coverage data
+        env:
+          RUST_MIN_STACK: 4194304
+        run: devbox run -- just test-coverage
+      - name: Shared test Report
+        uses: dorny/test-reporter@v1
+        if: success() || failure()
+        with:
+          name: Tests shared
+          path: target/nextest/ci/junit.xml
+          reporter: java-junit
+      - name: Upload to Coveralls
+        # upload only if push
+        if: ${{ github.event_name == 'push' }}
+        uses: coverallsapp/github-action@master
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path-to-lcov: './lcov.info'
+
+  test-ui-web:
+    needs: build
+    name: Test web frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Install Devbox
+        uses: jetpack-io/devbox-install-action@v0.7.0
+        with:
+          enable-cache: 'true'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci
+      - name: Collect web coverage data
+        env:
+          RUST_MIN_STACK: 4194304
+        run: devbox run -- just web/test
+
+  test-ui-api:
+    needs: build
+    name: Test API with coverage
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15.1
+        env:
+          POSTGRES_PASSWORD: password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Install Devbox
+        uses: jetpack-io/devbox-install-action@v0.7.0
+        with:
+          enable-cache: 'true'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci
+      - name: Collect API coverage data
+        env:
+          RUST_MIN_STACK: 4194304
+          RUST_BACKTRACE: "full"
+        run: devbox run -- just api/test-coverage
+      - name: API test Report
+        uses: dorny/test-reporter@v1
+        if: success() || failure()
+        with:
+          name: Tests API
+          path: target/nextest/ci/junit.xml
+          reporter: java-junit
+      - name: Upload to Coveralls
+        # upload only if push
+        if: ${{ github.event_name == 'push' }}
+        uses: coverallsapp/github-action@master
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path-to-lcov: './api/lcov.info'
+
+  docker:
+    needs:
+      - test-ui
+      - test-ui-web
+      - test-ui-api
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          version: "lab:latest"
+          driver: cloud
+          endpoint: "dax42/universal-inbox-ga"
+          install: true
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          tags: "dax42/universal-inbox:${{ github.sha }}"
+          outputs: 'type=registry,push=true'
