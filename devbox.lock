@@ -337,6 +337,34 @@
         }
       }
     },
+    "clang@latest": {
+      "last_modified": "2024-03-22T11:26:23Z",
+      "resolved": "github:NixOS/nixpkgs/a3ed7406349a9335cb4c2a71369b697cecd9d351#clang",
+      "source": "devbox-search",
+      "version": "17.0.6",
+      "systems": {
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/vr2022mapxx1pcqb3wr93lyhfk4yfnpy-clang-wrapper-17.0.6",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/vr2022mapxx1pcqb3wr93lyhfk4yfnpy-clang-wrapper-17.0.6"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/qrnislllasi714sz5kkmdvx6lx7f9hq1-clang-wrapper-17.0.6",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/qrnislllasi714sz5kkmdvx6lx7f9hq1-clang-wrapper-17.0.6"
+        }
+      }
+    },
     "darwin.apple_sdk.frameworks.Foundation": {
       "resolved": "github:NixOS/nixpkgs/75a52265bda7fd25e06e3a67dee3f0354e73243c#darwin.apple_sdk.frameworks.Foundation",
       "source": "nixpkg"
@@ -558,6 +586,50 @@
             }
           ],
           "store_path": "/nix/store/04bxhg3xjdlnwd43ynddszpahlbi3l2x-just-1.25.2"
+        }
+      }
+    },
+    "lld@latest": {
+      "last_modified": "2024-03-29T12:35:36Z",
+      "resolved": "github:NixOS/nixpkgs/807c549feabce7eddbf259dbdcec9e0600a0660d#lld",
+      "source": "devbox-search",
+      "version": "17.0.6",
+      "systems": {
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/n15b0fgcl9brbysnmwi9s38sb43ji823-lld-17.0.6",
+              "default": true
+            },
+            {
+              "name": "dev",
+              "path": "/nix/store/sprjq2l8l5ar76p3iqz4zy740cjd2rf3-lld-17.0.6-dev"
+            },
+            {
+              "name": "lib",
+              "path": "/nix/store/m0yfmiyyznc40xlg8dj1jyz0z5hpwlkn-lld-17.0.6-lib"
+            }
+          ],
+          "store_path": "/nix/store/n15b0fgcl9brbysnmwi9s38sb43ji823-lld-17.0.6"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/wgywz2g7v7vz4jxz3a3d9837k516gs8q-lld-17.0.6",
+              "default": true
+            },
+            {
+              "name": "lib",
+              "path": "/nix/store/dhk0lzwnmf65yjrjr4p5rvg2qm7qbs5j-lld-17.0.6-lib"
+            },
+            {
+              "name": "dev",
+              "path": "/nix/store/9yhz0gp2vc39j52jk9la8q5ib86xb69y-lld-17.0.6-dev"
+            }
+          ],
+          "store_path": "/nix/store/wgywz2g7v7vz4jxz3a3d9837k516gs8q-lld-17.0.6"
         }
       }
     },
