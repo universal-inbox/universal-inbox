@@ -12,8 +12,8 @@ use crate::theme::{
 };
 
 #[component]
-pub fn Linear<'a>(cx: Scope, class: Option<&'a str>) -> Element {
-    render! {
+pub fn Linear(class: Option<String>) -> Element {
+    rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
             class: "{class.unwrap_or_default()}",
@@ -30,48 +30,47 @@ pub fn Linear<'a>(cx: Scope, class: Option<&'a str>) -> Element {
 }
 
 #[component]
-pub fn LinearIssueIcon<'a>(
-    cx: Scope,
-    linear_issue: &'a LinearIssue,
-    class: Option<&'a str>,
+pub fn LinearIssueIcon(
+    linear_issue: ReadOnlySignal<LinearIssue>,
+    class: Option<String>,
 ) -> Element {
     let class = class.unwrap_or_default();
 
-    let (icon, color_style) = match linear_issue.state.r#type {
+    let (icon, color_style) = match linear_issue().state.r#type {
         LinearWorkflowStateType::Triage => (
-            render! { LinearIssueTriageIcon { class: "{class}" } },
+            rsx! { LinearIssueTriageIcon { class: "{class}" } },
             DRAFT_TEXT_COLOR_CLASS,
         ),
         LinearWorkflowStateType::Backlog => (
-            render! { LinearIssueBacklogIcon { class: "{class}" } },
+            rsx! { LinearIssueBacklogIcon { class: "{class}" } },
             BACKLOG_TEXT_COLOR_CLASS,
         ),
         LinearWorkflowStateType::Unstarted => (
-            render! { LinearIssueUnstartedIcon { class: "{class}" } },
+            rsx! { LinearIssueUnstartedIcon { class: "{class}" } },
             BACKLOG_TEXT_COLOR_CLASS,
         ),
         LinearWorkflowStateType::Started => (
-            render! { LinearIssueStartedIcon { class: "{class}" } },
+            rsx! { LinearIssueStartedIcon { class: "{class}" } },
             STARTED_TEXT_COLOR_CLASS,
         ),
         LinearWorkflowStateType::Completed => (
-            render! { LinearIssueCompletedIcon { class: "{class}" } },
+            rsx! { LinearIssueCompletedIcon { class: "{class}" } },
             COMPLETED_TEXT_COLOR_CLASS,
         ),
         LinearWorkflowStateType::Canceled => (
-            render! { LinearIssueCanceledIcon { class: "{class}" } },
+            rsx! { LinearIssueCanceledIcon { class: "{class}" } },
             CANCELED_TEXT_COLOR_CLASS,
         ),
     };
 
-    render! {
-        div { class: "{color_style}", icon }
+    rsx! {
+        div { class: "{color_style}", { icon } }
     }
 }
 
 #[component]
-pub fn LinearIssueTriageIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element {
-    render! {
+pub fn LinearIssueTriageIcon(class: Option<String>) -> Element {
+    rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
             class: "{class.unwrap_or_default()}",
@@ -87,8 +86,8 @@ pub fn LinearIssueTriageIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element {
 }
 
 #[component]
-pub fn LinearIssueBacklogIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element {
-    render! {
+pub fn LinearIssueBacklogIcon(class: Option<String>) -> Element {
+    rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
             class: "{class.unwrap_or_default()}",
@@ -105,8 +104,8 @@ pub fn LinearIssueBacklogIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element 
 }
 
 #[component]
-pub fn LinearIssueCompletedIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element {
-    render! {
+pub fn LinearIssueCompletedIcon(class: Option<String>) -> Element {
+    rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
             class: "{class.unwrap_or_default()}",
@@ -124,8 +123,8 @@ pub fn LinearIssueCompletedIcon<'a>(cx: Scope, class: Option<&'a str>) -> Elemen
 }
 
 #[component]
-pub fn LinearIssueCanceledIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element {
-    render! {
+pub fn LinearIssueCanceledIcon(class: Option<String>) -> Element {
+    rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
             class: "{class.unwrap_or_default()}",
@@ -143,8 +142,8 @@ pub fn LinearIssueCanceledIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element
 }
 
 #[component]
-pub fn LinearIssueUnstartedIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element {
-    render! {
+pub fn LinearIssueUnstartedIcon(class: Option<String>) -> Element {
+    rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
             class: "{class.unwrap_or_default()}",
@@ -164,8 +163,8 @@ pub fn LinearIssueUnstartedIcon<'a>(cx: Scope, class: Option<&'a str>) -> Elemen
 }
 
 #[component]
-pub fn LinearIssueStartedIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element {
-    render! {
+pub fn LinearIssueStartedIcon(class: Option<String>) -> Element {
+    rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
             class: "{class.unwrap_or_default()}",
@@ -185,48 +184,47 @@ pub fn LinearIssueStartedIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element 
 }
 
 #[component]
-pub fn LinearProjectIcon<'a>(
-    cx: Scope,
-    linear_project: &'a LinearProject,
-    class: Option<&'a str>,
+pub fn LinearProjectIcon(
+    linear_project: ReadOnlySignal<LinearProject>,
+    class: Option<String>,
 ) -> Element {
     let class = class.unwrap_or_default();
 
-    let (icon, color_style) = match linear_project.state {
+    let (icon, color_style) = match linear_project().state {
         LinearProjectState::Planned => (
-            render! { LinearProjectPlannedIcon { class: "{class}" } },
+            rsx! { LinearProjectPlannedIcon { class: "{class}" } },
             DRAFT_TEXT_COLOR_CLASS,
         ),
         LinearProjectState::Backlog => (
-            render! { LinearProjectBacklogIcon { class: "{class}" } },
+            rsx! { LinearProjectBacklogIcon { class: "{class}" } },
             BACKLOG_TEXT_COLOR_CLASS,
         ),
         LinearProjectState::Started => (
-            render! { LinearProjectStartedIcon { class: "{class}" } },
+            rsx! { LinearProjectStartedIcon { class: "{class}" } },
             STARTED_TEXT_COLOR_CLASS,
         ),
         LinearProjectState::Paused => (
-            render! { LinearProjectPausedIcon { class: "{class}" } },
+            rsx! { LinearProjectPausedIcon { class: "{class}" } },
             BACKLOG_TEXT_COLOR_CLASS,
         ),
         LinearProjectState::Completed => (
-            render! { LinearProjectCompletedIcon { class: "{class}" } },
+            rsx! { LinearProjectCompletedIcon { class: "{class}" } },
             COMPLETED_TEXT_COLOR_CLASS,
         ),
         LinearProjectState::Canceled => (
-            render! { LinearProjectCanceledIcon { class: "{class}" } },
+            rsx! { LinearProjectCanceledIcon { class: "{class}" } },
             CANCELED_TEXT_COLOR_CLASS,
         ),
     };
 
-    render! {
-        div { class: "{color_style}", icon }
+    rsx! {
+        div { class: "{color_style}", { icon } }
     }
 }
 
 #[component]
-pub fn LinearProjectPlannedIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element {
-    render! {
+pub fn LinearProjectPlannedIcon(class: Option<String>) -> Element {
+    rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
             class: "{class.unwrap_or_default()}",
@@ -244,8 +242,8 @@ pub fn LinearProjectPlannedIcon<'a>(cx: Scope, class: Option<&'a str>) -> Elemen
 }
 
 #[component]
-pub fn LinearProjectBacklogIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element {
-    render! {
+pub fn LinearProjectBacklogIcon(class: Option<String>) -> Element {
+    rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
             class: "{class.unwrap_or_default()}",
@@ -293,8 +291,8 @@ pub fn LinearProjectBacklogIcon<'a>(cx: Scope, class: Option<&'a str>) -> Elemen
 }
 
 #[component]
-pub fn LinearProjectCompletedIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element {
-    render! {
+pub fn LinearProjectCompletedIcon(class: Option<String>) -> Element {
+    rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
             class: "{class.unwrap_or_default()}",
@@ -317,8 +315,8 @@ pub fn LinearProjectCompletedIcon<'a>(cx: Scope, class: Option<&'a str>) -> Elem
 }
 
 #[component]
-pub fn LinearProjectCanceledIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element {
-    render! {
+pub fn LinearProjectCanceledIcon(class: Option<String>) -> Element {
+    rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
             class: "{class.unwrap_or_default()}",
@@ -339,8 +337,8 @@ pub fn LinearProjectCanceledIcon<'a>(cx: Scope, class: Option<&'a str>) -> Eleme
 }
 
 #[component]
-pub fn LinearProjectPausedIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element {
-    render! {
+pub fn LinearProjectPausedIcon(class: Option<String>) -> Element {
+    rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
             class: "{class.unwrap_or_default()}",
@@ -368,8 +366,8 @@ pub fn LinearProjectPausedIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element
 }
 
 #[component]
-pub fn LinearProjectStartedIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element {
-    render! {
+pub fn LinearProjectStartedIcon(class: Option<String>) -> Element {
+    rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
             class: "{class.unwrap_or_default()}",
@@ -408,8 +406,8 @@ pub fn LinearProjectStartedIcon<'a>(cx: Scope, class: Option<&'a str>) -> Elemen
 }
 
 #[component]
-pub fn LinearProjectMilestoneIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element {
-    render! {
+pub fn LinearProjectMilestoneIcon(class: Option<String>) -> Element {
+    rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
             class: "{class.unwrap_or_default()}",
@@ -428,8 +426,8 @@ pub fn LinearProjectMilestoneIcon<'a>(cx: Scope, class: Option<&'a str>) -> Elem
 }
 
 #[component]
-pub fn LinearProjectHealtIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element {
-    render! {
+pub fn LinearProjectHealtIcon(class: Option<String>) -> Element {
+    rsx! {
         svg {
             "viewBox": "0 0 16 16",
             fill: "none",
@@ -447,8 +445,8 @@ pub fn LinearProjectHealtIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element 
 }
 
 #[component]
-pub fn LinearProjectDefaultIcon<'a>(cx: Scope, class: Option<&'a str>) -> Element {
-    render! {
+pub fn LinearProjectDefaultIcon(class: Option<String>) -> Element {
+    rsx! {
         svg {
             class: "{class.unwrap_or_default()}",
              style: "--icon-color: #DCD8FE93;",

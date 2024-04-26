@@ -1221,51 +1221,51 @@
         }
       }
     },
-    "wasm-bindgen-cli@0.2.89": {
-      "last_modified": "2024-02-10T18:15:24Z",
-      "resolved": "github:NixOS/nixpkgs/10b813040df67c4039086db0f6eaf65c536886c6#wasm-bindgen-cli",
+    "wasm-bindgen-cli@0.2.92": {
+      "last_modified": "2024-06-12T20:55:33Z",
+      "resolved": "github:NixOS/nixpkgs/a9858885e197f984d92d7fe64e9fff6b2e488d40#wasm-bindgen-cli",
       "source": "devbox-search",
-      "version": "0.2.89",
+      "version": "0.2.92",
       "systems": {
         "aarch64-darwin": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/4sg2rpq0lz907milr32kfr82mh8dr6lp-wasm-bindgen-cli-0.2.89",
+              "path": "/nix/store/g099623lcck4l831hdl0vbrx0jkvs0lf-wasm-bindgen-cli-0.2.92",
               "default": true
             }
           ],
-          "store_path": "/nix/store/4sg2rpq0lz907milr32kfr82mh8dr6lp-wasm-bindgen-cli-0.2.89"
+          "store_path": "/nix/store/g099623lcck4l831hdl0vbrx0jkvs0lf-wasm-bindgen-cli-0.2.92"
         },
         "aarch64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/sn8h6dy6m3a7zicgbcalyqm86bp30lsv-wasm-bindgen-cli-0.2.89",
+              "path": "/nix/store/lmd32p7wy3208wxpymn2vi0fr2jmz5cs-wasm-bindgen-cli-0.2.92",
               "default": true
             }
           ],
-          "store_path": "/nix/store/sn8h6dy6m3a7zicgbcalyqm86bp30lsv-wasm-bindgen-cli-0.2.89"
+          "store_path": "/nix/store/lmd32p7wy3208wxpymn2vi0fr2jmz5cs-wasm-bindgen-cli-0.2.92"
         },
         "x86_64-darwin": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/8j3z1lspgsb2bvwx3mry8qyk1msxdb6k-wasm-bindgen-cli-0.2.89",
+              "path": "/nix/store/anmshjr9yay723xq2wpb8sm8n7dbh13j-wasm-bindgen-cli-0.2.92",
               "default": true
             }
           ],
-          "store_path": "/nix/store/8j3z1lspgsb2bvwx3mry8qyk1msxdb6k-wasm-bindgen-cli-0.2.89"
+          "store_path": "/nix/store/anmshjr9yay723xq2wpb8sm8n7dbh13j-wasm-bindgen-cli-0.2.92"
         },
         "x86_64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/lfmsgd7sdqlyxymwrwgnwpi3kng1yz6q-wasm-bindgen-cli-0.2.89",
+              "path": "/nix/store/3wcf2d9by37a8iq7460hcwh8mfn70v7c-wasm-bindgen-cli-0.2.92",
               "default": true
             }
           ],
-          "store_path": "/nix/store/lfmsgd7sdqlyxymwrwgnwpi3kng1yz6q-wasm-bindgen-cli-0.2.89"
+          "store_path": "/nix/store/3wcf2d9by37a8iq7460hcwh8mfn70v7c-wasm-bindgen-cli-0.2.92"
         }
       }
     },

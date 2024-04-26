@@ -5,8 +5,6 @@ use dioxus_free_icons::{
     icons::bs_icons::{BsBoxArrowInLeft, BsCheckCircle},
     Icon,
 };
-use dioxus_router::prelude::*;
-use fermi::use_atom_ref;
 
 use crate::{
     model::UI_MODEL,
@@ -15,23 +13,19 @@ use crate::{
 };
 
 #[component]
-pub fn FullpageLayout(cx: Scope) -> Element {
-    let ui_model_ref = use_atom_ref(cx, &UI_MODEL);
-    let connected_user_ref = use_atom_ref(cx, &CONNECTED_USER);
-    let user_service = use_coroutine_handle::<UserCommand>(cx).unwrap();
+pub fn FullpageLayout() -> Element {
+    let user_service = use_coroutine_handle::<UserCommand>();
 
-    render! {
+    rsx! {
         div {
             class: "flex min-h-screen items-center justify-center bg-base-100 relative",
 
-            if connected_user_ref.read().is_some() {
-                render! {
-                    button {
-                        class: "btn btn-ghost absolute top-4 right-4",
-                        "data-tip": "Logout",
-                        onclick: |_| user_service.send(UserCommand::Logout),
-                        Icon { class: "w-5 h-5", icon: BsBoxArrowInLeft }
-                    }
+            if CONNECTED_USER.read().is_some() {
+                button {
+                    class: "btn btn-ghost absolute top-4 right-4",
+                    "data-tip": "Logout",
+                    onclick: move |_| user_service.send(UserCommand::Logout),
+                    Icon { class: "w-5 h-5", icon: BsBoxArrowInLeft }
                 }
             }
 
@@ -48,34 +42,28 @@ pub fn FullpageLayout(cx: Scope) -> Element {
                         }
                     }
 
-                    if let Some(error_message) = &ui_model_ref.read().error_message {
-                        render! {
-                            div { class: "alert alert-error text-sm", "{error_message}" }
-                        }
+                    if let Some(error_message) = &UI_MODEL.read().error_message {
+                        div { class: "alert alert-error text-sm", "{error_message}" }
                     }
 
-                    if let Some(confirmation_message) = &ui_model_ref.read().confirmation_message {
-                        render! {
+                    if let Some(confirmation_message) = &UI_MODEL.read().confirmation_message {
+                        div {
+                            class: "flex flex-col items-center justify-center",
+
                             div {
-                                class: "flex flex-col items-center justify-center",
+                                class: "alert alert-success text-sm",
+                                Icon { class: "w-5 h-5", icon: BsCheckCircle }
+                                "{confirmation_message}"
+                            }
 
-                                div {
-                                    class: "alert alert-success text-sm",
-                                    Icon { class: "w-5 h-5", icon: BsCheckCircle }
-                                    "{confirmation_message}"
-                                }
-
-                                Link {
-                                    class: "btn btn-primary mt-2",
-                                    to: Route::LoginPage {},
-                                    "Return to Universal Inbox"
-                                }
+                            Link {
+                                class: "btn btn-primary mt-2",
+                                to: Route::LoginPage {},
+                                "Return to Universal Inbox"
                             }
                         }
                     } else {
-                        render! {
-                            Outlet::<Route> {}
-                        }
+                        Outlet::<Route> {}
                     }
                 }
             }

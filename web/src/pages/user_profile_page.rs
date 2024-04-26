@@ -7,10 +7,10 @@ use crate::components::{
     authentication_tokens_card::AuthenticationTokensCard, user_profile_card::UserProfileCard,
 };
 
-pub fn UserProfilePage(cx: Scope) -> Element {
+pub fn UserProfilePage() -> Element {
     debug!("Rendering user profile page");
 
-    render! {
+    rsx! {
         div {
             class: "h-full mx-auto flex flex-row px-4",
 

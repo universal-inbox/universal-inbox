@@ -108,6 +108,7 @@ reqwest-middleware = { git = "https://github.com/TrueLayer/reqwest-middleware", 
 reqwest-tracing = { git = "https://github.com/TrueLayer/reqwest-middleware", rev = "88dbfe67fbf56aecf29de9bc0b23a0abc72e3f29", features = [
   "opentelemetry_0_23",
 ] }
+rustls = { version = "0.23.0" } # Used to initialize lettre
 secrecy = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true, features = ["unbounded_depth"] }

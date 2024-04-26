@@ -19,12 +19,11 @@ use crate::components::{
 };
 
 #[component]
-pub fn SlackNotificationDisplay<'a>(
-    cx: Scope,
-    notif: &'a NotificationWithTask,
+pub fn SlackNotificationDisplay(
+    notif: ReadOnlySignal<NotificationWithTask>,
     slack_push_event_callback: SlackPushEventCallback,
 ) -> Element {
-    let subtitle = match &notif.details {
+    let subtitle = match notif().details {
         Some(NotificationDetails::SlackMessage(SlackMessageDetails { channel, .. }))
         | Some(NotificationDetails::SlackFile(SlackFileDetails { channel, .. }))
         | Some(NotificationDetails::SlackFileComment(SlackFileCommentDetails {
@@ -42,7 +41,7 @@ pub fn SlackNotificationDisplay<'a>(
         _ => "".to_string(),
     };
 
-    render! {
+    rsx! {
         div {
             class: "flex items-center gap-2",
 
@@ -54,7 +53,7 @@ pub fn SlackNotificationDisplay<'a>(
             div {
                 class: "flex flex-col grow",
 
-                Markdown { text: notif.title.clone() }
+                Markdown { text: notif().title.clone() }
                 span {
                     class: "flex gap-2 text-xs text-gray-400",
                     "{subtitle}"
@@ -65,83 +64,76 @@ pub fn SlackNotificationDisplay<'a>(
 }
 
 #[component]
-pub fn SlackMessageDetailsDisplay<'a>(
-    cx: Scope,
-    slack_message: &'a SlackMessageDetails,
-) -> Element {
-    render! {
+pub fn SlackMessageDetailsDisplay(slack_message: ReadOnlySignal<SlackMessageDetails>) -> Element {
+    rsx! {
         div {
             class: "flex items-center gap-2",
 
-            SlackTeamDisplay { team: &slack_message.team }
-            SlackMessageActorDisplay { slack_message: &slack_message }
+            SlackTeamDisplay { team: slack_message().team }
+            SlackMessageActorDisplay { slack_message: slack_message }
         }
     }
 }
 
 #[component]
-pub fn SlackFileDetailsDisplay<'a>(cx: Scope, slack_file: &'a SlackFileDetails) -> Element {
-    render! {
+pub fn SlackFileDetailsDisplay(slack_file: ReadOnlySignal<SlackFileDetails>) -> Element {
+    rsx! {
         div {
             class: "flex items-center gap-2",
 
-            SlackTeamDisplay { team: &slack_file.team }
-            if let Some(ref user) = slack_file.sender {
-                render! { SlackUserDisplay { user: user } }
+            SlackTeamDisplay { team: slack_file().team }
+            if let Some(user) = slack_file().sender {
+                SlackUserDisplay { user: user }
             }
         }
     }
 }
 
 #[component]
-pub fn SlackFileCommentDetailsDisplay<'a>(
-    cx: Scope,
-    slack_file_comment: &'a SlackFileCommentDetails,
+pub fn SlackFileCommentDetailsDisplay(
+    slack_file_comment: ReadOnlySignal<SlackFileCommentDetails>,
 ) -> Element {
-    render! {
+    rsx! {
         div {
             class: "flex items-center gap-2",
 
-            SlackTeamDisplay { team: &slack_file_comment.team }
-            if let Some(ref user) = slack_file_comment.sender {
-                render! { SlackUserDisplay { user: user } }
+            SlackTeamDisplay { team: slack_file_comment().team }
+            if let Some(user) = slack_file_comment().sender {
+                SlackUserDisplay { user: user }
             }
         }
     }
 }
 
 #[component]
-pub fn SlackChannelDetailsDisplay<'a>(
-    cx: Scope,
-    slack_channel: &'a SlackChannelDetails,
-) -> Element {
-    render! {
+pub fn SlackChannelDetailsDisplay(slack_channel: ReadOnlySignal<SlackChannelDetails>) -> Element {
+    rsx! {
         div {
             class: "flex items-center gap-2",
 
-            SlackTeamDisplay { team: &slack_channel.team }
+            SlackTeamDisplay { team: slack_channel().team }
         }
     }
 }
 
 #[component]
-pub fn SlackImDetailsDisplay<'a>(cx: Scope, slack_im: &'a SlackImDetails) -> Element {
-    render! {
+pub fn SlackImDetailsDisplay(slack_im: ReadOnlySignal<SlackImDetails>) -> Element {
+    rsx! {
         div {
             class: "flex items-center gap-2",
 
-            SlackTeamDisplay { team: &slack_im.team }
+            SlackTeamDisplay { team: slack_im().team }
         }
     }
 }
 
 #[component]
-pub fn SlackGroupDetailsDisplay<'a>(cx: Scope, slack_group: &'a SlackGroupDetails) -> Element {
-    render! {
+pub fn SlackGroupDetailsDisplay(slack_group: ReadOnlySignal<SlackGroupDetails>) -> Element {
+    rsx! {
         div {
             class: "flex items-center gap-2",
 
-            SlackTeamDisplay { team: &slack_group.team }
+            SlackTeamDisplay { team: slack_group().team }
         }
     }
 }

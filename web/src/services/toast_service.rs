@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use dioxus::prelude::*;
-use fermi::{AtomRef, UseAtomRef};
+
 use futures_util::StreamExt;
 use log::debug;
 use uuid::Uuid;
@@ -22,11 +22,11 @@ pub enum ToastCommand {
     Update(ToastUpdate),
 }
 
-pub static TOASTS: AtomRef<HashMap<Uuid, Toast>> = AtomRef(|_| HashMap::new());
+pub static TOASTS: GlobalSignal<HashMap<Uuid, Toast>> = Signal::global(HashMap::new);
 
 pub async fn toast_service(
     mut rx: UnboundedReceiver<ToastCommand>,
-    toasts: UseAtomRef<HashMap<Uuid, Toast>>,
+    mut toasts: Signal<HashMap<Uuid, Toast>>,
 ) {
     loop {
         let msg = rx.next().await;
@@ -49,7 +49,7 @@ pub async fn toast_service(
                         message: toast_update
                             .message
                             .unwrap_or_else(|| toast.message.clone()),
-                        kind: toast_update.kind.unwrap_or_else(|| toast.kind.clone()),
+                        kind: toast_update.kind.unwrap_or(toast.kind),
                         timeout: toast_update.timeout.unwrap_or(toast.timeout),
                     };
                     writable_toasts.insert(updated_toast.id, updated_toast);

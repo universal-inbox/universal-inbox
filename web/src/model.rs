@@ -1,6 +1,6 @@
-use fermi::AtomRef;
+use dioxus::prelude::*;
 
-pub static UI_MODEL: AtomRef<UniversalInboxUIModel> = AtomRef(|_| Default::default());
+pub static UI_MODEL: GlobalSignal<UniversalInboxUIModel> = Signal::global(Default::default);
 pub const DEFAULT_USER_AVATAR: &str = "https://avatars.githubusercontent.com/u/1062408?v=4";
 pub const NOT_CONNECTED_USER_NAME: &str = "Not connected";
 

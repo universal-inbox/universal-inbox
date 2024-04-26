@@ -3,8 +3,8 @@
 use dioxus::prelude::*;
 
 #[component]
-pub fn Spinner<'a>(cx: Scope, class: Option<&'a str>) -> Element {
-    render! {
+pub fn Spinner(class: Option<String>) -> Element {
+    rsx! {
         div {
             role: "status",
 

@@ -6,7 +6,8 @@ use wasm_bindgen::JsCast;
 use web_sys::{Element, HtmlElement, HtmlInputElement, Window};
 
 pub async fn focus_and_select_input_element(id: &str) -> Result<HtmlInputElement> {
-    let elt = get_element_by_id(id)?
+    let elt = wait_for_element_by_id(id, 300)
+        .await?
         .dyn_into::<HtmlInputElement>()
         .map_err(|_| anyhow!("Unable to convert Element {id} into HtmlElement"))?;
 
@@ -18,7 +19,8 @@ pub async fn focus_and_select_input_element(id: &str) -> Result<HtmlInputElement
 }
 
 pub async fn focus_element(id: &str) -> Result<HtmlElement> {
-    let elt = get_element_by_id(id)?
+    let elt = wait_for_element_by_id(id, 300)
+        .await?
         .dyn_into::<HtmlElement>()
         .map_err(|_| anyhow!("Unable to convert Element {id} into HtmlElement"))?;
 
@@ -32,6 +34,23 @@ pub async fn focus_element(id: &str) -> Result<HtmlElement> {
 pub fn get_element_by_id(id: &str) -> Result<Element> {
     let window = web_sys::window().context("Unable to load `window`")?;
     let document = window.document().context("Unable to load `document`")?;
+    document
+        .get_element_by_id(id)
+        .context(format!("Element `{id}` not found"))
+}
+
+pub async fn wait_for_element_by_id(id: &str, timeout: u32) -> Result<Element> {
+    let max_loops = timeout / 10;
+    let window = web_sys::window().context("Unable to load `window`")?;
+    let document = window.document().context("Unable to load `document`")?;
+    let mut loops = 0;
+    while document.get_element_by_id(id).is_none() {
+        TimeoutFuture::new(10).await;
+        loops += 1;
+        if loops >= max_loops {
+            return Err(anyhow!("Element `{id}` not found"));
+        }
+    }
     document
         .get_element_by_id(id)
         .context(format!("Element `{id}` not found"))

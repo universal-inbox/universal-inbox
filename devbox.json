@@ -35,7 +35,7 @@
     "cargo-chef": "latest",
     "cargo-binstall": "latest",
     "openssl.dev": "",
-    "wasm-bindgen-cli": "0.2.89"
+    "wasm-bindgen-cli": "0.2.92"
   },
   "shell": {
     "init_hook": [

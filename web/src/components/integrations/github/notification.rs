@@ -19,14 +19,13 @@ use crate::components::{
 };
 
 #[component]
-pub fn GithubNotificationDisplay<'a>(
-    cx: Scope,
-    notif: &'a NotificationWithTask,
-    github_notification: &'a GithubNotification,
+pub fn GithubNotificationDisplay(
+    notif: ReadOnlySignal<NotificationWithTask>,
+    github_notification: ReadOnlySignal<GithubNotification>,
 ) -> Element {
-    let github_notification_id = github_notification.extract_id();
+    let github_notification_id = github_notification().extract_id();
 
-    render! {
+    rsx! {
         div {
             class: "flex items-center gap-2",
 
@@ -39,15 +38,13 @@ pub fn GithubNotificationDisplay<'a>(
             div {
                 class: "flex flex-col grow",
 
-                Markdown { text: notif.title.clone() }
+                Markdown { text: notif().title.clone() }
                 div {
                     class: "flex gap-2 text-xs text-gray-400",
 
-                    span { "{github_notification.repository.full_name}" }
+                    span { "{github_notification().repository.full_name}" }
                     if let Some(github_notification_id) = github_notification_id {
-                        render! {
-                            span { "#{github_notification_id}" }
-                        }
+                        span { "#{github_notification_id}" }
                     }
                 }
             }
@@ -56,79 +53,69 @@ pub fn GithubNotificationDisplay<'a>(
 }
 
 #[component]
-pub fn GithubPullRequestDetailsDisplay<'a>(
-    cx: Scope,
-    github_pull_request: &'a GithubPullRequest,
+pub fn GithubPullRequestDetailsDisplay(
+    github_pull_request: ReadOnlySignal<GithubPullRequest>,
 ) -> Element {
-    render! {
+    rsx! {
         div {
             class: "flex items-center gap-2",
 
-            ChecksGithubPullRequest { latest_commit: &github_pull_request.latest_commit, icon_size: "h-3 w-3" }
+            ChecksGithubPullRequest { latest_commit: github_pull_request().latest_commit, icon_size: "h-3 w-3" }
 
-            if github_pull_request.comments_count > 0 {
-                render! {
-                    div {
-                        class: "flex gap-1",
-                        Icon { class: "h-3 w-3 text-info", icon: BsChatTextFill }
-                        span { class: "text-xs text-gray-400", "{github_pull_request.comments_count}" }
-                    }
+            if github_pull_request().comments_count > 0 {
+                div {
+                    class: "flex gap-1",
+                    Icon { class: "h-3 w-3 text-info", icon: BsChatTextFill }
+                    span { class: "text-xs text-gray-400", "{github_pull_request().comments_count}" }
                 }
             }
 
             GithubReviewStatus { github_pull_request: github_pull_request }
 
-            if let Some(actor) = &github_pull_request.author {
-                render! { GithubActorDisplay { actor: actor } }
-            } else {
-                None
+            if let Some(actor) = &github_pull_request().author {
+                GithubActorDisplay { actor: actor.clone() }
             }
         }
     }
 }
 
 #[component]
-fn GithubReviewStatus<'a>(cx: Scope, github_pull_request: &'a GithubPullRequest) -> Element {
-    github_pull_request
+fn GithubReviewStatus(github_pull_request: ReadOnlySignal<GithubPullRequest>) -> Element {
+    github_pull_request()
         .review_decision
         .as_ref()
         .map(|review_decision| match review_decision {
             GithubPullRequestReviewDecision::Approved => {
-                render! { div { class: "badge p-1 whitespace-nowrap bg-success text-xs text-white", "Approved" } }
+                rsx! { div { class: "badge p-1 whitespace-nowrap bg-success text-xs text-white", "Approved" } }
             }
             GithubPullRequestReviewDecision::ChangesRequested => {
-                render! { div { class: "badge p-1 whitespace-nowrap bg-error text-xs text-white", "Changes requested" } }
+                rsx! { div { class: "badge p-1 whitespace-nowrap bg-error text-xs text-white", "Changes requested" } }
             }
             GithubPullRequestReviewDecision::ReviewRequired => {
-                render! { div { class: "badge p-1 whitespace-nowrap bg-info text-xs text-white", "Review required" } }
+                rsx! { div { class: "badge p-1 whitespace-nowrap bg-info text-xs text-white", "Review required" } }
             }
         })
         .unwrap_or(None)
 }
 
 #[component]
-pub fn GithubDiscussionDetailsDisplay<'a>(
-    cx: Scope,
-    github_discussion: &'a GithubDiscussion,
+pub fn GithubDiscussionDetailsDisplay(
+    github_discussion: ReadOnlySignal<GithubDiscussion>,
 ) -> Element {
-    render! {
+    rsx! {
         div {
             class: "flex items-center gap-2",
 
-            if github_discussion.comments_count > 0 {
-                render! {
-                    div {
-                        class: "flex gap-1",
-                        Icon { class: "h-3 w-3 text-info", icon: BsChatTextFill }
-                        span { class: "text-xs text-gray-400", "{github_discussion.comments_count}" }
-                    }
+            if github_discussion().comments_count > 0 {
+                div {
+                    class: "flex gap-1",
+                    Icon { class: "h-3 w-3 text-info", icon: BsChatTextFill }
+                    span { class: "text-xs text-gray-400", "{github_discussion().comments_count}" }
                 }
             }
 
-            if let Some(actor) = &github_discussion.author {
-                render! { GithubActorDisplay { actor: actor } }
-            } else {
-                None
+            if let Some(actor) = &github_discussion().author {
+                GithubActorDisplay { actor: actor.clone() }
             }
         }
     }

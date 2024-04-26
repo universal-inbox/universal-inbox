@@ -24,8 +24,8 @@ use crate::theme::{
 };
 
 #[component]
-pub fn Github<'a>(cx: Scope, class: Option<&'a str>) -> Element {
-    render! {
+pub fn Github(class: Option<String>) -> Element {
+    rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
             class: "{class.unwrap_or_default()}",
@@ -42,36 +42,34 @@ pub fn Github<'a>(cx: Scope, class: Option<&'a str>) -> Element {
 }
 
 #[component]
-pub fn GithubNotificationIcon<'a>(
-    cx: Scope,
-    notif: &'a NotificationWithTask,
-    github_notification: &'a GithubNotification,
-    class: Option<&'a str>,
+pub fn GithubNotificationIcon(
+    notif: ReadOnlySignal<NotificationWithTask>,
+    github_notification: ReadOnlySignal<GithubNotification>,
+    class: Option<String>,
 ) -> Element {
     let class = class.unwrap_or_default();
-    match &notif.details {
-        Some(NotificationDetails::GithubPullRequest(pr)) => render! {
-            GithubPullRequestIcon { class: "{class}", github_pull_request: pr }
+    match &notif().details {
+        Some(NotificationDetails::GithubPullRequest(pr)) => rsx! {
+            GithubPullRequestIcon { class: "{class}", github_pull_request: pr.clone() }
         },
-        Some(NotificationDetails::GithubDiscussion(discussion)) => render! {
-            GithubDiscussionIcon { class: "{class}", github_discussion: discussion }
+        Some(NotificationDetails::GithubDiscussion(discussion)) => rsx! {
+            GithubDiscussionIcon { class: "{class}", github_discussion: discussion.clone() }
         },
-        Some(_) | None => match github_notification.subject.r#type.as_str() {
-            "PullRequest" => render! { GithubPullRequestIcon { class: "{class}" } },
-            "Issue" => render! { Icon { class: "{class}", icon: BsRecordCircle } },
-            "Discussion" => render! { GithubDiscussionIcon { class: "{class}" } },
-            "CheckSuite" => render! { Icon { class: "{class}", icon: BsCheckCircle } },
-            "Commit" => render! { Icon { class: "{class}", icon: GoGitCommit } },
+        Some(_) | None => match github_notification().subject.r#type.as_str() {
+            "PullRequest" => rsx! { GithubPullRequestIcon { class: "{class}" } },
+            "Issue" => rsx! { Icon { class: "{class}", icon: BsRecordCircle } },
+            "Discussion" => rsx! { GithubDiscussionIcon { class: "{class}" } },
+            "CheckSuite" => rsx! { Icon { class: "{class}", icon: BsCheckCircle } },
+            "Commit" => rsx! { Icon { class: "{class}", icon: GoGitCommit } },
             _ => None,
         },
     }
 }
 
 #[component]
-pub fn GithubPullRequestIcon<'a>(
-    cx: Scope,
-    github_pull_request: Option<&'a GithubPullRequest>,
-    class: Option<&'a str>,
+pub fn GithubPullRequestIcon(
+    github_pull_request: Option<GithubPullRequest>,
+    class: Option<String>,
     should_style_icon: Option<bool>,
 ) -> Element {
     let (closed_icon_style, merged_icon_style, draft_icon_style, opened_icon_style) =
@@ -87,29 +85,29 @@ pub fn GithubPullRequestIcon<'a>(
         };
     let class = class.unwrap_or_default();
     let Some(github_pull_request) = github_pull_request else {
-        return render! { Icon { class: "{class}", icon: GoGitPullRequest } };
+        return rsx! { Icon { class: "{class}", icon: GoGitPullRequest } };
     };
 
     match github_pull_request.state {
         GithubPullRequestState::Closed => {
-            render! { Icon { class: "{class} {closed_icon_style}", icon: GoGitPullRequestClosed }}
+            rsx! { Icon { class: "{class} {closed_icon_style}", icon: GoGitPullRequestClosed }}
         }
         GithubPullRequestState::Merged => {
-            render! { Icon { class: "{class} {merged_icon_style}", icon: GoGitPullRequest }}
+            rsx! { Icon { class: "{class} {merged_icon_style}", icon: GoGitPullRequest }}
         }
         GithubPullRequestState::Open => {
             if github_pull_request.is_draft {
-                render! { Icon { class: "{class} {draft_icon_style}", icon: GoGitPullRequestDraft }}
+                rsx! { Icon { class: "{class} {draft_icon_style}", icon: GoGitPullRequestDraft }}
             } else {
-                render! { Icon { class: "{class} {opened_icon_style}", icon: GoGitPullRequest }}
+                rsx! { Icon { class: "{class} {opened_icon_style}", icon: GoGitPullRequest }}
             }
         }
     }
 }
 
 #[component]
-pub fn GithubDiscussionOpened<'a>(cx: Scope, class: Option<&'a str>) -> Element {
-    render! {
+pub fn GithubDiscussionOpened(class: Option<String>) -> Element {
+    rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
             class: "{class.unwrap_or_default()}",
@@ -129,8 +127,8 @@ pub fn GithubDiscussionOpened<'a>(cx: Scope, class: Option<&'a str>) -> Element 
 }
 
 #[component]
-pub fn GithubDiscussionClosed<'a>(cx: Scope, class: Option<&'a str>) -> Element {
-    render! {
+pub fn GithubDiscussionClosed(class: Option<String>) -> Element {
+    rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
             class: "{class.unwrap_or_default()}",
@@ -147,8 +145,8 @@ pub fn GithubDiscussionClosed<'a>(cx: Scope, class: Option<&'a str>) -> Element 
 }
 
 #[component]
-pub fn GithubDiscussionDuplicate<'a>(cx: Scope, class: Option<&'a str>) -> Element {
-    render! {
+pub fn GithubDiscussionDuplicate(class: Option<String>) -> Element {
+    rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
             class: "{class.unwrap_or_default()}",
@@ -165,8 +163,8 @@ pub fn GithubDiscussionDuplicate<'a>(cx: Scope, class: Option<&'a str>) -> Eleme
 }
 
 #[component]
-pub fn GithubDiscussionOutdated<'a>(cx: Scope, class: Option<&'a str>) -> Element {
-    render! {
+pub fn GithubDiscussionOutdated(class: Option<String>) -> Element {
+    rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
             class: "{class.unwrap_or_default()}",
@@ -183,10 +181,9 @@ pub fn GithubDiscussionOutdated<'a>(cx: Scope, class: Option<&'a str>) -> Elemen
 }
 
 #[component]
-pub fn GithubDiscussionIcon<'a>(
-    cx: Scope,
-    github_discussion: Option<&'a GithubDiscussion>,
-    class: Option<&'a str>,
+pub fn GithubDiscussionIcon(
+    github_discussion: Option<GithubDiscussion>,
+    class: Option<String>,
     should_style_icon: Option<bool>,
 ) -> Element {
     let (closed_icon_style, opened_icon_style, duplicate_icon_style, outdated_icon_style) =
@@ -204,23 +201,23 @@ pub fn GithubDiscussionIcon<'a>(
 
     if let Some(github_discussion) = github_discussion {
         return match github_discussion.state_reason {
-            Some(GithubDiscussionStateReason::Duplicate) => render! {
+            Some(GithubDiscussionStateReason::Duplicate) => rsx! {
                 GithubDiscussionDuplicate { class: "{class} {duplicate_icon_style}" }
             },
-            Some(GithubDiscussionStateReason::Outdated) => render! {
+            Some(GithubDiscussionStateReason::Outdated) => rsx! {
                 GithubDiscussionOutdated { class: "{class} {outdated_icon_style}" }
             },
-            Some(GithubDiscussionStateReason::Reopened) => render! {
+            Some(GithubDiscussionStateReason::Reopened) => rsx! {
                 GithubDiscussionOpened { class: "{class} {opened_icon_style}" }
             },
-            Some(GithubDiscussionStateReason::Resolved) => render! {
+            Some(GithubDiscussionStateReason::Resolved) => rsx! {
                 GithubDiscussionClosed { class: "{class} {closed_icon_style}" }
             },
-            _ => render! {
+            _ => rsx! {
                 GithubDiscussionOpened { class: "{class} {opened_icon_style}" }
             },
         };
     }
 
-    render! { GithubDiscussionOpened { class: "{class} {opened_icon_style}" } }
+    rsx! { GithubDiscussionOpened { class: "{class} {opened_icon_style}" } }
 }

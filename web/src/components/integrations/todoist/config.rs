@@ -9,12 +9,11 @@ use universal_inbox::{
 };
 
 #[component]
-pub fn TodoistProviderConfiguration<'a>(
-    cx: Scope,
-    config: TodoistConfig,
-    on_config_change: EventHandler<'a, IntegrationConnectionConfig>,
+pub fn TodoistProviderConfiguration(
+    config: ReadOnlySignal<TodoistConfig>,
+    on_config_change: EventHandler<IntegrationConnectionConfig>,
 ) -> Element {
-    render! {
+    rsx! {
         div {
             class: "flex flex-col",
 
@@ -31,11 +30,11 @@ pub fn TodoistProviderConfiguration<'a>(
                         class: "toggle toggle-ghost",
                         oninput: move |event| {
                             on_config_change.call(IntegrationConnectionConfig::Todoist(TodoistConfig {
-                                sync_tasks_enabled: event.value == "true",
-                                ..config.clone()
+                                sync_tasks_enabled: event.value() == "true",
+                                ..config()
                             }))
                         },
-                        checked: config.sync_tasks_enabled
+                        checked: config().sync_tasks_enabled
                     }
                 }
             }
@@ -55,11 +54,11 @@ pub fn TodoistProviderConfiguration<'a>(
                         class: "toggle toggle-ghost",
                         oninput: move |event| {
                             on_config_change.call(IntegrationConnectionConfig::Todoist(TodoistConfig {
-                                create_notification_from_inbox_task: event.value == "true",
-                                ..config.clone()
+                                create_notification_from_inbox_task: event.value() == "true",
+                                ..config()
                             }))
                         },
-                        checked: config.create_notification_from_inbox_task
+                        checked: config().create_notification_from_inbox_task
                     }
                 }
             }

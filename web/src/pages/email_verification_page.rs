@@ -2,7 +2,6 @@
 
 use dioxus::prelude::*;
 use dioxus_router::prelude::use_navigator;
-use fermi::use_atom_ref;
 
 use universal_inbox::user::{EmailValidationToken, UserId};
 
@@ -15,16 +14,13 @@ use crate::{
 
 #[component]
 pub fn EmailVerificationPage(
-    cx: Scope,
     user_id: UserId,
     email_validation_token: EmailValidationToken,
 ) -> Element {
-    let connected_user_ref = use_atom_ref(cx, &CONNECTED_USER);
-    let ui_model_ref = use_atom_ref(cx, &UI_MODEL);
-    let user_service = use_coroutine_handle::<UserCommand>(cx).unwrap();
-    let nav = use_navigator(cx);
+    let user_service = use_coroutine_handle::<UserCommand>();
+    let nav = use_navigator();
 
-    use_future(cx, (), |()| {
+    let _ = use_resource(move || {
         to_owned![user_id];
         to_owned![email_validation_token];
         to_owned![user_service];
@@ -34,21 +30,21 @@ pub fn EmailVerificationPage(
         }
     });
 
-    if ui_model_ref.read().authentication_state == AuthenticationState::NotAuthenticated {
+    if UI_MODEL.read().authentication_state == AuthenticationState::NotAuthenticated {
         nav.push(Route::LoginPage {});
-        cx.needs_update();
+        needs_update();
         None
-    } else if connected_user_ref
+    } else if CONNECTED_USER
         .read()
         .as_ref()
         .map(|user| user.is_email_validated())
         .unwrap_or_default()
     {
         nav.push(Route::NotificationsPage {});
-        cx.needs_update();
+        needs_update();
         None
     } else {
-        render! {
+        rsx! {
             div {
                 class: "h-full flex justify-center items-center",
 

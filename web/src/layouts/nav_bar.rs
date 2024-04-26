@@ -1,7 +1,6 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
-use dioxus_router::prelude::*;
 
 use crate::{
     components::{footer::Footer, nav_bar::NavBar, toast_zone::ToastZone},
@@ -9,8 +8,8 @@ use crate::{
 };
 
 #[component]
-pub fn NavBarLayout(cx: Scope) -> Element {
-    render! {
+pub fn NavBarLayout() -> Element {
+    rsx! {
         div {
             class: "h-full flex flex-col relative text-sm h-16",
             NavBar {}

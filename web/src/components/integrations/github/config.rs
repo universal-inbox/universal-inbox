@@ -6,12 +6,11 @@ use universal_inbox::integration_connection::{
 };
 
 #[component]
-pub fn GithubProviderConfiguration<'a>(
-    cx: Scope,
+pub fn GithubProviderConfiguration(
     config: GithubConfig,
-    on_config_change: EventHandler<'a, IntegrationConnectionConfig>,
+    on_config_change: EventHandler<IntegrationConnectionConfig>,
 ) -> Element {
-    render! {
+    rsx! {
         div {
             class: "flex flex-col",
 
@@ -28,7 +27,7 @@ pub fn GithubProviderConfiguration<'a>(
                         class: "toggle toggle-ghost",
                         oninput: move |event| {
                             on_config_change.call(IntegrationConnectionConfig::Github(GithubConfig {
-                                sync_notifications_enabled: event.value == "true",
+                                sync_notifications_enabled: event.value() == "true",
                             }))
                         },
                         checked: config.sync_notifications_enabled

@@ -1,8 +1,6 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
-use dioxus_router::prelude::*;
-use fermi::use_atom_ref;
 
 use crate::{
     auth::Authenticated,
@@ -18,24 +16,22 @@ use crate::{
 };
 
 #[component]
-pub fn AuthenticatedLayout(cx: Scope) -> Element {
-    let ui_model_ref = use_atom_ref(cx, &UI_MODEL);
-    let app_config_ref = use_atom_ref(cx, &APP_CONFIG);
-    let api_base_url = use_memo(cx, (), |()| get_api_base_url().unwrap());
+pub fn AuthenticatedLayout() -> Element {
+    let api_base_url = use_memo(move || get_api_base_url().unwrap());
 
-    if let Some(app_config) = app_config_ref.read().as_ref() {
-        return render! {
+    if let Some(app_config) = APP_CONFIG.read().as_ref() {
+        return rsx! {
             Authenticated {
                 authentication_config: app_config.authentication_config.clone(),
-                ui_model_ref: ui_model_ref.clone(),
-                api_base_url: api_base_url.clone(),
+                ui_model: UI_MODEL.signal(),
+                api_base_url: api_base_url(),
 
                 AuthenticatedApp {}
             }
         };
     }
 
-    render! {
+    rsx! {
         div {
             class: "h-full flex justify-center items-center",
 
@@ -46,16 +42,14 @@ pub fn AuthenticatedLayout(cx: Scope) -> Element {
 }
 
 #[component]
-pub fn AuthenticatedApp(cx: Scope) -> Element {
-    let user_service = use_coroutine_handle::<UserCommand>(cx).unwrap();
-    let integration_connections_ref = use_atom_ref(cx, &INTEGRATION_CONNECTIONS);
-    let integration_connection_service =
-        use_coroutine_handle::<IntegrationConnectionCommand>(cx).unwrap();
-    let notification_service = use_coroutine_handle::<NotificationCommand>(cx).unwrap();
+pub fn AuthenticatedApp() -> Element {
+    let user_service = use_coroutine_handle::<UserCommand>();
+    let integration_connection_service = use_coroutine_handle::<IntegrationConnectionCommand>();
+    let notification_service = use_coroutine_handle::<NotificationCommand>();
     let history = WebHistory::<Route>::default();
-    let nav = use_navigator(cx);
+    let nav = use_navigator();
 
-    use_future(cx, (), |()| {
+    let _ = use_resource(move || {
         to_owned![user_service];
         to_owned![integration_connection_service];
         to_owned![notification_service];
@@ -74,17 +68,17 @@ pub fn AuthenticatedApp(cx: Scope) -> Element {
         }
     });
 
-    if let Some(integration_connections) = integration_connections_ref.read().as_ref() {
+    if let Some(integration_connections) = INTEGRATION_CONNECTIONS.read().as_ref() {
         if integration_connections.is_empty() && history.current_route() != (Route::SettingsPage {})
         {
             nav.push(Route::SettingsPage {});
-            cx.needs_update();
+            needs_update();
             None
         } else {
-            render! { Outlet::<Route> {} }
+            rsx! { Outlet::<Route> {} }
         }
     } else {
-        render! {
+        rsx! {
             div {
                 class: "h-full flex justify-center items-center",
 

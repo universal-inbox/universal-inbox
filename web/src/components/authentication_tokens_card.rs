@@ -11,7 +11,6 @@ use dioxus_free_icons::{
     },
     Icon,
 };
-use fermi::use_atom_ref;
 
 use secrecy::ExposeSecret;
 use universal_inbox::auth::auth_token::AuthenticationTokenId;
@@ -26,13 +25,10 @@ use crate::{
 };
 
 #[component]
-pub fn AuthenticationTokensCard(cx: Scope) -> Element {
-    let authentication_tokens_ref = use_atom_ref(cx, &AUTHENTICATION_TOKENS);
-    let created_authentication_token_ref = use_atom_ref(cx, &CREATED_AUTHENTICATION_TOKEN);
-    let authentication_token_service =
-        use_coroutine_handle::<AuthenticationTokenCommand>(cx).unwrap();
+pub fn AuthenticationTokensCard() -> Element {
+    let authentication_token_service = use_coroutine_handle::<AuthenticationTokenCommand>();
 
-    use_future(cx, (), |()| {
+    let _ = use_resource(move || {
         to_owned![authentication_token_service];
 
         async move {
@@ -40,8 +36,8 @@ pub fn AuthenticationTokensCard(cx: Scope) -> Element {
         }
     });
 
-    let Some(authentication_tokens) = authentication_tokens_ref.read().clone() else {
-        return render! {
+    let Some(authentication_tokens) = AUTHENTICATION_TOKENS.read().clone() else {
+        return rsx! {
             div {
                 class: "card w-full bg-base-200 text-base-content",
                 div {
@@ -53,7 +49,7 @@ pub fn AuthenticationTokensCard(cx: Scope) -> Element {
         };
     };
 
-    render! {
+    rsx! {
         div {
             class: "card w-full bg-base-200 text-base-content",
 
@@ -70,15 +66,15 @@ pub fn AuthenticationTokensCard(cx: Scope) -> Element {
                             "API keys"
                         }
 
-                        match created_authentication_token_ref.read().deref() {
-                            LoadState::Loading => render! {
+                        match CREATED_AUTHENTICATION_TOKEN.read().deref() {
+                            LoadState::Loading => rsx! {
                                 div {
                                     class: "btn btn-primary btn-sm btn-disabled",
                                     Spinner { class: "w-4 h-4" }
                                     "Creating new API key..."
                                 }
                             },
-                            _  => render! {
+                            _  => rsx! {
                                 button {
                                     class: "btn btn-primary btn-sm",
                                     onclick: move |_| {
@@ -102,8 +98,8 @@ pub fn AuthenticationTokensCard(cx: Scope) -> Element {
                             }
                         }
                         tbody {
-                            match created_authentication_token_ref.read().deref() {
-                                LoadState::Loaded(created_authentication_token) => render! {
+                            match CREATED_AUTHENTICATION_TOKEN.read().deref() {
+                                LoadState::Loaded(created_authentication_token) => rsx! {
                                     AuthenticationToken {
                                         id: created_authentication_token.id.clone(),
                                         expire_at: created_authentication_token.expire_at,
@@ -111,21 +107,19 @@ pub fn AuthenticationTokensCard(cx: Scope) -> Element {
                                         is_copiable: true
                                     }
                                 },
-                                LoadState::Error(error) => render! {
+                                LoadState::Error(error) => rsx! {
                                     tr {
-                                        td { colspan: "4", format!("Failed to create a new API key: {error}") }
+                                        td { colspan: "4", "Failed to create a new API key: {error}" }
                                     }
                                 },
                                 _ => None
                             }
                             for auth_token in authentication_tokens.into_iter() {
-                                render! {
-                                    AuthenticationToken {
-                                        id: auth_token.id,
-                                        expire_at: auth_token.expire_at,
-                                        jwt_token: format!("**********{}", auth_token.truncated_jwt_token.clone()),
-                                        is_copiable: false
-                                    }
+                                AuthenticationToken {
+                                    id: auth_token.id,
+                                    expire_at: auth_token.expire_at,
+                                    jwt_token: format!("**********{}", auth_token.truncated_jwt_token.clone()),
+                                    is_copiable: false
                                 }
                             }
                         }
@@ -138,14 +132,13 @@ pub fn AuthenticationTokensCard(cx: Scope) -> Element {
 
 #[component]
 pub fn AuthenticationToken(
-    cx: Scope,
     id: AuthenticationTokenId,
     #[props(!optional)] expire_at: Option<DateTime<Utc>>,
     jwt_token: String,
     is_copiable: bool,
 ) -> Element {
-    let is_copied = use_state(cx, || false);
-    let (line_class, td_class) = if *is_copiable {
+    let mut is_copied = use_signal(|| false);
+    let (line_class, td_class) = if is_copiable {
         (
             "bg-green-50 ring-2 ring-success/50 ring-offset-2 ring-offset-base-200 rounded-md",
             "my-0",
@@ -154,19 +147,15 @@ pub fn AuthenticationToken(
         ("", "my-2")
     };
 
-    render! {
+    rsx! {
         tr {
             class: "{line_class}",
             td { "{id}" }
 
             if let Some(expire_at) = expire_at {
-                render! {
-                    td { r#"{expire_at.date_naive().format("%Y-%m-%d")}"# }
-                }
+                td { r#"{expire_at.date_naive().format("%Y-%m-%d")}"# }
             } else {
-                render! {
-                    td { "Never expire" }
-                }
+                td { "Never expire" }
             }
 
             td {
@@ -177,34 +166,27 @@ pub fn AuthenticationToken(
                 class: "flex gap-2 justify-center items-center h-8 {td_class}",
 
                 if !is_copiable {
-                    render! {
-                        button {
-                            class: "btn btn-sm btn-error btn-disabled",
-                            onclick: move |_| {},
-                            "Revoke"
-                        }
+                    button {
+                        class: "btn btn-sm btn-error btn-disabled",
+                        onclick: move |_| {},
+                        "Revoke"
                     }
-                } else if **is_copied {
-                    render! {
-                        div {
-                            class: "badge badge-outline badge-ghost badge-sm",
-                            "Copied!"
-                        }
+                } else if is_copied() {
+                    div {
+                        class: "badge badge-outline badge-ghost badge-sm",
+                        "Copied!"
                     }
                 } else {
-                    render! {
-                        button {
-                            class: "btn btn-ghost btn-sm",
-                            onclick: move |_| {
-                                let jwt_token = jwt_token.clone();
-                                let is_copied = is_copied.clone();
-                                async move {
-                                    copy_to_clipboard(&jwt_token).await.unwrap();
-                                    is_copied.set(true);
-                                }
-                            },
-                            Icon { class: "w-4 h-4", icon: GoCopy }
-                        }
+                    button {
+                        class: "btn btn-ghost btn-sm",
+                        onclick: move |_| {
+                            let jwt_token = jwt_token.clone();
+                            async move {
+                                copy_to_clipboard(&jwt_token).await.unwrap();
+                                *is_copied.write() = true;
+                            }
+                        },
+                        Icon { class: "w-4 h-4", icon: GoCopy }
                     }
                 }
             }

@@ -1,7 +1,7 @@
 use anyhow::Result;
 use dioxus::prelude::*;
 use email_address::EmailAddress;
-use fermi::{AtomRef, UseAtomRef};
+
 use futures_util::StreamExt;
 use log::error;
 use reqwest::Method;
@@ -30,19 +30,19 @@ pub enum UserCommand {
     ResetPassword(UserId, PasswordResetToken, Secret<Password>),
 }
 
-pub static CONNECTED_USER: AtomRef<Option<User>> = AtomRef(|_| None);
+pub static CONNECTED_USER: GlobalSignal<Option<User>> = Signal::global(|| None);
 
-pub async fn user_service<'a>(
+pub async fn user_service(
     mut rx: UnboundedReceiver<UserCommand>,
     api_base_url: Url,
-    connected_user: UseAtomRef<Option<User>>,
-    ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
+    mut connected_user: Signal<Option<User>>,
+    mut ui_model: Signal<UniversalInboxUIModel>,
 ) {
     loop {
         let msg = rx.next().await;
         match msg {
             Some(UserCommand::GetUser) => {
-                get_user(&api_base_url, connected_user.clone(), ui_model_ref.clone()).await;
+                get_user(&api_base_url, connected_user, ui_model).await;
             }
 
             Some(UserCommand::RegisterUser(parameters)) => {
@@ -51,7 +51,7 @@ pub async fn user_service<'a>(
                     &api_base_url,
                     "users",
                     Some(parameters),
-                    Some(ui_model_ref.clone()),
+                    Some(ui_model),
                 )
                 .await;
 
@@ -60,19 +60,19 @@ pub async fn user_service<'a>(
                         connected_user.write().replace(user);
                     }
                     Err(err) => {
-                        ui_model_ref.write().error_message = Some(err.to_string());
+                        ui_model.write().error_message = Some(err.to_string());
                     }
                 };
             }
 
             Some(UserCommand::Login(credentials)) => {
-                ui_model_ref.write().error_message = None;
+                ui_model.write().error_message = None;
                 let result: Result<User> = call_api(
                     Method::POST,
                     &api_base_url,
                     "users/me",
                     Some(credentials),
-                    Some(ui_model_ref.clone()),
+                    Some(ui_model),
                 )
                 .await;
 
@@ -81,7 +81,7 @@ pub async fn user_service<'a>(
                         connected_user.write().replace(user);
                     }
                     Err(err) => {
-                        ui_model_ref.write().error_message = Some(err.to_string());
+                        ui_model.write().error_message = Some(err.to_string());
                     }
                 };
             }
@@ -91,7 +91,7 @@ pub async fn user_service<'a>(
                     &api_base_url,
                     "auth/session",
                     None::<i32>,
-                    Some(ui_model_ref.clone()),
+                    Some(ui_model),
                 )
                 .await;
 
@@ -105,16 +105,16 @@ pub async fn user_service<'a>(
                     &api_base_url,
                     "users/me/email-verification",
                     None::<i32>,
-                    Some(ui_model_ref.clone()),
+                    Some(ui_model),
                 )
                 .await;
 
                 match result {
                     Ok(SuccessResponse { message, .. }) => {
-                        ui_model_ref.write().confirmation_message = Some(message);
+                        ui_model.write().confirmation_message = Some(message);
                     }
                     Err(err) => {
-                        ui_model_ref.write().error_message = Some(err.to_string());
+                        ui_model.write().error_message = Some(err.to_string());
                     }
                 };
             }
@@ -130,13 +130,13 @@ pub async fn user_service<'a>(
 
                 match result {
                     Ok(SuccessResponse { message, .. }) => {
-                        ui_model_ref.write().confirmation_message = Some(message);
+                        ui_model.write().confirmation_message = Some(message);
                         // Refresh user as it should now have a validated email and either redirected to the
                         // to the app if it has a logged session or to the login form otherwise
-                        get_user(&api_base_url, connected_user.clone(), ui_model_ref.clone()).await
+                        get_user(&api_base_url, connected_user, ui_model).await
                     }
                     Err(err) => {
-                        ui_model_ref.write().error_message = Some(err.to_string());
+                        ui_model.write().error_message = Some(err.to_string());
                     }
                 };
             }
@@ -153,10 +153,10 @@ pub async fn user_service<'a>(
 
                 match result {
                     Ok(SuccessResponse { message, .. }) => {
-                        ui_model_ref.write().confirmation_message = Some(message);
+                        ui_model.write().confirmation_message = Some(message);
                     }
                     Err(err) => {
-                        ui_model_ref.write().error_message = Some(err.to_string());
+                        ui_model.write().error_message = Some(err.to_string());
                     }
                 };
             }
@@ -172,12 +172,12 @@ pub async fn user_service<'a>(
 
                 match result {
                     Ok(SuccessResponse { message, .. }) => {
-                        ui_model_ref.write().confirmation_message = Some(message);
+                        ui_model.write().confirmation_message = Some(message);
                         // Refresh user as it should now be authenticated
-                        get_user(&api_base_url, connected_user.clone(), ui_model_ref.clone()).await
+                        get_user(&api_base_url, connected_user, ui_model).await
                     }
                     Err(err) => {
-                        ui_model_ref.write().error_message = Some(err.to_string());
+                        ui_model.write().error_message = Some(err.to_string());
                     }
                 };
             }
@@ -188,21 +188,21 @@ pub async fn user_service<'a>(
 
 async fn get_user(
     api_base_url: &Url,
-    connected_user: UseAtomRef<Option<User>>,
-    ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
+    mut connected_user: Signal<Option<User>>,
+    ui_model: Signal<UniversalInboxUIModel>,
 ) {
     let result: Result<User> = call_api(
         Method::GET,
         api_base_url,
         "users/me",
         None::<i32>,
-        Some(ui_model_ref),
+        Some(ui_model),
     )
     .await;
 
     match result {
         Ok(user) => {
-            connected_user.write().replace(user);
+            *connected_user.write() = Some(user);
         }
         Err(err) => {
             error!("Failed to get current user: {err}");

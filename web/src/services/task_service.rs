@@ -1,6 +1,6 @@
 use anyhow::Result;
 use dioxus::prelude::*;
-use fermi::UseAtomRef;
+
 use futures_util::StreamExt;
 use reqwest::Method;
 use url::Url;
@@ -26,7 +26,7 @@ pub enum TaskCommand {
 pub async fn task_service(
     mut rx: UnboundedReceiver<TaskCommand>,
     api_base_url: Url,
-    ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
+    ui_model: Signal<UniversalInboxUIModel>,
     toast_service: Coroutine<ToastCommand>,
 ) {
     loop {
@@ -42,7 +42,7 @@ pub async fn task_service(
                         status: Some(TaskStatus::Deleted),
                         ..Default::default()
                     }),
-                    Some(ui_model_ref.clone()),
+                    Some(ui_model),
                     &toast_service,
                     "Deleting task...",
                     "Successfully deleted task",
@@ -58,7 +58,7 @@ pub async fn task_service(
                         status: Some(TaskStatus::Done),
                         ..Default::default()
                     }),
-                    Some(ui_model_ref.clone()),
+                    Some(ui_model),
                     &toast_service,
                     "Completing task...",
                     "Successfully completed task",
@@ -76,7 +76,7 @@ pub async fn task_service(
                         priority: Some(parameters.priority),
                         ..Default::default()
                     }),
-                    Some(ui_model_ref.clone()),
+                    Some(ui_model),
                     &toast_service,
                     "Planning task...",
                     "Successfully planned task",
@@ -92,7 +92,7 @@ pub async fn task_service(
                         source,
                         asynchronous: Some(false),
                     }),
-                    Some(ui_model_ref.clone()),
+                    Some(ui_model),
                     &toast_service,
                     "Syncing tasks...",
                     "Successfully synced tasks",

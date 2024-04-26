@@ -1,7 +1,7 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
-use fermi::use_atom_ref;
+
 use gravatar::{Gravatar, Rating};
 
 use universal_inbox::FrontAuthenticationConfig;
@@ -11,11 +11,10 @@ use crate::{
 };
 
 #[component]
-pub fn UserProfileCard(cx: Scope) -> Element {
-    let app_config_ref = use_atom_ref(cx, &APP_CONFIG);
+pub fn UserProfileCard() -> Element {
     // Howto use use_memo with an Option?
     let user_profile_url =
-        app_config_ref
+        APP_CONFIG
             .read()
             .as_ref()
             .and_then(|config| match &config.authentication_config {
@@ -29,10 +28,8 @@ pub fn UserProfileCard(cx: Scope) -> Element {
                 FrontAuthenticationConfig::Local => None,
             });
 
-    let connected_user_ref = use_atom_ref(cx, &CONNECTED_USER);
-
-    let Some(user) = connected_user_ref.read().clone() else {
-        return render! {
+    let Some(user) = CONNECTED_USER.read().clone() else {
+        return rsx! {
             div {
                 class: "card w-full bg-base-200 text-base-content",
                 div {
@@ -52,7 +49,7 @@ pub fn UserProfileCard(cx: Scope) -> Element {
         .to_string();
     let user_name = format!("{} {}", user.first_name, user.last_name);
 
-    render! {
+    rsx! {
         div {
             class: "card w-full bg-base-200 text-base-content",
 
@@ -85,15 +82,13 @@ pub fn UserProfileCard(cx: Scope) -> Element {
                     }
 
                     if let Some(user_profile_url) = user_profile_url.as_ref() {
-                        render!(
-                            a {
-                                class: "btn btn-primary",
-                                href: "{user_profile_url}",
-                                target: "_blank",
-                                rel: "noopener noreferrer",
-                                "View detailed profile"
-                            }
-                        )
+                        a {
+                            class: "btn btn-primary",
+                            href: "{user_profile_url}",
+                            target: "_blank",
+                            rel: "noopener noreferrer",
+                            "View detailed profile"
+                        }
                     }
                 }
             }

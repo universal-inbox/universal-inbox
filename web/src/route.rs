@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use dioxus_router::prelude::*;
+
 use universal_inbox::user::{EmailValidationToken, PasswordResetToken, UserId};
 
 use crate::{

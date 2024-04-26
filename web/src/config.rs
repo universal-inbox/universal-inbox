@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
-use fermi::AtomRef;
+use dioxus::prelude::*;
 use reqwest::Method;
 use url::Url;
 use wasm_bindgen::prelude::*;
@@ -29,7 +29,7 @@ extern "C" {
     fn api_base_url() -> String;
 }
 
-pub static APP_CONFIG: AtomRef<Option<AppConfig>> = AtomRef(|_| None);
+pub static APP_CONFIG: GlobalSignal<Option<AppConfig>> = Signal::global(|| None);
 
 pub fn get_api_base_url() -> Result<Url> {
     match Url::parse(&api_base_url()) {

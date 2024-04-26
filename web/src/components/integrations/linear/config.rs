@@ -1,7 +1,6 @@
 #![allow(non_snake_case)]
 use dioxus::prelude::*;
 
-use fermi::UseAtomRef;
 use universal_inbox::{
     integration_connection::{
         config::IntegrationConnectionConfig,
@@ -15,33 +14,30 @@ use crate::{
 };
 
 #[component]
-pub fn LinearProviderConfiguration<'a>(
-    cx: Scope,
-    config: LinearConfig,
-    ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
-    on_config_change: EventHandler<'a, IntegrationConnectionConfig>,
+pub fn LinearProviderConfiguration(
+    config: ReadOnlySignal<LinearConfig>,
+    ui_model: Signal<UniversalInboxUIModel>,
+    on_config_change: EventHandler<IntegrationConnectionConfig>,
 ) -> Element {
-    let default_project: &UseState<Option<String>> = use_state(cx, || None);
-    let selected_project: &UseState<Option<ProjectSummary>> = use_state(cx, || None);
-    let task_config_enabled = use_state(cx, || false);
-    let _ = use_memo(cx, config, |config| {
-        default_project.set(
-            config
-                .sync_task_config
-                .target_project
-                .map(|p| p.name.clone()),
-        );
-        task_config_enabled.set(config.sync_task_config.enabled);
+    let mut default_project: Signal<Option<String>> = use_signal(|| None);
+    let selected_project: Signal<Option<ProjectSummary>> = use_signal(|| None);
+    let mut task_config_enabled = use_signal(|| false);
+    let _ = use_memo(move || {
+        *default_project.write() = config()
+            .sync_task_config
+            .target_project
+            .map(|p| p.name.clone());
+        *task_config_enabled.write() = config().sync_task_config.enabled;
     });
-    let collapse_style = use_memo(cx, (task_config_enabled,), |(task_config_enabled,)| {
-        if *task_config_enabled {
+    let collapse_style = use_memo(move || {
+        if task_config_enabled() {
             "collapse-open"
         } else {
             "collapse-close"
         }
     });
 
-    render! {
+    rsx! {
         div {
             class: "flex flex-col",
 
@@ -58,11 +54,11 @@ pub fn LinearProviderConfiguration<'a>(
                         class: "toggle toggle-ghost",
                         oninput: move |event| {
                             on_config_change.call(IntegrationConnectionConfig::Linear(LinearConfig {
-                                sync_notifications_enabled: event.value == "true",
-                                ..config.clone()
+                                sync_notifications_enabled: event.value() == "true",
+                                ..config()
                             }))
                         },
-                        checked: config.sync_notifications_enabled
+                        checked: config().sync_notifications_enabled
                     }
                 }
             }
@@ -84,13 +80,13 @@ pub fn LinearProviderConfiguration<'a>(
                             oninput: move |event| {
                                 on_config_change.call(IntegrationConnectionConfig::Linear(LinearConfig {
                                     sync_task_config: LinearSyncTaskConfig {
-                                        enabled: event.value == "true",
-                                        ..config.sync_task_config.clone()
+                                        enabled: event.value() == "true",
+                                        ..config().sync_task_config
                                     },
-                                    ..config.clone()
+                                    ..config()
                                 }))
                             },
-                            checked: config.sync_task_config.enabled
+                            checked: config().sync_task_config.enabled
                         }
                     }
                 }
@@ -108,17 +104,17 @@ pub fn LinearProviderConfiguration<'a>(
                             }
                             TaskProjectSearch {
                                 class: "w-full max-w-xs bg-base-100 rounded",
-                                default_project_name: (*default_project.current()).clone().unwrap_or_default(),
-                                selected_project: selected_project.clone(),
-                                ui_model_ref: ui_model_ref.clone(),
+                                default_project_name: default_project().unwrap_or_default(),
+                                selected_project: selected_project,
+                                ui_model: ui_model,
                                 filter_out_inbox: false,
                                 on_select: move |project: ProjectSummary| {
                                     on_config_change.call(IntegrationConnectionConfig::Linear(LinearConfig {
                                         sync_task_config: LinearSyncTaskConfig {
                                             target_project: Some(project.clone()),
-                                            ..config.sync_task_config.clone()
+                                            ..config().sync_task_config
                                         },
-                                        ..config.clone()
+                                        ..config()
                                     }))
                                 }
                             }

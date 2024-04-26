@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 
 use anyhow::anyhow;
+use dioxus::prelude::FormValue;
 use email_address::EmailAddress;
 use secrecy::Secret;
 use universal_inbox::user::{Credentials, Password, RegisterUserParameters};
 
-pub struct FormValues(pub HashMap<String, Vec<String>>);
+pub struct FormValues(pub HashMap<String, FormValue>);
 
 impl TryFrom<FormValues> for Credentials {
     type Error = anyhow::Error;
@@ -15,6 +16,8 @@ impl TryFrom<FormValues> for Credentials {
             .0
             .get("email")
             .ok_or_else(|| anyhow!("email is required"))?
+            .clone()
+            .to_vec()
             .first()
             .ok_or_else(|| anyhow!("email is required"))?
             .parse()?;
@@ -23,6 +26,8 @@ impl TryFrom<FormValues> for Credentials {
             .0
             .get("password")
             .ok_or_else(|| anyhow!("password is required"))?
+            .clone()
+            .to_vec()
             .first()
             .ok_or_else(|| anyhow!("password is required"))?
             .parse()?;
@@ -42,6 +47,8 @@ impl TryFrom<FormValues> for RegisterUserParameters {
             .0
             .get("first_name")
             .ok_or_else(|| anyhow!("first_name is required"))?
+            .clone()
+            .to_vec()
             .first()
             .ok_or_else(|| anyhow!("first_name is required"))?
             .to_string();
@@ -50,6 +57,8 @@ impl TryFrom<FormValues> for RegisterUserParameters {
             .0
             .get("last_name")
             .ok_or_else(|| anyhow!("last_name is required"))?
+            .clone()
+            .to_vec()
             .first()
             .ok_or_else(|| anyhow!("last_name is required"))?
             .to_string();
@@ -66,6 +75,8 @@ impl TryFrom<FormValues> for EmailAddress {
             .0
             .get("email")
             .ok_or_else(|| anyhow!("email is required"))?
+            .clone()
+            .to_vec()
             .first()
             .ok_or_else(|| anyhow!("email is required"))?
             .parse()?;
@@ -82,6 +93,8 @@ impl TryFrom<FormValues> for Secret<Password> {
             .0
             .get("password")
             .ok_or_else(|| anyhow!("password is required"))?
+            .clone()
+            .to_vec()
             .first()
             .ok_or_else(|| anyhow!("password is required"))?
             .parse()?;

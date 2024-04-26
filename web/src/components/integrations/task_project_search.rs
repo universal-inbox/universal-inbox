@@ -2,7 +2,7 @@
 
 use anyhow::Result;
 use dioxus::prelude::*;
-use fermi::UseAtomRef;
+
 use http::Method;
 use log::error;
 
@@ -16,60 +16,46 @@ use crate::{
 };
 
 #[component]
-pub fn TaskProjectSearch<'a>(
-    cx: Scope,
-    class: Option<&'a str>,
-    label: Option<&'a str>,
+pub fn TaskProjectSearch(
+    class: Option<String>,
+    label: Option<String>,
     required: Option<bool>,
-    default_project_name: Option<String>,
-    selected_project: UseState<Option<ProjectSummary>>,
-    ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
+    default_project_name: ReadOnlySignal<Option<String>>,
+    selected_project: Signal<Option<ProjectSummary>>,
+    ui_model: Signal<UniversalInboxUIModel>,
     filter_out_inbox: Option<bool>,
-    on_select: EventHandler<'a, ProjectSummary>,
+    on_select: EventHandler<ProjectSummary>,
 ) -> Element {
     let filter_out_inbox = filter_out_inbox.unwrap_or_default();
-    let search_expression = use_state(cx, || "".to_string());
-    let search_results: &UseState<Vec<ProjectSummary>> = use_state(cx, Vec::new);
+    let search_expression = use_signal(|| "".to_string());
+    let mut search_results: Signal<Vec<ProjectSummary>> = use_signal(Vec::new);
 
-    let _ = use_memo(
-        cx,
-        (&search_results.clone(), &default_project_name.clone()),
-        |(search_results, default_project_name)| {
-            to_owned![selected_project];
-
-            if let Some(default_project_name) = default_project_name {
-                if selected_project.is_none() {
-                    if let Some(project) = search_results
-                        .iter()
-                        .find(|project| project.name == *default_project_name)
-                    {
-                        selected_project.set(Some(project.clone()));
-                    }
-                }
-            }
-        },
-    );
-
-    use_future(cx, &search_expression.clone(), |search_expression| {
-        to_owned![search_results];
-        to_owned![ui_model_ref];
-
-        async move {
-            let projects =
-                search_projects(&search_expression.current(), ui_model_ref, filter_out_inbox).await;
-            search_results.set(projects);
+    let _ = use_memo(move || {
+        if search_results().is_empty() {
+            return;
+        }
+        if let Some(default_project_name) = default_project_name() {
+            *selected_project.write() = search_results()
+                .iter()
+                .find(|project| project.name == *default_project_name)
+                .cloned();
         }
     });
 
-    render! {
+    let _ = use_resource(move || async move {
+        let projects = search_projects(&search_expression(), ui_model, filter_out_inbox).await;
+        *search_results.write() = projects;
+    });
+
+    rsx! {
         FloatingLabelInputSearchSelect {
             name: "project-search-input".to_string(),
             class: "{class.unwrap_or_default()}",
-            label: *label,
+            label: label,
             required: required.unwrap_or_default(),
-            value: selected_project.clone(),
-            search_expression: search_expression.clone(),
-            search_results: search_results.clone(),
+            value: selected_project,
+            search_expression: search_expression,
+            search_results: search_results,
             on_select: move |project| {
                 on_select.call(project);
             },
@@ -79,7 +65,7 @@ pub fn TaskProjectSearch<'a>(
 
 async fn search_projects(
     search: &str,
-    ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
+    ui_model: Signal<UniversalInboxUIModel>,
     filter_out_inbox: bool,
 ) -> Vec<ProjectSummary> {
     let api_base_url = get_api_base_url().unwrap();
@@ -88,7 +74,7 @@ async fn search_projects(
         &api_base_url,
         &format!("tasks/projects/search?matches={search}"),
         None::<i32>,
-        Some(ui_model_ref),
+        Some(ui_model),
     )
     .await;
 

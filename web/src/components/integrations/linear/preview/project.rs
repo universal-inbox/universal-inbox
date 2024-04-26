@@ -23,12 +23,11 @@ use crate::components::{
 };
 
 #[component]
-pub fn LinearProjectPreview<'a>(
-    cx: Scope,
-    linear_notification: &'a LinearNotification,
-    linear_project: &'a LinearProject,
+pub fn LinearProjectPreview(
+    linear_notification: ReadOnlySignal<LinearNotification>,
+    linear_project: ReadOnlySignal<LinearProject>,
 ) -> Element {
-    render! {
+    rsx! {
         div {
             class: "flex flex-col gap-2 w-full",
 
@@ -37,18 +36,18 @@ pub fn LinearProjectPreview<'a>(
 
                 LinearProjectIcon { class: "h-5 w-5", linear_project: linear_project }
 
-                if let Some(icon) = &linear_project.icon {
-                    render! { span { "{icon}" } }
+                if let Some(icon) = linear_project().icon {
+                    span { "{icon}" }
                 }
 
                 a {
-                    href: "{linear_project.url}",
+                    href: "{linear_project().url}",
                     target: "_blank",
-                    "{linear_project.name}"
+                    "{linear_project().name}"
                 }
                 a {
                     class: "flex-none",
-                    href: "{linear_project.url}",
+                    href: "{linear_project().url}",
                     target: "_blank",
                     Icon { class: "h-5 w-5 text-gray-400 p-1", icon: BsArrowUpRightSquare }
                 }
@@ -63,10 +62,9 @@ pub fn LinearProjectPreview<'a>(
 }
 
 #[component]
-pub fn LinearProjectDetails<'a>(
-    cx: Scope,
-    linear_notification: &'a LinearNotification,
-    linear_project: &'a LinearProject,
+pub fn LinearProjectDetails(
+    linear_notification: ReadOnlySignal<LinearNotification>,
+    linear_project: ReadOnlySignal<LinearProject>,
     dark_bg: Option<bool>,
 ) -> Element {
     let (cards_style, proses_style) = if dark_bg.unwrap_or_default() {
@@ -75,34 +73,32 @@ pub fn LinearProjectDetails<'a>(
         ("bg-base-200 text-base-content", "dark:prose-invert")
     };
 
-    render! {
+    rsx! {
         div {
             class: "flex flex-col gap-2 w-full",
 
             CollapseCard {
                 class: "{cards_style}",
-                header: render! { span { class: "text-gray-400 ", "Description" } },
-                Markdown { class: "{proses_style}", text: linear_project.description.clone() }
+                header: rsx! { span { class: "text-gray-400 ", "Description" } },
+                Markdown { class: "{proses_style}", text: linear_project().description.clone() }
             }
 
             SmallCard {
                 card_class: "{cards_style}",
                 span { class: "text-gray-400", "Reason:" }
                 TagDisplay {
-                    tag: Into::<Tag>::into(get_notification_type_label(&linear_notification.get_type()))
+                    tag: Into::<Tag>::into(get_notification_type_label(&linear_notification().get_type()))
                 }
             }
 
-            if let Some(lead) = &linear_project.lead {
-                render! {
-                    SmallCard {
-                        card_class: "{cards_style}",
-                        span { class: "text-gray-400", "Led by" }
-                        UserWithAvatar {
-                            user_name: lead.name.clone(),
-                            avatar_url: lead.avatar_url.clone(),
-                            display_name: true,
-                        }
+            if let Some(lead) = linear_project().lead {
+                SmallCard {
+                    card_class: "{cards_style}",
+                    span { class: "text-gray-400", "Led by" }
+                    UserWithAvatar {
+                        user_name: lead.name.clone(),
+                        avatar_url: lead.avatar_url.clone(),
+                        display_name: true,
                     }
                 }
             }
@@ -110,65 +106,57 @@ pub fn LinearProjectDetails<'a>(
             SmallCard {
                 card_class: "{cards_style}",
                 LinearProjectIcon { class: "h-5 w-5", linear_project: linear_project }
-                "{linear_project.state}",
-                if linear_project.progress > 0 {
-                    render! {
-                        div { class: "grow" }
-                        div {
-                            class: "h-5 w-5 radial-progress text-primary",
-                            style: "--value:{linear_project.progress}; --thickness: 2px;"
-                        }
-                        "{linear_project.progress}%"
+                "{linear_project().state}",
+                if linear_project().progress > 0 {
+                    div { class: "grow" }
+                    div {
+                        class: "h-5 w-5 radial-progress text-primary",
+                        style: "--value:{linear_project().progress}; --thickness: 2px;"
                     }
+                    "{linear_project().progress}%"
                 }
             }
 
-            if let Some(start_date) = linear_project.start_date {
-                render! {
-                    SmallCard {
-                        card_class: "{cards_style}",
+            if let Some(start_date) = linear_project().start_date {
+                SmallCard {
+                    card_class: "{cards_style}",
+                    Icon { class: "h-5 w-5 text-gray-400", icon: BsCalendar2Event }
+                    span { "{start_date}" }
+                    Icon { class: "h-5 w-5 text-gray-400", icon: BsArrowRight }
+                    if let Some(target_date) = linear_project().target_date {
                         Icon { class: "h-5 w-5 text-gray-400", icon: BsCalendar2Event }
-                        span { "{start_date}" }
-                        Icon { class: "h-5 w-5 text-gray-400", icon: BsArrowRight }
-                        if let Some(target_date) = linear_project.target_date {
-                            render! {
-                                Icon { class: "h-5 w-5 text-gray-400", icon: BsCalendar2Event }
-                                span { "{target_date}" }
-                            }
-                        }
+                        span { "{target_date}" }
                     }
                 }
             }
 
-            if let LinearNotification::ProjectNotification { project_update: Some(project_update), .. } = linear_notification {
-                render! {
-                    LinearProjectUpdateDetails { project_update: project_update }
-                }
+            if let LinearNotification::ProjectNotification { project_update: Some(project_update), .. } = linear_notification() {
+                LinearProjectUpdateDetails { project_update: project_update }
             }
         }
     }
 }
 
 #[component]
-fn LinearProjectUpdateDetails<'a>(cx: Scope, project_update: &'a LinearProjectUpdate) -> Element {
-    let updated_at = project_update
+fn LinearProjectUpdateDetails(project_update: ReadOnlySignal<LinearProjectUpdate>) -> Element {
+    let updated_at = project_update()
         .updated_at
         .format("%Y-%m-%d %H:%M")
         .to_string();
-    let health_icon_style = match project_update.health {
+    let health_icon_style = match project_update().health {
         LinearProjectUpdateHealthType::OnTrack => "text-success",
         LinearProjectUpdateHealthType::AtRisk => "text-warning",
         LinearProjectUpdateHealthType::OffTrack => "text-error",
     };
-    let headers = vec![render! {
+    let headers = vec![rsx! {
         div {
             class: "flex flex-row items-center gap-2",
             LinearProjectHealtIcon { class: "h-3 w-3 {health_icon_style}" }
-            span { "{project_update.health}" }
+            span { "{project_update().health}" }
             span { class: "text-gray-400", "by" }
             UserWithAvatar {
-                user_name: project_update.user.name.clone(),
-                avatar_url: project_update.user.avatar_url.clone(),
+                user_name: project_update().user.name.clone(),
+                avatar_url: project_update().user.avatar_url.clone(),
                 display_name: true,
             }
             span { class: "text-gray-400", "on" }
@@ -176,11 +164,11 @@ fn LinearProjectUpdateDetails<'a>(cx: Scope, project_update: &'a LinearProjectUp
         }
     }];
 
-    render! {
+    rsx! {
         CardWithHeaders {
             headers: headers,
 
-            Markdown { text: project_update.body.clone() }
+            Markdown { text: project_update().body.clone() }
         }
     }
 }

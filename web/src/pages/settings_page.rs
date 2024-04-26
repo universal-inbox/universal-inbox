@@ -1,7 +1,7 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
-use fermi::use_atom_ref;
+
 use log::debug;
 
 use universal_inbox::integration_connection::{
@@ -17,16 +17,12 @@ use crate::{
     },
 };
 
-pub fn SettingsPage(cx: Scope) -> Element {
-    let app_config_ref = use_atom_ref(cx, &APP_CONFIG);
-    let integration_connections_ref = use_atom_ref(cx, &INTEGRATION_CONNECTIONS);
-    let integration_connection_service =
-        use_coroutine_handle::<IntegrationConnectionCommand>(cx).unwrap();
-    let ui_model_ref = use_atom_ref(cx, &UI_MODEL);
+pub fn SettingsPage() -> Element {
+    let integration_connection_service = use_coroutine_handle::<IntegrationConnectionCommand>();
 
     debug!("Rendering settings page");
 
-    use_future(cx, (), |()| {
+    let _ = use_resource(move || {
         to_owned![integration_connection_service];
 
         async move {
@@ -34,9 +30,9 @@ pub fn SettingsPage(cx: Scope) -> Element {
         }
     });
 
-    if let Some(app_config) = app_config_ref.read().as_ref() {
-        if let Some(integration_connections) = integration_connections_ref.read().as_ref() {
-            return render! {
+    if let Some(app_config) = APP_CONFIG.read().as_ref() {
+        if let Some(integration_connections) = INTEGRATION_CONNECTIONS.read().as_ref() {
+            return rsx! {
                 div {
                     class: "h-full mx-auto flex flex-row px-4",
 
@@ -44,10 +40,10 @@ pub fn SettingsPage(cx: Scope) -> Element {
                         class: "h-full w-full overflow-auto scroll-auto px-2",
 
                         IntegrationsPanel {
-                            ui_model_ref: ui_model_ref.clone(),
+                            ui_model: UI_MODEL.signal(),
                             integration_providers: app_config.integration_providers.clone(),
                             integration_connections: integration_connections.clone(),
-                            on_connect: |(provider_kind, connection): (IntegrationProviderKind, Option<&IntegrationConnection>)| {
+                            on_connect: move |(provider_kind, connection): (IntegrationProviderKind, Option<IntegrationConnection>)| {
                                 if let Some(connection) = connection {
                                     integration_connection_service.send(
                                         IntegrationConnectionCommand::AuthenticateIntegrationConnection(connection.clone())
@@ -58,17 +54,17 @@ pub fn SettingsPage(cx: Scope) -> Element {
                                     );
                                 }
                             },
-                            on_disconnect: |connection: &IntegrationConnection| {
+                            on_disconnect: move |connection: IntegrationConnection| {
                                 integration_connection_service.send(
                                     IntegrationConnectionCommand::DisconnectIntegrationConnection(connection.id)
                                 );
                             },
-                            on_reconnect: |connection: &IntegrationConnection| {
+                            on_reconnect: move |connection: IntegrationConnection| {
                                 integration_connection_service.send(
                                     IntegrationConnectionCommand::ReconnectIntegrationConnection(connection.clone())
                                 );
                             },
-                            on_config_change: |(connection, config): (&IntegrationConnection, IntegrationConnectionConfig)| {
+                            on_config_change: move |(connection, config): (IntegrationConnection, IntegrationConnectionConfig)| {
                                 integration_connection_service.send(
                                     IntegrationConnectionCommand::UpdateIntegrationConnectionConfig(connection.clone(), config)
                                 );
@@ -80,7 +76,7 @@ pub fn SettingsPage(cx: Scope) -> Element {
         }
     }
 
-    render! {
+    rsx! {
         div {
             class: "h-full flex justify-center items-center",
 

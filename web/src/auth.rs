@@ -4,8 +4,7 @@ use log::{debug, error};
 
 use anyhow::{Context, Result};
 use dioxus::prelude::*;
-use dioxus_router::prelude::*;
-use fermi::UseAtomRef;
+
 use gloo_utils::errors::JsError;
 use openidconnect::{
     AccessToken, AuthorizationCode, ClientId, IssuerUrl, Nonce, PkceCodeChallenge,
@@ -30,38 +29,36 @@ use crate::{
     utils::{current_location, get_local_storage, redirect_to},
 };
 
-#[derive(Props)]
-pub struct AuthenticatedProps<'a> {
-    authentication_config: FrontAuthenticationConfig,
-    api_base_url: Url,
-    ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
-    children: Element<'a>,
+#[component]
+#[allow(unused_variables)]
+pub fn AuthPage(query: String) -> Element {
+    rsx! {
+        div {
+            class: "h-full flex justify-center items-center overflow-hidden",
+
+            Spinner {}
+            "Authenticating..."
+        }
+    }
 }
 
 #[component]
-#[allow(unused_variables)]
-pub fn AuthPage(cx: Scope, query: String) -> Element {
-    render!(div {
-        class: "h-full flex justify-center items-center overflow-hidden",
-
-        Spinner {}
-        "Authenticating..."
-    })
-}
-
-pub fn Authenticated<'a>(cx: Scope<'a, AuthenticatedProps<'a>>) -> Element<'a> {
-    let ui_model_ref = cx.props.ui_model_ref.clone();
-    let error = use_state(cx, || None::<anyhow::Error>);
+pub fn Authenticated(
+    authentication_config: FrontAuthenticationConfig,
+    api_base_url: Url,
+    mut ui_model: Signal<UniversalInboxUIModel>,
+    children: Element,
+) -> Element {
+    let mut error = use_signal(|| None::<anyhow::Error>);
     let current_url = current_location().unwrap();
-    let api_base_url = &cx.props.api_base_url;
-    let nav = use_navigator(cx);
+    let nav = use_navigator();
     let history = WebHistory::<Route>::default();
     // Workaround for Dioxus 0.4.1 bug: https://github.com/DioxusLabs/dioxus/issues/1511
     let local_storage = get_local_storage().unwrap();
     let auth_code = if let FrontAuthenticationConfig::OIDCAuthorizationCodePKCEFlow {
         oidc_redirect_url,
         ..
-    } = &cx.props.authentication_config
+    } = &authentication_config
     {
         if current_url.path() == oidc_redirect_url.path() {
             local_storage
@@ -78,22 +75,19 @@ pub fn Authenticated<'a>(cx: Scope<'a, AuthenticatedProps<'a>>) -> Element<'a> {
 
     // If we are on the authentication redirection URL with an authentication code,
     // we should exchange it for an access token and authentication state is not unknown anymore
-    if auth_code.is_some()
-        && ui_model_ref.read().authentication_state == AuthenticationState::Unknown
-    {
-        ui_model_ref.write_silent().authentication_state = AuthenticationState::FetchingAccessToken;
+    if auth_code.is_some() && ui_model.read().authentication_state == AuthenticationState::Unknown {
+        ui_model.write().authentication_state = AuthenticationState::FetchingAccessToken;
     }
-    let authentication_state = ui_model_ref.read().authentication_state.clone();
+    let authentication_state = ui_model.read().authentication_state.clone();
 
-    use_future(cx, &authentication_state, |_| {
-        to_owned![ui_model_ref];
+    let auth_config = authentication_config.clone();
+    let _ = use_resource(move || {
         to_owned![auth_code];
+        to_owned![auth_config];
         to_owned![api_base_url];
-        to_owned![cx.props.authentication_config];
-        to_owned![error];
 
         async move {
-            let authentication_state = ui_model_ref.read().authentication_state.clone();
+            let authentication_state = ui_model.read().authentication_state.clone();
             if authentication_state == AuthenticationState::Authenticated
                 || authentication_state == AuthenticationState::Unknown
             {
@@ -101,7 +95,7 @@ pub fn Authenticated<'a>(cx: Scope<'a, AuthenticatedProps<'a>>) -> Element<'a> {
                 return;
             }
 
-            match &authentication_config {
+            match auth_config {
                 FrontAuthenticationConfig::OIDCAuthorizationCodePKCEFlow {
                     oidc_issuer_url,
                     oidc_client_id,
@@ -109,23 +103,23 @@ pub fn Authenticated<'a>(cx: Scope<'a, AuthenticatedProps<'a>>) -> Element<'a> {
                     ..
                 } => {
                     if let Err(auth_error) = authenticate_pkce_flow(
-                        ui_model_ref,
+                        ui_model,
                         &api_base_url,
                         auth_code,
-                        oidc_issuer_url,
-                        oidc_client_id,
-                        oidc_redirect_url,
+                        &oidc_issuer_url,
+                        &oidc_client_id,
+                        &oidc_redirect_url,
                     )
                     .await
                     {
-                        error.set(Some(auth_error));
+                        *error.write() = Some(auth_error);
                     }
                 }
                 FrontAuthenticationConfig::OIDCGoogleAuthorizationCodeFlow { .. } => {
                     if let Err(auth_error) =
-                        authenticate_authorization_code_flow(ui_model_ref, &api_base_url).await
+                        authenticate_authorization_code_flow(ui_model, &api_base_url).await
                     {
-                        error.set(Some(auth_error));
+                        *error.write() = Some(auth_error);
                     }
                 }
                 FrontAuthenticationConfig::Local => {}
@@ -133,9 +127,9 @@ pub fn Authenticated<'a>(cx: Scope<'a, AuthenticatedProps<'a>>) -> Element<'a> {
         }
     });
 
-    if let Some(error) = error.current().as_ref() {
+    if let Some(error) = &*error.read() {
         error!("An error occured while authenticating: {:?}", error);
-        return render! {
+        return rsx! {
             "The authentication has failed, please contact the support"
         };
     }
@@ -146,46 +140,48 @@ pub fn Authenticated<'a>(cx: Scope<'a, AuthenticatedProps<'a>>) -> Element<'a> {
             if let FrontAuthenticationConfig::OIDCAuthorizationCodePKCEFlow {
                 oidc_redirect_url,
                 ..
-            } = &cx.props.authentication_config
+            } = &authentication_config
             {
                 if current_url.path() == oidc_redirect_url.path() {
                     debug!("auth: Authenticated, redirecting to /");
-                    cx.needs_update();
+                    needs_update();
                     nav.replace(Route::NotificationsPage {});
                     return None;
                 }
             }
-            render!(&cx.props.children)
+            rsx! { { children } }
         }
         AuthenticationState::Unknown => {
-            render!(&cx.props.children)
+            rsx! { { children } }
         }
         value => {
-            if cx.props.authentication_config == FrontAuthenticationConfig::Local {
+            if authentication_config == FrontAuthenticationConfig::Local {
                 if history.current_route() != (Route::LoginPage {})
                     && history.current_route() != (Route::SignupPage {})
                     && history.current_route() != (Route::PasswordResetPage {})
                 {
                     nav.replace(Route::LoginPage {});
-                    cx.needs_update();
+                    needs_update();
                     None
                 } else {
-                    render! { Outlet::<Route> {} }
+                    rsx! { Outlet::<Route> {} }
                 }
             } else {
-                render!(div {
-                    class: "h-full flex justify-center items-center overflow-hidden",
+                rsx! {
+                    div {
+                        class: "h-full flex justify-center items-center overflow-hidden",
 
-                    Spinner {}
-                    "{value.label()}"
-                })
+                        Spinner {}
+                        "{value.label()}"
+                    }
+                }
             }
         }
     }
 }
 
 async fn authenticate_authorization_code_flow(
-    ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
+    mut ui_model: Signal<UniversalInboxUIModel>,
     api_base_url: &Url,
 ) -> Result<()> {
     debug!("auth: Authenticating with Authorization code flow (server flow)");
@@ -193,8 +189,7 @@ async fn authenticate_authorization_code_flow(
     let auth_url = get_authorization_code_flow_auth_url(api_base_url)
         .await?
         .to_string();
-    ui_model_ref.write_silent().authentication_state =
-        AuthenticationState::RedirectingToAuthProvider;
+    ui_model.write().authentication_state = AuthenticationState::RedirectingToAuthProvider;
     debug!("auth: Redirecting to auth provider: {auth_url}");
     redirect_to(&auth_url)
 }
@@ -204,7 +199,7 @@ async fn authenticate_authorization_code_flow(
 // - if called on the auth callback URL with a `code` query parameter, fetch the access token and create
 // an authenticated session against the API
 async fn authenticate_pkce_flow(
-    ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
+    mut ui_model: Signal<UniversalInboxUIModel>,
     api_base_url: &Url,
     auth_code: Option<String>,
     issuer_url: &Url,
@@ -222,20 +217,13 @@ async fn authenticate_pkce_flow(
 
     if let Some(auth_code) = auth_code {
         // We are on the auth callback URL with a code from the auth provider, so we can fetch the access token
-        ui_model_ref.write_silent().authentication_state = AuthenticationState::FetchingAccessToken;
+        ui_model.write().authentication_state = AuthenticationState::FetchingAccessToken;
         let (access_token, auth_id_token) =
             fetch_access_token(oidc_provider, AuthorizationCode::new(auth_code)).await?;
-        create_authenticated_session(
-            api_base_url,
-            &access_token,
-            &auth_id_token,
-            ui_model_ref.clone(),
-        )
-        .await
+        create_authenticated_session(api_base_url, &access_token, &auth_id_token, ui_model).await
     } else {
         debug!("auth: Not authenticated, redirecting to login");
-        ui_model_ref.write_silent().authentication_state =
-            AuthenticationState::RedirectingToAuthProvider;
+        ui_model.write().authentication_state = AuthenticationState::RedirectingToAuthProvider;
         // let auth_url = build_auth_url(client).await?.to_string();
         let auth_url = build_auth_url(oidc_provider).await?.to_string();
         debug!("auth: Redirecting to auth provider: {auth_url}");
@@ -323,13 +311,13 @@ async fn create_authenticated_session(
     api_base_url: &Url,
     access_token: &AccessToken,
     auth_id_token: &AuthIdToken,
-    ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
+    mut ui_model: Signal<UniversalInboxUIModel>,
 ) -> Result<()> {
     debug!("auth: Creating authenticated session");
-    ui_model_ref.write_silent().authentication_state = AuthenticationState::VerifyingAccessToken;
+    ui_model.write().authentication_state = AuthenticationState::VerifyingAccessToken;
     let is_authenticated =
         is_session_authenticated(api_base_url, access_token, auth_id_token).await?;
-    ui_model_ref.write().authentication_state = if is_authenticated {
+    ui_model.write().authentication_state = if is_authenticated {
         AuthenticationState::Authenticated
     } else {
         AuthenticationState::NotAuthenticated

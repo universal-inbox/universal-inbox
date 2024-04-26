@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Context, Result};
 use dioxus::prelude::*;
-use fermi::{AtomRef, UseAtomRef};
+
 use futures_util::StreamExt;
 use log::{debug, error};
 use reqwest::Method;
@@ -35,17 +35,19 @@ pub enum IntegrationConnectionCommand {
     ReconnectIntegrationConnection(IntegrationConnection),
 }
 
-pub static INTEGRATION_CONNECTIONS: AtomRef<Option<Vec<IntegrationConnection>>> = AtomRef(|_| None);
-pub static TASK_SERVICE_INTEGRATION_CONNECTION: AtomRef<LoadState<Option<IntegrationConnection>>> =
-    AtomRef(|_| LoadState::None);
+pub static INTEGRATION_CONNECTIONS: GlobalSignal<Option<Vec<IntegrationConnection>>> =
+    Signal::global(|| None);
+pub static TASK_SERVICE_INTEGRATION_CONNECTION: GlobalSignal<
+    LoadState<Option<IntegrationConnection>>,
+> = Signal::global(|| LoadState::None);
 
 #[allow(clippy::too_many_arguments)]
-pub async fn integration_connnection_service<'a>(
+pub async fn integration_connnection_service(
     mut rx: UnboundedReceiver<IntegrationConnectionCommand>,
-    app_config_ref: UseAtomRef<Option<AppConfig>>,
-    integration_connections_ref: UseAtomRef<Option<Vec<IntegrationConnection>>>,
-    task_service_integration_connection_ref: UseAtomRef<LoadState<Option<IntegrationConnection>>>,
-    ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
+    app_config: ReadOnlySignal<Option<AppConfig>>,
+    integration_connections: Signal<Option<Vec<IntegrationConnection>>>,
+    task_service_integration_connection: Signal<LoadState<Option<IntegrationConnection>>>,
+    ui_model: Signal<UniversalInboxUIModel>,
     toast_service: Coroutine<ToastCommand>,
     notification_service: Coroutine<NotificationCommand>,
     task_service: Coroutine<TaskCommand>,
@@ -55,10 +57,10 @@ pub async fn integration_connnection_service<'a>(
         match msg {
             Some(IntegrationConnectionCommand::Refresh) => {
                 if let Err(error) = refresh_integration_connection(
-                    &integration_connections_ref,
-                    &task_service_integration_connection_ref,
-                    &app_config_ref,
-                    &ui_model_ref,
+                    integration_connections,
+                    task_service_integration_connection,
+                    app_config,
+                    ui_model,
                 )
                 .await
                 {
@@ -70,10 +72,10 @@ pub async fn integration_connnection_service<'a>(
             )) => {
                 match create_integration_connection(
                     integration_provider_kind,
-                    &integration_connections_ref,
-                    &task_service_integration_connection_ref,
-                    &app_config_ref,
-                    &ui_model_ref,
+                    integration_connections,
+                    task_service_integration_connection,
+                    app_config,
+                    ui_model,
                 )
                 .await
                 {
@@ -100,10 +102,10 @@ pub async fn integration_connnection_service<'a>(
                 match update_integration_connection_config(
                     integration_connection.id,
                     config,
-                    &integration_connections_ref,
-                    &task_service_integration_connection_ref,
-                    &app_config_ref,
-                    &ui_model_ref,
+                    integration_connections,
+                    task_service_integration_connection,
+                    app_config,
+                    ui_model,
                 )
                 .await
                 {
@@ -134,10 +136,10 @@ pub async fn integration_connnection_service<'a>(
             )) => {
                 match authenticate_integration_connection(
                     &integration_connection,
-                    &integration_connections_ref,
-                    &task_service_integration_connection_ref,
-                    &app_config_ref,
-                    &ui_model_ref,
+                    integration_connections,
+                    task_service_integration_connection,
+                    app_config,
+                    ui_model,
                 )
                 .await
                 {
@@ -167,10 +169,10 @@ pub async fn integration_connnection_service<'a>(
             )) => {
                 let _result = disconnect_integration_connection(
                     integration_connection_id,
-                    &integration_connections_ref,
-                    &task_service_integration_connection_ref,
-                    &app_config_ref,
-                    &ui_model_ref,
+                    integration_connections,
+                    task_service_integration_connection,
+                    app_config,
+                    ui_model,
                 )
                 .await;
             }
@@ -179,10 +181,10 @@ pub async fn integration_connnection_service<'a>(
             )) => {
                 match reconnect_integration_connection(
                     &integration_connection,
-                    &integration_connections_ref,
-                    &task_service_integration_connection_ref,
-                    &app_config_ref,
-                    &ui_model_ref,
+                    integration_connections,
+                    task_service_integration_connection,
+                    app_config,
+                    ui_model,
                 )
                 .await
                 {
@@ -213,12 +215,12 @@ pub async fn integration_connnection_service<'a>(
 }
 
 async fn refresh_integration_connection(
-    integration_connections_ref: &UseAtomRef<Option<Vec<IntegrationConnection>>>,
-    task_service_integration_connection_ref: &UseAtomRef<LoadState<Option<IntegrationConnection>>>,
-    app_config_ref: &UseAtomRef<Option<AppConfig>>,
-    ui_model_ref: &UseAtomRef<UniversalInboxUIModel>,
+    mut integration_connections: Signal<Option<Vec<IntegrationConnection>>>,
+    mut task_service_integration_connection_ref: Signal<LoadState<Option<IntegrationConnection>>>,
+    app_config: ReadOnlySignal<Option<AppConfig>>,
+    mut ui_model: Signal<UniversalInboxUIModel>,
 ) -> Result<()> {
-    let api_base_url = get_api_base_url(app_config_ref)?;
+    let api_base_url = get_api_base_url(app_config)?;
 
     let new_integration_connections: Vec<IntegrationConnection> = call_api(
         Method::GET,
@@ -226,32 +228,30 @@ async fn refresh_integration_connection(
         "integration-connections",
         // random type as we don't care about the body's type
         None::<i32>,
-        Some(ui_model_ref.clone()),
+        Some(ui_model),
     )
     .await?;
 
     let task_service_integration_connection = new_integration_connections
         .iter()
         .find(|c| c.is_connected_task_service());
-    ui_model_ref.write().is_task_actions_enabled = task_service_integration_connection.is_some();
+    ui_model.write().is_task_actions_enabled = task_service_integration_connection.is_some();
     *task_service_integration_connection_ref.write() =
         LoadState::Loaded(task_service_integration_connection.cloned());
 
-    integration_connections_ref
-        .write()
-        .replace(new_integration_connections);
+    *integration_connections.write() = Some(new_integration_connections);
 
     Ok(())
 }
 
 async fn create_integration_connection(
     integration_provider_kind: IntegrationProviderKind,
-    integration_connections_ref: &UseAtomRef<Option<Vec<IntegrationConnection>>>,
-    task_service_integration_connection_ref: &UseAtomRef<LoadState<Option<IntegrationConnection>>>,
-    app_config_ref: &UseAtomRef<Option<AppConfig>>,
-    ui_model_ref: &UseAtomRef<UniversalInboxUIModel>,
+    mut integration_connections: Signal<Option<Vec<IntegrationConnection>>>,
+    task_service_integration_connection: Signal<LoadState<Option<IntegrationConnection>>>,
+    app_config: ReadOnlySignal<Option<AppConfig>>,
+    ui_model: Signal<UniversalInboxUIModel>,
 ) -> Result<IntegrationConnection> {
-    let api_base_url = get_api_base_url(app_config_ref)?;
+    let api_base_url = get_api_base_url(app_config)?;
 
     debug!("Creating new integration connection for {integration_provider_kind}");
     let new_connection: IntegrationConnection = call_api(
@@ -261,12 +261,12 @@ async fn create_integration_connection(
         Some(IntegrationConnectionCreation {
             provider_kind: integration_provider_kind,
         }),
-        Some(ui_model_ref.clone()),
+        Some(ui_model),
     )
     .await?;
 
     {
-        let mut integration_connections = integration_connections_ref.write();
+        let mut integration_connections = integration_connections.write();
         if let Some(integration_connections) = integration_connections.as_mut() {
             integration_connections.push(new_connection.clone());
         } else {
@@ -276,24 +276,24 @@ async fn create_integration_connection(
 
     authenticate_integration_connection(
         &new_connection,
-        integration_connections_ref,
-        task_service_integration_connection_ref,
-        app_config_ref,
-        ui_model_ref,
+        integration_connections,
+        task_service_integration_connection,
+        app_config,
+        ui_model,
     )
     .await
 }
 
 async fn authenticate_integration_connection(
     integration_connection: &IntegrationConnection,
-    integration_connections_ref: &UseAtomRef<Option<Vec<IntegrationConnection>>>,
-    task_service_integration_connection_ref: &UseAtomRef<LoadState<Option<IntegrationConnection>>>,
-    app_config_ref: &UseAtomRef<Option<AppConfig>>,
-    ui_model_ref: &UseAtomRef<UniversalInboxUIModel>,
+    integration_connections: Signal<Option<Vec<IntegrationConnection>>>,
+    task_service_integration_connection: Signal<LoadState<Option<IntegrationConnection>>>,
+    app_config: ReadOnlySignal<Option<AppConfig>>,
+    ui_model: Signal<UniversalInboxUIModel>,
 ) -> Result<IntegrationConnection> {
     let provider_kind = integration_connection.provider.kind();
     let (nango_base_url, nango_public_key, provider_config) =
-        get_configs(app_config_ref, provider_kind)?;
+        get_configs(app_config, provider_kind)?;
 
     debug!(
         "Authenticating integration_connection {} for {provider_kind}",
@@ -310,22 +310,22 @@ async fn authenticate_integration_connection(
 
     verify_integration_connection(
         integration_connection.id,
-        integration_connections_ref,
-        task_service_integration_connection_ref,
-        app_config_ref,
-        ui_model_ref,
+        integration_connections,
+        task_service_integration_connection,
+        app_config,
+        ui_model,
     )
     .await
 }
 
 async fn verify_integration_connection(
     integration_connection_id: IntegrationConnectionId,
-    integration_connections_ref: &UseAtomRef<Option<Vec<IntegrationConnection>>>,
-    task_service_integration_connection_ref: &UseAtomRef<LoadState<Option<IntegrationConnection>>>,
-    app_config_ref: &UseAtomRef<Option<AppConfig>>,
-    ui_model_ref: &UseAtomRef<UniversalInboxUIModel>,
+    integration_connections: Signal<Option<Vec<IntegrationConnection>>>,
+    task_service_integration_connection: Signal<LoadState<Option<IntegrationConnection>>>,
+    app_config: ReadOnlySignal<Option<AppConfig>>,
+    ui_model: Signal<UniversalInboxUIModel>,
 ) -> Result<IntegrationConnection> {
-    let api_base_url = get_api_base_url(app_config_ref)?;
+    let api_base_url = get_api_base_url(app_config)?;
 
     debug!("Verifying integration connection {integration_connection_id}");
     let result: IntegrationConnection = call_api(
@@ -334,7 +334,7 @@ async fn verify_integration_connection(
         &format!("integration-connections/{integration_connection_id}/status"),
         // random type as we don't care about the body's type
         None::<i32>,
-        Some(ui_model_ref.clone()),
+        Some(ui_model),
     )
     .await?;
 
@@ -342,14 +342,14 @@ async fn verify_integration_connection(
         result.id,
         result.status,
         result.failure_message.clone(),
-        integration_connections_ref,
+        integration_connections,
     );
 
     refresh_integration_connection(
-        integration_connections_ref,
-        task_service_integration_connection_ref,
-        app_config_ref,
-        ui_model_ref,
+        integration_connections,
+        task_service_integration_connection,
+        app_config,
+        ui_model,
     )
     .await?;
 
@@ -358,12 +358,12 @@ async fn verify_integration_connection(
 
 async fn disconnect_integration_connection(
     integration_connection_id: IntegrationConnectionId,
-    integration_connections_ref: &UseAtomRef<Option<Vec<IntegrationConnection>>>,
-    task_service_integration_connection_ref: &UseAtomRef<LoadState<Option<IntegrationConnection>>>,
-    app_config_ref: &UseAtomRef<Option<AppConfig>>,
-    ui_model_ref: &UseAtomRef<UniversalInboxUIModel>,
+    integration_connections: Signal<Option<Vec<IntegrationConnection>>>,
+    task_service_integration_connection: Signal<LoadState<Option<IntegrationConnection>>>,
+    app_config: ReadOnlySignal<Option<AppConfig>>,
+    ui_model: Signal<UniversalInboxUIModel>,
 ) -> Result<()> {
-    let api_base_url = get_api_base_url(app_config_ref)?;
+    let api_base_url = get_api_base_url(app_config)?;
 
     debug!("Disconnecting integration connection {integration_connection_id}");
     let result: IntegrationConnection = call_api(
@@ -372,7 +372,7 @@ async fn disconnect_integration_connection(
         &format!("integration-connections/{integration_connection_id}"),
         // random type as we don't care about the body's type
         None::<i32>,
-        Some(ui_model_ref.clone()),
+        Some(ui_model),
     )
     .await?;
 
@@ -380,40 +380,40 @@ async fn disconnect_integration_connection(
         result.id,
         result.status,
         result.failure_message,
-        integration_connections_ref,
+        integration_connections,
     );
 
     refresh_integration_connection(
-        integration_connections_ref,
-        task_service_integration_connection_ref,
-        app_config_ref,
-        ui_model_ref,
+        integration_connections,
+        task_service_integration_connection,
+        app_config,
+        ui_model,
     )
     .await
 }
 
 async fn reconnect_integration_connection(
     integration_connection: &IntegrationConnection,
-    integration_connections_ref: &UseAtomRef<Option<Vec<IntegrationConnection>>>,
-    task_service_integration_connection_ref: &UseAtomRef<LoadState<Option<IntegrationConnection>>>,
-    app_config_ref: &UseAtomRef<Option<AppConfig>>,
-    ui_model_ref: &UseAtomRef<UniversalInboxUIModel>,
+    integration_connections: Signal<Option<Vec<IntegrationConnection>>>,
+    task_service_integration_connection: Signal<LoadState<Option<IntegrationConnection>>>,
+    app_config: ReadOnlySignal<Option<AppConfig>>,
+    ui_model: Signal<UniversalInboxUIModel>,
 ) -> Result<IntegrationConnection> {
     disconnect_integration_connection(
         integration_connection.id,
-        integration_connections_ref,
-        task_service_integration_connection_ref,
-        app_config_ref,
-        ui_model_ref,
+        integration_connections,
+        task_service_integration_connection,
+        app_config,
+        ui_model,
     )
     .await?;
 
     authenticate_integration_connection(
         integration_connection,
-        integration_connections_ref,
-        task_service_integration_connection_ref,
-        app_config_ref,
-        ui_model_ref,
+        integration_connections,
+        task_service_integration_connection,
+        app_config,
+        ui_model,
     )
     .await
 }
@@ -422,10 +422,10 @@ fn update_integration_connection_status(
     integration_connection_id: IntegrationConnectionId,
     status: IntegrationConnectionStatus,
     failure_message: Option<String>,
-    integration_connections_ref: &UseAtomRef<Option<Vec<IntegrationConnection>>>,
+    mut integration_connections: Signal<Option<Vec<IntegrationConnection>>>,
 ) {
     debug!("Updating integration connection {integration_connection_id} status with {status}");
-    if let Some(integration_connections) = integration_connections_ref.write().as_mut() {
+    if let Some(integration_connections) = integration_connections.write().as_mut() {
         if let Some(integration_connection) = integration_connections
             .iter_mut()
             .find(|integration_connection| integration_connection.id == integration_connection_id)
@@ -452,10 +452,10 @@ fn sync_integration_connection(
 }
 
 fn get_configs(
-    app_config_ref: &UseAtomRef<Option<AppConfig>>,
+    app_config: ReadOnlySignal<Option<AppConfig>>,
     integration_provider_kind: IntegrationProviderKind,
 ) -> Result<(Url, NangoPublicKey, IntegrationProviderStaticConfig)> {
-    if let Some(app_config) = app_config_ref.read().as_ref() {
+    if let Some(app_config) = app_config.read().as_ref() {
         Ok((
             app_config.nango_base_url.clone(),
             app_config.nango_public_key.clone(),
@@ -472,8 +472,8 @@ fn get_configs(
     }
 }
 
-fn get_api_base_url(app_config_ref: &UseAtomRef<Option<AppConfig>>) -> Result<Url> {
-    if let Some(app_config) = app_config_ref.read().as_ref() {
+fn get_api_base_url(app_config: ReadOnlySignal<Option<AppConfig>>) -> Result<Url> {
+    if let Some(app_config) = app_config.read().as_ref() {
         Ok(app_config.api_base_url.clone())
     } else {
         Err(anyhow!("Application not yet loaded, it is unexpected."))
@@ -483,12 +483,12 @@ fn get_api_base_url(app_config_ref: &UseAtomRef<Option<AppConfig>>) -> Result<Ur
 async fn update_integration_connection_config(
     integration_connection_id: IntegrationConnectionId,
     config: IntegrationConnectionConfig,
-    integration_connections_ref: &UseAtomRef<Option<Vec<IntegrationConnection>>>,
-    task_service_integration_connection_ref: &UseAtomRef<LoadState<Option<IntegrationConnection>>>,
-    app_config_ref: &UseAtomRef<Option<AppConfig>>,
-    ui_model_ref: &UseAtomRef<UniversalInboxUIModel>,
+    integration_connections: Signal<Option<Vec<IntegrationConnection>>>,
+    task_service_integration_connection: Signal<LoadState<Option<IntegrationConnection>>>,
+    app_config: ReadOnlySignal<Option<AppConfig>>,
+    ui_model: Signal<UniversalInboxUIModel>,
 ) -> Result<()> {
-    let api_base_url = get_api_base_url(app_config_ref)?;
+    let api_base_url = get_api_base_url(app_config)?;
 
     debug!("Updating integration connection {integration_connection_id} configuration: {config:?}");
     let _: IntegrationConnectionConfig = call_api(
@@ -496,15 +496,15 @@ async fn update_integration_connection_config(
         &api_base_url,
         &format!("integration-connections/{integration_connection_id}/config"),
         Some(config),
-        Some(ui_model_ref.clone()),
+        Some(ui_model),
     )
     .await?;
 
     refresh_integration_connection(
-        integration_connections_ref,
-        task_service_integration_connection_ref,
-        app_config_ref,
-        ui_model_ref,
+        integration_connections,
+        task_service_integration_connection,
+        app_config,
+        ui_model,
     )
     .await?;
 

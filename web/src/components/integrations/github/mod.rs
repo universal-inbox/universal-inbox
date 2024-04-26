@@ -14,13 +14,12 @@ pub mod notification;
 pub mod preview;
 
 #[component]
-pub fn GithubActorDisplay<'a>(
-    cx: Scope,
-    actor: &'a GithubActor,
+pub fn GithubActorDisplay(
+    actor: ReadOnlySignal<GithubActor>,
     display_name: Option<bool>,
 ) -> Element {
     let display_name = display_name.unwrap_or_default();
-    let (actor_display_name, actor_avatar_url) = match actor {
+    let (actor_display_name, actor_avatar_url) = match actor() {
         GithubActor::User(GithubUserSummary {
             name,
             avatar_url,
@@ -31,7 +30,7 @@ pub fn GithubActorDisplay<'a>(
         }) => (login.clone(), avatar_url.clone()),
     };
 
-    render! {
+    rsx! {
         UserWithAvatar {
             user_name: actor_display_name.clone(),
             avatar_url: Some(actor_avatar_url),
