@@ -2,7 +2,7 @@ use log::error;
 
 use dioxus::prelude::*;
 use dioxus_free_icons::{icons::bs_icons::BsX, Icon};
-use fermi::UseAtomRef;
+
 use gloo_timers::future::TimeoutFuture;
 use reqwest::Method;
 use url::Url;
@@ -23,34 +23,26 @@ use crate::{
 use super::floating_label_inputs::Searchable;
 
 #[component]
-pub fn TaskLinkModal<'a>(
-    cx: Scope,
-    api_base_url: Url,
-    notification_to_link: NotificationWithTask,
-    ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
-    on_close: EventHandler<'a, ()>,
-    on_task_link: EventHandler<'a, TaskId>,
+pub fn TaskLinkModal(
+    api_base_url: ReadOnlySignal<Url>,
+    notification_to_link: ReadOnlySignal<NotificationWithTask>,
+    ui_model: Signal<UniversalInboxUIModel>,
+    on_close: EventHandler<()>,
+    on_task_link: EventHandler<TaskId>,
 ) -> Element {
-    let selected_task: &UseState<Option<TaskSummary>> = use_state(cx, || None);
-    let search_expression = use_state(cx, || "".to_string());
-    let search_results: &UseState<Vec<TaskSummary>> = use_state(cx, Vec::new);
+    let selected_task: Signal<Option<TaskSummary>> = use_signal(|| None);
+    let search_expression = use_signal(|| "".to_string());
+    let mut search_results: Signal<Vec<TaskSummary>> = use_signal(Vec::new);
 
-    use_future(cx, &search_expression.clone(), |search_expression| {
-        to_owned![search_results];
-        to_owned![api_base_url];
-        to_owned![ui_model_ref];
-
-        async move {
-            if search_expression.len() > 2 {
-                TimeoutFuture::new(500).await;
-                search_results.set(
-                    search_tasks(&api_base_url, &search_expression.current(), ui_model_ref).await,
-                );
-            }
+    let _ = use_resource(move || async move {
+        if search_expression().len() > 2 {
+            TimeoutFuture::new(500).await;
+            *search_results.write() =
+                search_tasks(&api_base_url(), &search_expression(), ui_model).await;
         }
     });
 
-    render! {
+    rsx! {
         dialog {
             id: "task-link-modal",
             tabindex: "-1",
@@ -79,8 +71,8 @@ pub fn TaskLinkModal<'a>(
                     form {
                         class: "flex flex-col space-y-4 relative",
                         method: "dialog",
-                        onsubmit: |_| {
-                            if let Some(task) = &*selected_task.current() {
+                        onsubmit: move |_| {
+                            if let Some(task) = selected_task() {
                                 on_task_link.call(task.id);
                             }
                         },
@@ -89,12 +81,12 @@ pub fn TaskLinkModal<'a>(
                             class: "flex flex-none items-center",
                             div {
                                 class: "block py-2 px-4 bg-transparent",
-                                NotificationMetadataIcon { class: "h-5 w-5", notification_metadata: &notification_to_link.metadata }
+                                NotificationMetadataIcon { class: "h-5 w-5", notification_metadata: notification_to_link().metadata }
                             }
                             div {
                                 id: "notification-to-link",
                                 class: "grow truncate block",
-                                "{notification_to_link.title}"
+                                "{notification_to_link().title}"
                             }
                             label {
                                 "for": "notification-to-link",
@@ -105,13 +97,13 @@ pub fn TaskLinkModal<'a>(
 
                         FloatingLabelInputSearchSelect {
                             name: "task-search-input".to_string(),
-                            label: Some("with"),
-                            value: selected_task.clone(),
-                            search_expression: search_expression.clone(),
-                            search_results: search_results.clone(),
+                            label: Some("with".to_string()),
+                            value: selected_task,
+                            search_expression: search_expression,
+                            search_results: search_results,
                             autofocus: true,
                             on_select: |_task| {
-                                cx.spawn({
+                                spawn({
                                     async move {
                                         if let Err(error) = focus_element("task-modal-link-submit").await {
                                             error!("Error focusing element task-modal-link-submit: {error:?}");
@@ -146,14 +138,14 @@ pub fn TaskLinkModal<'a>(
 async fn search_tasks(
     api_base_url: &Url,
     search: &str,
-    ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
+    ui_model: Signal<UniversalInboxUIModel>,
 ) -> Vec<TaskSummary> {
     let search_result = call_api(
         Method::GET,
         api_base_url,
         &format!("tasks/search?matches={search}"),
         None::<i32>,
-        Some(ui_model_ref),
+        Some(ui_model),
     )
     .await;
 

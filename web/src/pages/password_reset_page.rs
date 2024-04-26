@@ -1,7 +1,6 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
-use dioxus_router::prelude::*;
 use email_address::EmailAddress;
 use log::error;
 
@@ -10,12 +9,12 @@ use crate::{
     services::user_service::UserCommand,
 };
 
-pub fn PasswordResetPage(cx: Scope) -> Element {
-    let user_service = use_coroutine_handle::<UserCommand>(cx).unwrap();
-    let email = use_state(cx, || "".to_string());
-    let force_validation = use_state(cx, || false);
+pub fn PasswordResetPage() -> Element {
+    let user_service = use_coroutine_handle::<UserCommand>();
+    let email = use_signal(|| "".to_string());
+    let mut force_validation = use_signal(|| false);
 
-    render! {
+    rsx! {
         div {
             class: "flex flex-col items-center justify-center pb-8",
             h1 {
@@ -26,13 +25,13 @@ pub fn PasswordResetPage(cx: Scope) -> Element {
 
         form {
             class: "flex flex-col justify-center gap-4 px-10 pb-8",
-            onsubmit: |evt| {
-                match FormValues(evt.values.clone()).try_into() {
+            onsubmit: move |evt| {
+                match FormValues(evt.values()).try_into() {
                     Ok(email_address) => {
                         user_service.send(UserCommand::SendPasswordResetEmail(email_address));
                     },
                     Err(err) => {
-                        force_validation.set(true);
+                        *force_validation.write() = true;
                         error!("Failed to parse form values as EmailAddress: {err}");
                     }
                 }
@@ -40,11 +39,11 @@ pub fn PasswordResetPage(cx: Scope) -> Element {
 
             FloatingLabelInputText::<EmailAddress> {
                 name: "email".to_string(),
-                label: Some("Email"),
+                label: Some("Email".to_string()),
                 required: true,
-                value: email.clone(),
+                value: email,
                 autofocus: true,
-                force_validation: *force_validation.current(),
+                force_validation: force_validation(),
                 r#type: "email".to_string()
             }
 

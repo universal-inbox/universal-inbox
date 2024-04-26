@@ -130,6 +130,10 @@ pub async fn tested_app(
     #[future] redis_storage: RedisStorage<UniversalInboxJob>,
 ) -> TestedApp {
     info!("Setting up server");
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install rustls crypto provider");
+
     let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
     let port = listener.local_addr().unwrap().port();
 
@@ -256,6 +260,10 @@ pub async fn tested_app_with_local_auth(
     #[future] redis_storage: RedisStorage<UniversalInboxJob>,
 ) -> TestedApp {
     info!("Setting up server");
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install rustls crypto provider");
+
     let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
     let port = listener.local_addr().unwrap().port();
 

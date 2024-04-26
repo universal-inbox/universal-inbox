@@ -16,14 +16,13 @@ pub mod notification;
 pub mod preview;
 
 #[component]
-pub fn SlackMessageActorDisplay<'a>(
-    cx: Scope,
-    slack_message: &'a SlackMessageDetails,
+pub fn SlackMessageActorDisplay(
+    slack_message: ReadOnlySignal<SlackMessageDetails>,
     display_name: Option<bool>,
 ) -> Element {
     let display_name = display_name.unwrap_or_default();
-    let (user_name, user_avatar) = match &slack_message.sender {
-        SlackMessageSenderDetails::User(user) => get_user_name_and_avatar(user),
+    let (user_name, user_avatar) = match slack_message().sender {
+        SlackMessageSenderDetails::User(user) => get_user_name_and_avatar(&user),
         SlackMessageSenderDetails::Bot(bot) => {
             let avatar_url = bot.icons.as_ref().and_then(|icons| {
                 icons.resolutions.iter().find_map(|res| {
@@ -38,7 +37,7 @@ pub fn SlackMessageActorDisplay<'a>(
         }
     };
 
-    render! {
+    rsx! {
         UserWithAvatar {
             user_name: user_name,
             avatar_url: user_avatar,
@@ -48,11 +47,11 @@ pub fn SlackMessageActorDisplay<'a>(
 }
 
 #[component]
-pub fn SlackUserDisplay<'a>(cx: Scope, user: &'a SlackUser, display_name: Option<bool>) -> Element {
+pub fn SlackUserDisplay(user: ReadOnlySignal<SlackUser>, display_name: Option<bool>) -> Element {
     let display_name = display_name.unwrap_or_default();
-    let (user_name, user_avatar) = get_user_name_and_avatar(user);
+    let (user_name, user_avatar) = get_user_name_and_avatar(&user());
 
-    render! {
+    rsx! {
         UserWithAvatar {
             user_name: user_name,
             avatar_url: user_avatar,
@@ -62,10 +61,10 @@ pub fn SlackUserDisplay<'a>(cx: Scope, user: &'a SlackUser, display_name: Option
 }
 
 #[component]
-pub fn SlackTeamDisplay<'a>(cx: Scope, team: &'a SlackTeamInfo) -> Element {
-    let (team_name, team_avatar) = get_team_name_and_avatar(team);
+pub fn SlackTeamDisplay(team: ReadOnlySignal<SlackTeamInfo>) -> Element {
+    let (team_name, team_avatar) = get_team_name_and_avatar(&team());
 
-    render! {
+    rsx! {
         UserWithAvatar {
             user_name: team_name,
             avatar_url: team_avatar,

@@ -18,9 +18,8 @@ use universal_inbox::notification::{
 use crate::components::integrations::google_mail::icons::Mail;
 
 #[component]
-pub fn GoogleMailThreadDisplay<'a>(
-    cx: Scope,
-    notif: &'a NotificationWithTask,
+pub fn GoogleMailThreadDisplay(
+    notif: ReadOnlySignal<NotificationWithTask>,
     google_mail_thread: GoogleMailThread,
 ) -> Element {
     let is_starred = google_mail_thread.is_tagged_with(GOOGLE_MAIL_STARRED_LABEL, None);
@@ -42,7 +41,7 @@ pub fn GoogleMailThreadDisplay<'a>(
         _ => "",
     };
 
-    render! {
+    rsx! {
         div {
             class: "flex items-center gap-2",
 
@@ -51,12 +50,12 @@ pub fn GoogleMailThreadDisplay<'a>(
             div {
                 class: "flex flex-col grow",
 
-                span { class: "mx-0.5", "{notif.title}" }
+                span { class: "mx-0.5", "{notif().title}" }
                 div {
                     class: "flex gap-2",
 
                     if let Some(from_address) = from_address {
-                        render! { span { class: "text-xs text-gray-400", "{from_address}" } }
+                        span { class: "text-xs text-gray-400", "{from_address}" }
                     }
                     span { class: "text-xs text-gray-400", "({interlocutors_count})" }
                 }
@@ -66,22 +65,21 @@ pub fn GoogleMailThreadDisplay<'a>(
 }
 
 #[component]
-pub fn GoogleMailNotificationDetailsDisplay<'a>(
-    cx: Scope,
-    google_mail_thread: &'a GoogleMailThread,
+pub fn GoogleMailNotificationDetailsDisplay(
+    google_mail_thread: ReadOnlySignal<GoogleMailThread>,
 ) -> Element {
-    let is_starred = google_mail_thread.is_tagged_with(GOOGLE_MAIL_STARRED_LABEL, None);
-    let is_important = google_mail_thread.is_tagged_with(GOOGLE_MAIL_IMPORTANT_LABEL, None);
+    let is_starred = google_mail_thread().is_tagged_with(GOOGLE_MAIL_STARRED_LABEL, None);
+    let is_important = google_mail_thread().is_tagged_with(GOOGLE_MAIL_IMPORTANT_LABEL, None);
 
-    render! {
+    rsx! {
         div {
             class: "flex gap-2",
 
             if is_starred {
-                render! { Icon { class: "mx-0.5 h-5 w-5 text-yellow-500", icon: BsStar } }
+                Icon { class: "mx-0.5 h-5 w-5 text-yellow-500", icon: BsStar }
             }
             if is_important {
-                render! { Icon { class: "mx-0.5 h-5 w-5 text-red-500", icon: BsExclamationCircle } }
+                Icon { class: "mx-0.5 h-5 w-5 text-red-500", icon: BsExclamationCircle }
             }
         }
     }

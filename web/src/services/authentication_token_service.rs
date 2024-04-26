@@ -1,6 +1,6 @@
 use anyhow::Result;
 use dioxus::prelude::*;
-use fermi::{AtomRef, UseAtomRef};
+
 use futures_util::StreamExt;
 use log::error;
 use reqwest::Method;
@@ -22,42 +22,39 @@ pub enum AuthenticationTokenCommand {
     CreateAuthenticationToken,
 }
 
-pub static AUTHENTICATION_TOKENS: AtomRef<Option<Vec<TruncatedAuthenticationToken>>> =
-    AtomRef(|_| None);
-pub static CREATED_AUTHENTICATION_TOKEN: AtomRef<LoadState<AuthenticationToken>> =
-    AtomRef(|_| LoadState::None);
+pub static AUTHENTICATION_TOKENS: GlobalSignal<Option<Vec<TruncatedAuthenticationToken>>> =
+    Signal::global(|| None);
+pub static CREATED_AUTHENTICATION_TOKEN: GlobalSignal<LoadState<AuthenticationToken>> =
+    Signal::global(|| LoadState::None);
 
-pub async fn authentication_token_service<'a>(
+pub async fn authentication_token_service(
     mut rx: UnboundedReceiver<AuthenticationTokenCommand>,
     api_base_url: Url,
-    authentication_tokens_ref: UseAtomRef<Option<Vec<TruncatedAuthenticationToken>>>,
-    created_authentication_token_ref: UseAtomRef<LoadState<AuthenticationToken>>,
-    ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
+    authentication_tokens: Signal<Option<Vec<TruncatedAuthenticationToken>>>,
+    mut created_authentication_token: Signal<LoadState<AuthenticationToken>>,
+    ui_model: Signal<UniversalInboxUIModel>,
     toast_service: Coroutine<ToastCommand>,
 ) {
     loop {
         let msg = rx.next().await;
         match msg {
             Some(AuthenticationTokenCommand::Refresh) => {
-                if let Err(error) = refresh_authentication_tokens(
-                    &authentication_tokens_ref,
-                    &api_base_url,
-                    &ui_model_ref,
-                )
-                .await
+                if let Err(error) =
+                    refresh_authentication_tokens(authentication_tokens, &api_base_url, ui_model)
+                        .await
                 {
                     error!("An error occurred while refreshing authentication tokens: {error:?}");
                 }
             }
             Some(AuthenticationTokenCommand::CreateAuthenticationToken) => {
-                *created_authentication_token_ref.write() = LoadState::Loading;
+                *created_authentication_token.write() = LoadState::Loading;
 
                 let result: Result<AuthenticationToken> = call_api_and_notify(
                     Method::POST,
                     &api_base_url,
                     "users/me/authentication-tokens",
                     None::<i32>,
-                    Some(ui_model_ref.clone()),
+                    Some(ui_model),
                     &toast_service,
                     "Creating API key...",
                     "API key successfully created",
@@ -66,12 +63,11 @@ pub async fn authentication_token_service<'a>(
 
                 match result {
                     Ok(authentication_token) => {
-                        *created_authentication_token_ref.write() =
+                        *created_authentication_token.write() =
                             LoadState::Loaded(authentication_token);
                     }
                     Err(error) => {
-                        *created_authentication_token_ref.write() =
-                            LoadState::Error(error.to_string());
+                        *created_authentication_token.write() = LoadState::Error(error.to_string());
                     }
                 }
             }
@@ -81,9 +77,9 @@ pub async fn authentication_token_service<'a>(
 }
 
 async fn refresh_authentication_tokens(
-    authentication_tokens_ref: &UseAtomRef<Option<Vec<TruncatedAuthenticationToken>>>,
+    mut authentication_tokens: Signal<Option<Vec<TruncatedAuthenticationToken>>>,
     api_base_url: &Url,
-    ui_model_ref: &UseAtomRef<UniversalInboxUIModel>,
+    ui_model: Signal<UniversalInboxUIModel>,
 ) -> Result<()> {
     let new_authentication_tokens: Vec<TruncatedAuthenticationToken> = call_api(
         Method::GET,
@@ -91,13 +87,11 @@ async fn refresh_authentication_tokens(
         "users/me/authentication-tokens",
         // random type as we don't care about the body's type
         None::<i32>,
-        Some(ui_model_ref.clone()),
+        Some(ui_model),
     )
     .await?;
 
-    authentication_tokens_ref
-        .write()
-        .replace(new_authentication_tokens);
+    *authentication_tokens.write() = Some(new_authentication_tokens);
 
     Ok(())
 }

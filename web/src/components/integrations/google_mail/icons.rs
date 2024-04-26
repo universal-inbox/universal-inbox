@@ -3,8 +3,8 @@
 use dioxus::prelude::*;
 
 #[component]
-pub fn GoogleMail<'a>(cx: Scope, class: Option<&'a str>) -> Element {
-    render! {
+pub fn GoogleMail(class: Option<String>) -> Element {
+    rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
             class: "{class.unwrap_or_default()}",
@@ -20,8 +20,8 @@ pub fn GoogleMail<'a>(cx: Scope, class: Option<&'a str>) -> Element {
 }
 
 #[component]
-pub fn Mail<'a>(cx: Scope, class: Option<&'a str>) -> Element {
-    render! {
+pub fn Mail(class: Option<String>) -> Element {
+    rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
             class: "{class.unwrap_or_default()}",

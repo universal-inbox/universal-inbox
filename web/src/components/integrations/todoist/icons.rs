@@ -3,8 +3,8 @@
 use dioxus::prelude::*;
 
 #[component]
-pub fn Todoist<'a>(cx: Scope, class: Option<&'a str>) -> Element {
-    render! {
+pub fn Todoist(class: Option<String>) -> Element {
+    rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
             class: "{class.unwrap_or_default()}",

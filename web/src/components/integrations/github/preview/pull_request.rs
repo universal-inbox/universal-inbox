@@ -27,48 +27,43 @@ use crate::components::{
 };
 
 #[component]
-pub fn GithubPullRequestPreview<'a>(
-    cx: Scope,
-    github_pull_request: &'a GithubPullRequest,
-) -> Element {
-    render! {
+pub fn GithubPullRequestPreview(github_pull_request: ReadOnlySignal<GithubPullRequest>) -> Element {
+    rsx! {
         div {
             class: "flex flex-col w-full gap-2",
 
             div {
                 class: "flex gap-2",
 
-                if let Some(head_repository) = &github_pull_request.head_repository {
-                    render! {
-                        a {
-                            class: "text-xs text-gray-400",
-                            href: "{head_repository.url}",
-                            target: "_blank",
-                            "{head_repository.name_with_owner}"
-                        }
+                if let Some(head_repository) = github_pull_request().head_repository {
+                    a {
+                        class: "text-xs text-gray-400",
+                        href: "{head_repository.url}",
+                        target: "_blank",
+                        "{head_repository.name_with_owner}"
                     }
                 }
 
                 a {
                     class: "text-xs text-gray-400",
-                    href: "{github_pull_request.url}",
+                    href: "{github_pull_request().url}",
                     target: "_blank",
-                    "#{github_pull_request.number}"
+                    "#{github_pull_request().number}"
                 }
             }
 
             h2 {
                 class: "flex items-center gap-2 text-lg",
 
-                GithubPullRequestIcon { class: "h-5 w-5", github_pull_request: github_pull_request }
+                GithubPullRequestIcon { class: "h-5 w-5", github_pull_request: github_pull_request() }
                 a {
-                    href: "{github_pull_request.url}",
+                    href: "{github_pull_request().url}",
                     target: "_blank",
-                    dangerous_inner_html: "{github_pull_request.title}"
+                    dangerous_inner_html: "{github_pull_request().title}"
                 }
                 a {
                     class: "flex-none",
-                    href: "{github_pull_request.url}",
+                    href: "{github_pull_request().url}",
                     target: "_blank",
                     Icon { class: "h-5 w-5 text-gray-400 p-1", icon: BsArrowUpRightSquare }
                 }
@@ -89,10 +84,10 @@ impl From<GithubLabel> for Tag {
 }
 
 #[component]
-fn GithubPullRequestDetails<'a>(cx: Scope, github_pull_request: &'a GithubPullRequest) -> Element {
+fn GithubPullRequestDetails(github_pull_request: ReadOnlySignal<GithubPullRequest>) -> Element {
     let show_base_and_head_repositories = match (
-        &github_pull_request.head_repository,
-        &github_pull_request.base_repository,
+        &github_pull_request().head_repository,
+        &github_pull_request().base_repository,
     ) {
         (
             Some(GithubRepositorySummary {
@@ -107,11 +102,11 @@ fn GithubPullRequestDetails<'a>(cx: Scope, github_pull_request: &'a GithubPullRe
         _ => false,
     };
 
-    let pr_state_label = match github_pull_request.state {
+    let pr_state_label = match github_pull_request().state {
         GithubPullRequestState::Closed => "Closed",
         GithubPullRequestState::Merged => "Merged",
         GithubPullRequestState::Open => {
-            if github_pull_request.is_draft {
+            if github_pull_request().is_draft {
                 "Draft"
             } else {
                 "Opened"
@@ -119,22 +114,23 @@ fn GithubPullRequestDetails<'a>(cx: Scope, github_pull_request: &'a GithubPullRe
         }
     };
 
-    let (mergeable_state_label, mergeable_state_icon) = match github_pull_request.mergeable_state {
+    let (mergeable_state_label, mergeable_state_icon) = match github_pull_request().mergeable_state
+    {
         GithubMergeableState::Mergeable => (
             "Pull request is mergeable",
-            render! { Icon { class: "h-5 w-5 text-success", icon: BsCheckCircleFill } },
+            rsx! { Icon { class: "h-5 w-5 text-success", icon: BsCheckCircleFill } },
         ),
         GithubMergeableState::Conflicting => (
             "Pull request is conflicting",
-            render! { Icon { class: "h-5 w-5 text-error", icon: BsXCircleFill } },
+            rsx! { Icon { class: "h-5 w-5 text-error", icon: BsXCircleFill } },
         ),
         GithubMergeableState::Unknown => (
             "Unknown pull request mergeable state",
-            render! { Icon { class: "h-5 w-5 text-warning", icon: BsQuestionCircleFill } },
+            rsx! { Icon { class: "h-5 w-5 text-warning", icon: BsQuestionCircleFill } },
         ),
     };
 
-    render! {
+    rsx! {
         div {
             class: "flex flex-col gap-2 w-full",
 
@@ -142,7 +138,7 @@ fn GithubPullRequestDetails<'a>(cx: Scope, github_pull_request: &'a GithubPullRe
                 class: "flex text-gray-400 gap-1 text-xs",
 
                 "Created at ",
-                span { class: "text-primary", "{github_pull_request.created_at}" }
+                span { class: "text-primary", "{github_pull_request().created_at}" }
             }
 
             div {
@@ -150,172 +146,150 @@ fn GithubPullRequestDetails<'a>(cx: Scope, github_pull_request: &'a GithubPullRe
 
                 "From"
                 if show_base_and_head_repositories {
-                    render! {
-                        if let Some(head_repository) = &github_pull_request.head_repository {
-                            render! {
-                                a {
-                                    href: "{head_repository.url}",
-                                    target: "_blank",
-                                    "{head_repository.name_with_owner}:"
-                                }
-                            }
+                    if let Some(head_repository) = github_pull_request().head_repository {
+                        a {
+                            href: "{head_repository.url}",
+                            target: "_blank",
+                            "{head_repository.name_with_owner}:"
                         }
                     }
                 }
-                span { class: "text-primary", "{github_pull_request.head_ref_name}" }
+                span { class: "text-primary", "{github_pull_request().head_ref_name}" }
 
                 "into"
 
                 if show_base_and_head_repositories {
-                    render! {
-                        if let Some(base_repository) = &github_pull_request.base_repository {
-                            render! {
-                                a {
-                                    href: "{base_repository.url}",
-                                    target: "_blank",
-                                    "{base_repository.name_with_owner}:"
-                                }
-                            }
+                    if let Some(base_repository) = github_pull_request().base_repository {
+                        a {
+                            href: "{base_repository.url}",
+                            target: "_blank",
+                            "{base_repository.name_with_owner}:"
                         }
                     }
                 }
-                span { class: "text-primary", "{github_pull_request.base_ref_name}" }
+                span { class: "text-primary", "{github_pull_request().base_ref_name}" }
             }
 
             div {
                 class: "flex flex-wrap items-center text-gray-400 gap-1 text-xs",
-                span { class: "text-red-500", "-{github_pull_request.deletions}" }
+                span { class: "text-red-500", "-{github_pull_request().deletions}" }
                 span { "/" }
-                span { class: "text-green-500", "+{github_pull_request.additions}" }
+                span { class: "text-green-500", "+{github_pull_request().additions}" }
                 span { "in" }
-                span { class: "text-primary", "{github_pull_request.changed_files}" }
+                span { class: "text-primary", "{github_pull_request().changed_files}" }
                 span { "files" }
             }
 
             TagsInCard {
-                tags: github_pull_request
+                tags: github_pull_request()
                     .labels
                     .iter()
                     .map(|label| label.clone().into())
                     .collect()
             }
 
-            if let Some(actor) = &github_pull_request.author {
-                render! {
-                    SmallCard {
-                        span { class: "text-gray-400", "Opened by" }
-                        GithubActorDisplay { actor: actor, display_name: true }
-                    }
+            if let Some(actor) = github_pull_request().author {
+                SmallCard {
+                    span { class: "text-gray-400", "Opened by" }
+                    GithubActorDisplay { actor: actor, display_name: true }
                 }
             }
 
-            if !github_pull_request.assignees.is_empty() {
-                render! {
-                    SmallCard {
-                        span { class: "text-gray-400", "Assigned to" }
-                        div {
-                            class: "flex flex-col",
-                            for assignee in &github_pull_request.assignees {
-                                render! {
-                                    GithubActorDisplay { actor: assignee, display_name: true }
-                                }
-                            }
+            if !github_pull_request().assignees.is_empty() {
+                SmallCard {
+                    span { class: "text-gray-400", "Assigned to" }
+                    div {
+                        class: "flex flex-col",
+                        for assignee in github_pull_request().assignees {
+                            GithubActorDisplay { actor: assignee, display_name: true }
                         }
                     }
                 }
             }
 
-            if let Some(merged_by) = &github_pull_request.merged_by {
-                render! {
-                    SmallCard {
-                        span { class: "text-gray-400", "Merged by" }
-                        GithubActorDisplay { actor: merged_by, display_name: true }
-                    }
+            if let Some(merged_by) = github_pull_request().merged_by {
+                SmallCard {
+                    span { class: "text-gray-400", "Merged by" }
+                    GithubActorDisplay { actor: merged_by, display_name: true }
                 }
             }
 
             SmallCard {
-                GithubPullRequestIcon { class: "h-5 w-5", github_pull_request: github_pull_request }
+                GithubPullRequestIcon { class: "h-5 w-5", github_pull_request: github_pull_request() }
                 span { "{pr_state_label}" }
             }
 
-            if github_pull_request.state == GithubPullRequestState::Open {
-                render! {
-                    SmallCard { mergeable_state_icon, span { "{mergeable_state_label}" } }
-                }
+            if github_pull_request().state == GithubPullRequestState::Open {
+                SmallCard { { mergeable_state_icon }, span { "{mergeable_state_label}" } }
             }
 
-            ChecksGithubPullRequest { latest_commit: &github_pull_request.latest_commit, with_details: true }
+            ChecksGithubPullRequest { latest_commit: github_pull_request().latest_commit, with_details: true }
 
             ReviewsGithubPullRequest { github_pull_request: github_pull_request }
 
             p {
                 class: "w-full prose prose-sm dark:prose-invert",
-                dangerous_inner_html: "{github_pull_request.body}"
+                dangerous_inner_html: "{github_pull_request().body}"
             }
 
-            GithubCommentList { comments: &github_pull_request.comments }
+            GithubCommentList { comments: github_pull_request().comments }
         }
     }
 }
 
 #[component]
-pub fn ChecksGithubPullRequest<'a>(
-    cx: Scope,
-    latest_commit: &'a GithubCommitChecks,
+pub fn ChecksGithubPullRequest(
+    latest_commit: ReadOnlySignal<GithubCommitChecks>,
     with_details: Option<bool>,
-    icon_size: Option<&'a str>,
+    icon_size: Option<String>,
 ) -> Element {
     let with_details = with_details.unwrap_or_default();
-    let checks_progress = use_memo(
-        cx,
-        &(latest_commit.check_suites.clone(),),
-        |(check_suites,)| compute_pull_request_checks_progress(&check_suites),
-    );
-    let icon_size = icon_size.unwrap_or("h-5 w-5");
+    let checks_progress =
+        use_memo(move || compute_pull_request_checks_progress(&latest_commit().check_suites));
+    let icon_size = icon_size.unwrap_or_else(|| "h-5 w-5".to_string());
 
     let checks_state = checks_progress.as_ref().map(|checks_progress| {
         match checks_progress.status() {
             GithubCheckStatusState::Pending => (
                 "Checks not started yet",
-                render! { Icon { class: "{icon_size} text-success", icon: BsPauseCircleFill } },
+                rsx! { Icon { class: "{icon_size} text-success", icon: BsPauseCircleFill } },
             ),
             GithubCheckStatusState::InProgress => (
                 "Checks are in progress",
-                render! { span { class: "{icon_size} loading loading-spinner text-primary" } },
+                rsx! { span { class: "{icon_size} loading loading-spinner text-primary" } },
             ),
             GithubCheckStatusState::Completed => match checks_progress.conclusion() {
                 GithubCheckConclusionState::Success => (
                     "All checks passed",
-                    render! { Icon { class: "{icon_size} text-success", icon: BsCheckCircleFill } },
+                    rsx! { Icon { class: "{icon_size} text-success", icon: BsCheckCircleFill } },
                 ),
                 GithubCheckConclusionState::Failure => (
                     "Some checks failed",
-                    render! { Icon { class: "{icon_size} text-error", icon: BsXCircleFill } },
+                    rsx! { Icon { class: "{icon_size} text-error", icon: BsXCircleFill } },
                 ),
                 _ => (
                     "Unknown checks status",
-                    render! { Icon { class: "{icon_size} text-warning", icon: BsQuestionCircleFill } },
+                    rsx! { Icon { class: "{icon_size} text-warning", icon: BsQuestionCircleFill } },
                 ),
             },
             _ => (
                 "Unknown checks status",
-                render! { Icon { class: "{icon_size} text-warning", icon: BsQuestionCircleFill } },
+                rsx! { Icon { class: "{icon_size} text-warning", icon: BsQuestionCircleFill } },
             ),
         }
     });
 
     if let Some(checks_state) = checks_state {
         if with_details {
-            return render! {
+            return rsx! {
                 CollapseCardWithIcon {
                     title: "{checks_state.0}",
-                    icon: render! { checks_state.1 },
+                    icon: checks_state.1,
                     ChecksGithubPullRequestDetails { latest_commit: latest_commit }
                 }
             };
         } else {
-            render! { checks_state.1 }
+            checks_state.1
         }
     } else {
         None
@@ -323,27 +297,21 @@ pub fn ChecksGithubPullRequest<'a>(
 }
 
 #[component]
-fn ChecksGithubPullRequestDetails<'a>(cx: Scope, latest_commit: &'a GithubCommitChecks) -> Element {
-    if let Some(check_suites) = &latest_commit.check_suites {
-        render! {
+fn ChecksGithubPullRequestDetails(latest_commit: ReadOnlySignal<GithubCommitChecks>) -> Element {
+    if let Some(check_suites) = &latest_commit().check_suites {
+        rsx! {
             table {
                 class: "table table-auto table-xs w-full",
                 tbody {
                     for check_suite in check_suites {
                         if check_suite.status != GithubCheckStatusState::Queued {
-                            render! {
-                                for check_run in check_suite.check_runs.iter() {
-                                    render! {
-                                        GithubCheckRunLine {
-                                            check_run: check_run,
-                                            workflow: &check_suite.workflow,
-                                            app: &check_suite.app,
-                                        }
-                                    }
+                            for check_run in check_suite.check_runs.iter() {
+                                GithubCheckRunLine {
+                                    check_run: check_run.clone(),
+                                    workflow: check_suite.workflow.clone(),
+                                    app: check_suite.app.clone(),
                                 }
                             }
-                        } else {
-                            None
                         }
                     }
                 }
@@ -355,90 +323,81 @@ fn ChecksGithubPullRequestDetails<'a>(cx: Scope, latest_commit: &'a GithubCommit
 }
 
 #[component]
-fn GithubCheckRunLine<'a>(
-    cx: Scope,
-    check_run: &'a GithubCheckRun,
-    workflow: &'a Option<GithubWorkflow>,
-    app: &'a Option<GithubCheckSuiteApp>,
+fn GithubCheckRunLine(
+    check_run: ReadOnlySignal<GithubCheckRun>,
+    workflow: Option<GithubWorkflow>,
+    app: Option<GithubCheckSuiteApp>,
 ) -> Element {
-    let check_run_status_icon = match check_run.status {
-        GithubCheckStatusState::Completed => match check_run.conclusion {
+    let check_run_status_icon = match check_run().status {
+        GithubCheckStatusState::Completed => match check_run().conclusion {
             Some(GithubCheckConclusionState::Success) => {
-                render! { Icon { class: "h-5 w-5 text-success", icon: BsCheckCircleFill } }
+                rsx! { Icon { class: "h-5 w-5 text-success", icon: BsCheckCircleFill } }
             }
             Some(GithubCheckConclusionState::Failure) => {
-                render! { Icon { class: "h-5 w-5 text-error", icon: BsXCircleFill } }
+                rsx! { Icon { class: "h-5 w-5 text-error", icon: BsXCircleFill } }
             }
-            _ => render! { Icon { class: "h-5 w-5 text-warning", icon: BsQuestionCircleFill } },
+            _ => rsx! { Icon { class: "h-5 w-5 text-warning", icon: BsQuestionCircleFill } },
         },
         GithubCheckStatusState::InProgress => {
-            render! { span { class: "h-5 w-5 loading loading-spinner text-primary" } }
+            rsx! { span { class: "h-5 w-5 loading loading-spinner text-primary" } }
         }
         GithubCheckStatusState::Pending => {
-            render! { Icon { class: "h-5 w-5 text-base-content", icon: BsPauseCircleFill } }
+            rsx! { Icon { class: "h-5 w-5 text-base-content", icon: BsPauseCircleFill } }
         }
         GithubCheckStatusState::Queued => {
-            render! { Icon { class: "h-5 w-5 text-base-content", icon: BsSkipForwardCircleFill } }
+            rsx! { Icon { class: "h-5 w-5 text-base-content", icon: BsSkipForwardCircleFill } }
         }
         GithubCheckStatusState::Requested => {
-            render! { Icon { class: "h-5 w-5 text-base-content", icon: BsQuestionCircleFill } }
+            rsx! { Icon { class: "h-5 w-5 text-base-content", icon: BsQuestionCircleFill } }
         }
         GithubCheckStatusState::Waiting => {
-            render! { Icon { class: "h-5 w-5 text-base-content", icon: BsPauseCircleFill } }
+            rsx! { Icon { class: "h-5 w-5 text-base-content", icon: BsPauseCircleFill } }
         }
     };
 
-    render! {
+    rsx! {
         tr {
             td {
                 div {
                     class: "flex items-center gap-1",
-                    check_run_status_icon
+                    { check_run_status_icon }
 
                     if let Some(app) = app {
-                        render! {
-                            a {
-                                href: "{app.url}",
-                                target: "_blank",
+                        a {
+                            href: "{app.url}",
+                            target: "_blank",
 
-                                if let Some(logo_url) = &app.logo_url {
-                                    render! {
-                                        img {
-                                            class: "h-5 w-5 rounded-full",
-                                            alt: "{app.name}",
-                                            title: "{app.name}",
-                                            src: "{logo_url}"
-                                        }
-                                    }
-                                } else {
-                                    render! { Icon { class: "h-5 w-5 rounded-full", icon: BsQuestionCircleFill } }
+                            if let Some(logo_url) = app.logo_url {
+                                img {
+                                    class: "h-5 w-5 rounded-full",
+                                    alt: "{app.name}",
+                                    title: "{app.name}",
+                                    src: "{logo_url}"
                                 }
+                            } else {
+                                Icon { class: "h-5 w-5 rounded-full", icon: BsQuestionCircleFill }
                             }
                         }
                     } else {
-                        render! { Icon { class: "h-5 w-5", icon: BsQuestionCircleFill } }
+                        Icon { class: "h-5 w-5", icon: BsQuestionCircleFill }
                     }
 
                     if let Some(workflow) = workflow {
-                        render! {
-                            a {
-                                class: "text-primary",
-                                href: "{workflow.url}",
-                                target: "_blank",
-                                "{workflow.name}"
-                            }
+                        a {
+                            class: "text-primary",
+                            href: "{workflow.url}",
+                            target: "_blank",
+                            "{workflow.name}"
                         }
-                    } else if let Some(check_run_url) = &check_run.url {
-                        render! {
-                            a {
-                                class: "text-primary",
-                                href: "{check_run_url}",
-                                target: "_blank",
-                                "{check_run.name}"
-                            }
+                    } else if let Some(check_run_url) = check_run().url {
+                        a {
+                            class: "text-primary",
+                            href: "{check_run_url}",
+                            target: "_blank",
+                            "{check_run().name}"
                         }
                     } else {
-                        render! { span { class: "text-primary", "{check_run.name}" } }
+                        span { class: "text-primary", "{check_run().name}" }
                     }
                 }
             }
@@ -507,32 +466,32 @@ fn compute_pull_request_checks_progress(
 }
 
 #[component]
-fn ReviewsGithubPullRequest<'a>(cx: Scope, github_pull_request: &'a GithubPullRequest) -> Element {
-    let reviews_state = github_pull_request
+fn ReviewsGithubPullRequest(github_pull_request: ReadOnlySignal<GithubPullRequest>) -> Element {
+    let reviews_state = github_pull_request()
         .review_decision
         .as_ref()
         .map(|review_decision| match review_decision {
             GithubPullRequestReviewDecision::Approved => (
                 "Pull request approved",
-                render! { Icon { class: "h-5 w-5 text-success", icon: BsCheckCircleFill } },
+                rsx! { Icon { class: "h-5 w-5 text-success", icon: BsCheckCircleFill } },
             ),
             GithubPullRequestReviewDecision::ChangesRequested => (
                 "Changes requested",
-                render! { Icon { class: "h-5 w-5 text-error", icon: BsXCircleFill } },
+                rsx! { Icon { class: "h-5 w-5 text-error", icon: BsXCircleFill } },
             ),
             GithubPullRequestReviewDecision::ReviewRequired => (
                 "Waiting for review",
-                render! { Icon { class: "h-5 w-5 text-info", icon: BsPauseCircleFill } },
+                rsx! { Icon { class: "h-5 w-5 text-info", icon: BsPauseCircleFill } },
             ),
         })
         .unwrap_or_else(|| {
             (
                 "Waiting for review",
-                render! { Icon { class: "h-5 w-5 text-info", icon: BsPauseCircleFill } },
+                rsx! { Icon { class: "h-5 w-5 text-info", icon: BsPauseCircleFill } },
             )
         });
 
-    render! {
+    rsx! {
         CollapseCardWithIcon {
             title: "{reviews_state.0}",
             icon: reviews_state.1,
@@ -542,27 +501,24 @@ fn ReviewsGithubPullRequest<'a>(cx: Scope, github_pull_request: &'a GithubPullRe
 }
 
 #[component]
-fn ReviewsGithubPullRequestDetails<'a>(
-    cx: Scope,
-    github_pull_request: &'a GithubPullRequest,
+fn ReviewsGithubPullRequestDetails(
+    github_pull_request: ReadOnlySignal<GithubPullRequest>,
 ) -> Element {
     let reviews = compute_pull_request_reviews(
-        github_pull_request.reviews.as_ref(),
-        github_pull_request.review_requests.as_ref(),
+        github_pull_request().reviews.as_ref(),
+        github_pull_request().review_requests.as_ref(),
     );
 
     if reviews.is_empty() {
         return None;
     }
 
-    render! {
+    rsx! {
         table {
             class: "table table-auto table-xs w-full",
             tbody {
                 for review in reviews {
-                    render! {
-                        GithubReviewLine { review: review }
-                    }
+                    GithubReviewLine { review: review }
                 }
             }
         }
@@ -570,12 +526,12 @@ fn ReviewsGithubPullRequestDetails<'a>(
 }
 
 #[component]
-fn GithubReviewLine(cx: Scope, review: GithubReview) -> Element {
+fn GithubReviewLine(review: GithubReview) -> Element {
     let (reviewer, review_body, review_status_icon) = match review {
         GithubReview::Requested { reviewer } => (
             reviewer,
             None,
-            render! { Icon { class: "h-5 w-5 text-info", icon: BsClock } },
+            rsx! { Icon { class: "h-5 w-5 text-info", icon: BsClock } },
         ),
         GithubReview::Completed {
             reviewer,
@@ -586,16 +542,16 @@ fn GithubReviewLine(cx: Scope, review: GithubReview) -> Element {
             (!body.is_empty()).then_some(body),
             match state {
                 GithubPullRequestReviewState::Approved => {
-                    render! { Icon { class: "h-5 w-5 text-success", icon: BsCheckCircleFill } }
+                    rsx! { Icon { class: "h-5 w-5 text-success", icon: BsCheckCircleFill } }
                 }
                 GithubPullRequestReviewState::ChangesRequested => {
-                    render! { Icon { class: "h-5 w-5 text-error", icon: BsXCircleFill } }
+                    rsx! { Icon { class: "h-5 w-5 text-error", icon: BsXCircleFill } }
                 }
                 GithubPullRequestReviewState::Commented => {
-                    render! { Icon { class: "h-5 w-5 text-info", icon: BsChatTextFill } }
+                    rsx! { Icon { class: "h-5 w-5 text-info", icon: BsChatTextFill } }
                 }
                 _ => {
-                    render! { Icon { class: "h-5 w-5 text-neutral", icon: BsQuestionCircleFill } }
+                    rsx! { Icon { class: "h-5 w-5 text-neutral", icon: BsQuestionCircleFill } }
                 }
             },
         ),
@@ -620,44 +576,43 @@ fn GithubReviewLine(cx: Scope, review: GithubReview) -> Element {
         }) => (login.clone(), Some(avatar_url.clone())),
     };
 
-    render! {
+    rsx! {
         tr {
             td {
                 if let Some(review_body) = review_body {
-                    render! {
-                        details {
-                            class: "collapse collapse-arrow",
-                            summary {
-                                class: "collapse-title min-h-min py-2 px-0",
-                                div {
-                                    class: "flex gap-2 items-center",
-                                    review_status_icon,
-                                    UserWithAvatar {
-                                        user_name: reviewer_display_name.clone(),
-                                        avatar_url: reviewer_avatar_url,
-                                        display_name: true,
-                                    },
-                                }
-                            }
-
+                    details {
+                        class: "collapse collapse-arrow",
+                        summary {
+                            class: "collapse-title min-h-min py-2 px-0",
                             div {
-                                class: "bg-neutral text-neutral-content p-2 my-1 rounded",
-                                dangerous_inner_html: "{review_body}"
+                                class: "flex gap-2 items-center",
+
+                                { review_status_icon }
+
+                                UserWithAvatar {
+                                    user_name: reviewer_display_name.clone(),
+                                    avatar_url: reviewer_avatar_url,
+                                    display_name: true,
+                                },
                             }
+                        }
+
+                        div {
+                            class: "bg-neutral text-neutral-content p-2 my-1 rounded",
+                            dangerous_inner_html: "{review_body}"
                         }
                     }
                 } else {
-                    render! {
-                        div {
-                            class: "flex gap-2 items-center",
+                    div {
+                        class: "flex gap-2 items-center",
 
-                            review_status_icon,
-                            UserWithAvatar {
-                                user_name: reviewer_display_name.clone(),
-                                avatar_url: reviewer_avatar_url,
-                                display_name: true,
-                            },
-                        }
+                        { review_status_icon }
+
+                        UserWithAvatar {
+                            user_name: reviewer_display_name.clone(),
+                            avatar_url: reviewer_avatar_url,
+                            display_name: true,
+                        },
                     }
                 }
             }
@@ -726,21 +681,19 @@ pub fn compute_pull_request_reviews(
 }
 
 #[component]
-pub fn GithubCommentList<'a>(cx: Scope, comments: &'a [GithubIssueComment]) -> Element {
-    render! {
+pub fn GithubCommentList(comments: ReadOnlySignal<Vec<GithubIssueComment>>) -> Element {
+    rsx! {
         div {
             class: "flex flex-col gap-2",
-            for comment in comments {
-                render! {
-                    CardWithHeaders {
-                        headers: if let Some(author) = &comment.author {
-                            vec![render! {
-                                GithubActorDisplay { actor: author, display_name: true },
-                                span { class: "text-gray-400", "at {comment.created_at}" }
-                            }]
-                        } else { vec![] },
-                        span { dangerous_inner_html: "{comment.body}" }
-                    }
+            for comment in comments() {
+                CardWithHeaders {
+                    headers: if let Some(author) = comment.author {
+                        vec![rsx! {
+                            GithubActorDisplay { actor: author, display_name: true },
+                            span { class: "text-gray-400", "at {comment.created_at}" }
+                        }]
+                    } else { vec![] },
+                    span { dangerous_inner_html: "{comment.body}" }
                 }
             }
         }

@@ -24,30 +24,24 @@ pub mod universal_inbox_title;
 pub mod user_profile_card;
 
 #[component]
-fn CollapseCardWithIcon<'a>(
-    cx: Scope,
-    icon: Element<'a>,
-    title: &'a str,
-    children: Element<'a>,
+fn CollapseCardWithIcon(
+    icon: Element,
+    title: ReadOnlySignal<String>,
+    children: Element,
 ) -> Element {
-    render! {
+    rsx! {
         CollapseCard {
-            header: render! { icon, span { "{title}" } },
+            header: rsx! { { icon }, span { "{title}" } },
             children
         }
     }
 }
 
 #[component]
-fn CollapseCard<'a>(
-    cx: Scope,
-    header: Element<'a>,
-    children: Element<'a>,
-    class: Option<&'a str>,
-) -> Element {
-    let card_style = class.unwrap_or("bg-base-200 text-base-content");
+fn CollapseCard(header: Element, children: Element, class: Option<String>) -> Element {
+    let card_style = class.unwrap_or("bg-base-200 text-base-content".to_string());
 
-    render! {
+    rsx! {
         div {
             class: "card w-full {card_style}",
 
@@ -58,10 +52,10 @@ fn CollapseCard<'a>(
                     input { "class": "min-h-0 p-2", "type": "checkbox" },
                     div {
                         class: "collapse-title min-h-0 p-2",
-                        div { class: "flex items-center gap-2", header }
+                        div { class: "flex items-center gap-2", { header } }
                     }
 
-                    div { class: "collapse-content", children }
+                    div { class: "collapse-content", { children } }
                 }
             }
         }
@@ -69,24 +63,19 @@ fn CollapseCard<'a>(
 }
 
 #[component]
-fn SmallCard<'a>(
-    cx: Scope,
-    card_class: Option<&'a str>,
-    class: Option<&'a str>,
-    children: Element<'a>,
-) -> Element {
+fn SmallCard(card_class: Option<String>, class: Option<String>, children: Element) -> Element {
     let card_class = card_class
         .and_then(|card_class| (!card_class.is_empty()).then_some(card_class))
-        .unwrap_or("bg-base-200 text-base-content");
+        .unwrap_or("bg-base-200 text-base-content".to_string());
 
-    render! {
+    rsx! {
         div {
             class: "card w-full {card_class}",
             div {
                 class: "card-body p-2",
                 div {
                     class: "flex items-center gap-2 {class.unwrap_or_default()}",
-                    children
+                    { children }
                 }
             }
         }
@@ -103,7 +92,6 @@ fn get_initials_from_name(name: &str) -> String {
 
 #[component]
 pub fn UserWithAvatar(
-    cx: Scope,
     user_name: Option<String>,
     avatar_url: Option<Option<Url>>,
     display_name: Option<bool>,
@@ -111,12 +99,12 @@ pub fn UserWithAvatar(
     let display_name = display_name.unwrap_or_default();
     let initials = user_name.as_ref().map(|name| get_initials_from_name(name));
 
-    render! {
+    rsx! {
         div {
             class: "flex gap-2 items-center",
 
             match avatar_url {
-                Some(Some(avatar_url)) => render! {
+                Some(Some(avatar_url)) => rsx! {
                     div {
                         class: "avatar",
                         div {
@@ -127,7 +115,7 @@ pub fn UserWithAvatar(
                 },
                 Some(None) => {
                     if let Some(initials) = initials {
-                        render! {
+                        rsx! {
                             div {
                                 class: "avatar placeholder",
                                 div {
@@ -137,7 +125,7 @@ pub fn UserWithAvatar(
                             }
                         }
                     } else {
-                        render! {
+                        rsx! {
                             div {
                                 class: "avatar placeholder",
                                 div {
@@ -152,15 +140,9 @@ pub fn UserWithAvatar(
             }
 
             if display_name {
-                render! {
-                    if let Some(user_name) = user_name {
-                        render! {
-                            span { class: "text-sm", "{user_name}" }
-                        }
-                    }
+                if let Some(user_name) = user_name {
+                    span { class: "text-sm", "{user_name}" }
                 }
-            } else {
-                None
             }
         }
     }
@@ -211,23 +193,23 @@ impl Tag {
 }
 
 #[component]
-pub fn TagsInCard(cx: Scope, tags: Vec<Tag>) -> Element {
+pub fn TagsInCard(tags: Vec<Tag>) -> Element {
     if tags.is_empty() {
         return None;
     }
 
-    render! {
+    rsx! {
         SmallCard {
             class: "flex-wrap",
             for tag in tags {
-                render! { TagDisplay { tag: tag.clone() } }
+                TagDisplay { tag: tag.clone() }
             }
         }
     }
 }
 
 #[component]
-pub fn TagDisplay<'a>(cx: Scope, tag: Tag, class: Option<&'a str>) -> Element {
+pub fn TagDisplay(tag: Tag, class: Option<String>) -> Element {
     let badge_text_class = tag.get_text_class_color("text-white");
     let badge_class = tag.get_class().unwrap_or_default();
     let badge_style = tag.get_style().unwrap_or_else(|| {
@@ -238,7 +220,7 @@ pub fn TagDisplay<'a>(cx: Scope, tag: Tag, class: Option<&'a str>) -> Element {
         }
     });
 
-    render! {
+    rsx! {
         div {
             class: "badge {badge_text_class} {badge_class} text-xs text-light {class.unwrap_or_default()} whitespace-nowrap",
             style: "{badge_style}",
@@ -248,25 +230,23 @@ pub fn TagDisplay<'a>(cx: Scope, tag: Tag, class: Option<&'a str>) -> Element {
 }
 
 #[component]
-pub fn CardWithHeaders<'a>(cx: Scope, headers: Vec<Element<'a>>, children: Element<'a>) -> Element {
-    render! {
+pub fn CardWithHeaders(headers: Vec<Element>, children: Element) -> Element {
+    rsx! {
         div {
             class: "card w-full bg-base-200 text-base-content",
             div {
                 class: "card-body flex flex-col gap-2 p-2",
 
                 for header in headers {
-                    render! {
-                        SmallCard {
-                            class: "text-xs",
-                            card_class: "bg-neutral text-neutral-content",
+                    SmallCard {
+                        class: "text-xs",
+                        card_class: "bg-neutral text-neutral-content",
 
-                            header
-                        }
+                        { header }
                     }
                 }
 
-                children
+                { children }
             }
         }
     }

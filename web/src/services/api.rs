@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 
 use anyhow::{anyhow, Result};
-use dioxus::prelude::Coroutine;
-use fermi::UseAtomRef;
+use dioxus::prelude::*;
 use log::error;
 use reqwest::{
     header::{HeaderMap, HeaderValue},
@@ -21,7 +20,7 @@ pub async fn call_api<R: for<'de> serde::de::Deserialize<'de>, B: serde::Seriali
     base_url: &Url,
     path: &str,
     body: Option<B>,
-    ui_model_ref: Option<UseAtomRef<UniversalInboxUIModel>>,
+    ui_model: Option<Signal<UniversalInboxUIModel>>,
 ) -> Result<R> {
     let mut request = API_CLIENT
         .request(method, base_url.join(path)?)
@@ -54,13 +53,13 @@ pub async fn call_api<R: for<'de> serde::de::Deserialize<'de>, B: serde::Seriali
         }
     }
 
-    if let Some(ui_model_ref) = ui_model_ref {
+    if let Some(mut ui_model) = ui_model {
         if response.status() == StatusCode::UNAUTHORIZED {
-            if ui_model_ref.read().authentication_state == AuthenticationState::Unknown
-                || ui_model_ref.read().authentication_state != AuthenticationState::Authenticated
-                || ui_model_ref.read().authentication_state != AuthenticationState::NotAuthenticated
+            if ui_model.read().authentication_state == AuthenticationState::Unknown
+                || ui_model.read().authentication_state != AuthenticationState::Authenticated
+                || ui_model.read().authentication_state != AuthenticationState::NotAuthenticated
             {
-                ui_model_ref.write().authentication_state = AuthenticationState::NotAuthenticated;
+                ui_model.write().authentication_state = AuthenticationState::NotAuthenticated;
             }
             let default_error_message = "Unauthenticated call to the API".to_string();
             if Some(HeaderValue::from_static("application/json"))
@@ -74,8 +73,8 @@ pub async fn call_api<R: for<'de> serde::de::Deserialize<'de>, B: serde::Seriali
             } else {
                 return Err(anyhow!(default_error_message));
             }
-        } else if ui_model_ref.read().authentication_state != AuthenticationState::Authenticated {
-            ui_model_ref.write().authentication_state = AuthenticationState::Authenticated;
+        } else if ui_model.read().authentication_state != AuthenticationState::Authenticated {
+            ui_model.write().authentication_state = AuthenticationState::Authenticated;
         }
     }
 
@@ -88,7 +87,7 @@ pub async fn call_api_and_notify<R: for<'de> serde::de::Deserialize<'de>, B: ser
     base_url: &Url,
     path: &str,
     body: Option<B>,
-    ui_model_ref: Option<UseAtomRef<UniversalInboxUIModel>>,
+    ui_model: Option<Signal<UniversalInboxUIModel>>,
     toast_service: &Coroutine<ToastCommand>,
     loading_message: &str,
     success_message: &str,
@@ -101,7 +100,7 @@ pub async fn call_api_and_notify<R: for<'de> serde::de::Deserialize<'de>, B: ser
     let toast_id = toast.id;
     toast_service.send(ToastCommand::Push(toast));
 
-    call_api(method.clone(), base_url, path, body, ui_model_ref)
+    call_api(method.clone(), base_url, path, body, ui_model)
         .await
         .map(|result: R| {
             let toast_update = ToastUpdate {

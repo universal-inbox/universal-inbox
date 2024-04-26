@@ -8,15 +8,15 @@ use log::error;
 use wasm_bindgen::{prelude::Closure, JsCast};
 use web_sys::KeyboardEvent;
 
-use crate::utils::{focus_and_select_input_element, get_element_by_id};
+use crate::utils::{focus_and_select_input_element, wait_for_element_by_id};
 
-#[derive(Props)]
-pub struct InputProps<'a, T: 'static> {
-    name: String,
+#[derive(Props, Clone, PartialEq)]
+pub struct InputProps<T: Clone + PartialEq + 'static> {
+    name: ReadOnlySignal<String>,
     #[props(!optional)]
-    label: Option<&'a str>,
+    label: ReadOnlySignal<Option<String>>,
     required: Option<bool>,
-    value: UseState<String>,
+    value: Signal<String>,
     #[props(default)]
     autofocus: Option<bool>,
     #[props(default)]
@@ -24,7 +24,7 @@ pub struct InputProps<'a, T: 'static> {
     #[props(default)]
     r#type: Option<String>,
     #[props(default)]
-    icon: Option<Element<'a>>,
+    icon: Option<Element>,
     #[props(default)]
     phantom: PhantomData<T>,
 }
@@ -32,115 +32,94 @@ pub struct InputProps<'a, T: 'static> {
 const INPUT_INVALID_STYLE: &str = "border-error focus:border-error";
 const FLOATING_LABEL_INVALID_STYLE: &str = "text-error peer-focus:text-error";
 
-pub fn FloatingLabelInputText<'a, T>(cx: Scope<'a, InputProps<'a, T>>) -> Element
+#[component]
+pub fn FloatingLabelInputText<T>(mut props: InputProps<T>) -> Element
 where
-    T: FromStr,
+    T: FromStr + Clone + PartialEq,
     <T as FromStr>::Err: Display,
 {
-    let required = cx.props.required.unwrap_or_default();
+    let required = props.required.unwrap_or_default();
     let required_label_style = required
         .then_some("after:content-['*'] after:ml-0.5 after:text-error")
         .unwrap_or_default();
 
-    let error_message = use_state(cx, || None);
-    let input_style = use_memo(
-        cx,
-        &(error_message.clone(), cx.props.icon.is_some()),
-        |(error_message, has_icon)| {
-            format!(
-                "{} {}",
-                error_message
-                    .as_ref()
-                    .and(Some(INPUT_INVALID_STYLE))
-                    .unwrap_or("border-base-200 focus:border-primary"),
-                if has_icon { "pl-7" } else { "pl-0" }
-            )
-        },
-    );
-    let label_style = use_memo(
-        cx,
-        &(error_message.clone(), cx.props.icon.is_some()),
-        |(error_message, has_icon)| {
-            format!(
-                "{} {}",
-                error_message
-                    .as_ref()
-                    .and(Some(FLOATING_LABEL_INVALID_STYLE))
-                    .unwrap_or_default(),
-                has_icon
-                    .then_some("peer-placeholder-shown:pl-7")
-                    .unwrap_or_default()
-            )
-        },
-    );
+    let error_message = use_signal(|| None);
+    let icon = props.icon.clone();
+    let input_style = use_memo(move || {
+        to_owned![icon];
+        format!(
+            "{} {}",
+            error_message()
+                .and(Some(INPUT_INVALID_STYLE))
+                .unwrap_or("border-base-200 focus:border-primary"),
+            if icon.is_some() { "pl-7" } else { "pl-0" }
+        )
+    });
+    let icon = props.icon.clone();
+    let label_style = use_memo(move || {
+        to_owned![icon];
+        format!(
+            "{} {}",
+            error_message()
+                .and(Some(FLOATING_LABEL_INVALID_STYLE))
+                .unwrap_or_default(),
+            icon.is_some()
+                .then_some("peer-placeholder-shown:pl-7")
+                .unwrap_or_default()
+        )
+    });
 
-    let input_type = cx.props.r#type.clone().unwrap_or("text".to_string());
-    let validate = use_state(cx, || false);
-    let _ = use_memo(
-        cx,
-        &(
-            cx.props.value.clone(),
-            cx.props.force_validation,
-            validate.clone(),
-        ),
-        |(value, force_validation, validate)| {
-            to_owned![error_message];
-            if force_validation.unwrap_or_default() || *validate {
-                validate_value::<T>(&value, error_message, required);
+    let input_type = props.r#type.clone().unwrap_or("text".to_string());
+    let mut validate = use_signal(|| false);
+    let _ = use_memo(move || {
+        if props.force_validation.unwrap_or_default() || validate() {
+            validate_value::<T>(&(*props.value)(), error_message, required);
+        }
+    });
+
+    let _ = use_resource(move || async move {
+        if props.autofocus.unwrap_or_default() {
+            let name = (props.name)();
+            if let Err(error) = focus_and_select_input_element(&name).await {
+                error!("Error focusing element task-project-input: {error:?}");
             }
-        },
-    );
+        }
+    });
 
-    use_future(
-        cx,
-        &(cx.props.autofocus, cx.props.name.clone()),
-        |(autofocus, id)| async move {
-            if autofocus.unwrap_or_default() {
-                if let Err(error) = focus_and_select_input_element(&id).await {
-                    error!("Error focusing element task-project-input: {error:?}");
-                }
-            }
-        },
-    );
-
-    render! {
+    rsx! {
         div {
             class: "relative w-full",
 
-            if let Some(icon) = &cx.props.icon {
-                render! {
-                    div {
-                        class: "absolute inset-y-0 start-0 flex py-2.5 pointer-events-none {label_style}",
-                        icon
-                    }
+            if let Some(icon) = &props.icon {
+                div {
+                    class: "absolute inset-y-0 start-0 flex py-2.5 pointer-events-none {label_style}",
+                    { icon }
                 }
             }
 
             input {
                 "type": "{input_type}",
-                name: "{cx.props.name}",
-                id: "{cx.props.name}",
+                name: "{props.name}",
+                id: "{props.name}",
                 class: "{input_style} block py-2 px-3 w-full bg-transparent border-0 border-b-2 focus:outline-none focus:ring-0 peer",
                 placeholder: " ",
                 required: "{required}",
-                value: "{cx.props.value}",
+                value: "{props.value}",
                 oninput: move |evt| {
-                    cx.props.value.set(evt.value.clone());
+                    props.value.write().clone_from(&evt.value());
                 },
                 onchange: move |evt| {
-                    cx.props.value.set(evt.value.clone());
+                    props.value.write().clone_from(&evt.value());
                 },
-                onfocusout: |_| validate.set(true),
-                autofocus: cx.props.autofocus.unwrap_or_default(),
+                onfocusout: move |_| *validate.write() = true,
+                autofocus: props.autofocus.unwrap_or_default(),
             }
 
-            if let Some(label) = cx.props.label {
-                render! {
-                    label {
-                        "for": "{cx.props.name}",
-                        class: "{label_style} {required_label_style} absolute duration-300 transform -translate-y-6 scale-75 top-3 origin-[0] peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-6 peer-focus:left-0 peer-focus:pl-0",
-                        "{label}"
-                    }
+            if let Some(label) = (props.label)() {
+                label {
+                    "for": "{props.name}",
+                    class: "{label_style} {required_label_style} absolute duration-300 transform -translate-y-6 scale-75 top-3 origin-[0] peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-6 peer-focus:left-0 peer-focus:pl-0",
+                    "{label}"
                 }
             }
 
@@ -149,101 +128,83 @@ where
     }
 }
 
-#[derive(Props)]
-pub struct InputSelectProps<'a, T: 'static> {
-    name: String,
+#[derive(Props, Clone, PartialEq)]
+pub struct InputSelectProps<T: Clone + PartialEq + 'static> {
+    name: ReadOnlySignal<String>,
     #[props(!optional)]
-    label: Option<&'a str>,
+    label: ReadOnlySignal<Option<String>>,
     #[props(default)]
-    class: Option<&'a str>,
+    class: Option<String>,
     #[props(default)]
     required: Option<bool>,
-    value: UseState<Option<T>>,
     #[props(default)]
     autofocus: Option<bool>,
     #[props(default)]
     force_validation: Option<bool>,
-    on_select: Option<EventHandler<'a, Option<T>>>,
-    children: Element<'a>,
+    on_select: Option<EventHandler<Option<T>>>,
+    children: Element,
     #[props(default)]
     phantom: PhantomData<T>,
 }
 
-pub fn FloatingLabelSelect<'a, T>(cx: Scope<'a, InputSelectProps<'a, T>>) -> Element
+#[component]
+pub fn FloatingLabelSelect<T>(props: InputSelectProps<T>) -> Element
 where
-    T: FromStr + Display,
+    T: FromStr + Display + Clone + PartialEq,
     <T as FromStr>::Err: Display,
 {
-    let required = cx.props.required.unwrap_or_default();
+    let required = props.required.unwrap_or_default();
     let required_label_style = required
         .then_some("after:content-['*'] after:ml-0.5 after:text-error")
         .unwrap_or_default();
 
-    let error_message = use_state(cx, || None);
-    let input_style = use_memo(cx, &(error_message.clone(),), |(error_message,)| {
-        error_message
-            .as_ref()
+    let error_message = use_signal(|| None);
+    let input_style = use_memo(move || {
+        error_message()
             .and(Some(INPUT_INVALID_STYLE))
             .unwrap_or("border-base-200 focus:border-primary")
     });
-    let label_style = use_memo(cx, &(error_message.clone(),), |(error_message,)| {
-        error_message
-            .as_ref()
+    let label_style = use_memo(move || {
+        error_message()
             .and(Some(FLOATING_LABEL_INVALID_STYLE))
             .unwrap_or_default()
     });
-    let value_to_validate = use_state(cx, || "".to_string());
-    let _ = use_memo(cx, &(cx.props.value.clone(),), |(value,)| {
-        value_to_validate.set(value.as_ref().map(|v| v.to_string()).unwrap_or_default())
+    let mut value_to_validate = use_signal(|| "".to_string());
+    let mut validate = use_signal(|| false);
+    let _ = use_memo(move || {
+        if props.force_validation.unwrap_or_default() || (*validate)() {
+            validate_value::<T>(&value_to_validate(), error_message, required);
+        }
     });
 
-    let validate = use_state(cx, || false);
-    let _ = use_memo(
-        cx,
-        &(
-            value_to_validate.clone(),
-            cx.props.force_validation,
-            validate.clone(),
-        ),
-        |(value, force_validation, validate)| {
-            to_owned![error_message];
-            if force_validation.unwrap_or_default() || *validate {
-                validate_value::<T>(&value, error_message, required);
-            }
-        },
-    );
-
-    render! {
+    rsx! {
         div {
-            class: "relative {cx.props.class.unwrap_or_default()}",
+            class: "relative {props.class.unwrap_or_default()}",
             select {
-                id: "{cx.props.name}",
-                name: "{cx.props.name}",
+                id: "{props.name}",
+                name: "{props.name}",
                 class: "{input_style} block py-2 px-3 w-full bg-transparent bg-right border-0 border-b-2 appearance-none focus:outline-none focus:ring-0 peer",
                 oninput: move |evt| {
-                    validate.set(true);
-                    value_to_validate.set(evt.data.value.clone());
-                    if let Some(on_select) = &cx.props.on_select {
-                        on_select.call(T::from_str(&evt.data.value).ok());
+                    *validate.write() = true;
+                    value_to_validate.write().clone_from(&evt.data.value());
+                    if let Some(on_select) = &props.on_select {
+                        on_select.call(T::from_str(&evt.data.value()).ok());
                     }
                 },
-                onfocusout: |_| validate.set(true),
-                value: "{value_to_validate}",
-                autofocus: cx.props.autofocus.unwrap_or_default(),
+                onfocusout: move |_| *validate.write() = true,
+                autofocus: props.autofocus.unwrap_or_default(),
 
                 if !required {
-                    render! { option { "" } }
+                    option { "" }
                 }
-                &cx.props.children
+                { props.children }
             }
 
-            if let Some(label) = cx.props.label {
-                render! {
-                    label {
-                        "for": "{cx.props.name}",
-                        class: "{label_style} {required_label_style} absolute duration-300 transform -translate-y-6 scale-75 top-3 -z-10 origin-[0]",
-                        "{label}"
-                    }
+            if let Some(label) = (props.label)() {
+                label {
+                    "for": "{props.name}",
+                    class: "{label_style} {required_label_style} absolute duration-300 transform -translate-y-6 scale-75 top-3 -z-10 origin-[0]",
+                    "{label}"
                 }
             }
 
@@ -259,220 +220,159 @@ pub trait Searchable {
     fn get_id(&self) -> String;
 }
 
-#[derive(Props)]
-pub struct InputSearchProps<'a, T>
+#[derive(Props, Clone, PartialEq)]
+pub struct InputSearchProps<T: Clone + PartialEq + Searchable + 'static>
 where
-    T: Clone + Searchable + 'static,
+    T: Clone + PartialEq + Searchable + 'static,
 {
-    name: String,
+    name: ReadOnlySignal<String>,
     #[props(!optional)]
-    label: Option<&'a str>,
-    value: UseState<Option<T>>,
-    search_expression: UseState<String>,
-    search_results: UseState<Vec<T>>,
+    label: ReadOnlySignal<Option<String>>,
+    value: Signal<Option<T>>,
+    search_expression: Signal<String>,
+    search_results: Signal<Vec<T>>,
     #[props(default)]
     required: Option<bool>,
     #[props(default)]
     autofocus: Option<bool>,
-    on_select: EventHandler<'a, T>,
+    on_select: EventHandler<T>,
     #[props(default)]
-    class: Option<&'a str>,
-    children: Element<'a>,
+    class: Option<String>,
+    children: Element,
 }
 
-pub fn FloatingLabelInputSearchSelect<'a, T>(cx: Scope<'a, InputSearchProps<'a, T>>) -> Element<'a>
+#[component]
+pub fn FloatingLabelInputSearchSelect<T>(mut props: InputSearchProps<T>) -> Element
 where
-    T: Clone + Searchable + 'static,
+    T: Clone + PartialEq + Searchable + 'static,
 {
-    let dropdown_opened = use_state(cx, || false);
-    let required = cx.props.required.unwrap_or_default();
+    let mut dropdown_opened = use_signal(|| false);
+    let required = props.required.unwrap_or_default();
     let required_label_style = required
         .then_some("after:content-['*'] after:ml-0.5 after:text-error")
         .unwrap_or_default();
 
-    let selected_index = use_state(cx, || 0);
-    let _ = use_memo(cx, (&cx.props.search_results,), |(_,)| {
-        selected_index.set(0)
-    });
+    let mut selected_index = use_signal(|| 0);
+    let _ = use_memo(move || *selected_index.write() = 0);
 
-    let selected_result_title = use_memo(cx, &cx.props.value.clone(), |value| {
-        (*value.current())
-            .as_ref()
+    let selected_result_title = use_memo(move || {
+        (*props.value)()
             .map(|value| value.get_title())
             .unwrap_or_default()
     });
 
-    let error_message = use_state(cx, || None);
-    let button_style = use_memo(
-        cx,
-        &(
-            cx.props.value.clone(),
-            cx.props.autofocus,
-            dropdown_opened.clone(),
-        ),
-        |(value, autofocus, dropdown_opened)| {
-            if value.is_none() {
-                if is_dropdown_opened(
-                    value.current().is_some(),
-                    autofocus.unwrap_or_default(),
-                    *dropdown_opened.current(),
-                ) {
-                    "issearching"
-                } else {
-                    "isempty text-opacity-0 text-base-100"
-                }
+    let mut error_message = use_signal(|| None);
+    let button_style = use_memo(move || {
+        if (*props.value)().is_none() {
+            if is_dropdown_opened(
+                (*props.value)().is_some(),
+                props.autofocus.unwrap_or_default(),
+                dropdown_opened(),
+            ) {
+                "issearching"
             } else {
-                "isnotempty"
+                "isempty text-opacity-0 text-base-100"
             }
-        },
-    );
-    let border_style = use_memo(cx, &(error_message.clone(),), |(error_message,)| {
-        error_message
-            .as_ref()
+        } else {
+            "isnotempty"
+        }
+    });
+    let border_style = use_memo(move || {
+        error_message()
             .and(Some(INPUT_INVALID_STYLE))
             .unwrap_or("border-base-200 focus:border-primary")
     });
-    let label_style = use_memo(cx, &(error_message.clone(),), |(error_message,)| {
-        error_message
-            .as_ref()
+    let label_style = use_memo(move || {
+        error_message()
             .and(Some(FLOATING_LABEL_INVALID_STYLE))
             .unwrap_or_default()
     });
 
-    let dropdown_style = use_memo(
-        cx,
-        &(
-            cx.props.value.clone(),
-            cx.props.autofocus,
-            dropdown_opened.clone(),
-        ),
-        |(value, autofocus, dropdown_opened)| {
-            if is_dropdown_opened(
-                value.current().is_some(),
-                autofocus.unwrap_or_default(),
-                *dropdown_opened.current(),
-            ) {
-                "visible opacity-100"
-            } else {
-                "invisible opacity-0"
-            }
-        },
-    );
-
-    use_future(
-        cx,
-        &(cx.props.autofocus, cx.props.name.clone()),
-        |(autofocus, id)| async move {
-            if autofocus.unwrap_or_default() {
-                if let Err(error) = focus_and_select_input_element(&id).await {
-                    error!("Error focusing element {id}: {error:?}");
-                }
-            }
-        },
-    );
-
-    let button_just_got_focus = use_state(cx, || false);
-    let _ = use_memo(
-        cx,
-        &(dropdown_opened.clone(), cx.props.name.clone()),
-        |(dropdown_opened, id)| {
-            if *dropdown_opened.current() {
-                cx.spawn(async move {
-                    if let Err(error) = focus_and_select_input_element(&id).await {
-                        error!("Error focusing element {id}: {error:?}");
-                    }
-                });
-            }
-        },
-    );
-
-    let select_result = move |result: Option<T>| {
-        dropdown_opened.set(false);
-
-        match result {
-            Some(result) => {
-                error_message.set(None);
-                cx.props.value.set(Some(result.clone()));
-                cx.props.search_expression.set("".to_string());
-                cx.props.search_results.set(vec![]);
-                cx.props.on_select.call(result);
-            }
-            None => {
-                if required {
-                    error_message.set(Some(format!(
-                        "{} value required",
-                        cx.props.label.unwrap_or_default()
-                    )));
-                }
-            }
+    let dropdown_style = use_memo(move || {
+        if is_dropdown_opened(
+            (*props.value)().is_some(),
+            props.autofocus.unwrap_or_default(),
+            dropdown_opened(),
+        ) {
+            "visible opacity-100"
+        } else {
+            "invisible opacity-0"
         }
-    };
+    });
+
+    let mut button_just_got_focus = use_signal(|| false);
+    let _ = use_resource(move || async move {
+        if props.autofocus.unwrap_or_default() || dropdown_opened() {
+            let name = (props.name)();
+            if let Err(error) = focus_and_select_input_element(&name).await {
+                error!("Error focusing element {}: {error:?}", name);
+            }
+        };
+    });
 
     // Tricks to be able to prevent default Enter behavior as Dioxus does not yet support
     // preventing an event conditionnaly (ie. in a handler).
     // This creates a `keydown` event handler using the DOM API on the `search-list` and set the
     // `select_value` flag to trigger the following `use_memo`.
-    // Indeed, it is not possible to call `select_result` from the DOM event handler as it has a
-    // 'static lifetime whereas `select_result` has a 'a lifetime.
-    let select_value = use_state(cx, || false);
-    use_future(cx, (), |()| {
-        to_owned![select_value];
+    let mut select_value = use_signal(|| false);
+    let _ = use_resource(move || async move {
+        let Ok(search_list) = wait_for_element_by_id("search-list", 300).await else {
+            error!("Element `search-list` not found");
+            return;
+        };
+        let handler = Closure::wrap(Box::new(move |evt: KeyboardEvent| {
+            if &evt.key() == "Enter" {
+                *select_value.write() = true;
+                evt.prevent_default();
+            }
+        }) as Box<dyn FnMut(KeyboardEvent)>);
 
-        async move {
-            let handler = Closure::wrap(Box::new(move |evt: KeyboardEvent| {
-                if &evt.key() == "Enter" {
-                    select_value.set(true);
-                    evt.prevent_default();
-                }
-            }) as Box<dyn FnMut(KeyboardEvent)>);
+        search_list
+            .add_event_listener_with_callback("keydown", handler.as_ref().unchecked_ref())
+            .expect("Failed to add `keydown` event listener to search-list");
+        handler.forget();
+    });
 
-            let search_list = get_element_by_id("search-list").unwrap();
-            search_list
-                .add_event_listener_with_callback("keydown", handler.as_ref().unchecked_ref())
-                .expect("Failed to add `keydown` event listener to search-list");
-            handler.forget();
+    use_effect(move || {
+        if select_value() {
+            *select_value.write() = false;
+            let result = &(*props.search_results)()[(*selected_index)()];
+            *error_message.write() = None;
+            *props.value.write() = Some(result.clone());
+            *props.search_expression.write() = "".to_string();
+            *props.search_results.write() = vec![];
+            *dropdown_opened.write() = false;
+            props.on_select.call(result.clone());
         }
     });
 
-    let _ = use_memo(
-        cx,
-        &(select_value.clone(), cx.props.search_results.clone()),
-        |(select_value, search_results)| {
-            if *select_value.current() {
-                select_value.set(false);
-                let result = &search_results[*selected_index.current()];
-                select_result(Some(result.clone()));
-            }
-        },
-    );
-
-    render! {
+    rsx! {
         div {
-            class: "dropdown group {cx.props.class.unwrap_or_default()}",
+            class: "dropdown group {props.class.unwrap_or_default()}",
 
             label {
                 class: "join h-10 group w-full",
                 tabindex: -1,
 
-                &cx.props.children
+                { props.children }
 
                 button {
                     id: "selected-result",
                     name: "selected-result",
                     "type": "button",
                     class: "{border_style} {button_style} grow truncate block bg-transparent text-left border-0 border-b-2 focus:outline-none focus:ring-0 peer join-item px-3",
-                    onclick: |_| {
-                        if *button_just_got_focus.current() {
+                    onclick: move |_| {
+                        if button_just_got_focus() {
                             // Focus has already opened the dropdown, no need to handle click
                             // and close it
-                            button_just_got_focus.set(false);
+                            *button_just_got_focus.write() = false;
                             return;
                         }
-                        dropdown_opened.set(!*dropdown_opened.current());
+                        *dropdown_opened.write() = !dropdown_opened();
                     },
-                    onfocus: |_| {
-                        button_just_got_focus.set(true);
-                        dropdown_opened.set(!*dropdown_opened.current());
+                    onfocus: move |_| {
+                        *button_just_got_focus.write() = true;
+                        *dropdown_opened.write() = !dropdown_opened();
                     },
 
                     "{selected_result_title}"
@@ -482,13 +382,11 @@ where
                     ArrowDown { class: "h-5 w-5 group-hover:visible invisible" }
                 }
 
-                if let Some(label) = &cx.props.label {
-                    render! {
-                        label {
-                            "for": "selected-result",
-                            class: "{label_style} {required_label_style} absolute duration-300 transform -translate-y-0 scale-100 top-2 z-10 origin-[0] peer-[.isnotempty]:scale-75 peer-[.isnotempty]:-translate-y-6 peer-[.issearching]:scale-75 peer-[.issearching]:-translate-y-6 peer-focus:scale-75 peer-focus:-translate-y-6",
-                            "{label}"
-                        }
+                if let Some(label) = (props.label)() {
+                    label {
+                        "for": "selected-result",
+                        class: "{label_style} {required_label_style} absolute duration-300 transform -translate-y-0 scale-100 top-2 z-10 origin-[0] peer-[.isnotempty]:scale-75 peer-[.isnotempty]:-translate-y-6 peer-[.issearching]:scale-75 peer-[.issearching]:-translate-y-6 peer-focus:scale-75 peer-focus:-translate-y-6",
+                        "{label}"
                     }
                 }
             }
@@ -504,19 +402,24 @@ where
                     onkeydown: move |evt| {
                         match evt.key() {
                             Key::ArrowDown => {
-                                let value = *selected_index.current();
-                                if value < cx.props.search_results.len() - 1 {
-                                    selected_index.set(value + 1);
+                                let value = selected_index();
+                                if value < (props.search_results)().len() - 1 {
+                                    *selected_index.write() = value + 1;
                                 }
                             }
                             Key::ArrowUp => {
-                                let value = *selected_index.current();
+                                let value = selected_index();
                                 if value > 0 {
-                                    selected_index.set(value - 1);
+                                    *selected_index.write() = value - 1;
                                 }
                             }
                             Key::Tab | Key::Escape => {
-                                select_result(None);
+                                if required {
+                                    *error_message.write() = Some(format!(
+                                        "{} value required",
+                                        (props.label)().unwrap_or_default()
+                                    ));
+                                }
                             }
                             _ => {}
                         }
@@ -527,16 +430,16 @@ where
 
                         input {
                             "type": "text",
-                            name: "{cx.props.name}",
-                            id: "{cx.props.name}",
+                            name: "{props.name}",
+                            id: "{props.name}",
                             class: "input bg-transparent w-full pl-12 focus:ring-0 focus:outline-none h-10",
                             placeholder: " ",
-                            value: "{cx.props.search_expression}",
+                            value: "{props.search_expression}",
                             autocomplete: "off",
-                            oninput: |evt| {
-                                cx.props.search_expression.set(evt.value.clone());
+                            oninput: move |evt| {
+                                props.search_expression.write().clone_from(&evt.value());
                             },
-                            autofocus: cx.props.autofocus.unwrap_or_default(),
+                            autofocus: props.autofocus.unwrap_or_default(),
                         }
                         Icon {
                             class: "p-0 w-6 h-6 absolute my-2 ml-2 opacity-60 text-base-content",
@@ -544,18 +447,25 @@ where
                         }
                     }
 
-                    cx.props.search_results.iter().enumerate().map(|(i, result)| {
-                        render! {
-                            SearchResultRow {
-                                key: "{result.get_id()}",
-                                title: "{result.get_title()}",
-                                selected: i == *selected_index.current(),
-                                on_select: move |_| {
-                                    select_result(Some(result.clone()));
-                                },
+                    {
+                        (props.search_results)().into_iter().enumerate().map(|(i, result)| {
+                            rsx! {
+                                SearchResultRow {
+                                    key: "{result.get_id()}",
+                                    title: "{result.get_title()}",
+                                    selected: i == selected_index(),
+                                    on_select: move |_| {
+                                        *error_message.write() = None;
+                                        *props.value.write() = Some(result.clone());
+                                        *props.search_expression.write() = "".to_string();
+                                        *props.search_results.write() = vec![];
+                                        *dropdown_opened.write() = false;
+                                        props.on_select.call(result.clone());
+                                    },
+                                }
                             }
-                        }
-                    })
+                        })
+                    }
                 }
             }
         }
@@ -563,8 +473,8 @@ where
 }
 
 #[component]
-fn ArrowDown<'a>(cx: Scope, class: Option<&'a str>) -> Element {
-    render! {
+fn ArrowDown(class: Option<String>) -> Element {
+    rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
             class: "{class.unwrap_or_default()}",
@@ -588,9 +498,9 @@ fn is_dropdown_opened(has_value: bool, autofocus: bool, dropdown_opened: bool) -
 }
 
 #[component]
-pub fn ErrorMessage<'a>(cx: Scope, message: &'a UseState<Option<String>>) -> Element {
-    if let Some(error) = message.as_ref() {
-        render! {
+pub fn ErrorMessage(message: ReadOnlySignal<Option<String>>) -> Element {
+    if let Some(error) = message() {
+        rsx! {
             p {
                 class: "mt-2 text-error dark:text-error",
                 span { "{error}" }
@@ -602,25 +512,14 @@ pub fn ErrorMessage<'a>(cx: Scope, message: &'a UseState<Option<String>>) -> Ele
 }
 
 #[component]
-fn SearchResultRow<'a>(
-    cx: Scope,
+fn SearchResultRow(
     selected: bool,
-    title: &'a str,
-    on_select: EventHandler<'a, ()>,
+    title: ReadOnlySignal<String>,
+    on_select: EventHandler<()>,
 ) -> Element {
-    let style = use_memo(
-        cx,
-        (selected,),
-        |(selected,)| {
-            if selected {
-                "active"
-            } else {
-                ""
-            }
-        },
-    );
+    let style = if selected { "active" } else { "" };
 
-    render! {
+    rsx! {
         li {
             class: "w-full inline-block",
             prevent_default: "onclick",
@@ -637,7 +536,7 @@ fn SearchResultRow<'a>(
     }
 }
 
-fn validate_value<T>(value: &str, error_message: UseState<Option<String>>, required: bool)
+fn validate_value<T>(value: &str, mut error_message: Signal<Option<String>>, required: bool)
 where
     T: FromStr,
     <T as FromStr>::Err: Display,
@@ -649,12 +548,12 @@ where
             } else {
                 "Value required".to_string()
             };
-            error_message.set(Some(msg));
+            *error_message.write() = Some(msg);
         } else {
-            error_message.set(None);
+            *error_message.write() = None;
         }
     } else {
-        error_message.set(T::from_str(value).err().map(|error| error.to_string()));
+        *error_message.write() = T::from_str(value).err().map(|error| error.to_string());
     }
 }
 

@@ -14,16 +14,16 @@ use crate::components::integrations::{
 };
 
 #[component]
-pub fn Notion<'a>(cx: Scope, class: Option<&'a str>) -> Element {
-    render! {img {
+pub fn Notion(class: Option<String>) -> Element {
+    rsx! {img {
         class: "{class.unwrap_or_default()}",
         src: "images/notion-logo.svg"
     }}
 }
 
 #[component]
-pub fn GoogleDocs<'a>(cx: Scope, class: Option<&'a str>) -> Element {
-    render! {
+pub fn GoogleDocs(class: Option<String>) -> Element {
+    rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
             class: "{class.unwrap_or_default()}",
@@ -39,8 +39,8 @@ pub fn GoogleDocs<'a>(cx: Scope, class: Option<&'a str>) -> Element {
 }
 
 #[component]
-pub fn TickTick<'a>(cx: Scope, class: Option<&'a str>) -> Element {
-    render! {
+pub fn TickTick(class: Option<String>) -> Element {
+    rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
             class: "{class.unwrap_or_default()}",
@@ -69,42 +69,37 @@ pub fn TickTick<'a>(cx: Scope, class: Option<&'a str>) -> Element {
 }
 
 #[component]
-pub fn IntegrationProviderIcon<'a>(
-    cx: Scope,
-    class: &'a str,
-    provider_kind: IntegrationProviderKind,
-) -> Element {
+pub fn IntegrationProviderIcon(class: String, provider_kind: IntegrationProviderKind) -> Element {
     // tag: New notification integration
     match provider_kind {
-        IntegrationProviderKind::Github => render! { Github { class: class } },
-        IntegrationProviderKind::Linear => render! { Linear { class: class } },
-        IntegrationProviderKind::GoogleMail => render! { GoogleMail { class: class } },
-        IntegrationProviderKind::Notion => render! { Notion { class: class } },
-        IntegrationProviderKind::GoogleDocs => render! { GoogleDocs { class: class } },
-        IntegrationProviderKind::Slack => render! { Icon { class: class, icon: BsSlack } },
-        IntegrationProviderKind::Todoist => render! { Todoist { class: class } },
-        IntegrationProviderKind::TickTick => render! { TickTick { class: class } },
+        IntegrationProviderKind::Github => rsx! { Github { class: class } },
+        IntegrationProviderKind::Linear => rsx! { Linear { class: class } },
+        IntegrationProviderKind::GoogleMail => rsx! { GoogleMail { class: class } },
+        IntegrationProviderKind::Notion => rsx! { Notion { class: class } },
+        IntegrationProviderKind::GoogleDocs => rsx! { GoogleDocs { class: class } },
+        IntegrationProviderKind::Slack => rsx! { Icon { class: class, icon: BsSlack } },
+        IntegrationProviderKind::Todoist => rsx! { Todoist { class: class } },
+        IntegrationProviderKind::TickTick => rsx! { TickTick { class: class } },
     }
 }
 
 #[component]
-pub fn NotificationMetadataIcon<'a>(
-    cx: Scope,
-    class: &'a str,
-    notification_metadata: &'a NotificationMetadata,
+pub fn NotificationMetadataIcon(
+    class: String,
+    notification_metadata: ReadOnlySignal<NotificationMetadata>,
 ) -> Element {
     // tag: New notification integration
-    match notification_metadata {
-        NotificationMetadata::Github(_) => render! { Github { class: class } },
-        NotificationMetadata::Linear(_) => render! { Linear { class: class } },
-        NotificationMetadata::GoogleMail(_) => render! { GoogleMail { class: class } },
-        NotificationMetadata::Todoist => render! { Todoist { class: class } },
-        NotificationMetadata::Slack(_) => render! { Icon { class: class, icon: BsSlack } },
+    match notification_metadata() {
+        NotificationMetadata::Github(_) => rsx! { Github { class: class } },
+        NotificationMetadata::Linear(_) => rsx! { Linear { class: class } },
+        NotificationMetadata::GoogleMail(_) => rsx! { GoogleMail { class: class } },
+        NotificationMetadata::Todoist => rsx! { Todoist { class: class } },
+        NotificationMetadata::Slack(_) => rsx! { Icon { class: class, icon: BsSlack } },
     }
 }
 
 #[component]
-pub fn TaskIcon<'a>(cx: Scope, class: &'a str, _kind: TaskSourceKind) -> Element {
+pub fn TaskIcon(class: String, _kind: TaskSourceKind) -> Element {
     // _kind is not yet used as Todoist is the only task provider for now
-    render! { Todoist { class: class } }
+    rsx! { Todoist { class: class } }
 }

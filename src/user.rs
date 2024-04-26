@@ -121,7 +121,7 @@ pub struct Credentials {
     pub password: Secret<Password>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(transparent)]
 pub struct Password(pub String);
 

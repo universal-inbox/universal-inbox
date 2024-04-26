@@ -204,6 +204,9 @@ async fn main() -> std::io::Result<()> {
         "Connecting to SMTP server on {}",
         &settings.application.email.safe_connection_string()
     );
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install rustls crypto provider");
     let mailer = Arc::new(RwLock::new(
         SmtpMailer::build(
             settings.application.email.smtp_server.clone(),

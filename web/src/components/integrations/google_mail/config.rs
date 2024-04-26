@@ -2,6 +2,7 @@
 
 use dioxus::prelude::*;
 
+use log::debug;
 use universal_inbox::integration_connection::{
     config::IntegrationConnectionConfig,
     integrations::google_mail::{GoogleMailConfig, GoogleMailContext},
@@ -10,18 +11,18 @@ use universal_inbox::integration_connection::{
 use crate::components::floating_label_inputs::FloatingLabelSelect;
 
 #[component]
-pub fn GoogleMailProviderConfiguration<'a>(
-    cx: Scope,
-    config: GoogleMailConfig,
-    context: Option<Option<GoogleMailContext>>,
-    on_config_change: EventHandler<'a, IntegrationConnectionConfig>,
+pub fn GoogleMailProviderConfiguration(
+    config: ReadOnlySignal<GoogleMailConfig>,
+    context: ReadOnlySignal<Option<Option<GoogleMailContext>>>,
+    on_config_change: EventHandler<IntegrationConnectionConfig>,
 ) -> Element {
-    let selected_label_id = use_state(cx, || None);
-    let _ = use_memo(cx, config, |config| {
-        selected_label_id.set(Some(config.synced_label.id.clone()));
+    let mut selected_label_id = use_signal(|| None);
+    debug!("XXX: Google Mail config: {:?}", config());
+    let _ = use_memo(move || {
+        *selected_label_id.write() = Some(config().synced_label.id);
     });
 
-    render! {
+    rsx! {
         div {
             class: "flex flex-col",
 
@@ -38,11 +39,11 @@ pub fn GoogleMailProviderConfiguration<'a>(
                         class: "toggle toggle-ghost",
                         oninput: move |event| {
                             on_config_change.call(IntegrationConnectionConfig::GoogleMail(GoogleMailConfig {
-                                sync_notifications_enabled: event.value == "true",
-                                ..config.clone()
+                                sync_notifications_enabled: event.value() == "true",
+                                ..config()
                             }))
                         },
-                        checked: config.sync_notifications_enabled
+                        checked: config().sync_notifications_enabled
                     }
                 }
             }
@@ -60,10 +61,9 @@ pub fn GoogleMailProviderConfiguration<'a>(
                         label: None,
                         class: "w-full max-w-xs bg-base-100 rounded",
                         name: "google-mail-label".to_string(),
-                        value: selected_label_id.clone(),
                         required: true,
                         on_select: move |label_id| {
-                            if let Some(Some(context)) = context {
+                            if let Some(Some(context)) = context() {
                                 if let Some(label_id) = label_id {
                                     let label = context
                                         .labels
@@ -72,25 +72,19 @@ pub fn GoogleMailProviderConfiguration<'a>(
                                     if let Some(label) = label {
                                         on_config_change.call(IntegrationConnectionConfig::GoogleMail(GoogleMailConfig {
                                             synced_label: label.clone(),
-                                            ..config.clone()
+                                            ..config()
                                         }));
                                     }
                                 }
                             }
                         },
 
-                        if let Some(Some(context)) = context {
-                            render! {
-                                for label in &context.labels {
-                                    render! {
-                                        option { value: "{label.id}", "{label.name}" }
-                                    }
-                                }
+                        if let Some(Some(context)) = context() {
+                            for label in &context.labels {
+                                option { selected: selected_label_id() == Some(label.id.clone()), value: "{label.id}", "{label.name}" }
                             }
                         } else {
-                            render! {
-                                option { selected: true, "{config.synced_label.name}" }
-                            }
+                            option { selected: true, "{config().synced_label.name}" }
                         }
                     }
                 }

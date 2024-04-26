@@ -13,31 +13,30 @@ use universal_inbox::{
 use crate::components::integrations::slack::{icons::SlackNotificationIcon, SlackTeamDisplay};
 
 #[component]
-pub fn SlackFileCommentPreview<'a>(
-    cx: Scope,
-    notification: &'a NotificationWithTask,
-    slack_file_comment: &'a SlackFileCommentDetails,
+pub fn SlackFileCommentPreview(
+    notification: ReadOnlySignal<NotificationWithTask>,
+    slack_file_comment: ReadOnlySignal<SlackFileCommentDetails>,
 ) -> Element {
-    let NotificationMetadata::Slack(ref slack_push_event_callback) = notification.metadata else {
+    let NotificationMetadata::Slack(slack_push_event_callback) = notification().metadata else {
         return None;
     };
-    let channel_name = slack_file_comment
+    let channel_name = slack_file_comment()
         .channel
         .name
         .clone()
-        .unwrap_or_else(|| slack_file_comment.channel.id.to_string());
+        .unwrap_or_else(|| slack_file_comment().channel.id.to_string());
 
-    render! {
+    rsx! {
         div {
             class: "flex flex-col w-full gap-2",
 
             div {
                 class: "flex items-center gap-2",
 
-                SlackTeamDisplay { team: &slack_file_comment.team }
+                SlackTeamDisplay { team: slack_file_comment().team }
                 a {
                     class: "text-xs text-gray-400",
-                    href: "{slack_file_comment.get_html_url()}",
+                    href: "{slack_file_comment().get_html_url()}",
                     target: "_blank",
                     "#{channel_name}"
                 }
@@ -46,15 +45,15 @@ pub fn SlackFileCommentPreview<'a>(
             h2 {
                 class: "flex items-center gap-2 text-lg",
 
-                SlackNotificationIcon { class: "h-5 w-5", slack_push_event_callback: &slack_push_event_callback }
+                SlackNotificationIcon { class: "h-5 w-5", slack_push_event_callback: *slack_push_event_callback }
                 a {
-                    href: "{slack_file_comment.get_html_url()}",
+                    href: "{slack_file_comment().get_html_url()}",
                     target: "_blank",
-                    dangerous_inner_html: "{notification.title}"
+                    dangerous_inner_html: "{notification().title}"
                 }
                 a {
                     class: "flex-none",
-                    href: "{slack_file_comment.get_html_url()}",
+                    href: "{slack_file_comment().get_html_url()}",
                     target: "_blank",
                     Icon { class: "h-5 w-5 text-gray-400 p-1", icon: BsArrowUpRightSquare }
                 }

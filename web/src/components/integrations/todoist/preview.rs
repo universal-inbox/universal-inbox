@@ -24,15 +24,14 @@ use crate::{
 };
 
 #[component]
-pub fn TodoistTaskPreview<'a>(
-    cx: Scope,
-    notification: &'a NotificationWithTask,
-    task: &'a Task,
+pub fn TodoistTaskPreview(
+    notification: ReadOnlySignal<NotificationWithTask>,
+    task: ReadOnlySignal<Task>,
     todoist_task: TodoistItem,
 ) -> Element {
-    let link = notification.get_html_url();
-    let project_link = task.get_html_project_url();
-    let priority: u8 = task.priority.into();
+    let link = notification().get_html_url();
+    let project_link = task().get_html_project_url();
+    let priority: u8 = task().priority.into();
     let task_priority_style = match todoist_task.priority {
         TodoistItemPriority::P1 => PRIORITY_LOW_COLOR_CLASS,
         TodoistItemPriority::P2 => PRIORITY_NORMAL_COLOR_CLASS,
@@ -40,7 +39,7 @@ pub fn TodoistTaskPreview<'a>(
         TodoistItemPriority::P4 => PRIORITY_URGENT_COLOR_CLASS,
     };
 
-    render! {
+    rsx! {
         div {
             class: "flex flex-col gap-2 w-full",
 
@@ -51,7 +50,7 @@ pub fn TodoistTaskPreview<'a>(
                     class: "text-xs text-gray-400",
                     href: "{project_link}",
                     target: "_blank",
-                    "#{task.project}"
+                    "#{task().project}"
                 }
             }
 
@@ -62,7 +61,7 @@ pub fn TodoistTaskPreview<'a>(
                 a {
                     href: "{link}",
                     target: "_blank",
-                    Markdown { text: notification.title.clone() }
+                    Markdown { text: notification().title.clone() }
                 }
                 a {
                     class: "flex-none",
@@ -91,14 +90,12 @@ pub fn TodoistTaskPreview<'a>(
                 }
 
                 if let Some(due) = &todoist_task.due {
-                    render! {
-                        SmallCard {
-                            Icon { class: "h-3 w-3", icon: BsCalendar2Check }
-                            span { class: "text-gray-400", "Due date:" }
-                            "{due.date}",
-                            if due.is_recurring {
-                                render! { Icon { class: "h-3 w-3", icon: BsArrowRepeat } }
-                            }
+                    SmallCard {
+                        Icon { class: "h-3 w-3", icon: BsCalendar2Check }
+                        span { class: "text-gray-400", "Due date:" }
+                        "{due.date}",
+                        if due.is_recurring {
+                            Icon { class: "h-3 w-3", icon: BsArrowRepeat }
                         }
                     }
                 }
@@ -110,7 +107,7 @@ pub fn TodoistTaskPreview<'a>(
                 }
             }
 
-            Markdown { text: task.body.clone() }
+            Markdown { text: task().body }
         }
     }
 }

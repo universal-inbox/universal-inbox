@@ -14,9 +14,8 @@ use universal_inbox::{
 use crate::components::{markdown::Markdown, Tag, TagDisplay};
 
 #[component]
-pub fn TodoistNotificationDisplay<'a>(
-    cx: Scope,
-    notif: &'a NotificationWithTask,
+pub fn TodoistNotificationDisplay(
+    notif: ReadOnlySignal<NotificationWithTask>,
     todoist_task: TodoistItem,
 ) -> Element {
     let task_icon_style = match todoist_task.priority {
@@ -26,7 +25,7 @@ pub fn TodoistNotificationDisplay<'a>(
         TodoistItemPriority::P4 => "text-red-500",
     };
 
-    render! {
+    rsx! {
         div {
             class: "flex items-center gap-2",
 
@@ -35,20 +34,18 @@ pub fn TodoistNotificationDisplay<'a>(
             div {
                 class: "flex flex-col grow",
 
-                Markdown { text: notif.title.clone() }
+                Markdown { text: notif().title.clone() }
                 div {
                     class: "flex gap-2",
 
                     if let Some(due) = &todoist_task.due {
-                        render! {
-                            div {
-                                class: "flex items-center text-xs text-gray-400 gap-1",
+                        div {
+                            class: "flex items-center text-xs text-gray-400 gap-1",
 
-                                Icon { class: "h-3 w-3", icon: BsCalendar2Check }
-                                "{due.date}"
-                                if due.is_recurring {
-                                    render! { Icon { class: "h-3 w-3", icon: BsArrowRepeat } }
-                                }
+                            Icon { class: "h-3 w-3", icon: BsCalendar2Check }
+                            "{due.date}"
+                            if due.is_recurring {
+                                Icon { class: "h-3 w-3", icon: BsArrowRepeat }
                             }
                         }
                     }
@@ -59,16 +56,16 @@ pub fn TodoistNotificationDisplay<'a>(
 }
 
 #[component]
-pub fn TodoistNotificationDetailsDisplay<'a>(cx: Scope, todoist_item: &'a TodoistItem) -> Element {
-    render! {
+pub fn TodoistNotificationDetailsDisplay(todoist_item: ReadOnlySignal<TodoistItem>) -> Element {
+    rsx! {
         div {
             class: "flex gap-2",
 
-            for tag in todoist_item
+            for tag in todoist_item()
                 .labels
                 .iter()
                 .map(|label| Into::<Tag>::into(label.clone())) {
-                    render! { TagDisplay { tag: tag } }
+                    TagDisplay { tag: tag }
                 }
         }
     }

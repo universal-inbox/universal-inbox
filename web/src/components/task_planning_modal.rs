@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use chrono::{NaiveDate, Utc};
 use dioxus::prelude::*;
 use dioxus_free_icons::{icons::bs_icons::BsX, Icon};
-use fermi::UseAtomRef;
+
 use log::error;
 
 use universal_inbox::{
@@ -30,42 +30,41 @@ use crate::{
 };
 
 #[component]
-pub fn TaskPlanningModal<'a>(
-    cx: Scope,
-    notification_to_plan: NotificationWithTask,
-    task_service_integration_connection_ref: UseAtomRef<LoadState<Option<IntegrationConnection>>>,
-    ui_model_ref: UseAtomRef<UniversalInboxUIModel>,
-    on_close: EventHandler<'a, ()>,
-    on_task_planning: EventHandler<'a, (TaskPlanning, TaskId)>,
-    on_task_creation: EventHandler<'a, TaskCreation>,
+pub fn TaskPlanningModal(
+    notification_to_plan: ReadOnlySignal<NotificationWithTask>,
+    task_service_integration_connection: Signal<LoadState<Option<IntegrationConnection>>>,
+    ui_model: Signal<UniversalInboxUIModel>,
+    on_close: EventHandler<()>,
+    on_task_planning: EventHandler<(TaskPlanning, TaskId)>,
+    on_task_creation: EventHandler<TaskCreation>,
 ) -> Element {
-    let icon = render! { div { class: "h-5 w-5 flex-none", Todoist {} } };
-    let default_project: &UseState<Option<String>> = use_state(cx, || None);
-    let due_at = use_state(cx, || Utc::now().format("%Y-%m-%d").to_string());
-    let priority = use_state(cx, || Some(TaskPriority::P4));
-    let task_title = use_state(cx, || "".to_string());
-    let task_to_plan = use_state(cx, || None);
+    let icon = rsx! { div { class: "h-5 w-5 flex-none", Todoist {} } };
+    let mut default_project: Signal<Option<String>> = use_signal(|| None);
+    let mut due_at = use_signal(|| Utc::now().format("%Y-%m-%d").to_string());
+    let mut priority = use_signal(|| Some(TaskPriority::P4));
+    let mut task_title = use_signal(|| "".to_string());
+    let mut task_to_plan = use_signal(|| None);
 
-    let force_validation = use_state(cx, || false);
+    let force_validation = use_signal(|| false);
 
-    let selected_project: &UseState<Option<ProjectSummary>> = use_state(cx, || None);
+    let selected_project: Signal<Option<ProjectSummary>> = use_signal(|| None);
 
-    let _ = use_memo(cx, &notification_to_plan.clone(), |notification| {
-        if let Some(task) = notification.task {
-            task_title.set(task.title.clone());
-            default_project.set(Some(task.project.clone()));
+    let _ = use_memo(move || {
+        if let Some(task) = notification_to_plan().task {
+            task_title.write().clone_from(&task.title);
+            *default_project.write() = Some(task.project.clone());
             if let Some(task_due_at) = task.due_at.as_ref() {
-                due_at.set(match task_due_at {
+                *due_at.write() = match task_due_at {
                     DueDate::DateTime(dt) => dt.format("%Y-%m-%d").to_string(),
                     DueDate::Date(dt) => dt.format("%Y-%m-%d").to_string(),
                     DueDate::DateTimeWithTz(dt) => dt.format("%Y-%m-%d").to_string(),
-                });
+                };
             }
-            priority.set(Some(task.priority));
-            task_to_plan.set(Some(task));
+            *priority.write() = Some(task.priority);
+            *task_to_plan.write() = Some(task);
         } else {
-            task_to_plan.set(None);
-            task_title.set(notification.title);
+            *task_to_plan.write() = None;
+            *task_title.write() = notification_to_plan().title;
 
             if let LoadState::Loaded(Some(IntegrationConnection {
                 provider:
@@ -78,10 +77,10 @@ pub fn TaskPlanningModal<'a>(
                         ..
                     },
                 ..
-            })) = *task_service_integration_connection_ref.read()
+            })) = *task_service_integration_connection.read()
             {
                 if !create_notification_from_inbox_task {
-                    default_project.set(Some(TODOIST_INBOX_PROJECT.to_string()));
+                    *default_project.write() = Some(TODOIST_INBOX_PROJECT.to_string());
                 }
             }
         }
@@ -98,14 +97,14 @@ pub fn TaskPlanningModal<'a>(
                 ..
             },
         ..
-    })) = *task_service_integration_connection_ref.read()
+    })) = *task_service_integration_connection.read()
     {
         create_notification_from_inbox_task
     } else {
         false
     };
 
-    render! {
+    rsx! {
         dialog {
             id: "task-planning-modal",
             tabindex: "-1",
@@ -133,15 +132,15 @@ pub fn TaskPlanningModal<'a>(
                     form {
                         class: "flex flex-col space-y-4",
                         method: "dialog",
-                        onsubmit: |evt| {
-                            if let Some(ref task) = *task_to_plan.current() {
+                        onsubmit: move |evt| {
+                            if let Some(task) = task_to_plan() {
                                 if let Some(task_planning_parameters) = validate_planning_form(
-                                    &evt.data.values, &selected_project.current()
+                                    &evt.data.values(), selected_project()
                                 ) {
                                     on_task_planning.call((task_planning_parameters, task.id));
                                 }
                             } else if let Some(task_creation_parameters) = validate_creation_form(
-                                &evt.data.values, &selected_project.current()
+                                &evt.data.values(), selected_project()
                             ) {
                                 on_task_creation.call(task_creation_parameters);
                             }
@@ -149,22 +148,18 @@ pub fn TaskPlanningModal<'a>(
 
                         div {
                             class: "flex flex-none items-center gap-2 w-full",
-                            if task_to_plan.current().is_some() {
-                                render! {
-                                    icon
-                                    span { class: "grow", "{task_title}" }
-                                }
+                            if task_to_plan().is_some() {
+                                { icon }
+                                span { class: "grow", "{task_title}" }
                             } else {
-                                render! {
-                                    FloatingLabelInputText::<String> {
-                                        name: "task-title-input".to_string(),
-                                        label: Some("Task's title"),
-                                        required: true,
-                                        value: task_title.clone(),
-                                        autofocus: true,
-                                        force_validation: *force_validation.current(),
-                                        icon: icon,
-                                    }
+                                FloatingLabelInputText::<String> {
+                                    name: "task-title-input".to_string(),
+                                    label: Some("Task's title".to_string()),
+                                    required: true,
+                                    value: task_title,
+                                    autofocus: true,
+                                    force_validation: force_validation(),
+                                    icon: icon,
                                 }
                             }
                         }
@@ -172,11 +167,12 @@ pub fn TaskPlanningModal<'a>(
                         TaskProjectSearch {
                             label: "Project",
                             required: true,
-                            selected_project: selected_project.clone(),
-                            ui_model_ref: ui_model_ref.clone(),
+                            selected_project: selected_project,
+                            default_project_name: None,
+                            ui_model: ui_model,
                             filter_out_inbox: filter_out_inbox,
                             on_select: move |_project| {
-                                cx.spawn({
+                                spawn({
                                     async move {
                                         if let Err(error) = focus_element("task-planning-modal-submit").await {
                                             error!("Error focusing element task-planning-modal-submit: {error:?}");
@@ -190,8 +186,8 @@ pub fn TaskPlanningModal<'a>(
                             name: "task-due_at-input".to_string(),
                             label: "Due at",
                             required: false,
-                            value: due_at.clone(),
-                            force_validation: *force_validation.current(),
+                            value: due_at,
+                            force_validation: force_validation(),
                             autohide: true,
                             today_button: true,
                             today_highlight: true,
@@ -199,15 +195,14 @@ pub fn TaskPlanningModal<'a>(
 
                         FloatingLabelSelect::<TaskPriority> {
                             name: "task-priority-input".to_string(),
-                            label: Some("Priority"),
+                            label: Some("Priority".to_string()),
                             required: false,
-                            value: priority.clone(),
-                            force_validation: *force_validation.current(),
+                            force_validation: force_validation(),
 
-                            option { value: "1", "🔴 Priority 1" }
-                            option { value: "2", "🟠 Priority 2" }
-                            option { value: "3", "🟡 Priority 3" }
-                            option { value: "4", "🔵 Priority 4" }
+                            option { selected: priority() == Some(TaskPriority::P1), value: "1", "🔴 Priority 1" }
+                            option { selected: priority() == Some(TaskPriority::P2), value: "2", "🟠 Priority 2" }
+                            option { selected: priority() == Some(TaskPriority::P3), value: "3", "🟡 Priority 3" }
+                            option { selected: priority() == Some(TaskPriority::P4), value: "4", "🔵 Priority 4" }
                         }
 
                         div {
@@ -227,10 +222,12 @@ pub fn TaskPlanningModal<'a>(
 }
 
 fn validate_planning_form(
-    values: &HashMap<String, Vec<String>>,
-    selected_project: &Option<ProjectSummary>,
+    values: &HashMap<String, FormValue>,
+    selected_project: Option<ProjectSummary>,
 ) -> Option<TaskPlanning> {
     let due_at = values["task-due_at-input"]
+        .clone()
+        .to_vec()
         .first()
         .map_or(Ok(None), |value| {
             if value.is_empty() {
@@ -239,10 +236,14 @@ fn validate_planning_form(
                 value.parse::<DueDate>().map(Some)
             }
         });
-    let priority = values["task-priority-input"].first().map_or(
-        Err("Task priority value is required".to_string()),
-        |value| value.parse::<TaskPriority>(),
-    );
+    let priority = values["task-priority-input"]
+        .clone()
+        .to_vec()
+        .first()
+        .map_or(
+            Err("Task priority value is required".to_string()),
+            |value| value.parse::<TaskPriority>(),
+        );
 
     if let (Some(project), Ok(due_at), Ok(priority)) = (selected_project, due_at, priority) {
         return Some(TaskPlanning {
@@ -256,11 +257,12 @@ fn validate_planning_form(
 }
 
 fn validate_creation_form(
-    values: &HashMap<String, Vec<String>>,
-    selected_project: &Option<ProjectSummary>,
+    values: &HashMap<String, FormValue>,
+    selected_project: Option<ProjectSummary>,
 ) -> Option<TaskCreation> {
     if let Some(task_planning_parameters) = validate_planning_form(values, selected_project) {
-        let title = values["task-title-input"]
+        let title_input = values["task-title-input"].clone().to_vec();
+        let title = title_input
             .first()
             .ok_or("Task title is required".to_string());
 
