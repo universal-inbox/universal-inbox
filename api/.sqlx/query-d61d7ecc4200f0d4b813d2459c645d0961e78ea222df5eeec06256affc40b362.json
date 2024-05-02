@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT\n                  integration_connection.id,\n                  integration_connection.user_id,\n                  integration_connection.provider_user_id,\n                  integration_connection.connection_id,\n                  integration_connection.status as \"status: _\",\n                  integration_connection.failure_message,\n                  integration_connection.created_at,\n                  integration_connection.updated_at,\n                  integration_connection.last_sync_started_at,\n                  integration_connection.last_sync_failure_message,\n                  integration_connection_config.config as \"config: Json<IntegrationConnectionConfig>\",\n                  integration_connection.context as \"context: Json<IntegrationConnectionContext>\"\n                FROM integration_connection\n                INNER JOIN integration_connection_config\n                  ON integration_connection.id = integration_connection_config.integration_connection_id\n                WHERE user_id = $1\n            ",
+  "query": "\n                SELECT\n                  integration_connection.id,\n                  integration_connection.user_id,\n                  integration_connection.provider_user_id,\n                  integration_connection.connection_id,\n                  integration_connection.status as \"status: _\",\n                  integration_connection.failure_message,\n                  integration_connection.created_at,\n                  integration_connection.updated_at,\n                  integration_connection.last_sync_started_at,\n                  integration_connection.last_sync_failure_message,\n                  integration_connection.sync_failures,\n                  integration_connection_config.config as \"config: Json<IntegrationConnectionConfig>\",\n                  integration_connection.context as \"context: Json<IntegrationConnectionContext>\"\n                FROM integration_connection\n                INNER JOIN integration_connection_config\n                  ON integration_connection.id = integration_connection_config.integration_connection_id\n                WHERE\n                    integration_connection.provider_user_id = $1\n                    AND integration_connection.provider_kind::TEXT = $2\n            ",
   "describe": {
     "columns": [
       {
@@ -66,18 +66,24 @@
       },
       {
         "ordinal": 10,
+        "name": "sync_failures",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 11,
         "name": "config: Json<IntegrationConnectionConfig>",
         "type_info": "Json"
       },
       {
-        "ordinal": 11,
+        "ordinal": 12,
         "name": "context: Json<IntegrationConnectionContext>",
         "type_info": "Json"
       }
     ],
     "parameters": {
       "Left": [
-        "Uuid"
+        "Text",
+        "Text"
       ]
     },
     "nullable": [
@@ -92,8 +98,9 @@
       true,
       true,
       false,
+      false,
       true
     ]
   },
-  "hash": "0990e04b8e9e3564108b00086fefedb43b2f5e78519b8a121991a46105bf9b1d"
+  "hash": "d61d7ecc4200f0d4b813d2459c645d0961e78ea222df5eeec06256affc40b362"
 }

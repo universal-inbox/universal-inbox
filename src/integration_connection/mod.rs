@@ -30,6 +30,7 @@ pub struct IntegrationConnection {
     pub updated_at: DateTime<Utc>,
     pub last_sync_started_at: Option<DateTime<Utc>>,
     pub last_sync_failure_message: Option<String>,
+    pub sync_failures: u32,
     pub provider: IntegrationProvider,
 }
 
@@ -46,6 +47,7 @@ impl IntegrationConnection {
             updated_at: Utc::now().with_nanosecond(0).unwrap(),
             last_sync_started_at: None,
             last_sync_failure_message: None,
+            sync_failures: 0,
             // Using unwrap as None cannot mismatch with the provided config
             provider: IntegrationProvider::new(config, None).unwrap(),
         }

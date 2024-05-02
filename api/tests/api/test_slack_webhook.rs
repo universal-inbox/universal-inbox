@@ -175,6 +175,7 @@ async fn test_receive_star_added_event_as_notification(
         IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
         &settings,
         nango_slack_connection,
+        None,
     )
     .await;
 
@@ -326,6 +327,7 @@ async fn test_receive_bot_star_added_event_as_notification(
         IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
         &settings,
         nango_slack_connection,
+        None,
     )
     .await;
 
@@ -478,6 +480,7 @@ async fn test_receive_star_removed_event_as_notification(
         IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
         &settings,
         nango_slack_connection,
+        None,
     )
     .await;
 
@@ -617,6 +620,7 @@ async fn test_receive_star_added_event_as_task(
         IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_tasks()),
         &settings,
         nango_slack_connection,
+        None,
     )
     .await;
     create_and_mock_integration_connection(
@@ -626,6 +630,7 @@ async fn test_receive_star_added_event_as_task(
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
         nango_todoist_connection,
+        None,
     )
     .await;
 
@@ -779,6 +784,7 @@ async fn test_receive_star_removed_and_added_event_as_task(
         IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_tasks()),
         &settings,
         nango_slack_connection,
+        None,
     )
     .await;
     create_and_mock_integration_connection(
@@ -788,6 +794,7 @@ async fn test_receive_star_removed_and_added_event_as_task(
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
         nango_todoist_connection,
+        None,
     )
     .await;
 

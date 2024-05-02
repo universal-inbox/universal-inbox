@@ -44,6 +44,7 @@ mod patch_notification {
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
             nango_todoist_connection,
+            None,
         )
         .await;
 
@@ -110,6 +111,7 @@ mod patch_notification {
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
             nango_todoist_connection,
+            None,
         )
         .await;
 

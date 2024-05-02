@@ -392,6 +392,7 @@ mod disconnect_integration_connections {
             IntegrationConnectionStatus::Validated,
             None,
             None,
+            None,
         )
         .await;
         let github_config_key = settings
@@ -436,6 +437,7 @@ mod disconnect_integration_connections {
             app.user.id,
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             IntegrationConnectionStatus::Validated,
+            None,
             None,
             None,
         )
@@ -515,6 +517,7 @@ mod update_integration_connection_config {
                 },
             )),
             None,
+            None,
         )
         .await;
         let integration_connection2 = create_integration_connection(
@@ -524,6 +527,7 @@ mod update_integration_connection_config {
                 sync_notifications_enabled: true,
             }),
             IntegrationConnectionStatus::Validated,
+            None,
             None,
             None,
         )
@@ -611,6 +615,7 @@ mod update_integration_connection_config {
                 },
             }),
             IntegrationConnectionStatus::Validated,
+            None,
             None,
             None,
         )

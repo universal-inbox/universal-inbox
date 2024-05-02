@@ -101,6 +101,8 @@ pub trait IntegrationConnectionRepository {
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError>;
 }
 
+pub const TOO_MANY_SYNC_FAILURES_ERROR_MESSAGE: &str = "♻️ Too many synchronization failures. Please try to reconnect the integration. If the issue keeps happening, please contact our support.";
+
 #[async_trait]
 impl IntegrationConnectionRepository for Repository {
     #[tracing::instrument(level = "debug", skip(self, executor))]
@@ -123,6 +125,7 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.updated_at,
                   integration_connection.last_sync_started_at,
                   integration_connection.last_sync_failure_message,
+                  integration_connection.sync_failures,
                   integration_connection_config.config as "config: Json<IntegrationConnectionConfig>",
                   integration_connection.context as "context: Json<IntegrationConnectionContext>"
                 FROM integration_connection
@@ -165,6 +168,7 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.updated_at,
                   integration_connection.last_sync_started_at,
                   integration_connection.last_sync_failure_message,
+                  integration_connection.sync_failures,
                   integration_connection_config.config as config,
                   integration_connection.context
                 FROM integration_connection
@@ -227,6 +231,7 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.updated_at,
                   integration_connection.last_sync_started_at,
                   integration_connection.last_sync_failure_message,
+                  integration_connection.sync_failures,
                   integration_connection_config.config as "config: Json<IntegrationConnectionConfig>",
                   integration_connection.context as "context: Json<IntegrationConnectionContext>"
                 FROM integration_connection
@@ -292,6 +297,7 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.updated_at,
                   integration_connection.last_sync_started_at,
                   integration_connection.last_sync_failure_message,
+                  integration_connection.sync_failures,
                   integration_connection_config.config as config,
                   integration_connection.context,
                   (SELECT
@@ -357,7 +363,17 @@ impl IntegrationConnectionRepository for Repository {
             separated
                 .push(" last_sync_started_at = ")
                 .push_bind_unseparated(Utc::now());
+        } else if failure_message.is_none() {
+            separated.push(" sync_failures = 0 ");
         }
+
+        if failure_message.is_some() {
+            separated.push(" sync_failures = sync_failures + 1");
+            separated
+                .push(" status = CASE WHEN sync_failures + 1 >= 3 THEN 'Failing' ELSE status END ");
+            separated.push(format!(" failure_message = CASE WHEN sync_failures + 1 >= 3 THEN '{TOO_MANY_SYNC_FAILURES_ERROR_MESSAGE}' ELSE failure_message END "));
+        }
+
         separated
             .push(" last_sync_failure_message = ")
             .push_bind_unseparated(failure_message.clone());
@@ -385,6 +401,7 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.updated_at,
                   integration_connection.last_sync_started_at,
                   integration_connection.last_sync_failure_message,
+                  integration_connection.sync_failures,
                   integration_connection_config.config as config,
                   integration_connection.context,
                   true as "is_updated"
@@ -447,6 +464,7 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.updated_at,
                   integration_connection.last_sync_started_at,
                   integration_connection.last_sync_failure_message,
+                  integration_connection.sync_failures,
                   integration_connection_config.config as config,
                   integration_connection.context,
                   true as "is_updated"
@@ -499,6 +517,7 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.updated_at,
                   integration_connection.last_sync_started_at,
                   integration_connection.last_sync_failure_message,
+                  integration_connection.sync_failures,
                   integration_connection_config.config as "config: Json<IntegrationConnectionConfig>",
                   integration_connection.context as "context: Json<IntegrationConnectionContext>"
                 FROM integration_connection
@@ -533,6 +552,7 @@ impl IntegrationConnectionRepository for Repository {
                     provider_kind,
                     status,
                     failure_message,
+                    sync_failures,
                     created_at,
                     updated_at
                   )
@@ -545,7 +565,8 @@ impl IntegrationConnectionRepository for Repository {
                     $5::integration_connection_status,
                     $6,
                     $7,
-                    $8
+                    $8,
+                    $9
                   )
             "#,
             integration_connection.id.0,
@@ -554,6 +575,7 @@ impl IntegrationConnectionRepository for Repository {
             integration_connection.provider.kind().to_string() as _,
             integration_connection.status.to_string() as _,
             integration_connection.failure_message,
+            integration_connection.sync_failures as i32,
             integration_connection.created_at.naive_utc(),
             integration_connection.updated_at.naive_utc()
         )
@@ -667,6 +689,7 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.updated_at,
                   integration_connection.last_sync_started_at,
                   integration_connection.last_sync_failure_message,
+                  integration_connection.sync_failures,
                   integration_connection_config.config as config,
                   integration_connection.context,
                   true as "is_updated"
@@ -725,6 +748,7 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.updated_at,
                   integration_connection.last_sync_started_at,
                   integration_connection.last_sync_failure_message,
+                  integration_connection.sync_failures,
                   integration_connection_config.config as config,
                   integration_connection.context,
                   true as "is_updated"
@@ -778,6 +802,7 @@ pub struct IntegrationConnectionRow {
     updated_at: NaiveDateTime,
     last_sync_started_at: Option<NaiveDateTime>,
     last_sync_failure_message: Option<String>,
+    sync_failures: i32,
     config: Json<IntegrationConnectionConfig>,
     context: Option<Json<IntegrationConnectionContext>>,
 }
@@ -821,6 +846,7 @@ impl TryFrom<IntegrationConnectionRow> for IntegrationConnection {
                 .last_sync_started_at
                 .map(|started_at| DateTime::from_naive_utc_and_offset(started_at, Utc)),
             last_sync_failure_message: row.last_sync_failure_message,
+            sync_failures: row.sync_failures as u32,
             provider: IntegrationProvider::new(
                 row.config.0.clone(),
                 row.context.map(|context| context.0),

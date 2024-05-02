@@ -65,6 +65,7 @@ async fn test_sync_todoist_slack_task_as_complete(
         IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_tasks()),
         &settings,
         nango_slack_connection,
+        None,
     )
     .await;
     create_and_mock_integration_connection(
@@ -74,6 +75,7 @@ async fn test_sync_todoist_slack_task_as_complete(
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
         nango_todoist_connection,
+        None,
     )
     .await;
 

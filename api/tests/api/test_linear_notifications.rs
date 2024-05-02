@@ -58,6 +58,7 @@ mod patch_resource {
             IntegrationConnectionConfig::Linear(LinearConfig::enabled()),
             &settings,
             nango_linear_connection,
+            None,
         )
         .await;
 
@@ -140,6 +141,7 @@ mod patch_resource {
             IntegrationConnectionConfig::Linear(LinearConfig::enabled()),
             &settings,
             nango_linear_connection,
+            None,
         )
         .await;
 
@@ -209,6 +211,7 @@ mod patch_resource {
             IntegrationConnectionConfig::Linear(LinearConfig::enabled()),
             &settings,
             nango_linear_connection,
+            None,
         )
         .await;
 
@@ -273,6 +276,7 @@ mod patch_resource {
             IntegrationConnectionConfig::Linear(LinearConfig::enabled()),
             &settings,
             nango_linear_connection,
+            None,
         )
         .await;
 
@@ -359,6 +363,7 @@ mod patch_resource {
             IntegrationConnectionConfig::Linear(LinearConfig::enabled()),
             &settings,
             nango_linear_connection,
+            None,
         )
         .await;
 
@@ -433,6 +438,7 @@ mod patch_resource {
             IntegrationConnectionConfig::Linear(LinearConfig::enabled()),
             &settings,
             nango_linear_connection,
+            None,
         )
         .await;
 

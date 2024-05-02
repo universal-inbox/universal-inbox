@@ -109,14 +109,16 @@ pub async fn create_integration_connection(
     status: IntegrationConnectionStatus,
     context: Option<IntegrationConnectionContext>,
     provider_user_id: Option<String>,
+    initial_sync_failures: Option<u32>,
 ) -> Box<IntegrationConnection> {
     let mut transaction = app.repository.begin().await.unwrap();
+    let mut new_integration_connection = IntegrationConnection::new(user_id, config);
+    if let Some(initial_sync_failures) = initial_sync_failures {
+        new_integration_connection.sync_failures = initial_sync_failures;
+    }
     let integration_connection = app
         .repository
-        .create_integration_connection(
-            &mut transaction,
-            Box::new(IntegrationConnection::new(user_id, config)),
-        )
+        .create_integration_connection(&mut transaction, Box::new(new_integration_connection))
         .await
         .unwrap();
 
@@ -222,6 +224,7 @@ pub async fn create_and_mock_integration_connection(
     config: IntegrationConnectionConfig,
     settings: &Settings,
     nango_connection: Box<NangoConnection>,
+    initial_sync_failures: Option<u32>,
 ) -> Box<IntegrationConnection> {
     let provider_kind = config.kind();
     let integration_connection = create_integration_connection(
@@ -231,6 +234,7 @@ pub async fn create_and_mock_integration_connection(
         IntegrationConnectionStatus::Validated,
         None,
         nango_connection.get_provider_user_id(),
+        initial_sync_failures,
     )
     .await;
     let config_key = settings

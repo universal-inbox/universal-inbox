@@ -81,6 +81,7 @@ mod patch_task {
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
             nango_todoist_connection,
+            None,
         )
         .await;
 
@@ -147,6 +148,7 @@ mod patch_task {
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
             nango_todoist_connection,
+            None,
         )
         .await;
 
@@ -226,6 +228,7 @@ mod patch_task {
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
             nango_todoist_connection,
+            None,
         )
         .await;
 
@@ -347,6 +350,7 @@ mod patch_task {
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
             nango_todoist_connection,
+            None,
         )
         .await;
         create_and_mock_integration_connection(
@@ -356,6 +360,7 @@ mod patch_task {
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
             nango_github_connection,
+            None,
         )
         .await;
 
@@ -481,6 +486,7 @@ mod patch_notification {
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
             nango_todoist_connection,
+            None,
         )
         .await;
         let todoist_sync_mock = mock_todoist_sync_service(

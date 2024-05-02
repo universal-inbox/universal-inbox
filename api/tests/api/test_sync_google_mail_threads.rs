@@ -121,6 +121,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         IntegrationConnectionConfig::GoogleMail(google_mail_config.clone()),
         &settings,
         nango_google_mail_connection,
+        None,
     )
     .await;
 
@@ -343,6 +344,7 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
         IntegrationConnectionConfig::GoogleMail(google_mail_config.clone()),
         &settings,
         nango_google_mail_connection,
+        None,
     )
     .await;
 
