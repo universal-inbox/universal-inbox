@@ -273,7 +273,8 @@ impl NotificationService {
         }
 
         info!("Syncing {integration_provider_kind} integration for user {user_id}.");
-        self.integration_connection_service
+        let integration_connection_update = self
+            .integration_connection_service
             .read()
             .await
             .update_integration_connection_sync_status(
@@ -289,15 +290,38 @@ impl NotificationService {
             .await
         {
             Ok(source_notifications) => {
-                self.save_notifications_and_sync_details(
-                    executor,
-                    notification_source_service,
-                    source_notifications,
-                    user_id,
-                )
-                .await
+                let notifications = self
+                    .save_notifications_and_sync_details(
+                        executor,
+                        notification_source_service,
+                        source_notifications,
+                        user_id,
+                    )
+                    .await?;
+
+                if let UpdateStatus {
+                    result: Some(result),
+                    ..
+                } = integration_connection_update
+                {
+                    if result.sync_failures > 0 {
+                        self.integration_connection_service
+                            .read()
+                            .await
+                            .update_integration_connection_sync_status(
+                                executor,
+                                user_id,
+                                integration_provider_kind,
+                                None,
+                                false,
+                            )
+                            .await?;
+                    }
+                }
+
+                Ok(notifications)
             }
-            Err(e) => {
+            Err(error @ UniversalInboxError::Recoverable(_)) => {
                 self.integration_connection_service
                     .read()
                     .await
@@ -311,7 +335,23 @@ impl NotificationService {
                         false,
                     )
                     .await?;
-                Err(UniversalInboxError::Recoverable(e.into()))
+                Err(error)
+            }
+            Err(error) => {
+                self.integration_connection_service
+                    .read()
+                    .await
+                    .update_integration_connection_sync_status(
+                        executor,
+                        user_id,
+                        integration_provider_kind,
+                        Some(format!(
+                            "Failed to fetch notifications from {integration_provider_kind}"
+                        )),
+                        false,
+                    )
+                    .await?;
+                Err(UniversalInboxError::Recoverable(error.into()))
             }
         }
     }

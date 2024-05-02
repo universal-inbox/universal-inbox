@@ -52,6 +52,7 @@ mod patch_resource {
             IntegrationConnectionConfig::GoogleMail(google_mail_config.clone()),
             &settings,
             nango_google_mail_connection,
+            None,
         )
         .await;
 
@@ -134,6 +135,7 @@ mod patch_resource {
             IntegrationConnectionConfig::GoogleMail(google_mail_config.clone()),
             &settings,
             nango_google_mail_connection,
+            None,
         )
         .await;
 
@@ -208,6 +210,7 @@ mod patch_resource {
             IntegrationConnectionConfig::GoogleMail(google_mail_config.clone()),
             &settings,
             nango_google_mail_connection,
+            None,
         )
         .await;
 

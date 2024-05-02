@@ -92,6 +92,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
         nango_todoist_connection,
+        None,
     )
     .await;
 
@@ -242,6 +243,7 @@ async fn test_sync_tasks_should_add_new_task_and_delete_notification_when_disabl
         }),
         &settings,
         nango_todoist_connection,
+        None,
     )
     .await;
 
@@ -302,6 +304,7 @@ async fn test_sync_tasks_should_add_new_empty_task(
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
         nango_todoist_connection,
+        None,
     )
     .await;
 
@@ -393,6 +396,7 @@ async fn test_sync_tasks_should_reuse_existing_sync_token(
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
         nango_todoist_connection,
+        None,
     )
     .await;
 
@@ -492,6 +496,7 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
         nango_todoist_connection,
+        None,
     )
     .await;
     let todoist_sync_items_mock = mock_todoist_sync_resources_service(
@@ -585,6 +590,7 @@ async fn test_sync_tasks_should_not_update_tasks_and_notifications_with_empty_in
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
         nango_todoist_connection,
+        None,
     )
     .await;
     let todoist_sync_items_mock = mock_todoist_sync_resources_service(
@@ -660,6 +666,7 @@ async fn test_sync_tasks_with_no_validated_integration_connections(
         IntegrationConnectionStatus::Created,
         None,
         None,
+        None,
     )
     .await;
     let todoist_mock = app.app.todoist_mock_server.mock(|when, then| {
@@ -694,6 +701,7 @@ async fn test_sync_tasks_with_synchronization_disabled(
         IntegrationConnectionConfig::Todoist(TodoistConfig::disabled()),
         &settings,
         nango_todoist_connection,
+        None,
     )
     .await;
     let todoist_mock = app.app.todoist_mock_server.mock(|when, then| {
@@ -754,6 +762,7 @@ async fn test_sync_all_tasks_asynchronously(
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
         nango_todoist_connection,
+        None,
     )
     .await;
 
@@ -854,6 +863,7 @@ async fn test_sync_all_tasks_asynchronously_in_error(
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
         nango_todoist_connection,
+        None,
     )
     .await;
 

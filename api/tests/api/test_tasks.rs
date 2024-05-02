@@ -663,6 +663,7 @@ mod search_projects {
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
             nango_todoist_connection,
+            None,
         )
         .await;
         let todoist_projects_mock = mock_todoist_sync_resources_service(

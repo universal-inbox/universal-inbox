@@ -55,6 +55,7 @@ mod patch_resource {
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
             nango_github_connection,
+            None,
         )
         .await;
 
@@ -156,6 +157,7 @@ mod patch_resource {
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
             nango_github_connection,
+            None,
         )
         .await;
 
@@ -237,6 +239,7 @@ mod patch_resource {
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
             nango_github_connection,
+            None,
         )
         .await;
 

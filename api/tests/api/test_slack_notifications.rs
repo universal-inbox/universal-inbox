@@ -54,6 +54,7 @@ mod patch_resource {
             IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
             &settings,
             nango_slack_connection,
+            None,
         )
         .await;
 
@@ -151,6 +152,7 @@ mod patch_resource {
             IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
             &settings,
             nango_slack_connection,
+            None,
         )
         .await;
 
@@ -230,6 +232,7 @@ mod patch_resource {
             IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
             &settings,
             nango_slack_connection,
+            None,
         )
         .await;
 
@@ -320,6 +323,7 @@ mod patch_resource {
             IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
             &settings,
             nango_slack_connection,
+            None,
         )
         .await;
         let snoozed_time = Utc.with_ymd_and_hms(2022, 1, 1, 1, 2, 3).unwrap();

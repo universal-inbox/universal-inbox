@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                INSERT INTO integration_connection\n                  (\n                    id,\n                    user_id,\n                    connection_id,\n                    provider_kind,\n                    status,\n                    failure_message,\n                    sync_failures,\n                    created_at,\n                    updated_at\n                  )\n                VALUES\n                  (\n                    $1,\n                    $2,\n                    $3,\n                    $4::integration_provider_kind,\n                    $5::integration_connection_status,\n                    $6,\n                    $7,\n                    $8,\n                    $9\n                  )\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        {
+          "Custom": {
+            "name": "integration_provider_kind",
+            "kind": {
+              "Enum": [
+                "Github",
+                "Todoist",
+                "Linear",
+                "GoogleMail",
+                "Slack"
+              ]
+            }
+          }
+        },
+        {
+          "Custom": {
+            "name": "integration_connection_status",
+            "kind": {
+              "Enum": [
+                "Created",
+                "Validated",
+                "Failing"
+              ]
+            }
+          }
+        },
+        "Text",
+        "Int4",
+        "Timestamp",
+        "Timestamp"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e3123962d4138ed7518cd008a941ed5caaabdee5339e4be2ebfd4ab3a1f7c0c9"
+}

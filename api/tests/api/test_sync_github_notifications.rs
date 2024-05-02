@@ -24,6 +24,7 @@ use universal_inbox_api::{
         github::graphql::{discussions_search_query, pull_request_query},
         oauth2::NangoConnection,
     },
+    repository::integration_connection::TOO_MANY_SYNC_FAILURES_ERROR_MESSAGE,
 };
 
 use crate::helpers::{
@@ -95,6 +96,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         &settings,
         nango_github_connection,
+        None,
     )
     .await;
     let expected_notification_123_details: NotificationDetails = github_pull_request_123_response
@@ -262,6 +264,7 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
         IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         &settings,
         nango_github_connection,
+        None,
     )
     .await;
 
@@ -345,6 +348,7 @@ async fn test_sync_all_notifications_asynchronously(
         IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         &settings,
         nango_github_connection,
+        None,
     )
     .await;
 
@@ -471,6 +475,7 @@ async fn test_sync_all_notifications_with_no_validated_integration_connections(
         IntegrationConnectionStatus::Created,
         None,
         None,
+        None,
     )
     .await;
 
@@ -506,6 +511,7 @@ async fn test_sync_all_notifications_with_synchronization_disabled(
         IntegrationConnectionConfig::Github(GithubConfig::disabled()),
         &settings,
         nango_github_connection,
+        None,
     )
     .await;
 
@@ -541,6 +547,8 @@ async fn test_sync_all_notifications_asynchronously_in_error(
         IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         &settings,
         nango_github_connection,
+        // Starting with 2 sync failures, it should mark the connection as failing with a third failure
+        Some(2),
     )
     .await;
 
@@ -593,6 +601,15 @@ async fn test_sync_all_notifications_asynchronously_in_error(
             .as_str(),
         "Failed to fetch notifications from Github"
     );
+    assert_eq!(integration_connection.sync_failures, 3);
+    assert_eq!(
+        integration_connection.status,
+        IntegrationConnectionStatus::Failing
+    );
+    assert_eq!(
+        integration_connection.failure_message,
+        Some(TOO_MANY_SYNC_FAILURES_ERROR_MESSAGE.to_string())
+    );
 }
 
 #[rstest]
@@ -619,6 +636,7 @@ async fn test_sync_discussion_notification_with_details(
         IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         &settings,
         nango_github_connection,
+        None,
     )
     .await;
 
@@ -689,6 +707,7 @@ async fn test_sync_discussion_notification_with_error(
         IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         &settings,
         nango_github_connection,
+        None,
     )
     .await;
 
@@ -755,5 +774,10 @@ async fn test_sync_discussion_notification_with_error(
             .unwrap()
             .as_str(),
         "Failed to fetch notification details from Github"
+    );
+    assert_eq!(integration_connection.sync_failures, 1);
+    assert_eq!(
+        integration_connection.status,
+        IntegrationConnectionStatus::Validated
     );
 }
