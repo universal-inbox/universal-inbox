@@ -73,7 +73,7 @@ pub fn NotificationsPage(cx: Scope) -> Element {
                             alt: "No notifications"
                         }
                         div {
-                            class: "flex flex-col items-center absolute h-full object-center top-1/2 transform translate-y-1/4",
+                            class: "flex flex-col items-center absolute object-center top-2/3 transform translate-y-1/4",
                             p { class: "text-gray-500 font-semibold", "Congrats! You have reached zero inbox 🎉" }
                             p { class: "text-gray-400", "You don't have any new notifications." }
                         }
