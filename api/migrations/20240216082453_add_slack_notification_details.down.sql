@@ -1,6 +1,6 @@
 CREATE TYPE notification_details_kind_new AS ENUM ('GithubPullRequest', 'GithubDiscussion');
 
-DELETE FROM integration_connection
+DELETE FROM notification_details
   WHERE provider_kind IN ('SlackMessage', 'SlackFile', 'SlackFileComment', 'SlackChannel', 'SlackIm', 'SlackGroup');
 
 ALTER TABLE notification_details

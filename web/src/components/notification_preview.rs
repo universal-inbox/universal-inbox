@@ -7,7 +7,8 @@ use universal_inbox::{
     notification::{
         NotificationDetails, NotificationId, NotificationMetadata, NotificationWithTask,
     },
-    task::{Task, TaskMetadata},
+    task::Task,
+    third_party::item::{ThirdPartyItem, ThirdPartyItemData},
 };
 
 use crate::{
@@ -17,7 +18,7 @@ use crate::{
             GithubNotificationDefaultPreview,
         },
         google_mail::preview::GoogleMailThreadPreview,
-        icons::{NotificationMetadataIcon, TaskMetadataIcon},
+        icons::{NotificationMetadataIcon, TaskIcon},
         linear::preview::LinearNotificationPreview,
         slack::preview::{
             channel::SlackChannelPreview, file::SlackFilePreview,
@@ -88,7 +89,7 @@ pub fn NotificationPreview<'a>(
                                 class: "flex gap-2",
                                 if let Some(task) = &notification.task {
                                     render! {
-                                        TaskMetadataIcon { class: "h-5 w-5", _task_metadata: &task.metadata }
+                                        TaskIcon { class: "h-5 w-5", _kind: task.kind }
                                     }
                                 }
                                 "Task"
@@ -166,7 +167,11 @@ fn TaskDetailsPreview<'a>(cx: Scope, notification: &'a NotificationWithTask) -> 
     match &notification.task {
         Some(
             task @ Task {
-                metadata: TaskMetadata::Todoist(todoist_task),
+                source_item:
+                    ThirdPartyItem {
+                        data: ThirdPartyItemData::TodoistItem(todoist_task),
+                        ..
+                    },
                 ..
             },
         ) => render! {

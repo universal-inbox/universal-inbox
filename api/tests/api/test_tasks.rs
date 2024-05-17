@@ -1,4 +1,4 @@
-use chrono::{NaiveDate, TimeZone, Utc};
+use chrono::{TimeZone, Utc};
 use http::StatusCode;
 use rstest::*;
 use serde_json::json;
@@ -8,10 +8,10 @@ use universal_inbox::{
     integration_connection::{
         config::IntegrationConnectionConfig, integrations::todoist::TodoistConfig,
     },
-    notification::{NotificationStatus, NotificationWithTask},
-    task::{
-        integrations::todoist::TodoistItem, service::TaskPatch, ProjectSummary, Task,
-        TaskCreationResult, TaskMetadata, TaskPriority, TaskStatus,
+    task::{service::TaskPatch, ProjectSummary, TaskStatus},
+    third_party::{
+        integrations::todoist::TodoistItem,
+        item::{ThirdPartyItem, ThirdPartyItemCreationResult, ThirdPartyItemData},
     },
 };
 
@@ -23,282 +23,15 @@ use universal_inbox_api::{
 use crate::helpers::{
     auth::{authenticate_user, authenticated_app, AuthenticatedApp},
     integration_connection::{create_and_mock_integration_connection, nango_todoist_connection},
-    notification::list_notifications_with_tasks,
-    rest::{
-        create_resource, create_resource_response, get_resource, get_resource_response,
-        patch_resource_response,
-    },
+    rest::{create_resource, get_resource_response, patch_resource_response},
     settings,
     task::{
         list_tasks, search_projects,
         todoist::{
-            create_task_from_todoist_item, mock_todoist_sync_resources_service,
-            sync_todoist_projects_response, todoist_item,
+            mock_todoist_sync_resources_service, sync_todoist_projects_response, todoist_item,
         },
     },
 };
-
-mod create_task {
-    use super::*;
-    use pretty_assertions::assert_eq;
-
-    #[rstest]
-    #[tokio::test]
-    async fn test_create_task_in_inbox(
-        #[future] authenticated_app: AuthenticatedApp,
-        todoist_item: Box<TodoistItem>,
-    ) {
-        let app = authenticated_app.await;
-        let expected_minimal_task = Box::new(Task {
-            id: Uuid::new_v4().into(),
-            source_id: "1234".to_string(),
-            title: "task 1".to_string(),
-            body: "more details".to_string(),
-            status: TaskStatus::Active,
-            completed_at: None,
-            priority: TaskPriority::P4,
-            due_at: None,
-            tags: vec![],
-            parent_id: None,
-            project: "Inbox".to_string(),
-            is_recurring: false,
-            created_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-            metadata: TaskMetadata::Todoist(*todoist_item.clone()),
-            user_id: app.user.id,
-        });
-
-        let creation_result: Box<TaskCreationResult> = create_resource(
-            &app.client,
-            &app.app.api_address,
-            "tasks",
-            expected_minimal_task.clone(),
-        )
-        .await;
-
-        assert_eq!(creation_result.task, *expected_minimal_task);
-        // A notification should have been created for tasks in the inbox (project)
-        assert_eq!(creation_result.notifications.len(), 1);
-        let created_notification = &creation_result.notifications[0];
-        assert_eq!(created_notification.task_id, Some(creation_result.task.id));
-
-        let task = get_resource(
-            &app.client,
-            &app.app.api_address,
-            "tasks",
-            creation_result.task.id.into(),
-        )
-        .await;
-        assert_eq!(task, expected_minimal_task);
-
-        let result = list_notifications_with_tasks(
-            &app.client,
-            &app.app.api_address,
-            vec![NotificationStatus::Unread],
-            false,
-            Some(creation_result.task.id),
-            None,
-        )
-        .await;
-        assert_eq!(result.len(), 1);
-        assert_eq!(
-            result[0],
-            NotificationWithTask {
-                id: created_notification.id,
-                ..(*task).clone().into()
-            }
-        );
-        assert_eq!(result[0].task, Some(*task));
-    }
-
-    #[rstest]
-    #[tokio::test]
-    async fn test_create_task(
-        #[future] authenticated_app: AuthenticatedApp,
-        todoist_item: Box<TodoistItem>,
-    ) {
-        let app = authenticated_app.await;
-        let expected_task = Box::new(Task {
-            id: Uuid::new_v4().into(),
-            source_id: "5678".to_string(),
-            title: "task 2".to_string(),
-            body: "more details 2".to_string(),
-            status: TaskStatus::Done,
-            completed_at: Some(Utc.with_ymd_and_hms(2022, 1, 3, 0, 0, 0).unwrap()),
-            priority: TaskPriority::P3,
-            due_at: Some(universal_inbox::task::DueDate::Date(
-                NaiveDate::from_ymd_opt(2016, 9, 1).unwrap(),
-            )),
-            tags: vec!["tag1".to_string(), "tag2".to_string()],
-            parent_id: None,
-            project: "project 1".to_string(),
-            is_recurring: true,
-            created_at: Utc.with_ymd_and_hms(2022, 1, 2, 0, 0, 0).unwrap(),
-            metadata: TaskMetadata::Todoist(*todoist_item),
-            user_id: app.user.id,
-        });
-
-        let creation_result: Box<TaskCreationResult> = create_resource(
-            &app.client,
-            &app.app.api_address,
-            "tasks",
-            expected_task.clone(),
-        )
-        .await;
-
-        assert_eq!(creation_result.task, *expected_task);
-        assert!(creation_result.notifications.is_empty());
-
-        let task = get_resource(
-            &app.client,
-            &app.app.api_address,
-            "tasks",
-            creation_result.task.id.into(),
-        )
-        .await;
-
-        assert_eq!(task, expected_task);
-
-        let result = list_notifications_with_tasks(
-            &app.client,
-            &app.app.api_address,
-            vec![NotificationStatus::Unread],
-            false,
-            Some(creation_result.task.id),
-            None,
-        )
-        .await;
-        assert!(result.is_empty());
-    }
-
-    #[rstest]
-    #[tokio::test]
-    async fn test_create_task_with_wrong_user_id(
-        #[future] authenticated_app: AuthenticatedApp,
-        todoist_item: Box<TodoistItem>,
-    ) {
-        let app = authenticated_app.await;
-        let expected_task = Box::new(Task {
-            id: Uuid::new_v4().into(),
-            source_id: "5678".to_string(),
-            title: "task 2".to_string(),
-            body: "more details 2".to_string(),
-            status: TaskStatus::Done,
-            completed_at: Some(Utc.with_ymd_and_hms(2022, 1, 3, 0, 0, 0).unwrap()),
-            priority: TaskPriority::P3,
-            due_at: Some(universal_inbox::task::DueDate::Date(
-                NaiveDate::from_ymd_opt(2016, 9, 1).unwrap(),
-            )),
-            tags: vec!["tag1".to_string(), "tag2".to_string()],
-            parent_id: None,
-            project: "project 1".to_string(),
-            is_recurring: true,
-            created_at: Utc.with_ymd_and_hms(2022, 1, 2, 0, 0, 0).unwrap(),
-            metadata: TaskMetadata::Todoist(*todoist_item),
-            user_id: Uuid::new_v4().into(),
-        });
-
-        let response = create_resource_response(
-            &app.client,
-            &app.app.api_address,
-            "tasks",
-            expected_task.clone(),
-        )
-        .await;
-
-        assert_eq!(response.status(), StatusCode::FORBIDDEN);
-    }
-
-    #[rstest]
-    #[tokio::test]
-    async fn test_create_task_as_donealue(
-        #[future] authenticated_app: AuthenticatedApp,
-        todoist_item: Box<TodoistItem>,
-    ) {
-        let app = authenticated_app.await;
-        let task_done = Box::new(Task {
-            id: Uuid::new_v4().into(),
-            source_id: "5678".to_string(),
-            title: "task 2".to_string(),
-            body: "more details 2".to_string(),
-            status: TaskStatus::Done,
-            completed_at: None,
-            priority: TaskPriority::P3,
-            due_at: Some(universal_inbox::task::DueDate::Date(
-                NaiveDate::from_ymd_opt(2022, 1, 3).unwrap(),
-            )),
-            tags: vec!["tag1".to_string(), "tag2".to_string()],
-            parent_id: None,
-            project: "project 1".to_string(),
-            is_recurring: true,
-            created_at: Utc.with_ymd_and_hms(2022, 1, 2, 0, 0, 0).unwrap(),
-            metadata: TaskMetadata::Todoist(*todoist_item),
-            user_id: app.user.id,
-        });
-
-        let response = create_resource_response(
-            &app.client,
-            &app.app.api_address,
-            "tasks",
-            task_done.clone(),
-        )
-        .await;
-
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-        let body = response.text().await.expect("Cannot get response body");
-        assert_eq!(
-            body,
-            json!({ "message": "Invalid input data: Submitted task is invalid" }).to_string()
-        );
-    }
-
-    #[rstest]
-    #[tokio::test]
-    async fn test_create_task_duplicate_task(
-        #[future] authenticated_app: AuthenticatedApp,
-        todoist_item: Box<TodoistItem>,
-    ) {
-        let app = authenticated_app.await;
-        let expected_task = Box::new(Task {
-            id: Uuid::new_v4().into(),
-            source_id: "1234".to_string(),
-            title: "task 1".to_string(),
-            body: "more details".to_string(),
-            status: TaskStatus::Active,
-            completed_at: None,
-            priority: TaskPriority::P4,
-            due_at: None,
-            tags: vec![],
-            parent_id: None,
-            project: "Inbox".to_string(),
-            is_recurring: false,
-            created_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-            metadata: TaskMetadata::Todoist(*todoist_item.clone()),
-            user_id: app.user.id,
-        });
-
-        let creation_result: Box<TaskCreationResult> = create_resource(
-            &app.client,
-            &app.app.api_address,
-            "tasks",
-            expected_task.clone(),
-        )
-        .await;
-
-        assert_eq!(creation_result.task, *expected_task);
-
-        let response =
-            create_resource_response(&app.client, &app.app.api_address, "tasks", expected_task)
-                .await;
-
-        assert_eq!(response.status(), StatusCode::CONFLICT);
-        let body = response.text().await.expect("Cannot get response body");
-        assert_eq!(
-            body,
-            json!({ "message": format!("The entity {} already exists", creation_result.task.id) })
-                .to_string()
-        );
-    }
-}
 
 mod get_task {
     use super::*;
@@ -325,24 +58,55 @@ mod get_task {
     #[rstest]
     #[tokio::test]
     async fn test_get_task_of_another_user(
+        settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
+        sync_todoist_projects_response: TodoistSyncResponse,
+        nango_todoist_connection: Box<NangoConnection>,
     ) {
         let app = authenticated_app.await;
-
-        let creation_result = create_task_from_todoist_item(
-            &app.client,
-            &app.app.api_address,
-            &todoist_item,
-            "Inbox".to_string(),
+        let integration_connection = create_and_mock_integration_connection(
+            &app.app,
             app.user.id,
+            &settings.integrations.oauth2.nango_secret_key,
+            IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
+            &settings,
+            nango_todoist_connection,
+            None,
         )
         .await;
-        let task_id = creation_result.task.id.0;
+        mock_todoist_sync_resources_service(
+            &app.app.todoist_mock_server,
+            "projects",
+            &sync_todoist_projects_response,
+            None,
+        );
+
+        let creation: Box<ThirdPartyItemCreationResult> = create_resource(
+            &app.client,
+            &app.app.api_address,
+            "third_party/items",
+            Box::new(ThirdPartyItem {
+                id: Uuid::new_v4().into(),
+                source_id: todoist_item.id.clone(),
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+                user_id: app.user.id,
+                data: ThirdPartyItemData::TodoistItem(TodoistItem {
+                    project_id: "1111".to_string(), // ie. "Inbox"
+                    added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
+                    ..*todoist_item.clone()
+                }),
+                integration_connection_id: integration_connection.id,
+            }),
+        )
+        .await;
+        let task_id = creation.task.as_ref().unwrap().id;
 
         let (client, _user) =
             authenticate_user(&app.app, "5678", "Jane", "Doe", "jane@example.com").await;
-        let response = get_resource_response(&client, &app.app.api_address, "tasks", task_id).await;
+        let response =
+            get_resource_response(&client, &app.app.api_address, "tasks", task_id.into()).await;
 
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
         let body = response.text().await.expect("Cannot get response body");
@@ -373,44 +137,88 @@ mod list_tasks {
     #[rstest]
     #[tokio::test]
     async fn test_list_tasks(
+        settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
+        sync_todoist_projects_response: TodoistSyncResponse,
+        nango_todoist_connection: Box<NangoConnection>,
     ) {
         let app = authenticated_app.await;
-        let task_active = create_task_from_todoist_item(
-            &app.client,
-            &app.app.api_address,
-            &todoist_item,
-            "Inbox".to_string(),
+        let integration_connection = create_and_mock_integration_connection(
+            &app.app,
             app.user.id,
+            &settings.integrations.oauth2.nango_secret_key,
+            IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
+            &settings,
+            nango_todoist_connection,
+            None,
         )
         .await;
-        assert_eq!(task_active.task.status, TaskStatus::Active);
+        mock_todoist_sync_resources_service(
+            &app.app.todoist_mock_server,
+            "projects",
+            &sync_todoist_projects_response,
+            None,
+        );
+
+        let creation: Box<ThirdPartyItemCreationResult> = create_resource(
+            &app.client,
+            &app.app.api_address,
+            "third_party/items",
+            Box::new(ThirdPartyItem {
+                id: Uuid::new_v4().into(),
+                source_id: todoist_item.id.clone(),
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+                user_id: app.user.id,
+                data: ThirdPartyItemData::TodoistItem(TodoistItem {
+                    project_id: "1111".to_string(), // ie. "Inbox"
+                    added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
+                    ..*todoist_item.clone()
+                }),
+                integration_connection_id: integration_connection.id,
+            }),
+        )
+        .await;
+        let task_active = creation.task.as_ref().unwrap().clone();
+        assert_eq!(task_active.status, TaskStatus::Active);
 
         let mut todoist_item_done = todoist_item.clone();
         todoist_item_done.id = "5678".to_string();
         todoist_item_done.checked = true;
         todoist_item_done.completed_at = Some(Utc.with_ymd_and_hms(2022, 1, 2, 0, 0, 0).unwrap());
 
-        let task_done = create_task_from_todoist_item(
+        let creation: Box<ThirdPartyItemCreationResult> = create_resource(
             &app.client,
             &app.app.api_address,
-            &todoist_item_done,
-            "Inbox".to_string(),
-            app.user.id,
+            "third_party/items",
+            Box::new(ThirdPartyItem {
+                id: Uuid::new_v4().into(),
+                source_id: todoist_item_done.id.clone(),
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+                user_id: app.user.id,
+                data: ThirdPartyItemData::TodoistItem(TodoistItem {
+                    project_id: "1111".to_string(), // ie. "Inbox"
+                    added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
+                    ..*todoist_item_done.clone()
+                }),
+                integration_connection_id: integration_connection.id,
+            }),
         )
         .await;
-        assert_eq!(task_done.task.status, TaskStatus::Done);
+        let task_done = creation.task.as_ref().unwrap().clone();
+        assert_eq!(task_done.status, TaskStatus::Done);
 
         let tasks = list_tasks(&app.client, &app.app.api_address, TaskStatus::Active).await;
 
         assert_eq!(tasks.len(), 1);
-        assert_eq!(tasks[0], task_active.task);
+        assert_eq!(tasks[0], task_active);
 
         let tasks = list_tasks(&app.client, &app.app.api_address, TaskStatus::Done).await;
 
         assert_eq!(tasks.len(), 1);
-        assert_eq!(tasks[0], task_done.task);
+        assert_eq!(tasks[0], task_done);
 
         // Test listing tasks of another user
         let (client, _user) =
@@ -429,27 +237,58 @@ mod patch_task {
     #[rstest]
     #[tokio::test]
     async fn test_patch_task_status_without_modification(
+        settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
+        sync_todoist_projects_response: TodoistSyncResponse,
+        nango_todoist_connection: Box<NangoConnection>,
     ) {
         let app = authenticated_app.await;
-
-        let creation_result = create_task_from_todoist_item(
-            &app.client,
-            &app.app.api_address,
-            &todoist_item,
-            "Inbox".to_string(),
+        let integration_connection = create_and_mock_integration_connection(
+            &app.app,
             app.user.id,
+            &settings.integrations.oauth2.nango_secret_key,
+            IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
+            &settings,
+            nango_todoist_connection,
+            None,
         )
         .await;
+        mock_todoist_sync_resources_service(
+            &app.app.todoist_mock_server,
+            "projects",
+            &sync_todoist_projects_response,
+            None,
+        );
+
+        let creation: Box<ThirdPartyItemCreationResult> = create_resource(
+            &app.client,
+            &app.app.api_address,
+            "third_party/items",
+            Box::new(ThirdPartyItem {
+                id: Uuid::new_v4().into(),
+                source_id: todoist_item.id.clone(),
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+                user_id: app.user.id,
+                data: ThirdPartyItemData::TodoistItem(TodoistItem {
+                    project_id: "1111".to_string(), // ie. "Inbox"
+                    added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
+                    ..*todoist_item.clone()
+                }),
+                integration_connection_id: integration_connection.id,
+            }),
+        )
+        .await;
+        let task = creation.task.as_ref().unwrap().clone();
 
         let response = patch_resource_response(
             &app.client,
             &app.app.api_address,
             "tasks",
-            creation_result.task.id.into(),
+            task.id.into(),
             &TaskPatch {
-                status: Some(creation_result.task.status),
+                status: Some(task.status),
                 ..Default::default()
             },
         )
@@ -461,19 +300,51 @@ mod patch_task {
     #[rstest]
     #[tokio::test]
     async fn test_patch_task_of_another_user(
+        settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
+        sync_todoist_projects_response: TodoistSyncResponse,
+        nango_todoist_connection: Box<NangoConnection>,
     ) {
         let app = authenticated_app.await;
-
-        let creation_result = create_task_from_todoist_item(
-            &app.client,
-            &app.app.api_address,
-            &todoist_item,
-            "Inbox".to_string(),
+        let integration_connection = create_and_mock_integration_connection(
+            &app.app,
             app.user.id,
+            &settings.integrations.oauth2.nango_secret_key,
+            IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
+            &settings,
+            nango_todoist_connection,
+            None,
         )
         .await;
+        mock_todoist_sync_resources_service(
+            &app.app.todoist_mock_server,
+            "projects",
+            &sync_todoist_projects_response,
+            None,
+        );
+
+        let creation: Box<ThirdPartyItemCreationResult> = create_resource(
+            &app.client,
+            &app.app.api_address,
+            "third_party/items",
+            Box::new(ThirdPartyItem {
+                id: Uuid::new_v4().into(),
+                source_id: todoist_item.id.clone(),
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+                user_id: app.user.id,
+                data: ThirdPartyItemData::TodoistItem(TodoistItem {
+                    project_id: "1111".to_string(), // ie. "Inbox"
+                    added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
+                    ..*todoist_item.clone()
+                }),
+                integration_connection_id: integration_connection.id,
+            }),
+        )
+        .await;
+        let task = creation.task.as_ref().unwrap().clone();
+
         let (client, _user) =
             authenticate_user(&app.app, "5678", "Jane", "Doe", "jane@example.com").await;
 
@@ -481,7 +352,7 @@ mod patch_task {
             &client,
             &app.app.api_address,
             "tasks",
-            creation_result.task.id.into(),
+            task.id.into(),
             &TaskPatch {
                 status: Some(TaskStatus::Done),
                 ..Default::default()
@@ -495,24 +366,56 @@ mod patch_task {
     #[rstest]
     #[tokio::test]
     async fn test_patch_task_without_values_to_update(
+        settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
+        sync_todoist_projects_response: TodoistSyncResponse,
+        nango_todoist_connection: Box<NangoConnection>,
     ) {
         let app = authenticated_app.await;
-        let creation_result = create_task_from_todoist_item(
-            &app.client,
-            &app.app.api_address,
-            &todoist_item,
-            "Inbox".to_string(),
+        let integration_connection = create_and_mock_integration_connection(
+            &app.app,
             app.user.id,
+            &settings.integrations.oauth2.nango_secret_key,
+            IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
+            &settings,
+            nango_todoist_connection,
+            None,
         )
         .await;
+        mock_todoist_sync_resources_service(
+            &app.app.todoist_mock_server,
+            "projects",
+            &sync_todoist_projects_response,
+            None,
+        );
+
+        let creation: Box<ThirdPartyItemCreationResult> = create_resource(
+            &app.client,
+            &app.app.api_address,
+            "third_party/items",
+            Box::new(ThirdPartyItem {
+                id: Uuid::new_v4().into(),
+                source_id: todoist_item.id.clone(),
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+                user_id: app.user.id,
+                data: ThirdPartyItemData::TodoistItem(TodoistItem {
+                    project_id: "1111".to_string(), // ie. "Inbox"
+                    added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
+                    ..*todoist_item.clone()
+                }),
+                integration_connection_id: integration_connection.id,
+            }),
+        )
+        .await;
+        let task = creation.task.as_ref().unwrap().clone();
 
         let response = patch_resource_response(
             &app.client,
             &app.app.api_address,
             "tasks",
-            creation_result.task.id.into(),
+            task.id.into(),
             &TaskPatch {
                 ..Default::default()
             },
@@ -527,7 +430,7 @@ mod patch_task {
                 "message":
                     format!(
                         "Invalid input data: Missing `status` field value to update task {}",
-                        creation_result.task.id
+                        task.id
                     )
             })
             .to_string()
@@ -580,58 +483,102 @@ mod search_tasks {
     #[rstest]
     #[tokio::test]
     async fn test_search_tasks(
+        settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         todoist_item: Box<TodoistItem>,
+        sync_todoist_projects_response: TodoistSyncResponse,
+        nango_todoist_connection: Box<NangoConnection>,
     ) {
         let app = authenticated_app.await;
-        let task1 = create_task_from_todoist_item(
-            &app.client,
-            &app.app.api_address,
-            &todoist_item,
-            "Inbox".to_string(),
+        let integration_connection = create_and_mock_integration_connection(
+            &app.app,
             app.user.id,
+            &settings.integrations.oauth2.nango_secret_key,
+            IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
+            &settings,
+            nango_todoist_connection,
+            None,
         )
         .await;
-        assert_eq!(task1.task.title, "Task 1".to_string());
+        mock_todoist_sync_resources_service(
+            &app.app.todoist_mock_server,
+            "projects",
+            &sync_todoist_projects_response,
+            None,
+        );
+
+        let creation: Box<ThirdPartyItemCreationResult> = create_resource(
+            &app.client,
+            &app.app.api_address,
+            "third_party/items",
+            Box::new(ThirdPartyItem {
+                id: Uuid::new_v4().into(),
+                source_id: todoist_item.id.clone(),
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+                user_id: app.user.id,
+                data: ThirdPartyItemData::TodoistItem(TodoistItem {
+                    project_id: "1111".to_string(), // ie. "Inbox"
+                    added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
+                    ..*todoist_item.clone()
+                }),
+                integration_connection_id: integration_connection.id,
+            }),
+        )
+        .await;
+        let task1 = creation.task.as_ref().unwrap().clone();
+        assert_eq!(task1.title, "Task 1".to_string());
 
         let mut other_todoist_item = todoist_item.clone();
         other_todoist_item.id = "5678".to_string();
         other_todoist_item.content = "Other todo".to_string();
         other_todoist_item.description = "fill the form".to_string();
 
-        let task2 = create_task_from_todoist_item(
+        let creation: Box<ThirdPartyItemCreationResult> = create_resource(
             &app.client,
             &app.app.api_address,
-            &other_todoist_item,
-            "Inbox".to_string(),
-            app.user.id,
+            "third_party/items",
+            Box::new(ThirdPartyItem {
+                id: Uuid::new_v4().into(),
+                source_id: other_todoist_item.id.clone(),
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+                user_id: app.user.id,
+                data: ThirdPartyItemData::TodoistItem(TodoistItem {
+                    project_id: "1111".to_string(), // ie. "Inbox"
+                    added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
+                    ..*other_todoist_item.clone()
+                }),
+                integration_connection_id: integration_connection.id,
+            }),
         )
         .await;
-        assert_eq!(task2.task.title, "Other todo".to_string());
+        let task2 = creation.task.as_ref().unwrap().clone();
+        assert_eq!(task2.title, "Other todo".to_string());
 
         // Search by task title
         let tasks = search_tasks(&app.client, &app.app.api_address, "Task").await;
 
         assert_eq!(tasks.len(), 1);
-        assert_eq!(tasks[0].id, task1.task.id);
+        assert_eq!(tasks[0].id, task1.id);
 
         let tasks = search_tasks(&app.client, &app.app.api_address, "todo").await;
 
         assert_eq!(tasks.len(), 1);
-        assert_eq!(tasks[0].id, task2.task.id);
+        assert_eq!(tasks[0].id, task2.id);
 
         // Search by task description
         let tasks = search_tasks(&app.client, &app.app.api_address, "form").await;
 
         assert_eq!(tasks.len(), 1);
-        assert_eq!(tasks[0].id, task2.task.id);
+        assert_eq!(tasks[0].id, task2.id);
 
         // Search by task tags
         let tasks = search_tasks(&app.client, &app.app.api_address, "Food").await;
 
         assert_eq!(tasks.len(), 2);
-        assert!(tasks.iter().any(|t| t.id == task1.task.id));
-        assert!(tasks.iter().any(|t| t.id == task2.task.id));
+        assert!(tasks.iter().any(|t| t.id == task1.id));
+        assert!(tasks.iter().any(|t| t.id == task2.id));
 
         // Test searching tasks of another user
         let (client, _user) =

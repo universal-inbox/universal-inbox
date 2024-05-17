@@ -3460,7 +3460,7 @@ dependencies = [
  "httpdate",
  "itoa",
  "pin-project-lite",
- "socket2 0.4.10",
+ "socket2 0.5.6",
  "tokio",
  "tower-service",
  "tracing",
@@ -7253,6 +7253,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6af6ae20167a9ece4bcb41af5b80f8a1f1df981f6391189ce00fd257af04126a"
 
 [[package]]
+name = "typed_id"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6924ced1d9746100f93dd42d9245dc02a0c6d1a66b370938af8bd5250babfce1"
+dependencies = [
+ "paste",
+ "serde",
+]
+
+[[package]]
 name = "typenum"
 version = "1.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7413,6 +7423,7 @@ dependencies = [
  "serde_urlencoded",
  "serde_with 2.3.3",
  "slack-morphism",
+ "typed_id",
  "unicode-segmentation",
  "url 2.5.0",
  "uuid",

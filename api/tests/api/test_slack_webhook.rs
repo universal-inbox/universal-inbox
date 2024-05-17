@@ -14,9 +14,10 @@ use universal_inbox::{
         integrations::slack::SlackMessageSenderDetails, NotificationDetails, NotificationMetadata,
         NotificationStatus,
     },
-    task::{
+    task::TaskStatus,
+    third_party::{
         integrations::todoist::{TodoistItem, TodoistItemPriority},
-        TaskStatus,
+        item::{ThirdPartyItemSource, ThirdPartyItemSourceKind},
     },
     HasHtmlUrl,
 };
@@ -645,10 +646,11 @@ async fn test_receive_star_added_event_as_task(
         "U05YYY", // The message's creator, not the user who starred the message
         "slack_fetch_user_response.json",
     );
+    let slack_message_id = "1707686216.825719";
     let slack_fetch_message_mock = mock_slack_fetch_message(
         &app.app.slack_mock_server,
         "C05XXX",
-        "1707686216.825719",
+        slack_message_id,
         "slack_fetch_message_response.json",
     );
     let slack_fetch_channel_mock = mock_slack_fetch_channel(
@@ -702,26 +704,29 @@ async fn test_receive_star_added_event_as_task(
     todoist_item_add_mock.assert();
     todoist_get_item_mock.assert();
 
-    let notifications = list_notifications(
-        &app.client,
-        &app.app.api_address,
-        vec![NotificationStatus::Deleted],
-        false,
-        None,
-        None,
-    )
-    .await;
+    let notifications =
+        list_notifications(&app.client, &app.app.api_address, vec![], false, None, None).await;
 
-    assert_eq!(notifications.len(), 1);
-    assert_eq!(notifications[0].source_id, "1707686216.825719");
-    // See test `_as_notifications` for detailed assertions on the notification
+    assert_eq!(notifications.len(), 0);
 
     let tasks = list_tasks(&app.client, &app.app.api_address, TaskStatus::Active).await;
 
     assert_eq!(tasks.len(), 1);
-    assert_eq!(tasks[0].source_id, todoist_item.id);
+    assert_eq!(tasks[0].status, TaskStatus::Active);
+    let source_item = &tasks[0].source_item;
+    assert_eq!(source_item.source_id, slack_message_id);
+    assert_eq!(
+        source_item.get_third_party_item_source_kind(),
+        ThirdPartyItemSourceKind::Slack
+    );
+    let sink_item = tasks[0].sink_item.as_ref().unwrap();
+    assert_eq!(sink_item.source_id, todoist_item.id);
+    assert_eq!(
+        sink_item.get_third_party_item_source_kind(),
+        ThirdPartyItemSourceKind::Todoist
+    );
 
-    // A duplicated event should not create a new notification or new task
+    // A duplicated event should not create a new task
     let response = create_resource_response(
         &app.client,
         &app.app.api_address,
@@ -739,28 +744,9 @@ async fn test_receive_star_added_event_as_task(
     slack_fetch_team_mock.assert_hits(1);
     todoist_projects_mock.assert_hits(1);
 
-    let notifications = list_notifications_with_tasks(
-        &app.client,
-        &app.app.api_address,
-        vec![NotificationStatus::Deleted],
-        false,
-        None,
-        None,
-    )
-    .await;
-
-    assert_eq!(notifications.len(), 1);
-    assert_eq!(notifications[0].source_id, "1707686216.825719");
-    assert!(notifications[0].task.is_some());
-    assert_eq!(
-        notifications[0].task.as_ref().unwrap().source_id,
-        todoist_item.id
-    );
-
     let tasks = list_tasks(&app.client, &app.app.api_address, TaskStatus::Active).await;
 
     assert_eq!(tasks.len(), 1);
-    assert_eq!(notifications[0].task.as_ref().unwrap().id, tasks[0].id);
 }
 
 #[rstest]
@@ -809,10 +795,11 @@ async fn test_receive_star_removed_and_added_event_as_task(
         "U05YYY", // The message's creator, not the user who starred the message
         "slack_fetch_user_response.json",
     );
+    let slack_message_id = "1707686216.825719";
     let slack_fetch_message_mock = mock_slack_fetch_message(
         &app.app.slack_mock_server,
         "C05XXX",
-        "1707686216.825719",
+        slack_message_id,
         "slack_fetch_message_response.json",
     );
     let slack_fetch_channel_mock = mock_slack_fetch_channel(
@@ -876,15 +863,28 @@ async fn test_receive_star_removed_and_added_event_as_task(
     )
     .await;
 
-    assert_eq!(notifications.len(), 1);
-    assert_eq!(notifications[0].source_id, "1707686216.825719");
-    let star_added_notification = &notifications[0];
-    let star_added_task = notifications[0].task.as_ref().unwrap();
+    assert_eq!(notifications.len(), 0);
 
-    let todoist_complete_item_mock = mock_todoist_complete_item_service(
-        &app.app.todoist_mock_server,
-        &star_added_task.source_id,
+    let tasks = list_tasks(&app.client, &app.app.api_address, TaskStatus::Active).await;
+
+    assert_eq!(tasks.len(), 1);
+    let star_added_task = &tasks[0];
+    assert_eq!(tasks[0].status, TaskStatus::Active);
+    let source_item = &tasks[0].source_item;
+    assert_eq!(source_item.source_id, slack_message_id);
+    assert_eq!(
+        source_item.get_third_party_item_source_kind(),
+        ThirdPartyItemSourceKind::Slack
     );
+    let sink_item = tasks[0].sink_item.as_ref().unwrap();
+    assert_eq!(sink_item.source_id, todoist_item.id);
+    assert_eq!(
+        sink_item.get_third_party_item_source_kind(),
+        ThirdPartyItemSourceKind::Todoist
+    );
+
+    let todoist_complete_item_mock =
+        mock_todoist_complete_item_service(&app.app.todoist_mock_server, &sink_item.source_id);
 
     // Notification should still be marked as deleted and associated task as done
     let response = create_resource_response(
@@ -914,18 +914,28 @@ async fn test_receive_star_removed_and_added_event_as_task(
     )
     .await;
 
-    assert_eq!(notifications.len(), 1);
-    assert_eq!(notifications[0].id, star_added_notification.id);
+    assert_eq!(notifications.len(), 0);
 
     let tasks = list_tasks(&app.client, &app.app.api_address, TaskStatus::Done).await;
 
     assert_eq!(tasks.len(), 1);
     assert_eq!(tasks[0].id, star_added_task.id);
-
-    let todoist_uncomplete_item_mock = mock_todoist_uncomplete_item_service(
-        &app.app.todoist_mock_server,
-        &star_added_task.source_id,
+    assert_eq!(tasks[0].status, TaskStatus::Done);
+    let source_item = &tasks[0].source_item;
+    assert_eq!(source_item.source_id, slack_message_id);
+    assert_eq!(
+        source_item.get_third_party_item_source_kind(),
+        ThirdPartyItemSourceKind::Slack
     );
+    let sink_item = tasks[0].sink_item.as_ref().unwrap();
+    assert_eq!(sink_item.source_id, todoist_item.id);
+    assert_eq!(
+        sink_item.get_third_party_item_source_kind(),
+        ThirdPartyItemSourceKind::Todoist
+    );
+
+    let todoist_uncomplete_item_mock =
+        mock_todoist_uncomplete_item_service(&app.app.todoist_mock_server, &sink_item.source_id);
 
     // Task should be marked as active again
     let response = create_resource_response(
@@ -940,21 +950,9 @@ async fn test_receive_star_removed_and_added_event_as_task(
 
     todoist_uncomplete_item_mock.assert();
 
-    let notifications = list_notifications(
-        &app.client,
-        &app.app.api_address,
-        vec![NotificationStatus::Deleted],
-        false,
-        None,
-        None,
-    )
-    .await;
-
-    assert_eq!(notifications.len(), 1);
-    assert_eq!(notifications[0].id, star_added_notification.id);
-
     let tasks = list_tasks(&app.client, &app.app.api_address, TaskStatus::Active).await;
 
     assert_eq!(tasks.len(), 1);
     assert_eq!(tasks[0].id, star_added_task.id);
+    assert_eq!(tasks[0].status, TaskStatus::Active);
 }

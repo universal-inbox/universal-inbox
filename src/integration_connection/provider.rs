@@ -1,15 +1,18 @@
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 
-use crate::integration_connection::{
-    config::IntegrationConnectionConfig,
-    integrations::{
-        github::GithubConfig,
-        google_mail::{GoogleMailConfig, GoogleMailContext},
-        linear::LinearConfig,
-        slack::{SlackConfig, SlackSyncType},
-        todoist::{TodoistConfig, TodoistContext},
+use crate::{
+    integration_connection::{
+        config::IntegrationConnectionConfig,
+        integrations::{
+            github::GithubConfig,
+            google_mail::{GoogleMailConfig, GoogleMailContext},
+            linear::LinearConfig,
+            slack::{SlackConfig, SlackSyncTaskConfig, SlackSyncType},
+            todoist::{TodoistConfig, TodoistContext},
+        },
     },
+    task::{integrations::todoist::TODOIST_INBOX_PROJECT, ProjectSummary, TaskCreation},
 };
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
@@ -145,6 +148,33 @@ impl IntegrationProvider {
                 config.create_notification_from_inbox_task
             }
             _ => false,
+        }
+    }
+
+    pub fn get_task_creation_default_values(&self) -> Option<TaskCreation> {
+        match self {
+            IntegrationProvider::Slack {
+                config:
+                    SlackConfig {
+                        sync_enabled: true,
+                        sync_type:
+                            SlackSyncType::AsTasks(SlackSyncTaskConfig {
+                                target_project,
+                                default_due_at,
+                                default_priority,
+                            }),
+                    },
+            } => Some(TaskCreation {
+                title: "Unused".to_string(),
+                body: None,
+                project: target_project.clone().unwrap_or_else(|| ProjectSummary {
+                    source_id: "Unused".to_string(),
+                    name: TODOIST_INBOX_PROJECT.to_string(),
+                }),
+                due_at: default_due_at.as_ref().map(|due_at| due_at.clone().into()),
+                priority: *default_priority,
+            }),
+            _ => None,
         }
     }
 }

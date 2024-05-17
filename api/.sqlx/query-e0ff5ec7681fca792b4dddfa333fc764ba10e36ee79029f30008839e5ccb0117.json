@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT\n                  id,\n                  source_id,\n                  title,\n                  body,\n                  priority,\n                  due_at as \"due_at: Json<Option<DueDate>>\",\n                  tags,\n                  project\n                FROM\n                  task,\n                  to_tsquery('english', $1) query\n                WHERE\n                  query @@ title_body_project_tags_tsv\n                  AND status::TEXT = 'Active'\n                  AND user_id = $2\n                ORDER BY ts_rank_cd(title_body_project_tags_tsv, query) DESC\n                LIMIT 10;\n            ",
+  "query": "\n                SELECT\n                  task.id,\n                  sink_item.source_id,\n                  task.title,\n                  task.body,\n                  task.priority,\n                  task.due_at as \"due_at: Json<Option<DueDate>>\",\n                  task.tags,\n                  task.project\n                FROM\n                  task,\n                  to_tsquery('english', $1) query,\n                  third_party_item sink_item\n                WHERE\n                  query @@ title_body_project_tags_tsv\n                  AND task.status::TEXT = 'Active'\n                  AND task.user_id = $2\n                  AND task.sink_item_id = sink_item.id\n                ORDER BY ts_rank_cd(title_body_project_tags_tsv, query) DESC\n                LIMIT 10;\n            ",
   "describe": {
     "columns": [
       {
@@ -61,5 +61,5 @@
       false
     ]
   },
-  "hash": "fe79de7587edba6557200743607adc6f9fbb37b4a8c845a496086a0ad0d97521"
+  "hash": "e0ff5ec7681fca792b4dddfa333fc764ba10e36ee79029f30008839e5ccb0117"
 }

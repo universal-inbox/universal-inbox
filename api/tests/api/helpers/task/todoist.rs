@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 
-use chrono::{NaiveDate, TimeZone, Utc};
+use chrono::NaiveDate;
 use httpmock::{Method::POST, Mock, MockServer};
 use pretty_assertions::assert_eq;
-use reqwest::Client;
 use rstest::*;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -14,9 +13,10 @@ use uuid::Uuid;
 use universal_inbox::{
     integration_connection::integrations::todoist::SyncToken,
     notification::{NotificationMetadata, NotificationStatus},
-    task::{
+    task::{DueDate, TaskCreationResult, TaskStatus},
+    third_party::{
         integrations::todoist::{TodoistItem, TodoistItemDue, TodoistItemPriority},
-        DueDate, Task, TaskCreationResult, TaskMetadata, TaskStatus,
+        item::ThirdPartyItemData,
     },
     user::UserId,
     HasHtmlUrl,
@@ -30,7 +30,7 @@ use universal_inbox_api::integrations::todoist::{
     TodoistSyncStatusResponse,
 };
 
-use crate::helpers::{load_json_fixture_file, rest::create_resource};
+use crate::helpers::load_json_fixture_file;
 
 #[fixture]
 pub fn sync_todoist_items_response() -> TodoistSyncResponse {
@@ -228,7 +228,7 @@ pub fn assert_sync_items(
         let notification = task_creation.notifications.first();
 
         assert_eq!(task.user_id, expected_user_id);
-        match task.source_id.as_ref() {
+        match task.source_item.source_id.as_ref() {
             "1123" => {
                 assert_eq!(task.title, "Task 1".to_string());
                 assert_eq!(
@@ -251,18 +251,14 @@ pub fn assert_sync_items(
                 );
                 assert_eq!(task.project, "Inbox".to_string());
                 assert_eq!(
-                    task.created_at,
-                    Utc.with_ymd_and_hms(2019, 12, 11, 22, 36, 50).unwrap()
-                );
-                assert_eq!(
-                    task.metadata,
-                    TaskMetadata::Todoist(sync_todoist_items[0].clone())
+                    task.source_item.data,
+                    ThirdPartyItemData::TodoistItem(sync_todoist_items[0].clone())
                 );
 
                 assert!(notification.is_some());
                 let notif = notification.unwrap();
                 assert_eq!(notif.title, task.title);
-                assert_eq!(notif.source_id, task.source_id.clone());
+                assert_eq!(notif.source_id, task.source_item.source_id.clone());
                 assert_eq!(
                     notif.status,
                     if sync_todoist_items[0].checked {
@@ -271,7 +267,6 @@ pub fn assert_sync_items(
                         NotificationStatus::Unread
                     }
                 );
-                assert_eq!(notif.updated_at, task.created_at);
                 assert_eq!(notif.metadata, NotificationMetadata::Todoist);
                 assert_eq!(notif.task_id, Some(task.id));
                 assert_eq!(notif.user_id, expected_user_id);
@@ -288,12 +283,8 @@ pub fn assert_sync_items(
                 );
                 assert_eq!(task.project, "Project2".to_string());
                 assert_eq!(
-                    task.created_at,
-                    Utc.with_ymd_and_hms(2019, 12, 11, 22, 37, 50).unwrap()
-                );
-                assert_eq!(
-                    task.metadata,
-                    TaskMetadata::Todoist(sync_todoist_items[1].clone())
+                    task.source_item.data,
+                    ThirdPartyItemData::TodoistItem(sync_todoist_items[1].clone())
                 );
                 assert!(notification.is_some());
                 let notif = notification.unwrap();
@@ -304,46 +295,6 @@ pub fn assert_sync_items(
             }
         }
     }
-}
-
-pub async fn create_task_from_todoist_item(
-    client: &Client,
-    api_address: &str,
-    todoist_item: &TodoistItem,
-    project: String,
-    user_id: UserId,
-) -> Box<TaskCreationResult> {
-    create_resource(
-        client,
-        api_address,
-        "tasks",
-        Box::new(Task {
-            id: Uuid::new_v4().into(),
-            user_id,
-            source_id: todoist_item.id.clone(),
-            title: todoist_item.content.clone(),
-            body: todoist_item.description.clone(),
-            status: if todoist_item.checked {
-                TaskStatus::Done
-            } else {
-                TaskStatus::Active
-            },
-            completed_at: todoist_item.completed_at,
-            priority: todoist_item.priority.into(),
-            due_at: todoist_item.due.as_ref().map(|due| due.date.clone()),
-            tags: todoist_item.labels.clone(),
-            parent_id: None,
-            project,
-            is_recurring: todoist_item
-                .due
-                .as_ref()
-                .map(|due| due.is_recurring)
-                .unwrap_or(false),
-            created_at: todoist_item.added_at,
-            metadata: TaskMetadata::Todoist(todoist_item.clone()),
-        }),
-    )
-    .await
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]

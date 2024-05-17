@@ -4,6 +4,7 @@ pub mod health_check;
 pub mod integration_connection;
 pub mod notification;
 pub mod task;
+pub mod third_party;
 pub mod user;
 pub mod webhook;
 
@@ -30,6 +31,7 @@ impl ResponseError for UniversalInboxError {
             UniversalInboxError::Unauthorized(_) => StatusCode::UNAUTHORIZED,
             UniversalInboxError::Forbidden(_) => StatusCode::FORBIDDEN,
             UniversalInboxError::UnsupportedAction(_) => StatusCode::BAD_REQUEST,
+            UniversalInboxError::DatabaseError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 

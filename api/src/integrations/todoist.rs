@@ -9,6 +9,7 @@ use std::{
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use cached::proc_macro::cached;
+use chrono::Utc;
 use http::{HeaderMap, HeaderValue, StatusCode};
 use regex::RegexBuilder;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
@@ -29,15 +30,23 @@ use universal_inbox::{
     },
     notification::{NotificationSource, NotificationSourceKind},
     task::{
-        integrations::todoist::{TodoistItem, TodoistItemDue, TodoistItemPriority, TodoistProject},
-        service::TaskPatch,
-        ProjectSummary, Task, TaskCreation, TaskMetadata, TaskSource, TaskSourceKind, TaskStatus,
+        integrations::todoist::TodoistProject, service::TaskPatch, ProjectSummary, Task,
+        TaskCreation, TaskSource, TaskSourceKind, TaskStatus,
+    },
+    third_party::item::ThirdPartyItem,
+    third_party::{
+        integrations::todoist::{TodoistItem, TodoistItemDue, TodoistItemPriority},
+        item::{ThirdPartyItemFromSource, ThirdPartyItemSource, ThirdPartyItemSourceKind},
     },
     user::UserId,
 };
 
 use crate::{
-    integrations::{oauth2::AccessToken, task::TaskSourceService},
+    integrations::{
+        oauth2::AccessToken,
+        task::{ThirdPartyTaskService, ThirdPartyTaskSourceService},
+        third_party::ThirdPartyItemSourceService,
+    },
     universal_inbox::{
         integration_connection::service::IntegrationConnectionService, UniversalInboxError,
     },
@@ -310,14 +319,32 @@ impl TodoistService {
         cached_fetch_all_projects(self, user_id, access_token, sync_token).await
     }
 
+    #[allow(clippy::blocks_in_conditions)]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    async fn fetch_task<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        source_id: &str,
+        user_id: UserId,
+    ) -> Result<Option<TodoistItem>, UniversalInboxError> {
+        let (access_token, _) = self
+            .integration_connection_service
+            .read()
+            .await
+            .find_access_token(executor, IntegrationProviderKind::Todoist, user_id)
+            .await?
+            .ok_or_else(|| anyhow!("Cannot fetch a Todoist task without an access token"))?;
+        self.get_item(source_id, &access_token).await
+    }
+
     pub async fn build_task_with_project_name(
         source: &TodoistItem,
         project_name: String,
+        source_third_party_item: &ThirdPartyItem,
         user_id: UserId,
     ) -> Box<Task> {
         Box::new(Task {
             id: Uuid::new_v4().into(),
-            source_id: source.id.clone(),
             title: source.content.clone(),
             body: source.description.clone(),
             status: if source.checked {
@@ -339,7 +366,10 @@ impl TodoistService {
                 .map(|due| due.is_recurring)
                 .unwrap_or(false),
             created_at: source.added_at,
-            metadata: TaskMetadata::Todoist(source.clone()),
+            updated_at: Utc::now(),
+            kind: TaskSourceKind::Todoist,
+            source_item: source_third_party_item.clone(),
+            sink_item: Some(source_third_party_item.clone()),
             user_id,
         })
     }
@@ -387,19 +417,19 @@ fn build_todoist_client(
 }
 
 #[async_trait]
-impl TaskSourceService<TodoistItem> for TodoistService {
+impl ThirdPartyItemSourceService for TodoistService {
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(level = "debug", skip(self, executor), err)]
-    async fn fetch_all_tasks<'a>(
+    async fn fetch_items<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
         user_id: UserId,
-    ) -> Result<Vec<TodoistItem>, UniversalInboxError> {
+    ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError> {
         let (access_token, integration_connection) = self
             .integration_connection_service
             .read()
             .await
-            .find_access_token(executor, IntegrationProviderKind::Todoist, None, user_id)
+            .find_access_token(executor, IntegrationProviderKind::Todoist, user_id)
             .await?
             .ok_or_else(|| anyhow!("Cannot fetch Todoist task without an access token"))?;
 
@@ -430,42 +460,45 @@ impl TaskSourceService<TodoistItem> for TodoistService {
                 )
             })?;
 
-        sync_response.items.ok_or_else(|| {
-            UniversalInboxError::Unexpected(anyhow!("Todoist response should include `items`"))
-        })
+        sync_response
+            .items
+            .ok_or_else(|| {
+                UniversalInboxError::Unexpected(anyhow!("Todoist response should include `items`"))
+            })
+            .map(|items| {
+                items
+                    .into_iter()
+                    .map(|item| item.into_third_party_item(user_id, integration_connection.id))
+                    .collect()
+            })
     }
+}
 
+#[async_trait]
+impl ThirdPartyTaskService<TodoistItem> for TodoistService {
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
-    async fn fetch_task<'a>(
-        &self,
-        executor: &mut Transaction<'a, Postgres>,
-        source_id: &str,
-        user_id: UserId,
-    ) -> Result<Option<TodoistItem>, UniversalInboxError> {
-        let (access_token, _) = self
-            .integration_connection_service
-            .read()
-            .await
-            .find_access_token(executor, IntegrationProviderKind::Todoist, None, user_id)
-            .await?
-            .ok_or_else(|| anyhow!("Cannot fetch a Todoist task without an access token"))?;
-        self.get_item(source_id, &access_token).await
-    }
-
-    #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor, source), fields(source_id = source.id), err)]
-    async fn build_task<'a>(
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, executor, source, source_third_party_item, _task_creation),
+        fields(
+            third_party_item_id = source_third_party_item.id.to_string(),
+            third_party_item_source_id = source_third_party_item.source_id
+        ),
+        err
+    )]
+    async fn third_party_item_into_task<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
         source: &TodoistItem,
+        source_third_party_item: &ThirdPartyItem,
+        _task_creation: Option<TaskCreation>,
         user_id: UserId,
     ) -> Result<Box<Task>, UniversalInboxError> {
         let (access_token, _) = self
             .integration_connection_service
             .read()
             .await
-            .find_access_token(executor, IntegrationProviderKind::Todoist, None, user_id)
+            .find_access_token(executor, IntegrationProviderKind::Todoist, user_id)
             .await?
             .ok_or_else(|| anyhow!("Cannot build a Todoist task without an access token"))?;
         let projects = self
@@ -477,9 +510,188 @@ impl TaskSourceService<TodoistItem> for TodoistService {
             .map(|project| project.name.clone())
             .unwrap_or_else(|| "No project".to_string());
 
-        Ok(TodoistService::build_task_with_project_name(source, project_name, user_id).await)
+        Ok(TodoistService::build_task_with_project_name(
+            source,
+            project_name,
+            source_third_party_item,
+            user_id,
+        )
+        .await)
     }
 
+    #[allow(clippy::blocks_in_conditions)]
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, executor, third_party_item),
+        fields(
+            third_party_item_id = third_party_item.id.to_string(),
+            third_party_item_source_id = third_party_item.source_id
+        ),
+        err
+    )]
+    async fn delete_task<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        third_party_item: &ThirdPartyItem,
+        user_id: UserId,
+    ) -> Result<(), UniversalInboxError> {
+        let (access_token, _) = self
+            .integration_connection_service
+            .read()
+            .await
+            .find_access_token(executor, IntegrationProviderKind::Todoist, user_id)
+            .await?
+            .ok_or_else(|| anyhow!("Cannot delete a Todoist task without an access token"))?;
+
+        self.send_sync_commands(
+            vec![TodoistSyncCommand::ItemDelete {
+                uuid: Uuid::new_v4(),
+                args: TodoistSyncCommandItemDeleteArgs {
+                    id: third_party_item.source_id.clone(),
+                },
+            }],
+            &access_token,
+        )
+        .await?;
+
+        Ok(())
+    }
+
+    #[allow(clippy::blocks_in_conditions)]
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, executor, third_party_item),
+        fields(
+            third_party_item_id = third_party_item.id.to_string(),
+            third_party_item_source_id = third_party_item.source_id
+        ),
+        err
+    )]
+    async fn complete_task<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        third_party_item: &ThirdPartyItem,
+        user_id: UserId,
+    ) -> Result<(), UniversalInboxError> {
+        let (access_token, _) = self
+            .integration_connection_service
+            .read()
+            .await
+            .find_access_token(executor, IntegrationProviderKind::Todoist, user_id)
+            .await?
+            .ok_or_else(|| anyhow!("Cannot complete a Todoist task without an access token"))?;
+
+        self.send_sync_commands(
+            vec![TodoistSyncCommand::ItemComplete {
+                uuid: Uuid::new_v4(),
+                args: TodoistSyncCommandItemCompleteArgs {
+                    id: third_party_item.source_id.clone(),
+                },
+            }],
+            &access_token,
+        )
+        .await?;
+
+        Ok(())
+    }
+
+    #[allow(clippy::blocks_in_conditions)]
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, executor, third_party_item),
+        fields(
+            third_party_item_id = third_party_item.id.to_string(),
+            third_party_item_source_id = third_party_item.source_id
+        ),
+        err
+    )]
+    async fn uncomplete_task<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        third_party_item: &ThirdPartyItem,
+        user_id: UserId,
+    ) -> Result<(), UniversalInboxError> {
+        let (access_token, _) = self
+            .integration_connection_service
+            .read()
+            .await
+            .find_access_token(executor, IntegrationProviderKind::Todoist, user_id)
+            .await?
+            .ok_or_else(|| anyhow!("Cannot complete a Todoist task without an access token"))?;
+
+        self.send_sync_commands(
+            vec![TodoistSyncCommand::ItemUncomplete {
+                uuid: Uuid::new_v4(),
+                args: TodoistSyncCommandItemUncompleteArgs {
+                    id: third_party_item.source_id.clone(),
+                },
+            }],
+            &access_token,
+        )
+        .await?;
+
+        Ok(())
+    }
+
+    #[allow(clippy::blocks_in_conditions)]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    async fn update_task<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        id: &str,
+        patch: &TaskPatch,
+        user_id: UserId,
+    ) -> Result<(), UniversalInboxError> {
+        let (access_token, _) = self
+            .integration_connection_service
+            .read()
+            .await
+            .find_access_token(executor, IntegrationProviderKind::Todoist, user_id)
+            .await?
+            .ok_or_else(|| anyhow!("Cannot update a Todoist task without an access token"))?;
+        let mut commands: Vec<TodoistSyncCommand> = vec![];
+        if let Some(ref project_name) = patch.project {
+            let project = self
+                .get_or_create_project(executor, project_name, user_id, Some(&access_token))
+                .await?;
+            commands.push(TodoistSyncCommand::ItemMove {
+                uuid: Uuid::new_v4(),
+                args: TodoistSyncCommandItemMoveArgs {
+                    id: id.to_string(),
+                    project_id: project.source_id.clone(),
+                },
+            });
+        }
+
+        if patch.priority.is_some() || patch.due_at.is_some() || patch.body.is_some() {
+            let priority = patch.priority.map(|priority| priority.into());
+            let due = patch
+                .due_at
+                .as_ref()
+                .map(|due| due.as_ref().map(|d| d.into()));
+            let description = patch.body.clone();
+
+            commands.push(TodoistSyncCommand::ItemUpdate {
+                uuid: Uuid::new_v4(),
+                args: TodoistSyncCommandItemUpdateArgs {
+                    id: id.to_string(),
+                    due,
+                    priority,
+                    description,
+                },
+            });
+        }
+
+        if !commands.is_empty() {
+            self.send_sync_commands(commands, &access_token).await?;
+        }
+
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl ThirdPartyTaskSourceService<TodoistItem> for TodoistService {
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(level = "debug", skip(self, executor), err)]
     async fn create_task<'a>(
@@ -492,7 +704,7 @@ impl TaskSourceService<TodoistItem> for TodoistService {
             .integration_connection_service
             .read()
             .await
-            .find_access_token(executor, IntegrationProviderKind::Todoist, None, user_id)
+            .find_access_token(executor, IntegrationProviderKind::Todoist, user_id)
             .await?
             .ok_or_else(|| anyhow!("Cannot create a Todoist task without an access token"))?;
         let sync_result = self
@@ -532,139 +744,6 @@ impl TaskSourceService<TodoistItem> for TodoistService {
 
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(level = "debug", skip(self, executor), err)]
-    async fn delete_task<'a>(
-        &self,
-        executor: &mut Transaction<'a, Postgres>,
-        id: &str,
-        user_id: UserId,
-    ) -> Result<TodoistSyncStatusResponse, UniversalInboxError> {
-        let (access_token, _) = self
-            .integration_connection_service
-            .read()
-            .await
-            .find_access_token(executor, IntegrationProviderKind::Todoist, None, user_id)
-            .await?
-            .ok_or_else(|| anyhow!("Cannot delete a Todoist task without an access token"))?;
-        self.send_sync_commands(
-            vec![TodoistSyncCommand::ItemDelete {
-                uuid: Uuid::new_v4(),
-                args: TodoistSyncCommandItemDeleteArgs { id: id.to_string() },
-            }],
-            &access_token,
-        )
-        .await
-    }
-
-    #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
-    async fn complete_task<'a>(
-        &self,
-        executor: &mut Transaction<'a, Postgres>,
-        id: &str,
-        user_id: UserId,
-    ) -> Result<TodoistSyncStatusResponse, UniversalInboxError> {
-        let (access_token, _) = self
-            .integration_connection_service
-            .read()
-            .await
-            .find_access_token(executor, IntegrationProviderKind::Todoist, None, user_id)
-            .await?
-            .ok_or_else(|| anyhow!("Cannot complete a Todoist task without an access token"))?;
-        self.send_sync_commands(
-            vec![TodoistSyncCommand::ItemComplete {
-                uuid: Uuid::new_v4(),
-                args: TodoistSyncCommandItemCompleteArgs { id: id.to_string() },
-            }],
-            &access_token,
-        )
-        .await
-    }
-
-    #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
-    async fn uncomplete_task<'a>(
-        &self,
-        executor: &mut Transaction<'a, Postgres>,
-        id: &str,
-        user_id: UserId,
-    ) -> Result<TodoistSyncStatusResponse, UniversalInboxError> {
-        let (access_token, _) = self
-            .integration_connection_service
-            .read()
-            .await
-            .find_access_token(executor, IntegrationProviderKind::Todoist, None, user_id)
-            .await?
-            .ok_or_else(|| anyhow!("Cannot complete a Todoist task without an access token"))?;
-        self.send_sync_commands(
-            vec![TodoistSyncCommand::ItemUncomplete {
-                uuid: Uuid::new_v4(),
-                args: TodoistSyncCommandItemUncompleteArgs { id: id.to_string() },
-            }],
-            &access_token,
-        )
-        .await
-    }
-
-    #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
-    async fn update_task<'a>(
-        &self,
-        executor: &mut Transaction<'a, Postgres>,
-        id: &str,
-        patch: &TaskPatch,
-        user_id: UserId,
-    ) -> Result<Option<TodoistSyncStatusResponse>, UniversalInboxError> {
-        let (access_token, _) = self
-            .integration_connection_service
-            .read()
-            .await
-            .find_access_token(executor, IntegrationProviderKind::Todoist, None, user_id)
-            .await?
-            .ok_or_else(|| anyhow!("Cannot update a Todoist task without an access token"))?;
-        let mut commands: Vec<TodoistSyncCommand> = vec![];
-        if let Some(ref project_name) = patch.project {
-            let project = self
-                .get_or_create_project(executor, project_name, user_id, Some(&access_token))
-                .await?;
-            commands.push(TodoistSyncCommand::ItemMove {
-                uuid: Uuid::new_v4(),
-                args: TodoistSyncCommandItemMoveArgs {
-                    id: id.to_string(),
-                    project_id: project.source_id.clone(),
-                },
-            });
-        }
-
-        if patch.priority.is_some() || patch.due_at.is_some() || patch.body.is_some() {
-            let priority = patch.priority.map(|priority| priority.into());
-            let due = patch
-                .due_at
-                .as_ref()
-                .map(|due| due.as_ref().map(|d| d.into()));
-            let description = patch.body.clone();
-
-            commands.push(TodoistSyncCommand::ItemUpdate {
-                uuid: Uuid::new_v4(),
-                args: TodoistSyncCommandItemUpdateArgs {
-                    id: id.to_string(),
-                    due,
-                    priority,
-                    description,
-                },
-            });
-        }
-
-        if commands.is_empty() {
-            Ok(None)
-        } else {
-            Ok(Some(
-                self.send_sync_commands(commands, &access_token).await?,
-            ))
-        }
-    }
-
-    #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     async fn search_projects<'a, 'b>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -675,7 +754,7 @@ impl TaskSourceService<TodoistItem> for TodoistService {
             .integration_connection_service
             .read()
             .await
-            .find_access_token(executor, IntegrationProviderKind::Todoist, None, user_id)
+            .find_access_token(executor, IntegrationProviderKind::Todoist, user_id)
             .await?
             .ok_or_else(|| anyhow!("Cannot search Todoist projects without an access token"))?;
 
@@ -715,7 +794,7 @@ impl TaskSourceService<TodoistItem> for TodoistService {
                 self.integration_connection_service
                     .read()
                     .await
-                    .find_access_token(executor, IntegrationProviderKind::Todoist, None, user_id)
+                    .find_access_token(executor, IntegrationProviderKind::Todoist, user_id)
                     .await?
                     .ok_or_else(|| {
                         anyhow!(
@@ -776,6 +855,12 @@ impl TaskSource for TodoistService {
 impl IntegrationProviderSource for TodoistService {
     fn get_integration_provider_kind(&self) -> IntegrationProviderKind {
         IntegrationProviderKind::Todoist
+    }
+}
+
+impl ThirdPartyItemSource for TodoistService {
+    fn get_third_party_item_source_kind(&self) -> ThirdPartyItemSourceKind {
+        ThirdPartyItemSourceKind::Todoist
     }
 }
 

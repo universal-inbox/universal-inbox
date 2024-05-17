@@ -15,21 +15,21 @@ use uuid::Uuid;
 use crate::{
     integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
     notification::{Notification, NotificationMetadata, NotificationStatus, NotificationWithTask},
-    task::integrations::todoist::{TodoistItem, DEFAULT_TODOIST_HTML_URL, TODOIST_INBOX_PROJECT},
+    task::integrations::todoist::{DEFAULT_TODOIST_HTML_URL, TODOIST_INBOX_PROJECT},
+    third_party::item::{
+        ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemSource, ThirdPartyItemSourceKind,
+    },
     user::UserId,
     HasHtmlUrl,
 };
-
-use self::integrations::todoist::get_task_html_url;
 
 pub mod integrations;
 pub mod service;
 
 #[serde_as]
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct Task {
     pub id: TaskId,
-    pub source_id: String,
     pub title: String,
     pub body: String,
     pub status: TaskStatus,
@@ -41,12 +41,15 @@ pub struct Task {
     pub project: String,
     pub is_recurring: bool,
     pub created_at: DateTime<Utc>,
-    pub metadata: TaskMetadata,
+    pub updated_at: DateTime<Utc>,
+    pub kind: TaskSourceKind,
+    pub source_item: ThirdPartyItem,
+    pub sink_item: Option<ThirdPartyItem>,
     pub user_id: UserId,
 }
 
 #[serde_as]
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct TaskSummary {
     pub id: TaskId,
     pub source_id: String,
@@ -79,64 +82,41 @@ impl fmt::Display for ProjectSummary {
 
 impl Task {
     pub fn is_in_inbox(&self) -> bool {
-        match &self.metadata {
-            TaskMetadata::Todoist(_) => self.project == TODOIST_INBOX_PROJECT,
-        }
-    }
-
-    pub fn get_task_source_kind(&self) -> TaskSourceKind {
-        match self.metadata {
-            TaskMetadata::Todoist(_) => TaskSourceKind::Todoist,
-        }
-    }
-
-    pub fn into_notification(self, user_id: UserId) -> Notification {
-        Notification {
-            id: Uuid::new_v4().into(),
-            title: self.title.clone(),
-            source_id: self.source_id.clone(),
-            status: if self.status != TaskStatus::Active {
-                NotificationStatus::Deleted
-            } else {
-                NotificationStatus::Unread
-            },
-            metadata: match self.metadata {
-                TaskMetadata::Todoist(_) => NotificationMetadata::Todoist,
-            },
-            updated_at: self.created_at,
-            last_read_at: None,
-            snoozed_until: None,
-            user_id,
-            details: None,
-            task_id: Some(self.id),
+        match self.kind {
+            TaskSourceKind::Todoist => self.project == TODOIST_INBOX_PROJECT,
+            _ => {
+                if let Some(sink_item) = &self.sink_item {
+                    match sink_item.get_third_party_item_source_kind() {
+                        ThirdPartyItemSourceKind::Todoist => self.project == TODOIST_INBOX_PROJECT,
+                        _ => false,
+                    }
+                } else {
+                    false
+                }
+            }
         }
     }
 
     pub fn get_html_project_url(&self) -> Url {
-        match &self.metadata {
-            TaskMetadata::Todoist(todoist_task) => format!(
+        let Some(sink_item) = &self.sink_item else {
+            return DEFAULT_TODOIST_HTML_URL.parse::<Url>().unwrap();
+        };
+        match &sink_item.data {
+            ThirdPartyItemData::TodoistItem(todoist_task) => format!(
                 "{DEFAULT_TODOIST_HTML_URL}project/{}",
                 todoist_task.project_id
             )
             .parse::<Url>()
             .unwrap(),
+            _ => DEFAULT_TODOIST_HTML_URL.parse::<Url>().unwrap(),
         }
     }
 }
 
 impl HasHtmlUrl for Task {
     fn get_html_url(&self) -> Url {
-        match self.metadata {
-            TaskMetadata::Todoist(_) => get_task_html_url(self.source_id.as_str())
-                .unwrap_or_else(|| DEFAULT_TODOIST_HTML_URL.parse::<Url>().unwrap()),
-        }
+        self.source_item.get_html_url()
     }
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
-#[serde(tag = "type", content = "content")]
-pub enum TaskMetadata {
-    Todoist(TodoistItem),
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Copy, Clone, Eq, Hash)]
@@ -315,8 +295,23 @@ impl Display for TaskPriority {
 
 impl From<Task> for Notification {
     fn from(task: Task) -> Self {
-        let user_id = task.user_id;
-        task.into_notification(user_id)
+        Notification {
+            id: Uuid::new_v4().into(),
+            title: task.title.clone(),
+            source_id: task.source_item.source_id.clone(),
+            status: if task.status != TaskStatus::Active {
+                NotificationStatus::Deleted
+            } else {
+                NotificationStatus::Unread
+            },
+            metadata: NotificationMetadata::Todoist,
+            updated_at: task.updated_at,
+            last_read_at: None,
+            snoozed_until: None,
+            user_id: task.user_id,
+            details: None,
+            task_id: Some(task.id),
+        }
     }
 }
 
@@ -325,12 +320,10 @@ impl From<Task> for NotificationWithTask {
         NotificationWithTask {
             id: Uuid::new_v4().into(),
             title: task.title.clone(),
-            source_id: task.source_id.clone(),
+            source_id: task.source_item.source_id.clone(),
             status: NotificationStatus::Unread,
-            metadata: match task.metadata {
-                TaskMetadata::Todoist(_) => NotificationMetadata::Todoist,
-            },
-            updated_at: task.created_at,
+            metadata: NotificationMetadata::Todoist,
+            updated_at: task.updated_at,
             last_read_at: None,
             snoozed_until: None,
             user_id: task.user_id,
@@ -351,7 +344,8 @@ macro_attr! {
 macro_attr! {
     #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!)]
     pub enum TaskSourceKind {
-        Todoist
+        Todoist,
+        Slack
     }
 }
 
@@ -366,14 +360,14 @@ impl TryFrom<IntegrationProviderKind> for TaskSyncSourceKind {
     }
 }
 
-pub trait TaskSource: IntegrationProviderSource {
-    fn get_task_source_kind(&self) -> TaskSourceKind;
-}
-
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct TaskCreationResult {
     pub task: Task,
     pub notifications: Vec<Notification>,
+}
+
+pub trait TaskSource: IntegrationProviderSource {
+    fn get_task_source_kind(&self) -> TaskSourceKind;
 }
 
 #[cfg(test)]

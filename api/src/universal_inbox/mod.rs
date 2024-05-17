@@ -10,6 +10,7 @@ pub mod auth_token;
 pub mod integration_connection;
 pub mod notification;
 pub mod task;
+pub mod third_party;
 pub mod user;
 
 fn error_chain_fmt(
@@ -63,6 +64,12 @@ pub enum UniversalInboxError {
     UnsupportedAction(String),
     #[error("Task not found: {0}")]
     TaskNotFound(TaskId),
+    #[error("Database error: {message}")]
+    DatabaseError {
+        #[source]
+        source: sqlx::Error,
+        message: String,
+    },
     #[error("Unauthorized access: {0}")]
     Unauthorized(anyhow::Error),
     #[error("Forbidden access: {0}")]
@@ -92,18 +99,18 @@ pub struct UpdateStatus<T> {
     pub result: Option<T>,
 }
 
-#[derive(Debug)]
-pub enum UpsertStatus<T> {
+#[derive(Debug, Clone)]
+pub enum UpsertStatus<T: Clone> {
     Created(T),
-    Updated(T),
+    Updated { old: T, new: T },
     Untouched(T),
 }
 
-impl<T> UpsertStatus<T> {
+impl<T: Clone> UpsertStatus<T> {
     pub fn value(self: UpsertStatus<T>) -> T {
         match self {
             UpsertStatus::Created(inner)
-            | UpsertStatus::Updated(inner)
+            | UpsertStatus::Updated { new: inner, .. }
             | UpsertStatus::Untouched(inner) => inner,
         }
     }
@@ -111,8 +118,22 @@ impl<T> UpsertStatus<T> {
     pub fn value_ref(self: &UpsertStatus<T>) -> &T {
         match self {
             UpsertStatus::Created(inner)
-            | UpsertStatus::Updated(inner)
+            | UpsertStatus::Updated { new: inner, .. }
             | UpsertStatus::Untouched(inner) => inner,
+        }
+    }
+
+    pub fn modified_value(self: UpsertStatus<T>) -> Option<T> {
+        match self {
+            UpsertStatus::Created(inner) | UpsertStatus::Updated { new: inner, .. } => Some(inner),
+            UpsertStatus::Untouched(_) => None,
+        }
+    }
+
+    pub fn modified_value_ref(self: &UpsertStatus<T>) -> Option<&T> {
+        match self {
+            UpsertStatus::Created(inner) | UpsertStatus::Updated { new: inner, .. } => Some(inner),
+            UpsertStatus::Untouched(_) => None,
         }
     }
 }

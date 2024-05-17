@@ -10,8 +10,8 @@ use dioxus_free_icons::{
 
 use universal_inbox::{
     notification::NotificationWithTask,
-    task::integrations::todoist::{TodoistItem, TodoistItemPriority},
     task::Task,
+    third_party::integrations::todoist::{TodoistItem, TodoistItemPriority},
     HasHtmlUrl,
 };
 

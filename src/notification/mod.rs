@@ -43,19 +43,6 @@ pub struct Notification {
     pub details: Option<NotificationDetails>,
 }
 
-impl Notification {
-    pub fn get_source_kind(&self) -> NotificationSourceKind {
-        // tag: New notification integration
-        match &self.metadata {
-            NotificationMetadata::Github(_) => NotificationSourceKind::Github,
-            NotificationMetadata::Todoist => NotificationSourceKind::Todoist,
-            NotificationMetadata::Linear(_) => NotificationSourceKind::Linear,
-            NotificationMetadata::GoogleMail(_) => NotificationSourceKind::GoogleMail,
-            NotificationMetadata::Slack(_) => NotificationSourceKind::Slack,
-        }
-    }
-}
-
 impl HasHtmlUrl for Notification {
     // tag: New notification integration
     fn get_html_url(&self) -> Url {
@@ -74,7 +61,6 @@ impl HasHtmlUrl for Notification {
                     google_mail_thread.get_html_url_from_metadata()
                 }
                 NotificationMetadata::Slack(_) => {
-                    // TODO: it requires to call Slack API to get the message URL
                     // See https://api.slack.com/methods/chat.getPermalink
                     // Hardcoding it for now
                     "https://slack.com".parse::<Url>().unwrap()
@@ -138,6 +124,17 @@ impl NotificationWithTask {
 
     pub fn is_built_from_task(&self) -> bool {
         matches!(self.metadata, NotificationMetadata::Todoist)
+    }
+
+    pub fn get_source_kind(&self) -> NotificationSourceKind {
+        // tag: New notification integration
+        match &self.metadata {
+            NotificationMetadata::Github(_) => NotificationSourceKind::Github,
+            NotificationMetadata::Todoist => NotificationSourceKind::Todoist,
+            NotificationMetadata::Linear(_) => NotificationSourceKind::Linear,
+            NotificationMetadata::GoogleMail(_) => NotificationSourceKind::GoogleMail,
+            NotificationMetadata::Slack(_) => NotificationSourceKind::Slack,
+        }
     }
 
     pub fn into_notification(self) -> Notification {
@@ -303,8 +300,12 @@ mod tests {
     mod get_html_url {
         use pretty_assertions::assert_eq;
 
-        use crate::task::{
-            integrations::todoist::TodoistItem, TaskMetadata, TaskPriority, TaskStatus,
+        use crate::{
+            task::{TaskPriority, TaskSourceKind, TaskStatus},
+            third_party::{
+                integrations::todoist::TodoistItem,
+                item::{ThirdPartyItem, ThirdPartyItemData},
+            },
         };
 
         use super::*;
@@ -407,7 +408,10 @@ mod tests {
 
         #[rstest]
         fn test_get_html_url_for_todoist_notification(todoist_item: Box<TodoistItem>) {
-            let expected_url: Url = "https://todoist.com/showTask?id=456".parse().unwrap();
+            let todoist_item_id = todoist_item.id.clone();
+            let expected_url: Url = format!("https://todoist.com/showTask?id={}", todoist_item_id)
+                .parse()
+                .unwrap();
             let notification = NotificationWithTask {
                 id: Uuid::new_v4().into(),
                 title: "notif1".to_string(),
@@ -421,7 +425,6 @@ mod tests {
                 details: None,
                 task: Some(Task {
                     id: Uuid::new_v4().into(),
-                    source_id: "456".to_string(),
                     title: "task1".to_string(),
                     body: "test".to_string(),
                     status: TaskStatus::Done,
@@ -433,7 +436,18 @@ mod tests {
                     project: "Project".to_string(),
                     is_recurring: false,
                     created_at: Utc::now(),
-                    metadata: TaskMetadata::Todoist(*todoist_item),
+                    updated_at: Utc::now(),
+                    kind: TaskSourceKind::Todoist,
+                    source_item: ThirdPartyItem {
+                        id: Uuid::new_v4().into(),
+                        data: ThirdPartyItemData::TodoistItem(*todoist_item),
+                        source_id: todoist_item_id,
+                        created_at: Utc::now(),
+                        updated_at: Utc::now(),
+                        user_id: Uuid::new_v4().into(),
+                        integration_connection_id: Uuid::new_v4().into(),
+                    },
+                    sink_item: None,
                     user_id: Uuid::new_v4().into(),
                 }),
             };

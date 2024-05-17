@@ -1,3 +1,4 @@
+#![recursion_limit = "256"]
 use std::{net::TcpListener, str::FromStr, sync::Arc};
 
 use apalis::redis::RedisStorage;
@@ -221,6 +222,7 @@ async fn main() -> std::io::Result<()> {
         user_service,
         integration_connection_service,
         auth_token_service,
+        third_party_item_service,
     ) = build_services(
         pool,
         &settings,
@@ -299,17 +301,24 @@ async fn main() -> std::io::Result<()> {
                 redis_storage.clone(),
                 settings,
                 notification_service.clone(),
-                task_service,
+                task_service.clone(),
                 user_service,
-                integration_connection_service,
+                integration_connection_service.clone(),
                 auth_token_service,
+                third_party_item_service,
             )
             .await
             .expect("Failed to start HTTP server");
 
             if async_workers_count.is_some() || *embed_async_workers {
-                let worker =
-                    run_worker(*async_workers_count, redis_storage, notification_service).await;
+                let worker = run_worker(
+                    *async_workers_count,
+                    redis_storage,
+                    notification_service,
+                    task_service,
+                    integration_connection_service,
+                )
+                .await;
 
                 future::try_join(server, worker.run_with_signal(tokio::signal::ctrl_c()))
                     .await
@@ -331,7 +340,14 @@ async fn main() -> std::io::Result<()> {
                     .expect("Redis storage connection failed"),
             );
 
-            let worker = run_worker(*count, redis_storage, notification_service).await;
+            let worker = run_worker(
+                *count,
+                redis_storage,
+                notification_service,
+                task_service,
+                integration_connection_service,
+            )
+            .await;
 
             worker
                 .run_with_signal(tokio::signal::ctrl_c())

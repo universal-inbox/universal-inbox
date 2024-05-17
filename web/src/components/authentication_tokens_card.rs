@@ -174,7 +174,7 @@ pub fn AuthenticationToken(
                     render! {
                         button {
                             class: "btn btn-sm btn-error btn-disabled",
-                            onclick: move |_| {}, // TODO
+                            onclick: move |_| {},
                             "Revoke"
                         }
                     }

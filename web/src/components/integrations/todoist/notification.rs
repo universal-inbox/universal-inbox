@@ -8,7 +8,7 @@ use dioxus_free_icons::{
 
 use universal_inbox::{
     notification::NotificationWithTask,
-    task::integrations::todoist::{TodoistItem, TodoistItemPriority},
+    third_party::integrations::todoist::{TodoistItem, TodoistItemPriority},
 };
 
 use crate::components::{markdown::Markdown, Tag, TagDisplay};

@@ -402,7 +402,7 @@ impl NotificationSyncSourceService for GoogleMailService {
             .integration_connection_service
             .read()
             .await
-            .find_access_token(executor, IntegrationProviderKind::GoogleMail, None, user_id)
+            .find_access_token(executor, IntegrationProviderKind::GoogleMail, user_id)
             .await?
             .ok_or_else(|| {
                 anyhow!("Cannot fetch Google Mail notifications without an access token")
@@ -529,7 +529,7 @@ impl NotificationSourceService for GoogleMailService {
             .integration_connection_service
             .read()
             .await
-            .find_access_token(executor, IntegrationProviderKind::GoogleMail, None, user_id)
+            .find_access_token(executor, IntegrationProviderKind::GoogleMail, user_id)
             .await?
             .ok_or_else(|| {
                 anyhow!("Cannot delete GoogleMail notification without an access token")
@@ -556,7 +556,7 @@ impl NotificationSourceService for GoogleMailService {
             .integration_connection_service
             .read()
             .await
-            .find_access_token(executor, IntegrationProviderKind::GoogleMail, None, user_id)
+            .find_access_token(executor, IntegrationProviderKind::GoogleMail, user_id)
             .await?
             .ok_or_else(|| {
                 anyhow!("Cannot unsubscribe from GoogleMail notifications without an access token")

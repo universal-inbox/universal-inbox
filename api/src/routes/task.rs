@@ -30,8 +30,7 @@ pub fn scope() -> Scope {
         .service(
             web::resource("")
                 .name("tasks")
-                .route(web::get().to(list_tasks))
-                .route(web::post().to(create_task)),
+                .route(web::get().to(list_tasks)),
         )
         .service(
             web::resource("/{task_id}")
@@ -128,36 +127,6 @@ pub async fn get_task(
                 json!({ "message": format!("Cannot find task {task_id}") }).to_string(),
             ))),
     }
-}
-
-pub async fn create_task(
-    task: web::Json<Box<Task>>,
-    task_service: web::Data<Arc<RwLock<TaskService>>>,
-    authenticated: Authenticated<Claims>,
-) -> Result<HttpResponse, UniversalInboxError> {
-    let user_id = authenticated
-        .claims
-        .sub
-        .parse::<UserId>()
-        .context("Wrong user ID format")?;
-    let service = task_service.read().await;
-    let mut transaction = service
-        .begin()
-        .await
-        .context("Failed to create new transaction while creating task")?;
-
-    let created_task = service
-        .create_task(&mut transaction, task.into_inner(), user_id)
-        .await?;
-
-    transaction
-        .commit()
-        .await
-        .context("Failed to commit while creating task")?;
-
-    Ok(HttpResponse::Ok().content_type("application/json").body(
-        serde_json::to_string(&created_task).context("Cannot serialize task creation result")?,
-    ))
 }
 
 pub async fn sync_tasks(
