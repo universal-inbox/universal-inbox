@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use sqlx::{pool::PoolConnection, PgPool, Postgres, Transaction};
+use sqlx::{pool::PoolConnection, postgres::PgRow, PgPool, Postgres, Row, Transaction};
 
 use crate::universal_inbox::UniversalInboxError;
 
@@ -9,6 +9,7 @@ pub mod auth_token;
 pub mod integration_connection;
 pub mod notification;
 pub mod task;
+pub mod third_party;
 pub mod user;
 
 #[derive(Debug)]
@@ -36,4 +37,11 @@ impl Repository {
             .await
             .context("Failed to begin database transaction")?)
     }
+}
+
+trait FromRowWithPrefix<'r, R>: Sized
+where
+    R: Row,
+{
+    fn from_row_with_prefix(row: &'r PgRow, prefix: &str) -> sqlx::Result<Self>;
 }

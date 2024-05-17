@@ -8,7 +8,10 @@ use uuid::Uuid;
 use universal_inbox::{
     integration_connection::{
         config::IntegrationConnectionConfig,
-        integrations::google_mail::{GoogleMailConfig, GoogleMailContext},
+        integrations::{
+            google_mail::{GoogleMailConfig, GoogleMailContext},
+            todoist::TodoistConfig,
+        },
         provider::IntegrationProvider,
         IntegrationConnection,
     },
@@ -19,7 +22,10 @@ use universal_inbox::{
         },
         Notification, NotificationMetadata, NotificationSourceKind, NotificationStatus,
     },
-    task::integrations::todoist::TodoistItem,
+    third_party::{
+        integrations::todoist::TodoistItem,
+        item::{ThirdPartyItem, ThirdPartyItemCreationResult, ThirdPartyItemData},
+    },
 };
 
 use universal_inbox_api::{
@@ -30,6 +36,7 @@ use universal_inbox_api::{
             GoogleMailUserProfile,
         },
         oauth2::NangoConnection,
+        todoist::TodoistSyncResponse,
     },
 };
 
@@ -37,7 +44,7 @@ use crate::helpers::{
     auth::{authenticated_app, AuthenticatedApp},
     integration_connection::{
         create_and_mock_integration_connection, get_integration_connection,
-        nango_google_mail_connection,
+        nango_google_mail_connection, nango_todoist_connection,
     },
     notification::{
         google_mail::{
@@ -51,7 +58,9 @@ use crate::helpers::{
     },
     rest::{create_resource, get_resource},
     settings,
-    task::todoist::{create_task_from_todoist_item, todoist_item},
+    task::todoist::{
+        mock_todoist_sync_resources_service, sync_todoist_projects_response, todoist_item,
+    },
 };
 
 #[rstest]
@@ -64,7 +73,9 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     google_mail_user_profile: GoogleMailUserProfile,
     google_mail_labels_list: GoogleMailLabelList,
     todoist_item: Box<TodoistItem>,
+    sync_todoist_projects_response: TodoistSyncResponse,
     nango_google_mail_connection: Box<NangoConnection>,
+    nango_todoist_connection: Box<NangoConnection>,
 ) {
     let app = authenticated_app.await;
     let user_email_address = EmailAddress(google_mail_user_profile.email_address.clone());
@@ -84,14 +95,43 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         result_size_estimate: 1,
         next_page_token: Some("next_token".to_string()),
     };
-    let existing_todoist_task = create_task_from_todoist_item(
-        &app.client,
-        &app.app.api_address,
-        &todoist_item,
-        "Project2".to_string(),
+    let integration_connection = create_and_mock_integration_connection(
+        &app.app,
         app.user.id,
+        &settings.integrations.oauth2.nango_secret_key,
+        IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
+        &settings,
+        nango_todoist_connection,
+        None,
     )
     .await;
+    mock_todoist_sync_resources_service(
+        &app.app.todoist_mock_server,
+        "projects",
+        &sync_todoist_projects_response,
+        None,
+    );
+
+    let creation: Box<ThirdPartyItemCreationResult> = create_resource(
+        &app.client,
+        &app.app.api_address,
+        "third_party/items",
+        Box::new(ThirdPartyItem {
+            id: Uuid::new_v4().into(),
+            source_id: todoist_item.id.clone(),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            user_id: app.user.id,
+            data: ThirdPartyItemData::TodoistItem(TodoistItem {
+                project_id: "2222".to_string(), // ie. "Project2"
+                added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
+                ..*todoist_item.clone()
+            }),
+            integration_connection_id: integration_connection.id,
+        }),
+    )
+    .await;
+    let existing_todoist_task = creation.task.as_ref().unwrap();
     let existing_notification: Box<Notification> = create_resource(
         &app.client,
         &app.app.api_address,
@@ -109,7 +149,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
             last_read_at: None,
             snoozed_until: Some(Utc.with_ymd_and_hms(2064, 1, 1, 0, 0, 0).unwrap()),
             details: None,
-            task_id: Some(existing_todoist_task.task.id),
+            task_id: Some(existing_todoist_task.id),
         }),
     )
     .await;
@@ -217,10 +257,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         updated_notification.snoozed_until,
         Some(Utc.with_ymd_and_hms(2064, 1, 1, 0, 0, 0).unwrap())
     );
-    assert_eq!(
-        updated_notification.task_id,
-        Some(existing_todoist_task.task.id)
-    );
+    assert_eq!(updated_notification.task_id, Some(existing_todoist_task.id));
 
     let updated_integration_connection =
         get_integration_connection(&app, integration_connection.id)

@@ -1,5 +1,6 @@
 #![feature(trait_upcasting)]
 #![feature(box_patterns)]
+#![recursion_limit = "256"]
 
 use std::{
     net::TcpListener, num::NonZeroUsize, sync::Arc, sync::Weak, thread,
@@ -59,7 +60,8 @@ use crate::{
         auth_token::service::AuthenticationTokenService,
         integration_connection::service::IntegrationConnectionService,
         notification::service::NotificationService, task::service::TaskService,
-        user::service::UserService, UniversalInboxError,
+        third_party::service::ThirdPartyItemService, user::service::UserService,
+        UniversalInboxError,
     },
     utils::jwt::{Claims, JWTBase64EncodedSigningKeys, JWTSigningKeys, JWT_SESSION_KEY},
 };
@@ -85,6 +87,7 @@ pub async fn run_server(
     user_service: Arc<RwLock<UserService>>,
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     auth_token_service: Arc<RwLock<AuthenticationTokenService>>,
+    third_party_item_service: Arc<RwLock<ThirdPartyItemService>>,
 ) -> Result<Server, UniversalInboxError> {
     let api_path = settings.application.api_path.clone();
     let front_base_url = settings
@@ -143,11 +146,13 @@ pub async fn run_server(
             .service(routes::task::scope())
             .service(routes::user::scope())
             .service(routes::webhook::scope())
+            .service(routes::third_party::scope())
             .app_data(web::Data::new(notification_service.clone()))
             .app_data(web::Data::new(task_service.clone()))
             .app_data(web::Data::new(user_service.clone()))
             .app_data(web::Data::new(integration_connection_service.clone()))
-            .app_data(web::Data::new(auth_token_service.clone()));
+            .app_data(web::Data::new(auth_token_service.clone()))
+            .app_data(web::Data::new(third_party_item_service.clone()));
 
         let cors = Cors::default()
             .allowed_origin(&front_base_url)
@@ -270,6 +275,8 @@ pub async fn run_worker(
     workers_count: Option<usize>,
     redis_storage: RedisStorage<SlackPushEventCallbackJob>,
     notification_service: Arc<RwLock<NotificationService>>,
+    task_service: Arc<RwLock<TaskService>>,
+    integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
 ) -> Monitor<TokioExecutor> {
     let count = workers_count.unwrap_or_else(|| {
         thread::available_parallelism()
@@ -289,6 +296,8 @@ pub async fn run_worker(
                 )
                 .with_storage(redis_storage.clone())
                 .data(notification_service)
+                .data(task_service)
+                .data(integration_connection_service)
                 .build_fn(handle_slack_push_event),
         )
         .on_event(|e| {
@@ -326,6 +335,7 @@ pub async fn build_services(
     Arc<RwLock<UserService>>,
     Arc<RwLock<IntegrationConnectionService>>,
     Arc<RwLock<AuthenticationTokenService>>,
+    Arc<RwLock<ThirdPartyItemService>>,
 ) {
     let repository = Arc::new(Repository::new(pool.clone()));
 
@@ -346,19 +356,23 @@ pub async fn build_services(
         settings.integrations.oauth2.nango_provider_keys.clone(),
     )));
 
-    let todoist_service =
+    let todoist_service = Arc::new(
         TodoistService::new(todoist_address, integration_connection_service.clone())
-            .expect("Failed to create new TodoistService");
+            .expect("Failed to create new TodoistService"),
+    );
     // tag: New notification integration
-    let github_service = GithubService::new(
-        github_address,
-        settings.integrations.github.page_size,
-        integration_connection_service.clone(),
-    )
-    .expect("Failed to create new GithubService");
-    let linear_service =
+    let github_service = Arc::new(
+        GithubService::new(
+            github_address,
+            settings.integrations.github.page_size,
+            integration_connection_service.clone(),
+        )
+        .expect("Failed to create new GithubService"),
+    );
+    let linear_service = Arc::new(
         LinearService::new(linear_graphql_url, integration_connection_service.clone())
-            .expect("Failed to create new LinearService");
+            .expect("Failed to create new LinearService"),
+    );
 
     let google_mail_service = Arc::new(RwLock::new(
         GoogleMailService::new(
@@ -369,13 +383,16 @@ pub async fn build_services(
         )
         .expect("Failed to create new GoogleMailService"),
     ));
-    let slack_service = SlackService::new(slack_base_url, integration_connection_service.clone());
+    let slack_service = Arc::new(SlackService::new(
+        slack_base_url,
+        integration_connection_service.clone(),
+    ));
 
     // tag: New notification integration
     let notification_service = Arc::new(RwLock::new(NotificationService::new(
         repository.clone(),
-        github_service,
-        linear_service,
+        github_service.clone(),
+        linear_service.clone(),
         google_mail_service.clone(),
         slack_service.clone(),
         Weak::new(),
@@ -391,6 +408,14 @@ pub async fn build_services(
         .await
         .set_notification_service(Arc::downgrade(&notification_service));
 
+    let third_party_item_service = Arc::new(RwLock::new(ThirdPartyItemService::new(
+        repository.clone(),
+        Weak::new(),
+        integration_connection_service.clone(),
+        todoist_service.clone(),
+        slack_service.clone(),
+    )));
+
     let task_service = Arc::new(RwLock::new(TaskService::new(
         repository,
         todoist_service.clone(),
@@ -398,10 +423,16 @@ pub async fn build_services(
         slack_service.clone(),
         integration_connection_service.clone(),
         user_service.clone(),
+        Arc::downgrade(&third_party_item_service),
         settings.application.min_sync_tasks_interval_in_minutes,
     )));
 
     notification_service
+        .write()
+        .await
+        .set_task_service(Arc::downgrade(&task_service));
+
+    third_party_item_service
         .write()
         .await
         .set_task_service(Arc::downgrade(&task_service));
@@ -412,6 +443,7 @@ pub async fn build_services(
         user_service,
         integration_connection_service,
         auth_token_service,
+        third_party_item_service,
     )
 }
 

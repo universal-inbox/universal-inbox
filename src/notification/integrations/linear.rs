@@ -16,7 +16,7 @@ use crate::{
 #[serde_as]
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 #[serde(tag = "type", content = "content")]
-#[allow(clippy::large_enum_variant)] // TODO - review later
+#[allow(clippy::large_enum_variant)]
 pub enum LinearNotification {
     IssueNotification {
         id: Uuid,

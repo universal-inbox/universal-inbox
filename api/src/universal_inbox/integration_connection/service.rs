@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use anyhow::{anyhow, Context};
-use chrono::{DateTime, Utc};
+use chrono::{TimeDelta, Utc};
 use sqlx::{Postgres, Transaction};
 
 use universal_inbox::{
@@ -238,11 +238,38 @@ impl IntegrationConnectionService {
     }
 
     #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    pub async fn get_integration_connection_to_sync<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        integration_provider_kind: IntegrationProviderKind,
+        min_sync_interval_in_minutes: i64,
+        for_user_id: UserId,
+    ) -> Result<Option<IntegrationConnection>, UniversalInboxError> {
+        self
+            .repository
+            .get_integration_connection_per_provider(
+                executor,
+                for_user_id,
+                integration_provider_kind,
+                Some(
+                    Utc::now()
+                        - TimeDelta::try_minutes(min_sync_interval_in_minutes)
+                        .unwrap_or_else(|| {
+                            panic!(
+                                "Invalid `min_sync_interval_in_minutes` value: {min_sync_interval_in_minutes}"
+                            )
+                        }),
+                ),
+                Some(IntegrationConnectionStatus::Validated),
+            )
+            .await
+    }
+
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     pub async fn find_access_token<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
         integration_provider_kind: IntegrationProviderKind,
-        synced_before: Option<DateTime<Utc>>,
         for_user_id: UserId,
     ) -> Result<Option<(AccessToken, IntegrationConnection)>, UniversalInboxError> {
         let integration_connection = self
@@ -251,7 +278,7 @@ impl IntegrationConnectionService {
                 executor,
                 for_user_id,
                 integration_provider_kind,
-                synced_before,
+                None,
                 Some(IntegrationConnectionStatus::Validated),
             )
             .await?;
@@ -306,26 +333,6 @@ impl IntegrationConnectionService {
     }
 
     #[tracing::instrument(level = "debug", skip(self, executor), err)]
-    pub async fn update_integration_connection_sync_status<'a>(
-        &self,
-        executor: &mut Transaction<'a, Postgres>,
-        user_id: UserId,
-        integration_provider_kind: IntegrationProviderKind,
-        failure_message: Option<String>,
-        starting_sync: bool,
-    ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
-        self.repository
-            .update_integration_connection_sync_status(
-                executor,
-                user_id,
-                integration_provider_kind,
-                failure_message,
-                starting_sync,
-            )
-            .await
-    }
-
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     pub async fn update_integration_connection_context<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -353,6 +360,61 @@ impl IntegrationConnectionService {
                 executor,
                 integration_provider_kind,
                 provider_user_id,
+            )
+            .await
+    }
+
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    pub async fn start_sync_status<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        integration_provider_kind: IntegrationProviderKind,
+        for_user_id: UserId,
+    ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
+        self.repository
+            .update_integration_connection_sync_status(
+                executor,
+                for_user_id,
+                integration_provider_kind,
+                None,
+                true,
+            )
+            .await
+    }
+
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    pub async fn error_sync_status<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        integration_provider_kind: IntegrationProviderKind,
+        failure_message: String,
+        for_user_id: UserId,
+    ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
+        self.repository
+            .update_integration_connection_sync_status(
+                executor,
+                for_user_id,
+                integration_provider_kind,
+                Some(failure_message),
+                false,
+            )
+            .await
+    }
+
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    pub async fn reset_error_sync_status<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        integration_provider_kind: IntegrationProviderKind,
+        for_user_id: UserId,
+    ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
+        self.repository
+            .update_integration_connection_sync_status(
+                executor,
+                for_user_id,
+                integration_provider_kind,
+                None,
+                false,
             )
             .await
     }

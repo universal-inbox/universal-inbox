@@ -1,4 +1,3 @@
-use anyhow::Context;
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use secrecy::{ExposeSecret, Secret};
@@ -71,7 +70,10 @@ impl AuthenticationTokenRepository for Repository {
         )
         .execute(&mut **executor)
         .await
-        .context("Failed to insert new authentication token into storage")?;
+        .map_err(|err| UniversalInboxError::DatabaseError {
+            source: err,
+            message: "Failed to insert new authentication token into storage".to_string(),
+        })?;
 
         Ok(auth_token)
     }
@@ -110,7 +112,10 @@ impl AuthenticationTokenRepository for Repository {
             .build_query_as::<AuthenticationTokenRow>()
             .fetch_all(&mut **executor)
             .await
-            .context("Failed to fetch authentication tokens from storage")?;
+            .map_err(|err| UniversalInboxError::DatabaseError {
+                source: err,
+                message: "Failed to fetch authentication tokens from storage".to_string(),
+            })?;
 
         Ok(rows.into_iter().map(|r| r.into()).collect())
     }

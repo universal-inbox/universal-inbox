@@ -120,6 +120,8 @@ pub enum SlackMessageSenderDetails {
 
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
 pub struct SlackFileDetails {
+    pub id: Option<SlackFileId>, // Option to ease the transition when the field is added
+    pub title: Option<String>,
     pub channel: SlackChannelInfo,
     pub sender: Option<SlackUser>,
     pub team: SlackTeamInfo,
@@ -139,7 +141,7 @@ impl HasHtmlUrl for SlackFileDetails {
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
 pub struct SlackFileCommentDetails {
     pub channel: SlackChannelInfo,
-    pub comment: String,
+    pub comment_id: SlackFileCommentId,
     pub sender: Option<SlackUser>,
     pub team: SlackTeamInfo,
 }

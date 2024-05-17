@@ -13,7 +13,8 @@ use fermi::UseAtomRef;
 
 use universal_inbox::{
     notification::{NotificationDetails, NotificationMetadata, NotificationWithTask},
-    task::{Task, TaskMetadata},
+    task::Task,
+    third_party::item::ThirdPartyItemData,
     HasHtmlUrl,
 };
 
@@ -274,13 +275,14 @@ fn NotificationDisplay<'a>(
         },
         NotificationMetadata::Todoist => {
             if let Some(task) = &notif.task {
-                match &task.metadata {
-                    TaskMetadata::Todoist(todoist_task) => render! {
+                match &task.source_item.data {
+                    ThirdPartyItemData::TodoistItem(todoist_task) => render! {
                         TodoistNotificationDisplay {
                             notif: notif,
                             todoist_task: todoist_task.clone(),
                         }
                     },
+                    _ => render! { DefaultNotificationDisplay { notif: notif } },
                 }
             } else {
                 render! { DefaultNotificationDisplay { notif: notif } }
@@ -431,13 +433,12 @@ fn NotificationButton<'a>(cx: Scope<'a, NotificationButtonProps<'a>>) -> Element
 
 #[component]
 fn TaskHint<'a>(cx: Scope, task: &'a Task) -> Element {
-    let kind = task.get_task_source_kind();
     let html_url = task.get_html_url();
 
     render! {
         div {
             class: "absolute top-0 right-0 tooltip tooltip-right text-xs text-gray-400",
-           "data-tip": "Linked to a {kind} task",
+           "data-tip": "Linked to a {task.kind} task",
 
             a {
                 href: "{html_url}",
@@ -487,10 +488,11 @@ pub fn NotificationDetailsDisplay<'a>(
         },
         NotificationMetadata::Todoist => {
             if let Some(task) = &notification.task {
-                match &task.metadata {
-                    TaskMetadata::Todoist(todoist_item) => render! {
+                match &task.source_item.data {
+                    ThirdPartyItemData::TodoistItem(todoist_item) => render! {
                         TodoistNotificationDetailsDisplay { todoist_item: todoist_item }
                     },
+                    _ => None,
                 }
             } else {
                 None

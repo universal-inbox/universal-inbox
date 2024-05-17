@@ -1,13 +1,11 @@
 use std::sync::{Arc, Weak};
 
 use anyhow::{anyhow, Context};
-use chrono::{TimeDelta, Utc};
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info};
 
 use universal_inbox::{
-    integration_connection::IntegrationConnection,
     notification::{
         service::NotificationPatch, Notification, NotificationDetails, NotificationId,
         NotificationMetadata, NotificationSourceKind, NotificationStatus,
@@ -24,7 +22,6 @@ use crate::{
         google_mail::GoogleMailService,
         linear::LinearService,
         notification::{NotificationSourceService, NotificationSyncSourceService},
-        oauth2::AccessToken,
         slack::SlackService,
     },
     repository::{notification::NotificationRepository, Repository},
@@ -37,10 +34,10 @@ use crate::{
 // tag: New notification integration
 pub struct NotificationService {
     repository: Arc<Repository>,
-    github_service: GithubService,
-    linear_service: LinearService,
+    github_service: Arc<GithubService>,
+    linear_service: Arc<LinearService>,
     google_mail_service: Arc<RwLock<GoogleMailService>>,
-    pub(super) slack_service: SlackService,
+    pub(super) slack_service: Arc<SlackService>,
     pub(super) task_service: Weak<RwLock<TaskService>>,
     pub integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     user_service: Arc<RwLock<UserService>>,
@@ -51,10 +48,10 @@ impl NotificationService {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         repository: Arc<Repository>,
-        github_service: GithubService,
-        linear_service: LinearService,
+        github_service: Arc<GithubService>,
+        linear_service: Arc<LinearService>,
         google_mail_service: Arc<RwLock<GoogleMailService>>,
-        slack_service: SlackService,
+        slack_service: Arc<SlackService>,
         task_service: Weak<RwLock<TaskService>>,
         integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
         user_service: Arc<RwLock<UserService>>,
@@ -82,14 +79,17 @@ impl NotificationService {
     }
 
     #[tracing::instrument(level = "debug", skip(self, executor, notification_source_service, notification), fields(notification_id = notification.id.to_string()), err)]
-    pub async fn apply_updated_notification_side_effect<'a>(
+    pub async fn apply_updated_notification_side_effect<'a, U>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        notification_source_service: &(dyn NotificationSourceService + Send + Sync),
+        notification_source_service: Arc<U>,
         patch: &NotificationPatch,
         notification: Box<Notification>,
         user_id: UserId,
-    ) -> Result<(), UniversalInboxError> {
+    ) -> Result<(), UniversalInboxError>
+    where
+        U: NotificationSourceService + Send + Sync,
+    {
         match patch.status {
             Some(NotificationStatus::Deleted) => {
                 notification_source_service
@@ -211,13 +211,16 @@ impl NotificationService {
             .await
     }
 
-    async fn sync_source_notification_details<'a>(
+    async fn sync_source_notification_details<'a, U>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        notification_source_service: &(dyn NotificationSourceService + Send + Sync),
+        notification_source_service: Arc<U>,
         notification: &Notification,
         user_id: UserId,
-    ) -> Result<Option<NotificationDetails>, UniversalInboxError> {
+    ) -> Result<Option<NotificationDetails>, UniversalInboxError>
+    where
+        U: NotificationSourceService + Send + Sync,
+    {
         let notification_details = notification_source_service
             .fetch_notification_details(executor, notification, user_id)
             .await?;
@@ -231,59 +234,41 @@ impl NotificationService {
         Ok(Some(details_upsert.value()))
     }
 
-    async fn sync_source_notifications<'a>(
+    async fn sync_source_notifications<'a, U>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        notification_source_service: &(dyn NotificationSyncSourceService + Send + Sync),
+        notification_source_service: Arc<U>,
         user_id: UserId,
-    ) -> Result<Vec<Notification>, UniversalInboxError> {
+    ) -> Result<Vec<Notification>, UniversalInboxError>
+    where
+        U: NotificationSyncSourceService + Send + Sync,
+    {
         let integration_provider_kind = notification_source_service.get_integration_provider_kind();
-        let result: Option<(AccessToken, IntegrationConnection)> = self
-            .integration_connection_service
-            .read()
-            .await
-            .find_access_token(
+        let integration_connection_service = self.integration_connection_service.read().await;
+        let Some(integration_connection) = integration_connection_service
+            .get_integration_connection_to_sync(
                 executor,
                 integration_provider_kind,
-                Some(
-                    Utc::now()
-                        - TimeDelta::try_minutes(self.min_sync_notifications_interval_in_minutes)
-                            .unwrap_or_else(|| {
-                                panic!(
-                                "Invalid `min_sync_notifications_interval_in_minutes` value: {}",
-                                self.min_sync_notifications_interval_in_minutes
-                            )
-                            }),
-                ),
+                self.min_sync_notifications_interval_in_minutes,
                 user_id,
             )
-            .await?;
-
-        if let Some((_, integration_connection)) = result {
-            if !integration_connection
-                .provider
-                .is_sync_notifications_enabled()
-            {
-                debug!("{integration_provider_kind} integration for user {user_id} is disabled, skipping notifications sync.");
-                return Ok(vec![]);
-            }
-        } else {
+            .await?
+        else {
             debug!("No validated {integration_provider_kind} integration found for user {user_id}, skipping notifications sync.");
+            return Ok(vec![]);
+        };
+
+        if !integration_connection
+            .provider
+            .is_sync_notifications_enabled()
+        {
+            debug!("{integration_provider_kind} integration for user {user_id} is disabled, skipping notifications sync.");
             return Ok(vec![]);
         }
 
-        info!("Syncing {integration_provider_kind} integration for user {user_id}.");
-        let integration_connection_update = self
-            .integration_connection_service
-            .read()
-            .await
-            .update_integration_connection_sync_status(
-                executor,
-                user_id,
-                integration_provider_kind,
-                None,
-                true,
-            )
+        info!("Syncing {integration_provider_kind} notifications for user {user_id}.");
+        let integration_connection_update = integration_connection_service
+            .start_sync_status(executor, integration_provider_kind, user_id)
             .await?;
         match notification_source_service
             .fetch_all_notifications(executor, user_id)
@@ -305,16 +290,8 @@ impl NotificationService {
                 } = integration_connection_update
                 {
                     if result.sync_failures > 0 {
-                        self.integration_connection_service
-                            .read()
-                            .await
-                            .update_integration_connection_sync_status(
-                                executor,
-                                user_id,
-                                integration_provider_kind,
-                                None,
-                                false,
-                            )
+                        integration_connection_service
+                            .reset_error_sync_status(executor, integration_provider_kind, user_id)
                             .await?;
                     }
                 }
@@ -322,33 +299,23 @@ impl NotificationService {
                 Ok(notifications)
             }
             Err(error @ UniversalInboxError::Recoverable(_)) => {
-                self.integration_connection_service
-                    .read()
-                    .await
-                    .update_integration_connection_sync_status(
+                integration_connection_service
+                    .error_sync_status(
                         executor,
-                        user_id,
                         integration_provider_kind,
-                        Some(format!(
-                            "Failed to fetch notifications from {integration_provider_kind}"
-                        )),
-                        false,
+                        format!("Failed to fetch notifications from {integration_provider_kind}"),
+                        user_id,
                     )
                     .await?;
                 Err(error)
             }
             Err(error) => {
-                self.integration_connection_service
-                    .read()
-                    .await
-                    .update_integration_connection_sync_status(
+                integration_connection_service
+                    .error_sync_status(
                         executor,
-                        user_id,
                         integration_provider_kind,
-                        Some(format!(
-                            "Failed to fetch notifications from {integration_provider_kind}"
-                        )),
-                        false,
+                        format!("Failed to fetch notifications from {integration_provider_kind}"),
+                        user_id,
                     )
                     .await?;
                 Err(UniversalInboxError::Recoverable(error.into()))
@@ -415,13 +382,16 @@ impl NotificationService {
         skip(self, executor, notification_source_service, source_notifications),
         err
     )]
-    pub async fn save_notifications_and_sync_details<'a>(
+    pub async fn save_notifications_and_sync_details<'a, U>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        notification_source_service: &(dyn NotificationSourceService + Send + Sync),
+        notification_source_service: Arc<U>,
         source_notifications: Vec<Notification>,
         user_id: UserId,
-    ) -> Result<Vec<Notification>, UniversalInboxError> {
+    ) -> Result<Vec<Notification>, UniversalInboxError>
+    where
+        U: NotificationSourceService + Send + Sync,
+    {
         let integration_provider_kind = notification_source_service.get_integration_provider_kind();
         let notification_source_kind = notification_source_service.get_notification_source_kind();
         let notification_upserts = self
@@ -438,13 +408,15 @@ impl NotificationService {
         let mut notifications = vec![];
         let mut notification_details_synced = 0;
         for notification_upsert in notification_upserts {
-            debug!("Notification upsert status: {notification_upsert:?}");
             let notification = match notification_upsert {
-                UpsertStatus::Created(notification) | UpsertStatus::Updated(notification) => {
+                UpsertStatus::Created(notification)
+                | UpsertStatus::Updated {
+                    new: notification, ..
+                } => {
                     let notification_details = self
                         .sync_source_notification_details(
                             executor,
-                            notification_source_service,
+                            notification_source_service.clone(),
                             &notification,
                             user_id,
                         )
@@ -463,14 +435,13 @@ impl NotificationService {
                             self.integration_connection_service
                                     .read()
                                     .await
-                                    .update_integration_connection_sync_status(
+                                    .error_sync_status(
                                         executor,
-                                        user_id,
                                         integration_provider_kind,
-                                        Some(format!(
+                                        format!(
                                             "Failed to fetch notification details from {integration_provider_kind}"
-                                        )),
-                                        false,
+                                        ),
+                                        user_id,
                                     )
                                     .await?;
                             return Err(error);
@@ -500,17 +471,17 @@ impl NotificationService {
         // tag: New notification integration
         match source {
             NotificationSyncSourceKind::Github => {
-                self.sync_source_notifications(executor, &self.github_service, user_id)
+                self.sync_source_notifications(executor, self.github_service.clone(), user_id)
                     .await
             }
             NotificationSyncSourceKind::Linear => {
-                self.sync_source_notifications(executor, &self.linear_service, user_id)
+                self.sync_source_notifications(executor, self.linear_service.clone(), user_id)
                     .await
             }
             NotificationSyncSourceKind::GoogleMail => {
                 self.sync_source_notifications(
                     executor,
-                    &*self.google_mail_service.read().await,
+                    (*self.google_mail_service.read().await).clone().into(),
                     user_id,
                 )
                 .await
@@ -650,7 +621,7 @@ impl NotificationService {
                     NotificationMetadata::Github(_) => {
                         self.apply_updated_notification_side_effect(
                             executor,
-                            &self.github_service,
+                            self.github_service.clone(),
                             patch,
                             notification.clone(),
                             for_user_id,
@@ -660,7 +631,7 @@ impl NotificationService {
                     NotificationMetadata::Linear(_) => {
                         self.apply_updated_notification_side_effect(
                             executor,
-                            &self.linear_service,
+                            self.linear_service.clone(),
                             patch,
                             notification.clone(),
                             for_user_id,
@@ -670,7 +641,7 @@ impl NotificationService {
                     NotificationMetadata::GoogleMail(_) => {
                         self.apply_updated_notification_side_effect(
                             executor,
-                            &*self.google_mail_service.read().await,
+                            (*self.google_mail_service.read().await).clone().into(),
                             patch,
                             notification.clone(),
                             for_user_id,
@@ -680,7 +651,7 @@ impl NotificationService {
                     NotificationMetadata::Slack(_) => {
                         self.apply_updated_notification_side_effect(
                             executor,
-                            &self.slack_service,
+                            self.slack_service.clone(),
                             patch,
                             notification.clone(),
                             for_user_id,
@@ -794,7 +765,7 @@ impl NotificationService {
             .context("Unable to access task_service from notification_service")?
             .read()
             .await
-            .create_task_from_notification(executor, task_creation, &notification, for_user_id)
+            .create_task_from_notification(executor, task_creation, &notification)
             .await?;
 
         let delete_patch = NotificationPatch {

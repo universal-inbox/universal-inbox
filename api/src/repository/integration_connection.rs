@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context};
+use anyhow::anyhow;
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use sqlx::{types::Json, Postgres, QueryBuilder, Transaction};
@@ -137,8 +137,9 @@ impl IntegrationConnectionRepository for Repository {
         )
         .fetch_optional(&mut **executor)
         .await
-        .with_context(|| {
-            format!(
+            .map_err(|err| UniversalInboxError::DatabaseError {
+                source: err,
+                message: format!(
                 "Failed to fetch integration connection {integration_connection_id} from storage"
             )
         })?;
@@ -203,8 +204,9 @@ impl IntegrationConnectionRepository for Repository {
             .build_query_as::<IntegrationConnectionRow>()
             .fetch_optional(&mut **executor)
             .await
-            .with_context(|| {
-                format!("Failed to fetch integration connection for user {user_id} of kind {integration_provider_kind} from storage")
+            .map_err(|err| UniversalInboxError::DatabaseError {
+                source: err,
+                message: format!("Failed to fetch integration connection for user {user_id} of kind {integration_provider_kind} from storage")
             })?;
 
         row.map(|r| r.try_into()).transpose()
@@ -246,8 +248,9 @@ impl IntegrationConnectionRepository for Repository {
         )
             .fetch_optional(&mut **executor)
             .await
-            .with_context(|| {
-                format!(
+            .map_err(|err| UniversalInboxError::DatabaseError {
+                source: err,
+                message: format!(
                     "Failed to fetch integration connection for {integration_provider_kind} user {provider_user_id} from storage"
                 )
             })?;
@@ -326,8 +329,9 @@ impl IntegrationConnectionRepository for Repository {
             .build_query_as::<UpdatedIntegrationConnectionRow>()
             .fetch_optional(&mut **executor)
             .await
-            .with_context(|| {
-                format!("Failed to update integration connection {integration_connection_id} from storage")
+            .map_err(|err| UniversalInboxError::DatabaseError {
+                source: err,
+                message: format!("Failed to update integration connection {integration_connection_id} from storage")
             })?;
 
         if let Some(updated_integration_connection_row) = row {
@@ -412,8 +416,9 @@ impl IntegrationConnectionRepository for Repository {
             .build_query_as::<UpdatedIntegrationConnectionRow>()
             .fetch_optional(&mut **executor)
             .await
-            .with_context(|| {
-                format!("Failed to update integration connection {integration_provider_kind} for user {user_id} from storage")
+            .map_err(|err| UniversalInboxError::DatabaseError {
+                source: err,
+                message: format!("Failed to update integration connection {integration_provider_kind} for user {user_id} from storage")
             })?;
 
         if let Some(updated_integration_connection_row) = row {
@@ -475,8 +480,9 @@ impl IntegrationConnectionRepository for Repository {
             .build_query_as::<UpdatedIntegrationConnectionRow>()
             .fetch_optional(&mut **executor)
             .await
-            .with_context(|| {
-                format!("Failed to update integration connection {integration_connection_id} context from storage")
+            .map_err(|err| UniversalInboxError::DatabaseError {
+                source: err,
+                message: format!("Failed to update integration connection {integration_connection_id} context from storage")
             })?;
 
         if let Some(updated_integration_connection_row) = row {
@@ -529,7 +535,9 @@ impl IntegrationConnectionRepository for Repository {
         )
         .fetch_all(&mut **executor)
         .await
-        .context("Failed to fetch all integration connections from storage")?;
+            .map_err(|err| UniversalInboxError::DatabaseError {
+                source: err,
+                message: "Failed to fetch all integration connections from storage".to_string() })?;
 
         rows.into_iter()
             .map(|r| r.try_into())
@@ -625,11 +633,12 @@ impl IntegrationConnectionRepository for Repository {
         )
         .execute(&mut **executor)
         .await
-        .with_context(|| {
-            format!(
+        .map_err(|err| UniversalInboxError::DatabaseError {
+            source: err,
+            message: format!(
                 "Failed to insert configuration for integration connection {}",
                 integration_connection.id
-            )
+            ),
         })?;
 
         Ok(integration_connection)
@@ -647,7 +656,10 @@ impl IntegrationConnectionRepository for Repository {
         )
         .fetch_one(&mut **executor)
         .await
-        .with_context(|| format!("Failed to check if integration connection {id} exists",))?;
+        .map_err(|err| UniversalInboxError::DatabaseError {
+            source: err,
+            message: format!("Failed to check if integration connection {id} exists"),
+        })?;
 
         if let Some(1) = count {
             return Ok(true);
@@ -700,8 +712,9 @@ impl IntegrationConnectionRepository for Repository {
             .build_query_as::<UpdatedIntegrationConnectionRow>()
             .fetch_optional(&mut **executor)
             .await
-            .with_context(|| {
-                format!("Failed to update integration connection {integration_connection_id} config from storage")
+            .map_err(|err| UniversalInboxError::DatabaseError {
+                source: err,
+                message: format!("Failed to update integration connection {integration_connection_id} config from storage")
             })?;
 
         if let Some(updated_integration_connection_row) = row {
@@ -759,8 +772,9 @@ impl IntegrationConnectionRepository for Repository {
             .build_query_as::<UpdatedIntegrationConnectionRow>()
             .fetch_optional(&mut **executor)
             .await
-            .with_context(|| {
-                format!("Failed to update integration connection {integration_connection_id} context from storage")
+            .map_err(|err| UniversalInboxError::DatabaseError {
+                source: err,
+                message: format!("Failed to update integration connection {integration_connection_id} context from storage")
             })?;
 
         if let Some(updated_integration_connection_row) = row {

@@ -5,7 +5,7 @@ use dioxus_free_icons::{icons::bs_icons::BsSlack, Icon};
 
 use universal_inbox::{
     integration_connection::provider::IntegrationProviderKind, notification::NotificationMetadata,
-    task::TaskMetadata,
+    task::TaskSourceKind,
 };
 
 use crate::components::integrations::{
@@ -104,11 +104,7 @@ pub fn NotificationMetadataIcon<'a>(
 }
 
 #[component]
-pub fn TaskMetadataIcon<'a>(
-    cx: Scope,
-    class: &'a str,
-    _task_metadata: &'a TaskMetadata,
-) -> Element {
-    // _task_metadata is not yet used as Todoist is the only task provider for now
+pub fn TaskIcon<'a>(cx: Scope, class: &'a str, _kind: TaskSourceKind) -> Element {
+    // _kind is not yet used as Todoist is the only task provider for now
     render! { Todoist { class: class } }
 }

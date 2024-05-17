@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-use crate::task::{DueDate, TaskPriority, TaskStatus, TaskSyncSourceKind};
+use crate::{
+    task::{DueDate, TaskPriority, TaskStatus, TaskSyncSourceKind},
+    third_party::item::ThirdPartyItemId,
+};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SyncTasksParameters {
@@ -15,4 +18,5 @@ pub struct TaskPatch {
     pub due_at: Option<Option<DueDate>>,
     pub priority: Option<TaskPriority>,
     pub body: Option<String>,
+    pub sink_item_id: Option<ThirdPartyItemId>,
 }

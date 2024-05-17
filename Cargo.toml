@@ -35,6 +35,7 @@ serde_repr = "0.1.0"
 serde_urlencoded = { workspace = true }
 serde_with = { workspace = true }
 slack-morphism = { workspace = true }
+typed_id = { version = "0.1.0", features = ["serde"] }
 unicode-segmentation = "1.11.0"
 url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true, features = ["serde"] }

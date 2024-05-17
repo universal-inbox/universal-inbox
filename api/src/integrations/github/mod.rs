@@ -276,7 +276,7 @@ impl NotificationSyncSourceService for GithubService {
             .integration_connection_service
             .read()
             .await
-            .find_access_token(executor, IntegrationProviderKind::Github, None, user_id)
+            .find_access_token(executor, IntegrationProviderKind::Github, user_id)
             .await?
             .ok_or_else(|| anyhow!("Cannot fetch Github notifications without an access token"))?;
 
@@ -321,7 +321,7 @@ impl NotificationSourceService for GithubService {
             .integration_connection_service
             .read()
             .await
-            .find_access_token(executor, IntegrationProviderKind::Github, None, user_id)
+            .find_access_token(executor, IntegrationProviderKind::Github, user_id)
             .await?
             .ok_or_else(|| anyhow!("Cannot delete Github notification without an access token"))?;
 
@@ -341,7 +341,7 @@ impl NotificationSourceService for GithubService {
             .integration_connection_service
             .read()
             .await
-            .find_access_token(executor, IntegrationProviderKind::Github, None, user_id)
+            .find_access_token(executor, IntegrationProviderKind::Github, user_id)
             .await?
             .ok_or_else(|| {
                 anyhow!("Cannot unsubscribe from Github notifications without an access token")
@@ -376,7 +376,7 @@ impl NotificationSourceService for GithubService {
             .integration_connection_service
             .read()
             .await
-            .find_access_token(executor, IntegrationProviderKind::Github, None, user_id)
+            .find_access_token(executor, IntegrationProviderKind::Github, user_id)
             .await?
             .ok_or_else(|| {
                 anyhow!("Cannot fetch Github notification details without an access token")

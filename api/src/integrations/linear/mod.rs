@@ -274,7 +274,7 @@ impl NotificationSyncSourceService for LinearService {
             .integration_connection_service
             .read()
             .await
-            .find_access_token(executor, IntegrationProviderKind::Linear, None, user_id)
+            .find_access_token(executor, IntegrationProviderKind::Linear, user_id)
             .await?
             .ok_or_else(|| anyhow!("Cannot fetch Linear notifications without an access token"))?;
 
@@ -303,7 +303,7 @@ impl NotificationSourceService for LinearService {
             .integration_connection_service
             .read()
             .await
-            .find_access_token(executor, IntegrationProviderKind::Linear, None, user_id)
+            .find_access_token(executor, IntegrationProviderKind::Linear, user_id)
             .await?
             .ok_or_else(|| anyhow!("Cannot delete Linear notification without an access token"))?;
 
@@ -325,7 +325,7 @@ impl NotificationSourceService for LinearService {
             .integration_connection_service
             .read()
             .await
-            .find_access_token(executor, IntegrationProviderKind::Linear, None, user_id)
+            .find_access_token(executor, IntegrationProviderKind::Linear, user_id)
             .await?
             .ok_or_else(|| {
                 anyhow!("Cannot unsubscribe from a Linear notification without an access token")
@@ -380,7 +380,7 @@ impl NotificationSourceService for LinearService {
             .integration_connection_service
             .read()
             .await
-            .find_access_token(executor, IntegrationProviderKind::Linear, None, user_id)
+            .find_access_token(executor, IntegrationProviderKind::Linear, user_id)
             .await?
             .ok_or_else(|| anyhow!("Cannot fetch Linear notifications without an access token"))?;
 

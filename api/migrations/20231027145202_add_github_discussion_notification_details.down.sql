@@ -1,6 +1,6 @@
 CREATE TYPE notification_details_kind_new AS ENUM ('GithubPullRequest');
 
-DELETE FROM integration_connection WHERE provider_kind = 'GithubDiscussion';
+DELETE FROM notification_details WHERE kind = 'GithubDiscussion';
 
 ALTER TABLE notification_details
   ALTER COLUMN kind TYPE notification_details_kind_new 

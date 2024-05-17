@@ -1,0 +1,51 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                INSERT INTO task\n                  (\n                    id,\n                    title,\n                    body,\n                    status,\n                    completed_at,\n                    priority,\n                    due_at,\n                    tags,\n                    parent_id,\n                    project,\n                    is_recurring,\n                    created_at,\n                    updated_at,\n                    kind,\n                    source_item_id,\n                    sink_item_id,\n                    user_id\n                  )\n                VALUES\n                  ($1, $2, $3, $4::task_status, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::task_kind, $15, $16, $17)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        {
+          "Custom": {
+            "name": "task_status",
+            "kind": {
+              "Enum": [
+                "Active",
+                "Done",
+                "Deleted"
+              ]
+            }
+          }
+        },
+        "Timestamp",
+        "Int4",
+        "Json",
+        "TextArray",
+        "Uuid",
+        "Text",
+        "Bool",
+        "Timestamp",
+        "Timestamp",
+        {
+          "Custom": {
+            "name": "task_kind",
+            "kind": {
+              "Enum": [
+                "Todoist",
+                "Slack"
+              ]
+            }
+          }
+        },
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "91a3133ef7c791da451abc1ab7c79c6e77c6ba2aed79193f601801bb1a9fcc3c"
+}

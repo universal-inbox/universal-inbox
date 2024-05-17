@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context};
+use anyhow::anyhow;
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use sqlx::{postgres::PgRow, types::Json, FromRow, Postgres, QueryBuilder, Row, Transaction};
@@ -19,6 +19,8 @@ use crate::{
     repository::{task::TaskRow, Repository},
     universal_inbox::{UniversalInboxError, UpdateStatus, UpsertStatus},
 };
+
+use super::FromRowWithPrefix;
 
 #[async_trait]
 pub trait NotificationRepository {
@@ -130,7 +132,9 @@ impl NotificationRepository for Repository {
         )
         .fetch_optional(&mut **executor)
         .await
-        .with_context(|| format!("Failed to fetch notification {id} from storage"))?;
+            .map_err(|err| UniversalInboxError::DatabaseError {
+                source: err,
+                message: format!("Failed to fetch notification {id} from storage")})?;
 
         row.map(|notification_row| notification_row.try_into())
             .transpose()
@@ -168,7 +172,9 @@ impl NotificationRepository for Repository {
         )
             .fetch_optional(&mut **executor)
             .await
-            .with_context(|| format!("Failed to fetch notification with source ID {source_id} and user ID {user_id} from storage"))?;
+            .map_err(|err| UniversalInboxError::DatabaseError {
+                source: err,
+                message: format!("Failed to fetch notification with source ID {source_id} and user ID {user_id} from storage")})?;
 
         row.map(|notification_row| notification_row.try_into())
             .transpose()
@@ -184,7 +190,10 @@ impl NotificationRepository for Repository {
             sqlx::query_scalar!(r#"SELECT count(*) FROM notification WHERE id = $1"#, id.0)
                 .fetch_one(&mut **executor)
                 .await
-                .with_context(|| format!("Failed to check if notification {id} exists",))?;
+                .map_err(|err| UniversalInboxError::DatabaseError {
+                    source: err,
+                    message: format!("Failed to check if notification {id} exists"),
+                })?;
 
         if let Some(1) = count {
             return Ok(true);
@@ -262,40 +271,61 @@ impl NotificationRepository for Repository {
             .build_query_scalar::<i64>()
             .fetch_one(&mut **executor)
             .await
-            .context("Failed to fetch notifications count from storage")?;
+            .map_err(|err| UniversalInboxError::DatabaseError {
+                source: err,
+                message: "Failed to fetch notifications count from storage".to_string(),
+            })?;
 
         let mut query_builder = QueryBuilder::new(
             r#"
                 SELECT
-                  notification.id as notification_id,
-                  notification.title as notification_title,
-                  notification.status as notification_status,
-                  notification.source_id as notification_source_id,
-                  notification.metadata as notification_metadata,
-                  notification.updated_at as notification_updated_at,
-                  notification.last_read_at as notification_last_read_at,
-                  notification.snoozed_until as notification_snoozed_until,
-                  notification.user_id as notification_user_id,
-                  notification_details.details as notification_details,
-                  task.id,
-                  task.source_id,
-                  task.title,
-                  task.body,
-                  task.status,
-                  task.completed_at,
-                  task.priority,
-                  task.due_at,
-                  task.tags,
-                  task.parent_id,
-                  task.project,
-                  task.is_recurring,
-                  task.created_at,
-                  task.metadata,
-                  task.user_id
+                  notification.id as notification__id,
+                  notification.title as notification__title,
+                  notification.status as notification__status,
+                  notification.source_id as notification__source_id,
+                  notification.metadata as notification__metadata,
+                  notification.updated_at as notification__updated_at,
+                  notification.last_read_at as notification__last_read_at,
+                  notification.snoozed_until as notification__snoozed_until,
+                  notification.user_id as notification__user_id,
+                  notification_details.details as notification__details,
+                  task.id as task__id,
+                  task.title as task__title,
+                  task.body as task__body,
+                  task.status as task__status,
+                  task.completed_at as task__completed_at,
+                  task.priority as task__priority,
+                  task.due_at as task__due_at,
+                  task.tags as task__tags,
+                  task.parent_id as task__parent_id,
+                  task.project as task__project,
+                  task.is_recurring as task__is_recurring,
+                  task.created_at as task__created_at,
+                  task.updated_at as task__updated_at,
+                  task.kind::TEXT as task__kind,
+                  task.user_id as task__user_id,
+                  source_item.id as source_item__id,
+                  source_item.source_id as source_item__source_id,
+                  source_item.data as source_item__data,
+                  source_item.created_at as source_item__created_at,
+                  source_item.updated_at as source_item__updated_at,
+                  source_item.user_id as source_item__user_id,
+                  source_item.integration_connection_id as source_item__integration_connection_id,
+                  sink_item.id as sink_item__id,
+                  sink_item.source_id as sink_item__source_id,
+                  sink_item.data as sink_item__data,
+                  sink_item.created_at as sink_item__created_at,
+                  sink_item.updated_at as sink_item__updated_at,
+                  sink_item.user_id as sink_item__user_id,
+                  sink_item.integration_connection_id as sink_item__integration_connection_id
                 FROM
                   notification
                 LEFT JOIN notification_details ON notification_details.notification_id = notification.id
                 LEFT JOIN task ON task.id = notification.task_id
+                LEFT JOIN third_party_item AS source_item
+                  ON task.source_item_id = source_item.id
+                LEFT JOIN third_party_item AS sink_item
+                  ON task.sink_item_id = sink_item.id
                 WHERE
             "#,
         );
@@ -315,7 +345,10 @@ impl NotificationRepository for Repository {
             .build_query_as::<NotificationWithTaskRow>()
             .fetch_all(&mut **executor)
             .await
-            .context("Failed to fetch notifications from storage")?;
+            .map_err(|err| UniversalInboxError::DatabaseError {
+                source: err,
+                message: "Failed to fetch notifications from storage".to_string(),
+            })?;
 
         Ok(Page {
             page: 1,
@@ -432,7 +465,10 @@ impl NotificationRepository for Repository {
         )
         .fetch_all(&mut **executor)
         .await
-        .context("Failed to update stale notification status from storage")?;
+        .map_err(|err| UniversalInboxError::DatabaseError {
+            source: err,
+            message: "Failed to update stale notification status from storage".to_string(),
+        })?;
 
         records
             .iter()
@@ -450,27 +486,42 @@ impl NotificationRepository for Repository {
     ) -> Result<UpsertStatus<Box<Notification>>, UniversalInboxError> {
         let metadata = Json(notification.metadata.clone());
 
-        let existing_notification = sqlx::query!(
+        let existing_notification: Option<Notification> = sqlx::query_as!(
+            NotificationRow,
             r#"
-              SELECT id, updated_at, task_id
+              SELECT
+                notification.id,
+                notification.title,
+                notification.status as "status: _",
+                notification.source_id,
+                notification.metadata as "metadata: Json<NotificationMetadata>",
+                notification.updated_at,
+                notification.last_read_at,
+                notification.snoozed_until,
+                notification_details.details as "details: Option<Json<NotificationDetails>>",
+                notification.task_id,
+                notification.user_id
               FROM notification
+              LEFT JOIN notification_details ON notification_details.notification_id = notification.id
               WHERE
-                source_id = $1
-                AND kind = $2
-                AND user_id = $3
+                notification.source_id = $1
+                AND notification.kind = $2
+                AND notification.user_id = $3
             "#,
             notification.source_id,
             kind.to_string(),
             notification.user_id.0,
         )
-        .fetch_optional(&mut **executor)
-        .await
-        .with_context(|| {
-            format!(
+            .fetch_optional(&mut **executor)
+            .await
+        .map_err(|err| UniversalInboxError::DatabaseError {
+            source: err,
+            message: format!(
                 "Failed to search for notification with source ID {} from storage",
                 notification.source_id
-            )
-        })?;
+            ),
+        })?
+            .map(TryInto::try_into).transpose()?;
 
         let last_read_at_naive_utc = notification
             .last_read_at
@@ -479,9 +530,21 @@ impl NotificationRepository for Repository {
             .snoozed_until
             .map(|snoozed_until| snoozed_until.naive_utc());
 
-        let upsert_status = if let Some(existing_notification) = existing_notification {
+        if let Some(existing_notification) = existing_notification {
+            if existing_notification.updated_at == notification.updated_at {
+                debug!(
+                    "Existing {} notification {} (from {}) for {} does not need updating: {:?}",
+                    kind,
+                    existing_notification.id,
+                    notification.source_id,
+                    notification.user_id,
+                    notification.updated_at
+                );
+                return Ok(UpsertStatus::Untouched(Box::new(existing_notification)));
+            }
+
             debug!(
-                "Updating existing notification {} {} (from {}) for {}",
+                "Updating existing {} notification {} (from {}) for {}",
                 kind, existing_notification.id, notification.source_id, notification.user_id
             );
             let mut query_builder = QueryBuilder::new("UPDATE notification SET ");
@@ -502,9 +565,6 @@ impl NotificationRepository for Repository {
             separated
                 .push("last_read_at = ")
                 .push_bind_unseparated(last_read_at_naive_utc);
-            separated
-                .push("user_id = ")
-                .push_bind_unseparated(notification.user_id.0);
             if update_snoozed_until {
                 separated
                     .push("snoozed_until = ")
@@ -512,34 +572,43 @@ impl NotificationRepository for Repository {
             }
             query_builder
                 .push(" WHERE id = ")
-                .push_bind(existing_notification.id);
+                .push_bind(existing_notification.id.0);
 
             query_builder
                 .build()
                 .execute(&mut **executor)
                 .await
-                .context(format!(
-                    "Failed to update notification {} from storage",
-                    existing_notification.id
-                ))?;
+                .map_err(|err| UniversalInboxError::DatabaseError {
+                    source: err,
+                    message: format!(
+                        "Failed to update notification {} from storage",
+                        existing_notification.id
+                    ),
+                })?;
 
             let notification_to_return = Box::new(Notification {
-                id: NotificationId(existing_notification.id),
-                task_id: existing_notification.task_id.map(TaskId),
-                ..*notification
+                id: existing_notification.id,
+                user_id: existing_notification.user_id,
+                task_id: existing_notification.task_id,
+                snoozed_until: if update_snoozed_until {
+                    notification.snoozed_until
+                } else {
+                    existing_notification.snoozed_until
+                },
+                ..*notification.clone()
             });
-            if existing_notification.updated_at != notification.updated_at.naive_utc() {
-                UpsertStatus::Updated(notification_to_return)
-            } else {
-                UpsertStatus::Untouched(notification_to_return)
-            }
-        } else {
-            debug!(
-                "Creating new notification {} {} (from {}) for {}",
-                kind, notification.id, notification.source_id, notification.user_id
-            );
-            let query = sqlx::query_scalar!(
-                r#"
+            return Ok(UpsertStatus::Updated {
+                new: notification_to_return,
+                old: Box::new(existing_notification),
+            });
+        }
+
+        debug!(
+            "Creating new {} notification {} (from {}) for {}",
+            kind, notification.id, notification.source_id, notification.user_id
+        );
+        let query = sqlx::query_scalar!(
+            r#"
                 INSERT INTO notification
                   (
                     id,
@@ -558,32 +627,33 @@ impl NotificationRepository for Repository {
                 RETURNING
                   id
                 "#,
-                notification.id.0, // no need to return the id as we already know it
-                notification.title,
-                notification.status.to_string() as _,
-                notification.source_id,
-                metadata as Json<NotificationMetadata>, // force the macro to ignore type checking
-                notification.updated_at.naive_utc(),
-                last_read_at_naive_utc,
-                snoozed_until_naive_utc,
-                notification.user_id.0,
-                notification.task_id.map(|task_id| task_id.0),
-            );
+            notification.id.0, // no need to return the id as we already know it
+            notification.title,
+            notification.status.to_string() as _,
+            notification.source_id,
+            metadata as Json<NotificationMetadata>, // force the macro to ignore type checking
+            notification.updated_at.naive_utc(),
+            last_read_at_naive_utc,
+            snoozed_until_naive_utc,
+            notification.user_id.0,
+            notification.task_id.map(|task_id| task_id.0),
+        );
 
-            let notification_id =
-                NotificationId(query.fetch_one(&mut **executor).await.with_context(|| {
-                    format!(
+        let notification_id =
+            NotificationId(query.fetch_one(&mut **executor).await.map_err(|err| {
+                UniversalInboxError::DatabaseError {
+                    source: err,
+                    message: format!(
                         "Failed to update notification with source ID {} from storage",
                         notification.source_id
-                    )
-                })?);
-            UpsertStatus::Created(Box::new(Notification {
-                id: notification_id,
-                ..*notification
-            }))
-        };
+                    ),
+                }
+            })?);
 
-        Ok(upsert_status)
+        Ok(UpsertStatus::Created(Box::new(Notification {
+            id: notification_id,
+            ..*notification
+        })))
     }
 
     #[tracing::instrument(level = "debug", skip(self, executor, details))]
@@ -623,15 +693,19 @@ impl NotificationRepository for Repository {
         .fetch_one(&mut **executor)
         .await;
 
-        let id = res.with_context(|| {
-            format!(
+        let id = res.map_err(|err| UniversalInboxError::DatabaseError {
+            source: err,
+            message: format!(
                 "Failed to update notification details for notification {} from storage",
                 notification_id
-            )
+            ),
         })?;
 
         Ok(if id != new_id {
-            UpsertStatus::Updated(details)
+            UpsertStatus::Updated {
+                new: details.clone(),
+                old: details, // we don't have the old details, so we return the new one
+            }
         } else {
             UpsertStatus::Created(details)
         })
@@ -730,9 +804,10 @@ impl NotificationRepository for Repository {
             .build_query_as::<UpdatedNotificationRow>()
             .fetch_optional(&mut **executor)
             .await
-            .context(format!(
-                "Failed to update notification {notification_id} from storage"
-            ))?;
+            .map_err(|err| UniversalInboxError::DatabaseError {
+                source: err,
+                message: format!("Failed to update notification {notification_id} from storage"),
+            })?;
 
         if let Some(updated_notification_row) = record {
             Ok(UpdateStatus {
@@ -844,9 +919,10 @@ impl NotificationRepository for Repository {
             .build_query_as::<UpdatedNotificationRow>()
             .fetch_all(&mut **executor)
             .await
-            .context(format!(
-                "Failed to update notifications for task {task_id} from storage"
-            ))?;
+            .map_err(|err| UniversalInboxError::DatabaseError {
+                source: err,
+                message: format!("Failed to update notifications for task {task_id} from storage"),
+            })?;
 
         let update_statuses = records
             .into_iter()
@@ -880,8 +956,9 @@ impl NotificationRepository for Repository {
         )
         .execute(&mut **executor)
         .await
-        .with_context(|| {
-            format!("Failed to delete notification details for {kind} from storage")
+        .map_err(|err| UniversalInboxError::DatabaseError {
+            source: err,
+            message: format!("Failed to delete notification details for {kind} from storage"),
         })?;
 
         Ok(res.rows_affected())
@@ -902,7 +979,10 @@ impl NotificationRepository for Repository {
         )
         .execute(&mut **executor)
         .await
-        .with_context(|| format!("Failed to delete notification for {kind} from storage"))?;
+        .map_err(|err| UniversalInboxError::DatabaseError {
+            source: err,
+            message: format!("Failed to delete notification for {kind} from storage"),
+        })?;
 
         Ok(res.rows_affected())
     }
@@ -963,21 +1043,27 @@ struct NotificationWithTaskRow {
 
 impl FromRow<'_, PgRow> for NotificationWithTaskRow {
     fn from_row(row: &PgRow) -> sqlx::Result<Self> {
+        NotificationWithTaskRow::from_row_with_prefix(row, "notification__")
+    }
+}
+
+impl FromRowWithPrefix<'_, PgRow> for NotificationWithTaskRow {
+    fn from_row_with_prefix(row: &PgRow, prefix: &str) -> sqlx::Result<Self> {
         Ok(NotificationWithTaskRow {
-            notification_id: row.try_get("notification_id")?,
-            notification_title: row.try_get("notification_title")?,
+            notification_id: row.try_get(format!("{prefix}id").as_str())?,
+            notification_title: row.try_get(format!("{prefix}title").as_str())?,
             notification_status: row
-                .try_get::<PgNotificationStatus, &str>("notification_status")?,
-            notification_source_id: row.try_get("notification_source_id")?,
-            notification_metadata: row.try_get("notification_metadata")?,
-            notification_updated_at: row.try_get("notification_updated_at")?,
-            notification_last_read_at: row.try_get("notification_last_read_at")?,
-            notification_snoozed_until: row.try_get("notification_snoozed_until")?,
-            notification_user_id: row.try_get("notification_user_id")?,
-            notification_details: row.try_get("notification_details")?,
+                .try_get::<PgNotificationStatus, &str>(format!("{prefix}status").as_str())?,
+            notification_source_id: row.try_get(format!("{prefix}source_id").as_str())?,
+            notification_metadata: row.try_get(format!("{prefix}metadata").as_str())?,
+            notification_updated_at: row.try_get(format!("{prefix}updated_at").as_str())?,
+            notification_last_read_at: row.try_get(format!("{prefix}last_read_at").as_str())?,
+            notification_snoozed_until: row.try_get(format!("{prefix}snoozed_until").as_str())?,
+            notification_user_id: row.try_get(format!("{prefix}user_id").as_str())?,
+            notification_details: row.try_get(format!("{prefix}details").as_str())?,
             task_row: row
-                .try_get::<Option<Uuid>, &str>("id")?
-                .map(|_task_id| TaskRow::from_row(row))
+                .try_get::<Option<Uuid>, &str>("task__id")?
+                .map(|_task_id| TaskRow::from_row_with_prefix(row, "task__"))
                 .transpose()?,
         })
     }

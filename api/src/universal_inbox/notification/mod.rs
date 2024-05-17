@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use sqlx::{Postgres, Transaction};
 
-use universal_inbox::notification::Notification;
+use universal_inbox::{notification::Notification, user::UserId};
 
 use crate::universal_inbox::UniversalInboxError;
 
@@ -14,5 +14,6 @@ pub trait NotificationEventService<T> {
         &self,
         executor: &mut Transaction<'a, Postgres>,
         event: T,
-    ) -> Result<Vec<Notification>, UniversalInboxError>;
+        user_id: UserId,
+    ) -> Result<Option<Notification>, UniversalInboxError>;
 }

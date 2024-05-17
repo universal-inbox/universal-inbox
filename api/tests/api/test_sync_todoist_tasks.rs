@@ -16,9 +16,10 @@ use universal_inbox::{
         IntegrationConnection, IntegrationConnectionStatus,
     },
     notification::{Notification, NotificationStatus},
-    task::{
+    task::{Task, TaskCreationResult, TaskPriority, TaskSourceKind, TaskStatus},
+    third_party::{
         integrations::todoist::{self, TodoistItem},
-        Task, TaskCreationResult, TaskMetadata, TaskPriority, TaskSourceKind, TaskStatus,
+        item::{ThirdPartyItem, ThirdPartyItemCreationResult, ThirdPartyItemData},
     },
 };
 use universal_inbox_api::{
@@ -39,8 +40,8 @@ use crate::helpers::{
     task::{
         list_tasks, sync_tasks, sync_tasks_response,
         todoist::{
-            assert_sync_items, create_task_from_todoist_item, mock_todoist_sync_resources_service,
-            sync_todoist_items_response, sync_todoist_projects_response,
+            assert_sync_items, mock_todoist_sync_resources_service, sync_todoist_items_response,
+            sync_todoist_projects_response,
         },
     },
 };
@@ -59,32 +60,6 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
     // a new task will be created
     // with an linked notification as the new task's project is Inbox
     let app = authenticated_app.await;
-    let todoist_items = sync_todoist_items_response.items.clone().unwrap();
-    let existing_todoist_task_creation: Box<TaskCreationResult> = create_resource(
-        &app.client,
-        &app.app.api_address,
-        "tasks",
-        Box::new(Task {
-            id: Uuid::new_v4().into(),
-            source_id: todoist_items[1].id.clone(),
-            title: "old task 1".to_string(),
-            body: "more details".to_string(),
-            status: TaskStatus::Active,
-            completed_at: None,
-            priority: TaskPriority::P1,
-            due_at: None,
-            tags: vec!["tag1".to_string()],
-            parent_id: None,
-            project: "Inbox".to_string(),
-            is_recurring: false,
-            created_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-            metadata: TaskMetadata::Todoist(todoist_items[1].clone()),
-            user_id: app.user.id,
-        }),
-    )
-    .await;
-    let existing_todoist_task = existing_todoist_task_creation.task;
-    let existing_todoist_notification = &existing_todoist_task_creation.notifications[0];
     let integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
@@ -95,17 +70,56 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
         None,
     )
     .await;
+    let todoist_projects_mock = mock_todoist_sync_resources_service(
+        &app.app.todoist_mock_server,
+        "projects",
+        &sync_todoist_projects_response,
+        None,
+    );
+
+    let todoist_items = sync_todoist_items_response.items.clone().unwrap();
+    let existing_todoist_third_party_item_creation: Box<ThirdPartyItemCreationResult> =
+        create_resource(
+            &app.client,
+            &app.app.api_address,
+            "third_party/items",
+            Box::new(ThirdPartyItem {
+                id: Uuid::new_v4().into(),
+                source_id: todoist_items[1].id.clone(),
+                created_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
+                updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
+                user_id: app.user.id,
+                data: ThirdPartyItemData::TodoistItem(TodoistItem {
+                    content: "old task 1".to_string(),
+                    description: "more details".to_string(),
+                    checked: false,
+                    is_deleted: false,
+                    completed_at: None,
+                    priority: todoist::TodoistItemPriority::P4,
+                    due: None,
+                    labels: vec!["tag1".to_string()],
+                    parent_id: None,
+                    project_id: "1111".to_string(), // ie. "Inbox"
+                    //added_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
+                    ..todoist_items[1].clone()
+                }),
+                integration_connection_id: integration_connection.id,
+            }),
+        )
+        .await;
+    let existing_todoist_task = existing_todoist_third_party_item_creation
+        .task
+        .as_ref()
+        .unwrap();
+    let existing_todoist_notification = existing_todoist_third_party_item_creation
+        .notification
+        .as_ref()
+        .unwrap();
 
     let todoist_tasks_mock = mock_todoist_sync_resources_service(
         &app.app.todoist_mock_server,
         "items",
         &sync_todoist_items_response,
-        None,
-    );
-    let todoist_projects_mock = mock_todoist_sync_resources_service(
-        &app.app.todoist_mock_server,
-        "projects",
-        &sync_todoist_projects_response,
         None,
     );
 
@@ -131,8 +145,8 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
     .await;
     assert_eq!(updated_todoist_task.id, existing_todoist_task.id);
     assert_eq!(
-        updated_todoist_task.source_id,
-        existing_todoist_task.source_id
+        updated_todoist_task.source_item.source_id,
+        existing_todoist_task.source_item.source_id
     );
     // Updated fields
     assert_eq!(updated_todoist_task.title, "Task 2");
@@ -145,8 +159,8 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
         Utc.with_ymd_and_hms(2019, 12, 11, 22, 37, 50).unwrap()
     );
     assert_eq!(
-        updated_todoist_task.metadata,
-        TaskMetadata::Todoist(todoist_items[1].clone())
+        updated_todoist_task.source_item.data,
+        ThirdPartyItemData::TodoistItem(todoist_items[1].clone())
     );
 
     let updated_todoist_notification: Box<Notification> = get_resource(
@@ -174,15 +188,11 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
         NotificationStatus::Deleted
     );
     assert_eq!(updated_todoist_notification.title, "old task 1");
-    assert_eq!(
-        updated_todoist_notification.updated_at,
-        Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap()
-    );
 
     // Newly created task is in the Inbox, thus a notification should be created
     let new_todoist_task_creation = task_creations
         .iter()
-        .find(|task_creation| task_creation.task.source_id == todoist_items[0].id)
+        .find(|task_creation| task_creation.task.source_item.source_id == todoist_items[0].id)
         .unwrap();
     let new_task = &new_todoist_task_creation.task;
     let notifications = list_notifications_with_tasks(
@@ -196,7 +206,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
     .await;
 
     assert_eq!(notifications.len(), 1);
-    assert_eq!(notifications[0].source_id, new_task.source_id);
+    assert_eq!(notifications[0].source_id, new_task.source_item.source_id);
     assert_eq!(notifications[0].task, Some(new_task.clone()));
     assert_eq!(
         Into::<Notification>::into(notifications[0].clone()),
@@ -372,7 +382,10 @@ async fn test_sync_tasks_should_add_new_empty_task(
     assert!(task_creations[0].task.parent_id.is_none());
     assert_eq!(task_creations[0].task.priority, TaskPriority::P4);
     assert_eq!(task_creations[0].task.project, "No project".to_string());
-    assert_eq!(task_creations[0].task.source_id, "id1".to_string());
+    assert_eq!(
+        task_creations[0].task.source_item.source_id,
+        "id1".to_string()
+    );
     assert_eq!(task_creations[0].task.status, TaskStatus::Deleted);
     assert!(task_creations[0].task.tags.is_empty());
     assert_eq!(task_creations[0].task.title, "".to_string());
@@ -463,33 +476,7 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
     nango_todoist_connection: Box<NangoConnection>,
 ) {
     let app = authenticated_app.await;
-    // Only task "1123" will be marked as Done during the sync, keeping reference to task and
-    // notifications ids
-    let mut task_creation: Option<TaskCreationResult> = None;
-    {
-        let todoist_items = sync_todoist_items_response.items.as_mut().unwrap();
-        for todoist_item in todoist_items.iter() {
-            let creation = create_task_from_todoist_item(
-                &app.client,
-                &app.app.api_address,
-                todoist_item,
-                "Inbox".to_string(),
-                app.user.id,
-            )
-            .await;
-            if creation.task.source_id == "1123" {
-                task_creation = Some(*creation);
-            }
-        }
-        // Mark task `1123` as completed in the sync response
-        let task: &mut TodoistItem = todoist_items.iter_mut().find(|i| i.id == "1123").unwrap();
-        task.checked = true;
-        task.completed_at = Some(Utc::now());
-    }
-    let task_creation = task_creation.unwrap();
-    let todoist_items = sync_todoist_items_response.items.clone().unwrap();
-
-    create_and_mock_integration_connection(
+    let integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
         &settings.integrations.oauth2.nango_secret_key,
@@ -499,16 +486,56 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
         None,
     )
     .await;
-    let todoist_sync_items_mock = mock_todoist_sync_resources_service(
-        &app.app.todoist_mock_server,
-        "items",
-        &sync_todoist_items_response,
-        None,
-    );
     let todoist_projects_mock = mock_todoist_sync_resources_service(
         &app.app.todoist_mock_server,
         "projects",
         &sync_todoist_projects_response,
+        None,
+    );
+
+    // Only task "1123" will be marked as Done during the sync, keeping reference to task and
+    // notifications ids
+    // notification for task "1123" will be marked as deleted because the task is done
+    // notification for task "1456" will be marked as deleted because the task is not in the inbox anymore
+    let mut third_party_item_creation: Option<ThirdPartyItemCreationResult> = None;
+    {
+        let todoist_items = sync_todoist_items_response.items.as_mut().unwrap();
+        for todoist_item in todoist_items.iter() {
+            let creation: Box<ThirdPartyItemCreationResult> = create_resource(
+                &app.client,
+                &app.app.api_address,
+                "third_party/items",
+                Box::new(ThirdPartyItem {
+                    id: Uuid::new_v4().into(),
+                    source_id: todoist_item.id.clone(),
+                    created_at: Utc::now(),
+                    updated_at: Utc::now(),
+                    user_id: app.user.id,
+                    data: ThirdPartyItemData::TodoistItem(TodoistItem {
+                        project_id: "1111".to_string(), // ie. "Inbox"
+                        added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
+                        ..todoist_item.clone()
+                    }),
+                    integration_connection_id: integration_connection.id,
+                }),
+            )
+            .await;
+            if creation.third_party_item.source_id == "1123" {
+                third_party_item_creation = Some(*creation);
+            }
+        }
+        // Mark task `1123` as completed in the sync response
+        let task: &mut TodoistItem = todoist_items.iter_mut().find(|i| i.id == "1123").unwrap();
+        task.checked = true;
+        task.completed_at = Some(Utc::now());
+    }
+    let third_party_item_creation = third_party_item_creation.unwrap();
+    let todoist_items = sync_todoist_items_response.items.clone().unwrap();
+
+    let todoist_sync_items_mock = mock_todoist_sync_resources_service(
+        &app.app.todoist_mock_server,
+        "items",
+        &sync_todoist_items_response,
         None,
     );
 
@@ -529,10 +556,13 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
         &app.client,
         &app.app.api_address,
         "tasks",
-        task_creation.task.id.into(),
+        third_party_item_creation.task.as_ref().unwrap().id.into(),
     )
     .await;
-    assert_eq!(completed_task.id, task_creation.task.id);
+    assert_eq!(
+        completed_task.id,
+        third_party_item_creation.task.as_ref().unwrap().id
+    );
     assert_eq!(completed_task.status, TaskStatus::Done);
     assert_eq!(completed_task.completed_at.is_some(), true);
 
@@ -540,10 +570,18 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
         &app.client,
         &app.app.api_address,
         "notifications",
-        task_creation.notifications[0].id.into(),
+        third_party_item_creation
+            .notification
+            .as_ref()
+            .unwrap()
+            .id
+            .into(),
     )
     .await;
-    assert_eq!(deleted_notification.task_id, Some(task_creation.task.id));
+    assert_eq!(
+        deleted_notification.task_id,
+        Some(third_party_item_creation.task.as_ref().unwrap().id)
+    );
     assert_eq!(deleted_notification.status, NotificationStatus::Deleted);
 }
 
@@ -557,19 +595,47 @@ async fn test_sync_tasks_should_not_update_tasks_and_notifications_with_empty_in
     nango_todoist_connection: Box<NangoConnection>,
 ) {
     let app = authenticated_app.await;
-    let mut tasks_created: Vec<TaskCreationResult> = vec![];
+    let integration_connection = create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        &settings.integrations.oauth2.nango_secret_key,
+        IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
+        &settings,
+        nango_todoist_connection,
+        None,
+    )
+    .await;
+    let todoist_projects_mock = mock_todoist_sync_resources_service(
+        &app.app.todoist_mock_server,
+        "projects",
+        &sync_todoist_projects_response,
+        None,
+    );
+
+    let mut third_party_items_created: Vec<ThirdPartyItemCreationResult> = vec![];
     {
         let todoist_items = sync_todoist_items_response.items.as_ref().unwrap();
         for todoist_item in todoist_items.iter() {
-            let creation = create_task_from_todoist_item(
+            let creation: Box<ThirdPartyItemCreationResult> = create_resource(
                 &app.client,
                 &app.app.api_address,
-                todoist_item,
-                "Inbox".to_string(),
-                app.user.id,
+                "third_party/items",
+                Box::new(ThirdPartyItem {
+                    id: Uuid::new_v4().into(),
+                    source_id: todoist_item.id.clone(),
+                    created_at: Utc::now(),
+                    updated_at: Utc::now(),
+                    user_id: app.user.id,
+                    data: ThirdPartyItemData::TodoistItem(TodoistItem {
+                        project_id: "1111".to_string(), // ie. "Inbox"
+                        //added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
+                        ..todoist_item.clone()
+                    }),
+                    integration_connection_id: integration_connection.id,
+                }),
             )
             .await;
-            tasks_created.push(*creation);
+            third_party_items_created.push(*creation);
         }
     }
     // Create a response with only the task 1456 in it.
@@ -583,26 +649,10 @@ async fn test_sync_tasks_should_not_update_tasks_and_notifications_with_empty_in
             .collect(),
     );
 
-    create_and_mock_integration_connection(
-        &app.app,
-        app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
-        IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
-        &settings,
-        nango_todoist_connection,
-        None,
-    )
-    .await;
     let todoist_sync_items_mock = mock_todoist_sync_resources_service(
         &app.app.todoist_mock_server,
         "items",
         &sync_todoist_items_response,
-        None,
-    );
-    let todoist_projects_mock = mock_todoist_sync_resources_service(
-        &app.app.todoist_mock_server,
-        "projects",
-        &sync_todoist_projects_response,
         None,
     );
 
@@ -616,7 +666,7 @@ async fn test_sync_tasks_should_not_update_tasks_and_notifications_with_empty_in
 
     assert_eq!(task_creations.len(), 1);
     assert_eq!(
-        task_creations[0].task.source_id,
+        task_creations[0].task.source_item.source_id,
         sync_todoist_items_response.items.unwrap()[0].id
     );
     assert_eq!(task_creations[0].task.status, TaskStatus::Active);
@@ -626,18 +676,20 @@ async fn test_sync_tasks_should_not_update_tasks_and_notifications_with_empty_in
 
     // We want to assert that the task that was not in the response (ie. source = "1123") has not
     // been updated
-    for task_creation in tasks_created
-        .iter()
-        .filter(|tc| tc.task.source_id != task_creations[0].task.source_id)
-    {
+    for third_party_item_created in third_party_items_created.iter().filter(|tpic| {
+        tpic.task.as_ref().unwrap().source_item.source_id
+            != task_creations[0].task.source_item.source_id
+    }) {
+        let existing_task = third_party_item_created.task.as_ref().unwrap();
+        let existing_notification = third_party_item_created.notification.as_ref().unwrap();
         let task: Box<Task> = get_resource(
             &app.client,
             &app.app.api_address,
             "tasks",
-            task_creation.task.id.into(),
+            existing_task.id.into(),
         )
         .await;
-        assert_eq!(task.id, task_creation.task.id);
+        assert_eq!(task.id, existing_task.id);
         assert_eq!(task.status, TaskStatus::Active);
         assert!(task.completed_at.is_none());
 
@@ -645,10 +697,10 @@ async fn test_sync_tasks_should_not_update_tasks_and_notifications_with_empty_in
             &app.client,
             &app.app.api_address,
             "notifications",
-            task_creation.notifications[0].id.into(),
+            existing_notification.id.into(),
         )
         .await;
-        assert_eq!(notification.task_id, Some(task_creation.task.id));
+        assert_eq!(notification.task_id, Some(existing_task.id));
         assert_eq!(notification.status, NotificationStatus::Unread);
     }
 }
@@ -731,31 +783,7 @@ async fn test_sync_all_tasks_asynchronously(
     nango_todoist_connection: Box<NangoConnection>,
 ) {
     let app = authenticated_app.await;
-    let todoist_items = sync_todoist_items_response.items.clone().unwrap();
-    let _existing_todoist_task_creation: Box<TaskCreationResult> = create_resource(
-        &app.client,
-        &app.app.api_address,
-        "tasks",
-        Box::new(Task {
-            id: Uuid::new_v4().into(),
-            source_id: todoist_items[1].id.clone(),
-            title: "old task 1".to_string(),
-            body: "more details".to_string(),
-            status: TaskStatus::Active,
-            completed_at: None,
-            priority: TaskPriority::P1,
-            due_at: None,
-            tags: vec!["tag1".to_string()],
-            parent_id: None,
-            project: "Inbox".to_string(),
-            is_recurring: false,
-            created_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-            metadata: TaskMetadata::Todoist(todoist_items[1].clone()),
-            user_id: app.user.id,
-        }),
-    )
-    .await;
-    create_and_mock_integration_connection(
+    let integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
         &settings.integrations.oauth2.nango_secret_key,
@@ -765,17 +793,48 @@ async fn test_sync_all_tasks_asynchronously(
         None,
     )
     .await;
+    let mut todoist_projects_mock = mock_todoist_sync_resources_service(
+        &app.app.todoist_mock_server,
+        "projects",
+        &sync_todoist_projects_response,
+        None,
+    );
+
+    let todoist_items = sync_todoist_items_response.items.clone().unwrap();
+    let _existing_todoist_third_party_item_creation: Box<ThirdPartyItemCreationResult> =
+        create_resource(
+            &app.client,
+            &app.app.api_address,
+            "third_party/items",
+            Box::new(ThirdPartyItem {
+                id: Uuid::new_v4().into(),
+                source_id: todoist_items[1].id.clone(),
+                created_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
+                updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
+                user_id: app.user.id,
+                data: ThirdPartyItemData::TodoistItem(TodoistItem {
+                    content: "old task 1".to_string(),
+                    description: "more details".to_string(),
+                    checked: false,
+                    is_deleted: false,
+                    completed_at: None,
+                    priority: todoist::TodoistItemPriority::P4,
+                    due: None,
+                    labels: vec!["tag1".to_string()],
+                    parent_id: None,
+                    project_id: "1111".to_string(), // ie. "Inbox"
+                    //added_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
+                    ..todoist_items[1].clone()
+                }),
+                integration_connection_id: integration_connection.id,
+            }),
+        )
+        .await;
 
     let mut todoist_tasks_mock = mock_todoist_sync_resources_service(
         &app.app.todoist_mock_server,
         "items",
         &sync_todoist_items_response,
-        None,
-    );
-    let mut todoist_projects_mock = mock_todoist_sync_resources_service(
-        &app.app.todoist_mock_server,
-        "projects",
-        &sync_todoist_projects_response,
         None,
     );
 

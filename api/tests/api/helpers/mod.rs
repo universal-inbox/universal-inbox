@@ -32,6 +32,7 @@ pub mod mailer;
 pub mod notification;
 pub mod rest;
 pub mod task;
+pub mod third_party;
 pub mod user;
 
 pub struct TestedApp {
@@ -181,6 +182,7 @@ pub async fn tested_app(
         user_service,
         integration_connection_service,
         auth_token_service,
+        third_party_item_service,
     ) = universal_inbox_api::build_services(
         pool.clone(),
         &settings,
@@ -203,18 +205,25 @@ pub async fn tested_app(
         redis_storage.clone(),
         settings,
         notification_service.clone(),
-        task_service,
+        task_service.clone(),
         user_service.clone(),
-        integration_connection_service,
+        integration_connection_service.clone(),
         auth_token_service,
+        third_party_item_service,
     )
     .await
     .expect("Failed to bind address");
 
     tokio::spawn(server);
 
-    let worker =
-        universal_inbox_api::run_worker(Some(1), redis_storage.clone(), notification_service).await;
+    let worker = universal_inbox_api::run_worker(
+        Some(1),
+        redis_storage.clone(),
+        notification_service,
+        task_service,
+        integration_connection_service,
+    )
+    .await;
 
     tokio::spawn(worker.run());
 
@@ -287,6 +296,7 @@ pub async fn tested_app_with_local_auth(
         user_service,
         integration_connection_service,
         auth_token_service,
+        third_party_item_service,
     ) = universal_inbox_api::build_services(
         pool.clone(),
         &settings,
@@ -309,18 +319,25 @@ pub async fn tested_app_with_local_auth(
         redis_storage.clone(),
         settings,
         notification_service.clone(),
-        task_service,
+        task_service.clone(),
         user_service.clone(),
-        integration_connection_service,
+        integration_connection_service.clone(),
         auth_token_service,
+        third_party_item_service,
     )
     .await
     .expect("Failed to bind address");
 
     tokio::spawn(server);
 
-    let worker =
-        universal_inbox_api::run_worker(Some(1), redis_storage.clone(), notification_service).await;
+    let worker = universal_inbox_api::run_worker(
+        Some(1),
+        redis_storage.clone(),
+        notification_service,
+        task_service,
+        integration_connection_service,
+    )
+    .await;
 
     tokio::spawn(worker.run());
 

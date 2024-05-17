@@ -19,6 +19,7 @@
 ### Changed
 
 - Use JWT token as access authorization (via a cookie or the `Authorization` header)
+- Introduce ThirdPartyItem entity for Tasks source data
 
 ### Fixed
 
