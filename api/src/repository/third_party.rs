@@ -5,7 +5,11 @@ use sqlx::{postgres::PgRow, types::Json, Postgres, QueryBuilder, Row, Transactio
 use tracing::debug;
 use uuid::Uuid;
 
-use universal_inbox::third_party::item::{ThirdPartyItem, ThirdPartyItemData};
+use universal_inbox::{
+    task::TaskSourceKind,
+    third_party::item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemId},
+    user::UserId,
+};
 
 use crate::{
     repository::Repository,
@@ -21,6 +25,14 @@ pub trait ThirdPartyItemRepository {
         executor: &mut Transaction<'a, Postgres>,
         third_party_item: Box<ThirdPartyItem>,
     ) -> Result<UpsertStatus<Box<ThirdPartyItem>>, UniversalInboxError>;
+
+    async fn get_stale_task_source_third_party_items<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        active_task_source_third_party_item_ids: Vec<ThirdPartyItemId>,
+        task_source_kind: TaskSourceKind,
+        user_id: UserId,
+    ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError>;
 }
 
 #[async_trait]
@@ -167,6 +179,55 @@ impl ThirdPartyItemRepository for Repository {
             id: third_party_item_id,
             ..*third_party_item
         })))
+    }
+
+    #[tracing::instrument(level = "debug", skip(self, executor))]
+    async fn get_stale_task_source_third_party_items<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        active_task_source_third_party_item_ids: Vec<ThirdPartyItemId>,
+        task_source_kind: TaskSourceKind,
+        user_id: UserId,
+    ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError> {
+        let third_party_item_ids_to_exclude = active_task_source_third_party_item_ids
+            .iter()
+            .map(|id| id.0)
+            .collect::<Vec<Uuid>>();
+
+        let records = sqlx::query_as!(
+            ThirdPartyItemRow,
+            r#"
+              SELECT
+                third_party_item.id,
+                third_party_item.source_id,
+                third_party_item.data as "data: Json<ThirdPartyItemData>",
+                third_party_item.created_at,
+                third_party_item.updated_at,
+                third_party_item.user_id,
+                third_party_item.integration_connection_id
+              FROM third_party_item
+              LEFT JOIN task ON task.source_item_id = third_party_item.id
+              WHERE
+                NOT third_party_item.id = ANY($1)
+                AND task.kind::TEXT = $2
+                AND third_party_item.user_id = $3
+                AND task.status::TEXT = 'Active'
+            "#,
+            &third_party_item_ids_to_exclude[..],
+            task_source_kind.to_string(),
+            user_id.0,
+        )
+        .fetch_all(&mut **executor)
+        .await
+        .map_err(|err| UniversalInboxError::DatabaseError {
+            source: err,
+            message: "Failed to update stale notification status from storage".to_string(),
+        })?;
+
+        records
+            .iter()
+            .map(|r| r.try_into())
+            .collect::<Result<Vec<ThirdPartyItem>, UniversalInboxError>>()
     }
 }
 

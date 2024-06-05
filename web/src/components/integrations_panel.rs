@@ -431,6 +431,7 @@ pub fn IntegrationConnectionProviderConfiguration<'a>(
         },
         IntegrationProvider::Linear { config } => render! {
             LinearProviderConfiguration {
+                ui_model_ref: ui_model_ref.clone(),
                 on_config_change: |c| on_config_change.call(c),
                 config: config.clone()
             }

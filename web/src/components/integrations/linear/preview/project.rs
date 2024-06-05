@@ -6,8 +6,11 @@ use dioxus_free_icons::{
     Icon,
 };
 
-use universal_inbox::notification::integrations::linear::{
-    LinearNotification, LinearProject, LinearProjectUpdate, LinearProjectUpdateHealthType,
+use universal_inbox::{
+    notification::integrations::linear::{
+        LinearNotification, LinearProjectUpdate, LinearProjectUpdateHealthType,
+    },
+    third_party::integrations::linear::LinearProject,
 };
 
 use crate::components::{

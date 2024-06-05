@@ -12,7 +12,9 @@ use crate::{
             todoist::{TodoistConfig, TodoistContext},
         },
     },
-    task::{integrations::todoist::TODOIST_INBOX_PROJECT, ProjectSummary, TaskCreation},
+    task::{
+        integrations::todoist::TODOIST_INBOX_PROJECT, ProjectSummary, TaskCreation, TaskPriority,
+    },
 };
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
@@ -138,6 +140,7 @@ impl IntegrationProvider {
     pub fn is_sync_tasks_enabled(&self) -> bool {
         match self {
             IntegrationProvider::Todoist { config, .. } => config.sync_tasks_enabled,
+            IntegrationProvider::Linear { config } => config.sync_task_config.enabled,
             _ => false,
         }
     }
@@ -156,13 +159,13 @@ impl IntegrationProvider {
             IntegrationProvider::Slack {
                 config:
                     SlackConfig {
-                        sync_enabled: true,
                         sync_type:
                             SlackSyncType::AsTasks(SlackSyncTaskConfig {
                                 target_project,
                                 default_due_at,
                                 default_priority,
                             }),
+                        ..
                     },
             } => Some(TaskCreation {
                 title: "Unused".to_string(),
@@ -173,6 +176,20 @@ impl IntegrationProvider {
                 }),
                 due_at: default_due_at.as_ref().map(|due_at| due_at.clone().into()),
                 priority: *default_priority,
+            }),
+            IntegrationProvider::Linear { config } => Some(TaskCreation {
+                title: "Unused".to_string(),
+                body: None,
+                project: config
+                    .sync_task_config
+                    .target_project
+                    .clone()
+                    .unwrap_or_else(|| ProjectSummary {
+                        source_id: "Unused".to_string(),
+                        name: TODOIST_INBOX_PROJECT.to_string(),
+                    }),
+                due_at: None,
+                priority: TaskPriority::default(),
             }),
             _ => None,
         }

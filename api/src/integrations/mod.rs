@@ -33,6 +33,8 @@ pub mod third_party {
             executor: &mut Transaction<'a, Postgres>,
             user_id: UserId,
         ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError>;
+
+        fn is_sync_incremental(&self) -> bool;
     }
 }
 

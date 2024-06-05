@@ -1,0 +1,60 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n              SELECT\n                third_party_item.id,\n                third_party_item.source_id,\n                third_party_item.data as \"data: Json<ThirdPartyItemData>\",\n                third_party_item.created_at,\n                third_party_item.updated_at,\n                third_party_item.user_id,\n                third_party_item.integration_connection_id\n              FROM third_party_item\n              LEFT JOIN task ON task.source_item_id = third_party_item.id\n              WHERE\n                NOT third_party_item.id = ANY($1)\n                AND task.kind::TEXT = $2\n                AND third_party_item.user_id = $3\n                AND task.status::TEXT = 'Active'\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "source_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "data: Json<ThirdPartyItemData>",
+        "type_info": "Json"
+      },
+      {
+        "ordinal": 3,
+        "name": "created_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 4,
+        "name": "updated_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 5,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 6,
+        "name": "integration_connection_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "fb507013d40a98eae85740cfc82bb0966a210fccd99366a0107080da9709634c"
+}
