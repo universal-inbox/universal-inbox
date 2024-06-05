@@ -3,9 +3,11 @@ use uuid::Uuid;
 
 use universal_inbox::{
     notification::integrations::linear::{
-        LinearComment, LinearIssue, LinearLabel, LinearNotification, LinearOrganization,
-        LinearProject, LinearProjectMilestone, LinearProjectUpdate, LinearProjectUpdateHealthType,
-        LinearTeam, LinearUser, LinearWorkflowState,
+        LinearComment, LinearNotification, LinearProjectUpdate, LinearProjectUpdateHealthType,
+    },
+    third_party::integrations::linear::{
+        LinearIssue, LinearLabel, LinearOrganization, LinearProject, LinearProjectMilestone,
+        LinearTeam, LinearUser, LinearWorkflowState, LinearWorkflowStateIds,
     },
     utils::emoji::replace_emoji_code_with_emoji,
 };
@@ -210,10 +212,51 @@ impl TryFrom<notifications_query::NotificationsQueryNotificationsNodesOnIssueNot
             description: value.description,
             color: value.color,
             r#type: value.type_.try_into()?,
+            id: Some(
+                Uuid::parse_str(&value.id)
+                    .with_context(|| format!("Failed to parse UUID from `{}`", value.id))?,
+            ),
         })
     }
 }
 
+impl TryFrom<notifications_query::NotificationsQueryNotificationsNodesOnIssueNotificationIssueStateTeamStates>
+    for LinearWorkflowStateIds
+{
+    type Error = UniversalInboxError;
+
+    fn try_from(
+        value: notifications_query::NotificationsQueryNotificationsNodesOnIssueNotificationIssueStateTeamStates,
+    ) -> Result<Self, Self::Error> {
+        let node = value
+            .nodes
+            .iter()
+            .find(|node| node.type_ == "unstarted")
+            .with_context(|| "Failed to find unstarted state id")?;
+        let unstarted_id = Uuid::parse_str(&node.id)
+            .with_context(|| format!("Failed to parse UUID from `{}`", node.id))?;
+        let node = value
+            .nodes
+            .iter()
+            .find(|node| node.type_ == "completed")
+            .with_context(|| "Failed to find completed state id")?;
+        let completed_id = Uuid::parse_str(&node.id)
+            .with_context(|| format!("Failed to parse UUID from `{}`", node.id))?;
+        let node = value
+            .nodes
+            .iter()
+            .find(|node| node.type_ == "canceled")
+            .with_context(|| "Failed to find canceled state id")?;
+        let canceled_id = Uuid::parse_str(&node.id)
+            .with_context(|| format!("Failed to parse UUID from `{}`", node.id))?;
+
+        Ok(LinearWorkflowStateIds {
+            unstarted: unstarted_id,
+            completed: completed_id,
+            canceled: canceled_id,
+        })
+    }
+}
 impl TryFrom<notifications_query::NotificationsQueryNotificationsNodesOnIssueNotificationIssue>
     for LinearIssue
 {
@@ -252,7 +295,7 @@ impl TryFrom<notifications_query::NotificationsQueryNotificationsNodesOnIssueNot
                 .assignee
                 .map(|assignee| assignee.try_into())
                 .transpose()?,
-            state: value.state.try_into()?,
+            state: value.state.clone().try_into()?,
             labels: value
                 .labels
                 .nodes
@@ -261,6 +304,7 @@ impl TryFrom<notifications_query::NotificationsQueryNotificationsNodesOnIssueNot
                 .collect(),
             description: value.description,
             team: value.team.try_into()?,
+            state_ids: Some(value.state.team.states.try_into()?),
         })
     }
 }

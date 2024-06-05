@@ -1,0 +1,88 @@
+query AssignedIssuesQuery {
+  issues(filter: {
+      and: [
+        { assignee: { isMe: { eq: true } } },
+        { state: { type: { nin: ["completed", "canceled"] } } }
+      ]
+    }) {
+    nodes {
+      id
+      createdAt
+      updatedAt
+      startedAt
+      completedAt
+      canceledAt
+      dueDate
+      identifier
+      title
+      url
+      priority
+      project {
+        id
+        name
+        url
+        description
+        icon
+        color
+        state
+        progress
+        startDate
+        targetDate
+        lead {
+          displayName
+          avatarUrl
+          url
+        }
+      }
+      projectMilestone {
+        name
+        description
+      }
+      creator {
+        displayName
+        avatarUrl
+        url
+      }
+      assignee {
+        displayName
+        avatarUrl
+        url
+      }
+      state {
+        name
+        color
+        description
+        type
+        id
+        team {
+          states(filter: {
+              or: [
+                {type: {eq: "unstarted"}},
+                {type: {eq: "completed"}}
+                {type: {eq: "canceled"}}
+              ]
+            }) {
+            nodes {
+              type
+              id
+            }
+          }
+        }
+      }
+      labels {
+        nodes {
+          name
+          description
+          color
+        }
+      }
+      description
+      team {
+        id
+        key
+        name
+        icon
+      }
+    }
+  }
+}

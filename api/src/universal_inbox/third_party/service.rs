@@ -21,6 +21,7 @@ use universal_inbox::{
 
 use crate::{
     integrations::{
+        linear::LinearService,
         slack::SlackService,
         task::{ThirdPartyTaskService, ThirdPartyTaskSourceService},
         third_party::ThirdPartyItemSourceService,
@@ -39,6 +40,7 @@ pub struct ThirdPartyItemService {
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     todoist_service: Arc<TodoistService>,
     slack_service: Arc<SlackService>,
+    linear_service: Arc<LinearService>,
 }
 
 impl ThirdPartyItemService {
@@ -48,6 +50,7 @@ impl ThirdPartyItemService {
         integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
         todoist_service: Arc<TodoistService>,
         slack_service: Arc<SlackService>,
+        linear_service: Arc<LinearService>,
     ) -> Self {
         Self {
             repository,
@@ -55,6 +58,7 @@ impl ThirdPartyItemService {
             integration_connection_service,
             todoist_service,
             slack_service,
+            linear_service,
         }
     }
 
@@ -102,13 +106,15 @@ impl ThirdPartyItemService {
 
         debug!("Syncing {kind} third party items for user {user_id}");
         for item in items.into_iter() {
+            let task_creation = integration_connection_provider.get_task_creation_default_values();
+
             let creation_result = self
                 .sync_item(
                     executor,
                     third_party_task_service.clone(),
                     item,
                     integration_connection_provider,
-                    None, // No need for a TaskCreation as values are already in the third party item
+                    task_creation,
                     user_id,
                 )
                 .await?;
@@ -121,6 +127,47 @@ impl ThirdPartyItemService {
             "Successfully synced {} third party items for user {user_id}",
             creations_result.len()
         );
+
+        if !third_party_task_service.is_sync_incremental() {
+            let active_task_source_third_party_item_ids = creations_result
+                .iter()
+                .map(|r| r.third_party_item.id)
+                .collect();
+
+            let third_party_items_to_mark_as_done = self
+                .repository
+                .get_stale_task_source_third_party_items(
+                    executor,
+                    active_task_source_third_party_item_ids,
+                    third_party_task_service.get_task_source_kind(),
+                    user_id,
+                )
+                .await?;
+
+            let third_party_items_to_mark_as_done_count = third_party_items_to_mark_as_done.len();
+            for item in third_party_items_to_mark_as_done.into_iter() {
+                let task_creation =
+                    integration_connection_provider.get_task_creation_default_values();
+
+                let creation_result = self
+                    .sync_item(
+                        executor,
+                        third_party_task_service.clone(),
+                        item.marked_as_done(),
+                        integration_connection_provider,
+                        task_creation,
+                        user_id,
+                    )
+                    .await?;
+
+                if let Some(creation_result) = creation_result {
+                    creations_result.push(creation_result);
+                }
+            }
+            debug!(
+                "Marked {third_party_items_to_mark_as_done_count} {kind} stale third party items as done"
+            )
+        }
 
         Ok(creations_result)
     }
@@ -171,6 +218,17 @@ impl ThirdPartyItemService {
                 self.sync_item(
                     executor,
                     self.slack_service.clone(),
+                    third_party_item,
+                    &integration_connection.provider,
+                    task_creation,
+                    user_id,
+                )
+                .await
+            }
+            ThirdPartyItemSourceKind::Linear => {
+                self.sync_item(
+                    executor,
+                    self.linear_service.clone(),
                     third_party_item,
                     &integration_connection.provider,
                     task_creation,
@@ -257,7 +315,7 @@ impl ThirdPartyItemService {
                 third_party_task_service,
                 &task,
                 integration_connection_provider,
-                true,
+                true, // Force incremental here to avoid deleting all other notification for this third party item kind
                 user_id,
             )
             .await?;
@@ -311,7 +369,7 @@ impl ThirdPartyItemService {
     pub async fn create_sink_item_from_task<'a, 'b>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        task: &'b Task,
+        task: &'b mut Task,
     ) -> Result<Box<ThirdPartyItem>, UniversalInboxError> {
         let user_id = task.user_id;
         let third_party_task_service = self.todoist_service.clone(); // Shortcut as only Todoist is supported for now as a sink
@@ -360,6 +418,7 @@ impl ThirdPartyItemService {
             uptodate_sink_party_item.id, task.id
         );
 
+        task.sink_item = Some(*uptodate_sink_party_item.clone());
         self.task_service
             .upgrade()
             .context("Unable to access task_service from third_party_service")?

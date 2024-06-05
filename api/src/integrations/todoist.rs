@@ -472,6 +472,10 @@ impl ThirdPartyItemSourceService for TodoistService {
                     .collect()
             })
     }
+
+    fn is_sync_incremental(&self) -> bool {
+        true
+    }
 }
 
 #[async_trait]

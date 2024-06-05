@@ -15,6 +15,7 @@
 - Connect to Slack and receive "saved for later" (aka. "stars") events
 - Add Slack "saved for later" as notifications
 - 2 way sync Slack "saved for later" and Todoist tasks
+- 2 way sync assigned Linear issues and Todoist tasks
 
 ### Changed
 

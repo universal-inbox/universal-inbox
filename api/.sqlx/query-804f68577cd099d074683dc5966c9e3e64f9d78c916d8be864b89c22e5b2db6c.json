@@ -41,7 +41,8 @@
             "kind": {
               "Enum": [
                 "Todoist",
-                "Slack"
+                "Slack",
+                "Linear"
               ]
             }
           }

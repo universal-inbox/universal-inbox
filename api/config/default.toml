@@ -107,7 +107,15 @@ snooze = "The Github notification will not be modified. The notification in Univ
 
 [integrations.linear]
 name = "Linear"
-doc = "Linear notifications (issue and project notifications) are synchronized 1 for 1 with Universal Inbox notifications. Linear notifications for the same Linear issue are not (yet) merged as one like Linear does."
+doc = """
+Linear notifications (issue and project notifications) are synchronized 1 for 1 with Universal Inbox notifications. Linear notifications for the same Linear issue are not (yet) merged as one like Linear does.<br>
+
+Assigned Linear issues can also be synchronized as a task in the task management service.
+
+When an assigned Linear issue is synchronized as a task, the synchronization is two way:
+- completed task will set the Linear issue as completed.
+- and completed Linear issue will set the task as completed.
+"""
 
 [integrations.linear.doc_for_actions]
 delete = "The Linear notification will be deleted."
@@ -137,10 +145,11 @@ snooze = "The Todoist task will not be modified. The notification in Universal I
 [integrations.slack]
 name = "Slack"
 doc = """
-Slack \"saved for later\" items can be synchronized 1 for 1 with a Universal Inbox notifications or a tasks in the task management service.<br>
-When synchronized as tasks, the synchronization is two way:
-- completed tasks will delete the \"saved for later\" item in Slack.<br>
-- ⚠️ uncompleted tasks will partially mark the \"saved for later\" item in Slack. Indeed, due to some Slack public API limitations, the original marked message will be marked again but it won't appear in the \"saved for later\" list.
+Slack \"saved for later\" messages can be synchronized 1 for 1 with a Universal Inbox notification or a task in the task management service.
+
+When synchronized as a task, the synchronization is two way:
+- completed task will delete the \"saved for later\" mark in Slack.
+- ⚠️ re-activated task will partially create the \"saved for later\" mark in Slack. Indeed, due to some Slack public API limitations, the Slack message will be marked again but it won't appear in the \"saved for later\" list.
 """
 
 [integrations.slack.doc_for_actions]

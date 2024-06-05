@@ -227,6 +227,12 @@ impl From<PresetDueDate> for DueDate {
     }
 }
 
+impl From<NaiveDate> for DueDate {
+    fn from(date: NaiveDate) -> Self {
+        DueDate::Date(date)
+    }
+}
+
 macro_attr! {
     #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy, Eq, EnumFromStr!, EnumDisplay!)]
     pub enum TaskStatus {
@@ -337,7 +343,8 @@ macro_attr! {
     // Synchronization sources for tasks
     #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!)]
     pub enum TaskSyncSourceKind {
-        Todoist
+        Todoist,
+        Linear
     }
 }
 
@@ -345,7 +352,8 @@ macro_attr! {
     #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!)]
     pub enum TaskSourceKind {
         Todoist,
-        Slack
+        Slack,
+        Linear
     }
 }
 

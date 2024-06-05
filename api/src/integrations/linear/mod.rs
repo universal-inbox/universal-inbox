@@ -9,6 +9,7 @@ use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_tracing::{SpanBackendWithUrl, TracingMiddleware};
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
+use uuid::Uuid;
 
 use universal_inbox::{
     integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
@@ -16,19 +17,31 @@ use universal_inbox::{
         integrations::linear::LinearNotification, Notification, NotificationDetails,
         NotificationSource, NotificationSourceKind,
     },
+    task::{service::TaskPatch, Task, TaskCreation, TaskSource, TaskSourceKind, TaskStatus},
+    third_party::{
+        integrations::linear::LinearIssue,
+        item::{
+            ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemFromSource, ThirdPartyItemSource,
+            ThirdPartyItemSourceKind,
+        },
+    },
     user::UserId,
+    HasHtmlUrl,
 };
 
 use crate::{
     integrations::{
         linear::graphql::{
-            issue_update_subscribers, notification_archive, notification_subscribers_query,
-            notification_update_snoozed_until_at, notifications_query, IssueUpdateSubscribers,
-            NotificationArchive, NotificationSubscribersQuery, NotificationUpdateSnoozedUntilAt,
-            NotificationsQuery,
+            assigned_issues_query, issue_update_state, issue_update_subscribers,
+            notification_archive, notification_subscribers_query,
+            notification_update_snoozed_until_at, notifications_query, AssignedIssuesQuery,
+            IssueUpdateState, IssueUpdateSubscribers, NotificationArchive,
+            NotificationSubscribersQuery, NotificationUpdateSnoozedUntilAt, NotificationsQuery,
         },
         notification::{NotificationSourceService, NotificationSyncSourceService},
         oauth2::AccessToken,
+        task::ThirdPartyTaskService,
+        third_party::ThirdPartyItemSourceService,
         APP_USER_AGENT,
     },
     universal_inbox::{
@@ -204,12 +217,12 @@ impl LinearService {
     pub async fn update_notification_snoozed_until_at(
         &self,
         access_token: &AccessToken,
-        issue_id: String,
+        notification_id: String,
         snoozed_until_at: DateTime<Utc>,
     ) -> Result<(), UniversalInboxError> {
         let request_body = NotificationUpdateSnoozedUntilAt::build_query(
             notification_update_snoozed_until_at::Variables {
-                id: issue_id,
+                id: notification_id,
                 snoozed_until_at,
             },
         );
@@ -236,6 +249,75 @@ impl LinearService {
             .ok_or_else(|| anyhow!("Failed to parse `data` from Linear graphql response"))?;
 
         if !response_data.notification_update.success {
+            return Err(UniversalInboxError::Unexpected(anyhow!(
+                "Linear API call failed with an unknown error"
+            )));
+        }
+
+        Ok(())
+    }
+
+    pub async fn query_assigned_issues(
+        &self,
+        access_token: &AccessToken,
+    ) -> Result<assigned_issues_query::ResponseData, UniversalInboxError> {
+        let request_body = AssignedIssuesQuery::build_query(assigned_issues_query::Variables {});
+
+        let response = build_linear_client(access_token)
+            .context("Failed to build Linear client")?
+            .post(&self.linear_graphql_url)
+            .json(&request_body)
+            .send()
+            .await
+            .context("Cannot fetch assigned issues from Linear API")?
+            .text()
+            .await
+            .context("Failed to fetch assigned issues response from Linear API")?;
+
+        let assigned_issues_response: Response<assigned_issues_query::ResponseData> =
+            serde_json::from_str(&response)
+                .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
+
+        assert_no_error_in_graphql_response(&assigned_issues_response, LINEAR_GRAPHQL_API_NAME)?;
+
+        Ok(assigned_issues_response
+            .data
+            .ok_or_else(|| anyhow!("Failed to parse `data` from Linear graphql response"))?)
+    }
+
+    pub async fn update_issue_state(
+        &self,
+        access_token: &AccessToken,
+        issue_id: String,
+        state_id: String,
+    ) -> Result<(), UniversalInboxError> {
+        let request_body = IssueUpdateState::build_query(issue_update_state::Variables {
+            id: issue_id,
+            state_id,
+        });
+
+        let response = build_linear_client(access_token)
+            .context("Failed to build Linear client")?
+            .post(&self.linear_graphql_url)
+            .json(&request_body)
+            .send()
+            .await
+            .context("Cannot update issue state from Linear API")?
+            .text()
+            .await
+            .context("Failed to fetch issue update state response from Linear API")?;
+
+        let update_response: Response<issue_update_state::ResponseData> =
+            serde_json::from_str(&response)
+                .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
+
+        assert_no_error_in_graphql_response(&update_response, LINEAR_GRAPHQL_API_NAME)?;
+
+        let response_data = update_response
+            .data
+            .ok_or_else(|| anyhow!("Failed to parse `data` from Linear graphql response"))?;
+
+        if !response_data.issue_update.success {
             return Err(UniversalInboxError::Unexpected(anyhow!(
                 "Linear API call failed with an unknown error"
             )));
@@ -419,5 +501,251 @@ impl NotificationSource for LinearService {
 
     fn is_supporting_snoozed_notifications(&self) -> bool {
         true
+    }
+}
+
+impl TaskSource for LinearService {
+    fn get_task_source_kind(&self) -> TaskSourceKind {
+        TaskSourceKind::Linear
+    }
+}
+
+impl ThirdPartyItemSource for LinearService {
+    fn get_third_party_item_source_kind(&self) -> ThirdPartyItemSourceKind {
+        ThirdPartyItemSourceKind::Linear
+    }
+}
+
+#[async_trait]
+impl ThirdPartyItemSourceService for LinearService {
+    #[allow(clippy::blocks_in_conditions)]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    async fn fetch_items<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        user_id: UserId,
+    ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError> {
+        let (access_token, integration_connection) = self
+            .integration_connection_service
+            .read()
+            .await
+            .find_access_token(executor, IntegrationProviderKind::Linear, user_id)
+            .await?
+            .ok_or_else(|| anyhow!("Cannot fetch Linear task without an access token"))?;
+
+        let assigned_issues_response = self.query_assigned_issues(&access_token).await?;
+
+        TryInto::<Vec<LinearIssue>>::try_into(assigned_issues_response).map(|linear_issues| {
+            linear_issues
+                .into_iter()
+                .map(|linear_issue| {
+                    linear_issue.into_third_party_item(user_id, integration_connection.id)
+                })
+                .collect()
+        })
+    }
+
+    fn is_sync_incremental(&self) -> bool {
+        false
+    }
+}
+
+#[async_trait]
+impl ThirdPartyTaskService<LinearIssue> for LinearService {
+    #[allow(clippy::blocks_in_conditions)]
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, _executor, source, source_third_party_item),
+        fields(source_id = source.id.to_string()),
+        err
+    )]
+    async fn third_party_item_into_task<'a>(
+        &self,
+        _executor: &mut Transaction<'a, Postgres>,
+        source: &LinearIssue,
+        source_third_party_item: &ThirdPartyItem,
+        task_creation: Option<TaskCreation>,
+        user_id: UserId,
+    ) -> Result<Box<Task>, UniversalInboxError> {
+        let task_creation = task_creation.ok_or_else(|| {
+            UniversalInboxError::Unexpected(anyhow!(
+                "Cannot build a Linear task without a task creation"
+            ))
+        })?;
+
+        Ok(Box::new(Task {
+            id: Uuid::new_v4().into(),
+            title: format!("[{}]({})", source.title.clone(), source.get_html_url()),
+            body: source.description.clone().unwrap_or_default(),
+            status: source.state.r#type.into(),
+            completed_at: source.completed_at,
+            priority: source.priority.into(),
+            due_at: source.due_date.map(|due_date| due_date.into()),
+            tags: source
+                .labels
+                .iter()
+                .map(|label| label.name.clone())
+                .collect(),
+            parent_id: None,
+            project: task_creation.project.name.clone(),
+            is_recurring: false,
+            created_at: source.created_at,
+            updated_at: source.updated_at,
+            kind: TaskSourceKind::Linear,
+            source_item: source_third_party_item.clone(),
+            sink_item: None,
+            user_id,
+        }))
+    }
+
+    #[allow(clippy::blocks_in_conditions)]
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, executor, third_party_item),
+        fields(
+            third_party_item_id = third_party_item.id.to_string(),
+            third_party_item_source_id = third_party_item.source_id
+        ),
+        err
+    )]
+    async fn delete_task<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        third_party_item: &ThirdPartyItem,
+        user_id: UserId,
+    ) -> Result<(), UniversalInboxError> {
+        let (access_token, _) = self
+            .integration_connection_service
+            .read()
+            .await
+            .find_access_token(executor, IntegrationProviderKind::Linear, user_id)
+            .await?
+            .ok_or_else(|| {
+                anyhow!("Cannot delete task from a Linear notification without an access token")
+            })?;
+
+        let ThirdPartyItemData::LinearIssue(linear_issue) = &third_party_item.data else {
+            return Err(UniversalInboxError::Unexpected(anyhow!(
+                "Cannot delete a task without a Linear issue data"
+            )));
+        };
+
+        let Some(state_id) = linear_issue.get_state_id_for_task_status(TaskStatus::Deleted) else {
+            return Err(UniversalInboxError::Unexpected(anyhow!(
+                "Cannot delete a task without a Linear state ID for 'Deleted' status"
+            )));
+        };
+
+        self.update_issue_state(
+            &access_token,
+            third_party_item.source_id.to_string(),
+            state_id.to_string(),
+        )
+        .await
+    }
+
+    #[allow(clippy::blocks_in_conditions)]
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, executor, third_party_item),
+        fields(
+            third_party_item_id = third_party_item.id.to_string(),
+            third_party_item_source_id = third_party_item.source_id
+        ),
+        err
+    )]
+    async fn complete_task<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        third_party_item: &ThirdPartyItem,
+        user_id: UserId,
+    ) -> Result<(), UniversalInboxError> {
+        let (access_token, _) = self
+            .integration_connection_service
+            .read()
+            .await
+            .find_access_token(executor, IntegrationProviderKind::Linear, user_id)
+            .await?
+            .ok_or_else(|| {
+                anyhow!("Cannot complete task from a Linear notification without an access token")
+            })?;
+
+        let ThirdPartyItemData::LinearIssue(linear_issue) = &third_party_item.data else {
+            return Err(UniversalInboxError::Unexpected(anyhow!(
+                "Cannot complete a task without a Linear issue data"
+            )));
+        };
+
+        let Some(state_id) = linear_issue.get_state_id_for_task_status(TaskStatus::Done) else {
+            return Err(UniversalInboxError::Unexpected(anyhow!(
+                "Cannot complete a task without a Linear state ID for 'Done' status"
+            )));
+        };
+
+        self.update_issue_state(
+            &access_token,
+            third_party_item.source_id.to_string(),
+            state_id.to_string(),
+        )
+        .await
+    }
+
+    #[allow(clippy::blocks_in_conditions)]
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, executor, third_party_item),
+        fields(
+            third_party_item_id = third_party_item.id.to_string(),
+            third_party_item_source_id = third_party_item.source_id
+        ),
+        err
+    )]
+    async fn uncomplete_task<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        third_party_item: &ThirdPartyItem,
+        user_id: UserId,
+    ) -> Result<(), UniversalInboxError> {
+        let (access_token, _) = self
+            .integration_connection_service
+            .read()
+            .await
+            .find_access_token(executor, IntegrationProviderKind::Linear, user_id)
+            .await?
+            .ok_or_else(|| {
+                anyhow!("Cannot uncomplete task from a Linear notification without an access token")
+            })?;
+
+        let ThirdPartyItemData::LinearIssue(linear_issue) = &third_party_item.data else {
+            return Err(UniversalInboxError::Unexpected(anyhow!(
+                "Cannot uncomplete a task without a Linear issue data"
+            )));
+        };
+
+        let Some(state_id) = linear_issue.get_state_id_for_task_status(TaskStatus::Active) else {
+            return Err(UniversalInboxError::Unexpected(anyhow!(
+                "Cannot uncomplete a task without a Linear state ID for 'Active' status"
+            )));
+        };
+
+        self.update_issue_state(
+            &access_token,
+            third_party_item.source_id.to_string(),
+            state_id.to_string(),
+        )
+        .await
+    }
+
+    #[allow(clippy::blocks_in_conditions)]
+    #[tracing::instrument(level = "debug", skip(self, _executor, _id, _patch, _user_id), err)]
+    async fn update_task<'a>(
+        &self,
+        _executor: &mut Transaction<'a, Postgres>,
+        _id: &str,
+        _patch: &TaskPatch,
+        _user_id: UserId,
+    ) -> Result<(), UniversalInboxError> {
+        // Nothing to do here for now
+        Ok(())
     }
 }

@@ -109,7 +109,26 @@
               "name": "In progress",
               "color": "#FABD00",
               "description": "This issue is being actively worked on",
-              "type": "started"
+              "type": "started",
+              "id": "6F2231C6-8525-4FB7-A2B1-AC470FDF709D",
+              "team": {
+                "states": {
+                  "nodes": [
+                    {
+                      "type": "unstarted",
+                      "id": "DE8D2E6E-5613-4DEE-9221-60083E1C273C"
+                    },
+                    {
+                      "type": "completed",
+                      "id": "C66F6CD6-F8F5-4378-A1D5-22247F537CFC"
+                    },
+                    {
+                      "type": "canceled",
+                      "id": "5A83DD71-D640-45E4-8B76-2457CEB307B4"
+                    }
+                  ]
+                }
+              }
             },
             "labels": {
               "nodes": [
@@ -229,7 +248,26 @@
               "name": "In triage",
               "color": "#FABD00",
               "description": null,
-              "type": "triage"
+              "type": "triage",
+              "id": "702C66A4-F67C-4B8F-A778-51E14C6C31C8",
+              "team": {
+                "states": {
+                  "nodes": [
+                    {
+                      "type": "unstarted",
+                      "id": "DE8D2E6E-5613-4DEE-9221-60083E1C273C"
+                    },
+                    {
+                      "type": "completed",
+                      "id": "C66F6CD6-F8F5-4378-A1D5-22247F537CFC"
+                    },
+                    {
+                      "type": "canceled",
+                      "id": "5A83DD71-D640-45E4-8B76-2457CEB307B4"
+                    }
+                  ]
+                }
+              }
             },
             "labels": {
               "nodes": []
@@ -323,7 +361,26 @@
               "name": "In triage",
               "color": "#FABD00",
               "description": null,
-              "type": "triage"
+              "type": "triage",
+              "id": "702C66A4-F67C-4B8F-A778-51E14C6C31C8",
+              "team": {
+                "states": {
+                  "nodes": [
+                    {
+                      "type": "unstarted",
+                      "id": "DE8D2E6E-5613-4DEE-9221-60083E1C273C"
+                    },
+                    {
+                      "type": "completed",
+                      "id": "C66F6CD6-F8F5-4378-A1D5-22247F537CFC"
+                    },
+                    {
+                      "type": "canceled",
+                      "id": "5A83DD71-D640-45E4-8B76-2457CEB307B4"
+                    }
+                  ]
+                }
+              }
             },
             "labels": {
               "nodes": []

@@ -2,7 +2,7 @@ use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use sqlx::{postgres::PgRow, types::Json, FromRow, Postgres, QueryBuilder, Row, Transaction};
-use tracing::debug;
+use tracing::{debug, error};
 use uuid::Uuid;
 
 use universal_inbox::{
@@ -665,9 +665,15 @@ impl TaskRepository for Repository {
                 .build()
                 .execute(&mut **executor)
                 .await
-                .map_err(|err| UniversalInboxError::DatabaseError {
-                    source: err,
-                    message: format!("Failed to update task {} from storage", existing_task.id),
+                .map_err(|err| {
+                    error!(
+                        "Failed to update task {} from storage: {:?}",
+                        existing_task.id, err
+                    );
+                    UniversalInboxError::DatabaseError {
+                        source: err,
+                        message: format!("Failed to update task {} from storage", existing_task.id),
+                    }
                 })?;
 
             return Ok(UpsertStatus::Updated {

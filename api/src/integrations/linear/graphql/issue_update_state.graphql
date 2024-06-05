@@ -1,0 +1,6 @@
+mutation IssueUpdateState($id: String!, $state_id: String!) {
+  issueUpdate(
+    id: $id,
+    input: { stateId: $state_id }
+  ) { success }
+}

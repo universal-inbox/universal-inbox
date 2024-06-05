@@ -2,7 +2,7 @@
 
 use dioxus::prelude::*;
 
-use universal_inbox::notification::integrations::linear::{
+use universal_inbox::third_party::integrations::linear::{
     LinearIssue, LinearProject, LinearProjectState, LinearWorkflowStateType,
 };
 

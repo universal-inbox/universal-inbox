@@ -20,7 +20,7 @@ use universal_inbox_api::{
     jobs::slack::SlackPushEventCallbackJob,
     observability::{get_subscriber, init_subscriber},
     repository::Repository,
-    universal_inbox::user::service::UserService,
+    universal_inbox::{task::service::TaskService, user::service::UserService},
 };
 
 use crate::helpers::mailer::MailerStub;
@@ -40,6 +40,7 @@ pub struct TestedApp {
     pub api_address: String,
     pub repository: Arc<Repository>,
     pub user_service: Arc<RwLock<UserService>>,
+    pub task_service: Arc<RwLock<TaskService>>,
     pub github_mock_server: MockServer,
     pub linear_mock_server: MockServer,
     pub google_mail_mock_server: MockServer,
@@ -220,7 +221,7 @@ pub async fn tested_app(
         Some(1),
         redis_storage.clone(),
         notification_service,
-        task_service,
+        task_service.clone(),
         integration_connection_service,
     )
     .await;
@@ -234,6 +235,7 @@ pub async fn tested_app(
         api_address,
         repository,
         user_service,
+        task_service,
         github_mock_server,
         linear_mock_server,
         google_mail_mock_server,
@@ -334,7 +336,7 @@ pub async fn tested_app_with_local_auth(
         Some(1),
         redis_storage.clone(),
         notification_service,
-        task_service,
+        task_service.clone(),
         integration_connection_service,
     )
     .await;
@@ -348,6 +350,7 @@ pub async fn tested_app_with_local_auth(
         api_address,
         repository,
         user_service,
+        task_service,
         github_mock_server,
         linear_mock_server,
         google_mail_mock_server,

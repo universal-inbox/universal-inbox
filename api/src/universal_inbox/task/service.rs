@@ -28,6 +28,7 @@ use universal_inbox::{
 
 use crate::{
     integrations::{
+        linear::LinearService,
         slack::SlackService,
         task::{ThirdPartyTaskService, ThirdPartyTaskSourceService},
         third_party::ThirdPartyItemSourceService,
@@ -44,8 +45,9 @@ use crate::{
 pub struct TaskService {
     repository: Arc<Repository>,
     todoist_service: Arc<TodoistService>,
+    pub linear_service: Arc<LinearService>,
     notification_service: Weak<RwLock<NotificationService>>,
-    pub(super) slack_service: Arc<SlackService>,
+    pub slack_service: Arc<SlackService>,
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     user_service: Arc<RwLock<UserService>>,
     pub(super) third_party_item_service: Weak<RwLock<ThirdPartyItemService>>,
@@ -57,6 +59,7 @@ impl TaskService {
     pub fn new(
         repository: Arc<Repository>,
         todoist_service: Arc<TodoistService>,
+        linear_service: Arc<LinearService>,
         notification_service: Weak<RwLock<NotificationService>>,
         slack_service: Arc<SlackService>,
         integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
@@ -67,6 +70,7 @@ impl TaskService {
         TaskService {
             repository,
             todoist_service,
+            linear_service,
             notification_service,
             slack_service,
             integration_connection_service,
@@ -102,16 +106,31 @@ impl TaskService {
     {
         match patch.status {
             Some(TaskStatus::Deleted) => {
+                debug!(
+                    "Deleting {} task {}",
+                    third_party_item.get_third_party_item_source_kind(),
+                    third_party_item.source_id
+                );
                 third_party_task_service
                     .delete_task(executor, third_party_item, user_id)
                     .await?;
             }
             Some(TaskStatus::Done) => {
+                debug!(
+                    "Completing {} task {}",
+                    third_party_item.get_third_party_item_source_kind(),
+                    third_party_item.source_id
+                );
                 third_party_task_service
                     .complete_task(executor, third_party_item, user_id)
                     .await?;
             }
             Some(TaskStatus::Active) => {
+                debug!(
+                    "Uncompleting {} task {}",
+                    third_party_item.get_third_party_item_source_kind(),
+                    third_party_item.source_id
+                );
                 third_party_task_service
                     .uncomplete_task(executor, third_party_item, user_id)
                     .await?;
@@ -119,6 +138,11 @@ impl TaskService {
             _ => (),
         }
 
+        debug!(
+            "Updating {} task {}",
+            third_party_item.get_third_party_item_source_kind(),
+            third_party_item.source_id
+        );
         third_party_task_service
             .update_task(executor, &third_party_item.source_id, patch, user_id)
             .await?;
@@ -140,7 +164,7 @@ impl TaskService {
         &self,
         executor: &mut Transaction<'a, Postgres>,
         synced_third_party_item: &ThirdPartyItem,
-        upsert_task: &UpsertStatus<Box<Task>>,
+        upsert_task: &mut UpsertStatus<Box<Task>>,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
         match upsert_task {
@@ -235,6 +259,16 @@ impl TaskService {
                         self.apply_updated_task_side_effect(
                             executor,
                             self.slack_service.clone(),
+                            &task_patch,
+                            third_party_item_to_be_updated,
+                            user_id,
+                        )
+                        .await?
+                    }
+                    ThirdPartyItemSourceKind::Linear => {
+                        self.apply_updated_task_side_effect(
+                            executor,
+                            self.linear_service.clone(),
                             &task_patch,
                             third_party_item_to_be_updated,
                             user_id,
@@ -483,7 +517,7 @@ impl TaskService {
             }
         }
         info!(
-            "Successfully synced {integration_provider_kind} {} tasks for user {user_id}",
+            "Successfully synced {} {integration_provider_kind} tasks for user {user_id}",
             tasks_creation_result.len()
         );
 
@@ -511,7 +545,7 @@ impl TaskService {
         U: ThirdPartyTaskService<T> + ThirdPartyItemSource + TaskSource + Send + Sync,
         <T as TryFrom<ThirdPartyItem>>::Error: Send + Sync,
     {
-        let upsert_task = self
+        let mut upsert_task = self
             .save_third_party_item_as_task(
                 executor,
                 third_party_task_service,
@@ -522,8 +556,13 @@ impl TaskService {
             .await?;
 
         if upsert_task.modified_value_ref().is_some() {
-            self.apply_synced_task_side_effect(executor, third_party_item, &upsert_task, user_id)
-                .await?;
+            self.apply_synced_task_side_effect(
+                executor,
+                third_party_item,
+                &mut upsert_task,
+                user_id,
+            )
+            .await?;
         }
 
         Ok(upsert_task)
@@ -697,6 +736,10 @@ impl TaskService {
                 self.sync_third_party_tasks(executor, self.todoist_service.clone(), user_id)
                     .await
             }
+            TaskSyncSourceKind::Linear => {
+                self.sync_third_party_tasks(executor, self.linear_service.clone(), user_id)
+                    .await
+            }
         }
     }
 
@@ -743,7 +786,13 @@ impl TaskService {
         let sync_result_from_todoist = self
             .sync_tasks_with_transaction(TaskSyncSourceKind::Todoist, user_id)
             .await?;
-        Ok(sync_result_from_todoist)
+        let sync_result_from_linear = self
+            .sync_tasks_with_transaction(TaskSyncSourceKind::Linear, user_id)
+            .await?;
+        Ok(sync_result_from_todoist
+            .into_iter()
+            .chain(sync_result_from_linear.into_iter())
+            .collect())
     }
 
     #[tracing::instrument(level = "debug", skip(self), err)]

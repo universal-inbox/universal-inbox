@@ -56,6 +56,21 @@ query NotificationsQuery {
             color
             description
             type
+            id
+            team {
+              states(filter: {
+                  or: [
+                    {type: {eq: "unstarted"}},
+                    {type: {eq: "completed"}}
+                    {type: {eq: "canceled"}}
+                  ]
+                }) {
+                nodes {
+                  type
+                  id
+                }
+              }
+            }
           }
           labels {
             nodes {
@@ -90,7 +105,7 @@ query NotificationsQuery {
               url
             }
             url
-            children(last: 40) {
+            children(last: 20) {
               nodes {
                 body
                 updatedAt

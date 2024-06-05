@@ -2,9 +2,9 @@
 
 use dioxus::prelude::*;
 
-use universal_inbox::notification::{
-    integrations::linear::{LinearIssue, LinearNotification, LinearProject},
-    NotificationWithTask,
+use universal_inbox::{
+    notification::{integrations::linear::LinearNotification, NotificationWithTask},
+    third_party::integrations::linear::{LinearIssue, LinearProject},
 };
 
 use crate::components::{

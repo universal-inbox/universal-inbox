@@ -7,14 +7,17 @@ use uuid::Uuid;
 
 use universal_inbox::{
     notification::{
-        integrations::linear::{LinearNotification, LinearProject},
-        Notification, NotificationMetadata, NotificationStatus,
+        integrations::linear::LinearNotification, Notification, NotificationMetadata,
+        NotificationStatus,
     },
+    third_party::integrations::linear::LinearProject,
     user::UserId,
     HasHtmlUrl,
 };
 
 use universal_inbox_api::integrations::linear::graphql::{
+    assigned_issues_query,
+    issue_update_state::{self, IssueUpdateStateIssueUpdate},
     issue_update_subscribers::{self, IssueUpdateSubscribersIssueUpdate},
     notification_archive::{self, NotificationArchiveNotificationArchive},
     notification_subscribers_query::{
@@ -28,8 +31,9 @@ use universal_inbox_api::integrations::linear::graphql::{
     notification_update_snoozed_until_at::{
         self, NotificationUpdateSnoozedUntilAtNotificationUpdate,
     },
-    notifications_query, IssueUpdateSubscribers, NotificationArchive, NotificationSubscribersQuery,
-    NotificationUpdateSnoozedUntilAt, NotificationsQuery,
+    notifications_query, AssignedIssuesQuery, IssueUpdateState, IssueUpdateSubscribers,
+    NotificationArchive, NotificationSubscribersQuery, NotificationUpdateSnoozedUntilAt,
+    NotificationsQuery,
 };
 
 use crate::helpers::load_json_fixture_file;
@@ -206,6 +210,54 @@ pub fn mock_linear_update_notification_snoozed_until_at_query(
     })
 }
 
+pub fn mock_linear_assigned_issues_query<'a>(
+    linear_mock_server: &'a MockServer,
+    result: &'a Response<assigned_issues_query::ResponseData>,
+) -> Mock<'a> {
+    let expected_request_body =
+        AssignedIssuesQuery::build_query(assigned_issues_query::Variables {});
+    linear_mock_server.mock(|when, then| {
+        when.method(POST)
+            .path("/")
+            .json_body_obj(&expected_request_body)
+            .header("authorization", "Bearer linear_test_access_token");
+        then.status(200)
+            .header("content-type", "application/json")
+            .json_body_obj(result);
+    })
+}
+
+pub fn mock_linear_update_issue_state_query(
+    linear_mock_server: &MockServer,
+    issue_id: Uuid,
+    state_id: Uuid,
+    successful_response: bool,
+    errors: Option<Vec<Error>>,
+) -> Mock {
+    let expected_update_request_body =
+        IssueUpdateState::build_query(issue_update_state::Variables {
+            id: issue_id.to_string(),
+            state_id: state_id.to_string(),
+        });
+    linear_mock_server.mock(|when, then| {
+        when.method(POST)
+            .path("/")
+            .json_body_obj(&expected_update_request_body)
+            .header("authorization", "Bearer linear_test_access_token");
+        then.status(200)
+            .header("content-type", "application/json")
+            .json_body_obj(&Response {
+                data: Some(issue_update_state::ResponseData {
+                    issue_update: IssueUpdateStateIssueUpdate {
+                        success: successful_response,
+                    },
+                }),
+                errors: Some(errors.unwrap_or_default()),
+                extensions: None,
+            });
+    })
+}
+
 pub fn assert_sync_notifications(
     notifications: &[Notification],
     sync_linear_notifications: &[LinearNotification],
@@ -309,4 +361,9 @@ pub fn assert_sync_notifications(
 #[fixture]
 pub fn sync_linear_notifications_response() -> Response<notifications_query::ResponseData> {
     load_json_fixture_file("sync_linear_notifications.json")
+}
+
+#[fixture]
+pub fn sync_linear_tasks_response() -> Response<assigned_issues_query::ResponseData> {
+    load_json_fixture_file("sync_linear_tasks.json")
 }
