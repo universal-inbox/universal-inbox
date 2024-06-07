@@ -86,6 +86,7 @@ impl SlackService {
         slack_api_token: &SlackApiToken,
         channel: &SlackChannelId,
         message: &SlackTs,
+        thread_message: &Option<SlackTs>,
     ) -> Result<SlackHistoryMessage, UniversalInboxError> {
         let result = cached_fetch_message(
             user_id,
@@ -93,6 +94,7 @@ impl SlackService {
             slack_api_token,
             channel,
             message,
+            thread_message,
         )
         .await?;
         if result.was_cached {
@@ -359,7 +361,7 @@ impl SlackService {
             SlackStarsItem::Message(SlackStarsItemMessage {
                 message:
                     SlackHistoryMessage {
-                        origin: SlackMessageOrigin { ts, .. },
+                        origin: SlackMessageOrigin { ts, thread_ts, .. },
                         sender: SlackMessageSender { user, bot_id, .. },
                         ..
                     },
@@ -383,7 +385,7 @@ impl SlackService {
                 };
 
                 let message = self
-                    .fetch_message(user_id, &slack_api_token, channel, ts)
+                    .fetch_message(user_id, &slack_api_token, channel, ts, thread_ts)
                     .await?;
                 let channel = self.fetch_channel(&slack_api_token, channel).await?;
                 let team = self
@@ -525,6 +527,7 @@ async fn cached_fetch_message(
     slack_api_token: &SlackApiToken,
     channel: &SlackChannelId,
     message: &SlackTs,
+    thread_message: &Option<SlackTs>,
 ) -> Result<Return<SlackHistoryMessage>, UniversalInboxError> {
     let client = SlackClient::new(
         SlackClientHyperHttpsConnector::new()
@@ -533,25 +536,42 @@ async fn cached_fetch_message(
     );
     let session = client.open_session(slack_api_token);
 
-    let response = session
-        .conversations_history(
-            &SlackApiConversationsHistoryRequest::new()
-                .with_channel(channel.clone())
-                .with_latest(message.clone())
-                .with_limit(1)
-                .with_inclusive(true),
-        )
-        .await
-        .with_context(|| {
-            UniversalInboxError::Unexpected(anyhow!(
-                "Failed to fetch Slack message {message} in channel {channel}"
-            ))
-        })?;
+    let messages = if let Some(thread_message) = thread_message {
+        session
+            .conversations_replies(
+                &SlackApiConversationsRepliesRequest::new(channel.clone(), thread_message.clone())
+                    .with_latest(message.clone())
+                    .with_limit(1)
+                    .with_inclusive(true),
+            )
+            .await
+            .with_context(|| {
+                UniversalInboxError::Unexpected(anyhow!(
+                    "Failed to fetch Slack message {message} in channel {channel}"
+                ))
+            })?
+            .messages
+    } else {
+        session
+            .conversations_history(
+                &SlackApiConversationsHistoryRequest::new()
+                    .with_channel(channel.clone())
+                    .with_latest(message.clone())
+                    .with_limit(1)
+                    .with_inclusive(true),
+            )
+            .await
+            .with_context(|| {
+                UniversalInboxError::Unexpected(anyhow!(
+                    "Failed to fetch Slack message {message} in channel {channel}"
+                ))
+            })?
+            .messages
+    };
 
     Ok(Return::new(
-        response
-            .messages
-            .first()
+        messages
+            .last()
             .ok_or_else(|| {
                 UniversalInboxError::Unexpected(anyhow!(
                     "No messages found for Slack message {message} in channel {channel}"
@@ -878,7 +898,7 @@ impl NotificationSourceService for SlackService {
                 SlackStarsItem::Message(SlackStarsItemMessage {
                     message:
                         SlackHistoryMessage {
-                            origin: SlackMessageOrigin { ts, .. },
+                            origin: SlackMessageOrigin { ts, thread_ts, .. },
                             sender: SlackMessageSender { user, bot_id, .. },
                             ..
                         },
@@ -904,7 +924,7 @@ impl NotificationSourceService for SlackService {
                     };
 
                     let message = self
-                        .fetch_message(user_id, &slack_api_token, channel, ts)
+                        .fetch_message(user_id, &slack_api_token, channel, ts, thread_ts)
                         .await?;
                     let channel = self.fetch_channel(&slack_api_token, channel).await?;
                     let team = self

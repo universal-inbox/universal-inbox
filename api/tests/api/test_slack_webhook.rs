@@ -2,9 +2,10 @@ use chrono::{TimeZone, Utc};
 use rstest::*;
 use slack_morphism::prelude::{
     SlackAppHomeOpenedEvent, SlackAppRateLimitedEvent, SlackEventCallbackBody, SlackPushEvent,
-    SlackPushEventCallback, SlackUrlVerificationEvent,
+    SlackPushEventCallback, SlackStarAddedEvent, SlackStarsItem, SlackUrlVerificationEvent,
 };
 
+use tracing::debug;
 use universal_inbox::{
     integration_connection::{
         config::IntegrationConnectionConfig,
@@ -37,9 +38,9 @@ use crate::helpers::{
         list_notifications, list_notifications_with_tasks,
         slack::{
             mock_slack_fetch_bot, mock_slack_fetch_channel, mock_slack_fetch_message,
-            mock_slack_fetch_team, mock_slack_fetch_user, mock_slack_get_chat_permalink,
-            slack_push_bot_star_added_event, slack_push_star_added_event,
-            slack_push_star_removed_event,
+            mock_slack_fetch_reply, mock_slack_fetch_team, mock_slack_fetch_user,
+            mock_slack_get_chat_permalink, slack_push_bot_star_added_event,
+            slack_push_star_added_event, slack_push_star_removed_event,
         },
     },
     rest::create_resource_response,
@@ -465,13 +466,16 @@ async fn test_receive_bot_star_added_event_as_notification(
 }
 
 #[rstest]
+#[case::without_thread(false)]
+#[case::with_message_in_thread(true)]
 #[tokio::test]
 async fn test_receive_star_removed_event_as_notification(
     settings: Settings,
     #[future] authenticated_app: AuthenticatedApp,
-    slack_push_star_added_event: Box<SlackPushEvent>,
+    mut slack_push_star_added_event: Box<SlackPushEvent>,
     slack_push_star_removed_event: Box<SlackPushEvent>,
     nango_slack_connection: Box<NangoConnection>,
+    #[case] with_message_in_thread: bool,
 ) {
     let app = authenticated_app.await;
     create_and_mock_integration_connection(
@@ -496,12 +500,39 @@ async fn test_receive_star_removed_event_as_notification(
         "U05YYY", // The message's creator, not the user who starred the message
         "slack_fetch_user_response.json",
     );
-    let slack_fetch_message_mock = mock_slack_fetch_message(
-        &app.app.slack_mock_server,
-        "C05XXX",
-        "1707686216.825719",
-        "slack_fetch_message_response.json",
-    );
+    let slack_fetch_message_mock = if with_message_in_thread {
+        debug!(
+            "Fetching message in thread: {:#?}",
+            slack_push_star_added_event
+        );
+        let SlackPushEvent::EventCallback(SlackPushEventCallback {
+            event:
+                SlackEventCallbackBody::StarAdded(SlackStarAddedEvent {
+                    item: SlackStarsItem::Message(ref mut message),
+                    ..
+                }),
+            ..
+        }) = *slack_push_star_added_event
+        else {
+            unreachable!("Unexpected event type");
+        };
+        let thread_ts = "1707686216.111111";
+        message.message.origin.thread_ts = Some(thread_ts.into());
+        mock_slack_fetch_reply(
+            &app.app.slack_mock_server,
+            "C05XXX",
+            thread_ts,
+            "1707686216.825719",
+            "slack_fetch_message_response.json",
+        )
+    } else {
+        mock_slack_fetch_message(
+            &app.app.slack_mock_server,
+            "C05XXX",
+            "1707686216.825719",
+            "slack_fetch_message_response.json",
+        )
+    };
     let slack_fetch_channel_mock = mock_slack_fetch_channel(
         &app.app.slack_mock_server,
         "C05XXX",

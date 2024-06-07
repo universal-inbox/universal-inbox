@@ -104,6 +104,28 @@ pub fn mock_slack_fetch_message<'a>(
     })
 }
 
+pub fn mock_slack_fetch_reply<'a>(
+    slack_mock_server: &'a MockServer,
+    channel_id: &'a str,
+    thread_id: &'a str,
+    message_id: &'a str,
+    fixture_response_file: &'a str,
+) -> Mock<'a> {
+    slack_mock_server.mock(|when, then| {
+        when.method(GET)
+            .path("/conversations.replies")
+            .header("authorization", "Bearer slack_test_user_access_token")
+            .query_param("channel", channel_id)
+            .query_param("ts", thread_id)
+            .query_param("latest", message_id)
+            .query_param("limit", "1")
+            .query_param("inclusive", "true");
+        then.status(200)
+            .header("content-type", "application/json")
+            .body_from_file(fixture_path(fixture_response_file));
+    })
+}
+
 pub fn mock_slack_fetch_channel<'a>(
     slack_mock_server: &'a MockServer,
     channel_id: &'a str,
