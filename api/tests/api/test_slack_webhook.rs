@@ -1,11 +1,11 @@
 use chrono::{TimeZone, Utc};
+use pretty_assertions::assert_eq;
 use rstest::*;
 use slack_morphism::prelude::{
     SlackAppHomeOpenedEvent, SlackAppRateLimitedEvent, SlackEventCallbackBody, SlackPushEvent,
     SlackPushEventCallback, SlackStarAddedEvent, SlackStarsItem, SlackUrlVerificationEvent,
 };
 
-use tracing::debug;
 use universal_inbox::{
     integration_connection::{
         config::IntegrationConnectionConfig,
@@ -501,10 +501,6 @@ async fn test_receive_star_removed_event_as_notification(
         "slack_fetch_user_response.json",
     );
     let slack_fetch_message_mock = if with_message_in_thread {
-        debug!(
-            "Fetching message in thread: {:#?}",
-            slack_push_star_added_event
-        );
         let SlackPushEvent::EventCallback(SlackPushEventCallback {
             event:
                 SlackEventCallbackBody::StarAdded(SlackStarAddedEvent {
@@ -704,9 +700,9 @@ async fn test_receive_star_added_event_as_task(
     let todoist_item_add_mock = mock_todoist_item_add_service(
         &app.app.todoist_mock_server,
         &todoist_item.id,
-        "🔴  *Test title* 🔴...".to_string(),
+        "[🔴  *Test title* 🔴...](https://slack.com/archives/C05XXX/p1234567890)".to_string(),
         Some(
-            "- [🔴  *Test title* 🔴...](https://slack.com/archives/C05XXX/p1234567890)".to_string(),
+            "🔴  *Test title* 🔴\n\n- list 1\n- list 2\n1. number 1\n1. number 2\n> quote\n```$ echo Hello world```\n_Some_ `formatted` ~text~.\n\nHere is a [link](https://www.universal-inbox.com)".to_string(),
         ),
         "1111".to_string(), // ie. "Inbox"
         None,
@@ -853,9 +849,9 @@ async fn test_receive_star_removed_and_added_event_as_task(
     let todoist_item_add_mock = mock_todoist_item_add_service(
         &app.app.todoist_mock_server,
         &todoist_item.id,
-        "🔴  *Test title* 🔴...".to_string(),
+        "[🔴  *Test title* 🔴...](https://slack.com/archives/C05XXX/p1234567890)".to_string(),
         Some(
-            "- [🔴  *Test title* 🔴...](https://slack.com/archives/C05XXX/p1234567890)".to_string(),
+            "🔴  *Test title* 🔴\n\n- list 1\n- list 2\n1. number 1\n1. number 2\n> quote\n```$ echo Hello world```\n_Some_ `formatted` ~text~.\n\nHere is a [link](https://www.universal-inbox.com)".to_string(),
         ),
         "1111".to_string(), // ie. "Inbox"
         None,

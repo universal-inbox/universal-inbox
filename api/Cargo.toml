@@ -74,6 +74,7 @@ secrecy = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true, features = ["unbounded_depth"] }
 serde_with = { workspace = true }
+slack-blocks-render = { workspace = true }
 slack-morphism = { workspace = true, features = ["hyper"] }
 sqlx = { version = "0.7.0", default-features = false, features = [
   "runtime-tokio-rustls",

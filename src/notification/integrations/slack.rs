@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
+use slack_blocks_render::render_blocks_as_markdown;
 use slack_morphism::prelude::*;
 use url::Url;
 use uuid::Uuid;
@@ -17,7 +18,7 @@ pub trait SlackPushEventCallbackExt {
 
 impl SlackPushEventCallbackExt for SlackPushEventCallback {
     fn into_notification(self, user_id: UserId) -> Result<Notification> {
-        let (updated_at, source_id, title, status) = match &self {
+        let (updated_at, source_id, title, blocks, status) = match &self {
             SlackPushEventCallback {
                 event_time,
                 event:
@@ -27,7 +28,7 @@ impl SlackPushEventCallbackExt for SlackPushEventCallback {
                                 message:
                                     SlackHistoryMessage {
                                         origin: SlackMessageOrigin { ts, .. },
-                                        content: SlackMessageContent { text, .. },
+                                        content: SlackMessageContent { text, blocks, .. },
                                         ..
                                     },
                                 ..
@@ -39,6 +40,7 @@ impl SlackPushEventCallbackExt for SlackPushEventCallback {
                 event_time.0,
                 ts.to_string(),
                 (*text).clone().unwrap_or("Starred message".to_string()),
+                blocks,
                 NotificationStatus::Unread,
             ),
             SlackPushEventCallback {
@@ -50,7 +52,7 @@ impl SlackPushEventCallbackExt for SlackPushEventCallback {
                                 message:
                                     SlackHistoryMessage {
                                         origin: SlackMessageOrigin { ts, .. },
-                                        content: SlackMessageContent { text, .. },
+                                        content: SlackMessageContent { text, blocks, .. },
                                         ..
                                     },
                                 ..
@@ -62,12 +64,17 @@ impl SlackPushEventCallbackExt for SlackPushEventCallback {
                 event_time.0,
                 ts.to_string(),
                 (*text).clone().unwrap_or("Starred message".to_string()),
+                blocks,
                 NotificationStatus::Deleted,
             ),
             _ => return Err(anyhow!("Unsupported Slack event {self:?}")),
         };
-        let title_with_emojis = replace_emoji_code_in_string_with_emoji(&title);
-        let title = truncate_with_ellipse(&title_with_emojis, 50, "...");
+        let content_with_emojis = if let Some(blocks) = &blocks {
+            render_blocks_as_markdown(blocks.clone())
+        } else {
+            replace_emoji_code_in_string_with_emoji(&title)
+        };
+        let title = truncate_with_ellipse(&content_with_emojis, 50, "...", true);
 
         Ok(Notification {
             id: Uuid::new_v4().into(),
