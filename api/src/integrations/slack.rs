@@ -32,7 +32,7 @@ use universal_inbox::{
         },
     },
     user::UserId,
-    utils::{emoji::replace_emoji_code_in_string_with_emoji, truncate::truncate_with_ellipse},
+    utils::truncate::truncate_with_ellipse,
     HasHtmlUrl,
 };
 
@@ -1050,10 +1050,13 @@ impl ThirdPartyTaskService<SlackStar> for SlackService {
         };
         let created_at = source.created_at;
         let updated_at = source.created_at;
-        let title_with_emojis =
-            replace_emoji_code_in_string_with_emoji(&source.starred_item.title());
-        let title = truncate_with_ellipse(&title_with_emojis, 50, "...");
-        let body = format!("- [{}]({})", title, source.get_html_url());
+        let content_with_emojis = source.starred_item.content();
+        let title = format!(
+            "[{}]({})",
+            truncate_with_ellipse(&content_with_emojis, 50, "...", true),
+            source.get_html_url()
+        );
+        let body = truncate_with_ellipse(&content_with_emojis, 16300, "...", false);
         let completed_at = if status == TaskStatus::Done {
             Some(Utc::now())
         } else {

@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use slack_blocks_render::render_blocks_as_markdown;
 use slack_morphism::{
     SlackChannelId, SlackChannelInfo, SlackFileCommentId, SlackFileId, SlackHistoryMessage,
     SlackMessageOrigin, SlackTs,
@@ -15,6 +16,7 @@ use crate::{
     },
     third_party::item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemFromSource},
     user::UserId,
+    utils::emoji::replace_emoji_code_in_string_with_emoji,
     HasHtmlUrl,
 };
 
@@ -55,14 +57,22 @@ impl SlackStarredItem {
         }
     }
 
-    pub fn title(&self) -> String {
+    pub fn content(&self) -> String {
         match self {
-            SlackStarredItem::SlackMessage(message) => message
-                .message
-                .content
-                .text
-                .clone()
-                .unwrap_or("Starred message".to_string()),
+            SlackStarredItem::SlackMessage(message) => {
+                if let Some(blocks) = &message.message.content.blocks {
+                    render_blocks_as_markdown(blocks.clone())
+                } else {
+                    replace_emoji_code_in_string_with_emoji(
+                        &message
+                            .message
+                            .content
+                            .text
+                            .clone()
+                            .unwrap_or("Starred message".to_string()),
+                    )
+                }
+            }
             SlackStarredItem::SlackFile(file) => file
                 .title
                 .clone()

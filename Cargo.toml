@@ -34,6 +34,7 @@ serde_json = { workspace = true, features = ["preserve_order"] }
 serde_repr = "0.1.0"
 serde_urlencoded = { workspace = true }
 serde_with = { workspace = true }
+slack-blocks-render = { workspace = true }
 slack-morphism = { workspace = true }
 typed_id = { version = "0.1.0", features = ["serde"] }
 unicode-segmentation = "1.11.0"
@@ -65,7 +66,8 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 serde_urlencoded = { version = "0.7.0" }
 serde_with = { version = "2.3.0" }
-slack-morphism = { git = "https://github.com/dax/slack-morphism-rust", rev = "eaa80d54b7f50e1dc92e0d90a1b846ad6e65fc79" }
+slack-blocks-render = { version = "0.1.0" }
+slack-morphism = { version = "2.3.0" }
 thiserror = { version = "1.0" }
 url = { version = "2.5.0" }
 uuid = { version = "1.0", features = ["v4"] }

@@ -16,6 +16,7 @@
 - Add Slack "saved for later" as notifications
 - 2 way sync Slack "saved for later" and Todoist tasks
 - 2 way sync assigned Linear issues and Todoist tasks
+- Render Slack messages from Slack blocks
 
 ### Changed
 
@@ -27,6 +28,7 @@
 - Increase the number of connection to Postgres in production
 - Split the Todoist projects cache per user
 - Trace user ID in logs and traces
+- Fetch Slack message in a thread if any
 
 ## [Initial Version] - 2024-01-27
 

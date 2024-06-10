@@ -133,9 +133,9 @@ async fn test_sync_todoist_slack_task(
     let todoist_item_add_mock = mock_todoist_item_add_service(
         &app.app.todoist_mock_server,
         &todoist_item.id,
-        "🔴  *Test title* 🔴...".to_string(),
+        "[🔴  *Test title* 🔴...](https://slack.com/archives/C05XXX/p1234567890)".to_string(),
         Some(
-            "- [🔴  *Test title* 🔴...](https://slack.com/archives/C05XXX/p1234567890)".to_string(),
+            "🔴  *Test title* 🔴\n\n- list 1\n- list 2\n1. number 1\n1. number 2\n> quote\n```$ echo Hello world```\n_Some_ `formatted` ~text~.\n\nHere is a [link](https://www.universal-inbox.com)".to_string(),
         ),
         todoist_item.project_id.clone(),
         None,
