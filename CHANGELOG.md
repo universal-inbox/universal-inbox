@@ -17,6 +17,7 @@
 - 2 way sync Slack "saved for later" and Todoist tasks
 - 2 way sync assigned Linear issues and Todoist tasks
 - Render Slack messages from Slack blocks
+- Track required vs registered OAuth scopes to suggest a reconnection if needed
 
 ### Changed
 

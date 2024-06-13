@@ -44,7 +44,7 @@ impl AuthenticationTokenService {
         self.repository.begin().await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     pub async fn create_auth_token<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -87,7 +87,7 @@ impl AuthenticationTokenService {
         Ok(auth_token)
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     pub async fn fetch_auth_tokens_for_user<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,

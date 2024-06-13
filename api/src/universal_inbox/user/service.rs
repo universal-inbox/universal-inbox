@@ -64,7 +64,7 @@ impl UserService {
         self.repository.begin().await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     pub async fn get_user<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -73,7 +73,7 @@ impl UserService {
         self.repository.get_user(executor, id).await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     pub async fn get_user_by_email<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -82,7 +82,7 @@ impl UserService {
         self.repository.get_user_by_email(executor, email).await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     pub async fn fetch_all_users<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -92,7 +92,7 @@ impl UserService {
 
     /// In an OpenID Connect Authorization code flow, the API has fetched the access token and
     /// thus does not need to validate it.
-    #[tracing::instrument(level = "debug", skip(self, executor, nonce), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor, nonce))]
     pub async fn authenticate_for_auth_code_flow<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -123,7 +123,7 @@ impl UserService {
         .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, oidc_provider), err)]
+    #[tracing::instrument(level = "debug", skip(self, oidc_provider))]
     async fn verify_access_token(
         &self,
         pkce_flow_settings: &OIDCAuthorizationCodePKCEFlowSettings,
@@ -160,7 +160,7 @@ impl UserService {
 
     /// In an OpenIDConnect flow, the access token is fetched by the front-end and sent to the API
     /// This function validates the access token and creates the user if it does not exist.
-    #[tracing::instrument(level = "debug", skip(self, executor, id_token), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor, id_token))]
     pub async fn authenticate_for_auth_code_pkce_flow<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -193,7 +193,7 @@ impl UserService {
 
     /// In an OpenIDConnect flow, this function update the ID token associated with the given auth_user_id
     /// If there no user associated with the given auth_user_id, it creates a new user.
-    #[tracing::instrument(level = "debug", skip(self, executor, oidc_provider, id_token), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor, oidc_provider, id_token))]
     async fn authenticate_and_create_user_if_not_exists<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -270,7 +270,7 @@ impl UserService {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     pub async fn close_session<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -332,7 +332,7 @@ impl UserService {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn build_auth_url<'a>(
         &self,
         openid_connect_settings: &OpenIDConnectSettings,
@@ -344,7 +344,7 @@ impl UserService {
     }
 
     #[allow(clippy::type_complexity)]
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn fetch_access_token<'a>(
         &self,
         openid_connect_settings: &OpenIDConnectSettings,
@@ -390,7 +390,7 @@ impl UserService {
         .await?)
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     pub async fn register_user<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -402,7 +402,7 @@ impl UserService {
         Ok(new_user)
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor, credentials), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor, credentials))]
     pub async fn validate_credentials<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -439,7 +439,7 @@ impl UserService {
         user.ok_or_else(|| UniversalInboxError::Unauthorized(anyhow!("Unknown user")))
     }
 
-    #[tracing::instrument(level = "debug", skip(self, password), err)]
+    #[tracing::instrument(level = "debug", skip(self, password))]
     pub fn get_new_password_hash(
         &self,
         password: Secret<Password>,
@@ -469,7 +469,7 @@ impl UserService {
         .context("Failed to hash password")?)
     }
 
-    #[tracing::instrument(level = "debug", skip(expected_password_hash, password_candidate), err)]
+    #[tracing::instrument(level = "debug", skip(expected_password_hash, password_candidate))]
     fn verify_password_hash(
         expected_password_hash: Secret<PasswordHash>,
         password_candidate: Secret<Password>,
@@ -492,7 +492,7 @@ impl UserService {
             .map_err(UniversalInboxError::Unauthorized)
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     pub async fn send_verification_email<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -537,7 +537,7 @@ impl UserService {
         Ok(())
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     pub async fn verify_email<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -569,7 +569,7 @@ impl UserService {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     pub async fn send_password_reset_email<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -623,7 +623,7 @@ impl UserService {
         Ok(())
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     pub async fn reset_password<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,

@@ -3,6 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use anyhow::{anyhow, Context};
 use chrono::{TimeDelta, Utc};
 use sqlx::{Postgres, Transaction};
+use tracing::{error, info, warn};
 
 use universal_inbox::{
     integration_connection::{
@@ -21,14 +22,14 @@ use crate::{
         integration_connection::IntegrationConnectionRepository,
         notification::NotificationRepository,
     },
-    universal_inbox::{UniversalInboxError, UpdateStatus},
+    universal_inbox::{user::service::UserService, UniversalInboxError, UpdateStatus},
 };
 
-#[derive(Debug)]
 pub struct IntegrationConnectionService {
     repository: Arc<Repository>,
     nango_service: NangoService,
     nango_provider_keys: HashMap<IntegrationProviderKind, NangoProviderKey>,
+    user_service: Arc<UserService>,
 }
 
 pub const UNKNOWN_NANGO_CONNECTION_ERROR_MESSAGE: &str = "🔌 The OAuth connection is failing due to a technical issue on our end. Please try to reconnect the integration. If the issue keeps happening, please contact our support.";
@@ -38,11 +39,13 @@ impl IntegrationConnectionService {
         repository: Arc<Repository>,
         nango_service: NangoService,
         nango_provider_keys: HashMap<IntegrationProviderKind, NangoProviderKey>,
+        user_service: Arc<UserService>,
     ) -> IntegrationConnectionService {
         IntegrationConnectionService {
             repository,
             nango_service,
             nango_provider_keys,
+            user_service,
         }
     }
 
@@ -50,18 +53,19 @@ impl IntegrationConnectionService {
         self.repository.begin().await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     pub async fn fetch_all_integration_connections<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
         for_user_id: UserId,
+        status: Option<IntegrationConnectionStatus>,
     ) -> Result<Vec<IntegrationConnection>, UniversalInboxError> {
         self.repository
-            .fetch_all_integration_connections(executor, for_user_id)
+            .fetch_all_integration_connections(executor, for_user_id, status)
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     pub async fn create_integration_connection<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -78,7 +82,7 @@ impl IntegrationConnectionService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     pub async fn update_integration_connection_config<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -124,7 +128,7 @@ impl IntegrationConnectionService {
         Ok(updated_integration_connection_config)
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     pub async fn verify_integration_connection<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -166,6 +170,7 @@ impl IntegrationConnectionService {
                     integration_connection_id,
                     IntegrationConnectionStatus::Failing,
                     Some(UNKNOWN_NANGO_CONNECTION_ERROR_MESSAGE.to_string()),
+                    None,
                     for_user_id,
                 )
                 .await;
@@ -186,12 +191,13 @@ impl IntegrationConnectionService {
                 integration_connection_id,
                 IntegrationConnectionStatus::Validated,
                 None,
+                Some(nango_connection.get_registered_oauth_scopes()),
                 for_user_id,
             )
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     pub async fn disconnect_integration_connection<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -226,6 +232,7 @@ impl IntegrationConnectionService {
                     integration_connection_id,
                     IntegrationConnectionStatus::Created,
                     None,
+                    None,
                     for_user_id,
                 )
                 .await;
@@ -237,7 +244,7 @@ impl IntegrationConnectionService {
         })
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     pub async fn get_integration_connection_to_sync<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -265,7 +272,7 @@ impl IntegrationConnectionService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     pub async fn find_access_token<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -319,6 +326,7 @@ impl IntegrationConnectionService {
                     integration_connection.id,
                     IntegrationConnectionStatus::Failing,
                     Some(UNKNOWN_NANGO_CONNECTION_ERROR_MESSAGE.to_string()),
+                    None,
                     for_user_id,
                 )
                 .await?;
@@ -332,7 +340,7 @@ impl IntegrationConnectionService {
         Ok(None)
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     pub async fn update_integration_connection_context<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -348,7 +356,7 @@ impl IntegrationConnectionService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     pub async fn get_integration_connection_per_provider_user_id<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -364,7 +372,7 @@ impl IntegrationConnectionService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     pub async fn start_sync_status<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -382,7 +390,7 @@ impl IntegrationConnectionService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     pub async fn error_sync_status<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -401,7 +409,7 @@ impl IntegrationConnectionService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     pub async fn reset_error_sync_status<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -417,5 +425,127 @@ impl IntegrationConnectionService {
                 false,
             )
             .await
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    pub async fn sync_oauth_scopes_for_all_users<'a>(
+        &self,
+        provider_kind: Option<IntegrationProviderKind>,
+    ) -> Result<(), UniversalInboxError> {
+        let service = self.user_service.clone();
+        let mut transaction = service
+            .begin()
+            .await
+            .context("Failed to create new transaction while syncing OAuth scopes for all users")?;
+        let users = service.fetch_all_users(&mut transaction).await?;
+
+        for user in users {
+            let _ = self
+                .sync_oauth_scopes_for_user(provider_kind, user.id)
+                .await;
+        }
+
+        Ok(())
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    pub async fn sync_oauth_scopes_for_user<'a>(
+        &self,
+        provider_kind: Option<IntegrationProviderKind>,
+        user_id: UserId,
+    ) -> Result<(), UniversalInboxError> {
+        info!("Syncing OAuth scopes for user {user_id}");
+
+        let mut transaction = self.begin().await.context(format!(
+            "Failed to create new transaction while syncing {provider_kind:?} OAuth scopes"
+        ))?;
+
+        match self
+            .sync_oauth_scopes(&mut transaction, provider_kind, user_id)
+            .await
+        {
+            Ok(_) => {
+                transaction.commit().await.context(format!(
+                    "Failed to commit while syncing {provider_kind:?} OAuth scopes"
+                ))?;
+                info!("Successfully synced OAuth scopes for user {user_id}");
+                Ok(())
+            }
+            Err(error @ UniversalInboxError::Recoverable(_)) => {
+                transaction.commit().await.context(format!(
+                    "Failed to commit while syncing {provider_kind:?} OAuth scopes"
+                ))?;
+                error!("Failed to sync OAuth scopes for user {user_id}: {error:?}");
+                Err(error)
+            }
+            Err(error) => {
+                transaction.rollback().await.context(format!(
+                    "Failed to rollback while syncing {provider_kind:?} OAuth scopes"
+                ))?;
+                error!("Failed to sync OAuth scopes for user {user_id}: {error:?}");
+                Err(error)
+            }
+        }
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    async fn sync_oauth_scopes<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        provider_kind: Option<IntegrationProviderKind>,
+        user_id: UserId,
+    ) -> Result<(), UniversalInboxError> {
+        let integration_connections = self
+            .fetch_all_integration_connections(
+                executor,
+                user_id,
+                Some(IntegrationConnectionStatus::Validated),
+            )
+            .await?;
+
+        for integration_connection in integration_connections {
+            if let Some(provider_kind) = provider_kind {
+                if integration_connection.provider.kind() != provider_kind {
+                    continue;
+                }
+            }
+
+            let provider_kind = integration_connection.provider.kind();
+            let provider_config_key =
+                self.nango_provider_keys
+                    .get(&provider_kind)
+                    .context(format!(
+                        "No Nango provider config key found for {provider_kind}"
+                    ))?;
+
+            let nango_connection = self
+                .nango_service
+                .get_connection(integration_connection.connection_id, provider_config_key)
+                .await?;
+            let Some(nango_connection) = nango_connection else {
+                warn!(
+                    "Unknown Nango connection {}, skipping OAuth scopes sync",
+                    integration_connection.connection_id
+                );
+                continue;
+            };
+
+            info!(
+                "Updating OAuth scopes for {provider_kind} integration connection {} for user {user_id}",
+                integration_connection.id
+            );
+            self.repository
+                .update_integration_connection_status(
+                    executor,
+                    integration_connection.id,
+                    IntegrationConnectionStatus::Validated,
+                    None,
+                    Some(nango_connection.get_registered_oauth_scopes()),
+                    user_id,
+                )
+                .await?;
+        }
+
+        Ok(())
     }
 }

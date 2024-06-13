@@ -115,7 +115,7 @@ impl SmtpMailer {
         })
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self))]
     fn build_email(
         &self,
         user: User,
@@ -158,7 +158,7 @@ impl SmtpMailer {
 #[async_trait]
 impl Mailer for SmtpMailer {
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "info", skip(self), err)]
+    #[tracing::instrument(level = "info", skip(self))]
     async fn send_email(
         &self,
         user: User,

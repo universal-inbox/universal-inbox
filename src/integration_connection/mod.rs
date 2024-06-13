@@ -32,6 +32,7 @@ pub struct IntegrationConnection {
     pub last_sync_failure_message: Option<String>,
     pub sync_failures: u32,
     pub provider: IntegrationProvider,
+    pub registered_oauth_scopes: Vec<String>,
 }
 
 impl IntegrationConnection {
@@ -50,6 +51,7 @@ impl IntegrationConnection {
             sync_failures: 0,
             // Using unwrap as None cannot mismatch with the provided config
             provider: IntegrationProvider::new(config, None).unwrap(),
+            registered_oauth_scopes: Vec::new(),
         }
     }
 
@@ -57,8 +59,22 @@ impl IntegrationConnection {
         self.status == IntegrationConnectionStatus::Validated
     }
 
+    pub fn is_failing(&self) -> bool {
+        self.status == IntegrationConnectionStatus::Failing
+    }
+
     pub fn is_connected_task_service(&self) -> bool {
         self.is_connected() && self.provider.is_task_service()
+    }
+
+    pub fn has_oauth_scopes(&self, scopes: &[String]) -> bool {
+        if self.provider.kind() == IntegrationProviderKind::Todoist {
+            // Todoist scopes are not registered in Nango, let's consider them as always valid
+            return true;
+        }
+        scopes
+            .iter()
+            .all(|scope| self.registered_oauth_scopes.contains(scope))
     }
 }
 

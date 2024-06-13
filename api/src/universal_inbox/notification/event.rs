@@ -15,7 +15,7 @@ use crate::universal_inbox::{
 #[async_trait]
 impl NotificationEventService<SlackPushEventCallback> for NotificationService {
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor, event), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor, event))]
     async fn save_notification_from_event<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,

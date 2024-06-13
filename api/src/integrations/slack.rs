@@ -46,7 +46,7 @@ use crate::{
 
 static SLACK_BASE_URL: &str = "https://api.slack.com/api";
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct SlackService {
     slack_base_url: String,
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
@@ -63,7 +63,7 @@ impl SlackService {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn get_chat_permalink(
         &self,
         slack_api_token: &SlackApiToken,
@@ -79,7 +79,7 @@ impl SlackService {
         Ok(result.value)
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn fetch_message(
         &self,
         user_id: UserId,
@@ -103,7 +103,7 @@ impl SlackService {
         Ok(result.value)
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn fetch_channel(
         &self,
         slack_api_token: &SlackApiToken,
@@ -116,7 +116,7 @@ impl SlackService {
         Ok(result.value)
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn fetch_user(
         &self,
         user_id: UserId,
@@ -131,7 +131,7 @@ impl SlackService {
         Ok(result.value)
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn fetch_bot(
         &self,
         slack_api_token: &SlackApiToken,
@@ -144,7 +144,7 @@ impl SlackService {
         Ok(result.value)
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn fetch_team(
         &self,
         slack_api_token: &SlackApiToken,
@@ -157,7 +157,7 @@ impl SlackService {
         Ok(result.value)
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn stars_add(
         &self,
         slack_api_token: &SlackApiToken,
@@ -206,7 +206,7 @@ impl SlackService {
         Ok(())
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn stars_remove(
         &self,
         slack_api_token: &SlackApiToken,
@@ -316,7 +316,7 @@ impl SlackService {
     }
 
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor, slack_push_event_callback), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor, slack_push_event_callback))]
     pub async fn fetch_item_from_event<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -841,7 +841,7 @@ impl NotificationSourceService for SlackService {
     }
 
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.0.to_string()), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.0.to_string()))]
     async fn unsubscribe_notification_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -864,7 +864,7 @@ impl NotificationSourceService for SlackService {
     }
 
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.0.to_string()), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.0.to_string()))]
     async fn fetch_notification_details<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -1209,7 +1209,7 @@ impl ThirdPartyTaskService<SlackStar> for SlackService {
     }
 
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, _executor, _id, _patch, _user_id), err)]
+    #[tracing::instrument(level = "debug", skip(self, _executor, _id, _patch, _user_id))]
     async fn update_task<'a>(
         &self,
         _executor: &mut Transaction<'a, Postgres>,

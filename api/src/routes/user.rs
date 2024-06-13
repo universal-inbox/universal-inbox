@@ -65,7 +65,7 @@ pub fn scope() -> Scope {
 }
 
 pub async fn get_user(
-    user_service: web::Data<Arc<RwLock<UserService>>>,
+    user_service: web::Data<Arc<UserService>>,
     authenticated: Authenticated<Claims>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let user_id = authenticated
@@ -73,7 +73,7 @@ pub async fn get_user(
         .sub
         .parse::<UserId>()
         .context("Wrong user ID format")?;
-    let service = user_service.read().await;
+    let service = user_service.clone();
     let mut transaction = service
         .begin()
         .await
@@ -92,12 +92,12 @@ pub async fn get_user(
 }
 
 pub async fn register_user(
-    user_service: web::Data<Arc<RwLock<UserService>>>,
+    user_service: web::Data<Arc<UserService>>,
     auth_token_service: web::Data<Arc<RwLock<AuthenticationTokenService>>>,
     register_user_parameters: web::Json<RegisterUserParameters>,
     session: Session,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    let user_service = user_service.read().await;
+    let user_service = user_service.clone();
     let mut transaction = user_service
         .begin()
         .await
@@ -157,12 +157,12 @@ pub async fn register_user(
 }
 
 pub async fn login_user(
-    user_service: web::Data<Arc<RwLock<UserService>>>,
+    user_service: web::Data<Arc<UserService>>,
     auth_token_service: web::Data<Arc<RwLock<AuthenticationTokenService>>>,
     credentials: web::Json<Credentials>,
     session: Session,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    let service = user_service.read().await;
+    let service = user_service.clone();
     let mut transaction = service
         .begin()
         .await
@@ -202,7 +202,7 @@ pub async fn login_user(
 }
 
 pub async fn send_verification_email(
-    user_service: web::Data<Arc<RwLock<UserService>>>,
+    user_service: web::Data<Arc<UserService>>,
     authenticated: Authenticated<Claims>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let user_id = authenticated
@@ -210,7 +210,7 @@ pub async fn send_verification_email(
         .sub
         .parse::<UserId>()
         .context("Wrong user ID format")?;
-    let service = user_service.read().await;
+    let service = user_service.clone();
     let mut transaction = service
         .begin()
         .await
@@ -235,11 +235,11 @@ pub async fn send_verification_email(
 }
 
 pub async fn verify_email(
-    user_service: web::Data<Arc<RwLock<UserService>>>,
+    user_service: web::Data<Arc<UserService>>,
     path_info: web::Path<(UserId, EmailValidationToken)>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let (user_id, email_validation_token) = path_info.into_inner();
-    let service = user_service.read().await;
+    let service = user_service.clone();
     let mut transaction = service
         .begin()
         .await
@@ -264,10 +264,10 @@ pub async fn verify_email(
 }
 
 pub async fn send_password_reset_email(
-    user_service: web::Data<Arc<RwLock<UserService>>>,
+    user_service: web::Data<Arc<UserService>>,
     email_address: web::Json<EmailAddress>,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    let service = user_service.read().await;
+    let service = user_service.clone();
     let mut transaction = service
         .begin()
         .await
@@ -292,12 +292,12 @@ pub async fn send_password_reset_email(
 }
 
 pub async fn reset_password(
-    user_service: web::Data<Arc<RwLock<UserService>>>,
+    user_service: web::Data<Arc<UserService>>,
     path_info: web::Path<(UserId, PasswordResetToken)>,
     password: web::Json<Secret<Password>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let (user_id, password_reset_token) = path_info.into_inner();
-    let service = user_service.read().await;
+    let service = user_service.clone();
     let mut transaction = service.begin().await.context(format!(
         "Failed to create new transaction while resetting the password of {user_id}"
     ))?;

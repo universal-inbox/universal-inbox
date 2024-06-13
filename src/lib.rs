@@ -37,6 +37,7 @@ pub struct IntegrationProviderStaticConfig {
     pub doc_for_actions: HashMap<String, String>,
     pub is_implemented: bool,
     pub oauth_user_scopes: Vec<String>,
+    pub required_oauth_scopes: Vec<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]

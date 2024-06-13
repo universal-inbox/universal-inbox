@@ -14,6 +14,7 @@ use tokio::sync::RwLock;
 use tracing::{error, info};
 
 use universal_inbox::{
+    integration_connection::provider::IntegrationProviderKind,
     notification::{NotificationSourceKind, NotificationSyncSourceKind},
     task::TaskSyncSourceKind,
     user::UserId,
@@ -59,6 +60,15 @@ enum Commands {
         user_id: Option<UserId>,
         #[clap(short, long, value_enum, value_parser)]
         source: Option<TaskSyncSourceKind>,
+    },
+
+    /// Synchronize registered OAuth scopes from Nango into the database
+    SyncOauthScopes {
+        /// Sync OAuth scopes for given user
+        #[clap(short, long)]
+        user_id: Option<UserId>,
+        #[clap(short, long, value_enum, value_parser)]
+        provider_kind: Option<IntegrationProviderKind>,
     },
 
     /// Clear notifications details from the database. Useful when stored data is no longer valid.
@@ -247,6 +257,17 @@ async fn main() -> std::io::Result<()> {
         }
         Commands::SyncTasks { source, user_id } => {
             commands::sync::sync_tasks_for_all_users(task_service, *source, *user_id).await
+        }
+        Commands::SyncOauthScopes {
+            provider_kind,
+            user_id,
+        } => {
+            commands::sync::sync_oauth_scopes(
+                integration_connection_service,
+                *provider_kind,
+                *user_id,
+            )
+            .await
         }
         Commands::DeleteNotificationDetails { source } => {
             commands::migration::delete_notification_details(notification_service, *source).await

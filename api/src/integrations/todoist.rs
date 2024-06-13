@@ -52,7 +52,7 @@ use crate::{
     },
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct TodoistService {
     pub todoist_sync_base_url: String,
     pub projects_cache_index: Arc<AtomicU64>,
@@ -192,7 +192,7 @@ impl TodoistService {
         })
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn sync_resources(
         &self,
         resource_name: &str,
@@ -223,7 +223,7 @@ impl TodoistService {
             .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn sync_items(
         &self,
         access_token: &AccessToken,
@@ -232,7 +232,7 @@ impl TodoistService {
         self.sync_resources("items", access_token, sync_token).await
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn get_item(
         &self,
         id: &str,
@@ -265,7 +265,7 @@ impl TodoistService {
         Ok(Some(item_info.item))
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn send_sync_commands(
         &self,
         commands: Vec<TodoistSyncCommand>,
@@ -309,7 +309,7 @@ impl TodoistService {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn fetch_all_projects(
         &self,
         user_id: UserId,
@@ -320,7 +320,7 @@ impl TodoistService {
     }
 
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn fetch_task<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -419,7 +419,7 @@ fn build_todoist_client(
 #[async_trait]
 impl ThirdPartyItemSourceService for TodoistService {
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn fetch_items<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -638,7 +638,7 @@ impl ThirdPartyTaskService<TodoistItem> for TodoistService {
     }
 
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn update_task<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -697,7 +697,7 @@ impl ThirdPartyTaskService<TodoistItem> for TodoistService {
 #[async_trait]
 impl ThirdPartyTaskSourceService<TodoistItem> for TodoistService {
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn create_task<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -747,7 +747,7 @@ impl ThirdPartyTaskSourceService<TodoistItem> for TodoistService {
     }
 
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn search_projects<'a, 'b>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -784,7 +784,7 @@ impl ThirdPartyTaskSourceService<TodoistItem> for TodoistService {
     }
 
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn get_or_create_project<'a, 'b>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
