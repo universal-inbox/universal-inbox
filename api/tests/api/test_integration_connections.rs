@@ -167,6 +167,10 @@ mod verify_integration_connections {
 
         assert_eq!(result.status, IntegrationConnectionStatus::Validated);
         assert_eq!(result.failure_message, None);
+        assert_eq!(
+            result.registered_oauth_scopes,
+            vec!["public_repo".to_string(), "user".to_string()]
+        );
         nango_mock.assert();
 
         // Verifying again should keep validating the status with Nango and return the connection
@@ -179,6 +183,10 @@ mod verify_integration_connections {
 
         assert_eq!(result.status, IntegrationConnectionStatus::Validated);
         assert_eq!(result.failure_message, None);
+        assert_eq!(
+            result.registered_oauth_scopes,
+            vec!["public_repo".to_string(), "user".to_string()]
+        );
         nango_mock.assert_hits(2);
     }
 
@@ -223,6 +231,15 @@ mod verify_integration_connections {
         assert_eq!(result.status, IntegrationConnectionStatus::Validated);
         assert_eq!(result.failure_message, None);
         assert_eq!(result.provider_user_id, Some("U05XXX".to_string()));
+        assert_eq!(
+            result.registered_oauth_scopes,
+            vec![
+                "stars:read".to_string(),
+                "stars:write".to_string(),
+                "channel:read".to_string(),
+                "channel:history".to_string()
+            ]
+        );
         nango_mock.assert();
     }
 
@@ -285,6 +302,10 @@ mod verify_integration_connections {
 
         assert_eq!(result.status, IntegrationConnectionStatus::Validated);
         assert_eq!(result.failure_message, None);
+        assert_eq!(
+            result.registered_oauth_scopes,
+            vec!["public_repo".to_string(), "user".to_string()]
+        );
         nango_mock.assert();
 
         nango_mock.delete();
@@ -340,6 +361,10 @@ mod verify_integration_connections {
 
         assert_eq!(result.status, IntegrationConnectionStatus::Validated);
         assert_eq!(result.failure_message, None);
+        assert_eq!(
+            result.registered_oauth_scopes,
+            vec!["public_repo".to_string(), "user".to_string()]
+        );
         nango_mock.assert();
     }
 

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT\n                  integration_connection.id,\n                  integration_connection.user_id,\n                  integration_connection.provider_user_id,\n                  integration_connection.connection_id,\n                  integration_connection.status as \"status: _\",\n                  integration_connection.failure_message,\n                  integration_connection.created_at,\n                  integration_connection.updated_at,\n                  integration_connection.last_sync_started_at,\n                  integration_connection.last_sync_failure_message,\n                  integration_connection.sync_failures,\n                  integration_connection_config.config as \"config: Json<IntegrationConnectionConfig>\",\n                  integration_connection.context as \"context: Json<IntegrationConnectionContext>\"\n                FROM integration_connection\n                INNER JOIN integration_connection_config\n                  ON integration_connection.id = integration_connection_config.integration_connection_id\n                WHERE integration_connection.id = $1\n            ",
+  "query": "\n                SELECT\n                  integration_connection.id,\n                  integration_connection.user_id,\n                  integration_connection.provider_user_id,\n                  integration_connection.connection_id,\n                  integration_connection.status as \"status: _\",\n                  integration_connection.failure_message,\n                  integration_connection.created_at,\n                  integration_connection.updated_at,\n                  integration_connection.last_sync_started_at,\n                  integration_connection.last_sync_failure_message,\n                  integration_connection.sync_failures,\n                  integration_connection_config.config as \"config: Json<IntegrationConnectionConfig>\",\n                  integration_connection.context as \"context: Json<IntegrationConnectionContext>\",\n                  integration_connection.registered_oauth_scopes as \"registered_oauth_scopes: Json<Vec<String>>\"\n                FROM integration_connection\n                INNER JOIN integration_connection_config\n                  ON integration_connection.id = integration_connection_config.integration_connection_id\n                WHERE\n                    integration_connection.provider_user_id = $1\n                    AND integration_connection.provider_kind::TEXT = $2\n            ",
   "describe": {
     "columns": [
       {
@@ -78,11 +78,17 @@
         "ordinal": 12,
         "name": "context: Json<IntegrationConnectionContext>",
         "type_info": "Json"
+      },
+      {
+        "ordinal": 13,
+        "name": "registered_oauth_scopes: Json<Vec<String>>",
+        "type_info": "Json"
       }
     ],
     "parameters": {
       "Left": [
-        "Uuid"
+        "Text",
+        "Text"
       ]
     },
     "nullable": [
@@ -98,8 +104,9 @@
       true,
       false,
       false,
-      true
+      true,
+      false
     ]
   },
-  "hash": "215f56b83030fe2a6c8d9e1e1444543cc5bf1458360b956db0bc223e8a77b957"
+  "hash": "ffc80e1d156f6ae6150e884456d863b41b3997463ad08c77e90a80860615f460"
 }

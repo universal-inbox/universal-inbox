@@ -70,6 +70,11 @@ pub async fn front_config(
                         .context("Missing Nango config key for Github")?
                         .clone(),
                     oauth_user_scopes: vec![],
+                    required_oauth_scopes: settings
+                        .integrations
+                        .github
+                        .required_oauth_scopes
+                        .clone(),
                     doc: settings.integrations.github.doc.clone(),
                     warning_message: settings.integrations.github.warning_message.clone(),
                     doc_for_actions: settings.integrations.github.doc_for_actions.clone(),
@@ -88,6 +93,11 @@ pub async fn front_config(
                         .context("Missing Nango config key for Linear")?
                         .clone(),
                     oauth_user_scopes: vec![],
+                    required_oauth_scopes: settings
+                        .integrations
+                        .linear
+                        .required_oauth_scopes
+                        .clone(),
                     doc: settings.integrations.linear.doc.clone(),
                     warning_message: settings.integrations.linear.warning_message.clone(),
                     doc_for_actions: settings.integrations.linear.doc_for_actions.clone(),
@@ -106,6 +116,11 @@ pub async fn front_config(
                         .context("Missing Nango config key for Google Mail")?
                         .clone(),
                     oauth_user_scopes: vec![],
+                    required_oauth_scopes: settings
+                        .integrations
+                        .google_mail
+                        .required_oauth_scopes
+                        .clone(),
                     doc: settings.integrations.google_mail.doc.clone(),
                     warning_message: settings.integrations.google_mail.warning_message.clone(),
                     doc_for_actions: settings.integrations.google_mail.doc_for_actions.clone(),
@@ -117,21 +132,12 @@ pub async fn front_config(
                 IntegrationProviderStaticConfig {
                     name: "Slack".to_string(),
                     nango_config_key: "slack".to_string().into(),
-                    oauth_user_scopes: vec![
-                        // Read/write "Saved for later"
-                        "stars:read".to_string(),
-                        "stars:write".to_string(),
-                        // Read messages & channel infos
-                        "channels:read".to_string(),
-                        "channels:history".to_string(),
-                        "groups:read".to_string(),
-                        "im:read".to_string(),
-                        "mpim:read".to_string(),
-                        // Read user info
-                        "users:read".to_string(),
-                        // Read team info
-                        "team:read".to_string(),
-                    ],
+                    oauth_user_scopes: settings.integrations.slack.required_oauth_scopes.clone(),
+                    required_oauth_scopes: settings
+                        .integrations
+                        .slack
+                        .required_oauth_scopes
+                        .clone(),
                     doc: settings.integrations.slack.doc.clone(),
                     warning_message: None,
                     doc_for_actions: settings.integrations.slack.doc_for_actions.clone(),
@@ -144,6 +150,7 @@ pub async fn front_config(
                     name: "Notion".to_string(),
                     nango_config_key: "notion".to_string().into(),
                     oauth_user_scopes: vec![],
+                    required_oauth_scopes: vec![],
                     doc: "".to_string(),
                     warning_message: None,
                     doc_for_actions: HashMap::new(),
@@ -156,6 +163,7 @@ pub async fn front_config(
                     name: "Google Docs".to_string(),
                     nango_config_key: "googledocs".to_string().into(),
                     oauth_user_scopes: vec![],
+                    required_oauth_scopes: vec![],
                     doc: "".to_string(),
                     warning_message: None,
                     doc_for_actions: HashMap::new(),
@@ -174,6 +182,11 @@ pub async fn front_config(
                         .context("Missing Nango config key for Todoist")?
                         .clone(),
                     oauth_user_scopes: vec![],
+                    required_oauth_scopes: settings
+                        .integrations
+                        .todoist
+                        .required_oauth_scopes
+                        .clone(),
                     doc: settings.integrations.todoist.doc.clone(),
                     warning_message: settings.integrations.todoist.warning_message.clone(),
                     doc_for_actions: settings.integrations.todoist.doc_for_actions.clone(),
@@ -186,6 +199,7 @@ pub async fn front_config(
                     name: "Tick Tick".to_string(),
                     nango_config_key: "ticktick".to_string().into(),
                     oauth_user_scopes: vec![],
+                    required_oauth_scopes: vec![],
                     doc: "".to_string(),
                     warning_message: None,
                     doc_for_actions: HashMap::new(),

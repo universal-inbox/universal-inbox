@@ -19,12 +19,12 @@ use crate::universal_inbox::{
     err
 )]
 pub async fn send_verification_email(
-    user_service: Arc<RwLock<UserService>>,
+    user_service: Arc<UserService>,
     user_email: &EmailAddress,
     dry_run: bool,
 ) -> Result<(), UniversalInboxError> {
     info!("Sending email verification to {user_email}");
-    let service = user_service.read().await;
+    let service = user_service.clone();
 
     let mut transaction = service.begin().await.context(format!(
         "Failed to create new transaction while sending verification email to {user_email}"
@@ -72,12 +72,12 @@ pub async fn send_verification_email(
     err
 )]
 pub async fn send_password_reset_email(
-    user_service: Arc<RwLock<UserService>>,
+    user_service: Arc<UserService>,
     user_email: &EmailAddress,
     dry_run: bool,
 ) -> Result<(), UniversalInboxError> {
     info!("Sending the password reset email to {user_email}");
-    let service = user_service.read().await;
+    let service = user_service.clone();
 
     let mut transaction = service.begin().await.context(format!(
         "Failed to create new transaction while send the password reset email for {user_email}"
@@ -117,11 +117,11 @@ pub async fn send_password_reset_email(
     err
 )]
 pub async fn generate_jwt_token(
-    user_service: Arc<RwLock<UserService>>,
+    user_service: Arc<UserService>,
     auth_token_service: Arc<RwLock<AuthenticationTokenService>>,
     user_email: &EmailAddress,
 ) -> Result<(), UniversalInboxError> {
-    let service = user_service.read().await;
+    let service = user_service.clone();
 
     let mut transaction = service.begin().await.context(format!(
         "Failed to create new transaction while generating new authentication token for {user_email}"

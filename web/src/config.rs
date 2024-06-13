@@ -13,7 +13,7 @@ use universal_inbox::{
 
 use crate::{services::api::call_api, utils::current_origin};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct AppConfig {
     pub authentication_config: FrontAuthenticationConfig,
     pub api_base_url: Url,

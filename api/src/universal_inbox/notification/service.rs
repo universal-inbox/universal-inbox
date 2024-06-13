@@ -40,7 +40,7 @@ pub struct NotificationService {
     pub(super) slack_service: Arc<SlackService>,
     pub(super) task_service: Weak<RwLock<TaskService>>,
     pub integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
-    user_service: Arc<RwLock<UserService>>,
+    user_service: Arc<UserService>,
     min_sync_notifications_interval_in_minutes: i64,
 }
 
@@ -54,7 +54,7 @@ impl NotificationService {
         slack_service: Arc<SlackService>,
         task_service: Weak<RwLock<TaskService>>,
         integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
-        user_service: Arc<RwLock<UserService>>,
+        user_service: Arc<UserService>,
         min_sync_notifications_interval_in_minutes: i64,
     ) -> NotificationService {
         NotificationService {
@@ -78,7 +78,7 @@ impl NotificationService {
         self.repository.begin().await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor, notification_source_service, notification), fields(notification_id = notification.id.to_string()), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor, notification_source_service, notification), fields(notification_id = notification.id.to_string()))]
     pub async fn apply_updated_notification_side_effect<'a, U>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -118,7 +118,7 @@ impl NotificationService {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     pub async fn list_notifications<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -140,7 +140,7 @@ impl NotificationService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     pub async fn get_notification<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -163,7 +163,7 @@ impl NotificationService {
         Ok(notification)
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     pub async fn get_notification_for_source_id<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -175,7 +175,7 @@ impl NotificationService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.to_string()), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.to_string()))]
     pub async fn create_notification<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -193,7 +193,7 @@ impl NotificationService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.to_string()), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.to_string()))]
     pub async fn create_or_update_notification<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -323,7 +323,7 @@ impl NotificationService {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor, source_notifications), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor, source_notifications))]
     pub async fn save_notifications_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -461,7 +461,7 @@ impl NotificationService {
         Ok(notifications)
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     pub async fn sync_notifications<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -489,7 +489,7 @@ impl NotificationService {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn sync_notifications_with_transaction<'a>(
         &self,
         source: NotificationSyncSourceKind,
@@ -527,7 +527,7 @@ impl NotificationService {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn sync_all_notifications<'a>(
         &self,
         user_id: UserId,
@@ -549,12 +549,12 @@ impl NotificationService {
             .collect())
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn sync_notifications_for_all_users<'a>(
         &self,
         source: Option<NotificationSyncSourceKind>,
     ) -> Result<(), UniversalInboxError> {
-        let service = self.user_service.read().await;
+        let service = self.user_service.clone();
         let mut transaction = service.begin().await.context(
             "Failed to create new transaction while syncing notifications for all users",
         )?;
@@ -567,7 +567,7 @@ impl NotificationService {
         Ok(())
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn sync_notifications_for_user<'a>(
         &self,
         source: Option<NotificationSyncSourceKind>,
@@ -592,7 +592,7 @@ impl NotificationService {
         Ok(())
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     pub async fn patch_notification<'a, 'b>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -731,7 +731,7 @@ impl NotificationService {
         Ok(updated_notification)
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     pub async fn patch_notifications_for_task<'a, 'b>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -744,7 +744,7 @@ impl NotificationService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     pub async fn create_task_from_notification<'a, 'b>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -795,7 +795,7 @@ impl NotificationService {
         Ok(None)
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     pub async fn delete_notification_details<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,

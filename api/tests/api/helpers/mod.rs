@@ -39,7 +39,7 @@ pub struct TestedApp {
     pub app_address: String,
     pub api_address: String,
     pub repository: Arc<Repository>,
-    pub user_service: Arc<RwLock<UserService>>,
+    pub user_service: Arc<UserService>,
     pub task_service: Arc<RwLock<TaskService>>,
     pub github_mock_server: MockServer,
     pub linear_mock_server: MockServer,

@@ -50,7 +50,7 @@ pub fn ToastZone(cx: Scope) -> Element {
 
     render! {
         div {
-            class: "toast toast-bottom toast-end items-end",
+            class: "toast toast-bottom toast-end items-end absolute bottom-0 right-0",
 
             toasts_ref.read().clone().into_iter().map(move |(id, toast)| {
                 render! {

@@ -52,7 +52,7 @@ use crate::{
 
 pub mod graphql;
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct LinearService {
     linear_graphql_url: String,
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
@@ -346,7 +346,7 @@ fn build_linear_client(access_token: &AccessToken) -> Result<ClientWithMiddlewar
 #[async_trait]
 impl NotificationSyncSourceService for LinearService {
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn fetch_all_notifications<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -374,7 +374,7 @@ impl NotificationSyncSourceService for LinearService {
 #[async_trait]
 impl NotificationSourceService for LinearService {
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.0.to_string()), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.0.to_string()))]
     async fn delete_notification_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -396,7 +396,7 @@ impl NotificationSourceService for LinearService {
     }
 
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.0.to_string()), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.0.to_string()))]
     async fn unsubscribe_notification_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -450,7 +450,7 @@ impl NotificationSourceService for LinearService {
     }
 
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.0.to_string()), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.0.to_string()))]
     async fn snooze_notification_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -475,7 +475,7 @@ impl NotificationSourceService for LinearService {
     }
 
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, _executor, _notification), fields(notification_id = _notification.id.to_string()), err)]
+    #[tracing::instrument(level = "debug", skip(self, _executor, _notification), fields(notification_id = _notification.id.to_string()))]
     async fn fetch_notification_details<'a>(
         &self,
         _executor: &mut Transaction<'a, Postgres>,
@@ -519,7 +519,7 @@ impl ThirdPartyItemSource for LinearService {
 #[async_trait]
 impl ThirdPartyItemSourceService for LinearService {
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn fetch_items<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -737,7 +737,7 @@ impl ThirdPartyTaskService<LinearIssue> for LinearService {
     }
 
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, _executor, _id, _patch, _user_id), err)]
+    #[tracing::instrument(level = "debug", skip(self, _executor, _id, _patch, _user_id))]
     async fn update_task<'a>(
         &self,
         _executor: &mut Transaction<'a, Postgres>,

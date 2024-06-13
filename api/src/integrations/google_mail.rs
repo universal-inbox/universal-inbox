@@ -45,7 +45,7 @@ use crate::{
     },
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct GoogleMailService {
     google_mail_base_url: String,
     page_size: usize,
@@ -392,7 +392,7 @@ fn build_google_mail_client(
 #[async_trait]
 impl NotificationSyncSourceService for GoogleMailService {
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn fetch_all_notifications<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -518,7 +518,7 @@ impl NotificationSyncSourceService for GoogleMailService {
 #[async_trait]
 impl NotificationSourceService for GoogleMailService {
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.0.to_string()), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.0.to_string()))]
     async fn delete_notification_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -545,7 +545,7 @@ impl NotificationSourceService for GoogleMailService {
     }
 
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.0.to_string()), err)]
+    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.0.to_string()))]
     async fn unsubscribe_notification_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -583,7 +583,7 @@ impl NotificationSourceService for GoogleMailService {
     }
 
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, _executor, _notification), fields(notification_id = _notification.id.0.to_string()), err)]
+    #[tracing::instrument(level = "debug", skip(self, _executor, _notification), fields(notification_id = _notification.id.0.to_string()))]
     async fn fetch_notification_details<'a>(
         &self,
         _executor: &mut Transaction<'a, Postgres>,

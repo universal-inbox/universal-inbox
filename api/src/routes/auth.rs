@@ -53,12 +53,12 @@ pub fn scope() -> Scope {
 #[allow(clippy::too_many_arguments)]
 pub async fn authenticate_session(
     params: web::Json<SessionAuthValidationParameters>,
-    user_service: web::Data<Arc<RwLock<UserService>>>,
+    user_service: web::Data<Arc<UserService>>,
     auth_token_service: web::Data<Arc<RwLock<AuthenticationTokenService>>>,
     settings: web::Data<Settings>,
     session: Session,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    let service = user_service.read().await;
+    let service = user_service.clone();
     let mut transaction = service
         .begin()
         .await
@@ -121,7 +121,7 @@ const OIDC_AUTHORIZATION_URL_SESSION_KEY: &str = "authorization_url";
 /// Implement the Authorization Code flow and redirect the user to the OpenIDConnect
 /// auth provider.
 pub async fn authorize_session(
-    user_service: web::Data<Arc<RwLock<UserService>>>,
+    user_service: web::Data<Arc<UserService>>,
     session: Session,
     settings: web::Data<Settings>,
 ) -> Result<HttpResponse, UniversalInboxError> {
@@ -136,7 +136,7 @@ pub async fn authorize_session(
         ));
     }
 
-    let service = user_service.read().await;
+    let service = user_service.clone();
     let AuthenticationSettings::OpenIDConnect(openid_connect_settings) =
         &settings.application.security.authentication
     else {
@@ -188,7 +188,7 @@ pub async fn authenticated_session(
     settings: web::Data<Settings>,
     session: Session,
     authenticated_session_request: web::Query<AuthenticatedSessionRequest>,
-    user_service: web::Data<Arc<RwLock<UserService>>>,
+    user_service: web::Data<Arc<UserService>>,
     auth_token_service: web::Data<Arc<RwLock<AuthenticationTokenService>>>,
 ) -> Result<Redirect, UniversalInboxError> {
     session
@@ -217,7 +217,7 @@ pub async fn authenticated_session(
         .context("Failed to extract Nonce from the session")?
         .context(format!("Missing `{OIDC_NONCE_SESSION_KEY}` session key"))?;
 
-    let service = user_service.read().await;
+    let service = user_service.clone();
     let mut transaction = service
         .begin()
         .await
@@ -264,7 +264,7 @@ pub async fn authenticated_session(
 }
 
 pub async fn close_session(
-    user_service: web::Data<Arc<RwLock<UserService>>>,
+    user_service: web::Data<Arc<UserService>>,
     authenticated: Authenticated<Claims>,
     session: Session,
 ) -> Result<HttpResponse, UniversalInboxError> {
@@ -274,7 +274,7 @@ pub async fn close_session(
         .parse::<UserId>()
         .context("Wrong user ID format")?;
 
-    let service = user_service.read().await;
+    let service = user_service.clone();
     let mut transaction = service
         .begin()
         .await

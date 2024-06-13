@@ -60,6 +60,42 @@ impl NangoConnection {
             _ => None,
         }
     }
+
+    pub fn get_registered_oauth_scopes(&self) -> Vec<String> {
+        match self.provider_config_key.0.as_str() {
+            "slack" => self.credentials.raw["authed_user"]["scope"]
+                .as_str()
+                .unwrap_or_default()
+                .split(',')
+                .map(|scope| scope.to_string())
+                .collect(),
+            // Todoist scopes are not stored in the connection raw credentials
+            "todoist" => vec![],
+            "google-mail" => {
+                if let Some(scope) = self.credentials.raw["scope"].as_str() {
+                    vec![scope.to_string()]
+                } else {
+                    vec![]
+                }
+            }
+            "linear" => self.credentials.raw["scope"]
+                .as_array()
+                .map(|scopes| {
+                    scopes
+                        .iter()
+                        .filter_map(|scope| Some(scope.as_str()?.to_string()))
+                        .collect::<Vec<String>>()
+                })
+                .unwrap_or_default(),
+            "github" => self.credentials.raw["scope"]
+                .as_str()
+                .unwrap_or_default()
+                .split(',')
+                .map(|scope| scope.to_string())
+                .collect(),
+            _ => vec![],
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Hash, Default)]
@@ -90,7 +126,7 @@ impl NangoService {
         })
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn get_connection(
         &self,
         connection_id: ConnectionId,
@@ -128,7 +164,7 @@ impl NangoService {
         Ok(Some(connection))
     }
 
-    #[tracing::instrument(level = "debug", skip(self), err)]
+    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn delete_connection(
         &self,
         connection_id: ConnectionId,
@@ -176,4 +212,119 @@ fn build_nango_client(secret_key: &str) -> Result<ClientWithMiddleware, reqwest:
     Ok(ClientBuilder::new(reqwest_client)
         .with(TracingMiddleware::<SpanBackendWithUrl>::new())
         .build())
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::*;
+
+    use super::*;
+
+    mod get_registered_oauth_scopes {
+        use pretty_assertions::assert_eq;
+        use serde_json::json;
+        use uuid::Uuid;
+
+        use super::*;
+
+        #[fixture]
+        fn connection() -> NangoConnection {
+            NangoConnection {
+                id: 1,
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+                deleted_at: None,
+                deleted: false,
+                environment_id: 1,
+                last_fetched_at: None,
+                provider_config_key: NangoProviderKey("slack".to_string()),
+                connection_id: ConnectionId(Uuid::new_v4()),
+                credentials: NangoConnectionCredentials {
+                    r#type: "oauth".to_string(),
+                    access_token: AccessToken("access_token".to_string()),
+                    refresh_token: Some(RefreshToken("refresh_token".to_string())),
+                    expires_at: None,
+                    raw: json!({
+                        "authed_user": {
+                            "id": "U123456",
+                            "scope": "channels:read,chat:write,users:read"
+                        }
+                    }),
+                },
+                connection_config: json!({}),
+                metadata: json!({}),
+                credentials_iv: json!({}),
+                credentials_tag: json!({}),
+            }
+        }
+
+        #[rstest]
+        fn test_slack_scopes_extractions(mut connection: NangoConnection) {
+            connection.provider_config_key = NangoProviderKey("slack".to_string());
+            connection.credentials.raw = serde_json::json!({
+                "authed_user": {
+                    "scope": "channels:read,chat:write,users:read"
+                }
+            });
+
+            let scopes = connection.get_registered_oauth_scopes();
+
+            assert_eq!(scopes.len(), 3);
+            assert!(scopes.contains(&"channels:read".to_string()));
+            assert!(scopes.contains(&"chat:write".to_string()));
+            assert!(scopes.contains(&"users:read".to_string()));
+        }
+
+        #[rstest]
+        fn test_todoist_scopes_extractions(mut connection: NangoConnection) {
+            connection.provider_config_key = NangoProviderKey("todoist".to_string());
+            // Todoist scopes are not stored in the connection raw credentials
+            connection.credentials.raw = serde_json::json!({});
+
+            let scopes = connection.get_registered_oauth_scopes();
+
+            assert_eq!(scopes.len(), 0);
+        }
+
+        #[rstest]
+        fn test_google_mail_scopes_extractions(mut connection: NangoConnection) {
+            connection.provider_config_key = NangoProviderKey("google-mail".to_string());
+            connection.credentials.raw = serde_json::json!({
+                "scope": "https://www.googleapis.com/auth/gmail.readonly"
+            });
+
+            let scopes = connection.get_registered_oauth_scopes();
+
+            assert_eq!(scopes.len(), 1);
+            assert!(scopes.contains(&"https://www.googleapis.com/auth/gmail.readonly".to_string()));
+        }
+
+        #[rstest]
+        fn test_linear_scopes_extractions(mut connection: NangoConnection) {
+            connection.provider_config_key = NangoProviderKey("linear".to_string());
+            connection.credentials.raw = serde_json::json!({
+                "scope": ["read", "write"]
+            });
+
+            let scopes = connection.get_registered_oauth_scopes();
+
+            assert_eq!(scopes.len(), 2);
+            assert!(scopes.contains(&"read".to_string()));
+            assert!(scopes.contains(&"write".to_string()));
+        }
+
+        #[rstest]
+        fn test_github_scopes_extractions(mut connection: NangoConnection) {
+            connection.provider_config_key = NangoProviderKey("github".to_string());
+            connection.credentials.raw = serde_json::json!({
+                "scope": "repo,read:org"
+            });
+
+            let scopes = connection.get_registered_oauth_scopes();
+
+            assert_eq!(scopes.len(), 2);
+            assert!(scopes.contains(&"repo".to_string()));
+            assert!(scopes.contains(&"read:org".to_string()));
+        }
+    }
 }

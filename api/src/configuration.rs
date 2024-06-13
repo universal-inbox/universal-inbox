@@ -172,6 +172,7 @@ pub struct Oauth2Settings {
 #[derive(Deserialize, Clone, Debug)]
 pub struct GithubIntegrationSettings {
     pub name: String,
+    pub required_oauth_scopes: Vec<String>,
     pub page_size: usize,
     pub doc: String,
     pub warning_message: Option<String>,
@@ -181,6 +182,7 @@ pub struct GithubIntegrationSettings {
 #[derive(Deserialize, Clone, Debug)]
 pub struct GoogleMailIntegrationSettings {
     pub name: String,
+    pub required_oauth_scopes: Vec<String>,
     pub page_size: usize,
     pub doc: String,
     pub warning_message: Option<String>,
@@ -190,6 +192,7 @@ pub struct GoogleMailIntegrationSettings {
 #[derive(Deserialize, Clone, Debug)]
 pub struct SlackIntegrationSettings {
     pub name: String,
+    pub required_oauth_scopes: Vec<String>,
     pub doc: String,
     pub doc_for_actions: HashMap<String, String>,
 }
@@ -197,6 +200,7 @@ pub struct SlackIntegrationSettings {
 #[derive(Deserialize, Clone, Debug)]
 pub struct DefaultIntegrationSettings {
     pub name: String,
+    pub required_oauth_scopes: Vec<String>,
     pub doc: String,
     pub warning_message: Option<String>,
     pub doc_for_actions: HashMap<String, String>,

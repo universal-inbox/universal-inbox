@@ -48,6 +48,7 @@ pub trait IntegrationConnectionRepository {
         integration_connection_id: IntegrationConnectionId,
         new_status: IntegrationConnectionStatus,
         failure_message: Option<String>,
+        registered_oauth_scopes: Option<Vec<String>>,
         for_user_id: UserId,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError>;
 
@@ -64,6 +65,7 @@ pub trait IntegrationConnectionRepository {
         &self,
         executor: &mut Transaction<'a, Postgres>,
         for_user_id: UserId,
+        status: Option<IntegrationConnectionStatus>,
     ) -> Result<Vec<IntegrationConnection>, UniversalInboxError>;
 
     async fn create_integration_connection<'a>(
@@ -127,7 +129,8 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.last_sync_failure_message,
                   integration_connection.sync_failures,
                   integration_connection_config.config as "config: Json<IntegrationConnectionConfig>",
-                  integration_connection.context as "context: Json<IntegrationConnectionContext>"
+                  integration_connection.context as "context: Json<IntegrationConnectionContext>",
+                  integration_connection.registered_oauth_scopes as "registered_oauth_scopes: Json<Vec<String>>"
                 FROM integration_connection
                 INNER JOIN integration_connection_config
                   ON integration_connection.id = integration_connection_config.integration_connection_id
@@ -171,7 +174,8 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.last_sync_failure_message,
                   integration_connection.sync_failures,
                   integration_connection_config.config as config,
-                  integration_connection.context
+                  integration_connection.context,
+                  integration_connection.registered_oauth_scopes
                 FROM integration_connection
                 INNER JOIN integration_connection_config
                   ON integration_connection.id = integration_connection_config.integration_connection_id
@@ -235,7 +239,8 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.last_sync_failure_message,
                   integration_connection.sync_failures,
                   integration_connection_config.config as "config: Json<IntegrationConnectionConfig>",
-                  integration_connection.context as "context: Json<IntegrationConnectionContext>"
+                  integration_connection.context as "context: Json<IntegrationConnectionContext>",
+                  integration_connection.registered_oauth_scopes as "registered_oauth_scopes: Json<Vec<String>>"
                 FROM integration_connection
                 INNER JOIN integration_connection_config
                   ON integration_connection.id = integration_connection_config.integration_connection_id
@@ -265,6 +270,7 @@ impl IntegrationConnectionRepository for Repository {
         integration_connection_id: IntegrationConnectionId,
         new_status: IntegrationConnectionStatus,
         failure_message: Option<String>,
+        registered_oauth_scopes: Option<Vec<String>>,
         for_user_id: UserId,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
         let mut query_builder = QueryBuilder::new("UPDATE integration_connection SET");
@@ -276,6 +282,12 @@ impl IntegrationConnectionRepository for Repository {
         separated
             .push(" failure_message = ")
             .push_bind_unseparated(failure_message.clone());
+
+        if let Some(registered_oauth_scopes) = &registered_oauth_scopes {
+            separated
+                .push(" registered_oauth_scopes = ")
+                .push_bind_unseparated(Json(registered_oauth_scopes));
+        }
 
         query_builder
             .push(" FROM integration_connection_config ")
@@ -303,6 +315,7 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.sync_failures,
                   integration_connection_config.config as config,
                   integration_connection.context,
+                  integration_connection.registered_oauth_scopes,
                   (SELECT
              "#,
         );
@@ -318,6 +331,12 @@ impl IntegrationConnectionRepository for Repository {
                 .push_unseparated(")");
         } else {
             separated.push(" failure_message IS NOT NULL");
+        }
+
+        if let Some(registered_oauth_scopes) = &registered_oauth_scopes {
+            separated
+                .push(" registered_oauth_scopes::jsonb != ")
+                .push_bind_unseparated(Json(registered_oauth_scopes));
         }
 
         query_builder
@@ -408,6 +427,7 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.sync_failures,
                   integration_connection_config.config as config,
                   integration_connection.context,
+                  integration_connection.registered_oauth_scopes,
                   true as "is_updated"
              "#,
         );
@@ -472,6 +492,7 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.sync_failures,
                   integration_connection_config.config as config,
                   integration_connection.context,
+                  integration_connection.registered_oauth_scopes,
                   true as "is_updated"
                "#,
         );
@@ -508,36 +529,49 @@ impl IntegrationConnectionRepository for Repository {
         &self,
         executor: &mut Transaction<'a, Postgres>,
         for_user_id: UserId,
+        status: Option<IntegrationConnectionStatus>,
     ) -> Result<Vec<IntegrationConnection>, UniversalInboxError> {
-        let rows = sqlx::query_as!(
-            IntegrationConnectionRow,
+        let mut query_builder = QueryBuilder::new(
             r#"
                 SELECT
                   integration_connection.id,
                   integration_connection.user_id,
                   integration_connection.provider_user_id,
                   integration_connection.connection_id,
-                  integration_connection.status as "status: _",
+                  integration_connection.status,
                   integration_connection.failure_message,
                   integration_connection.created_at,
                   integration_connection.updated_at,
                   integration_connection.last_sync_started_at,
                   integration_connection.last_sync_failure_message,
                   integration_connection.sync_failures,
-                  integration_connection_config.config as "config: Json<IntegrationConnectionConfig>",
-                  integration_connection.context as "context: Json<IntegrationConnectionContext>"
+                  integration_connection_config.config,
+                  integration_connection.context,
+                  integration_connection.registered_oauth_scopes
                 FROM integration_connection
                 INNER JOIN integration_connection_config
                   ON integration_connection.id = integration_connection_config.integration_connection_id
-                WHERE user_id = $1
+                WHERE
             "#,
-            for_user_id.0
-        )
-        .fetch_all(&mut **executor)
-        .await
+        );
+        let mut separated = query_builder.separated(" AND ");
+        separated
+            .push("user_id = ")
+            .push_bind_unseparated(for_user_id.0);
+        if let Some(status) = status {
+            separated
+                .push("integration_connection.status::TEXT = ")
+                .push_bind_unseparated(status.to_string());
+        }
+
+        let rows = query_builder
+            .build_query_as::<IntegrationConnectionRow>()
+            .fetch_all(&mut **executor)
+            .await
             .map_err(|err| UniversalInboxError::DatabaseError {
                 source: err,
-                message: "Failed to fetch all integration connections from storage".to_string() })?;
+                message: "Failed to fetch all integration connections from storage".to_string(),
+            })?;
 
         rows.into_iter()
             .map(|r| r.try_into())
@@ -704,6 +738,7 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.sync_failures,
                   integration_connection_config.config as config,
                   integration_connection.context,
+                  integration_connection.registered_oauth_scopes,
                   true as "is_updated"
                "#,
         );
@@ -764,6 +799,7 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.sync_failures,
                   integration_connection_config.config as config,
                   integration_connection.context,
+                  integration_connection.registered_oauth_scopes,
                   true as "is_updated"
                "#,
         );
@@ -819,6 +855,7 @@ pub struct IntegrationConnectionRow {
     sync_failures: i32,
     config: Json<IntegrationConnectionConfig>,
     context: Option<Json<IntegrationConnectionContext>>,
+    registered_oauth_scopes: Json<Vec<String>>,
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -865,6 +902,7 @@ impl TryFrom<IntegrationConnectionRow> for IntegrationConnection {
                 row.config.0.clone(),
                 row.context.map(|context| context.0),
             )?,
+            registered_oauth_scopes: row.registered_oauth_scopes.0,
         })
     }
 }

@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -209,7 +210,7 @@ pub trait IntegrationProviderSource {
 
 macro_attr! {
     // tag: New notification integration
-    #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy, Eq, EnumFromStr!, EnumDisplay!, Hash)]
+    #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy, Eq, EnumFromStr!, EnumDisplay!, Hash, ValueEnum)]
     pub enum IntegrationProviderKind {
         Github,
         Linear,

@@ -140,6 +140,7 @@ pub async fn create_integration_connection(
             integration_connection.id,
             status,
             None,
+            None,
             user_id,
         )
         .await

@@ -136,7 +136,7 @@ pub async fn create_user(
     email: EmailAddress,
     password: &str,
 ) -> User {
-    let service = app.user_service.read().await;
+    let service = app.user_service.clone();
     let mut transaction = app.repository.begin().await.unwrap();
     let new_user = app
         .repository

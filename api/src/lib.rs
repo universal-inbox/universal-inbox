@@ -84,7 +84,7 @@ pub async fn run_server(
     settings: Settings,
     notification_service: Arc<RwLock<NotificationService>>,
     task_service: Arc<RwLock<TaskService>>,
-    user_service: Arc<RwLock<UserService>>,
+    user_service: Arc<UserService>,
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     auth_token_service: Arc<RwLock<AuthenticationTokenService>>,
     third_party_item_service: Arc<RwLock<ThirdPartyItemService>>,
@@ -332,7 +332,7 @@ pub async fn build_services(
 ) -> (
     Arc<RwLock<NotificationService>>,
     Arc<RwLock<TaskService>>,
-    Arc<RwLock<UserService>>,
+    Arc<UserService>,
     Arc<RwLock<IntegrationConnectionService>>,
     Arc<RwLock<AuthenticationTokenService>>,
     Arc<RwLock<ThirdPartyItemService>>,
@@ -344,16 +344,17 @@ pub async fn build_services(
         settings.application.http_session.clone(),
     )));
 
-    let user_service = Arc::new(RwLock::new(UserService::new(
+    let user_service = Arc::new(UserService::new(
         repository.clone(),
         settings.application.clone(),
         mailer.clone(),
-    )));
+    ));
 
     let integration_connection_service = Arc::new(RwLock::new(IntegrationConnectionService::new(
         repository.clone(),
         nango_service,
         settings.integrations.oauth2.nango_provider_keys.clone(),
+        user_service.clone(),
     )));
 
     let todoist_service = Arc::new(

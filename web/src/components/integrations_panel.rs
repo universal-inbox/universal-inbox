@@ -181,70 +181,79 @@ pub fn IntegrationSettings<'a>(
     on_reconnect: EventHandler<'a, &'a IntegrationConnection>,
     on_config_change: EventHandler<'a, (&'a IntegrationConnection, IntegrationConnectionConfig)>,
 ) -> Element {
-    let (connection_button_label, connection_button_style, sync_message, provider) =
+    let provider = use_memo(cx, &connection.clone(), |connection| {
+        if let Some(Some(ic)) = &connection {
+            Some(ic.provider.clone())
+        } else {
+            None
+        }
+    });
+
+    let (connection_button_label, connection_button_style, add_disconnect_button) =
         use_memo(cx, &connection.clone(), |connection| match connection {
-            Some(Some(IntegrationConnection {
-                status: IntegrationConnectionStatus::Validated,
-                provider: p @ IntegrationProvider::Slack { .. },
-                provider_user_id: Some(_),
-                ..
-            })) => (
-                "Disconnect",
-                "btn-success",
-                Some("🟢 Integration is ready to receive events from Slack".to_string()),
-                Some(p),
-            ),
-            Some(Some(IntegrationConnection {
-                status: IntegrationConnectionStatus::Validated,
-                last_sync_started_at: Some(ref started_at),
-                last_sync_failure_message: None,
-                provider,
-                ..
-            })) => (
-                "Disconnect",
-                "btn-success",
-                Some(format!(
-                    "🟢 Last successfully synced at {}",
-                    started_at
-                        .with_timezone(&Local)
-                        .to_rfc3339_opts(SecondsFormat::Secs, true)
-                )),
-                Some(provider),
-            ),
-            Some(Some(IntegrationConnection {
-                status: IntegrationConnectionStatus::Validated,
-                last_sync_failure_message: Some(message),
-                provider,
-                ..
-            })) => (
-                "Disconnect",
-                "btn-success",
-                Some(format!("🔴 Last sync failed: {message}")),
-                Some(provider),
-            ),
-            Some(Some(IntegrationConnection {
-                status: IntegrationConnectionStatus::Validated,
-                last_sync_started_at: None,
-                provider,
-                ..
-            })) => (
-                "Disconnect",
-                "btn-success",
-                Some("🟠 Not yet synced".to_string()),
-                Some(provider),
-            ),
+            Some(Some(
+                ic @ IntegrationConnection {
+                    status: IntegrationConnectionStatus::Validated,
+                    ..
+                },
+            )) => {
+                if ic.has_oauth_scopes(&config.required_oauth_scopes) {
+                    ("Disconnect", "btn-success", false)
+                } else {
+                    ("Reconnect", "btn-warning", true)
+                }
+            }
             Some(Some(IntegrationConnection {
                 status: IntegrationConnectionStatus::Failing,
                 ..
-            })) => ("Reconnect", "btn-error", None, None),
+            })) => ("Reconnect", "btn-error", true),
             _ => {
                 if config.is_implemented {
-                    ("Connect", "btn-primary", None, None)
+                    ("Connect", "btn-primary", false)
                 } else {
-                    ("Not yet implemented", "btn-disabled btn-ghost", None, None)
+                    ("Not yet implemented", "btn-disabled btn-ghost", false)
                 }
             }
         });
+
+    let sync_message = use_memo(cx, &connection.clone(), |connection| match connection {
+        Some(Some(IntegrationConnection {
+            status: IntegrationConnectionStatus::Validated,
+            provider: IntegrationProvider::Slack { .. },
+            provider_user_id: Some(_),
+            ..
+        })) => Some("🟢 Integration is ready to receive events from Slack".to_string()),
+        Some(Some(IntegrationConnection {
+            status: IntegrationConnectionStatus::Validated,
+            last_sync_started_at: Some(ref started_at),
+            last_sync_failure_message: None,
+            ..
+        })) => Some(format!(
+            "🟢 Last successfully synced at {}",
+            started_at
+                .with_timezone(&Local)
+                .to_rfc3339_opts(SecondsFormat::Secs, true)
+        )),
+        Some(Some(IntegrationConnection {
+            status: IntegrationConnectionStatus::Validated,
+            last_sync_failure_message: Some(message),
+            ..
+        })) => Some(format!("🔴 Last sync failed: {message}")),
+        Some(Some(IntegrationConnection {
+            status: IntegrationConnectionStatus::Validated,
+            last_sync_started_at: None,
+            ..
+        })) => Some("🟠 Not yet synced".to_string()),
+        _ => None,
+    });
+
+    let has_all_oauth_scopes = use_memo(cx, &connection.clone(), |connection| {
+        if let Some(Some(ic)) = connection {
+            ic.has_oauth_scopes(&config.required_oauth_scopes)
+        } else {
+            false
+        }
+    });
 
     render! {
         div {
@@ -276,7 +285,7 @@ pub fn IntegrationSettings<'a>(
                             class: "btn {connection_button_style}",
                             onclick: move |_| {
                                 match connection {
-                                    Some(Some(c @ IntegrationConnection { status: IntegrationConnectionStatus::Validated, .. })) => on_disconnect.call(c),
+                                    Some(Some(c @ IntegrationConnection { status: IntegrationConnectionStatus::Validated, .. })) => if *has_all_oauth_scopes { on_disconnect.call(c) } else { on_reconnect.call(c) },
                                     Some(Some(c @ IntegrationConnection { status: IntegrationConnectionStatus::Failing, .. })) => on_reconnect.call(c),
                                     Some(Some(c @ IntegrationConnection { status: IntegrationConnectionStatus::Created, .. })) => on_connect.call(Some(c)),
                                     _ => on_connect.call(None),
@@ -284,6 +293,25 @@ pub fn IntegrationSettings<'a>(
                             },
 
                             "{connection_button_label}"
+                        }
+                    }
+
+                    if *add_disconnect_button {
+                        render! {
+                            div {
+                                class: "card-actions justify-end",
+
+                                button {
+                                    class: "btn btn-primary",
+                                    onclick: move |_| {
+                                        if let Some(Some(c)) = connection {
+                                            on_disconnect.call(c);
+                                        }
+                                    },
+
+                                    "Disconnect"
+                                }
+                            }
                         }
                     }
                 }
@@ -296,6 +324,25 @@ pub fn IntegrationSettings<'a>(
                             Icon { class: "w-5 h-5", icon: BsExclamationTriangle }
                             span { "{failure_message}" }
                         }
+                    }
+                }
+
+                if let Some(Some(IntegrationConnection { status: IntegrationConnectionStatus::Validated, .. })) = connection {
+                    if !*has_all_oauth_scopes {
+                        render! {
+                            div {
+                                class: "alert alert-warning shadow-lg",
+
+                                Icon { class: "w-5 h-5", icon: BsExclamationTriangle }
+                                div {
+                                    class: "flex flex-col gap-1",
+                                    span { "{kind} is connected, but it is missing some permissions. Some Universal Inbox features may not work properly." }
+                                    span { "Please reconnect the {kind} connection to grant the necessary permissions." }
+                                }
+                            }
+                        }
+                    } else {
+                        None
                     }
                 }
 

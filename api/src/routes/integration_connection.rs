@@ -60,7 +60,7 @@ pub async fn list_integration_connections(
         .await
         .context("Failed to create new transaction while listing integration connections")?;
     let result: Vec<IntegrationConnection> = service
-        .fetch_all_integration_connections(&mut transaction, user_id)
+        .fetch_all_integration_connections(&mut transaction, user_id, None)
         .await?;
 
     Ok(HttpResponse::Ok().content_type("application/json").body(
