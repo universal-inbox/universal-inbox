@@ -24,7 +24,6 @@ email_address = { workspace = true }
 emojis = "0.6.0"
 enum_derive = { workspace = true }
 git-url-parse = "0.4.0"
-http = { workspace = true }
 macro-attr = { workspace = true }
 num_enum = "0.7.0"
 openidconnect = { workspace = true }

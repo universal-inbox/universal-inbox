@@ -3,7 +3,7 @@ repos:
   - repo: local
     hooks:
       - id: fmt
-        name: fmt
+        name: Format Rust code
         description: Format files with cargo fmt
         entry: just format
         language: system
@@ -12,14 +12,20 @@ repos:
         args: []
         stages: [commit]
       - id: clippy
-        name: clippy
+        name: Check Rust code
         language: system
         pass_filenames: false
         entry: just check-all
         files: \.rs$
         stages: [commit]
+      - id: cargo-machete
+        name: Detect unused Rust dependencies
+        language: system
+        pass_filenames: false
+        entry: just check-unused-dependencies
+        stages: [commit]
       - id: todo
-        name: todo
+        name: Check TODO in the code
         language: system
         pass_filenames: false
         entry: bash -c 'rg TODO && false || true'

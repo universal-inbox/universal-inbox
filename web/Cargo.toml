@@ -19,7 +19,11 @@ comrak = { version = "0.21.0", features = ["shortcodes"] }
 console_error_panic_hook = "0.1"
 console_log = { version = "1.0", features = ["color"], optional = true }
 dioxus = { version = "0.4" }
-dioxus-free-icons = { version = "0.7.0", features = ["bootstrap", "ionicons", "octicons"] }
+dioxus-free-icons = { version = "0.7.0", features = [
+  "bootstrap",
+  "ionicons",
+  "octicons",
+] }
 dioxus-router = { version = "0.4", features = ["web"] }
 dioxus-web = "0.4"
 email_address = { workspace = true }
@@ -38,10 +42,8 @@ regex = { workspace = true }
 reqwest = { workspace = true }
 secrecy = { workspace = true }
 serde = { workspace = true }
-serde_urlencoded = { workspace = true }
 serde-wasm-bindgen = "0.6.0"
 slack-morphism = { workspace = true }
-thiserror = { workspace = true }
 universal-inbox = { path = ".." }
 url = { workspace = true }
 uuid = { workspace = true, features = ["js"] }
@@ -73,7 +75,6 @@ features = [
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }
-rstest = { workspace = true }
 wasm-bindgen-test = "0.3.0"
 
 [features]
