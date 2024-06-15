@@ -40,6 +40,9 @@ check-all: check
     just web/check
     just api/check
 
+check-unused-dependencies:
+    cargo machete --with-metadata Cargo.toml web/Cargo.toml api/Cargo.toml
+
 format:
     cargo fmt --all
 
