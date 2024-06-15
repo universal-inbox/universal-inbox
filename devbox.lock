@@ -561,6 +561,50 @@
         }
       }
     },
+    "lld@latest": {
+      "last_modified": "2024-06-09T00:38:05Z",
+      "resolved": "github:NixOS/nixpkgs/3bcedce9f4de37570242faf16e1e143583407eab#lld",
+      "source": "devbox-search",
+      "version": "17.0.6",
+      "systems": {
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/2xzzfr23z4v8617lfmsc4cwr0za95yqb-lld-17.0.6",
+              "default": true
+            },
+            {
+              "name": "dev",
+              "path": "/nix/store/6vb2gcg5nhxjy4fcgq489ab77ddippxh-lld-17.0.6-dev"
+            },
+            {
+              "name": "lib",
+              "path": "/nix/store/dlw33pk3424qw2qa5gm5mgwb6w0cmpld-lld-17.0.6-lib"
+            }
+          ],
+          "store_path": "/nix/store/2xzzfr23z4v8617lfmsc4cwr0za95yqb-lld-17.0.6"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/bw0xb4cyr625zwgpqdnywsiha1g6cahn-lld-17.0.6",
+              "default": true
+            },
+            {
+              "name": "lib",
+              "path": "/nix/store/vwp5r8g8swhw63lgws9awd9phsg6f43p-lld-17.0.6-lib"
+            },
+            {
+              "name": "dev",
+              "path": "/nix/store/qqakn0q4clra7ciq1g90pmnzlrrabcb0-lld-17.0.6-dev"
+            }
+          ],
+          "store_path": "/nix/store/bw0xb4cyr625zwgpqdnywsiha1g6cahn-lld-17.0.6"
+        }
+      }
+    },
     "nodejs@latest": {
       "last_modified": "2024-03-09T07:11:56Z",
       "plugin_version": "0.0.2",
