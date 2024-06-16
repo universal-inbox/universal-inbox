@@ -72,7 +72,7 @@ jobs:
           shared-key: ci
       - name: Run tests
         env:
-          RUST_MIN_STACK: 4194304
+          RUST_MIN_STACK: 104857600
         run: devbox run -- just test
       - name: Shared test Report
         uses: dorny/test-reporter@v1
@@ -98,7 +98,7 @@ jobs:
           shared-key: ci
       - name: Run web tests
         env:
-          RUST_MIN_STACK: 4194304
+          RUST_MIN_STACK: 104857600
         run: devbox run -- just web/test
 
   test-ui-api:
@@ -148,7 +148,7 @@ jobs:
           shared-key: ci
       - name: Run API tests
         env:
-          RUST_MIN_STACK: 4194304
+          RUST_MIN_STACK: 104857600
           RUST_BACKTRACE: "full"
         run: devbox run -- just api/test
       - name: API test Report

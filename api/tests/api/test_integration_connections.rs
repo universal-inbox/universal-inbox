@@ -1,4 +1,4 @@
-use actix_http::StatusCode;
+use http::StatusCode;
 use httpmock::Method::GET;
 use rstest::*;
 use serde_json::json;

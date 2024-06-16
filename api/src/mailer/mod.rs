@@ -121,7 +121,7 @@ impl SmtpMailer {
         user: User,
         template: EmailTemplate,
     ) -> Result<Message, UniversalInboxError> {
-        let theme = DefaultTheme::new();
+        let theme = DefaultTheme::new().context("Failed to create default theme")?;
         let branding = Branding {
             logo: Some(
                 "https://www.universal-inbox.com/images/ui-logo-transparent.png".to_string(),
