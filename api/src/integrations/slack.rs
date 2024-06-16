@@ -3,7 +3,7 @@ use std::sync::Arc;
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use cached::{proc_macro::io_cached, Return};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Timelike, Utc};
 use slack_morphism::{
     errors::{SlackClientApiError, SlackClientError},
     prelude::*,
@@ -504,8 +504,8 @@ impl SlackService {
                 created_at: slack_star_created_at,
                 starred_item: slack_starred_item,
             }),
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
+            created_at: Utc::now().with_nanosecond(0).unwrap(),
+            updated_at: Utc::now().with_nanosecond(0).unwrap(),
             user_id,
             integration_connection_id: integration_connection.id,
         }))

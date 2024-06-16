@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 use slack_blocks_render::render_blocks_as_markdown;
 use slack_morphism::{
@@ -181,8 +181,8 @@ impl ThirdPartyItemFromSource for SlackStar {
             id: Uuid::new_v4().into(),
             source_id,
             data: ThirdPartyItemData::SlackStar(self.clone()),
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
+            created_at: Utc::now().with_nanosecond(0).unwrap(),
+            updated_at: Utc::now().with_nanosecond(0).unwrap(),
             user_id,
             integration_connection_id,
         }

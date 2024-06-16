@@ -1,7 +1,7 @@
 use std::fmt;
 
 use anyhow::anyhow;
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, NaiveDate, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use serde_with::{serde_as, DisplayFromStr};
@@ -310,8 +310,8 @@ impl ThirdPartyItemFromSource for LinearIssue {
             id: Uuid::new_v4().into(),
             source_id: self.id.to_string(),
             data: ThirdPartyItemData::LinearIssue(self.clone()),
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
+            created_at: Utc::now().with_nanosecond(0).unwrap(),
+            updated_at: Utc::now().with_nanosecond(0).unwrap(),
             user_id,
             integration_connection_id,
         }

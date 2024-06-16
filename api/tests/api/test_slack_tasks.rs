@@ -4,6 +4,8 @@ use chrono::Utc;
 use pretty_assertions::assert_eq;
 use rstest::*;
 use slack_morphism::prelude::SlackPushEvent;
+use tokio::time::{sleep, Duration};
+
 use universal_inbox::{
     integration_connection::{
         config::IntegrationConnectionConfig,
@@ -158,6 +160,8 @@ async fn test_sync_todoist_slack_task(
 
     assert_eq!(response.status(), 200);
     assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
+    // make sure the task will be updated
+    sleep(Duration::from_millis(1000)).await;
 
     slack_get_chat_permalink_mock.assert();
     slack_fetch_user_mock.assert();

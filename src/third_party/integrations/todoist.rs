@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Timelike, Utc};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use url::Url;
@@ -125,8 +125,8 @@ impl ThirdPartyItemFromSource for TodoistItem {
             id: Uuid::new_v4().into(),
             source_id: self.id.clone(),
             data: ThirdPartyItemData::TodoistItem(self.clone()),
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
+            created_at: Utc::now().with_nanosecond(0).unwrap(),
+            updated_at: Utc::now().with_nanosecond(0).unwrap(),
             user_id,
             integration_connection_id,
         }

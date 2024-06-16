@@ -1,4 +1,4 @@
-use chrono::{NaiveDate, TimeZone, Utc};
+use chrono::{NaiveDate, TimeZone, Timelike, Utc};
 use graphql_client::Response;
 use rstest::*;
 use uuid::Uuid;
@@ -80,8 +80,8 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         Box::new(ThirdPartyItem {
             id: Uuid::new_v4().into(),
             source_id: todoist_item.id.clone(),
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
+            created_at: Utc::now().with_nanosecond(0).unwrap(),
+            updated_at: Utc::now().with_nanosecond(0).unwrap(),
             user_id: app.user.id,
             data: ThirdPartyItemData::TodoistItem(TodoistItem {
                 project_id: "2222".to_string(), // ie. "Project2"
