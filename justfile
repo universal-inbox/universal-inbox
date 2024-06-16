@@ -5,6 +5,26 @@ export NANGO_POSTGRES_DB := "nango"
 default:
     @just --choose
 
+## Setup recipes
+init-db:
+  #!/usr/bin/env bash
+  
+  [ -d .devbox/virtenv/postgresql_15/data ] || initdb --username=postgres --pwfile=<(echo password)
+
+install-rust-toolchain:
+  #!/usr/bin/env bash
+
+  rustup show active-toolchain | grep -q "^$RUST_TOOLCHAIN_VERSION-" || rustup default $RUST_TOOLCHAIN_VERSION
+  for toolchain in $(rustup toolchain list | grep -v $(rustup show active-toolchain | awk '{ print $1 }')); do
+    rustup toolchain uninstall $toolchain
+  done
+  rustup target list --installed | grep -q '^wasm32-unknown-unknown$' || rustup target add wasm32-unknown-unknown
+  rustup component list --installed | grep -q '^rust-analyzer-' || rustup component add rust-analyzer
+  rustup component list --installed | grep -q '^llvm-tools-' || rustup component add llvm-tools-preview
+
+install-rust-tools:
+  cargo binstall -y cargo-llvm-cov --version 0.6.8
+
 ## Build recipes
 clean:
     cargo clean

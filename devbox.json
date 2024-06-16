@@ -39,16 +39,13 @@
   },
   "shell": {
     "init_hook": [
-      "bash -c '[ -d .devbox/virtenv/postgresql_15/data ] || initdb --username=postgres --pwfile=<(echo password)'",
-      "rustup show active-toolchain | grep -q '^1.75-' || rustup default 1.75",
-      "rustup toolchain list | grep -q '^nightly-2024-03-04' || rustup toolchain install nightly-2024-03-04",
-      "rustup target list --installed | grep -q '^wasm32-unknown-unknown$' || rustup target add wasm32-unknown-unknown",
-      "rustup component list --installed | grep -q '^rust-analyzer-' || rustup component add rust-analyzer",
-      "rustup component list --installed | grep -q '^llvm-tools-' || rustup component add llvm-tools-preview",
-      "cargo binstall -y cargo-llvm-cov --version 0.6.8"
+      "just init-db",
+      "just install-rust-toolchain",
+      "just install-rust-tools"
     ]
   },
   "env": {
-    "TARGET_CC": "cc"
+    "TARGET_CC": "cc",
+    "RUST_TOOLCHAIN_VERSION": "1.79"
   }
 }

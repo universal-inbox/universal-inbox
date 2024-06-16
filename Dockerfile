@@ -4,6 +4,7 @@ FROM devbox as base
 WORKDIR /app
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" devbox.json devbox.json
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" devbox.lock devbox.lock
+COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" justfile justfile
 RUN sudo chown -R "${DEVBOX_USER}:${DEVBOX_USER}" /app
 RUN devbox run -- echo "Installed Packages."
 
@@ -14,7 +15,7 @@ COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" api/Cargo.toml api/Cargo.toml
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/Cargo.toml web/Cargo.toml
 RUN devbox run -- cargo chef prepare --recipe-path recipe.json
 
-FROM rust:1.75.0-bookworm as tools
+FROM rust:1.79.0-bookworm as tools
 RUN cargo install sqlx-cli --version 0.7.4
 
 FROM base as dep-web-builder
@@ -32,7 +33,6 @@ RUN devbox run -- just web/build-release
 
 FROM base as dep-api-builder
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" api/justfile api/justfile
-COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" api/rust-toolchain.toml api/rust-toolchain.toml
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" --from=planner /app/recipe.json recipe.json
 RUN devbox run -- cargo chef cook --release -p universal-inbox-api --recipe-path recipe.json --no-build
 # Only dependencies will be compiled as cargo chef has modfied main.rs and lib.rs to be empty
@@ -60,10 +60,10 @@ RUN mkdir /data
 COPY docker/universal-inbox-entrypoint universal-inbox-entrypoint
 COPY --from=release-api-builder /app/target/release/universal-inbox-api universal-inbox
 RUN apt-get update \
-    && apt-get install -y ca-certificates patchelf curl \
-    && patchelf --set-interpreter /usr/bin/ld.so universal-inbox \
-    && apt-get purge -y patchelf \
-    && rm -rf /var/lib/apt/lists/*
+  && apt-get install -y ca-certificates patchelf curl \
+  && patchelf --set-interpreter /usr/bin/ld.so universal-inbox \
+  && apt-get purge -y patchelf \
+  && rm -rf /var/lib/apt/lists/*
 COPY --from=release-api-builder /app/api/config/default.toml config/default.toml
 COPY --from=release-api-builder /app/api/config/prod.toml config/prod.toml
 COPY --from=release-api-builder /app/api/migrations migrations

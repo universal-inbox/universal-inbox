@@ -106,7 +106,7 @@ fn SlackMessageDisplay<'a>(cx: Scope, slack_message: &'a SlackMessageDetails) ->
 fn sanitize_slack_markdown(slack_markdown: &str) -> String {
     // Replace slack markdown with common markdown
     // This could be more robustly implemented using Slack blocks
-    let regexs = vec![
+    let regexs = [
         (Regex::new(r"^```").unwrap(), "```\n"),
         (Regex::new(r"```$").unwrap(), "\n```"),
         (Regex::new(r"^• ").unwrap(), "- "),
