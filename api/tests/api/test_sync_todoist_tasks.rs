@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use actix_http::StatusCode;
 use chrono::{TimeZone, Utc};
+use http::StatusCode;
 use pretty_assertions::assert_eq;
 use rstest::*;
 use tokio::time::{sleep, Duration};
