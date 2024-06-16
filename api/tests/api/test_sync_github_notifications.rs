@@ -1,7 +1,7 @@
 #![allow(clippy::too_many_arguments)]
-use actix_http::StatusCode;
 use chrono::{TimeZone, Timelike, Utc};
 use graphql_client::{Error, Response};
+use http::StatusCode;
 use rstest::*;
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
