@@ -102,15 +102,21 @@ pub fn AuthenticationTokensCard(cx: Scope) -> Element {
                             }
                         }
                         tbody {
-                            if let LoadState::Loaded(created_authentication_token) = created_authentication_token_ref.read().deref() {
-                                render! {
+                            match created_authentication_token_ref.read().deref() {
+                                LoadState::Loaded(created_authentication_token) => render! {
                                     AuthenticationToken {
                                         id: created_authentication_token.id.clone(),
                                         expire_at: created_authentication_token.expire_at,
                                         jwt_token: created_authentication_token.jwt_token.expose_secret().to_string(),
                                         is_copiable: true
                                     }
-                                }
+                                },
+                                LoadState::Error(error) => render! {
+                                    tr {
+                                        td { colspan: "4", format!("Failed to create a new API key: {error}") }
+                                    }
+                                },
+                                _ => None
                             }
                             for auth_token in authentication_tokens.into_iter() {
                                 render! {

@@ -1,5 +1,3 @@
-#![feature(trait_upcasting)]
-#![feature(box_patterns)]
 #![recursion_limit = "256"]
 
 use std::{

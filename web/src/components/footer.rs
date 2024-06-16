@@ -71,9 +71,7 @@ pub fn Footer(cx: Scope) -> Element {
         },
     );
 
-    let Some(app_config) = app_config.as_ref() else {
-        return None;
-    };
+    let app_config = app_config.as_ref()?;
 
     render! {
         footer {
