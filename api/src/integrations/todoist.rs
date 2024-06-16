@@ -9,7 +9,6 @@ use std::{
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use cached::proc_macro::cached;
-use chrono::Utc;
 use http::{HeaderMap, HeaderValue, StatusCode};
 use regex::RegexBuilder;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
@@ -366,7 +365,7 @@ impl TodoistService {
                 .map(|due| due.is_recurring)
                 .unwrap_or(false),
             created_at: source.added_at,
-            updated_at: Utc::now(),
+            updated_at: source_third_party_item.updated_at,
             kind: TaskSourceKind::Todoist,
             source_item: source_third_party_item.clone(),
             sink_item: Some(source_third_party_item.clone()),
