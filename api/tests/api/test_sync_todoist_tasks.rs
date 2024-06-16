@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use actix_http::StatusCode;
-use chrono::{TimeZone, Utc};
+use chrono::{TimeDelta, TimeZone, Timelike, Utc};
+use http::StatusCode;
 use pretty_assertions::assert_eq;
 use rstest::*;
 use tokio::time::{sleep, Duration};
@@ -508,8 +508,8 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
                 Box::new(ThirdPartyItem {
                     id: Uuid::new_v4().into(),
                     source_id: todoist_item.id.clone(),
-                    created_at: Utc::now(),
-                    updated_at: Utc::now(),
+                    created_at: Utc::now().with_nanosecond(0).unwrap(),
+                    updated_at: Utc::now().with_nanosecond(0).unwrap() - TimeDelta::seconds(1),
                     user_id: app.user.id,
                     data: ThirdPartyItemData::TodoistItem(TodoistItem {
                         project_id: "1111".to_string(), // ie. "Inbox"
@@ -623,8 +623,8 @@ async fn test_sync_tasks_should_not_update_tasks_and_notifications_with_empty_in
                 Box::new(ThirdPartyItem {
                     id: Uuid::new_v4().into(),
                     source_id: todoist_item.id.clone(),
-                    created_at: Utc::now(),
-                    updated_at: Utc::now(),
+                    created_at: Utc::now().with_nanosecond(0).unwrap(),
+                    updated_at: Utc::now().with_nanosecond(0).unwrap() - TimeDelta::seconds(1),
                     user_id: app.user.id,
                     data: ThirdPartyItemData::TodoistItem(TodoistItem {
                         project_id: "1111".to_string(), // ie. "Inbox"

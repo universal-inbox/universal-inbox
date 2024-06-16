@@ -1,4 +1,4 @@
-use chrono::Utc;
+use chrono::{TimeDelta, Timelike, Utc};
 
 use universal_inbox::{
     integration_connection::IntegrationConnectionId,
@@ -75,7 +75,7 @@ pub async fn create_linear_task(
         is_deleted: false,
         collapsed: false,
         completed_at: None,
-        added_at: Utc::now(),
+        added_at: Utc::now().with_nanosecond(0).unwrap(),
         due: task.due_at.as_ref().map(|due_at| due_at.into()),
         user_id: "user_id".to_string(),
         added_by_uid: None,
@@ -89,8 +89,10 @@ pub async fn create_linear_task(
         .await
         .unwrap();
 
-    let sink_third_party_item =
+    let mut sink_third_party_item =
         todoist_item.into_third_party_item(user_id, integration_connection_id);
+    // Make sure it will be updated
+    sink_third_party_item.updated_at = Utc::now() - TimeDelta::seconds(1);
     let sink_third_party_item = app
         .repository
         .create_or_update_third_party_item(&mut transaction, Box::new(sink_third_party_item))

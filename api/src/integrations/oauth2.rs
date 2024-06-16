@@ -216,9 +216,9 @@ fn build_nango_client(secret_key: &str) -> Result<ClientWithMiddleware, reqwest:
 
 #[cfg(test)]
 mod tests {
-    use rstest::*;
-
     use super::*;
+    use chrono::Timelike;
+    use rstest::*;
 
     mod get_registered_oauth_scopes {
         use pretty_assertions::assert_eq;
@@ -231,8 +231,8 @@ mod tests {
         fn connection() -> NangoConnection {
             NangoConnection {
                 id: 1,
-                created_at: Utc::now(),
-                updated_at: Utc::now(),
+                created_at: Utc::now().with_nanosecond(0).unwrap(),
+                updated_at: Utc::now().with_nanosecond(0).unwrap(),
                 deleted_at: None,
                 deleted: false,
                 environment_id: 1,

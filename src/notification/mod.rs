@@ -292,7 +292,7 @@ pub trait NotificationSource: IntegrationProviderSource {
 mod tests {
     use std::{env, fs};
 
-    use chrono::{TimeZone, Utc};
+    use chrono::{TimeZone, Timelike, Utc};
 
     use super::*;
     use rstest::*;
@@ -435,15 +435,15 @@ mod tests {
                     parent_id: None,
                     project: "Project".to_string(),
                     is_recurring: false,
-                    created_at: Utc::now(),
-                    updated_at: Utc::now(),
+                    created_at: Utc::now().with_nanosecond(0).unwrap(),
+                    updated_at: Utc::now().with_nanosecond(0).unwrap(),
                     kind: TaskSourceKind::Todoist,
                     source_item: ThirdPartyItem {
                         id: Uuid::new_v4().into(),
                         data: ThirdPartyItemData::TodoistItem(*todoist_item),
                         source_id: todoist_item_id,
-                        created_at: Utc::now(),
-                        updated_at: Utc::now(),
+                        created_at: Utc::now().with_nanosecond(0).unwrap(),
+                        updated_at: Utc::now().with_nanosecond(0).unwrap(),
                         user_id: Uuid::new_v4().into(),
                         integration_connection_id: Uuid::new_v4().into(),
                     },

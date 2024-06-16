@@ -1,4 +1,4 @@
-use chrono::{TimeZone, Utc};
+use chrono::{TimeZone, Timelike, Utc};
 use httpmock::Method::POST;
 use rstest::*;
 use serde_json::json;
@@ -106,8 +106,8 @@ mod patch_resource {
             Box::new(ThirdPartyItem {
                 id: Uuid::new_v4().into(),
                 source_id: todoist_item.id.clone(),
-                created_at: Utc::now(),
-                updated_at: Utc::now(),
+                created_at: Utc::now().with_nanosecond(0).unwrap(),
+                updated_at: Utc::now().with_nanosecond(0).unwrap(),
                 user_id: app.user.id,
                 data: ThirdPartyItemData::TodoistItem(TodoistItem {
                     project_id: "2222".to_string(), // ie. "Project2"

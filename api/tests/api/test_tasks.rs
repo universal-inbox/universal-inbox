@@ -1,4 +1,4 @@
-use chrono::{TimeZone, Utc};
+use chrono::{TimeZone, Timelike, Utc};
 use http::StatusCode;
 use rstest::*;
 use serde_json::json;
@@ -89,8 +89,8 @@ mod get_task {
             Box::new(ThirdPartyItem {
                 id: Uuid::new_v4().into(),
                 source_id: todoist_item.id.clone(),
-                created_at: Utc::now(),
-                updated_at: Utc::now(),
+                created_at: Utc::now().with_nanosecond(0).unwrap(),
+                updated_at: Utc::now().with_nanosecond(0).unwrap(),
                 user_id: app.user.id,
                 data: ThirdPartyItemData::TodoistItem(TodoistItem {
                     project_id: "1111".to_string(), // ie. "Inbox"
@@ -168,8 +168,8 @@ mod list_tasks {
             Box::new(ThirdPartyItem {
                 id: Uuid::new_v4().into(),
                 source_id: todoist_item.id.clone(),
-                created_at: Utc::now(),
-                updated_at: Utc::now(),
+                created_at: Utc::now().with_nanosecond(0).unwrap(),
+                updated_at: Utc::now().with_nanosecond(0).unwrap(),
                 user_id: app.user.id,
                 data: ThirdPartyItemData::TodoistItem(TodoistItem {
                     project_id: "1111".to_string(), // ie. "Inbox"
@@ -195,8 +195,8 @@ mod list_tasks {
             Box::new(ThirdPartyItem {
                 id: Uuid::new_v4().into(),
                 source_id: todoist_item_done.id.clone(),
-                created_at: Utc::now(),
-                updated_at: Utc::now(),
+                created_at: Utc::now().with_nanosecond(0).unwrap(),
+                updated_at: Utc::now().with_nanosecond(0).unwrap(),
                 user_id: app.user.id,
                 data: ThirdPartyItemData::TodoistItem(TodoistItem {
                     project_id: "1111".to_string(), // ie. "Inbox"
@@ -268,8 +268,8 @@ mod patch_task {
             Box::new(ThirdPartyItem {
                 id: Uuid::new_v4().into(),
                 source_id: todoist_item.id.clone(),
-                created_at: Utc::now(),
-                updated_at: Utc::now(),
+                created_at: Utc::now().with_nanosecond(0).unwrap(),
+                updated_at: Utc::now().with_nanosecond(0).unwrap(),
                 user_id: app.user.id,
                 data: ThirdPartyItemData::TodoistItem(TodoistItem {
                     project_id: "1111".to_string(), // ie. "Inbox"
@@ -331,8 +331,8 @@ mod patch_task {
             Box::new(ThirdPartyItem {
                 id: Uuid::new_v4().into(),
                 source_id: todoist_item.id.clone(),
-                created_at: Utc::now(),
-                updated_at: Utc::now(),
+                created_at: Utc::now().with_nanosecond(0).unwrap(),
+                updated_at: Utc::now().with_nanosecond(0).unwrap(),
                 user_id: app.user.id,
                 data: ThirdPartyItemData::TodoistItem(TodoistItem {
                     project_id: "1111".to_string(), // ie. "Inbox"
@@ -397,8 +397,8 @@ mod patch_task {
             Box::new(ThirdPartyItem {
                 id: Uuid::new_v4().into(),
                 source_id: todoist_item.id.clone(),
-                created_at: Utc::now(),
-                updated_at: Utc::now(),
+                created_at: Utc::now().with_nanosecond(0).unwrap(),
+                updated_at: Utc::now().with_nanosecond(0).unwrap(),
                 user_id: app.user.id,
                 data: ThirdPartyItemData::TodoistItem(TodoistItem {
                     project_id: "1111".to_string(), // ie. "Inbox"
@@ -514,8 +514,8 @@ mod search_tasks {
             Box::new(ThirdPartyItem {
                 id: Uuid::new_v4().into(),
                 source_id: todoist_item.id.clone(),
-                created_at: Utc::now(),
-                updated_at: Utc::now(),
+                created_at: Utc::now().with_nanosecond(0).unwrap(),
+                updated_at: Utc::now().with_nanosecond(0).unwrap(),
                 user_id: app.user.id,
                 data: ThirdPartyItemData::TodoistItem(TodoistItem {
                     project_id: "1111".to_string(), // ie. "Inbox"
@@ -541,8 +541,8 @@ mod search_tasks {
             Box::new(ThirdPartyItem {
                 id: Uuid::new_v4().into(),
                 source_id: other_todoist_item.id.clone(),
-                created_at: Utc::now(),
-                updated_at: Utc::now(),
+                created_at: Utc::now().with_nanosecond(0).unwrap(),
+                updated_at: Utc::now().with_nanosecond(0).unwrap(),
                 user_id: app.user.id,
                 data: ThirdPartyItemData::TodoistItem(TodoistItem {
                     project_id: "1111".to_string(), // ie. "Inbox"

@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Timelike, Utc};
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
@@ -100,8 +100,8 @@ impl ThirdPartyItem {
             id: Uuid::new_v4().into(),
             source_id,
             data,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
+            created_at: Utc::now().with_nanosecond(0).unwrap(),
+            updated_at: Utc::now().with_nanosecond(0).unwrap(),
             user_id,
             integration_connection_id,
         }

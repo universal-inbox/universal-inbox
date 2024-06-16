@@ -5,6 +5,7 @@ use slack_morphism::prelude::{
     SlackAppHomeOpenedEvent, SlackAppRateLimitedEvent, SlackEventCallbackBody, SlackPushEvent,
     SlackPushEventCallback, SlackStarAddedEvent, SlackStarsItem, SlackUrlVerificationEvent,
 };
+use tokio::time::{sleep, Duration};
 
 use universal_inbox::{
     integration_connection::{
@@ -223,6 +224,7 @@ async fn test_receive_star_added_event_as_notification(
 
     assert_eq!(response.status(), 200);
     assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
+    sleep(Duration::from_secs(1)).await;
 
     slack_get_chat_permalink_mock.assert();
     slack_fetch_user_mock.assert();
@@ -375,6 +377,7 @@ async fn test_receive_bot_star_added_event_as_notification(
 
     assert_eq!(response.status(), 200);
     assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
+    sleep(Duration::from_secs(1)).await;
 
     slack_get_chat_permalink_mock.assert();
     slack_fetch_bot_mock.assert();
@@ -583,6 +586,7 @@ async fn test_receive_star_removed_event_as_notification(
     .await;
     assert_eq!(response.status(), 200);
     assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
+    sleep(Duration::from_secs(1)).await;
 
     slack_get_chat_permalink_mock.assert_hits(1);
     slack_fetch_user_mock.assert_hits(1);
@@ -870,6 +874,8 @@ async fn test_receive_star_removed_and_added_event_as_task(
     .await;
     assert_eq!(response.status(), 200);
     assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
+    // Make sure the task will be updated
+    sleep(Duration::from_secs(1)).await;
 
     slack_get_chat_permalink_mock.assert();
     slack_fetch_user_mock.assert();
@@ -923,6 +929,7 @@ async fn test_receive_star_removed_and_added_event_as_task(
     .await;
     assert_eq!(response.status(), 200);
     assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
+    sleep(Duration::from_secs(1)).await;
 
     slack_get_chat_permalink_mock.assert_hits(1);
     slack_fetch_user_mock.assert_hits(1);
@@ -974,6 +981,7 @@ async fn test_receive_star_removed_and_added_event_as_task(
     .await;
     assert_eq!(response.status(), 200);
     assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
+    sleep(Duration::from_secs(1)).await;
 
     todoist_uncomplete_item_mock.assert();
 

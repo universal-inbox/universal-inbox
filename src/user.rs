@@ -1,7 +1,7 @@
 use std::{fmt, str::FromStr};
 
 use anyhow::anyhow;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Timelike, Utc};
 use email_address::EmailAddress;
 use secrecy::{CloneableSecret, DebugSecret, Secret, SerializableSecret, Zeroize};
 use serde::{Deserialize, Serialize};
@@ -34,8 +34,8 @@ impl User {
             email,
             email_validated_at: None,
             email_validation_sent_at: None,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
+            created_at: Utc::now().with_nanosecond(0).unwrap(),
+            updated_at: Utc::now().with_nanosecond(0).unwrap(),
             auth,
         }
     }
