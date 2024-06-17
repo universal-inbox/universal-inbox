@@ -1,8 +1,6 @@
 name: ci-pr
 
-on:
-  push:
-    pull_request:
+on: pull_request
 
 permissions:
   contents: read
@@ -23,7 +21,7 @@ jobs:
       - name: Install Devbox
         uses: jetpack-io/devbox-install-action@v0.7.0
         with:
-          enable-cache: 'true'
+          enable-cache: "true"
 
   rustfmt:
     needs: base
@@ -35,7 +33,7 @@ jobs:
       - name: Install Devbox
         uses: jetpack-io/devbox-install-action@v0.7.0
         with:
-          enable-cache: 'true'
+          enable-cache: "true"
       - name: Check formatting
         run: devbox run -- just check-format
 
@@ -49,7 +47,7 @@ jobs:
       - name: Install Devbox
         uses: jetpack-io/devbox-install-action@v0.7.0
         with:
-          enable-cache: 'true'
+          enable-cache: "true"
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci
@@ -66,7 +64,7 @@ jobs:
       - name: Install Devbox
         uses: jetpack-io/devbox-install-action@v0.7.0
         with:
-          enable-cache: 'true'
+          enable-cache: "true"
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci
@@ -92,7 +90,7 @@ jobs:
       - name: Install Devbox
         uses: jetpack-io/devbox-install-action@v0.7.0
         with:
-          enable-cache: 'true'
+          enable-cache: "true"
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci
@@ -142,7 +140,7 @@ jobs:
       - name: Install Devbox
         uses: jetpack-io/devbox-install-action@v0.7.0
         with:
-          enable-cache: 'true'
+          enable-cache: "true"
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci
