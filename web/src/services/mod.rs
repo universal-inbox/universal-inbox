@@ -1,5 +1,6 @@
 pub mod api;
 pub mod authentication_token_service;
+pub mod headway;
 pub mod integration_connection_service;
 pub mod nango;
 pub mod notification_service;

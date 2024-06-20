@@ -208,6 +208,7 @@ pub async fn front_config(
             ),
         ]),
         support_href: settings.application.support_href.clone(),
+        show_changelog: settings.application.show_changelog,
     };
 
     Ok(HttpResponse::Ok()
