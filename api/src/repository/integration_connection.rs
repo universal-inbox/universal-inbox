@@ -104,6 +104,7 @@ pub trait IntegrationConnectionRepository {
 }
 
 pub const TOO_MANY_SYNC_FAILURES_ERROR_MESSAGE: &str = "♻️ Too many synchronization failures. Please try to reconnect the integration. If the issue keeps happening, please contact our support.";
+pub const MAX_SYNC_FAILURES_BEFORE_DISCONNECT: u32 = 42;
 
 #[async_trait]
 impl IntegrationConnectionRepository for Repository {
@@ -393,8 +394,8 @@ impl IntegrationConnectionRepository for Repository {
         if failure_message.is_some() {
             separated.push(" sync_failures = sync_failures + 1");
             separated
-                .push(" status = CASE WHEN sync_failures + 1 >= 3 THEN 'Failing' ELSE status END ");
-            separated.push(format!(" failure_message = CASE WHEN sync_failures + 1 >= 3 THEN '{TOO_MANY_SYNC_FAILURES_ERROR_MESSAGE}' ELSE failure_message END "));
+                .push(format!(" status = CASE WHEN sync_failures + 1 >= {MAX_SYNC_FAILURES_BEFORE_DISCONNECT} THEN 'Failing' ELSE status END "));
+            separated.push(format!(" failure_message = CASE WHEN sync_failures + 1 >= {MAX_SYNC_FAILURES_BEFORE_DISCONNECT} THEN '{TOO_MANY_SYNC_FAILURES_ERROR_MESSAGE}' ELSE failure_message END "));
         }
 
         separated
