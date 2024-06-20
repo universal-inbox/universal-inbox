@@ -474,7 +474,8 @@ fn build_csp_header(settings: &Settings) -> String {
         .push(Directive::ScriptSrc(
             Sources::new_with(Source::Self_)
                 .push(Source::WasmUnsafeEval)
-                .push(Source::UnsafeInline),
+                .push(Source::UnsafeInline)
+                .push(Source::Host("https://cdn.headwayapp.co")),
         ))
         .push(Directive::StyleSrc(
             Sources::new_with(Source::Self_).push(Source::UnsafeInline),
@@ -493,6 +494,9 @@ fn build_csp_header(settings: &Settings) -> String {
                 .push(Source::Scheme("data")), // Allow loading of inlined svg
         ))
         .push(Directive::WorkerSrc(Sources::new()))
+        .push(Directive::FrameSrc(
+            Sources::new_with(Source::Self_).push(Source::Host("https://headway-widget.net")),
+        ))
         .to_string()
 }
 

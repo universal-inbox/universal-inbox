@@ -1,22 +1,25 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
-use dioxus_free_icons::icons::bs_icons::{
-    BsBoxArrowInLeft, BsGear, BsInbox, BsMoon, BsPerson, BsQuestionLg, BsSun,
+use dioxus_free_icons::{
+    icons::{
+        bs_icons::{
+            BsBell, BsBoxArrowInLeft, BsGear, BsInbox, BsMoon, BsPerson, BsQuestionLg, BsSun,
+        },
+        go_icons::GoMarkGithub,
+    },
+    Icon,
 };
-use dioxus_free_icons::icons::go_icons::GoMarkGithub;
-use dioxus_free_icons::Icon;
 use dioxus_router::prelude::*;
 use fermi::{use_atom_ref, use_atom_state};
 use gravatar::{Gravatar, Rating};
 
-use crate::model::{DEFAULT_USER_AVATAR, NOT_CONNECTED_USER_NAME};
-use crate::theme::IS_DARK_MODE;
 use crate::{
     config::APP_CONFIG,
+    model::{DEFAULT_USER_AVATAR, NOT_CONNECTED_USER_NAME},
     route::Route,
     services::user_service::{UserCommand, CONNECTED_USER},
-    theme::toggle_dark_mode,
+    theme::{toggle_dark_mode, IS_DARK_MODE},
 };
 
 pub fn NavBar(cx: Scope) -> Element {
@@ -44,6 +47,11 @@ pub fn NavBar(cx: Scope) -> Element {
         .read()
         .as_ref()
         .and_then(|config| config.support_href.clone());
+    let show_changelog = app_config_ref
+        .read()
+        .as_ref()
+        .map(|config| config.show_changelog)
+        .unwrap_or_default();
     let is_dark_mode = use_atom_state(cx, &IS_DARK_MODE);
 
     render! {
@@ -76,6 +84,16 @@ pub fn NavBar(cx: Scope) -> Element {
                     title: "Universal Inbox on GitHub",
                     target: "_blank",
                     Icon { class: "w-5 h-5", icon: GoMarkGithub }
+                }
+
+                if show_changelog {
+                    render! {
+                        button {
+                           class: "btn btn-ghost btn-square relative",
+                           div { id: "ui-changelog", class: "absolute top-0 left-0" }
+                           Icon { class: "w-5 h-5", icon: BsBell }
+                        }
+                    }
                 }
 
                 if let Some(support_href) = support_href {

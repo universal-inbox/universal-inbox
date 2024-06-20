@@ -11,6 +11,7 @@ min_sync_notifications_interval_in_minutes = 5
 min_sync_tasks_interval_in_minutes = 5
 # Disabled by default
 # support_href = "mailto:support@universal-inbox.com"
+show_changelog = false
 
 [application.email]
 smtp_server = "smtp.example.com"
@@ -98,12 +99,7 @@ use_tls = false
 [integrations.github]
 name = "Github"
 page_size = 50
-required_oauth_scopes = [
-  "notifications",
-  "read:discussion",
-  "read:org",
-  "repo"
-]
+required_oauth_scopes = ["notifications", "read:discussion", "read:org", "repo"]
 doc = "Github notifications are synchronized 1 for 1 with Universal Inbox notifications."
 
 [integrations.github.doc_for_actions]
@@ -113,10 +109,7 @@ snooze = "The Github notification will not be modified. The notification in Univ
 
 [integrations.linear]
 name = "Linear"
-required_oauth_scopes = [
-  "read",
-  "write"
-]
+required_oauth_scopes = ["read", "write"]
 doc = """
 Linear notifications (issue and project notifications) are synchronized 1 for 1 with Universal Inbox notifications. Linear notifications for the same Linear issue are not (yet) merged as one like Linear does.<br>
 
@@ -135,9 +128,7 @@ snooze = "The Linear notification will be snoozed and will only reappear the nex
 [integrations.google_mail]
 name = "Google Mail"
 page_size = 500
-required_oauth_scopes = [
-  "https://www.googleapis.com/auth/gmail.modify"
-]
+required_oauth_scopes = ["https://www.googleapis.com/auth/gmail.modify"]
 doc = "Google Mail threads from your Inbox are considered as Universal Inbox notifications. More flexible configuration is coming."
 warning_message = "Google Mail integration is not yet public, it requires your email address to be whitelisted and you will see a warning message from Google while connecting. If you still want to connect it, please send the Google email address you want to use to the <a href='mailto:support@universal-inbox.com' title='Contact support'>support</a>"
 
@@ -148,10 +139,7 @@ snooze = "Snoozing a notification will only be reflected in Universal Inbox. ⚠
 
 [integrations.todoist]
 name = "Todoist"
-required_oauth_scopes = [
-  "data:read_write",
-  "data:delete"
-]
+required_oauth_scopes = ["data:read_write", "data:delete"]
 doc = "Task from the Todoist Inbox are considered as Universal Inbox notifications."
 
 [integrations.todoist.doc_for_actions]
@@ -173,7 +161,7 @@ required_oauth_scopes = [
   "stars:read",
   "stars:write",
   "team:read",
-  "users:read"
+  "users:read",
 ]
 doc = """
 Slack \"saved for later\" messages can be synchronized 1 for 1 with a Universal Inbox notification or a task in the task management service.

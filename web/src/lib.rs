@@ -31,7 +31,9 @@ use services::{
 use theme::{toggle_dark_mode, IS_DARK_MODE};
 use utils::{current_location, get_local_storage, open_link};
 
-use crate::services::integration_connection_service::TASK_SERVICE_INTEGRATION_CONNECTION;
+use crate::services::{
+    headway::init_headway, integration_connection_service::TASK_SERVICE_INTEGRATION_CONNECTION,
+};
 
 mod auth;
 mod components;
@@ -115,6 +117,16 @@ pub fn App(cx: Scope) -> Element {
         )
     });
     let is_dark_mode = use_atom_state(cx, &IS_DARK_MODE);
+
+    let show_changelog = app_config_ref
+        .read()
+        .as_ref()
+        .map(|config| config.show_changelog)
+        .unwrap_or_default();
+
+    if show_changelog {
+        init_headway();
+    }
 
     use_future(cx, (), |()| {
         to_owned![ui_model_ref];

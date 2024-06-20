@@ -12,3 +12,19 @@
 .collapse-arrow > .collapse-title:after {
     top: 1.2rem;
 }
+
+#HW_badge_cont {
+  position: absolute !important;
+  width: 48px !important;
+  height: 48px !important;
+}
+
+#HW_badge {
+  background: #3778FF !important;
+  top: 4px !important;
+  left: 28px !important;
+}
+
+#HW_badge.HW_badge.HW_softHidden {
+  display: none;
+}

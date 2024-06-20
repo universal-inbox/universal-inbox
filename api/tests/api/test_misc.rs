@@ -28,7 +28,7 @@ mod content_security_policy {
                    Some(
                        &HeaderValue::from_str(
                            &format!(
-                               "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; object-src 'none'; connect-src 'self' ws://localhost:3003/ http://localhost:3003/ {}; img-src 'self' https://secure.gravatar.com https://avatars.githubusercontent.com https://private-user-images.githubusercontent.com https://public.linear.app https://avatars.slack-edge.com data:; worker-src 'none'",
+                               "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'unsafe-inline' https://cdn.headwayapp.co; style-src 'self' 'unsafe-inline'; object-src 'none'; connect-src 'self' ws://localhost:3003/ http://localhost:3003/ {}; img-src 'self' https://secure.gravatar.com https://avatars.githubusercontent.com https://private-user-images.githubusercontent.com https://public.linear.app https://avatars.slack-edge.com data:; worker-src 'none'; frame-src 'self' https://headway-widget.net",
                                app.oidc_issuer_mock_server.as_ref().unwrap().base_url()
                            )
                        ).unwrap()
