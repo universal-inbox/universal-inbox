@@ -31,7 +31,9 @@ use universal_inbox_api::{
         oauth2::NangoConnection,
         todoist::TodoistSyncResponse,
     },
-    repository::integration_connection::TOO_MANY_SYNC_FAILURES_ERROR_MESSAGE,
+    repository::integration_connection::{
+        MAX_SYNC_FAILURES_BEFORE_DISCONNECT, TOO_MANY_SYNC_FAILURES_ERROR_MESSAGE,
+    },
 };
 
 use crate::helpers::{
@@ -584,8 +586,8 @@ async fn test_sync_all_notifications_asynchronously_in_error(
         IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         &settings,
         nango_github_connection,
-        // Starting with 2 sync failures, it should mark the connection as failing with a third failure
-        Some(2),
+        // Starting with max sync failures minus 1, it should mark the connection as failing with a new failure
+        Some(MAX_SYNC_FAILURES_BEFORE_DISCONNECT - 1),
     )
     .await;
 
@@ -638,7 +640,10 @@ async fn test_sync_all_notifications_asynchronously_in_error(
             .as_str(),
         "Failed to fetch notifications from Github"
     );
-    assert_eq!(integration_connection.sync_failures, 3);
+    assert_eq!(
+        integration_connection.sync_failures,
+        MAX_SYNC_FAILURES_BEFORE_DISCONNECT
+    );
     assert_eq!(
         integration_connection.status,
         IntegrationConnectionStatus::Failing
