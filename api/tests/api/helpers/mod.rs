@@ -17,7 +17,7 @@ use universal_inbox_api::{
         AuthenticationSettings, LocalAuthenticationSettings, OIDCFlowSettings, Settings,
     },
     integrations::oauth2::NangoService,
-    jobs::slack::SlackPushEventCallbackJob,
+    jobs::UniversalInboxJob,
     observability::{get_subscriber, init_subscriber},
     repository::Repository,
     universal_inbox::{task::service::TaskService, user::service::UserService},
@@ -49,7 +49,7 @@ pub struct TestedApp {
     pub oidc_issuer_mock_server: Option<MockServer>,
     pub nango_mock_server: MockServer,
     pub mailer_stub: Arc<RwLock<MailerStub>>,
-    pub redis_storage: RedisStorage<SlackPushEventCallbackJob>,
+    pub redis_storage: RedisStorage<UniversalInboxJob>,
 }
 
 #[fixture]
@@ -105,7 +105,7 @@ async fn db_connection(mut settings: Settings) -> Arc<PgPool> {
 }
 
 #[fixture]
-async fn redis_storage(settings: Settings) -> RedisStorage<SlackPushEventCallbackJob> {
+async fn redis_storage(settings: Settings) -> RedisStorage<UniversalInboxJob> {
     let mut config = apalis_redis::Config::default();
     config.set_queue_name_prefix(Some(Uuid::new_v4().to_string()));
     RedisStorage::new_with_config(
@@ -127,7 +127,7 @@ pub async fn tested_app(
     mut settings: Settings,
     #[allow(unused, clippy::let_unit_value)] tracing_setup: (),
     #[future] db_connection: Arc<PgPool>,
-    #[future] redis_storage: RedisStorage<SlackPushEventCallbackJob>,
+    #[future] redis_storage: RedisStorage<UniversalInboxJob>,
 ) -> TestedApp {
     info!("Setting up server");
     let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
@@ -253,7 +253,7 @@ pub async fn tested_app_with_local_auth(
     mut settings: Settings,
     #[allow(unused, clippy::let_unit_value)] tracing_setup: (),
     #[future] db_connection: Arc<PgPool>,
-    #[future] redis_storage: RedisStorage<SlackPushEventCallbackJob>,
+    #[future] redis_storage: RedisStorage<UniversalInboxJob>,
 ) -> TestedApp {
     info!("Setting up server");
     let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");

@@ -37,7 +37,7 @@ use configuration::AuthenticationSettings;
 use csp::{Directive, Source, Sources, CSP};
 use futures::channel::mpsc;
 use integrations::slack::SlackService;
-use jobs::slack::SlackPushEventCallbackJob;
+use jobs::UniversalInboxJob;
 use jsonwebtoken::{Algorithm, Validation};
 use mailer::Mailer;
 use sqlx::PgPool;
@@ -51,7 +51,7 @@ use crate::{
         github::GithubService, google_mail::GoogleMailService, linear::LinearService,
         oauth2::NangoService, todoist::TodoistService,
     },
-    jobs::slack::handle_slack_push_event,
+    jobs::handle_universal_inbox_job,
     observability::AuthenticatedRootSpanBuilder,
     repository::Repository,
     universal_inbox::{
@@ -78,7 +78,7 @@ pub mod utils;
 #[allow(clippy::too_many_arguments)]
 pub async fn run_server(
     listener: TcpListener,
-    redis_storage: RedisStorage<SlackPushEventCallbackJob>,
+    redis_storage: RedisStorage<UniversalInboxJob>,
     settings: Settings,
     notification_service: Arc<RwLock<NotificationService>>,
     task_service: Arc<RwLock<TaskService>>,
@@ -271,7 +271,7 @@ impl OnFailure for WorkerOnFailure {
 
 pub async fn run_worker(
     workers_count: Option<usize>,
-    redis_storage: RedisStorage<SlackPushEventCallbackJob>,
+    redis_storage: RedisStorage<UniversalInboxJob>,
     notification_service: Arc<RwLock<NotificationService>>,
     task_service: Arc<RwLock<TaskService>>,
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
@@ -285,7 +285,7 @@ pub async fn run_worker(
     Monitor::new()
         .register_with_count(
             count,
-            WorkerBuilder::new("slack-push-event-worker")
+            WorkerBuilder::new("universal-inbox-worker")
                 .layer(
                     TraceLayer::new()
                         .on_request(DefaultOnRequest::default().level(Level::INFO))
@@ -296,7 +296,7 @@ pub async fn run_worker(
                 .data(notification_service)
                 .data(task_service)
                 .data(integration_connection_service)
-                .build_fn(handle_slack_push_event),
+                .build_fn(handle_universal_inbox_job),
         )
         .on_event(|e| {
             let worker_id = e.id();

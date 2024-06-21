@@ -5,7 +5,10 @@ use serde_json::json;
 use slack_morphism::prelude::*;
 use tracing::debug;
 
-use crate::{jobs::slack::SlackPushEventCallbackJob, universal_inbox::UniversalInboxError};
+use crate::{
+    jobs::{slack::SlackPushEventCallbackJob, UniversalInboxJob},
+    universal_inbox::UniversalInboxError,
+};
 
 pub fn scope() -> Scope {
     web::scope("/hooks")
@@ -14,7 +17,7 @@ pub fn scope() -> Scope {
 
 pub async fn push_slack_event(
     slack_push_event: web::Json<SlackPushEvent>,
-    storage: web::Data<RedisStorage<SlackPushEventCallbackJob>>,
+    storage: web::Data<RedisStorage<UniversalInboxJob>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     match slack_push_event.into_inner() {
         SlackPushEvent::UrlVerification(SlackUrlVerificationEvent { challenge }) => {
@@ -26,7 +29,9 @@ pub async fn push_slack_event(
             let storage = &*storage.into_inner();
             let mut storage = storage.clone();
             let job_id = storage
-                .push(SlackPushEventCallbackJob(event))
+                .push(UniversalInboxJob::SlackPushEventCallback(
+                    SlackPushEventCallbackJob(event),
+                ))
                 .await
                 .context("Failed to push Slack event to queue")?;
             debug!("Pushed a Slack event to the queue with job ID {job_id:?}");
