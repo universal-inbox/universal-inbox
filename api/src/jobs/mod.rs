@@ -16,6 +16,7 @@ pub mod sync;
 #[derive(Debug, Serialize, Deserialize)]
 pub enum UniversalInboxJob {
     SyncNotifications(sync::SyncNotificationsJob),
+    SyncTasks(sync::SyncTasksJob),
     SlackPushEventCallback(slack::SlackPushEventCallbackJob),
 }
 
@@ -43,6 +44,7 @@ pub async fn handle_universal_inbox_job(
         UniversalInboxJob::SyncNotifications(job) => {
             sync::handle_sync_notifications(job, notification_service).await
         }
+        UniversalInboxJob::SyncTasks(job) => sync::handle_sync_tasks(job, task_service).await,
         UniversalInboxJob::SlackPushEventCallback(job) => {
             slack::handle_slack_push_event(
                 job,
