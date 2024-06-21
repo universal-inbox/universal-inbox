@@ -4,11 +4,12 @@ use actix_http::body::BoxBody;
 use actix_jwt_authc::{Authenticated, MaybeAuthenticated};
 use actix_web::{web, HttpResponse, Scope};
 use anyhow::Context;
+use apalis::{prelude::Storage, redis::RedisStorage};
 use serde::Deserialize;
 use serde_json::json;
 use serde_with::{formats::CommaSeparator, serde_as, StringWithSeparator};
 use tokio::sync::RwLock;
-use tracing::{error, info};
+use tracing::debug;
 
 use universal_inbox::{
     notification::{
@@ -22,7 +23,7 @@ use universal_inbox::{
 };
 
 use crate::{
-    observability::spawn_with_tracing,
+    jobs::{sync::SyncNotificationsJob, UniversalInboxJob},
     universal_inbox::{
         notification::service::NotificationService, UniversalInboxError, UpdateStatus,
     },
@@ -159,8 +160,11 @@ pub async fn sync_notifications(
     params: web::Json<SyncNotificationsParameters>,
     notification_service: web::Data<Arc<RwLock<NotificationService>>>,
     maybe_authenticated: MaybeAuthenticated<Claims>,
+    storage: web::Data<RedisStorage<UniversalInboxJob>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let source = params.source;
+    let storage = &*storage.into_inner();
+    let mut storage = storage.clone();
 
     if let Some(authenticated) = maybe_authenticated.into_option() {
         let user_id = authenticated
@@ -170,32 +174,14 @@ pub async fn sync_notifications(
             .context("Wrong user ID format")?;
 
         if params.asynchronous.unwrap_or(true) {
-            let notification_service = notification_service.get_ref().clone();
-            spawn_with_tracing(async move {
-                let source_kind_string = source
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| "all types of".to_string());
-                info!("Syncing {source_kind_string} notifications for user {user_id}");
-                let service = notification_service.read().await;
-
-                let notifications = if let Some(source) = source {
-                    service
-                        .sync_notifications_with_transaction(source, user_id)
-                        .await
-                } else {
-                    service.sync_all_notifications(user_id).await
-                };
-
-                match notifications {
-                    Ok(notifications) => info!(
-                        "{} {source_kind_string} notifications successfully synced for user {user_id}",
-                        notifications.len()
-                    ),
-                    Err(err) => {
-                        error!("Failed to sync {source_kind_string} notifications for user {user_id}: {err:?}")
-                    }
-                };
-            });
+            let job_id = storage
+                .push(UniversalInboxJob::SyncNotifications(SyncNotificationsJob {
+                    source,
+                    user_id: Some(user_id),
+                }))
+                .await
+                .context("Failed to push Sync notifications event to queue")?;
+            debug!("Pushed a Sync notifications event for user {user_id} to the queue with job ID {job_id:?}");
             Ok(HttpResponse::Created().finish())
         } else {
             let service = notification_service.read().await;
@@ -212,24 +198,16 @@ pub async fn sync_notifications(
             ))
         }
     } else {
-        let notification_service = notification_service.get_ref().clone();
-
-        spawn_with_tracing(async move {
-            let source_kind_string = source
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| "all types of".to_string());
-            info!("Syncing {source_kind_string} notifications for all users");
-            let service = notification_service.read().await;
-
-            let result = service.sync_notifications_for_all_users(source).await;
-
-            match result {
-                Ok(_) => info!("{source_kind_string} notifications successfully synced"),
-                Err(err) => {
-                    error!("Failed to sync {source_kind_string} notifications: {err:?}")
-                }
-            };
-        });
+        let job_id = storage
+            .push(UniversalInboxJob::SyncNotifications(SyncNotificationsJob {
+                source,
+                user_id: None,
+            }))
+            .await
+            .context("Failed to push Sync notifications event to queue")?;
+        debug!(
+            "Pushed a Sync notifications event for all users to the queue with job ID {job_id:?}"
+        );
         Ok(HttpResponse::Created().finish())
     }
 }

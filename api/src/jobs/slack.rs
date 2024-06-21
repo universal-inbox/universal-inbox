@@ -1,13 +1,14 @@
 use std::sync::Arc;
 
 use anyhow::{anyhow, Context};
-use apalis::prelude::*;
+use apalis::prelude::Data;
 use serde::{Deserialize, Serialize};
 use slack_morphism::prelude::{
     SlackEventCallbackBody, SlackPushEventCallback, SlackStarAddedEvent, SlackStarRemovedEvent,
 };
 use tokio::sync::RwLock;
 use tracing::info;
+
 use universal_inbox::integration_connection::{
     integrations::slack::SlackSyncType,
     provider::{IntegrationProvider, IntegrationProviderKind},
@@ -22,10 +23,6 @@ use crate::universal_inbox::{
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SlackPushEventCallbackJob(pub SlackPushEventCallback);
-
-impl Job for SlackPushEventCallbackJob {
-    const NAME: &'static str = "universal-inbox:jobs:slack:SlackPushEventCallbackJob";
-}
 
 fn fail_if_needed<T>(
     result: Result<T, UniversalInboxError>,
