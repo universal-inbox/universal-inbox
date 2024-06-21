@@ -1,3 +1,4 @@
+#![recursion_limit = "256"]
 mod helpers;
 mod test_auth;
 mod test_github_notifications;

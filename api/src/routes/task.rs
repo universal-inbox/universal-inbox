@@ -4,10 +4,11 @@ use actix_http::body::BoxBody;
 use actix_jwt_authc::{Authenticated, MaybeAuthenticated};
 use actix_web::{web, HttpResponse, Scope};
 use anyhow::Context;
+use apalis::{prelude::Storage, redis::RedisStorage};
 use serde::Deserialize;
 use serde_json::json;
 use tokio::sync::RwLock;
-use tracing::{error, info};
+use tracing::debug;
 
 use universal_inbox::{
     task::{
@@ -18,7 +19,7 @@ use universal_inbox::{
 };
 
 use crate::{
-    observability::spawn_with_tracing,
+    jobs::{sync::SyncTasksJob, UniversalInboxJob},
     universal_inbox::{task::service::TaskService, UniversalInboxError, UpdateStatus},
     utils::jwt::Claims,
 };
@@ -133,8 +134,11 @@ pub async fn sync_tasks(
     params: web::Json<SyncTasksParameters>,
     task_service: web::Data<Arc<RwLock<TaskService>>>,
     maybe_authenticated: MaybeAuthenticated<Claims>,
+    storage: web::Data<RedisStorage<UniversalInboxJob>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let source = params.source;
+    let storage = &*storage.into_inner();
+    let mut storage = storage.clone();
 
     if let Some(authenticated) = maybe_authenticated.into_option() {
         let user_id = authenticated
@@ -144,32 +148,16 @@ pub async fn sync_tasks(
             .context("Wrong user ID format")?;
 
         if params.asynchronous.unwrap_or(true) {
-            let task_service = task_service.get_ref().clone();
-            spawn_with_tracing(async move {
-                let source_kind_string = source
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| "all types of".to_string());
-                info!("Syncing {source_kind_string} tasks for user {user_id}");
-                let service = task_service.read().await;
-
-                let tasks = if let Some(source) = source {
-                    service.sync_tasks_with_transaction(source, user_id).await
-                } else {
-                    service.sync_all_tasks(user_id).await
-                };
-
-                match tasks {
-                    Ok(tasks) => info!(
-                        "{} {source_kind_string} tasks successfully synced for user {user_id}",
-                        tasks.len()
-                    ),
-                    Err(err) => {
-                        error!(
-                            "Failed to sync {source_kind_string} tasks for user {user_id}: {err:?}"
-                        )
-                    }
-                };
-            });
+            let job_id = storage
+                .push(UniversalInboxJob::SyncTasks(SyncTasksJob {
+                    source,
+                    user_id: Some(user_id),
+                }))
+                .await
+                .context("Failed to push Sync tasks event to queue")?;
+            debug!(
+                "Pushed a Sync tasks event for user {user_id} to the queue with job ID {job_id:?}"
+            );
             Ok(HttpResponse::Created().finish())
         } else {
             let service = task_service.read().await;
@@ -184,24 +172,14 @@ pub async fn sync_tasks(
                 .body(serde_json::to_string(&tasks).context("Cannot serialize tasks")?))
         }
     } else {
-        let task_service = task_service.get_ref().clone();
-
-        spawn_with_tracing(async move {
-            let source_kind_string = source
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| "all types of".to_string());
-            info!("Syncing {source_kind_string} tasks for all users");
-            let service = task_service.read().await;
-
-            let result = service.sync_tasks_for_all_users(source).await;
-
-            match result {
-                Ok(_) => info!("{source_kind_string} tasks successfully synced"),
-                Err(err) => {
-                    error!("Failed to sync {source_kind_string} tasks: {err:?}")
-                }
-            };
-        });
+        let job_id = storage
+            .push(UniversalInboxJob::SyncTasks(SyncTasksJob {
+                source,
+                user_id: None,
+            }))
+            .await
+            .context("Failed to push Sync tasks event to queue")?;
+        debug!("Pushed a Sync tasks event for all users to the queue with job ID {job_id:?}");
         Ok(HttpResponse::Created().finish())
     }
 }
