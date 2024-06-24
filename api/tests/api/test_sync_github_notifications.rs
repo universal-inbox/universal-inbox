@@ -215,6 +215,31 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         Some(Utc.with_ymd_and_hms(2064, 1, 1, 0, 0, 0).unwrap())
     );
     assert_eq!(updated_notification.task_id, Some(existing_todoist_task.id));
+
+    let integration_connection = get_integration_connection_per_provider(
+        &app,
+        app.user.id,
+        IntegrationProviderKind::Github,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    assert!(integration_connection
+        .last_notifications_sync_started_at
+        .is_some());
+    assert!(integration_connection
+        .last_notifications_sync_completed_at
+        .is_some());
+    assert!(integration_connection
+        .last_notifications_sync_failure_message
+        .is_none());
+    assert_eq!(integration_connection.notifications_sync_failures, 0);
+    assert_eq!(
+        integration_connection.status,
+        IntegrationConnectionStatus::Validated
+    );
+    assert!(integration_connection.failure_message.is_none(),);
 }
 
 #[rstest]
@@ -633,15 +658,21 @@ async fn test_sync_all_notifications_asynchronously_in_error(
     )
     .await
     .unwrap();
+    assert!(integration_connection
+        .last_notifications_sync_started_at
+        .is_some());
+    assert!(integration_connection
+        .last_notifications_sync_completed_at
+        .is_some());
     assert_eq!(
         integration_connection
-            .last_sync_failure_message
+            .last_notifications_sync_failure_message
             .unwrap()
             .as_str(),
         "Failed to fetch notifications from Github"
     );
     assert_eq!(
-        integration_connection.sync_failures,
+        integration_connection.notifications_sync_failures,
         MAX_SYNC_FAILURES_BEFORE_DISCONNECT
     );
     assert_eq!(
@@ -810,14 +841,20 @@ async fn test_sync_discussion_notification_with_error(
     )
     .await
     .unwrap();
+    assert!(integration_connection
+        .last_notifications_sync_started_at
+        .is_some());
+    assert!(integration_connection
+        .last_notifications_sync_completed_at
+        .is_some());
     assert_eq!(
         integration_connection
-            .last_sync_failure_message
+            .last_notifications_sync_failure_message
             .unwrap()
             .as_str(),
         "Failed to fetch notification details from Github"
     );
-    assert_eq!(integration_connection.sync_failures, 1);
+    assert_eq!(integration_connection.notifications_sync_failures, 1);
     assert_eq!(
         integration_connection.status,
         IntegrationConnectionStatus::Validated

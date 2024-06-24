@@ -1,4 +1,3 @@
-use chrono::{DateTime, Utc};
 use httpmock::{
     Method::{DELETE, GET},
     Mock, MockServer,
@@ -17,8 +16,11 @@ use universal_inbox::{
 };
 
 use universal_inbox_api::{
-    configuration::Settings, integrations::oauth2::NangoConnection,
-    repository::integration_connection::IntegrationConnectionRepository,
+    configuration::Settings,
+    integrations::oauth2::NangoConnection,
+    repository::integration_connection::{
+        IntegrationConnectionRepository, IntegrationConnectionSyncedBeforeFilter,
+    },
     universal_inbox::UpdateStatus,
 };
 
@@ -114,7 +116,7 @@ pub async fn create_integration_connection(
     let mut transaction = app.repository.begin().await.unwrap();
     let mut new_integration_connection = IntegrationConnection::new(user_id, config);
     if let Some(initial_sync_failures) = initial_sync_failures {
-        new_integration_connection.sync_failures = initial_sync_failures;
+        new_integration_connection.notifications_sync_failures = initial_sync_failures;
     }
     let integration_connection = app
         .repository
@@ -160,7 +162,7 @@ pub async fn get_integration_connection_per_provider(
     app: &AuthenticatedApp,
     user_id: UserId,
     provider_kind: IntegrationProviderKind,
-    synced_before: Option<DateTime<Utc>>,
+    synced_before_filter: Option<IntegrationConnectionSyncedBeforeFilter>,
     with_status: Option<IntegrationConnectionStatus>,
 ) -> Option<IntegrationConnection> {
     let mut transaction = app.app.repository.begin().await.unwrap();
@@ -171,7 +173,7 @@ pub async fn get_integration_connection_per_provider(
             &mut transaction,
             user_id,
             provider_kind,
-            synced_before,
+            synced_before_filter,
             with_status,
         )
         .await

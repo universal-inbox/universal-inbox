@@ -163,6 +163,26 @@ pub fn IntegrationConnectionsStatus(
     } else {
         None
     };
+    let mut sorted_notification_connections = integration_connections
+        .iter()
+        .filter(|c| c.provider.kind().is_notification_service())
+        .collect::<Vec<&IntegrationConnection>>();
+    sorted_notification_connections.sort_by(|a, b| {
+        a.provider
+            .kind()
+            .to_string()
+            .cmp(&b.provider.kind().to_string())
+    });
+    let mut sorted_task_connections = integration_connections
+        .iter()
+        .filter(|c| c.provider.kind().is_task_service())
+        .collect::<Vec<&IntegrationConnection>>();
+    sorted_task_connections.sort_by(|a, b| {
+        a.provider
+            .kind()
+            .to_string()
+            .cmp(&b.provider.kind().to_string())
+    });
 
     render! {
         if let Some(tooltip) = connection_issue_tooltip {
@@ -179,7 +199,7 @@ pub fn IntegrationConnectionsStatus(
             }
         }
 
-        for integration_connection in (integration_connections.iter().filter(|c| c.provider.kind().is_notification_service() )) {
+        for integration_connection in sorted_notification_connections {
             if let Some(provider_config) = integration_providers.get(&integration_connection.provider.kind()) {
                 render! {
                     IntegrationConnectionStatus {
@@ -194,7 +214,7 @@ pub fn IntegrationConnectionsStatus(
 
         div { class: "divider divider-horizontal" }
 
-        for integration_connection in (integration_connections.iter().filter(|c| c.provider.kind().is_task_service() )) {
+        for integration_connection in sorted_task_connections {
             if let Some(provider_config) = integration_providers.get(&integration_connection.provider.kind()) {
                 render! {
                     IntegrationConnectionStatus {
@@ -220,11 +240,21 @@ pub fn IntegrationConnectionStatus(
         match connection {
             IntegrationConnection {
                 status: IntegrationConnectionStatus::Validated,
-                last_sync_started_at: started_at,
-                last_sync_failure_message: None,
+                last_notifications_sync_started_at: notifs_started_at,
+                last_tasks_sync_started_at: tasks_started_at,
+                last_notifications_sync_failure_message: None,
+                last_tasks_sync_failure_message: None,
                 ..
             } => {
                 if connection.has_oauth_scopes(&config.required_oauth_scopes) {
+                    let started_at = match (notifs_started_at, tasks_started_at) {
+                        (Some(notifs_started_at), Some(tasks_started_at)) => {
+                            Some(notifs_started_at.max(tasks_started_at))
+                        }
+                        (Some(notifs_started_at), None) => Some(notifs_started_at),
+                        (None, Some(tasks_started_at)) => Some(tasks_started_at),
+                        _ => None,
+                    };
                     (
                         "text-success",
                         started_at
@@ -256,7 +286,11 @@ pub fn IntegrationConnectionStatus(
                     .unwrap_or_else(|| "Connection failed".to_string()),
             ),
             IntegrationConnection {
-                last_sync_failure_message: Some(message),
+                last_notifications_sync_failure_message: Some(message),
+                ..
+            }
+            | IntegrationConnection {
+                last_tasks_sync_failure_message: Some(message),
                 ..
             } => (
                 "text-error",
@@ -273,9 +307,17 @@ pub fn IntegrationConnectionStatus(
             class: "tooltip tooltip-left text-xs",
             "data-tip": "{tooltip}",
 
-            Link {
-                to: Route::SettingsPage {},
-                IntegrationProviderIcon { class: "w-4 h-4 {connection_style}", provider_kind: provider_kind },
+            div {
+                class: "relative flex items-center justify-center w-6 h-6",
+                if connection.is_syncing() {
+                    render! {
+                        span { class: "absolute top-0 left-0 w-6 h-6 loading loading-spinner loading-xs {connection_style} opacity-50" }
+                    }
+                }
+                Link {
+                    to: Route::SettingsPage {},
+                    IntegrationProviderIcon { class: "w-4 h-4 rounded-full {connection_style}", provider_kind: provider_kind },
+                }
             }
         }
     }

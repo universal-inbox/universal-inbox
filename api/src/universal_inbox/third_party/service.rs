@@ -192,7 +192,11 @@ impl ThirdPartyItemService {
             .integration_connection_service
             .read()
             .await
-            .get_integration_connection_to_sync(executor, integration_provider_kind, 0, user_id)
+            .get_validated_integration_connection_per_kind(
+                executor,
+                integration_provider_kind,
+                user_id,
+            )
             .await?
         else {
             debug!("No validated {integration_provider_kind} integration found for user {user_id}, cannot create third party item");
