@@ -64,11 +64,11 @@ pub fn AuthenticatedApp(cx: Scope) -> Element {
             user_service.send(UserCommand::GetUser);
             // Load integration connections status
             integration_connection_service.send(IntegrationConnectionCommand::Refresh);
-
             notification_service.send(NotificationCommand::Refresh);
             // Refresh notifications every minute
             gloo_timers::callback::Interval::new(60_000, move || {
                 notification_service.send(NotificationCommand::Refresh);
+                integration_connection_service.send(IntegrationConnectionCommand::Refresh);
             })
             .forget();
         }

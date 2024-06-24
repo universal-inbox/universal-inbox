@@ -216,34 +216,99 @@ pub fn IntegrationSettings<'a>(
             }
         });
 
-    let sync_message = use_memo(cx, &connection.clone(), |connection| match connection {
+    let notifications_sync_message =
+        use_memo(cx, &connection.clone(), |connection| match connection {
+            Some(Some(IntegrationConnection {
+                status: IntegrationConnectionStatus::Validated,
+                provider: IntegrationProvider::Slack { .. },
+                provider_user_id: Some(_),
+                ..
+            })) => Some("🟢 Integration is ready to receive events from Slack".to_string()),
+            Some(Some(IntegrationConnection {
+                status: IntegrationConnectionStatus::Validated,
+                last_notifications_sync_started_at: Some(ref started_at),
+                last_notifications_sync_completed_at: Some(_),
+                last_notifications_sync_failure_message: None,
+                ..
+            })) => Some(format!(
+                "🟢 Notifications last successfully synced at {}",
+                started_at
+                    .with_timezone(&Local)
+                    .to_rfc3339_opts(SecondsFormat::Secs, true)
+            )),
+            Some(Some(IntegrationConnection {
+                status: IntegrationConnectionStatus::Validated,
+                last_notifications_sync_started_at: Some(ref started_at),
+                last_notifications_sync_completed_at: None,
+                ..
+            })) => Some(format!(
+                "🟣 Notifications are currently syncing since {}",
+                started_at
+                    .with_timezone(&Local)
+                    .to_rfc3339_opts(SecondsFormat::Secs, true)
+            )),
+            Some(Some(IntegrationConnection {
+                status: IntegrationConnectionStatus::Validated,
+                last_notifications_sync_failure_message: Some(message),
+                ..
+            })) => Some(format!("🔴 Notifications last sync failed: {message}")),
+            Some(Some(
+                c @ IntegrationConnection {
+                    status: IntegrationConnectionStatus::Validated,
+                    last_notifications_sync_started_at: None,
+                    ..
+                },
+            )) => {
+                if c.provider.is_notification_service() {
+                    Some("🟠 Notifications Not yet synced".to_string())
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        });
+    let tasks_sync_message = use_memo(cx, &connection.clone(), |connection| match connection {
         Some(Some(IntegrationConnection {
             status: IntegrationConnectionStatus::Validated,
-            provider: IntegrationProvider::Slack { .. },
-            provider_user_id: Some(_),
-            ..
-        })) => Some("🟢 Integration is ready to receive events from Slack".to_string()),
-        Some(Some(IntegrationConnection {
-            status: IntegrationConnectionStatus::Validated,
-            last_sync_started_at: Some(ref started_at),
-            last_sync_failure_message: None,
+            last_tasks_sync_started_at: Some(ref started_at),
+            last_tasks_sync_completed_at: Some(_),
+            last_tasks_sync_failure_message: None,
             ..
         })) => Some(format!(
-            "🟢 Last successfully synced at {}",
+            "🟢 Tasks last successfully synced at {}",
             started_at
                 .with_timezone(&Local)
                 .to_rfc3339_opts(SecondsFormat::Secs, true)
         )),
         Some(Some(IntegrationConnection {
             status: IntegrationConnectionStatus::Validated,
-            last_sync_failure_message: Some(message),
+            last_tasks_sync_started_at: Some(ref started_at),
+            last_tasks_sync_completed_at: None,
             ..
-        })) => Some(format!("🔴 Last sync failed: {message}")),
+        })) => Some(format!(
+            "🟣 Tasks are currently syncing since {}",
+            started_at
+                .with_timezone(&Local)
+                .to_rfc3339_opts(SecondsFormat::Secs, true)
+        )),
         Some(Some(IntegrationConnection {
             status: IntegrationConnectionStatus::Validated,
-            last_sync_started_at: None,
+            last_tasks_sync_failure_message: Some(message),
             ..
-        })) => Some("🟠 Not yet synced".to_string()),
+        })) => Some(format!("🔴 Tasks last sync failed: {message}")),
+        Some(Some(
+            c @ IntegrationConnection {
+                status: IntegrationConnectionStatus::Validated,
+                last_tasks_sync_started_at: None,
+                ..
+            },
+        )) => {
+            if c.provider.is_task_service() {
+                Some("🟠 Tasks not yet synced".to_string())
+            } else {
+                None
+            }
+        }
         _ => None,
     });
 
@@ -271,11 +336,15 @@ pub fn IntegrationSettings<'a>(
                         "{config.name}"
                     }
                     div {
-                        class: "flex grow justify-start items-center",
-                        if let Some(sync_message) = sync_message {
-                            render! { span { "{sync_message}" } }
-                        } else {
-                            render! { span {} }
+                        class: "flex flex-col grow justify-center items-start",
+                        if let Some(notifications_sync_message) = notifications_sync_message {
+                            render! { span { "{notifications_sync_message}" } }
+                        }
+                        if let Some(tasks_sync_message) = tasks_sync_message {
+                            render! { span { "{tasks_sync_message}" } }
+                        }
+                        if notifications_sync_message.is_none() && tasks_sync_message.is_none() {
+                            render! { span { } }
                         }
                     }
                     div {

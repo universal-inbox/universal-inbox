@@ -26,8 +26,12 @@ use crate::{
     },
     repository::{notification::NotificationRepository, Repository},
     universal_inbox::{
-        integration_connection::service::IntegrationConnectionService, task::service::TaskService,
-        user::service::UserService, UniversalInboxError, UpdateStatus, UpsertStatus,
+        integration_connection::service::{
+            IntegrationConnectionService, IntegrationConnectionSyncType,
+        },
+        task::service::TaskService,
+        user::service::UserService,
+        UniversalInboxError, UpdateStatus, UpsertStatus,
     },
 };
 
@@ -250,6 +254,7 @@ impl NotificationService {
                 executor,
                 integration_provider_kind,
                 self.min_sync_notifications_interval_in_minutes,
+                IntegrationConnectionSyncType::Notifications,
                 user_id,
             )
             .await?
@@ -267,8 +272,8 @@ impl NotificationService {
         }
 
         info!("Syncing {integration_provider_kind} notifications for user {user_id}.");
-        let integration_connection_update = integration_connection_service
-            .start_sync_status(executor, integration_provider_kind, user_id)
+        integration_connection_service
+            .start_notifications_sync_status(executor, integration_provider_kind, user_id)
             .await?;
         match notification_source_service
             .fetch_all_notifications(executor, user_id)
@@ -283,24 +288,19 @@ impl NotificationService {
                         user_id,
                     )
                     .await?;
-
-                if let UpdateStatus {
-                    result: Some(result),
-                    ..
-                } = integration_connection_update
-                {
-                    if result.sync_failures > 0 {
-                        integration_connection_service
-                            .reset_error_sync_status(executor, integration_provider_kind, user_id)
-                            .await?;
-                    }
-                }
+                integration_connection_service
+                    .complete_notifications_sync_status(
+                        executor,
+                        integration_provider_kind,
+                        user_id,
+                    )
+                    .await?;
 
                 Ok(notifications)
             }
             Err(error @ UniversalInboxError::Recoverable(_)) => {
                 integration_connection_service
-                    .error_sync_status(
+                    .error_notifications_sync_status(
                         executor,
                         integration_provider_kind,
                         format!("Failed to fetch notifications from {integration_provider_kind}"),
@@ -311,7 +311,7 @@ impl NotificationService {
             }
             Err(error) => {
                 integration_connection_service
-                    .error_sync_status(
+                    .error_notifications_sync_status(
                         executor,
                         integration_provider_kind,
                         format!("Failed to fetch notifications from {integration_provider_kind}"),
@@ -435,7 +435,7 @@ impl NotificationService {
                             self.integration_connection_service
                                     .read()
                                     .await
-                                    .error_sync_status(
+                                    .error_notifications_sync_status(
                                         executor,
                                         integration_provider_kind,
                                         format!(

@@ -229,6 +229,29 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
             ..updated_integration_connection.clone()
         }
     );
+
+    let integration_connection = get_integration_connection_per_provider(
+        &app,
+        app.user.id,
+        IntegrationProviderKind::Todoist,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    assert!(integration_connection.last_tasks_sync_started_at.is_some());
+    assert!(integration_connection
+        .last_tasks_sync_completed_at
+        .is_some());
+    assert!(integration_connection
+        .last_tasks_sync_failure_message
+        .is_none());
+    assert_eq!(integration_connection.tasks_sync_failures, 0);
+    assert_eq!(
+        integration_connection.status,
+        IntegrationConnectionStatus::Validated
+    );
+    assert!(integration_connection.failure_message.is_none(),);
 }
 
 #[rstest]
@@ -962,7 +985,7 @@ async fn test_sync_all_tasks_asynchronously_in_error(
     .unwrap();
     assert_eq!(
         integration_connection
-            .last_sync_failure_message
+            .last_tasks_sync_failure_message
             .unwrap()
             .as_str(),
         "Failed to fetch tasks from Todoist"

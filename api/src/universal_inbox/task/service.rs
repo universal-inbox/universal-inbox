@@ -36,9 +36,13 @@ use crate::{
     },
     repository::{task::TaskRepository, Repository},
     universal_inbox::{
-        integration_connection::service::IntegrationConnectionService,
-        notification::service::NotificationService, third_party::service::ThirdPartyItemService,
-        user::service::UserService, UniversalInboxError, UpdateStatus, UpsertStatus,
+        integration_connection::service::{
+            IntegrationConnectionService, IntegrationConnectionSyncType,
+        },
+        notification::service::NotificationService,
+        third_party::service::ThirdPartyItemService,
+        user::service::UserService,
+        UniversalInboxError, UpdateStatus, UpsertStatus,
     },
 };
 
@@ -384,7 +388,13 @@ impl TaskService {
             .integration_connection_service
             .read()
             .await
-            .get_integration_connection_to_sync(executor, integration_provider_kind, 0, user_id)
+            .get_integration_connection_to_sync(
+                executor,
+                integration_provider_kind,
+                0,
+                IntegrationConnectionSyncType::Tasks,
+                user_id,
+            )
             .await?
         else {
             return Err(UniversalInboxError::Unexpected(anyhow!(
@@ -458,6 +468,7 @@ impl TaskService {
                 executor,
                 integration_provider_kind,
                 self.min_sync_tasks_interval_in_minutes,
+                IntegrationConnectionSyncType::Tasks,
                 user_id,
             )
             .await?
@@ -473,7 +484,7 @@ impl TaskService {
 
         info!("Syncing {integration_provider_kind} tasks for user {user_id}");
         integration_connection_service
-            .start_sync_status(executor, integration_provider_kind, user_id)
+            .start_tasks_sync_status(executor, integration_provider_kind, user_id)
             .await?;
 
         let third_party_item_creation_results = match self
@@ -492,7 +503,7 @@ impl TaskService {
         {
             Err(e) => {
                 integration_connection_service
-                    .error_sync_status(
+                    .error_tasks_sync_status(
                         executor,
                         integration_provider_kind,
                         format!("Failed to fetch tasks from {integration_provider_kind}"),
@@ -501,7 +512,12 @@ impl TaskService {
                     .await?;
                 return Err(UniversalInboxError::Recoverable(e.into()));
             }
-            Ok(third_party_item_creation_results) => third_party_item_creation_results,
+            Ok(third_party_item_creation_results) => {
+                integration_connection_service
+                    .complete_tasks_sync_status(executor, integration_provider_kind, user_id)
+                    .await?;
+                third_party_item_creation_results
+            }
         };
 
         let mut tasks_creation_result = vec![];
