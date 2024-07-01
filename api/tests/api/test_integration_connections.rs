@@ -617,8 +617,16 @@ mod update_integration_connection_config {
         assert_eq!(other_integration_connection, Some(*integration_connection2));
 
         // Verify notifications have been cleared
-        let notifications: Vec<Notification> =
-            list_notifications(&app.client, &app.app.api_address, vec![], true, None, None).await;
+        let notifications: Vec<Notification> = list_notifications(
+            &app.client,
+            &app.app.api_address,
+            vec![],
+            true,
+            None,
+            None,
+            false,
+        )
+        .await;
 
         assert!(notifications.is_empty());
     }

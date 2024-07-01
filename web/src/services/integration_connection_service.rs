@@ -61,6 +61,7 @@ pub async fn integration_connnection_service(
                     task_service_integration_connection,
                     app_config,
                     ui_model,
+                    &notification_service,
                 )
                 .await
                 {
@@ -76,6 +77,7 @@ pub async fn integration_connnection_service(
                     task_service_integration_connection,
                     app_config,
                     ui_model,
+                    &notification_service,
                 )
                 .await
                 {
@@ -106,6 +108,7 @@ pub async fn integration_connnection_service(
                     task_service_integration_connection,
                     app_config,
                     ui_model,
+                    &notification_service,
                 )
                 .await
                 {
@@ -140,6 +143,7 @@ pub async fn integration_connnection_service(
                     task_service_integration_connection,
                     app_config,
                     ui_model,
+                    &notification_service,
                 )
                 .await
                 {
@@ -173,6 +177,7 @@ pub async fn integration_connnection_service(
                     task_service_integration_connection,
                     app_config,
                     ui_model,
+                    &notification_service,
                 )
                 .await;
             }
@@ -185,6 +190,7 @@ pub async fn integration_connnection_service(
                     task_service_integration_connection,
                     app_config,
                     ui_model,
+                    &notification_service,
                 )
                 .await
                 {
@@ -219,6 +225,7 @@ async fn refresh_integration_connection(
     mut task_service_integration_connection_ref: Signal<LoadState<Option<IntegrationConnection>>>,
     app_config: ReadOnlySignal<Option<AppConfig>>,
     mut ui_model: Signal<UniversalInboxUIModel>,
+    notification_service: &Coroutine<NotificationCommand>,
 ) -> Result<()> {
     let api_base_url = get_api_base_url(app_config)?;
 
@@ -239,6 +246,21 @@ async fn refresh_integration_connection(
     *task_service_integration_connection_ref.write() =
         LoadState::Loaded(task_service_integration_connection.cloned());
 
+    let was_syncing = ui_model.read().is_syncing_notifications || ui_model.read().is_syncing_tasks;
+    ui_model.write().is_syncing_notifications = new_integration_connections
+        .iter()
+        .any(|c| c.is_syncing_notifications());
+    ui_model.write().is_syncing_tasks = new_integration_connections
+        .iter()
+        .any(|c| c.is_syncing_tasks());
+
+    if was_syncing
+        && !(ui_model.read().is_syncing_notifications || ui_model.read().is_syncing_tasks)
+    {
+        debug!("Sync completed, refreshing notifications");
+        notification_service.send(NotificationCommand::Refresh);
+    }
+
     *integration_connections.write() = Some(new_integration_connections);
 
     Ok(())
@@ -250,6 +272,7 @@ async fn create_integration_connection(
     task_service_integration_connection: Signal<LoadState<Option<IntegrationConnection>>>,
     app_config: ReadOnlySignal<Option<AppConfig>>,
     ui_model: Signal<UniversalInboxUIModel>,
+    notification_service: &Coroutine<NotificationCommand>,
 ) -> Result<IntegrationConnection> {
     let api_base_url = get_api_base_url(app_config)?;
 
@@ -280,6 +303,7 @@ async fn create_integration_connection(
         task_service_integration_connection,
         app_config,
         ui_model,
+        notification_service,
     )
     .await
 }
@@ -290,6 +314,7 @@ async fn authenticate_integration_connection(
     task_service_integration_connection: Signal<LoadState<Option<IntegrationConnection>>>,
     app_config: ReadOnlySignal<Option<AppConfig>>,
     ui_model: Signal<UniversalInboxUIModel>,
+    notification_service: &Coroutine<NotificationCommand>,
 ) -> Result<IntegrationConnection> {
     let provider_kind = integration_connection.provider.kind();
     let (nango_base_url, nango_public_key, provider_config) =
@@ -314,6 +339,7 @@ async fn authenticate_integration_connection(
         task_service_integration_connection,
         app_config,
         ui_model,
+        notification_service,
     )
     .await
 }
@@ -324,6 +350,7 @@ async fn verify_integration_connection(
     task_service_integration_connection: Signal<LoadState<Option<IntegrationConnection>>>,
     app_config: ReadOnlySignal<Option<AppConfig>>,
     ui_model: Signal<UniversalInboxUIModel>,
+    notification_service: &Coroutine<NotificationCommand>,
 ) -> Result<IntegrationConnection> {
     let api_base_url = get_api_base_url(app_config)?;
 
@@ -350,6 +377,7 @@ async fn verify_integration_connection(
         task_service_integration_connection,
         app_config,
         ui_model,
+        notification_service,
     )
     .await?;
 
@@ -362,6 +390,7 @@ async fn disconnect_integration_connection(
     task_service_integration_connection: Signal<LoadState<Option<IntegrationConnection>>>,
     app_config: ReadOnlySignal<Option<AppConfig>>,
     ui_model: Signal<UniversalInboxUIModel>,
+    notification_service: &Coroutine<NotificationCommand>,
 ) -> Result<()> {
     let api_base_url = get_api_base_url(app_config)?;
 
@@ -388,6 +417,7 @@ async fn disconnect_integration_connection(
         task_service_integration_connection,
         app_config,
         ui_model,
+        notification_service,
     )
     .await
 }
@@ -398,6 +428,7 @@ async fn reconnect_integration_connection(
     task_service_integration_connection: Signal<LoadState<Option<IntegrationConnection>>>,
     app_config: ReadOnlySignal<Option<AppConfig>>,
     ui_model: Signal<UniversalInboxUIModel>,
+    notification_service: &Coroutine<NotificationCommand>,
 ) -> Result<IntegrationConnection> {
     disconnect_integration_connection(
         integration_connection.id,
@@ -405,6 +436,7 @@ async fn reconnect_integration_connection(
         task_service_integration_connection,
         app_config,
         ui_model,
+        notification_service,
     )
     .await?;
 
@@ -414,6 +446,7 @@ async fn reconnect_integration_connection(
         task_service_integration_connection,
         app_config,
         ui_model,
+        notification_service,
     )
     .await
 }
@@ -487,6 +520,7 @@ async fn update_integration_connection_config(
     task_service_integration_connection: Signal<LoadState<Option<IntegrationConnection>>>,
     app_config: ReadOnlySignal<Option<AppConfig>>,
     ui_model: Signal<UniversalInboxUIModel>,
+    notification_service: &Coroutine<NotificationCommand>,
 ) -> Result<()> {
     let api_base_url = get_api_base_url(app_config)?;
 
@@ -505,6 +539,7 @@ async fn update_integration_connection_config(
         task_service_integration_connection,
         app_config,
         ui_model,
+        notification_service,
     )
     .await?;
 

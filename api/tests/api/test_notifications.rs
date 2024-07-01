@@ -40,6 +40,7 @@ mod list_notifications {
             false,
             None,
             None,
+            false,
         )
         .await;
 
@@ -149,6 +150,7 @@ mod list_notifications {
             false,
             None,
             None,
+            false,
         )
         .await;
 
@@ -162,6 +164,7 @@ mod list_notifications {
             false,
             None,
             None,
+            false,
         )
         .await;
 
@@ -176,6 +179,7 @@ mod list_notifications {
             true,
             None,
             None,
+            false,
         )
         .await;
 
@@ -191,6 +195,7 @@ mod list_notifications {
             false,
             None,
             None,
+            false,
         )
         .await;
 
@@ -204,6 +209,7 @@ mod list_notifications {
             false,
             None,
             None,
+            false,
         )
         .await;
 
@@ -220,6 +226,7 @@ mod list_notifications {
             false,
             None,
             None,
+            false,
         )
         .await;
 
@@ -278,6 +285,7 @@ mod list_notifications {
             false,
             None,
             Some(NotificationSourceKind::Github),
+            false,
         )
         .await;
 
@@ -291,6 +299,7 @@ mod list_notifications {
             false,
             None,
             Some(NotificationSourceKind::Linear),
+            false,
         )
         .await;
 
@@ -304,6 +313,7 @@ mod list_notifications {
             false,
             None,
             Some(NotificationSourceKind::Todoist),
+            false,
         )
         .await;
 

@@ -4,6 +4,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Context};
+use apalis_redis::RedisStorage;
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info};
@@ -34,6 +35,7 @@ use crate::{
         third_party::ThirdPartyItemSourceService,
         todoist::TodoistService,
     },
+    jobs::UniversalInboxJob,
     repository::{task::TaskRepository, Repository},
     universal_inbox::{
         integration_connection::service::{
@@ -293,10 +295,22 @@ impl TaskService {
         executor: &mut Transaction<'a, Postgres>,
         status: TaskStatus,
         user_id: UserId,
+        job_storage: Option<RedisStorage<UniversalInboxJob>>,
     ) -> Result<Vec<Task>, UniversalInboxError> {
-        self.repository
+        let tasks = self
+            .repository
             .fetch_all_tasks(executor, status, user_id)
-            .await
+            .await?;
+
+        if let Some(job_storage) = job_storage {
+            self.integration_connection_service
+                .read()
+                .await
+                .trigger_sync_for_integration_connections(executor, user_id, job_storage)
+                .await?;
+        }
+
+        Ok(tasks)
     }
 
     #[tracing::instrument(level = "debug", skip(self, executor))]
@@ -648,7 +662,7 @@ impl TaskService {
             .context("Unable to access notification_service from task_service")?
             .read()
             .await
-            .list_notifications(executor, vec![], true, Some(task.id), None, user_id)
+            .list_notifications(executor, vec![], true, Some(task.id), None, user_id, None)
             .await?
             // Considering the list of notifications for a task is small enough to fit in a single page
             .content;

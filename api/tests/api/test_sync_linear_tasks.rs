@@ -8,6 +8,8 @@ use universal_inbox::{
             linear::{LinearConfig, LinearSyncTaskConfig},
             todoist::TodoistConfig,
         },
+        provider::IntegrationProviderKind,
+        IntegrationConnectionStatus,
     },
     task::{ProjectSummary, TaskCreationResult, TaskSourceKind, TaskStatus},
     third_party::{
@@ -31,7 +33,8 @@ use universal_inbox_api::{
 use crate::helpers::{
     auth::{authenticated_app, AuthenticatedApp},
     integration_connection::{
-        create_and_mock_integration_connection, nango_linear_connection, nango_todoist_connection,
+        create_and_mock_integration_connection, get_integration_connection_per_provider,
+        nango_linear_connection, nango_todoist_connection,
     },
     notification::linear::{mock_linear_assigned_issues_query, sync_linear_tasks_response},
     settings,
@@ -153,6 +156,29 @@ async fn test_sync_tasks_should_create_new_task(
     linear_assigned_issues_mock.assert();
     todoist_item_add_mock.assert();
     todoist_get_item_mock.assert();
+
+    let integration_connection = get_integration_connection_per_provider(
+        &app,
+        app.user.id,
+        IntegrationProviderKind::Linear,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    assert!(integration_connection.last_tasks_sync_started_at.is_some());
+    assert!(integration_connection
+        .last_tasks_sync_completed_at
+        .is_some());
+    assert!(integration_connection
+        .last_tasks_sync_failure_message
+        .is_none());
+    assert_eq!(integration_connection.tasks_sync_failures, 0);
+    assert_eq!(
+        integration_connection.status,
+        IntegrationConnectionStatus::Validated
+    );
+    assert!(integration_connection.failure_message.is_none(),);
 }
 
 #[rstest]

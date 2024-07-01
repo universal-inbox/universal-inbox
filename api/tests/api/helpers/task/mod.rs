@@ -12,9 +12,12 @@ pub async fn list_tasks_response(
     client: &Client,
     api_address: &str,
     status_filter: TaskStatus,
+    trigger_sync: bool,
 ) -> Response {
     client
-        .get(&format!("{api_address}tasks?status={status_filter}"))
+        .get(&format!(
+            "{api_address}tasks?status={status_filter}&trigger_sync={trigger_sync}"
+        ))
         .send()
         .await
         .expect("Failed to execute request")
@@ -24,8 +27,9 @@ pub async fn list_tasks(
     client: &Client,
     api_address: &str,
     status_filter: TaskStatus,
+    trigger_sync: bool,
 ) -> Vec<Task> {
-    list_tasks_response(client, api_address, status_filter)
+    list_tasks_response(client, api_address, status_filter, trigger_sync)
         .await
         .json()
         .await

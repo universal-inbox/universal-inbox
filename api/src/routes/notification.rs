@@ -4,12 +4,11 @@ use actix_http::body::BoxBody;
 use actix_jwt_authc::{Authenticated, MaybeAuthenticated};
 use actix_web::{web, HttpResponse, Scope};
 use anyhow::Context;
-use apalis::{prelude::Storage, redis::RedisStorage};
+use apalis::redis::RedisStorage;
 use serde::Deserialize;
 use serde_json::json;
 use serde_with::{formats::CommaSeparator, serde_as, StringWithSeparator};
 use tokio::sync::RwLock;
-use tracing::debug;
 
 use universal_inbox::{
     notification::{
@@ -23,8 +22,9 @@ use universal_inbox::{
 };
 
 use crate::{
-    jobs::{sync::SyncNotificationsJob, UniversalInboxJob},
+    jobs::UniversalInboxJob,
     universal_inbox::{
+        integration_connection::service::IntegrationConnectionService,
         notification::service::NotificationService, UniversalInboxError, UpdateStatus,
     },
     utils::jwt::Claims,
@@ -58,12 +58,14 @@ pub struct ListNotificationRequest {
     include_snoozed_notifications: Option<bool>,
     task_id: Option<TaskId>,
     notification_kind: Option<NotificationSourceKind>,
+    trigger_sync: Option<bool>,
 }
 
 pub async fn list_notifications(
     list_notification_request: web::Query<ListNotificationRequest>,
     notification_service: web::Data<Arc<RwLock<NotificationService>>>,
     authenticated: Authenticated<Claims>,
+    job_storage: web::Data<RedisStorage<UniversalInboxJob>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let user_id = authenticated
         .claims
@@ -85,8 +87,17 @@ pub async fn list_notifications(
             list_notification_request.task_id,
             list_notification_request.notification_kind,
             user_id,
+            list_notification_request
+                .trigger_sync
+                .unwrap_or(true)
+                .then(|| job_storage.as_ref().clone()),
         )
         .await?;
+
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit while listing notifications")?;
 
     Ok(HttpResponse::Ok().content_type("application/json").body(
         serde_json::to_string(&result).context("Cannot serialize notifications list result")?,
@@ -159,12 +170,12 @@ pub async fn create_notification(
 pub async fn sync_notifications(
     params: web::Json<SyncNotificationsParameters>,
     notification_service: web::Data<Arc<RwLock<NotificationService>>>,
+    integration_connection_service: web::Data<Arc<RwLock<IntegrationConnectionService>>>,
     maybe_authenticated: MaybeAuthenticated<Claims>,
     storage: web::Data<RedisStorage<UniversalInboxJob>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let source = params.source;
-    let storage = &*storage.into_inner();
-    let mut storage = storage.clone();
+    let mut storage = storage.as_ref().clone();
 
     if let Some(authenticated) = maybe_authenticated.into_option() {
         let user_id = authenticated
@@ -174,14 +185,18 @@ pub async fn sync_notifications(
             .context("Wrong user ID format")?;
 
         if params.asynchronous.unwrap_or(true) {
-            let job_id = storage
-                .push(UniversalInboxJob::SyncNotifications(SyncNotificationsJob {
-                    source,
-                    user_id: Some(user_id),
-                }))
+            let service = integration_connection_service.read().await;
+            let mut transaction = service
+                .begin()
                 .await
-                .context("Failed to push Sync notifications event to queue")?;
-            debug!("Pushed a Sync notifications event for user {user_id} to the queue with job ID {job_id:?}");
+                .context("Failed to create new transaction while triggering notifications sync")?;
+            service
+                .trigger_sync_notifications(&mut transaction, source, Some(user_id), &mut storage)
+                .await?;
+            transaction
+                .commit()
+                .await
+                .context("Failed to commit while triggering notifications sync")?;
             Ok(HttpResponse::Created().finish())
         } else {
             let service = notification_service.read().await;
@@ -198,16 +213,18 @@ pub async fn sync_notifications(
             ))
         }
     } else {
-        let job_id = storage
-            .push(UniversalInboxJob::SyncNotifications(SyncNotificationsJob {
-                source,
-                user_id: None,
-            }))
+        let service = integration_connection_service.read().await;
+        let mut transaction = service
+            .begin()
             .await
-            .context("Failed to push Sync notifications event to queue")?;
-        debug!(
-            "Pushed a Sync notifications event for all users to the queue with job ID {job_id:?}"
-        );
+            .context("Failed to create new transaction while triggering notifications sync")?;
+        service
+            .trigger_sync_notifications(&mut transaction, source, None, &mut storage)
+            .await?;
+        transaction
+            .commit()
+            .await
+            .context("Failed to commit while triggering notifications sync")?;
         Ok(HttpResponse::Created().finish())
     }
 }

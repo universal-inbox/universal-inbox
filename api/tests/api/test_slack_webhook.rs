@@ -157,6 +157,7 @@ async fn test_receive_star_added_event_for_unknown_user(
         false,
         None,
         None,
+        false,
     )
     .await;
     assert!(notifications.is_empty());
@@ -182,7 +183,8 @@ async fn test_receive_star_added_event_as_notification(
     )
     .await;
 
-    let slack_get_chat_permalink_mock = mock_slack_get_chat_permalink(
+    // Not asserting this call as it could be cached by another test
+    let _slack_get_chat_permalink_mock = mock_slack_get_chat_permalink(
         &app.app.slack_mock_server,
         "C05XXX",
         "1707686216.825719",
@@ -226,7 +228,6 @@ async fn test_receive_star_added_event_as_notification(
     assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
     sleep(Duration::from_secs(1)).await;
 
-    slack_get_chat_permalink_mock.assert();
     slack_fetch_user_mock.assert();
     slack_fetch_message_mock.assert();
     slack_fetch_channel_mock.assert();
@@ -239,6 +240,7 @@ async fn test_receive_star_added_event_as_notification(
         false,
         None,
         None,
+        false,
     )
     .await;
 
@@ -295,7 +297,6 @@ async fn test_receive_star_added_event_as_notification(
     assert_eq!(response.status(), 200);
     assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
 
-    slack_get_chat_permalink_mock.assert_hits(1);
     slack_fetch_user_mock.assert_hits(1);
     slack_fetch_message_mock.assert_hits(1);
     slack_fetch_channel_mock.assert_hits(1);
@@ -308,6 +309,7 @@ async fn test_receive_star_added_event_as_notification(
         false,
         None,
         None,
+        false,
     )
     .await;
 
@@ -335,7 +337,8 @@ async fn test_receive_bot_star_added_event_as_notification(
     )
     .await;
 
-    let slack_get_chat_permalink_mock = mock_slack_get_chat_permalink(
+    // Not asserting this call as it could be cached by another test
+    let _slack_get_chat_permalink_mock = mock_slack_get_chat_permalink(
         &app.app.slack_mock_server,
         "C05XXX",
         "1707686216.825719",
@@ -379,7 +382,6 @@ async fn test_receive_bot_star_added_event_as_notification(
     assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
     sleep(Duration::from_secs(1)).await;
 
-    slack_get_chat_permalink_mock.assert();
     slack_fetch_bot_mock.assert();
     slack_fetch_message_mock.assert();
     slack_fetch_channel_mock.assert();
@@ -392,6 +394,7 @@ async fn test_receive_bot_star_added_event_as_notification(
         false,
         None,
         None,
+        false,
     )
     .await;
 
@@ -448,7 +451,6 @@ async fn test_receive_bot_star_added_event_as_notification(
     assert_eq!(response.status(), 200);
     assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
 
-    slack_get_chat_permalink_mock.assert_hits(1);
     slack_fetch_bot_mock.assert_hits(1);
     slack_fetch_message_mock.assert_hits(1);
     slack_fetch_channel_mock.assert_hits(1);
@@ -461,6 +463,7 @@ async fn test_receive_bot_star_added_event_as_notification(
         false,
         None,
         None,
+        false,
     )
     .await;
 
@@ -492,7 +495,8 @@ async fn test_receive_star_removed_event_as_notification(
     )
     .await;
 
-    let slack_get_chat_permalink_mock = mock_slack_get_chat_permalink(
+    // Not asserting this call as it could be cached by another test
+    let _slack_get_chat_permalink_mock = mock_slack_get_chat_permalink(
         &app.app.slack_mock_server,
         "C05XXX",
         "1707686216.825719",
@@ -553,7 +557,6 @@ async fn test_receive_star_removed_event_as_notification(
     assert_eq!(response.status(), 200);
     assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
 
-    slack_get_chat_permalink_mock.assert();
     slack_fetch_user_mock.assert();
     slack_fetch_message_mock.assert();
     slack_fetch_channel_mock.assert();
@@ -566,6 +569,7 @@ async fn test_receive_star_removed_event_as_notification(
         false,
         None,
         None,
+        false,
     )
     .await;
 
@@ -588,7 +592,6 @@ async fn test_receive_star_removed_event_as_notification(
     assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
     sleep(Duration::from_secs(1)).await;
 
-    slack_get_chat_permalink_mock.assert_hits(1);
     slack_fetch_user_mock.assert_hits(1);
     slack_fetch_message_mock.assert_hits(1);
     slack_fetch_channel_mock.assert_hits(1);
@@ -602,6 +605,7 @@ async fn test_receive_star_removed_event_as_notification(
         false,
         None,
         None,
+        false,
     )
     .await;
     assert_eq!(notifications.len(), 0);
@@ -613,6 +617,7 @@ async fn test_receive_star_removed_event_as_notification(
         false,
         None,
         None,
+        false,
     )
     .await;
 
@@ -666,7 +671,8 @@ async fn test_receive_star_added_event_as_task(
     )
     .await;
 
-    let slack_get_chat_permalink_mock = mock_slack_get_chat_permalink(
+    // Not asserting this call as it could be cached by another test
+    let _slack_get_chat_permalink_mock = mock_slack_get_chat_permalink(
         &app.app.slack_mock_server,
         "C05XXX",
         "1707686216.825719",
@@ -726,7 +732,6 @@ async fn test_receive_star_added_event_as_task(
     assert_eq!(response.status(), 200);
     assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
 
-    slack_get_chat_permalink_mock.assert();
     slack_fetch_user_mock.assert();
     slack_fetch_message_mock.assert();
     slack_fetch_channel_mock.assert();
@@ -735,12 +740,20 @@ async fn test_receive_star_added_event_as_task(
     todoist_item_add_mock.assert();
     todoist_get_item_mock.assert();
 
-    let notifications =
-        list_notifications(&app.client, &app.app.api_address, vec![], false, None, None).await;
+    let notifications = list_notifications(
+        &app.client,
+        &app.app.api_address,
+        vec![],
+        false,
+        None,
+        None,
+        false,
+    )
+    .await;
 
     assert_eq!(notifications.len(), 0);
 
-    let tasks = list_tasks(&app.client, &app.app.api_address, TaskStatus::Active).await;
+    let tasks = list_tasks(&app.client, &app.app.api_address, TaskStatus::Active, false).await;
 
     assert_eq!(tasks.len(), 1);
     assert_eq!(tasks[0].status, TaskStatus::Active);
@@ -768,14 +781,13 @@ async fn test_receive_star_added_event_as_task(
     assert_eq!(response.status(), 200);
     assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
 
-    slack_get_chat_permalink_mock.assert_hits(1);
     slack_fetch_user_mock.assert_hits(1);
     slack_fetch_message_mock.assert_hits(1);
     slack_fetch_channel_mock.assert_hits(1);
     slack_fetch_team_mock.assert_hits(1);
     todoist_projects_mock.assert_hits(1);
 
-    let tasks = list_tasks(&app.client, &app.app.api_address, TaskStatus::Active).await;
+    let tasks = list_tasks(&app.client, &app.app.api_address, TaskStatus::Active, false).await;
 
     assert_eq!(tasks.len(), 1);
 }
@@ -815,7 +827,8 @@ async fn test_receive_star_removed_and_added_event_as_task(
     )
     .await;
 
-    let slack_get_chat_permalink_mock = mock_slack_get_chat_permalink(
+    // Not asserting this call as it could be cached by another test
+    let _slack_get_chat_permalink_mock = mock_slack_get_chat_permalink(
         &app.app.slack_mock_server,
         "C05XXX",
         "1707686216.825719",
@@ -877,7 +890,6 @@ async fn test_receive_star_removed_and_added_event_as_task(
     // Make sure the task will be updated
     sleep(Duration::from_secs(1)).await;
 
-    slack_get_chat_permalink_mock.assert();
     slack_fetch_user_mock.assert();
     slack_fetch_message_mock.assert();
     slack_fetch_channel_mock.assert();
@@ -893,12 +905,13 @@ async fn test_receive_star_removed_and_added_event_as_task(
         false,
         None,
         None,
+        false,
     )
     .await;
 
     assert_eq!(notifications.len(), 0);
 
-    let tasks = list_tasks(&app.client, &app.app.api_address, TaskStatus::Active).await;
+    let tasks = list_tasks(&app.client, &app.app.api_address, TaskStatus::Active, false).await;
 
     assert_eq!(tasks.len(), 1);
     let star_added_task = &tasks[0];
@@ -931,7 +944,6 @@ async fn test_receive_star_removed_and_added_event_as_task(
     assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
     sleep(Duration::from_secs(1)).await;
 
-    slack_get_chat_permalink_mock.assert_hits(1);
     slack_fetch_user_mock.assert_hits(1);
     slack_fetch_message_mock.assert_hits(1);
     slack_fetch_channel_mock.assert_hits(1);
@@ -945,12 +957,13 @@ async fn test_receive_star_removed_and_added_event_as_task(
         false,
         None,
         None,
+        false,
     )
     .await;
 
     assert_eq!(notifications.len(), 0);
 
-    let tasks = list_tasks(&app.client, &app.app.api_address, TaskStatus::Done).await;
+    let tasks = list_tasks(&app.client, &app.app.api_address, TaskStatus::Done, false).await;
 
     assert_eq!(tasks.len(), 1);
     assert_eq!(tasks[0].id, star_added_task.id);
@@ -985,7 +998,7 @@ async fn test_receive_star_removed_and_added_event_as_task(
 
     todoist_uncomplete_item_mock.assert();
 
-    let tasks = list_tasks(&app.client, &app.app.api_address, TaskStatus::Active).await;
+    let tasks = list_tasks(&app.client, &app.app.api_address, TaskStatus::Active, false).await;
 
     assert_eq!(tasks.len(), 1);
     assert_eq!(tasks[0].id, star_added_task.id);

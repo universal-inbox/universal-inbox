@@ -28,6 +28,7 @@ pub async fn list_notifications_response(
     include_snoozed_notifications: bool,
     task_id: Option<TaskId>,
     notification_kind: Option<NotificationSourceKind>,
+    trigger_sync: bool,
 ) -> Response {
     let snoozed_notifications_parameter = if include_snoozed_notifications {
         "include_snoozed_notifications=true&"
@@ -53,7 +54,7 @@ pub async fn list_notifications_response(
 
     client
         .get(&format!(
-            "{api_address}notifications?{status_parameter}{snoozed_notifications_parameter}{task_id_parameter}{notification_kind_parameter}"
+            "{api_address}notifications?trigger_sync={trigger_sync}&{status_parameter}{snoozed_notifications_parameter}{task_id_parameter}{notification_kind_parameter}"
         ))
         .send()
         .await
@@ -67,6 +68,7 @@ pub async fn list_notifications_with_tasks(
     include_snoozed_notifications: bool,
     task_id: Option<TaskId>,
     notification_kind: Option<NotificationSourceKind>,
+    trigger_sync: bool,
 ) -> Vec<NotificationWithTask> {
     let notifications_page: Page<NotificationWithTask> = list_notifications_response(
         client,
@@ -75,6 +77,7 @@ pub async fn list_notifications_with_tasks(
         include_snoozed_notifications,
         task_id,
         notification_kind,
+        trigger_sync,
     )
     .await
     .json()
@@ -91,6 +94,7 @@ pub async fn list_notifications(
     include_snoozed_notifications: bool,
     task_id: Option<TaskId>,
     notification_kind: Option<NotificationSourceKind>,
+    trigger_sync: bool,
 ) -> Vec<Notification> {
     list_notifications_with_tasks(
         client,
@@ -99,6 +103,7 @@ pub async fn list_notifications(
         include_snoozed_notifications,
         task_id,
         notification_kind,
+        trigger_sync,
     )
     .await
     .into_iter()

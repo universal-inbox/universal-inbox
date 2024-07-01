@@ -78,7 +78,7 @@ pub fn Authenticated(
     if auth_code.is_some() && ui_model.read().authentication_state == AuthenticationState::Unknown {
         ui_model.write().authentication_state = AuthenticationState::FetchingAccessToken;
     }
-    let authentication_state = ui_model.read().authentication_state.clone();
+    let authentication_state = ui_model.read().authentication_state;
 
     let auth_config = authentication_config.clone();
     let _ = use_resource(move || {
@@ -87,7 +87,7 @@ pub fn Authenticated(
         to_owned![api_base_url];
 
         async move {
-            let authentication_state = ui_model.read().authentication_state.clone();
+            let authentication_state = ui_model.read().authentication_state;
             if authentication_state == AuthenticationState::Authenticated
                 || authentication_state == AuthenticationState::Unknown
             {

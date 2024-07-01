@@ -203,6 +203,7 @@ async fn test_sync_todoist_linear_task(
             false,
             Some(existing_task.id),
             Some(NotificationSourceKind::Todoist),
+            false,
         )
         .await;
 
@@ -223,6 +224,7 @@ async fn test_sync_todoist_linear_task(
             false,
             Some(existing_task.id),
             None,
+            false,
         )
         .await;
 
