@@ -1,6 +1,7 @@
 use std::sync::{Arc, Weak};
 
 use anyhow::{anyhow, Context};
+use apalis_redis::RedisStorage;
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info};
@@ -24,6 +25,7 @@ use crate::{
         notification::{NotificationSourceService, NotificationSyncSourceService},
         slack::SlackService,
     },
+    jobs::UniversalInboxJob,
     repository::{notification::NotificationRepository, Repository},
     universal_inbox::{
         integration_connection::service::{
@@ -122,7 +124,12 @@ impl NotificationService {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug", 
+        skip(self, executor, job_storage),
+        fields(trigger_sync = job_storage.is_some())
+    )]
+    #[allow(clippy::too_many_arguments)]
     pub async fn list_notifications<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -131,8 +138,10 @@ impl NotificationService {
         task_id: Option<TaskId>,
         notification_kind: Option<NotificationSourceKind>,
         user_id: UserId,
+        job_storage: Option<RedisStorage<UniversalInboxJob>>,
     ) -> Result<Page<NotificationWithTask>, UniversalInboxError> {
-        self.repository
+        let notifications_page = self
+            .repository
             .fetch_all_notifications(
                 executor,
                 status,
@@ -141,7 +150,17 @@ impl NotificationService {
                 notification_kind,
                 user_id,
             )
-            .await
+            .await?;
+
+        if let Some(job_storage) = job_storage {
+            self.integration_connection_service
+                .read()
+                .await
+                .trigger_sync_for_integration_connections(executor, user_id, job_storage)
+                .await?;
+        }
+
+        Ok(notifications_page)
     }
 
     #[tracing::instrument(level = "debug", skip(self, executor))]
@@ -272,9 +291,15 @@ impl NotificationService {
         }
 
         info!("Syncing {integration_provider_kind} notifications for user {user_id}.");
+        let mut transaction = self.begin().await.context(format!(
+            "Failed to create new transaction while registering start sync date for {integration_provider_kind}"
+        ))?;
         integration_connection_service
-            .start_notifications_sync_status(executor, integration_provider_kind, user_id)
+            .start_notifications_sync_status(&mut transaction, integration_provider_kind, user_id)
             .await?;
+        transaction.commit().await.context(
+            "Failed to commit while registering start sync date for {integration_provider_kind}",
+        )?;
         match notification_source_service
             .fetch_all_notifications(executor, user_id)
             .await

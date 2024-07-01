@@ -5,7 +5,6 @@ use http::StatusCode;
 use pretty_assertions::assert_eq;
 use rstest::*;
 use tokio::time::{sleep, Duration};
-use tracing::debug;
 use uuid::Uuid;
 
 use universal_inbox::{
@@ -202,6 +201,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
         false,
         Some(new_task.id),
         None,
+        false,
     )
     .await;
 
@@ -315,6 +315,7 @@ async fn test_sync_tasks_should_add_new_task_and_delete_notification_when_disabl
         false,
         None,
         None,
+        false,
     )
     .await;
 
@@ -797,6 +798,8 @@ async fn test_sync_tasks_with_synchronization_disabled(
 }
 
 #[rstest]
+#[case::trigger_sync_when_listing_tasks(true)]
+#[case::trigger_sync_with_sync_endpoint(false)]
 #[tokio::test]
 async fn test_sync_all_tasks_asynchronously(
     settings: Settings,
@@ -804,6 +807,7 @@ async fn test_sync_all_tasks_asynchronously(
     sync_todoist_items_response: TodoistSyncResponse,
     sync_todoist_projects_response: TodoistSyncResponse,
     nango_todoist_connection: Box<NangoConnection>,
+    #[case] trigger_sync_when_listing_tasks: bool,
 ) {
     let app = authenticated_app.await;
     let integration_connection = create_and_mock_integration_connection(
@@ -861,27 +865,34 @@ async fn test_sync_all_tasks_asynchronously(
         None,
     );
 
-    let unauthenticated_client = reqwest::Client::new();
-    let response = sync_tasks_response(
-        &unauthenticated_client,
-        &app.app.api_address,
-        Some(TaskSourceKind::Todoist),
-        true, // asynchronously
-    )
-    .await;
+    if trigger_sync_when_listing_tasks {
+        let result = list_tasks(&app.client, &app.app.api_address, TaskStatus::Active, true).await;
 
-    assert_eq!(response.status(), StatusCode::CREATED);
+        // The existing task's status should not have been updated to Deleted yet
+        assert_eq!(result.len(), 1);
+    } else {
+        let unauthenticated_client = reqwest::Client::new();
+        let response = sync_tasks_response(
+            &unauthenticated_client,
+            &app.app.api_address,
+            Some(TaskSourceKind::Todoist),
+            true, // asynchronously
+        )
+        .await;
 
-    let result = list_tasks(&app.client, &app.app.api_address, TaskStatus::Active).await;
-
-    // The existing task's status should not have been updated to Deleted yet
-    assert_eq!(result.len(), 1);
+        assert_eq!(response.status(), StatusCode::CREATED);
+    }
 
     let mut i = 0;
     let synchronized = loop {
-        let result = list_tasks(&app.client, &app.app.api_address, TaskStatus::Active).await;
+        let result = list_tasks(
+            &app.client,
+            &app.app.api_address,
+            TaskStatus::Active,
+            trigger_sync_when_listing_tasks,
+        )
+        .await;
 
-        debug!("result: {result:?}");
         if result.len() == 2 {
             // The existing task's status has been updated to Deleted
             break true;
@@ -922,7 +933,7 @@ async fn test_sync_all_tasks_asynchronously(
 
     sleep(Duration::from_millis(1000)).await;
 
-    let result = list_tasks(&app.client, &app.app.api_address, TaskStatus::Active).await;
+    let result = list_tasks(&app.client, &app.app.api_address, TaskStatus::Active, false).await;
 
     // Even after 1s, the existing task's status should not have been updated
     // because the sync happen too soon after the previous one
@@ -967,7 +978,7 @@ async fn test_sync_all_tasks_asynchronously_in_error(
 
     sleep(Duration::from_millis(1000)).await;
 
-    let result = list_tasks(&app.client, &app.app.api_address, TaskStatus::Active).await;
+    let result = list_tasks(&app.client, &app.app.api_address, TaskStatus::Active, false).await;
 
     // Even after 1s, the existing task's status should not have been updated
     // because the sync was in error

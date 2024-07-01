@@ -26,8 +26,7 @@ pub async fn push_slack_event(
                 .body(json!({ "challenge": challenge }).to_string()));
         }
         SlackPushEvent::EventCallback(event) => {
-            let storage = &*storage.into_inner();
-            let mut storage = storage.clone();
+            let mut storage = storage.as_ref().clone();
             let job_id = storage
                 .push(UniversalInboxJob::SlackPushEventCallback(
                     SlackPushEventCallbackJob(event),

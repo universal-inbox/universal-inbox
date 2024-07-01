@@ -87,7 +87,8 @@ async fn test_sync_todoist_slack_task(
     )
     .await;
 
-    let slack_get_chat_permalink_mock = mock_slack_get_chat_permalink(
+    // Not asserting this call as it could be cached by another test
+    let _slack_get_chat_permalink_mock = mock_slack_get_chat_permalink(
         &app.app.slack_mock_server,
         "C05XXX",
         "1707686216.825719",
@@ -163,7 +164,6 @@ async fn test_sync_todoist_slack_task(
     // make sure the task will be updated
     sleep(Duration::from_millis(1000)).await;
 
-    slack_get_chat_permalink_mock.assert();
     slack_fetch_user_mock.assert();
     slack_fetch_message_mock.assert();
     slack_fetch_channel_mock.assert();
@@ -180,6 +180,7 @@ async fn test_sync_todoist_slack_task(
         } else {
             TaskStatus::Done
         },
+        false,
     )
     .await;
 
@@ -254,6 +255,7 @@ async fn test_sync_todoist_slack_task(
             false,
             Some(existing_task.id),
             Some(NotificationSourceKind::Todoist),
+            false,
         )
         .await;
 
@@ -274,6 +276,7 @@ async fn test_sync_todoist_slack_task(
             false,
             Some(existing_task.id),
             None,
+            false,
         )
         .await;
 

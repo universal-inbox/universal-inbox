@@ -267,6 +267,17 @@ impl TryFrom<IntegrationProviderKind> for NotificationSyncSourceKind {
     }
 }
 
+impl From<NotificationSyncSourceKind> for IntegrationProviderKind {
+    // tag: New notification integration
+    fn from(sync_source_kind: NotificationSyncSourceKind) -> Self {
+        match sync_source_kind {
+            NotificationSyncSourceKind::Github => IntegrationProviderKind::Github,
+            NotificationSyncSourceKind::Linear => IntegrationProviderKind::Linear,
+            NotificationSyncSourceKind::GoogleMail => IntegrationProviderKind::GoogleMail,
+        }
+    }
+}
+
 impl TryFrom<IntegrationProviderKind> for NotificationSourceKind {
     type Error = ();
 

@@ -376,6 +376,8 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
 }
 
 #[rstest]
+#[case::trigger_sync_when_listing_notifications(true)]
+#[case::trigger_sync_with_sync_endpoint(false)]
 #[tokio::test]
 async fn test_sync_all_notifications_asynchronously(
     settings: Settings,
@@ -384,6 +386,7 @@ async fn test_sync_all_notifications_asynchronously(
     sync_github_notifications: Vec<GithubNotification>,
     github_pull_request_123_response: Response<pull_request_query::ResponseData>,
     nango_github_connection: Box<NangoConnection>,
+    #[case] trigger_sync_when_listing_notifications: bool,
 ) {
     let app = authenticated_app.await;
     let _existing_notification: Box<Notification> = create_resource(
@@ -432,29 +435,32 @@ async fn test_sync_all_notifications_asynchronously(
         &github_pull_request_123_response,
     );
 
-    let unauthenticated_client = reqwest::Client::new();
-    let response = sync_notifications_response(
-        &unauthenticated_client,
-        &app.app.api_address,
-        Some(NotificationSourceKind::Github),
-        true, // asynchronously
-    )
-    .await;
+    if trigger_sync_when_listing_notifications {
+        let result = list_notifications(
+            &app.client,
+            &app.app.api_address,
+            vec![NotificationStatus::Read],
+            false,
+            None,
+            None,
+            true,
+        )
+        .await;
 
-    assert_eq!(response.status(), StatusCode::CREATED);
+        // The existing notification's status should not have been updated to Read yet
+        assert_eq!(result.len(), 0);
+    } else {
+        let unauthenticated_client = reqwest::Client::new();
+        let response = sync_notifications_response(
+            &unauthenticated_client,
+            &app.app.api_address,
+            Some(NotificationSourceKind::Github),
+            true, // asynchronously
+        )
+        .await;
 
-    let result = list_notifications(
-        &app.client,
-        &app.app.api_address,
-        vec![NotificationStatus::Read],
-        false,
-        None,
-        None,
-    )
-    .await;
-
-    // The existing notification's status should not have been updated to Read yet
-    assert_eq!(result.len(), 0);
+        assert_eq!(response.status(), StatusCode::CREATED);
+    }
 
     let mut i = 0;
     let synchronized = loop {
@@ -465,6 +471,7 @@ async fn test_sync_all_notifications_asynchronously(
             false,
             None,
             None,
+            trigger_sync_when_listing_notifications,
         )
         .await;
 
@@ -517,6 +524,7 @@ async fn test_sync_all_notifications_asynchronously(
         false,
         None,
         None,
+        false,
     )
     .await;
 
@@ -641,6 +649,7 @@ async fn test_sync_all_notifications_asynchronously_in_error(
         false,
         None,
         None,
+        false,
     )
     .await;
 
@@ -745,6 +754,7 @@ async fn test_sync_discussion_notification_with_details(
         false,
         None,
         None,
+        false,
     )
     .await;
 
@@ -826,6 +836,7 @@ async fn test_sync_discussion_notification_with_error(
         false,
         None,
         None,
+        false,
     )
     .await;
 

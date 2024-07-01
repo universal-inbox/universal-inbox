@@ -211,24 +211,24 @@ pub fn IntegrationSettings(
         })) => Some("🟢 Integration is ready to receive events from Slack".to_string()),
         Some(Some(IntegrationConnection {
             status: IntegrationConnectionStatus::Validated,
-            last_notifications_sync_started_at: Some(ref started_at),
+            last_notifications_sync_scheduled_at: Some(ref scheduled_at),
             last_notifications_sync_completed_at: Some(_),
             last_notifications_sync_failure_message: None,
             ..
         })) => Some(format!(
             "🟢 Notifications last successfully synced at {}",
-            started_at
+            scheduled_at
                 .with_timezone(&Local)
                 .to_rfc3339_opts(SecondsFormat::Secs, true)
         )),
         Some(Some(IntegrationConnection {
             status: IntegrationConnectionStatus::Validated,
-            last_notifications_sync_started_at: Some(ref started_at),
+            last_notifications_sync_scheduled_at: Some(ref scheduled_at),
             last_notifications_sync_completed_at: None,
             ..
         })) => Some(format!(
             "🟣 Notifications are currently syncing since {}",
-            started_at
+            scheduled_at
                 .with_timezone(&Local)
                 .to_rfc3339_opts(SecondsFormat::Secs, true)
         )),
@@ -255,24 +255,24 @@ pub fn IntegrationSettings(
     let tasks_sync_message = use_memo(move || match connection() {
         Some(Some(IntegrationConnection {
             status: IntegrationConnectionStatus::Validated,
-            last_tasks_sync_started_at: Some(ref started_at),
+            last_tasks_sync_scheduled_at: Some(ref scheduled_at),
             last_tasks_sync_completed_at: Some(_),
             last_tasks_sync_failure_message: None,
             ..
         })) => Some(format!(
             "🟢 Tasks last successfully synced at {}",
-            started_at
+            scheduled_at
                 .with_timezone(&Local)
                 .to_rfc3339_opts(SecondsFormat::Secs, true)
         )),
         Some(Some(IntegrationConnection {
             status: IntegrationConnectionStatus::Validated,
-            last_tasks_sync_started_at: Some(ref started_at),
+            last_tasks_sync_scheduled_at: Some(ref scheduled_at),
             last_tasks_sync_completed_at: None,
             ..
         })) => Some(format!(
             "🟣 Tasks are currently syncing since {}",
-            started_at
+            scheduled_at
                 .with_timezone(&Local)
                 .to_rfc3339_opts(SecondsFormat::Secs, true)
         )),
