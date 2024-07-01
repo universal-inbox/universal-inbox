@@ -241,6 +241,54 @@
         }
       }
     },
+    "cargo-machete@latest": {
+      "last_modified": "2024-06-12T20:55:33Z",
+      "resolved": "github:NixOS/nixpkgs/a9858885e197f984d92d7fe64e9fff6b2e488d40#cargo-machete",
+      "source": "devbox-search",
+      "version": "0.6.2",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/v4fw11wm98l53yw5grsbfqp83azg8zcl-cargo-machete-0.6.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/v4fw11wm98l53yw5grsbfqp83azg8zcl-cargo-machete-0.6.2"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/j725fm62lb89v5jaybkz5m3v2cr2in3f-cargo-machete-0.6.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/j725fm62lb89v5jaybkz5m3v2cr2in3f-cargo-machete-0.6.2"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/a7smsgh0g829ahpi0svng470ljbpy7jm-cargo-machete-0.6.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/a7smsgh0g829ahpi0svng470ljbpy7jm-cargo-machete-0.6.2"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/5wa7dcf7qyb827nqh2bpvgs3hilzpwnr-cargo-machete-0.6.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/5wa7dcf7qyb827nqh2bpvgs3hilzpwnr-cargo-machete-0.6.2"
+        }
+      }
+    },
     "cargo-nextest@latest": {
       "last_modified": "2024-03-19T05:49:19Z",
       "resolved": "github:NixOS/nixpkgs/5710127d9693421e78cca4f74fac2db6d67162b1#cargo-nextest",
