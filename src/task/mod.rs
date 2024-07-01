@@ -363,7 +363,17 @@ impl TryFrom<IntegrationProviderKind> for TaskSyncSourceKind {
     fn try_from(provider_kind: IntegrationProviderKind) -> Result<Self, Self::Error> {
         match provider_kind {
             IntegrationProviderKind::Todoist => Ok(Self::Todoist),
+            IntegrationProviderKind::Linear => Ok(Self::Linear),
             _ => Err(()),
+        }
+    }
+}
+
+impl From<TaskSyncSourceKind> for IntegrationProviderKind {
+    fn from(source_kind: TaskSyncSourceKind) -> Self {
+        match source_kind {
+            TaskSyncSourceKind::Todoist => IntegrationProviderKind::Todoist,
+            TaskSyncSourceKind::Linear => IntegrationProviderKind::Linear,
         }
     }
 }

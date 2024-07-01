@@ -353,6 +353,10 @@ pub async fn build_services(
         nango_service,
         settings.integrations.oauth2.nango_provider_keys.clone(),
         user_service.clone(),
+        settings
+            .application
+            .min_sync_notifications_interval_in_minutes,
+        settings.application.min_sync_tasks_interval_in_minutes,
     )));
 
     let todoist_service = Arc::new(

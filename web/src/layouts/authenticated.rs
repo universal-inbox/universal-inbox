@@ -1,12 +1,14 @@
 #![allow(non_snake_case)]
 
+use chrono::Utc;
 use dioxus::prelude::*;
+use gloo_timers::future::TimeoutFuture;
 
 use crate::{
     auth::Authenticated,
     components::spinner::Spinner,
     config::{get_api_base_url, APP_CONFIG},
-    model::UI_MODEL,
+    model::{AuthenticationState, UI_MODEL},
     route::Route,
     services::{
         integration_connection_service::{IntegrationConnectionCommand, INTEGRATION_CONNECTIONS},
@@ -49,22 +51,31 @@ pub fn AuthenticatedApp() -> Element {
     let history = WebHistory::<Route>::default();
     let nav = use_navigator();
 
-    let _ = use_resource(move || {
+    use_future(move || {
         to_owned![user_service];
         to_owned![integration_connection_service];
         to_owned![notification_service];
 
         async move {
             user_service.send(UserCommand::GetUser);
-            // Load integration connections status
-            integration_connection_service.send(IntegrationConnectionCommand::Refresh);
-            notification_service.send(NotificationCommand::Refresh);
-            // Refresh notifications every minute
-            gloo_timers::callback::Interval::new(60_000, move || {
-                notification_service.send(NotificationCommand::Refresh);
+            if UI_MODEL.read().authentication_state == AuthenticationState::Authenticated {
+                // Load integration connections status
                 integration_connection_service.send(IntegrationConnectionCommand::Refresh);
-            })
-            .forget();
+                notification_service.send(NotificationCommand::Refresh);
+                loop {
+                    TimeoutFuture::new(10_000).await;
+                    if UI_MODEL.read().is_syncing_notifications || UI_MODEL.read().is_syncing_tasks
+                    {
+                        // Refresh integration connections every 10 seconds if any of them is syncing
+                        integration_connection_service.send(IntegrationConnectionCommand::Refresh);
+                    } else if (Utc::now().timestamp() % 60) < 10 {
+                        // Refresh notifications and integration connections every minute
+                        notification_service.send(NotificationCommand::Refresh);
+                        TimeoutFuture::new(200).await;
+                        integration_connection_service.send(IntegrationConnectionCommand::Refresh);
+                    }
+                }
+            }
         }
     });
 

@@ -29,14 +29,6 @@ pub fn NotificationsPage() -> Element {
 
     debug!("Rendering notifications page");
 
-    let _ = use_resource(move || {
-        to_owned![notification_service];
-
-        async move {
-            notification_service.send(NotificationCommand::Refresh);
-        }
-    });
-
     let selected_notification = use_memo(move || {
         let notifications_page = NOTIFICATIONS_PAGE();
         let selected_notification = notifications_page

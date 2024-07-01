@@ -69,6 +69,8 @@ format:
 check-format:
     cargo fmt --all --check
 
+check-commit: format check-unused-dependencies check-all test-all
+
 ## Test recipes
 test test-filter="" $RUST_LOG="info":
     cargo nextest run {{test-filter}}

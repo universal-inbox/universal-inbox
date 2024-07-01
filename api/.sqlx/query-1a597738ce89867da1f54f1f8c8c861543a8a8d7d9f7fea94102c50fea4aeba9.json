@@ -1,0 +1,154 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                SELECT\n                  integration_connection.id,\n                  integration_connection.user_id,\n                  integration_connection.provider_user_id,\n                  integration_connection.connection_id,\n                  integration_connection.status as \"status: _\",\n                  integration_connection.failure_message,\n                  integration_connection.created_at,\n                  integration_connection.updated_at,\n                  integration_connection.last_notifications_sync_scheduled_at,\n                  integration_connection.last_notifications_sync_started_at,\n                  integration_connection.last_notifications_sync_completed_at,\n                  integration_connection.last_notifications_sync_failure_message,\n                  integration_connection.notifications_sync_failures,\n                  integration_connection.last_tasks_sync_scheduled_at,\n                  integration_connection.last_tasks_sync_started_at,\n                  integration_connection.last_tasks_sync_completed_at,\n                  integration_connection.last_tasks_sync_failure_message,\n                  integration_connection.tasks_sync_failures,\n                  integration_connection_config.config as \"config: Json<IntegrationConnectionConfig>\",\n                  integration_connection.context as \"context: Json<IntegrationConnectionContext>\",\n                  integration_connection.registered_oauth_scopes as \"registered_oauth_scopes: Json<Vec<String>>\"\n                FROM integration_connection\n                INNER JOIN integration_connection_config\n                  ON integration_connection.id = integration_connection_config.integration_connection_id\n                WHERE\n                    integration_connection.provider_user_id = $1\n                    AND integration_connection.provider_kind::TEXT = $2\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "provider_user_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "connection_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "status: _",
+        "type_info": {
+          "Custom": {
+            "name": "integration_connection_status",
+            "kind": {
+              "Enum": [
+                "Created",
+                "Validated",
+                "Failing"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "failure_message",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 7,
+        "name": "updated_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 8,
+        "name": "last_notifications_sync_scheduled_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 9,
+        "name": "last_notifications_sync_started_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 10,
+        "name": "last_notifications_sync_completed_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 11,
+        "name": "last_notifications_sync_failure_message",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 12,
+        "name": "notifications_sync_failures",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 13,
+        "name": "last_tasks_sync_scheduled_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 14,
+        "name": "last_tasks_sync_started_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 15,
+        "name": "last_tasks_sync_completed_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 16,
+        "name": "last_tasks_sync_failure_message",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 17,
+        "name": "tasks_sync_failures",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 18,
+        "name": "config: Json<IntegrationConnectionConfig>",
+        "type_info": "Json"
+      },
+      {
+        "ordinal": 19,
+        "name": "context: Json<IntegrationConnectionContext>",
+        "type_info": "Json"
+      },
+      {
+        "ordinal": 20,
+        "name": "registered_oauth_scopes: Json<Vec<String>>",
+        "type_info": "Json"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "1a597738ce89867da1f54f1f8c8c861543a8a8d7d9f7fea94102c50fea4aeba9"
+}

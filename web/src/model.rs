@@ -17,6 +17,8 @@ pub struct UniversalInboxUIModel {
     pub selected_preview_pane: PreviewPane,
     pub error_message: Option<String>,
     pub confirmation_message: Option<String>,
+    pub is_syncing_notifications: bool,
+    pub is_syncing_tasks: bool,
 }
 
 impl UniversalInboxUIModel {
@@ -33,7 +35,7 @@ impl UniversalInboxUIModel {
     }
 }
 
-#[derive(Debug, PartialEq, Default, Clone)]
+#[derive(Debug, PartialEq, Default, Clone, Copy)]
 pub enum AuthenticationState {
     // When we don't know if the user is authenticated, we will load the application as if
     // she is authenticated and deduce the state from the first API request result

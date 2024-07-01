@@ -59,12 +59,12 @@ pub async fn list_integration_connections(
         .begin()
         .await
         .context("Failed to create new transaction while listing integration connections")?;
-    let result: Vec<IntegrationConnection> = service
+    let integration_connections: Vec<IntegrationConnection> = service
         .fetch_all_integration_connections(&mut transaction, user_id, None)
         .await?;
 
     Ok(HttpResponse::Ok().content_type("application/json").body(
-        serde_json::to_string(&result)
+        serde_json::to_string(&integration_connections)
             .context("Cannot serialize integration connections list result")?,
     ))
 }

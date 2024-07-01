@@ -110,7 +110,7 @@ pub fn App() -> Element {
         init_headway();
     }
 
-    let _ = use_resource(move || {
+    use_future(move || {
         to_owned![notification_service_handle];
         to_owned![task_service_handle];
 

@@ -1,0 +1,3 @@
+ALTER TABLE integration_connection
+ADD COLUMN last_notifications_sync_scheduled_at TIMESTAMP,
+ADD COLUMN last_tasks_sync_scheduled_at TIMESTAMP;

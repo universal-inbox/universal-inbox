@@ -20,9 +20,11 @@ use crate::{
 
 #[derive(Debug)]
 pub enum IntegrationConnectionSyncStatusUpdate {
+    NotificationsSyncScheduled,
     NotificationsSyncStarted,
     NotificationsSyncCompleted,
     NotificationsSyncFailed(String),
+    TasksSyncScheduled,
     TasksSyncStarted,
     TasksSyncCompleted,
     TasksSyncFailed(String),
@@ -71,8 +73,8 @@ pub trait IntegrationConnectionRepository {
     async fn update_integration_connection_sync_status<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        user_id: UserId,
-        integration_provider_kind: IntegrationProviderKind,
+        user_id: Option<UserId>,
+        integration_provider_kind: Option<IntegrationProviderKind>,
         sync_update: IntegrationConnectionSyncStatusUpdate,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError>;
 
@@ -141,10 +143,12 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.failure_message,
                   integration_connection.created_at,
                   integration_connection.updated_at,
+                  integration_connection.last_notifications_sync_scheduled_at,
                   integration_connection.last_notifications_sync_started_at,
                   integration_connection.last_notifications_sync_completed_at,
                   integration_connection.last_notifications_sync_failure_message,
                   integration_connection.notifications_sync_failures,
+                  integration_connection.last_tasks_sync_scheduled_at,
                   integration_connection.last_tasks_sync_started_at,
                   integration_connection.last_tasks_sync_completed_at,
                   integration_connection.last_tasks_sync_failure_message,
@@ -191,10 +195,12 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.failure_message,
                   integration_connection.created_at,
                   integration_connection.updated_at,
+                  integration_connection.last_notifications_sync_scheduled_at,
                   integration_connection.last_notifications_sync_started_at,
                   integration_connection.last_notifications_sync_completed_at,
                   integration_connection.last_notifications_sync_failure_message,
                   integration_connection.notifications_sync_failures,
+                  integration_connection.last_tasks_sync_scheduled_at,
                   integration_connection.last_tasks_sync_started_at,
                   integration_connection.last_tasks_sync_completed_at,
                   integration_connection.last_tasks_sync_failure_message,
@@ -270,10 +276,12 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.failure_message,
                   integration_connection.created_at,
                   integration_connection.updated_at,
+                  integration_connection.last_notifications_sync_scheduled_at,
                   integration_connection.last_notifications_sync_started_at,
                   integration_connection.last_notifications_sync_completed_at,
                   integration_connection.last_notifications_sync_failure_message,
                   integration_connection.notifications_sync_failures,
+                  integration_connection.last_tasks_sync_scheduled_at,
                   integration_connection.last_tasks_sync_started_at,
                   integration_connection.last_tasks_sync_completed_at,
                   integration_connection.last_tasks_sync_failure_message,
@@ -350,10 +358,12 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.failure_message,
                   integration_connection.created_at,
                   integration_connection.updated_at,
+                  integration_connection.last_notifications_sync_scheduled_at,
                   integration_connection.last_notifications_sync_started_at,
                   integration_connection.last_notifications_sync_completed_at,
                   integration_connection.last_notifications_sync_failure_message,
                   integration_connection.notifications_sync_failures,
+                  integration_connection.last_tasks_sync_scheduled_at,
                   integration_connection.last_tasks_sync_started_at,
                   integration_connection.last_tasks_sync_completed_at,
                   integration_connection.last_tasks_sync_failure_message,
@@ -420,17 +430,24 @@ impl IntegrationConnectionRepository for Repository {
     async fn update_integration_connection_sync_status<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        user_id: UserId,
-        integration_provider_kind: IntegrationProviderKind,
+        user_id: Option<UserId>,
+        integration_provider_kind: Option<IntegrationProviderKind>,
         sync_update: IntegrationConnectionSyncStatusUpdate,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
         let mut query_builder = QueryBuilder::new("UPDATE integration_connection SET");
         let mut separated = query_builder.separated(", ");
         match sync_update {
+            IntegrationConnectionSyncStatusUpdate::NotificationsSyncScheduled => {
+                separated
+                    .push(" last_notifications_sync_scheduled_at = ")
+                    .push_bind_unseparated(Utc::now());
+                separated.push(" last_notifications_sync_completed_at = NULL ");
+            }
             IntegrationConnectionSyncStatusUpdate::NotificationsSyncStarted => {
                 separated
                     .push(" last_notifications_sync_started_at = ")
                     .push_bind_unseparated(Utc::now());
+                separated.push(" last_notifications_sync_completed_at = NULL ");
             }
             IntegrationConnectionSyncStatusUpdate::NotificationsSyncCompleted => {
                 separated
@@ -451,10 +468,17 @@ impl IntegrationConnectionRepository for Repository {
                     .push(format!(" status = CASE WHEN notifications_sync_failures + 1 >= {MAX_SYNC_FAILURES_BEFORE_DISCONNECT} THEN 'Failing' ELSE status END "));
                 separated.push(format!(" failure_message = CASE WHEN notifications_sync_failures + 1 >= {MAX_SYNC_FAILURES_BEFORE_DISCONNECT} THEN '{TOO_MANY_SYNC_FAILURES_ERROR_MESSAGE}' ELSE failure_message END "));
             }
+            IntegrationConnectionSyncStatusUpdate::TasksSyncScheduled => {
+                separated
+                    .push(" last_tasks_sync_scheduled_at = ")
+                    .push_bind_unseparated(Utc::now());
+                separated.push(" last_tasks_sync_completed_at = NULL ");
+            }
             IntegrationConnectionSyncStatusUpdate::TasksSyncStarted => {
                 separated
                     .push(" last_tasks_sync_started_at = ")
                     .push_bind_unseparated(Utc::now());
+                separated.push(" last_tasks_sync_completed_at = NULL ");
             }
             IntegrationConnectionSyncStatusUpdate::TasksSyncCompleted => {
                 separated
@@ -479,13 +503,21 @@ impl IntegrationConnectionRepository for Repository {
 
         query_builder
             .push(" FROM integration_connection_config ")
-            .push(" WHERE ")
-            .separated(" AND ")
-            .push(" integration_connection_config.integration_connection_id = integration_connection.id ")
-            .push(" integration_connection.user_id = ")
-            .push_bind_unseparated(user_id.0)
-            .push(" integration_connection.provider_kind::TEXT = ")
-            .push_bind_unseparated(integration_provider_kind.to_string());
+            .push(" WHERE ");
+        let mut separated = query_builder.separated(" AND ");
+        separated.push(
+            " integration_connection_config.integration_connection_id = integration_connection.id ",
+        );
+        if let Some(integration_provider_kind) = integration_provider_kind {
+            separated
+                .push(" integration_connection.provider_kind::TEXT = ")
+                .push_bind_unseparated(integration_provider_kind.to_string());
+        }
+        if let Some(user_id) = user_id {
+            separated
+                .push(" integration_connection.user_id = ")
+                .push_bind_unseparated(user_id.0);
+        }
 
         query_builder.push(
             r#"
@@ -498,10 +530,12 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.failure_message,
                   integration_connection.created_at,
                   integration_connection.updated_at,
+                  integration_connection.last_notifications_sync_scheduled_at,
                   integration_connection.last_notifications_sync_started_at,
                   integration_connection.last_notifications_sync_completed_at,
                   integration_connection.last_notifications_sync_failure_message,
                   integration_connection.notifications_sync_failures,
+                  integration_connection.last_tasks_sync_scheduled_at,
                   integration_connection.last_tasks_sync_started_at,
                   integration_connection.last_tasks_sync_completed_at,
                   integration_connection.last_tasks_sync_failure_message,
@@ -519,7 +553,7 @@ impl IntegrationConnectionRepository for Repository {
             .await
             .map_err(|err| UniversalInboxError::DatabaseError {
                 source: err,
-                message: format!("Failed to update integration connection {integration_provider_kind} for user {user_id} from storage")
+                message: format!("Failed to update integration connection {integration_provider_kind:?} for user {user_id:?} from storage")
             })?;
 
         if let Some(updated_integration_connection_row) = row {
@@ -568,10 +602,12 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.failure_message,
                   integration_connection.created_at,
                   integration_connection.updated_at,
+                  integration_connection.last_notifications_sync_scheduled_at,
                   integration_connection.last_notifications_sync_started_at,
                   integration_connection.last_notifications_sync_completed_at,
                   integration_connection.last_notifications_sync_failure_message,
                   integration_connection.notifications_sync_failures,
+                  integration_connection.last_tasks_sync_scheduled_at,
                   integration_connection.last_tasks_sync_started_at,
                   integration_connection.last_tasks_sync_completed_at,
                   integration_connection.last_tasks_sync_failure_message,
@@ -628,10 +664,12 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.failure_message,
                   integration_connection.created_at,
                   integration_connection.updated_at,
+                  integration_connection.last_notifications_sync_scheduled_at,
                   integration_connection.last_notifications_sync_started_at,
                   integration_connection.last_notifications_sync_completed_at,
                   integration_connection.last_notifications_sync_failure_message,
                   integration_connection.notifications_sync_failures,
+                  integration_connection.last_tasks_sync_scheduled_at,
                   integration_connection.last_tasks_sync_started_at,
                   integration_connection.last_tasks_sync_completed_at,
                   integration_connection.last_tasks_sync_failure_message,
@@ -827,10 +865,12 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.failure_message,
                   integration_connection.created_at,
                   integration_connection.updated_at,
+                  integration_connection.last_notifications_sync_scheduled_at,
                   integration_connection.last_notifications_sync_started_at,
                   integration_connection.last_notifications_sync_completed_at,
                   integration_connection.last_notifications_sync_failure_message,
                   integration_connection.notifications_sync_failures,
+                  integration_connection.last_tasks_sync_scheduled_at,
                   integration_connection.last_tasks_sync_started_at,
                   integration_connection.last_tasks_sync_completed_at,
                   integration_connection.last_tasks_sync_failure_message,
@@ -893,10 +933,12 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.failure_message,
                   integration_connection.created_at,
                   integration_connection.updated_at,
+                  integration_connection.last_notifications_sync_scheduled_at,
                   integration_connection.last_notifications_sync_started_at,
                   integration_connection.last_notifications_sync_completed_at,
                   integration_connection.last_notifications_sync_failure_message,
                   integration_connection.notifications_sync_failures,
+                  integration_connection.last_tasks_sync_scheduled_at,
                   integration_connection.last_tasks_sync_started_at,
                   integration_connection.last_tasks_sync_completed_at,
                   integration_connection.last_tasks_sync_failure_message,
@@ -954,10 +996,12 @@ pub struct IntegrationConnectionRow {
     failure_message: Option<String>,
     created_at: NaiveDateTime,
     updated_at: NaiveDateTime,
+    last_notifications_sync_scheduled_at: Option<NaiveDateTime>,
     last_notifications_sync_started_at: Option<NaiveDateTime>,
     last_notifications_sync_completed_at: Option<NaiveDateTime>,
     last_notifications_sync_failure_message: Option<String>,
     notifications_sync_failures: i32,
+    last_tasks_sync_scheduled_at: Option<NaiveDateTime>,
     last_tasks_sync_started_at: Option<NaiveDateTime>,
     last_tasks_sync_completed_at: Option<NaiveDateTime>,
     last_tasks_sync_failure_message: Option<String>,
@@ -1002,6 +1046,9 @@ impl TryFrom<IntegrationConnectionRow> for IntegrationConnection {
             failure_message: row.failure_message,
             created_at: DateTime::from_naive_utc_and_offset(row.created_at, Utc),
             updated_at: DateTime::from_naive_utc_and_offset(row.updated_at, Utc),
+            last_notifications_sync_scheduled_at: row
+                .last_notifications_sync_scheduled_at
+                .map(|scheduled_at| DateTime::from_naive_utc_and_offset(scheduled_at, Utc)),
             last_notifications_sync_started_at: row
                 .last_notifications_sync_started_at
                 .map(|started_at| DateTime::from_naive_utc_and_offset(started_at, Utc)),
@@ -1010,6 +1057,9 @@ impl TryFrom<IntegrationConnectionRow> for IntegrationConnection {
                 .map(|completed_at| DateTime::from_naive_utc_and_offset(completed_at, Utc)),
             last_notifications_sync_failure_message: row.last_notifications_sync_failure_message,
             notifications_sync_failures: row.notifications_sync_failures as u32,
+            last_tasks_sync_scheduled_at: row
+                .last_tasks_sync_scheduled_at
+                .map(|scheduled_at| DateTime::from_naive_utc_and_offset(scheduled_at, Utc)),
             last_tasks_sync_started_at: row
                 .last_tasks_sync_started_at
                 .map(|started_at| DateTime::from_naive_utc_and_offset(started_at, Utc)),

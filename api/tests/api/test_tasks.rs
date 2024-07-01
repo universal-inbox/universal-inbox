@@ -129,7 +129,7 @@ mod list_tasks {
     #[tokio::test]
     async fn test_empty_list_tasks(#[future] authenticated_app: AuthenticatedApp) {
         let app = authenticated_app.await;
-        let tasks = list_tasks(&app.client, &app.app.api_address, TaskStatus::Active).await;
+        let tasks = list_tasks(&app.client, &app.app.api_address, TaskStatus::Active, false).await;
 
         assert!(tasks.is_empty());
     }
@@ -210,12 +210,12 @@ mod list_tasks {
         let task_done = creation.task.as_ref().unwrap().clone();
         assert_eq!(task_done.status, TaskStatus::Done);
 
-        let tasks = list_tasks(&app.client, &app.app.api_address, TaskStatus::Active).await;
+        let tasks = list_tasks(&app.client, &app.app.api_address, TaskStatus::Active, false).await;
 
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0], task_active);
 
-        let tasks = list_tasks(&app.client, &app.app.api_address, TaskStatus::Done).await;
+        let tasks = list_tasks(&app.client, &app.app.api_address, TaskStatus::Done, false).await;
 
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0], task_done);
@@ -224,7 +224,7 @@ mod list_tasks {
         let (client, _user) =
             authenticate_user(&app.app, "5678", "Jane", "Doe", "jane@example.com").await;
 
-        let result = list_tasks(&client, &app.app.api_address, TaskStatus::Done).await;
+        let result = list_tasks(&client, &app.app.api_address, TaskStatus::Done, false).await;
 
         assert_eq!(result.len(), 0);
     }

@@ -24,6 +24,7 @@
 - Use JWT token as access authorization (via a cookie or the `Authorization` header)
 - Introduce ThirdPartyItem entity for Tasks source data
 - Synchronize notifications and tasks on async workers
+- Trigger notifications and tasks synchronization when user is active
 
 ### Fixed
 

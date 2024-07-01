@@ -28,10 +28,12 @@ pub struct IntegrationConnection {
     pub failure_message: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub last_notifications_sync_scheduled_at: Option<DateTime<Utc>>,
     pub last_notifications_sync_started_at: Option<DateTime<Utc>>,
     pub last_notifications_sync_completed_at: Option<DateTime<Utc>>,
     pub last_notifications_sync_failure_message: Option<String>,
     pub notifications_sync_failures: u32,
+    pub last_tasks_sync_scheduled_at: Option<DateTime<Utc>>,
     pub last_tasks_sync_started_at: Option<DateTime<Utc>>,
     pub last_tasks_sync_completed_at: Option<DateTime<Utc>>,
     pub last_tasks_sync_failure_message: Option<String>,
@@ -51,10 +53,12 @@ impl IntegrationConnection {
             failure_message: None,
             created_at: Utc::now().with_nanosecond(0).unwrap(),
             updated_at: Utc::now().with_nanosecond(0).unwrap(),
+            last_notifications_sync_scheduled_at: None,
             last_notifications_sync_started_at: None,
             last_notifications_sync_completed_at: None,
             last_notifications_sync_failure_message: None,
             notifications_sync_failures: 0,
+            last_tasks_sync_scheduled_at: None,
             last_tasks_sync_started_at: None,
             last_tasks_sync_completed_at: None,
             last_tasks_sync_failure_message: None,
@@ -91,26 +95,26 @@ impl IntegrationConnection {
         if !self.is_connected() {
             return false;
         }
-        let Some(started_at) = self.last_notifications_sync_started_at else {
+        let Some(scheduled_at) = self.last_notifications_sync_scheduled_at else {
             return false;
         };
         let Some(completed_at) = self.last_notifications_sync_completed_at else {
             return true;
         };
-        started_at > completed_at
+        scheduled_at > completed_at
     }
 
     pub fn is_syncing_tasks(&self) -> bool {
         if !self.is_connected() {
             return false;
         }
-        let Some(started_at) = self.last_tasks_sync_started_at else {
+        let Some(scheduled_at) = self.last_tasks_sync_scheduled_at else {
             return false;
         };
         let Some(completed_at) = self.last_tasks_sync_completed_at else {
             return true;
         };
-        started_at > completed_at
+        scheduled_at > completed_at
     }
 
     pub fn is_syncing(&self) -> bool {
