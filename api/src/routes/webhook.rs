@@ -3,6 +3,10 @@ use anyhow::Context;
 use apalis::{prelude::Storage, redis::RedisStorage};
 use serde_json::json;
 use slack_morphism::prelude::*;
+use tokio_retry::{
+    strategy::{jitter, ExponentialBackoff},
+    Retry,
+};
 use tracing::debug;
 
 use crate::{
@@ -26,13 +30,20 @@ pub async fn push_slack_event(
                 .body(json!({ "challenge": challenge }).to_string()));
         }
         SlackPushEvent::EventCallback(event) => {
-            let mut storage = storage.as_ref().clone();
-            let job_id = storage
-                .push(UniversalInboxJob::SlackPushEventCallback(
-                    SlackPushEventCallbackJob(event),
-                ))
-                .await
-                .context("Failed to push Slack event to queue")?;
+            let storage = storage.as_ref();
+            let job_id = Retry::spawn(
+                ExponentialBackoff::from_millis(10).map(jitter).take(10),
+                || async {
+                    storage
+                        .clone()
+                        .push(UniversalInboxJob::SlackPushEventCallback(
+                            SlackPushEventCallbackJob(event.clone()),
+                        ))
+                        .await
+                },
+            )
+            .await
+            .context("Failed to push Slack event to queue")?;
             debug!("Pushed a Slack event to the queue with job ID {job_id:?}");
         }
         event => {
