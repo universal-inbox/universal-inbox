@@ -143,6 +143,7 @@ universal-inbox = { path = ".." }
 url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true, features = ["serde"] }
 validator = { workspace = true }
+tokio-retry = "0.3.0"
 
 [dev-dependencies]
 httpmock = { git = "https://github.com/dax/httpmock", rev = "334aa67d402a11054f7f942b9df5b2f53ff773d1" }

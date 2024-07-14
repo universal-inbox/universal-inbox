@@ -7781,6 +7781,7 @@ dependencies = [
  "sqlx",
  "thiserror",
  "tokio",
+ "tokio-retry",
  "tonic",
  "tracing",
  "tracing-actix-web",

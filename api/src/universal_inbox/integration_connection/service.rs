@@ -4,6 +4,10 @@ use anyhow::{anyhow, Context};
 use apalis::{prelude::*, redis::RedisStorage};
 use chrono::{TimeDelta, Utc};
 use sqlx::{Postgres, Transaction};
+use tokio_retry::{
+    strategy::{jitter, ExponentialBackoff},
+    Retry,
+};
 use tracing::{error, info, warn};
 
 use universal_inbox::{
@@ -175,13 +179,21 @@ impl IntegrationConnectionService {
             for_user_id,
         )
         .await?;
-        job_storage
-            .push(UniversalInboxJob::SyncNotifications(SyncNotificationsJob {
-                source: notification_sync_source_kind,
-                user_id: for_user_id,
-            }))
-            .await
-            .context("Failed to push SyncNotifications job to queue")?;
+
+        Retry::spawn(
+            ExponentialBackoff::from_millis(10).map(jitter).take(10),
+            || async {
+                job_storage
+                    .clone()
+                    .push(UniversalInboxJob::SyncNotifications(SyncNotificationsJob {
+                        source: notification_sync_source_kind,
+                        user_id: for_user_id,
+                    }))
+                    .await
+            },
+        )
+        .await
+        .context("Failed to push SyncNotifications job to queue")?;
 
         Ok(())
     }
@@ -201,13 +213,21 @@ impl IntegrationConnectionService {
             for_user_id,
         )
         .await?;
-        job_storage
-            .push(UniversalInboxJob::SyncTasks(SyncTasksJob {
-                source: task_sync_source_kind,
-                user_id: for_user_id,
-            }))
-            .await
-            .context("Failed to push SyncTasks job to queue")?;
+
+        Retry::spawn(
+            ExponentialBackoff::from_millis(10).map(jitter).take(10),
+            || async {
+                job_storage
+                    .clone()
+                    .push(UniversalInboxJob::SyncTasks(SyncTasksJob {
+                        source: task_sync_source_kind,
+                        user_id: for_user_id,
+                    }))
+                    .await
+            },
+        )
+        .await
+        .context("Failed to push SyncTasks job to queue")?;
 
         Ok(())
     }
