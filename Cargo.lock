@@ -6519,8 +6519,7 @@ dependencies = [
 [[package]]
 name = "slack-morphism"
 version = "2.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d8cabe862fe7e57b3285ee8718c03410c26ad225cfd6671da785a62c3cccea25"
+source = "git+https://github.com/dax/slack-morphism-rust?branch=add-blocks-to-message-attachment#e89ea0ad346b5deeabd5b7d7311f08717c10ebf5"
 dependencies = [
  "async-recursion",
  "async-trait",

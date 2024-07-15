@@ -32,6 +32,7 @@
 - Split the Todoist projects cache per user
 - Trace user ID in logs and traces
 - Fetch Slack message in a thread if any
+- Handle Slack blocks in attachments
 
 ## [Initial Version] - 2024-01-27
 
