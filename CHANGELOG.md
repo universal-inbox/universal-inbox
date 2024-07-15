@@ -34,6 +34,7 @@
 - Fetch Slack message in a thread if any
 - Handle Slack blocks in attachments
 - Add `default_due_at` setting while syncing Linear assigned issues
+- Add cache directive to task projects search endpoint
 
 ## [Initial Version] - 2024-01-27
 
