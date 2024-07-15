@@ -14,7 +14,7 @@ use universal_inbox::{
         },
     },
     notification::{NotificationSourceKind, NotificationStatus},
-    task::{ProjectSummary, Task, TaskCreationResult, TaskSourceKind, TaskStatus},
+    task::{PresetDueDate, ProjectSummary, Task, TaskCreationResult, TaskSourceKind, TaskStatus},
     third_party::integrations::linear::{
         LinearIssue, LinearWorkflowState, LinearWorkflowStateType,
     },
@@ -90,6 +90,7 @@ async fn test_sync_todoist_linear_task(
             sync_task_config: LinearSyncTaskConfig {
                 enabled: true,
                 target_project: Some(project.clone()),
+                default_due_at: Some(PresetDueDate::Today),
             },
         }),
         &settings,

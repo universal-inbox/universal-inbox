@@ -580,7 +580,7 @@ impl ThirdPartyTaskService<LinearIssue> for LinearService {
             status: source.state.r#type.into(),
             completed_at: source.completed_at,
             priority: source.priority.into(),
-            due_at: source.due_date.map(|due_date| due_date.into()),
+            due_at: task_creation.due_at.clone(),
             tags: source
                 .labels
                 .iter()

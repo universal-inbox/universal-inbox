@@ -11,7 +11,9 @@ use universal_inbox::{
         provider::IntegrationProviderKind,
         IntegrationConnectionStatus,
     },
-    task::{ProjectSummary, TaskCreationResult, TaskSourceKind, TaskStatus},
+    task::{
+        DueDate, PresetDueDate, ProjectSummary, TaskCreationResult, TaskSourceKind, TaskStatus,
+    },
     third_party::{
         integrations::{
             linear::LinearIssue,
@@ -83,6 +85,7 @@ async fn test_sync_tasks_should_create_new_task(
                     name: "Project2".to_string(),
                     source_id: "2222".to_string(),
                 }),
+                default_due_at: Some(PresetDueDate::Today),
             },
         }),
         &settings,
@@ -111,13 +114,14 @@ async fn test_sync_tasks_should_create_new_task(
         sync_linear_issues[0].title.clone(),
         sync_linear_issues[0].get_html_url()
     );
+    let due_at: DueDate = PresetDueDate::Today.into();
     let todoist_item_add_mock = mock_todoist_item_add_service(
         &app.app.todoist_mock_server,
         &todoist_item.id,
         expected_task_title.clone(),
         sync_linear_issues[0].description.clone(),
         "2222".to_string(), // ie. "Project2"
-        None,
+        Some((&due_at).into()),
         TodoistItemPriority::P1,
     );
     let todoist_get_item_mock =
@@ -149,6 +153,9 @@ async fn test_sync_tasks_should_create_new_task(
         task.source_item.source_id,
         sync_linear_issues[0].id.to_string()
     );
+    assert_eq!(task.project, "Project2".to_string());
+    assert_eq!(task.due_at, Some(due_at));
+
     let sink_item = task.sink_item.clone().unwrap();
     assert_eq!(sink_item.kind(), ThirdPartyItemKind::TodoistItem);
     assert_eq!(sink_item.source_id, todoist_item.id);
@@ -215,6 +222,7 @@ async fn test_sync_tasks_should_complete_existing_task(
             sync_task_config: LinearSyncTaskConfig {
                 enabled: true,
                 target_project: Some(project.clone()),
+                default_due_at: None,
             },
         }),
         &settings,
