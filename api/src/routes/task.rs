@@ -2,7 +2,10 @@ use std::sync::Arc;
 
 use actix_http::body::BoxBody;
 use actix_jwt_authc::{Authenticated, MaybeAuthenticated};
-use actix_web::{web, HttpResponse, Scope};
+use actix_web::{
+    http::header::{self, CacheDirective},
+    web, HttpResponse, Scope,
+};
 use anyhow::Context;
 use apalis::redis::RedisStorage;
 use serde::Deserialize;
@@ -283,5 +286,9 @@ pub async fn search_projects(
 
     Ok(HttpResponse::Ok()
         .content_type("application/json")
+        .insert_header(header::CacheControl(vec![
+            CacheDirective::Private,
+            CacheDirective::MaxAge(600u32),
+        ]))
         .body(serde_json::to_string(&tasks).context("Cannot serialize task projects")?))
 }
