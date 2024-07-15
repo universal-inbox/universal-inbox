@@ -6,11 +6,15 @@ use universal_inbox::{
         config::IntegrationConnectionConfig,
         integrations::linear::{LinearConfig, LinearSyncTaskConfig},
     },
-    task::ProjectSummary,
+    task::{PresetDueDate, ProjectSummary},
 };
 
 use crate::{
-    components::integrations::task_project_search::TaskProjectSearch, model::UniversalInboxUIModel,
+    components::{
+        floating_label_inputs::FloatingLabelSelect,
+        integrations::task_project_search::TaskProjectSearch,
+    },
+    model::UniversalInboxUIModel,
 };
 
 #[component]
@@ -20,6 +24,7 @@ pub fn LinearProviderConfiguration(
     on_config_change: EventHandler<IntegrationConnectionConfig>,
 ) -> Element {
     let mut default_project: Signal<Option<String>> = use_signal(|| None);
+    let mut default_due_at: Signal<Option<PresetDueDate>> = use_signal(|| None);
     let selected_project: Signal<Option<ProjectSummary>> = use_signal(|| None);
     let mut task_config_enabled = use_signal(|| false);
     let _ = use_memo(move || {
@@ -27,6 +32,9 @@ pub fn LinearProviderConfiguration(
             .sync_task_config
             .target_project
             .map(|p| p.name.clone());
+        default_due_at
+            .write()
+            .clone_from(&config().sync_task_config.default_due_at);
         *task_config_enabled.write() = config().sync_task_config.enabled;
     });
     let collapse_style = use_memo(move || {
@@ -117,6 +125,37 @@ pub fn LinearProviderConfiguration(
                                         ..config()
                                     }))
                                 }
+                            }
+                        }
+                    }
+
+                    div {
+                        class: "form-control",
+                        label {
+                            class: "cursor-pointer label py-1",
+                            span {
+                                class: "label-text",
+                                "Due date to assign to synchronized tasks"
+                            }
+
+                            FloatingLabelSelect::<PresetDueDate> {
+                                label: None,
+                                class: "w-full max-w-xs bg-base-100 rounded",
+                                name: "task-due-at-input".to_string(),
+                                on_select: move |default_due_at| {
+                                    on_config_change.call(IntegrationConnectionConfig::Linear(LinearConfig {
+                                        sync_task_config: LinearSyncTaskConfig {
+                                            default_due_at,
+                                            ..config().sync_task_config
+                                        },
+                                        ..config()
+                                    }));
+                                },
+
+                                option { selected: default_due_at() == Some(PresetDueDate::Today), "{PresetDueDate::Today}" }
+                                option { selected: default_due_at() == Some(PresetDueDate::Tomorrow), "{PresetDueDate::Tomorrow}" }
+                                option { selected: default_due_at() == Some(PresetDueDate::ThisWeekend), "{PresetDueDate::ThisWeekend}" }
+                                option { selected: default_due_at() == Some(PresetDueDate::NextWeek), "{PresetDueDate::NextWeek}" }
                             }
                         }
                     }

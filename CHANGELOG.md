@@ -33,6 +33,7 @@
 - Trace user ID in logs and traces
 - Fetch Slack message in a thread if any
 - Handle Slack blocks in attachments
+- Add `default_due_at` setting while syncing Linear assigned issues
 
 ## [Initial Version] - 2024-01-27
 

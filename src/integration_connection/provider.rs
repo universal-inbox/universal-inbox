@@ -189,7 +189,11 @@ impl IntegrationProvider {
                         source_id: "Unused".to_string(),
                         name: TODOIST_INBOX_PROJECT.to_string(),
                     }),
-                due_at: None,
+                due_at: config
+                    .sync_task_config
+                    .default_due_at
+                    .as_ref()
+                    .map(|due_at| due_at.clone().into()),
                 priority: TaskPriority::default(),
             }),
             _ => None,
