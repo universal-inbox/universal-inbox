@@ -66,7 +66,7 @@ serde_json = { version = "1.0" }
 serde_urlencoded = { version = "0.7.0" }
 serde_with = { version = "3.8.0" }
 slack-blocks-render = { version = "0.1.0" }
-slack-morphism = { version = "2.3.0" }
+slack-morphism = { version = "2.4.0" }
 thiserror = { version = "1.0" }
 url = { version = "2.5.0" }
 uuid = { version = "1.0", features = ["v4"] }
@@ -75,3 +75,6 @@ validator = { version = "0.18.0", features = ["derive"] }
 [dev-dependencies]
 pretty_assertions = { workspace = true }
 rstest = { workspace = true }
+
+[patch.crates-io]
+slack-morphism = { git = "https://github.com/dax/slack-morphism-rust", branch = "add-blocks-to-message-attachment" }

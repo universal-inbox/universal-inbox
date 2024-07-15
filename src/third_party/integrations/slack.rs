@@ -61,17 +61,35 @@ impl SlackStarredItem {
         match self {
             SlackStarredItem::SlackMessage(message) => {
                 if let Some(blocks) = &message.message.content.blocks {
-                    render_blocks_as_markdown(blocks.clone())
-                } else {
-                    replace_emoji_code_in_string_with_emoji(
-                        &message
-                            .message
-                            .content
-                            .text
-                            .clone()
-                            .unwrap_or("Starred message".to_string()),
-                    )
+                    if !blocks.is_empty() {
+                        return render_blocks_as_markdown(blocks.clone());
+                    }
                 }
+
+                if let Some(attachments) = &message.message.content.attachments {
+                    if !attachments.is_empty() {
+                        let str_blocks = attachments
+                            .iter()
+                            .filter_map(|a| {
+                                a.blocks
+                                    .as_ref()
+                                    .map(|blocks| render_blocks_as_markdown(blocks.clone()))
+                            })
+                            .collect::<Vec<String>>();
+                        if !str_blocks.is_empty() {
+                            return str_blocks.join("\n");
+                        }
+                    }
+                }
+
+                replace_emoji_code_in_string_with_emoji(
+                    &message
+                        .message
+                        .content
+                        .text
+                        .clone()
+                        .unwrap_or("Starred message".to_string()),
+                )
             }
             SlackStarredItem::SlackFile(file) => file
                 .title
@@ -194,4 +212,105 @@ pub struct SlackStarIds {
     pub message_id: Option<SlackTs>,
     pub file_id: Option<SlackFileId>,
     pub file_comment_id: Option<SlackFileCommentId>,
+}
+
+#[cfg(test)]
+mod test {
+    use std::{env, fs};
+
+    use crate::notification::integrations::slack::SlackMessageSenderDetails;
+
+    use super::*;
+    use rstest::*;
+    use slack_morphism::{
+        api::{
+            SlackApiConversationsHistoryResponse, SlackApiConversationsInfoResponse,
+            SlackApiTeamInfoResponse, SlackApiUsersInfoResponse,
+        },
+        SlackMessageAttachment,
+    };
+
+    pub fn fixture_path(fixture_file_name: &str) -> String {
+        format!(
+            "{}/tests/fixtures/{fixture_file_name}",
+            env::var("CARGO_MANIFEST_DIR").unwrap()
+        )
+    }
+    pub fn load_json_fixture_file<T: for<'de> serde::de::Deserialize<'de>>(
+        fixture_file_name: &str,
+    ) -> T {
+        let input_str = fs::read_to_string(fixture_path(fixture_file_name)).unwrap();
+        serde_json::from_str::<T>(&input_str).unwrap()
+    }
+
+    #[fixture]
+    pub fn slack_starred_message() -> Box<SlackStarredItem> {
+        let message_response: SlackApiConversationsHistoryResponse =
+            load_json_fixture_file("slack_fetch_message_response.json");
+        let channel_response: SlackApiConversationsInfoResponse =
+            load_json_fixture_file("slack_fetch_channel_response.json");
+        let user_response: SlackApiUsersInfoResponse =
+            load_json_fixture_file("slack_fetch_user_response.json");
+        let sender = SlackMessageSenderDetails::User(Box::new(user_response.user));
+        let team_response: SlackApiTeamInfoResponse =
+            load_json_fixture_file("slack_fetch_team_response.json");
+
+        Box::new(SlackStarredItem::SlackMessage(SlackMessageDetails {
+            url: "https://example.com".parse().unwrap(),
+            message: message_response.messages[0].clone(),
+            channel: channel_response.channel,
+            sender,
+            team: team_response.team,
+        }))
+    }
+
+    #[rstest]
+    fn test_render_starred_message_with_blocks(slack_starred_message: Box<SlackStarredItem>) {
+        assert_eq!(
+            slack_starred_message.content(),
+            "🔴  *Test title* 🔴\n\n- list 1\n- list 2\n1. number 1\n1. number 2\n> quote\n```$ echo Hello world```\n_Some_ `formatted` ~text~.\n\nHere is a [link](https://www.universal-inbox.com)"
+        );
+    }
+
+    #[rstest]
+    fn test_render_starred_message_with_blocks_in_attachments(
+        mut slack_starred_message: Box<SlackStarredItem>,
+    ) {
+        let SlackStarredItem::SlackMessage(message) = &mut (*slack_starred_message) else {
+            panic!(
+                "Expected SlackStarredItem::SlackMessage, got {:?}",
+                slack_starred_message
+            );
+        };
+        message.message.content.attachments = Some(vec![SlackMessageAttachment {
+            id: None,
+            color: None,
+            fallback: None,
+            title: None,
+            fields: None,
+            mrkdwn_in: None,
+            text: None,
+            blocks: message.message.content.blocks.clone(),
+        }]);
+        message.message.content.blocks = Some(vec![]);
+        assert_eq!(
+            slack_starred_message.content(),
+            "🔴  *Test title* 🔴\n\n- list 1\n- list 2\n1. number 1\n1. number 2\n> quote\n```$ echo Hello world```\n_Some_ `formatted` ~text~.\n\nHere is a [link](https://www.universal-inbox.com)"
+        );
+    }
+
+    #[rstest]
+    fn test_render_starred_message_with_only_text(
+        mut slack_starred_message: Box<SlackStarredItem>,
+    ) {
+        let SlackStarredItem::SlackMessage(message) = &mut (*slack_starred_message) else {
+            panic!(
+                "Expected SlackStarredItem::SlackMessage, got {:?}",
+                slack_starred_message
+            );
+        };
+        message.message.content.text = Some("Test message".to_string());
+        message.message.content.blocks = Some(vec![]);
+        assert_eq!(slack_starred_message.content(), "Test message".to_string());
+    }
 }
