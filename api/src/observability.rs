@@ -38,6 +38,7 @@ pub fn get_subscriber_with_telemetry(
     environment: &str,
     env_filter_str: &str,
     config: &TracingSettings,
+    service_name: &str,
 ) -> impl Subscriber + Send + Sync {
     let env_filter =
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(env_filter_str));
@@ -52,7 +53,7 @@ pub fn get_subscriber_with_telemetry(
                 .with_max_events_per_span(256)
                 .with_max_attributes_per_span(64)
                 .with_resource(Resource::new(vec![
-                    KeyValue::new("service.name", "universal-inbox-api"),
+                    KeyValue::new("service.name", service_name.to_string()),
                     KeyValue::new("host.name", hostname.clone()),
                     KeyValue::new("deployment.environment", environment.to_string()),
                 ])),
@@ -69,7 +70,7 @@ pub fn get_subscriber_with_telemetry(
     let meter = opentelemetry_otlp::new_pipeline()
         .metrics(opentelemetry_sdk::runtime::Tokio)
         .with_resource(Resource::new(vec![
-            KeyValue::new("service.name", "universal-inbox-api"),
+            KeyValue::new("service.name", service_name.to_string()),
             KeyValue::new("host.name", hostname.clone()),
             KeyValue::new("deployment.environment", environment.to_string()),
         ]))
@@ -89,7 +90,7 @@ pub fn get_subscriber_with_telemetry(
     let logger = opentelemetry_otlp::new_pipeline()
         .logging()
         .with_log_config(logs::Config::default().with_resource(Resource::new(vec![
-            KeyValue::new("service.name", "universal-inbox-api"),
+            KeyValue::new("service.name", service_name.to_string()),
             KeyValue::new("host.name", hostname.clone()),
             KeyValue::new("deployment.environment", environment.to_string()),
         ])))

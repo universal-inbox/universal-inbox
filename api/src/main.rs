@@ -160,10 +160,15 @@ async fn main() -> std::io::Result<()> {
         ),
     };
     if let Some(tracing_settings) = &settings.application.observability.tracing {
+        let service_name = match &cli.command {
+            Commands::StartWorkers { .. } => "universal-inbox-workers",
+            _ => "universal-inbox-api",
+        };
         let subscriber = get_subscriber_with_telemetry(
             &settings.application.environment,
             log_env_filter,
             tracing_settings,
+            service_name,
         );
         init_subscriber(subscriber, dep_log_level_filter);
     } else {
