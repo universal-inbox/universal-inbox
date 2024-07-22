@@ -374,6 +374,7 @@ impl ThirdPartyItemService {
         &self,
         executor: &mut Transaction<'a, Postgres>,
         task: &'b mut Task,
+        overwrite_existing_sink_item: bool,
     ) -> Result<Box<ThirdPartyItem>, UniversalInboxError> {
         let user_id = task.user_id;
         let third_party_task_service = self.todoist_service.clone(); // Shortcut as only Todoist is supported for now as a sink
@@ -398,13 +399,15 @@ impl ThirdPartyItemService {
         };
 
         if let Some(sink_item) = &task.sink_item {
-            debug!(
-                "Task {} already has a {} sink item for {}, returning it",
-                task.id,
-                sink_item.kind(),
-                sink_item.source_id
-            );
-            return Ok(Box::new(sink_item.clone()));
+            if !overwrite_existing_sink_item {
+                debug!(
+                    "Task {} already has a {} sink item for {}, returning it",
+                    task.id,
+                    sink_item.kind(),
+                    sink_item.source_id
+                );
+                return Ok(Box::new(sink_item.clone()));
+            }
         };
 
         let third_party_task = third_party_task_service

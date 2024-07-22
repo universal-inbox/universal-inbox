@@ -4,8 +4,6 @@ use url::ParseError;
 use uuid::Uuid;
 use validator::ValidationErrors;
 
-use universal_inbox::task::TaskId;
-
 pub mod auth_token;
 pub mod integration_connection;
 pub mod notification;
@@ -62,8 +60,8 @@ pub enum UniversalInboxError {
     },
     #[error("Unsupported action: {0}")]
     UnsupportedAction(String),
-    #[error("Task not found: {0}")]
-    TaskNotFound(TaskId),
+    #[error("Item not found: {0}")]
+    ItemNotFound(String),
     #[error("Database error: {message}")]
     DatabaseError {
         #[source]
