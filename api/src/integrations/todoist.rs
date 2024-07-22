@@ -295,15 +295,19 @@ impl TodoistService {
         let command_result = sync_response.sync_status.values().next();
         match command_result {
             Some(TodoistCommandStatus::Ok(_)) => Ok(sync_response),
-            Some(TodoistCommandStatus::Error { error_code: _, error }) => {
-                Err(UniversalInboxError::Unexpected(anyhow!(
-                    "Unexpected error while sending commands {commands:?}: {:?}",
-                    error
-                )))
+            Some(TodoistCommandStatus::Error { error_code, error: _ }) => {
+                if *error_code == 22 {
+                    Err(UniversalInboxError::ItemNotFound(format!(
+                        "Todoist item not found while sending commands {commands:?}: {command_result:?}"
+                    )))
+                } else {
+                    Err(UniversalInboxError::Unexpected(anyhow!(
+                        "Unexpected error while sending commands {commands:?}: {command_result:?}"
+                    )))
+                }
             }
             _ => Err(UniversalInboxError::Unexpected(anyhow!(
-                "Failed to parse response from Todoist API while sending commands {commands:?}: {:?}",
-                command_result
+                "Failed to parse response from Todoist API while sending commands {commands:?}: {command_result:?}",
             ))),
         }
     }

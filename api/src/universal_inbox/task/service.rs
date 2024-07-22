@@ -117,9 +117,14 @@ impl TaskService {
                     third_party_item.get_third_party_item_source_kind(),
                     third_party_item.source_id
                 );
-                third_party_task_service
+                match third_party_task_service
                     .delete_task(executor, third_party_item, user_id)
-                    .await?;
+                    .await
+                {
+                    Err(UniversalInboxError::ItemNotFound(_)) => {}
+                    Err(e) => return Err(e),
+                    _ => {}
+                }
             }
             Some(TaskStatus::Done) => {
                 debug!(
@@ -196,7 +201,7 @@ impl TaskService {
                     .context("Unable to access third_party_item_service from task_service")?
                     .read()
                     .await
-                    .create_sink_item_from_task(executor, task)
+                    .create_sink_item_from_task(executor, task, false)
                     .await?;
             }
             UpsertStatus::Updated {
@@ -250,38 +255,64 @@ impl TaskService {
                     sink_item_id: None,
                 };
 
-                match third_party_item_to_be_updated.get_third_party_item_source_kind() {
-                    ThirdPartyItemSourceKind::Todoist => {
-                        self.apply_updated_task_side_effect(
-                            executor,
-                            self.todoist_service.clone(),
-                            &task_patch,
-                            third_party_item_to_be_updated,
-                            user_id,
-                        )
-                        .await?
-                    }
-                    ThirdPartyItemSourceKind::Slack => {
-                        self.apply_updated_task_side_effect(
-                            executor,
-                            self.slack_service.clone(),
-                            &task_patch,
-                            third_party_item_to_be_updated,
-                            user_id,
-                        )
-                        .await?
-                    }
-                    ThirdPartyItemSourceKind::Linear => {
-                        self.apply_updated_task_side_effect(
-                            executor,
-                            self.linear_service.clone(),
-                            &task_patch,
-                            third_party_item_to_be_updated,
-                            user_id,
-                        )
-                        .await?
-                    }
+                let side_effect_result =
+                    match third_party_item_to_be_updated.get_third_party_item_source_kind() {
+                        ThirdPartyItemSourceKind::Todoist => {
+                            self.apply_updated_task_side_effect(
+                                executor,
+                                self.todoist_service.clone(),
+                                &task_patch,
+                                third_party_item_to_be_updated,
+                                user_id,
+                            )
+                            .await
+                        }
+                        ThirdPartyItemSourceKind::Slack => {
+                            self.apply_updated_task_side_effect(
+                                executor,
+                                self.slack_service.clone(),
+                                &task_patch,
+                                third_party_item_to_be_updated,
+                                user_id,
+                            )
+                            .await
+                        }
+                        ThirdPartyItemSourceKind::Linear => {
+                            self.apply_updated_task_side_effect(
+                                executor,
+                                self.linear_service.clone(),
+                                &task_patch,
+                                third_party_item_to_be_updated,
+                                user_id,
+                            )
+                            .await
+                        }
+                    };
+
+                let Err(UniversalInboxError::ItemNotFound(_)) = side_effect_result else {
+                    return side_effect_result;
+                };
+
+                if new_task.kind == TaskSourceKind::Todoist {
+                    // Return the error as there is no fallback in that case
+                    return side_effect_result;
                 }
+
+                debug!(
+                    "Creating new sink item from {} task {} as update failed because current {} sink item {} was not found upstream",
+                    new_task.kind,
+                    new_task.id,
+                    task_sink_item.kind(),
+                    task_sink_item.source_id
+                );
+
+                self.third_party_item_service
+                    .upgrade()
+                    .context("Unable to access third_party_item_service from task_service")?
+                    .read()
+                    .await
+                    .create_sink_item_from_task(executor, new_task, true)
+                    .await?;
             }
             _ => {}
         }
