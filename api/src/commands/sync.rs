@@ -31,9 +31,11 @@ pub async fn sync_notifications_for_all_users(
     let service = notification_service.read().await;
 
     let result = if let Some(user_id) = user_id {
-        service.sync_notifications_for_user(source, user_id).await
+        service
+            .sync_notifications_for_user(source, user_id, true)
+            .await
     } else {
-        service.sync_notifications_for_all_users(source).await
+        service.sync_notifications_for_all_users(source, true).await
     };
 
     match &result {
@@ -59,9 +61,9 @@ pub async fn sync_tasks_for_all_users(
     let service = task_service.read().await;
 
     let result = if let Some(user_id) = user_id {
-        service.sync_tasks_for_user(source, user_id).await
+        service.sync_tasks_for_user(source, user_id, true).await
     } else {
-        service.sync_tasks_for_all_users(source).await
+        service.sync_tasks_for_all_users(source, true).await
     };
 
     match &result {

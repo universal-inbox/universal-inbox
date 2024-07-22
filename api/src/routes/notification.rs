@@ -203,10 +203,10 @@ pub async fn sync_notifications(
 
             let notifications = if let Some(source) = source {
                 service
-                    .sync_notifications_with_transaction(source, user_id)
+                    .sync_notifications_with_transaction(source, user_id, false)
                     .await?
             } else {
-                service.sync_all_notifications(user_id).await?
+                service.sync_all_notifications(user_id, false).await?
             };
             Ok(HttpResponse::Ok().content_type("application/json").body(
                 serde_json::to_string(&notifications).context("Cannot serialize notifications")?,

@@ -463,6 +463,7 @@ impl TaskService {
         executor: &mut Transaction<'a, Postgres>,
         third_party_task_service: Arc<U>,
         user_id: UserId,
+        force_sync: bool,
     ) -> Result<Vec<TaskCreationResult>, UniversalInboxError>
     where
         T: TryFrom<ThirdPartyItem> + Debug,
@@ -477,11 +478,14 @@ impl TaskService {
     {
         let integration_provider_kind = third_party_task_service.get_integration_provider_kind();
         let integration_connection_service = self.integration_connection_service.read().await;
+        let min_sync_interval_in_minutes = (!force_sync)
+            .then_some(self.min_sync_tasks_interval_in_minutes)
+            .unwrap_or_default();
         let Some(integration_connection) = integration_connection_service
             .get_integration_connection_to_sync(
                 executor,
                 integration_provider_kind,
-                self.min_sync_tasks_interval_in_minutes,
+                min_sync_interval_in_minutes,
                 IntegrationConnectionSyncType::Tasks,
                 user_id,
             )
@@ -760,15 +764,26 @@ impl TaskService {
         executor: &mut Transaction<'a, Postgres>,
         source: TaskSyncSourceKind,
         user_id: UserId,
+        force_sync: bool,
     ) -> Result<Vec<TaskCreationResult>, UniversalInboxError> {
         match source {
             TaskSyncSourceKind::Todoist => {
-                self.sync_third_party_tasks(executor, self.todoist_service.clone(), user_id)
-                    .await
+                self.sync_third_party_tasks(
+                    executor,
+                    self.todoist_service.clone(),
+                    user_id,
+                    force_sync,
+                )
+                .await
             }
             TaskSyncSourceKind::Linear => {
-                self.sync_third_party_tasks(executor, self.linear_service.clone(), user_id)
-                    .await
+                self.sync_third_party_tasks(
+                    executor,
+                    self.linear_service.clone(),
+                    user_id,
+                    force_sync,
+                )
+                .await
             }
         }
     }
@@ -778,12 +793,16 @@ impl TaskService {
         &self,
         source: TaskSyncSourceKind,
         user_id: UserId,
+        force_sync: bool,
     ) -> Result<Vec<TaskCreationResult>, UniversalInboxError> {
         let mut transaction = self.begin().await.context(format!(
             "Failed to create new transaction while syncing {source:?}"
         ))?;
 
-        match self.sync_tasks(&mut transaction, source, user_id).await {
+        match self
+            .sync_tasks(&mut transaction, source, user_id, force_sync)
+            .await
+        {
             Ok(tasks) => {
                 transaction
                     .commit()
@@ -812,12 +831,13 @@ impl TaskService {
     pub async fn sync_all_tasks<'a>(
         &self,
         user_id: UserId,
+        force_sync: bool,
     ) -> Result<Vec<TaskCreationResult>, UniversalInboxError> {
         let sync_result_from_todoist = self
-            .sync_tasks_with_transaction(TaskSyncSourceKind::Todoist, user_id)
+            .sync_tasks_with_transaction(TaskSyncSourceKind::Todoist, user_id, force_sync)
             .await?;
         let sync_result_from_linear = self
-            .sync_tasks_with_transaction(TaskSyncSourceKind::Linear, user_id)
+            .sync_tasks_with_transaction(TaskSyncSourceKind::Linear, user_id, force_sync)
             .await?;
         Ok(sync_result_from_todoist
             .into_iter()
@@ -829,6 +849,7 @@ impl TaskService {
     pub async fn sync_tasks_for_all_users<'a>(
         &self,
         source: Option<TaskSyncSourceKind>,
+        force_sync: bool,
     ) -> Result<(), UniversalInboxError> {
         let service = self.user_service.clone();
         let mut transaction = service
@@ -838,7 +859,7 @@ impl TaskService {
         let users = service.fetch_all_users(&mut transaction).await?;
 
         for user in users {
-            let _ = self.sync_tasks_for_user(source, user.id).await;
+            let _ = self.sync_tasks_for_user(source, user.id, force_sync).await;
         }
 
         Ok(())
@@ -849,13 +870,15 @@ impl TaskService {
         &self,
         source: Option<TaskSyncSourceKind>,
         user_id: UserId,
+        force_sync: bool,
     ) -> Result<(), UniversalInboxError> {
         info!("Syncing tasks for user {user_id}");
 
         let sync_result = if let Some(source) = source {
-            self.sync_tasks_with_transaction(source, user_id).await
+            self.sync_tasks_with_transaction(source, user_id, force_sync)
+                .await
         } else {
-            self.sync_all_tasks(user_id).await
+            self.sync_all_tasks(user_id, force_sync).await
         };
         match sync_result {
             Ok(tasks) => info!(
