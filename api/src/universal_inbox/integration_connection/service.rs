@@ -426,12 +426,16 @@ impl IntegrationConnectionService {
                 )
             });
 
-        let synced_before_filter = match sync_type {
-            IntegrationConnectionSyncType::Notifications => {
-                IntegrationConnectionSyncedBeforeFilter::Notifications(synced_before)
-            }
-            IntegrationConnectionSyncType::Tasks => {
-                IntegrationConnectionSyncedBeforeFilter::Tasks(synced_before)
+        let synced_before_filter = if min_sync_interval_in_minutes == 0 {
+            None
+        } else {
+            match sync_type {
+                IntegrationConnectionSyncType::Notifications => Some(
+                    IntegrationConnectionSyncedBeforeFilter::Notifications(synced_before),
+                ),
+                IntegrationConnectionSyncType::Tasks => Some(
+                    IntegrationConnectionSyncedBeforeFilter::Tasks(synced_before),
+                ),
             }
         };
         self.repository
@@ -439,7 +443,7 @@ impl IntegrationConnectionService {
                 executor,
                 for_user_id,
                 integration_provider_kind,
-                Some(synced_before_filter),
+                synced_before_filter,
                 Some(IntegrationConnectionStatus::Validated),
             )
             .await

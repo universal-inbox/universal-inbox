@@ -184,9 +184,11 @@ pub async fn sync_tasks(
             let service = task_service.read().await;
 
             let tasks = if let Some(source) = source {
-                service.sync_tasks_with_transaction(source, user_id).await?
+                service
+                    .sync_tasks_with_transaction(source, user_id, false)
+                    .await?
             } else {
-                service.sync_all_tasks(user_id).await?
+                service.sync_all_tasks(user_id, false).await?
             };
             Ok(HttpResponse::Ok()
                 .content_type("application/json")

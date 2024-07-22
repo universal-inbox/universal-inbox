@@ -34,16 +34,16 @@ pub async fn handle_sync_notifications(
 
         if let Some(source) = event.source {
             service
-                .sync_notifications_with_transaction(source, user_id)
+                .sync_notifications_with_transaction(source, user_id, false)
                 .await?;
         } else {
-            service.sync_all_notifications(user_id).await?;
+            service.sync_all_notifications(user_id, false).await?;
         };
     } else {
         info!("Syncing {source_kind_string} notifications for all users");
 
         service
-            .sync_notifications_for_all_users(event.source)
+            .sync_notifications_for_all_users(event.source, false)
             .await?;
     }
 
@@ -70,14 +70,18 @@ pub async fn handle_sync_tasks(
         info!("Syncing {source_kind_string} tasks for user {user_id}");
 
         if let Some(source) = event.source {
-            service.sync_tasks_with_transaction(source, user_id).await?;
+            service
+                .sync_tasks_with_transaction(source, user_id, false)
+                .await?;
         } else {
-            service.sync_all_tasks(user_id).await?;
+            service.sync_all_tasks(user_id, false).await?;
         };
     } else {
         info!("Syncing {source_kind_string} tasks for all users");
 
-        service.sync_tasks_for_all_users(event.source).await?;
+        service
+            .sync_tasks_for_all_users(event.source, false)
+            .await?;
     }
 
     Ok(())
