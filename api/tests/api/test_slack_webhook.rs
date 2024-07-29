@@ -175,7 +175,7 @@ async fn test_receive_star_added_event_as_notification(
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
         &settings,
         nango_slack_connection,
@@ -329,7 +329,7 @@ async fn test_receive_bot_star_added_event_as_notification(
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
         &settings,
         nango_slack_connection,
@@ -487,7 +487,7 @@ async fn test_receive_star_removed_event_as_notification(
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
         &settings,
         nango_slack_connection,
@@ -653,7 +653,7 @@ async fn test_receive_star_added_event_as_task(
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_tasks()),
         &settings,
         nango_slack_connection,
@@ -663,7 +663,7 @@ async fn test_receive_star_added_event_as_task(
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
         nango_todoist_connection,
@@ -809,7 +809,7 @@ async fn test_receive_star_removed_and_added_event_as_task(
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_tasks()),
         &settings,
         nango_slack_connection,
@@ -819,7 +819,7 @@ async fn test_receive_star_removed_and_added_event_as_task(
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
         nango_todoist_connection,

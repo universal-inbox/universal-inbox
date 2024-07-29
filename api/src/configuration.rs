@@ -18,7 +18,8 @@ pub struct Settings {
     pub application: ApplicationSettings,
     pub database: DatabaseSettings,
     pub redis: RedisSettings,
-    pub integrations: IntegrationsSettings,
+    pub integrations: HashMap<String, IntegrationSettings>,
+    pub oauth2: Oauth2Settings,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -151,57 +152,21 @@ pub struct RedisSettings {
     pub use_tls: bool,
 }
 
-// tag: New notification integration
-#[derive(Deserialize, Clone, Debug)]
-pub struct IntegrationsSettings {
-    pub oauth2: Oauth2Settings,
-    pub github: GithubIntegrationSettings,
-    pub linear: DefaultIntegrationSettings,
-    pub google_mail: GoogleMailIntegrationSettings,
-    pub slack: SlackIntegrationSettings,
-    pub todoist: DefaultIntegrationSettings,
-}
-
 #[derive(Deserialize, Clone, Debug)]
 pub struct Oauth2Settings {
     pub nango_base_url: Url,
     pub nango_secret_key: String,
     pub nango_public_key: NangoPublicKey,
-    pub nango_provider_keys: HashMap<IntegrationProviderKind, NangoProviderKey>,
 }
 
 #[derive(Deserialize, Clone, Debug)]
-pub struct GithubIntegrationSettings {
+pub struct IntegrationSettings {
     pub name: String,
+    pub kind: IntegrationProviderKind,
+    pub nango_key: NangoProviderKey,
     pub required_oauth_scopes: Vec<String>,
-    pub page_size: usize,
-    pub doc: String,
-    pub warning_message: Option<String>,
-    pub doc_for_actions: HashMap<String, String>,
-}
-
-#[derive(Deserialize, Clone, Debug)]
-pub struct GoogleMailIntegrationSettings {
-    pub name: String,
-    pub required_oauth_scopes: Vec<String>,
-    pub page_size: usize,
-    pub doc: String,
-    pub warning_message: Option<String>,
-    pub doc_for_actions: HashMap<String, String>,
-}
-
-#[derive(Deserialize, Clone, Debug)]
-pub struct SlackIntegrationSettings {
-    pub name: String,
-    pub required_oauth_scopes: Vec<String>,
-    pub doc: String,
-    pub doc_for_actions: HashMap<String, String>,
-}
-
-#[derive(Deserialize, Clone, Debug)]
-pub struct DefaultIntegrationSettings {
-    pub name: String,
-    pub required_oauth_scopes: Vec<String>,
+    pub use_as_oauth_user_scopes: Option<bool>,
+    pub page_size: Option<usize>,
     pub doc: String,
     pub warning_message: Option<String>,
     pub doc_for_actions: HashMap<String, String>,
@@ -320,6 +285,14 @@ impl Settings {
 
     pub fn new() -> Result<Self, ConfigError> {
         Settings::new_from_file(None)
+    }
+
+    pub fn nango_provider_keys(&self) -> HashMap<IntegrationProviderKind, NangoProviderKey> {
+        HashMap::from_iter(
+            self.integrations
+                .values()
+                .map(|config| (config.kind, config.nango_key.clone())),
+        )
     }
 }
 

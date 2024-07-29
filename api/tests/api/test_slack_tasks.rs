@@ -69,7 +69,7 @@ async fn test_sync_todoist_slack_task(
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_tasks()),
         &settings,
         nango_slack_connection,
@@ -79,7 +79,7 @@ async fn test_sync_todoist_slack_task(
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
         nango_todoist_connection,

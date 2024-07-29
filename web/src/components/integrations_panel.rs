@@ -10,8 +10,8 @@ use dioxus_free_icons::{
     },
     Icon,
 };
-
 use itertools::Itertools;
+use log::warn;
 
 use universal_inbox::{
     integration_connection::{
@@ -299,7 +299,14 @@ pub fn IntegrationSettings(
 
     let has_all_oauth_scopes = use_memo(move || {
         if let Some(Some(ic)) = connection() {
-            ic.has_oauth_scopes(&config().required_oauth_scopes)
+            let result = ic.has_oauth_scopes(&config().required_oauth_scopes);
+            if ic.status == IntegrationConnectionStatus::Validated && !result {
+                warn!(
+                    "{kind} is connected, but it is missing some permissions: required OAuth scopes: {:?} vs registered OAuth scopes: {:?}", 
+                    config().required_oauth_scopes, ic.registered_oauth_scopes
+                );
+            }
+            result
         } else {
             false
         }

@@ -351,7 +351,7 @@ pub async fn build_services(
     let integration_connection_service = Arc::new(RwLock::new(IntegrationConnectionService::new(
         repository.clone(),
         nango_service,
-        settings.integrations.oauth2.nango_provider_keys.clone(),
+        settings.nango_provider_keys(),
         user_service.clone(),
         settings
             .application
@@ -364,10 +364,14 @@ pub async fn build_services(
             .expect("Failed to create new TodoistService"),
     );
     // tag: New notification integration
+    let github_settings = settings
+        .integrations
+        .get("github")
+        .expect("Missing Github settings");
     let github_service = Arc::new(
         GithubService::new(
             github_address,
-            settings.integrations.github.page_size,
+            github_settings.page_size.unwrap_or(100),
             integration_connection_service.clone(),
         )
         .expect("Failed to create new GithubService"),
@@ -377,10 +381,14 @@ pub async fn build_services(
             .expect("Failed to create new LinearService"),
     );
 
+    let google_mail_settings = settings
+        .integrations
+        .get("google_mail")
+        .expect("Missing Google Mail settings");
     let google_mail_service = Arc::new(RwLock::new(
         GoogleMailService::new(
             google_mail_base_url,
-            settings.integrations.google_mail.page_size,
+            google_mail_settings.page_size.unwrap_or(100),
             integration_connection_service.clone(),
             Weak::new(),
         )
@@ -453,13 +461,13 @@ pub async fn build_services(
 }
 
 fn build_csp_header(settings: &Settings) -> String {
-    let nango_ws_scheme = if settings.integrations.oauth2.nango_base_url.scheme() == "http" {
+    let nango_ws_scheme = if settings.oauth2.nango_base_url.scheme() == "http" {
         "ws"
     } else {
         "wss"
     };
-    let nango_base_url = settings.integrations.oauth2.nango_base_url.to_string();
-    let mut nango_ws_base_url = settings.integrations.oauth2.nango_base_url.clone();
+    let nango_base_url = settings.oauth2.nango_base_url.to_string();
+    let mut nango_ws_base_url = settings.oauth2.nango_base_url.clone();
     nango_ws_base_url.set_scheme(nango_ws_scheme).unwrap();
     let mut connect_srcs = Sources::new_with(Source::Self_)
         .push(Source::Host(nango_ws_base_url.as_str()))

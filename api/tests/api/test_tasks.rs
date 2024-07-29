@@ -68,7 +68,7 @@ mod get_task {
         let integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.integrations.oauth2.nango_secret_key,
+            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
             nango_todoist_connection,
@@ -147,7 +147,7 @@ mod list_tasks {
         let integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.integrations.oauth2.nango_secret_key,
+            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
             nango_todoist_connection,
@@ -247,7 +247,7 @@ mod patch_task {
         let integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.integrations.oauth2.nango_secret_key,
+            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
             nango_todoist_connection,
@@ -310,7 +310,7 @@ mod patch_task {
         let integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.integrations.oauth2.nango_secret_key,
+            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
             nango_todoist_connection,
@@ -376,7 +376,7 @@ mod patch_task {
         let integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.integrations.oauth2.nango_secret_key,
+            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
             nango_todoist_connection,
@@ -493,7 +493,7 @@ mod search_tasks {
         let integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.integrations.oauth2.nango_secret_key,
+            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
             nango_todoist_connection,
@@ -606,7 +606,7 @@ mod search_projects {
         create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.integrations.oauth2.nango_secret_key,
+            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
             nango_todoist_connection,

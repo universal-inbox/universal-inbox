@@ -98,7 +98,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     let integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
         nango_todoist_connection,
@@ -157,7 +157,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     let integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::GoogleMail(google_mail_config.clone()),
         &settings,
         nango_google_mail_connection,
@@ -176,7 +176,12 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     let google_mail_threads_list_mock = mock_google_mail_threads_list_service(
         &app.app.google_mail_mock_server,
         None,
-        settings.integrations.google_mail.page_size,
+        settings
+            .integrations
+            .get("google_mail")
+            .unwrap()
+            .page_size
+            .unwrap(),
         Some(vec![google_mail_config.synced_label.id.clone()]),
         &google_mail_threads_list,
     );
@@ -188,7 +193,12 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     let google_mail_threads_list_mock2 = mock_google_mail_threads_list_service(
         &app.app.google_mail_mock_server,
         Some("next_token"),
-        settings.integrations.google_mail.page_size,
+        settings
+            .integrations
+            .get("google_mail")
+            .unwrap()
+            .page_size
+            .unwrap(),
         Some(vec![google_mail_config.synced_label.id.clone()]),
         &empty_result,
     );
@@ -377,7 +387,7 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::GoogleMail(google_mail_config.clone()),
         &settings,
         nango_google_mail_connection,
@@ -396,7 +406,12 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
     let google_mail_threads_list_mock = mock_google_mail_threads_list_service(
         &app.app.google_mail_mock_server,
         None,
-        settings.integrations.google_mail.page_size,
+        settings
+            .integrations
+            .get("google_mail")
+            .unwrap()
+            .page_size
+            .unwrap(),
         Some(vec![synced_label_id.clone()]),
         &google_mail_threads_list,
     );

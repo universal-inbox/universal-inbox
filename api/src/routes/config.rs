@@ -6,10 +6,7 @@ use actix_web::{
 };
 use anyhow::Context;
 
-use universal_inbox::{
-    integration_connection::provider::IntegrationProviderKind, FrontAuthenticationConfig,
-    FrontConfig, IntegrationProviderStaticConfig,
-};
+use universal_inbox::{FrontAuthenticationConfig, FrontConfig, IntegrationProviderStaticConfig};
 
 use crate::{
     configuration::{
@@ -52,161 +49,30 @@ pub async fn front_config(
         AuthenticationSettings::Local(_) => FrontAuthenticationConfig::Local,
     };
 
+    let integration_providers = HashMap::from_iter(settings.integrations.values().map(|config| {
+        (
+            config.kind,
+            IntegrationProviderStaticConfig {
+                name: config.name.clone(),
+                nango_config_key: config.nango_key.clone(),
+                oauth_user_scopes: if config.use_as_oauth_user_scopes.unwrap_or_default() {
+                    config.required_oauth_scopes.clone()
+                } else {
+                    vec![]
+                },
+                required_oauth_scopes: config.required_oauth_scopes.clone(),
+                doc: config.doc.clone(),
+                warning_message: config.warning_message.clone(),
+                doc_for_actions: config.doc_for_actions.clone(),
+                is_implemented: true,
+            },
+        )
+    }));
     let config = FrontConfig {
         authentication_config,
-        nango_base_url: settings.integrations.oauth2.nango_base_url.clone(),
-        nango_public_key: settings.integrations.oauth2.nango_public_key.clone(),
-        // tag: New notification integration
-        integration_providers: HashMap::from([
-            (
-                IntegrationProviderKind::Github,
-                IntegrationProviderStaticConfig {
-                    name: settings.integrations.github.name.clone(),
-                    nango_config_key: settings
-                        .integrations
-                        .oauth2
-                        .nango_provider_keys
-                        .get(&IntegrationProviderKind::Github)
-                        .context("Missing Nango config key for Github")?
-                        .clone(),
-                    oauth_user_scopes: vec![],
-                    required_oauth_scopes: settings
-                        .integrations
-                        .github
-                        .required_oauth_scopes
-                        .clone(),
-                    doc: settings.integrations.github.doc.clone(),
-                    warning_message: settings.integrations.github.warning_message.clone(),
-                    doc_for_actions: settings.integrations.github.doc_for_actions.clone(),
-                    is_implemented: true,
-                },
-            ),
-            (
-                IntegrationProviderKind::Linear,
-                IntegrationProviderStaticConfig {
-                    name: settings.integrations.linear.name.clone(),
-                    nango_config_key: settings
-                        .integrations
-                        .oauth2
-                        .nango_provider_keys
-                        .get(&IntegrationProviderKind::Linear)
-                        .context("Missing Nango config key for Linear")?
-                        .clone(),
-                    oauth_user_scopes: vec![],
-                    required_oauth_scopes: settings
-                        .integrations
-                        .linear
-                        .required_oauth_scopes
-                        .clone(),
-                    doc: settings.integrations.linear.doc.clone(),
-                    warning_message: settings.integrations.linear.warning_message.clone(),
-                    doc_for_actions: settings.integrations.linear.doc_for_actions.clone(),
-                    is_implemented: true,
-                },
-            ),
-            (
-                IntegrationProviderKind::GoogleMail,
-                IntegrationProviderStaticConfig {
-                    name: settings.integrations.google_mail.name.clone(),
-                    nango_config_key: settings
-                        .integrations
-                        .oauth2
-                        .nango_provider_keys
-                        .get(&IntegrationProviderKind::GoogleMail)
-                        .context("Missing Nango config key for Google Mail")?
-                        .clone(),
-                    oauth_user_scopes: vec![],
-                    required_oauth_scopes: settings
-                        .integrations
-                        .google_mail
-                        .required_oauth_scopes
-                        .clone(),
-                    doc: settings.integrations.google_mail.doc.clone(),
-                    warning_message: settings.integrations.google_mail.warning_message.clone(),
-                    doc_for_actions: settings.integrations.google_mail.doc_for_actions.clone(),
-                    is_implemented: true,
-                },
-            ),
-            (
-                IntegrationProviderKind::Slack,
-                IntegrationProviderStaticConfig {
-                    name: "Slack".to_string(),
-                    nango_config_key: "slack".to_string().into(),
-                    oauth_user_scopes: settings.integrations.slack.required_oauth_scopes.clone(),
-                    required_oauth_scopes: settings
-                        .integrations
-                        .slack
-                        .required_oauth_scopes
-                        .clone(),
-                    doc: settings.integrations.slack.doc.clone(),
-                    warning_message: None,
-                    doc_for_actions: settings.integrations.slack.doc_for_actions.clone(),
-                    is_implemented: true,
-                },
-            ),
-            (
-                IntegrationProviderKind::Notion,
-                IntegrationProviderStaticConfig {
-                    name: "Notion".to_string(),
-                    nango_config_key: "notion".to_string().into(),
-                    oauth_user_scopes: vec![],
-                    required_oauth_scopes: vec![],
-                    doc: "".to_string(),
-                    warning_message: None,
-                    doc_for_actions: HashMap::new(),
-                    is_implemented: false,
-                },
-            ),
-            (
-                IntegrationProviderKind::GoogleDocs,
-                IntegrationProviderStaticConfig {
-                    name: "Google Docs".to_string(),
-                    nango_config_key: "googledocs".to_string().into(),
-                    oauth_user_scopes: vec![],
-                    required_oauth_scopes: vec![],
-                    doc: "".to_string(),
-                    warning_message: None,
-                    doc_for_actions: HashMap::new(),
-                    is_implemented: false,
-                },
-            ),
-            (
-                IntegrationProviderKind::Todoist,
-                IntegrationProviderStaticConfig {
-                    name: settings.integrations.todoist.name.clone(),
-                    nango_config_key: settings
-                        .integrations
-                        .oauth2
-                        .nango_provider_keys
-                        .get(&IntegrationProviderKind::Todoist)
-                        .context("Missing Nango config key for Todoist")?
-                        .clone(),
-                    oauth_user_scopes: vec![],
-                    required_oauth_scopes: settings
-                        .integrations
-                        .todoist
-                        .required_oauth_scopes
-                        .clone(),
-                    doc: settings.integrations.todoist.doc.clone(),
-                    warning_message: settings.integrations.todoist.warning_message.clone(),
-                    doc_for_actions: settings.integrations.todoist.doc_for_actions.clone(),
-                    is_implemented: true,
-                },
-            ),
-            (
-                IntegrationProviderKind::TickTick,
-                IntegrationProviderStaticConfig {
-                    name: "Tick Tick".to_string(),
-                    nango_config_key: "ticktick".to_string().into(),
-                    oauth_user_scopes: vec![],
-                    required_oauth_scopes: vec![],
-                    doc: "".to_string(),
-                    warning_message: None,
-                    doc_for_actions: HashMap::new(),
-                    is_implemented: false,
-                },
-            ),
-        ]),
+        nango_base_url: settings.oauth2.nango_base_url.clone(),
+        nango_public_key: settings.oauth2.nango_public_key.clone(),
+        integration_providers,
         support_href: settings.application.support_href.clone(),
         show_changelog: settings.application.show_changelog,
     };

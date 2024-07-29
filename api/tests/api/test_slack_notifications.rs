@@ -66,7 +66,7 @@ mod patch_resource {
         create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.integrations.oauth2.nango_secret_key,
+            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
             &settings,
             nango_slack_connection,
@@ -85,7 +85,7 @@ mod patch_resource {
         let integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.integrations.oauth2.nango_secret_key,
+            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
             nango_todoist_connection,
@@ -193,7 +193,7 @@ mod patch_resource {
         create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.integrations.oauth2.nango_secret_key,
+            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
             &settings,
             nango_slack_connection,
@@ -273,7 +273,7 @@ mod patch_resource {
         create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.integrations.oauth2.nango_secret_key,
+            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
             &settings,
             nango_slack_connection,
@@ -364,7 +364,7 @@ mod patch_resource {
         create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.integrations.oauth2.nango_secret_key,
+            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
             &settings,
             nango_slack_connection,

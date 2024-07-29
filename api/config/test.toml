@@ -7,7 +7,7 @@ static_dir = "tests/api/statics"
 log_directive = "debug"
 dependencies_log_level = "debug"
 
-[integrations.oauth2]
+[oauth2]
 nango_secret_key = "nango_test_key"
 nango_public_key = "nango_public_test_key"
 
@@ -30,3 +30,4 @@ front_client_id = "12345"
 
 [integrations.github]
 page_size = 2
+

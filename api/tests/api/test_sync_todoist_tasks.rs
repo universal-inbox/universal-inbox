@@ -62,7 +62,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
     let integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
         nango_todoist_connection,
@@ -269,7 +269,7 @@ async fn test_sync_tasks_should_add_new_task_and_delete_notification_when_disabl
     let _integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig {
             create_notification_from_inbox_task: false,
             ..TodoistConfig::enabled()
@@ -334,7 +334,7 @@ async fn test_sync_tasks_should_add_new_empty_task(
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
         nango_todoist_connection,
@@ -429,7 +429,7 @@ async fn test_sync_tasks_should_reuse_existing_sync_token(
     let integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
         nango_todoist_connection,
@@ -503,7 +503,7 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
     let integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
         nango_todoist_connection,
@@ -622,7 +622,7 @@ async fn test_sync_tasks_should_not_update_tasks_and_notifications_with_empty_in
     let integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
         nango_todoist_connection,
@@ -773,7 +773,7 @@ async fn test_sync_tasks_with_synchronization_disabled(
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::disabled()),
         &settings,
         nango_todoist_connection,
@@ -813,7 +813,7 @@ async fn test_sync_all_tasks_asynchronously(
     let integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
         nango_todoist_connection,
@@ -952,7 +952,7 @@ async fn test_sync_all_tasks_asynchronously_in_error(
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
         nango_todoist_connection,

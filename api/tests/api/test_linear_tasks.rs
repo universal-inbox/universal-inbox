@@ -70,7 +70,7 @@ async fn test_sync_todoist_linear_task(
     let todoist_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
         nango_todoist_connection,
@@ -84,7 +84,7 @@ async fn test_sync_todoist_linear_task(
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Linear(LinearConfig {
             sync_notifications_enabled: true,
             sync_task_config: LinearSyncTaskConfig {

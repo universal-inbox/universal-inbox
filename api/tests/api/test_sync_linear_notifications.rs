@@ -62,7 +62,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     let integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
         nango_todoist_connection,
@@ -163,7 +163,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Linear(LinearConfig::enabled()),
         &settings,
         nango_linear_connection,

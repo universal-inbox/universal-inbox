@@ -37,6 +37,7 @@ git clone https://github.com/universal-inbox/universal-inbox.git
 ```
 
 The simplest is to install [direnv](https://direnv.net/) to enter a complete development environment everytime you enter the `universal-inbox` directory:
+
 ```bash
 cd universal-inbox
 direnv allow
@@ -47,12 +48,14 @@ From here, it should keep the environment installed using Devbox.
 #### Environment setup (bis)
 
 Without direnv, you can start by installing the development environment:
+
 ```bash
 cd universal-inbox
 devbox install
 ```
 
 and then enter the environment:
+
 ```bash
 devbox shell
 ```
@@ -60,11 +63,13 @@ devbox shell
 #### Setup PostgreSQL
 
 Start PostgreSQL (it will also start Redis):
+
 ```bash
 just run-db
 ```
 
 Prepare the database:
+
 ```bash
 just migrate-db
 ```
@@ -78,6 +83,7 @@ just build-all
 ### Execute tests
 
 Before executing the tests, Postgres and Redis must be running:
+
 ```bash
 just test-all
 ```
@@ -86,6 +92,7 @@ just test-all
 
 Universal Inbox uses OpenIDConnect to implement the user authentication and it relies on a third party OIDC service.
 Thus it must be configured to use this OIDC service using the following configuration variables, using environment variables:
+
 ```
 AUTHENTICATION_OIDC_ISSUER_URL=https://oidc.service
 AUTHENTICATION_OIDC_INTROSPECTION_URL=https://oidc.service/oauth/v2/introspect
@@ -96,6 +103,7 @@ AUTHENTICATION_USER_PROFILE_URL=https://oidc.service/users/me
 ```
 
 Or using a `api/config/local.toml` file:
+
 ```toml
 [application.authentication]
 oidc_issuer_url = "https://service"
@@ -109,11 +117,13 @@ user_profile_url = "https://oidc.service/users/me"
 ### Start the application
 
 (`just run-db` must be stopped as both will start PostgreSQL and Redis):
+
 ```bash
 just run-all
 ```
 
 It will start the following services:
+
 - `postgresql` to store Universal Inbox data
 - `redis` to store the HTTP sessions
 - `nango-server` (and its database `nango-db`) running as Docker container. [Nango](https://github.com/NangoHQ/nango) is used to manage all OAuth2 connections and token with third party services (used to fetch notifications and tasks)
@@ -126,16 +136,8 @@ You can the connect the development application on [http://localhost:8080](http:
 
 To be able to connect to the implemented integrations (for notifications or tasks), Universal Inbox must be declared as an OAuth2 application for each integrations to fetch a `Client ID` and a `Client Secret`.
 
-Each integrations must then be configured in Nango (accessible at [http://localhost:3003](http://localhost:3003)). In Nango, the `Integration Unique Key` must match the keys declared in `api/config/default.yaml`:
-```toml
-[integrations.oauth2.nango_provider_keys]
-Github = "github"
-Linear = "linear"
-GoogleMail = "google-mail"
-Todoist = "todoist"
-```
-
-To be able to complete an OAuth2 connection, the Nango server must be accessible from internet. The public address for development is by default https://oauth-dev.universal-inbox.com
+Each integrations must then be configured in Nango (accessible at [http://localhost:3003](http://localhost:3003)).
+To be able to complete an OAuth2 connection, the Nango server must be accessible from internet. The public address for development is by default <https://oauth-dev.universal-inbox.com>
 
 ## License
 

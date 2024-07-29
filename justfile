@@ -137,11 +137,18 @@ run-nango-server: create-docker-network
         -e NANGO_ENCRYPTION_KEY="ITbLZfSOuTaqglhgh9tZROu0GUBMRoEwAmGK9K7x56Q=" \
         -e NANGO_DASHBOARD_USERNAME=nango \
         -e NANGO_DASHBOARD_PASSWORD=nango \
+        -e NANGO_DB_HOST="nango-db" \
+        -e NANGO_DB_PORT=5432 \
+        -e NANGO_DB_NAME=$NANGO_POSTGRES_DB \
+        -e NANGO_DB_USER=$NANGO_POSTGRES_USER \
+        -e NANGO_DB_PASSWORD=$NANGO_POSTGRES_PASSWORD \
+        -e NANGO_DB_SSL=false \
         --network universal-inbox \
         --rm \
+        --platform linux/amd64 \
         -p 3003:3003 \
         --name nango-server \
-        nangohq/nango-server:0.32.10
+        nangohq/nango-server:hosted-02c1ee2bcbd92741057582169c95c4157ba98262
 
 run-all:
     process-compose -f .devbox/virtenv/redis/process-compose.yaml -f .devbox/virtenv/postgresql_15/process-compose.yaml -f process-compose.yaml -p 9999
