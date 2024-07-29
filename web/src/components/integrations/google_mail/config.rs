@@ -2,7 +2,6 @@
 
 use dioxus::prelude::*;
 
-use log::debug;
 use universal_inbox::integration_connection::{
     config::IntegrationConnectionConfig,
     integrations::google_mail::{GoogleMailConfig, GoogleMailContext},
@@ -17,7 +16,6 @@ pub fn GoogleMailProviderConfiguration(
     on_config_change: EventHandler<IntegrationConnectionConfig>,
 ) -> Element {
     let mut selected_label_id = use_signal(|| None);
-    debug!("XXX: Google Mail config: {:?}", config());
     let _ = use_memo(move || {
         *selected_label_id.write() = Some(config().synced_label.id);
     });

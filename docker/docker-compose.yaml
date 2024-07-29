@@ -13,7 +13,7 @@ services:
       - "database"
 
   nango-server:
-    image: "nangohq/nango-server:0.32.10"
+    image: "nangohq/nango-server:hosted-02c1ee2bcbd92741057582169c95c4157ba98262"
     networks:
       - universal-inbox
     ports:

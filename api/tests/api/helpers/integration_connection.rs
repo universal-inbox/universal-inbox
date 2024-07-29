@@ -240,12 +240,8 @@ pub async fn create_and_mock_integration_connection(
         initial_sync_failures,
     )
     .await;
-    let config_key = settings
-        .integrations
-        .oauth2
-        .nango_provider_keys
-        .get(&provider_kind)
-        .unwrap();
+    let nango_provider_keys = settings.nango_provider_keys();
+    let config_key = nango_provider_keys.get(&provider_kind).unwrap();
     mock_nango_connection_service(
         &app.nango_mock_server,
         nango_secret_key,

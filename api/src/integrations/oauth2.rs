@@ -61,24 +61,24 @@ impl NangoConnection {
         }
     }
 
-    pub fn get_registered_oauth_scopes(&self) -> Vec<String> {
+    pub fn get_registered_oauth_scopes(&self) -> Result<Vec<String>, UniversalInboxError> {
         match self.provider_config_key.0.as_str() {
-            "slack" => self.credentials.raw["authed_user"]["scope"]
+            "slack" => Ok(self.credentials.raw["authed_user"]["scope"]
                 .as_str()
                 .unwrap_or_default()
                 .split(',')
                 .map(|scope| scope.to_string())
-                .collect(),
+                .collect()),
             // Todoist scopes are not stored in the connection raw credentials
-            "todoist" => vec![],
+            "todoist" => Ok(vec![]),
             "google-mail" => {
                 if let Some(scope) = self.credentials.raw["scope"].as_str() {
-                    vec![scope.to_string()]
+                    Ok(vec![scope.to_string()])
                 } else {
-                    vec![]
+                    Ok(vec![])
                 }
             }
-            "linear" => self.credentials.raw["scope"]
+            "linear" => Ok(self.credentials.raw["scope"]
                 .as_array()
                 .map(|scopes| {
                     scopes
@@ -86,14 +86,22 @@ impl NangoConnection {
                         .filter_map(|scope| Some(scope.as_str()?.to_string()))
                         .collect::<Vec<String>>()
                 })
-                .unwrap_or_default(),
-            "github" => self.credentials.raw["scope"]
+                .unwrap_or_default()),
+            "github" => Ok(self.credentials.raw["scope"]
                 .as_str()
                 .unwrap_or_default()
                 .split(',')
                 .map(|scope| scope.to_string())
-                .collect(),
-            _ => vec![],
+                .collect()),
+            "ticktick" => Ok(self.credentials.raw["scope"]
+                .as_str()
+                .unwrap_or_default()
+                .split(' ')
+                .map(|scope| scope.to_string())
+                .collect()),
+            key => Err(UniversalInboxError::Unexpected(anyhow!(
+                "Don't know how to extract registered OAuth scopes for Nango key `{key}`"
+            ))),
         }
     }
 }
@@ -267,7 +275,7 @@ mod tests {
                 }
             });
 
-            let scopes = connection.get_registered_oauth_scopes();
+            let scopes = connection.get_registered_oauth_scopes().unwrap();
 
             assert_eq!(scopes.len(), 3);
             assert!(scopes.contains(&"channels:read".to_string()));
@@ -281,7 +289,7 @@ mod tests {
             // Todoist scopes are not stored in the connection raw credentials
             connection.credentials.raw = serde_json::json!({});
 
-            let scopes = connection.get_registered_oauth_scopes();
+            let scopes = connection.get_registered_oauth_scopes().unwrap();
 
             assert_eq!(scopes.len(), 0);
         }
@@ -293,7 +301,7 @@ mod tests {
                 "scope": "https://www.googleapis.com/auth/gmail.readonly"
             });
 
-            let scopes = connection.get_registered_oauth_scopes();
+            let scopes = connection.get_registered_oauth_scopes().unwrap();
 
             assert_eq!(scopes.len(), 1);
             assert!(scopes.contains(&"https://www.googleapis.com/auth/gmail.readonly".to_string()));
@@ -306,7 +314,7 @@ mod tests {
                 "scope": ["read", "write"]
             });
 
-            let scopes = connection.get_registered_oauth_scopes();
+            let scopes = connection.get_registered_oauth_scopes().unwrap();
 
             assert_eq!(scopes.len(), 2);
             assert!(scopes.contains(&"read".to_string()));
@@ -320,7 +328,7 @@ mod tests {
                 "scope": "repo,read:org"
             });
 
-            let scopes = connection.get_registered_oauth_scopes();
+            let scopes = connection.get_registered_oauth_scopes().unwrap();
 
             assert_eq!(scopes.len(), 2);
             assert!(scopes.contains(&"repo".to_string()));

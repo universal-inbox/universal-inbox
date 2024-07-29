@@ -75,7 +75,7 @@ async fn test_sync_tasks_should_create_new_task(
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
         nango_todoist_connection,
@@ -85,7 +85,7 @@ async fn test_sync_tasks_should_create_new_task(
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Linear(LinearConfig {
             sync_notifications_enabled: true,
             sync_task_config: LinearSyncTaskConfig {
@@ -211,7 +211,7 @@ async fn test_sync_tasks_should_complete_existing_task(
     let todoist_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
         nango_todoist_connection,
@@ -225,7 +225,7 @@ async fn test_sync_tasks_should_complete_existing_task(
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Linear(LinearConfig {
             sync_notifications_enabled: true,
             sync_task_config: LinearSyncTaskConfig {
@@ -311,7 +311,7 @@ async fn test_sync_tasks_should_complete_existing_task_and_recreate_sink_task_if
     let todoist_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
         nango_todoist_connection,
@@ -325,7 +325,7 @@ async fn test_sync_tasks_should_complete_existing_task_and_recreate_sink_task_if
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Linear(LinearConfig {
             sync_notifications_enabled: true,
             sync_task_config: LinearSyncTaskConfig {

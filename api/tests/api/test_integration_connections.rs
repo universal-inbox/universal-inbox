@@ -144,15 +144,13 @@ mod verify_integration_connections {
             }),
         )
         .await;
-        let github_config_key = settings
-            .integrations
-            .oauth2
-            .nango_provider_keys
+        let nango_provider_keys = settings.nango_provider_keys();
+        let github_config_key = nango_provider_keys
             .get(&IntegrationProviderKind::Github)
             .unwrap();
         let nango_mock = mock_nango_connection_service(
             &app.app.nango_mock_server,
-            &settings.integrations.oauth2.nango_secret_key,
+            &settings.oauth2.nango_secret_key,
             &integration_connection.connection_id.to_string(),
             github_config_key,
             nango_github_connection.clone(),
@@ -207,15 +205,13 @@ mod verify_integration_connections {
             }),
         )
         .await;
-        let slack_config_key = settings
-            .integrations
-            .oauth2
-            .nango_provider_keys
+        let nango_provider_keys = settings.nango_provider_keys();
+        let slack_config_key = nango_provider_keys
             .get(&IntegrationProviderKind::Slack)
             .unwrap();
         let nango_mock = mock_nango_connection_service(
             &app.app.nango_mock_server,
-            &settings.integrations.oauth2.nango_secret_key,
+            &settings.oauth2.nango_secret_key,
             &integration_connection.connection_id.to_string(),
             slack_config_key,
             nango_slack_connection.clone(),
@@ -279,15 +275,13 @@ mod verify_integration_connections {
         .await;
 
         // Validate it first
-        let github_config_key = settings
-            .integrations
-            .oauth2
-            .nango_provider_keys
+        let nango_provider_keys = settings.nango_provider_keys();
+        let github_config_key = nango_provider_keys
             .get(&IntegrationProviderKind::Github)
             .unwrap();
         let mut nango_mock = mock_nango_connection_service(
             &app.app.nango_mock_server,
-            &settings.integrations.oauth2.nango_secret_key,
+            &settings.oauth2.nango_secret_key,
             &integration_connection.connection_id.to_string(),
             github_config_key,
             nango_github_connection.clone(),
@@ -312,7 +306,7 @@ mod verify_integration_connections {
         let mut nango_mock = app.app.nango_mock_server.mock(|when, then| {
             when.method(GET)
                 .path(format!("/connection/{}", integration_connection.connection_id))
-                .header("authorization", format!("Bearer {}", settings.integrations.oauth2.nango_secret_key))
+                .header("authorization", format!("Bearer {}", settings.oauth2.nango_secret_key))
                 .query_param("provider_config_key", "github");
             then.status(400).header("content-type", "application/json")
                 .json_body(json!({
@@ -338,15 +332,13 @@ mod verify_integration_connections {
 
         // Test failure recovery
         nango_mock.delete();
-        let github_config_key = settings
-            .integrations
-            .oauth2
-            .nango_provider_keys
+        let nango_provider_keys = settings.nango_provider_keys();
+        let github_config_key = nango_provider_keys
             .get(&IntegrationProviderKind::Github)
             .unwrap();
         let nango_mock = mock_nango_connection_service(
             &app.app.nango_mock_server,
-            &settings.integrations.oauth2.nango_secret_key,
+            &settings.oauth2.nango_secret_key,
             &integration_connection.connection_id.to_string(),
             github_config_key,
             nango_github_connection.clone(),
@@ -420,16 +412,14 @@ mod disconnect_integration_connections {
             None,
         )
         .await;
-        let github_config_key = settings
-            .integrations
-            .oauth2
-            .nango_provider_keys
+        let nango_provider_keys = settings.nango_provider_keys();
+        let github_config_key = nango_provider_keys
             .get(&IntegrationProviderKind::Github)
             .unwrap();
 
         let nango_mock = mock_nango_delete_connection_service(
             &app.app.nango_mock_server,
-            &settings.integrations.oauth2.nango_secret_key,
+            &settings.oauth2.nango_secret_key,
             &integration_connection.connection_id.to_string(),
             github_config_key,
         );
@@ -471,7 +461,7 @@ mod disconnect_integration_connections {
         let nango_mock = app.app.nango_mock_server.mock(|when, then| {
             when.method(DELETE)
                 .path(format!("/connection/{}", integration_connection.connection_id))
-                .header("authorization", format!("Bearer {}", settings.integrations.oauth2.nango_secret_key))
+                .header("authorization", format!("Bearer {}", settings.oauth2.nango_secret_key))
                 .query_param("provider_config_key", "github");
             then.status(400).header("content-type", "application/json")
                 .json_body(json!({

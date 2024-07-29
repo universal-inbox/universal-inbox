@@ -357,7 +357,7 @@ impl IntegrationConnectionService {
                 integration_connection_id,
                 IntegrationConnectionStatus::Validated,
                 None,
-                Some(nango_connection.get_registered_oauth_scopes()),
+                Some(nango_connection.get_registered_oauth_scopes()?),
                 for_user_id,
             )
             .await
@@ -818,7 +818,7 @@ impl IntegrationConnectionService {
                     integration_connection.id,
                     IntegrationConnectionStatus::Validated,
                     None,
-                    Some(nango_connection.get_registered_oauth_scopes()),
+                    Some(nango_connection.get_registered_oauth_scopes()?),
                     user_id,
                 )
                 .await?;

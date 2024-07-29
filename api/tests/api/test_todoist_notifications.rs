@@ -49,7 +49,7 @@ mod patch_notification {
         let integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.integrations.oauth2.nango_secret_key,
+            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
             nango_todoist_connection,
@@ -135,7 +135,7 @@ mod patch_notification {
         let integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
-            &settings.integrations.oauth2.nango_secret_key,
+            &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
             nango_todoist_connection,

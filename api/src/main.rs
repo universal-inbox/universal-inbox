@@ -195,13 +195,10 @@ async fn main() -> std::io::Result<()> {
             .expect("Failed to connect to Postgresql"),
     );
 
-    info!(
-        "Connecting to Nango on {}",
-        &settings.integrations.oauth2.nango_base_url
-    );
+    info!("Connecting to Nango on {}", &settings.oauth2.nango_base_url);
     let nango_service = NangoService::new(
-        settings.integrations.oauth2.nango_base_url.clone(),
-        &settings.integrations.oauth2.nango_secret_key,
+        settings.oauth2.nango_base_url.clone(),
+        &settings.oauth2.nango_secret_key,
     )
     .expect("Failed to create new GithubService");
 

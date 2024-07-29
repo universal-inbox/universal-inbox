@@ -176,7 +176,7 @@ pub async fn tested_app(
 
     let nango_service = NangoService::new(
         nango_mock_server_url.parse::<Url>().unwrap(),
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
     )
     .expect("Failed to create new NangoService");
 
@@ -295,7 +295,7 @@ pub async fn tested_app_with_local_auth(
 
     let nango_service = NangoService::new(
         nango_mock_server_url.parse::<Url>().unwrap(),
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
     )
     .expect("Failed to create new NangoService");
 

@@ -98,6 +98,8 @@ use_tls = false
 # tag: New notification integration
 [integrations.github]
 name = "Github"
+kind = "Github"
+nango_key = "github"
 page_size = 50
 required_oauth_scopes = ["notifications", "read:discussion", "read:org", "repo"]
 doc = "Github notifications are synchronized 1 for 1 with Universal Inbox notifications."
@@ -109,6 +111,8 @@ snooze = "The Github notification will not be modified. The notification in Univ
 
 [integrations.linear]
 name = "Linear"
+kind = "Linear"
+nango_key = "linear"
 required_oauth_scopes = ["read", "write"]
 doc = """
 Linear notifications (issue and project notifications) are synchronized 1 for 1 with Universal Inbox notifications. Linear notifications for the same Linear issue are not (yet) merged as one like Linear does.<br>
@@ -127,6 +131,8 @@ snooze = "The Linear notification will be snoozed and will only reappear the nex
 
 [integrations.google_mail]
 name = "Google Mail"
+kind = "GoogleMail"
+nango_key = "google-mail"
 page_size = 500
 required_oauth_scopes = ["https://www.googleapis.com/auth/gmail.modify"]
 doc = "Google Mail threads from your Inbox are considered as Universal Inbox notifications. More flexible configuration is coming."
@@ -139,8 +145,10 @@ snooze = "Snoozing a notification will only be reflected in Universal Inbox. ⚠
 
 [integrations.todoist]
 name = "Todoist"
+kind = "Todoist"
+nango_key = "todoist"
 required_oauth_scopes = ["data:read_write", "data:delete"]
-doc = "Task from the Todoist Inbox are considered as Universal Inbox notifications."
+doc = "Tasks from the Todoist Inbox are considered as Universal Inbox notifications."
 
 [integrations.todoist.doc_for_actions]
 delete = "The Todoist task will be deleted."
@@ -149,6 +157,8 @@ snooze = "The Todoist task will not be modified. The notification in Universal I
 
 [integrations.slack]
 name = "Slack"
+kind = "Slack"
+nango_key = "slack"
 required_oauth_scopes = [
   "channels:history",
   "channels:read",
@@ -163,6 +173,7 @@ required_oauth_scopes = [
   "team:read",
   "users:read",
 ]
+use_as_oauth_user_scopes = true
 doc = """
 Slack \"saved for later\" messages can be synchronized 1 for 1 with a Universal Inbox notification or a task in the task management service.
 
@@ -176,16 +187,16 @@ delete = "The Slack \"saved for later\" item will be deleted."
 unsubscribe = "The Slack \"saved for later\" item will be deleted."
 snooze = "The notification will be snoozed and will only reappear the next day. It won't change the Slack \"saved for later\" item."
 
-[integrations.oauth2]
+[integrations.ticktick]
+name = "Tick Tick"
+kind = "TickTick"
+nango_key = "ticktick"
+required_oauth_scopes = ["tasks:read", "tasks:write"]
+doc = "This is still work in progress."
+
+[integrations.ticktick.doc_for_actions]
+
+[oauth2]
 nango_base_url = "http://localhost:3003"
 nango_public_key = "get it from Nango/project-settings page"
 nango_secret_key = "To be generated"
-
-# Integration provider to be created on Nango
-# 1 key/value pair must be declared per IntegrationProviderKind enum value
-[integrations.oauth2.nango_provider_keys]
-Github = "github"
-Linear = "linear"
-GoogleMail = "google-mail"
-Todoist = "todoist"
-Slack = "slack"

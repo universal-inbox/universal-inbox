@@ -78,7 +78,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     let integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
         nango_todoist_connection,
@@ -134,7 +134,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         &settings,
         nango_github_connection,
@@ -324,7 +324,7 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
     create_and_mock_integration_connection(
         &app,
         user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         &settings,
         nango_github_connection,
@@ -411,7 +411,7 @@ async fn test_sync_all_notifications_asynchronously(
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         &settings,
         nango_github_connection,
@@ -579,7 +579,7 @@ async fn test_sync_all_notifications_with_synchronization_disabled(
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Github(GithubConfig::disabled()),
         &settings,
         nango_github_connection,
@@ -615,7 +615,7 @@ async fn test_sync_all_notifications_asynchronously_in_error(
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         &settings,
         nango_github_connection,
@@ -714,7 +714,7 @@ async fn test_sync_discussion_notification_with_details(
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         &settings,
         nango_github_connection,
@@ -786,7 +786,7 @@ async fn test_sync_discussion_notification_with_error(
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
-        &settings.integrations.oauth2.nango_secret_key,
+        &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         &settings,
         nango_github_connection,
