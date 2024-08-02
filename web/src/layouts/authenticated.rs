@@ -64,14 +64,15 @@ pub fn AuthenticatedApp() -> Element {
                 notification_service.send(NotificationCommand::Refresh);
                 loop {
                     TimeoutFuture::new(10_000).await;
-                    if UI_MODEL.read().is_syncing_notifications || UI_MODEL.read().is_syncing_tasks
-                    {
-                        // Refresh integration connections every 10 seconds if any of them is syncing
-                        integration_connection_service.send(IntegrationConnectionCommand::Refresh);
-                    } else if (Utc::now().timestamp() % 60) < 10 {
+                    if (Utc::now().timestamp() % 60) < 10 {
                         // Refresh notifications and integration connections every minute
                         notification_service.send(NotificationCommand::Refresh);
                         TimeoutFuture::new(200).await;
+                        integration_connection_service.send(IntegrationConnectionCommand::Refresh);
+                    } else if UI_MODEL.read().is_syncing_notifications
+                        || UI_MODEL.read().is_syncing_tasks
+                    {
+                        // Refresh integration connections every 10 seconds if any of them is syncing
                         integration_connection_service.send(IntegrationConnectionCommand::Refresh);
                     }
                 }

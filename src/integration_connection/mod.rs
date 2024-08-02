@@ -236,3 +236,90 @@ impl From<String> for NangoPublicKey {
         Self(s)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use self::integrations::todoist::TodoistConfig;
+
+    use super::*;
+
+    use chrono::Duration;
+    use pretty_assertions::assert_eq;
+    use rstest::*;
+
+    #[fixture]
+    fn connection() -> IntegrationConnection {
+        IntegrationConnection::new(
+            Uuid::new_v4().into(),
+            IntegrationConnectionConfig::Todoist(TodoistConfig::default()),
+        )
+    }
+
+    #[rstest]
+    fn test_is_syncing_notifications_not_connected(connection: IntegrationConnection) {
+        assert_eq!(connection.is_syncing(), false);
+    }
+
+    #[rstest]
+    fn test_is_syncing_notifications_not_scheduled(mut connection: IntegrationConnection) {
+        connection.status = IntegrationConnectionStatus::Validated;
+        assert_eq!(connection.is_syncing(), false);
+    }
+
+    #[rstest]
+    fn test_is_syncing_notifications_not_completed(mut connection: IntegrationConnection) {
+        connection.status = IntegrationConnectionStatus::Validated;
+        connection.last_notifications_sync_scheduled_at = Some(Utc::now());
+        assert_eq!(connection.is_syncing(), true);
+    }
+
+    #[rstest]
+    fn test_is_syncing_notifications_yet_completed(mut connection: IntegrationConnection) {
+        connection.status = IntegrationConnectionStatus::Validated;
+        connection.last_notifications_sync_scheduled_at = Some(Utc::now());
+        connection.last_notifications_sync_completed_at = Some(Utc::now() - Duration::seconds(1));
+        assert_eq!(connection.is_syncing(), true);
+    }
+
+    #[rstest]
+    fn test_is_syncing_notifications_completed(mut connection: IntegrationConnection) {
+        connection.status = IntegrationConnectionStatus::Validated;
+        connection.last_notifications_sync_scheduled_at = Some(Utc::now());
+        connection.last_notifications_sync_completed_at = Some(Utc::now());
+        assert_eq!(connection.is_syncing(), false);
+    }
+
+    #[rstest]
+    fn test_is_syncing_tasks_not_connected(connection: IntegrationConnection) {
+        assert_eq!(connection.is_syncing(), false);
+    }
+
+    #[rstest]
+    fn test_is_syncing_tasks_not_scheduled(mut connection: IntegrationConnection) {
+        connection.status = IntegrationConnectionStatus::Validated;
+        assert_eq!(connection.is_syncing(), false);
+    }
+
+    #[rstest]
+    fn test_is_syncing_tasks_not_completed(mut connection: IntegrationConnection) {
+        connection.status = IntegrationConnectionStatus::Validated;
+        connection.last_tasks_sync_scheduled_at = Some(Utc::now());
+        assert_eq!(connection.is_syncing(), true);
+    }
+
+    #[rstest]
+    fn test_is_syncing_tasks_yet_completed(mut connection: IntegrationConnection) {
+        connection.status = IntegrationConnectionStatus::Validated;
+        connection.last_tasks_sync_scheduled_at = Some(Utc::now());
+        connection.last_tasks_sync_completed_at = Some(Utc::now() - Duration::seconds(1));
+        assert_eq!(connection.is_syncing(), true);
+    }
+
+    #[rstest]
+    fn test_is_syncing_tasks_completed(mut connection: IntegrationConnection) {
+        connection.status = IntegrationConnectionStatus::Validated;
+        connection.last_tasks_sync_scheduled_at = Some(Utc::now());
+        connection.last_tasks_sync_completed_at = Some(Utc::now());
+        assert_eq!(connection.is_syncing(), false);
+    }
+}
