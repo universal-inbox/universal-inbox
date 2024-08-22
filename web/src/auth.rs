@@ -90,8 +90,9 @@ pub fn Authenticated(
             let authentication_state = ui_model.read().authentication_state;
             if authentication_state == AuthenticationState::Authenticated
                 || authentication_state == AuthenticationState::Unknown
+                || authentication_state == AuthenticationState::RedirectingToAuthProvider
             {
-                debug!("auth: Already authenticated or unknown, skipping authentication");
+                debug!("auth: Already authenticated or authenticating, skipping authentication");
                 return;
             }
 
