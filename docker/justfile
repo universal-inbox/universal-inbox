@@ -18,6 +18,7 @@ publish:
       --builder "$DOCKER_BUILDX_BUILDER" \
       --push \
       --platform linux/amd64,linux/arm64 \
+      --label version=$(git rev-parse HEAD) \
       -t dax42/universal-inbox:$(git rev-parse HEAD) \
       -t dax42/universal-inbox:latest \
       --label service="universal-inbox" \
