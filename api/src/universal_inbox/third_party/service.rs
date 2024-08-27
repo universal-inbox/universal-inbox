@@ -145,6 +145,9 @@ impl ThirdPartyItemService {
                 .await?;
 
             let third_party_items_to_mark_as_done_count = third_party_items_to_mark_as_done.len();
+            debug!(
+                "Marking {third_party_items_to_mark_as_done_count} stale third party items as done",
+            );
             for item in third_party_items_to_mark_as_done.into_iter() {
                 let task_creation =
                     integration_connection_provider.get_task_creation_default_values();
@@ -272,13 +275,20 @@ impl ThirdPartyItemService {
         <T as TryFrom<ThirdPartyItem>>::Error: Send + Sync,
     {
         let upsert_item = self
-            .save_third_party_item(executor, third_party_item)
+            .save_third_party_item(executor, third_party_item.clone())
             .await?;
 
         let third_party_item_id = upsert_item.value_ref().id;
         let Some(third_party_item) = upsert_item.modified_value() else {
             debug!("Third party item {third_party_item_id} is already up to date");
-            return Ok(None);
+            return Ok(Some(ThirdPartyItemCreationResult {
+                third_party_item: ThirdPartyItem {
+                    id: third_party_item_id,
+                    ..third_party_item
+                },
+                task: None,
+                notification: None,
+            }));
         };
 
         let upsert_task = self
@@ -296,14 +306,16 @@ impl ThirdPartyItemService {
             )
             .await?;
 
-        let task_id = upsert_task.value_ref().id;
-        let Some(task) = upsert_task.modified_value() else {
+        let task_is_modified = upsert_task.is_modified();
+        let task = upsert_task.value();
+        if !task_is_modified {
             debug!(
-                "Task {task_id} for third party item {third_party_item_id} is already up to date"
+                "Task {} for third party item {third_party_item_id} is already up to date",
+                task.id
             );
             return Ok(Some(ThirdPartyItemCreationResult {
                 third_party_item: *third_party_item,
-                task: None,
+                task: Some(*task),
                 notification: None,
             }));
         };
@@ -332,16 +344,19 @@ impl ThirdPartyItemService {
             }));
         };
 
-        let notification_id = upsert_notification.value_ref().id;
-        let notification_modified_value = upsert_notification.modified_value();
-        if notification_modified_value.is_none() {
-            debug!("Notification {notification_id} for task {task_id} is already up to date");
+        let notification_is_modified = upsert_notification.is_modified();
+        let notification = upsert_notification.value();
+        if !notification_is_modified {
+            debug!(
+                "Notification {} for task {} is already up to date",
+                notification.id, task.id
+            );
         }
 
         Ok(Some(ThirdPartyItemCreationResult {
             third_party_item: *third_party_item,
             task: Some(*task),
-            notification: notification_modified_value.map(|n| *n),
+            notification: Some(*notification),
         }))
     }
 

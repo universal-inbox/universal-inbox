@@ -81,7 +81,7 @@ async fn test_sync_todoist_linear_task(
         name: "Inbox".to_string(),
         source_id: "1111".to_string(),
     };
-    create_and_mock_integration_connection(
+    let linear_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
         &settings.oauth2.nango_secret_key,
@@ -147,6 +147,7 @@ async fn test_sync_todoist_linear_task(
         &linear_issue,
         project,
         app.user.id,
+        linear_integration_connection.id,
         todoist_integration_connection.id,
         todoist_item_id,
     )

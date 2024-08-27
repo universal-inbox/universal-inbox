@@ -4,7 +4,7 @@ use sqlx::{Postgres, Transaction};
 
 use universal_inbox::{
     notification::{Notification, NotificationDetails, NotificationSource},
-    task::{service::TaskPatch, ProjectSummary, Task, TaskCreation},
+    task::{service::TaskPatch, CreateOrUpdateTaskRequest, ProjectSummary, TaskCreation},
     third_party::item::ThirdPartyItem,
     user::UserId,
 };
@@ -92,7 +92,7 @@ pub mod task {
             source_third_party_item: &ThirdPartyItem,
             task_creation: Option<TaskCreation>,
             user_id: UserId,
-        ) -> Result<Box<Task>, UniversalInboxError>;
+        ) -> Result<Box<CreateOrUpdateTaskRequest>, UniversalInboxError>;
         async fn delete_task<'a>(
             &self,
             executor: &mut Transaction<'a, Postgres>,

@@ -20,6 +20,7 @@ use crate::{
         ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemSource, ThirdPartyItemSourceKind,
     },
     user::UserId,
+    utils::default_value::DefaultValue,
     HasHtmlUrl,
 };
 
@@ -249,6 +250,52 @@ pub struct TaskCreation {
     pub project: ProjectSummary,
     pub due_at: Option<DueDate>,
     pub priority: TaskPriority,
+}
+
+#[serde_as]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+pub struct CreateOrUpdateTaskRequest {
+    pub id: TaskId,
+    pub title: String,
+    pub body: String,
+    pub status: TaskStatus,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub priority: TaskPriority,
+    pub due_at: DefaultValue<Option<DueDate>>,
+    pub tags: Vec<String>,
+    pub parent_id: Option<TaskId>,
+    pub project: DefaultValue<String>,
+    pub is_recurring: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub kind: TaskSourceKind,
+    pub source_item: ThirdPartyItem,
+    pub sink_item: Option<ThirdPartyItem>,
+    pub user_id: UserId,
+}
+
+impl From<CreateOrUpdateTaskRequest> for Task {
+    fn from(request: CreateOrUpdateTaskRequest) -> Self {
+        Task {
+            id: request.id,
+            title: request.title,
+            body: request.body,
+            status: request.status,
+            completed_at: request.completed_at,
+            priority: request.priority,
+            due_at: request.due_at.into_value(),
+            tags: request.tags,
+            parent_id: request.parent_id,
+            project: request.project.into_value(),
+            is_recurring: request.is_recurring,
+            created_at: request.created_at,
+            updated_at: request.updated_at,
+            kind: request.kind,
+            source_item: request.source_item,
+            sink_item: request.sink_item,
+            user_id: request.user_id,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]

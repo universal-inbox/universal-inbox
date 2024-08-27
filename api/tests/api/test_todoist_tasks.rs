@@ -488,7 +488,7 @@ mod patch_task {
                         .as_ref()
                         .unwrap()
                         .updated_at,
-                    ..*TodoistService::build_task_with_project_name(
+                    ..(*TodoistService::build_task_with_project_name(
                         &todoist_item,
                         project,
                         &ThirdPartyItem {
@@ -523,7 +523,8 @@ mod patch_task {
                         },
                         app.user.id
                     )
-                    .await
+                    .await)
+                        .into()
                 })
             ))
         );

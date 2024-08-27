@@ -662,10 +662,12 @@ impl TaskService {
             )
         })?;
 
-        let task = third_party_task_service
+        let task_request = third_party_task_service
             .third_party_item_into_task(executor, &data, third_party_item, task_creation, user_id)
             .await?;
-        self.repository.create_or_update_task(executor, task).await
+        self.repository
+            .create_or_update_task(executor, task_request)
+            .await
     }
 
     #[tracing::instrument(

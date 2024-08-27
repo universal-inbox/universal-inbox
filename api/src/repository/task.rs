@@ -7,8 +7,8 @@ use uuid::Uuid;
 
 use universal_inbox::{
     task::{
-        service::TaskPatch, DueDate, Task, TaskId, TaskPriority, TaskSourceKind, TaskStatus,
-        TaskSummary,
+        service::TaskPatch, CreateOrUpdateTaskRequest, DueDate, Task, TaskId, TaskPriority,
+        TaskSourceKind, TaskStatus, TaskSummary,
     },
     user::UserId,
 };
@@ -62,7 +62,7 @@ pub trait TaskRepository {
     async fn create_or_update_task<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        task: Box<Task>,
+        task: Box<CreateOrUpdateTaskRequest>,
     ) -> Result<UpsertStatus<Box<Task>>, UniversalInboxError>;
     async fn update_task<'a, 'b>(
         &self,
@@ -513,20 +513,20 @@ impl TaskRepository for Repository {
 
     #[tracing::instrument(
         level = "debug",
-        skip(self, executor, task),
+        skip(self, executor, task_request),
         fields(
-            task_id = task.id.to_string(),
-            task_kind = task.kind.to_string(),
-            task_source_item_id = task.source_item.id.to_string(),
-            task_user_id = task.user_id.to_string()
+            task_id = task_request.id.to_string(),
+            task_kind = task_request.kind.to_string(),
+            task_source_item_id = task_request.source_item.id.to_string(),
+            task_user_id = task_request.user_id.to_string()
         )
     )]
     async fn create_or_update_task<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        task: Box<Task>,
+        task_request: Box<CreateOrUpdateTaskRequest>,
     ) -> Result<UpsertStatus<Box<Task>>, UniversalInboxError> {
-        let priority: u8 = task.priority.into();
+        let priority: u8 = task_request.priority.into();
 
         let mut query_builder = QueryBuilder::new(
             r#"
@@ -572,19 +572,19 @@ impl TaskRepository for Repository {
         // Built `task` could already exist as a source_item or a sink_item
         separated
             .push(" ((source_item.id = ")
-            .push_bind_unseparated(task.source_item.id.0)
+            .push_bind_unseparated(task_request.source_item.id.0)
             .push_unseparated(" AND ")
             .push_unseparated(" source_item.kind::TEXT = ")
-            .push_bind_unseparated(task.source_item.kind().to_string())
+            .push_bind_unseparated(task_request.source_item.kind().to_string())
             .push_unseparated(") OR (sink_item.id = ")
-            .push_bind_unseparated(task.source_item.id.0)
+            .push_bind_unseparated(task_request.source_item.id.0)
             .push_unseparated(" AND ")
             .push_unseparated(" sink_item.kind::TEXT = ")
-            .push_bind_unseparated(task.source_item.kind().to_string())
+            .push_bind_unseparated(task_request.source_item.kind().to_string())
             .push_unseparated(")) ");
         separated
             .push(" task.user_id = ")
-            .push_bind_unseparated(task.user_id.0);
+            .push_bind_unseparated(task_request.user_id.0);
 
         let existing_task: Option<Task> = query_builder
             .build_query_as::<TaskRow>()
@@ -594,33 +594,35 @@ impl TaskRepository for Repository {
                 source: err,
                 message: format!(
                     "Failed to search for task with source ID {} from storage",
-                    task.source_item.source_id
+                    task_request.source_item.source_id
                 ),
             })?
             .map(TryInto::try_into)
             .transpose()?;
 
-        let completed_at = task
+        let completed_at = task_request
             .completed_at
             .map(|completed_at| completed_at.naive_utc());
-        let due_at: Json<Option<DueDate>> = Json(task.due_at.clone());
-        let parent_id = task.parent_id.map(|id| id.0);
+        let parent_id = task_request.parent_id.map(|id| id.0);
 
         if let Some(existing_task) = existing_task {
-            if existing_task.kind != task.kind {
+            if existing_task.kind != task_request.kind {
                 // Built task may be a sink item after all
                 debug!(
                     "Updating existing {} task {} (from sink item {}) for {}",
-                    existing_task.kind, existing_task.id, task.source_item.source_id, task.user_id
+                    existing_task.kind,
+                    existing_task.id,
+                    task_request.source_item.source_id,
+                    task_request.user_id
                 );
             } else {
                 debug!(
                     "Updating existing {} task {} (from source item {}) for {}: {:?}",
-                    task.kind,
+                    task_request.kind,
                     existing_task.id,
-                    task.source_item.source_id,
-                    task.user_id,
-                    task.status
+                    task_request.source_item.source_id,
+                    task_request.user_id,
+                    task_request.status
                 );
             }
 
@@ -628,13 +630,13 @@ impl TaskRepository for Repository {
             let mut separated = query_builder.separated(", ");
             separated
                 .push("title = ")
-                .push_bind_unseparated(task.title.clone());
+                .push_bind_unseparated(task_request.title.clone());
             separated
                 .push("body = ")
-                .push_bind_unseparated(task.body.clone());
+                .push_bind_unseparated(task_request.body.clone());
             separated
                 .push("status = ")
-                .push_bind_unseparated(task.status.to_string())
+                .push_bind_unseparated(task_request.status.to_string())
                 .push_unseparated("::task_status");
             separated
                 .push("completed_at = ")
@@ -642,20 +644,30 @@ impl TaskRepository for Repository {
             separated
                 .push("priority = ")
                 .push_bind_unseparated(priority as i32);
-            separated.push("due_at = ").push_bind_unseparated(due_at);
-            separated.push("tags = ").push_bind_unseparated(&task.tags);
+            if task_request.due_at.has_value() {
+                separated
+                    .push("due_at = ")
+                    .push_bind_unseparated(
+                        Json(task_request.due_at.clone().into_value()) as Json<Option<DueDate>>
+                    );
+            }
+            separated
+                .push("tags = ")
+                .push_bind_unseparated(&task_request.tags);
             separated
                 .push("parent_id = ")
                 .push_bind_unseparated(parent_id);
-            separated
-                .push("project = ")
-                .push_bind_unseparated(task.project.clone());
+            if task_request.project.has_value() {
+                separated
+                    .push("project = ")
+                    .push_bind_unseparated(task_request.project.clone().into_value());
+            }
             separated
                 .push("is_recurring = ")
-                .push_bind_unseparated(task.is_recurring);
+                .push_bind_unseparated(task_request.is_recurring);
             separated
                 .push("updated_at = ")
-                .push_bind_unseparated(task.updated_at.naive_utc());
+                .push_bind_unseparated(task_request.updated_at.naive_utc());
 
             query_builder
                 .push(" WHERE id = ")
@@ -683,7 +695,17 @@ impl TaskRepository for Repository {
                     created_at: existing_task.created_at,
                     source_item: existing_task.source_item.clone(),
                     sink_item: existing_task.sink_item.clone(),
-                    ..*task
+                    due_at: task_request
+                        .due_at
+                        .value
+                        .clone()
+                        .unwrap_or_else(|| existing_task.due_at.clone()),
+                    project: task_request
+                        .project
+                        .value
+                        .clone()
+                        .unwrap_or_else(|| existing_task.project.clone()),
+                    ..Into::<Task>::into(*task_request)
                 }),
                 old: Box::new(existing_task),
             });
@@ -691,7 +713,10 @@ impl TaskRepository for Repository {
 
         debug!(
             "Creating new {} task {} (from source item {}) for {}",
-            task.kind, task.id, task.source_item.source_id, task.user_id
+            task_request.kind,
+            task_request.id,
+            task_request.source_item.source_id,
+            task_request.user_id
         );
         let task_id: TaskId = TaskId(
                 sqlx::query_scalar!(
@@ -721,23 +746,23 @@ impl TaskRepository for Repository {
                 RETURNING
                   id
             "#,
-                    task.id.0,
-                    task.title,
-                    task.body,
-                    task.status.to_string() as _,
+                    task_request.id.0,
+                    task_request.title,
+                    task_request.body,
+                    task_request.status.to_string() as _,
                     completed_at,
                     priority as i32,
-                    due_at as Json<Option<DueDate>>,
-                    &task.tags,
+                    Json(task_request.due_at.clone().into_value()) as Json<Option<DueDate>>,
+                    &task_request.tags,
                     parent_id,
-                    task.project,
-                    task.is_recurring,
-                    task.created_at.naive_utc(),
-                    task.updated_at.naive_utc(),
-                    task.kind.to_string() as _,
-                    task.source_item.id.0,
-                    task.sink_item.as_ref().map(|item| item.id.0),
-                    task.user_id.0
+                    task_request.project.clone().into_value(),
+                    task_request.is_recurring,
+                    task_request.created_at.naive_utc(),
+                    task_request.updated_at.naive_utc(),
+                    task_request.kind.to_string() as _,
+                    task_request.source_item.id.0,
+                    task_request.sink_item.as_ref().map(|item| item.id.0),
+                    task_request.user_id.0
                 )
                 .fetch_one(&mut **executor)
                 .await
@@ -745,14 +770,14 @@ impl TaskRepository for Repository {
                         source: err,
                         message: format!(
                         "Failed to update task with source ID {} from storage",
-                        task.source_item.source_id
+                        task_request.source_item.source_id
                     )
                 })?,
             );
 
         Ok(UpsertStatus::Created(Box::new(Task {
             id: task_id,
-            ..*task
+            ..Into::<Task>::into(*task_request)
         })))
     }
 

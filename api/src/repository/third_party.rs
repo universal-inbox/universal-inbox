@@ -37,7 +37,17 @@ pub trait ThirdPartyItemRepository {
 
 #[async_trait]
 impl ThirdPartyItemRepository for Repository {
-    #[tracing::instrument(level = "debug", skip(self, executor, third_party_item), fields(third_party_item_id = third_party_item.id.to_string()))]
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, executor, third_party_item),
+        fields(
+            third_party_item_id = third_party_item.id.to_string(),
+            source_id = third_party_item.source_id.as_str(),
+            kind = third_party_item.kind().to_string(),
+            user_id = third_party_item.user_id.to_string(),
+            integration_connection_id = third_party_item.integration_connection_id.to_string()
+        )
+    )]
     async fn create_or_update_third_party_item<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
