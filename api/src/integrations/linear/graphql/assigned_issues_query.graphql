@@ -2,7 +2,7 @@ query AssignedIssuesQuery {
   issues(filter: {
       and: [
         { assignee: { isMe: { eq: true } } },
-        { state: { type: { nin: ["completed", "canceled"] } } }
+        { state: { type: { nin: ["completed", "canceled", "backlog"] } } }
       ]
     }) {
     nodes {
