@@ -452,6 +452,7 @@ impl TaskRepository for Repository {
         );
 
         let mut separated = query_builder.separated(" AND ");
+        separated.push(" task.id = t.id ");
         separated
             .push(" source_item.source_id = ANY(")
             .push_bind(&active_source_task_ids[..])
@@ -851,6 +852,7 @@ impl TaskRepository for Repository {
               "#,
             )
             .separated(" AND ")
+            .push(" task.id = t.id ")
             .push(" task.id = ")
             .push_bind_unseparated(task_id.0)
             .push(" task.user_id = ")
