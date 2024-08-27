@@ -134,4 +134,11 @@ impl<T: Clone> UpsertStatus<T> {
             UpsertStatus::Untouched(_) => None,
         }
     }
+
+    pub fn is_modified(&self) -> bool {
+        matches!(
+            self,
+            UpsertStatus::Created(_) | UpsertStatus::Updated { .. }
+        )
+    }
 }

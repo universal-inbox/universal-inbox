@@ -29,15 +29,20 @@ use universal_inbox::{
     },
     notification::{NotificationSource, NotificationSourceKind},
     task::{
-        integrations::todoist::TodoistProject, service::TaskPatch, ProjectSummary, Task,
-        TaskCreation, TaskSource, TaskSourceKind, TaskStatus,
+        integrations::todoist::{TodoistProject, TODOIST_INBOX_PROJECT},
+        service::TaskPatch,
+        CreateOrUpdateTaskRequest, ProjectSummary, TaskCreation, TaskSource, TaskSourceKind,
+        TaskStatus,
     },
-    third_party::item::ThirdPartyItem,
     third_party::{
         integrations::todoist::{TodoistItem, TodoistItemDue, TodoistItemPriority},
-        item::{ThirdPartyItemFromSource, ThirdPartyItemSource, ThirdPartyItemSourceKind},
+        item::{
+            ThirdPartyItem, ThirdPartyItemFromSource, ThirdPartyItemSource,
+            ThirdPartyItemSourceKind,
+        },
     },
     user::UserId,
+    utils::default_value::DefaultValue,
 };
 
 use crate::{
@@ -345,8 +350,8 @@ impl TodoistService {
         project_name: String,
         source_third_party_item: &ThirdPartyItem,
         user_id: UserId,
-    ) -> Box<Task> {
-        Box::new(Task {
+    ) -> Box<CreateOrUpdateTaskRequest> {
+        Box::new(CreateOrUpdateTaskRequest {
             id: Uuid::new_v4().into(),
             title: source.content.clone(),
             body: source.description.clone(),
@@ -359,10 +364,10 @@ impl TodoistService {
             },
             completed_at: source.completed_at,
             priority: source.priority.into(),
-            due_at: source.due.as_ref().map(|due| due.into()),
+            due_at: DefaultValue::new(None, Some(source.due.as_ref().map(|due| due.into()))),
             tags: source.labels.clone(),
             parent_id: None, // Unsupported for now
-            project: project_name,
+            project: DefaultValue::new(TODOIST_INBOX_PROJECT.to_string(), Some(project_name)),
             is_recurring: source
                 .due
                 .as_ref()
@@ -500,7 +505,7 @@ impl ThirdPartyTaskService<TodoistItem> for TodoistService {
         source_third_party_item: &ThirdPartyItem,
         _task_creation: Option<TaskCreation>,
         user_id: UserId,
-    ) -> Result<Box<Task>, UniversalInboxError> {
+    ) -> Result<Box<CreateOrUpdateTaskRequest>, UniversalInboxError> {
         let (access_token, _) = self
             .integration_connection_service
             .read()

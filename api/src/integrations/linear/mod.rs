@@ -17,7 +17,10 @@ use universal_inbox::{
         integrations::linear::LinearNotification, Notification, NotificationDetails,
         NotificationSource, NotificationSourceKind,
     },
-    task::{service::TaskPatch, Task, TaskCreation, TaskSource, TaskSourceKind, TaskStatus},
+    task::{
+        service::TaskPatch, CreateOrUpdateTaskRequest, TaskCreation, TaskSource, TaskSourceKind,
+        TaskStatus,
+    },
     third_party::{
         integrations::linear::LinearIssue,
         item::{
@@ -26,6 +29,7 @@ use universal_inbox::{
         },
     },
     user::UserId,
+    utils::default_value::DefaultValue,
     HasHtmlUrl,
 };
 
@@ -566,28 +570,31 @@ impl ThirdPartyTaskService<LinearIssue> for LinearService {
         source_third_party_item: &ThirdPartyItem,
         task_creation: Option<TaskCreation>,
         user_id: UserId,
-    ) -> Result<Box<Task>, UniversalInboxError> {
+    ) -> Result<Box<CreateOrUpdateTaskRequest>, UniversalInboxError> {
         let task_creation = task_creation.ok_or_else(|| {
             UniversalInboxError::Unexpected(anyhow!(
                 "Cannot build a Linear task without a task creation"
             ))
         })?;
 
-        Ok(Box::new(Task {
+        Ok(Box::new(CreateOrUpdateTaskRequest {
             id: Uuid::new_v4().into(),
             title: format!("[{}]({})", source.title.clone(), source.get_html_url()),
             body: source.description.clone().unwrap_or_default(),
             status: source.state.r#type.into(),
             completed_at: source.completed_at,
             priority: source.priority.into(),
-            due_at: task_creation.due_at.clone(),
+            due_at: DefaultValue::new(
+                task_creation.due_at.clone(),
+                source.due_date.map(|due_date| Some(due_date.into())),
+            ),
             tags: source
                 .labels
                 .iter()
                 .map(|label| label.name.clone())
                 .collect(),
             parent_id: None,
-            project: task_creation.project.name.clone(),
+            project: DefaultValue::new(task_creation.project.name.clone(), None),
             is_recurring: false,
             created_at: source.created_at,
             updated_at: source.updated_at,

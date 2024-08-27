@@ -24,7 +24,10 @@ use universal_inbox::{
         Notification, NotificationDetails, NotificationMetadata, NotificationSource,
         NotificationSourceKind,
     },
-    task::{service::TaskPatch, Task, TaskCreation, TaskSource, TaskSourceKind, TaskStatus},
+    task::{
+        service::TaskPatch, CreateOrUpdateTaskRequest, TaskCreation, TaskSource, TaskSourceKind,
+        TaskStatus,
+    },
     third_party::{
         integrations::slack::{SlackStar, SlackStarState, SlackStarredItem},
         item::{
@@ -32,7 +35,7 @@ use universal_inbox::{
         },
     },
     user::UserId,
-    utils::truncate::truncate_with_ellipse,
+    utils::{default_value::DefaultValue, truncate::truncate_with_ellipse},
     HasHtmlUrl,
 };
 
@@ -1038,7 +1041,7 @@ impl ThirdPartyTaskService<SlackStar> for SlackService {
         source_third_party_item: &ThirdPartyItem,
         task_creation: Option<TaskCreation>,
         user_id: UserId,
-    ) -> Result<Box<Task>, UniversalInboxError> {
+    ) -> Result<Box<CreateOrUpdateTaskRequest>, UniversalInboxError> {
         let task_creation = task_creation.ok_or_else(|| {
             UniversalInboxError::Unexpected(anyhow!(
                 "Cannot build a Slack task without a task creation"
@@ -1063,17 +1066,17 @@ impl ThirdPartyTaskService<SlackStar> for SlackService {
             None
         };
 
-        Ok(Box::new(Task {
+        Ok(Box::new(CreateOrUpdateTaskRequest {
             id: Uuid::new_v4().into(),
             title,
             body,
             status,
             completed_at,
             priority: task_creation.priority,
-            due_at: task_creation.due_at.clone(),
+            due_at: DefaultValue::new(task_creation.due_at.clone(), None),
             tags: vec![],
             parent_id: None,
-            project: task_creation.project.name.clone(),
+            project: DefaultValue::new(task_creation.project.name.clone(), None),
             is_recurring: false,
             created_at,
             updated_at,

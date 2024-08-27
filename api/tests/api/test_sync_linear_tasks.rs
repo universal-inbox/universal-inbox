@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use graphql_client::Response;
 use pretty_assertions::assert_ne;
 use rstest::*;
+use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
 use universal_inbox::{
@@ -49,6 +50,7 @@ use crate::helpers::{
     notification::linear::{mock_linear_assigned_issues_query, sync_linear_tasks_response},
     settings,
     task::{
+        get_task,
         linear::create_linear_task,
         sync_tasks,
         todoist::{
@@ -197,6 +199,118 @@ async fn test_sync_tasks_should_create_new_task(
     assert!(integration_connection.failure_message.is_none(),);
 }
 
+/// Test when syncing an already existing task, the existing values `due_at` and `project` are
+/// are not overwritten by the default values from the Linear configuration.
+#[rstest]
+#[tokio::test]
+async fn test_sync_tasks_should_not_update_default_values(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    sync_linear_tasks_response: Response<assigned_issues_query::ResponseData>,
+    nango_linear_connection: Box<NangoConnection>,
+    nango_todoist_connection: Box<NangoConnection>,
+) {
+    let app = authenticated_app.await;
+    let todoist_integration_connection = create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        &settings.oauth2.nango_secret_key,
+        IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
+        &settings,
+        nango_todoist_connection,
+        None,
+    )
+    .await;
+    let project = ProjectSummary {
+        name: "Project2".to_string(),
+        source_id: "2222".to_string(),
+    };
+    let linear_integration_connection = create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        &settings.oauth2.nango_secret_key,
+        IntegrationConnectionConfig::Linear(LinearConfig {
+            sync_notifications_enabled: true,
+            sync_task_config: LinearSyncTaskConfig {
+                enabled: true,
+                target_project: Some(project.clone()),
+                // Test will create a task with due date set to Today
+                default_due_at: Some(PresetDueDate::Tomorrow),
+            },
+        }),
+        &settings,
+        nango_linear_connection,
+        None,
+    )
+    .await;
+
+    let linear_issues: Vec<LinearIssue> = sync_linear_tasks_response
+        .data
+        .clone()
+        .unwrap()
+        .try_into()
+        .unwrap();
+    let linear_issue: &LinearIssue = &linear_issues[0];
+    let existing_task = create_linear_task(
+        &app.app,
+        linear_issue,
+        ProjectSummary {
+            name: "Project1".to_string(),
+            source_id: "1111".to_string(),
+        },
+        app.user.id,
+        linear_integration_connection.id,
+        todoist_integration_connection.id,
+        "todoist_source_id".to_string(),
+    )
+    .await;
+    assert_eq!(existing_task.due_at, Some(PresetDueDate::Today.into()));
+
+    // Sleep so that third party item created during sync will have a different `updated_at`
+    // and thus force to update the task
+    sleep(Duration::from_secs(1)).await;
+
+    let source_linear_issue = sync_linear_tasks_response
+        .data
+        .clone()
+        .unwrap()
+        .issues
+        .nodes[0]
+        .clone();
+    let single_sync_linear_tasks_response = Response {
+        data: Some(assigned_issues_query::ResponseData {
+            issues: assigned_issues_query::AssignedIssuesQueryIssues {
+                nodes: vec![source_linear_issue],
+            },
+        }),
+        errors: None,
+        extensions: None,
+    };
+    let linear_assigned_issues_mock = mock_linear_assigned_issues_query(
+        &app.app.linear_mock_server,
+        &single_sync_linear_tasks_response,
+    );
+
+    let task_creation_results: Vec<TaskCreationResult> = sync_tasks(
+        &app.client,
+        &app.app.api_address,
+        Some(TaskSourceKind::Linear),
+        false,
+    )
+    .await;
+    assert_eq!(task_creation_results.len(), 1);
+    assert_eq!(task_creation_results[0].task.id, existing_task.id);
+
+    let task = get_task(&app.client, &app.app.api_address, existing_task.id)
+        .await
+        .unwrap();
+    assert_eq!(task.id, existing_task.id);
+    assert_eq!(task.due_at, existing_task.due_at);
+    assert_eq!(task.project, existing_task.project);
+
+    linear_assigned_issues_mock.assert();
+}
+
 #[rstest]
 #[tokio::test]
 async fn test_sync_tasks_should_complete_existing_task(
@@ -222,7 +336,7 @@ async fn test_sync_tasks_should_complete_existing_task(
         name: "Project2".to_string(),
         source_id: "2222".to_string(),
     };
-    create_and_mock_integration_connection(
+    let linear_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
         &settings.oauth2.nango_secret_key,
@@ -252,6 +366,7 @@ async fn test_sync_tasks_should_complete_existing_task(
         linear_issue,
         project,
         app.user.id,
+        linear_integration_connection.id,
         todoist_integration_connection.id,
         "todoist_source_id".to_string(),
     )
@@ -322,7 +437,7 @@ async fn test_sync_tasks_should_complete_existing_task_and_recreate_sink_task_if
         name: "Project2".to_string(),
         source_id: "2222".to_string(),
     };
-    create_and_mock_integration_connection(
+    let linear_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
         &settings.oauth2.nango_secret_key,
@@ -352,6 +467,7 @@ async fn test_sync_tasks_should_complete_existing_task_and_recreate_sink_task_if
         linear_issue,
         project,
         app.user.id,
+        linear_integration_connection.id,
         todoist_integration_connection.id,
         "todoist_source_id".to_string(),
     )
@@ -406,7 +522,7 @@ async fn test_sync_tasks_should_complete_existing_task_and_recreate_sink_task_if
         existing_task.title.clone(),
         Some(existing_task.body.clone()),
         "2222".to_string(), // ie. "Project2"
-        None,
+        Some((&Into::<DueDate>::into(PresetDueDate::Today)).into()),
         TodoistItemPriority::P1,
     );
     let todoist_get_item_mock = mock_todoist_get_item_service(
