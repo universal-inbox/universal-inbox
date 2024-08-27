@@ -864,9 +864,8 @@ impl NotificationRepository for Repository {
             .push(" WHERE ")
             .separated(" AND ");
         separated
+            .push(" notification.id = n.id")
             .push(" notification.task_id = ")
-            .push_bind_unseparated(task_id.0)
-            .push(" n.task_id = ")
             .push_bind_unseparated(task_id.0);
 
         if let Some(kind) = notification_kind {
