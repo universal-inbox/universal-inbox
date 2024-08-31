@@ -3,8 +3,10 @@ use std::fmt;
 use anyhow::{anyhow, Context};
 use chrono::{DateTime, Utc};
 use http::{HeaderMap, HeaderValue};
-use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
-use reqwest_tracing::{SpanBackendWithUrl, TracingMiddleware};
+use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, Extension};
+use reqwest_tracing::{
+    DisableOtelPropagation, OtelPathNames, SpanBackendWithUrl, TracingMiddleware,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_with::serde_as;
@@ -128,8 +130,9 @@ impl fmt::Display for RefreshToken {
 
 impl NangoService {
     pub fn new(nango_base_url: Url, secret_key: &str) -> Result<NangoService, UniversalInboxError> {
+        let nango_base_path = nango_base_url.path();
         Ok(NangoService {
-            client: build_nango_client(secret_key).context("Cannot build Nango client")?,
+            client: build_nango_client(nango_base_path, secret_key)?,
             nango_base_url,
         })
     }
@@ -206,7 +209,10 @@ impl NangoService {
     }
 }
 
-fn build_nango_client(secret_key: &str) -> Result<ClientWithMiddleware, reqwest::Error> {
+fn build_nango_client(
+    nango_base_path: &str,
+    secret_key: &str,
+) -> Result<ClientWithMiddleware, UniversalInboxError> {
     let mut headers = HeaderMap::new();
 
     let mut auth_header_value: HeaderValue = format!("Bearer {secret_key}").parse().unwrap();
@@ -216,8 +222,17 @@ fn build_nango_client(secret_key: &str) -> Result<ClientWithMiddleware, reqwest:
     let reqwest_client = reqwest::Client::builder()
         .default_headers(headers)
         .user_agent(APP_USER_AGENT)
-        .build()?;
+        .build()
+        .context("Failed to build Nango client")?;
     Ok(ClientBuilder::new(reqwest_client)
+        .with_init(Extension(
+            OtelPathNames::known_paths([format!(
+                "{}connection/{{connection_id}}",
+                nango_base_path
+            )])
+            .context("Cannot build Otel path names")?,
+        ))
+        .with_init(Extension(DisableOtelPropagation))
         .with(TracingMiddleware::<SpanBackendWithUrl>::new())
         .build())
 }

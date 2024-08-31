@@ -6,8 +6,10 @@ use chrono::{DateTime, Utc};
 use futures::stream::{self, TryStreamExt};
 use graphql_client::GraphQLQuery;
 use http::{HeaderMap, HeaderValue};
-use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
-use reqwest_tracing::{SpanBackendWithUrl, TracingMiddleware};
+use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, Extension};
+use reqwest_tracing::{
+    DisableOtelPropagation, OtelPathNames, SpanBackendWithUrl, TracingMiddleware,
+};
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
 
@@ -20,6 +22,7 @@ use universal_inbox::{
     },
     user::UserId,
 };
+use url::Url;
 
 use crate::{
     integrations::{
@@ -41,6 +44,7 @@ pub mod graphql;
 #[derive(Clone)]
 pub struct GithubService {
     github_base_url: String,
+    github_base_path: String,
     github_graphql_url: String,
     page_size: usize,
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
@@ -55,17 +59,85 @@ impl GithubService {
         page_size: usize,
         integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     ) -> Result<GithubService, UniversalInboxError> {
+        let github_base_url = github_base_url.unwrap_or_else(|| GITHUB_BASE_URL.to_string());
+        let github_base_path = Url::parse(&github_base_url)
+            .context("Cannot parse Github base URL")?
+            .path()
+            .to_string();
+        let github_graphql_url = format!("{}/graphql", github_base_url);
+
         Ok(GithubService {
-            github_base_url: github_base_url
-                .clone()
-                .unwrap_or_else(|| GITHUB_BASE_URL.to_string()),
-            github_graphql_url: format!(
-                "{}/graphql",
-                github_base_url.unwrap_or_else(|| GITHUB_BASE_URL.to_string())
-            ),
+            github_base_url,
+            github_base_path: if &github_base_path == "/" {
+                "".to_string()
+            } else {
+                github_base_path
+            },
+            github_graphql_url,
             page_size,
             integration_connection_service,
         })
+    }
+
+    fn build_github_rest_client(
+        &self,
+        access_token: &AccessToken,
+    ) -> Result<ClientWithMiddleware, UniversalInboxError> {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "Accept",
+            HeaderValue::from_static("application/vnd.github.v3+json"),
+        );
+
+        self.build_github_client(access_token, headers)
+    }
+
+    fn build_github_graphql_client(
+        &self,
+        access_token: &AccessToken,
+    ) -> Result<ClientWithMiddleware, UniversalInboxError> {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "Accept",
+            HeaderValue::from_static("application/vnd.github.merge-info-preview+json"),
+        );
+
+        self.build_github_client(access_token, headers)
+    }
+
+    fn build_github_client(
+        &self,
+        access_token: &AccessToken,
+        mut headers: HeaderMap,
+    ) -> Result<ClientWithMiddleware, UniversalInboxError> {
+        let mut auth_header_value: HeaderValue = format!("Bearer {access_token}").parse().unwrap();
+        auth_header_value.set_sensitive(true);
+        headers.insert("Authorization", auth_header_value);
+
+        let reqwest_client = reqwest::Client::builder()
+            .default_headers(headers)
+            .user_agent(APP_USER_AGENT)
+            .build()
+            .context("Cannot build Github client")?;
+        Ok(ClientBuilder::new(reqwest_client)
+            .with_init(Extension(
+                OtelPathNames::known_paths([
+                    format!(
+                        "{}/notifications/threads/{{thread_id}}/subscription",
+                        self.github_base_path
+                    ),
+                    format!(
+                        "{}/notifications/threads/{{thread_id}}",
+                        self.github_base_path
+                    ),
+                    format!("{}/notifications", self.github_base_path),
+                    format!("{}/graphql", self.github_base_path),
+                ])
+                .context("Cannot build Otel path names")?,
+            ))
+            .with_init(Extension(DisableOtelPropagation))
+            .with(TracingMiddleware::<SpanBackendWithUrl>::new())
+            .build())
     }
 
     pub async fn fetch_notifications(
@@ -78,8 +150,8 @@ impl GithubService {
             "{}/notifications?page={page}&per_page={per_page}",
             self.github_base_url
         );
-        let response = build_github_rest_client(access_token)
-            .context("Failed to build Github client")?
+        let response = self
+            .build_github_rest_client(access_token)?
             .get(&url)
             .send()
             .await
@@ -99,8 +171,8 @@ impl GithubService {
         thread_id: &str,
         access_token: &AccessToken,
     ) -> Result<(), UniversalInboxError> {
-        let response = build_github_rest_client(access_token)
-            .context("Failed to build Github client")?
+        let response = self
+            .build_github_rest_client(access_token)?
             .patch(&format!(
                 "{}/notifications/threads/{thread_id}",
                 self.github_base_url
@@ -126,8 +198,8 @@ impl GithubService {
         thread_id: &str,
         access_token: &AccessToken,
     ) -> Result<(), UniversalInboxError> {
-        let response = build_github_rest_client(access_token)
-            .context("Failed to build Github client")?
+        let response = self
+            .build_github_rest_client(access_token)?
             .put(&format!(
                 "{}/notifications/threads/{thread_id}/subscription",
                 self.github_base_url
@@ -164,8 +236,8 @@ impl GithubService {
             pr_number,
         });
 
-        let response = build_github_graphql_client(access_token)
-            .context("Failed to build Github client")?
+        let response = self
+            .build_github_graphql_client(access_token)?
             .post(&self.github_graphql_url)
             .json(&request_body)
             .send()
@@ -198,8 +270,8 @@ impl GithubService {
                 search_query,
             });
 
-        let response = build_github_graphql_client(access_token)
-            .context("Failed to build Github client")?
+        let response = self
+            .build_github_graphql_client(access_token)?
             .post(&self.github_graphql_url)
             .json(&request_body)
             .send()
@@ -220,47 +292,6 @@ impl GithubService {
             .data
             .ok_or_else(|| anyhow!("Failed to parse `data` from Github graphql response"))?)
     }
-}
-
-fn build_github_rest_client(
-    access_token: &AccessToken,
-) -> Result<ClientWithMiddleware, reqwest::Error> {
-    let mut headers = HeaderMap::new();
-    headers.insert(
-        "Accept",
-        HeaderValue::from_static("application/vnd.github.v3+json"),
-    );
-
-    build_github_client(access_token, headers)
-}
-
-fn build_github_graphql_client(
-    access_token: &AccessToken,
-) -> Result<ClientWithMiddleware, reqwest::Error> {
-    let mut headers = HeaderMap::new();
-    headers.insert(
-        "Accept",
-        HeaderValue::from_static("application/vnd.github.merge-info-preview+json"),
-    );
-
-    build_github_client(access_token, headers)
-}
-
-fn build_github_client(
-    access_token: &AccessToken,
-    mut headers: HeaderMap,
-) -> Result<ClientWithMiddleware, reqwest::Error> {
-    let mut auth_header_value: HeaderValue = format!("Bearer {access_token}").parse().unwrap();
-    auth_header_value.set_sensitive(true);
-    headers.insert("Authorization", auth_header_value);
-
-    let reqwest_client = reqwest::Client::builder()
-        .default_headers(headers)
-        .user_agent(APP_USER_AGENT)
-        .build()?;
-    Ok(ClientBuilder::new(reqwest_client)
-        .with(TracingMiddleware::<SpanBackendWithUrl>::new())
-        .build())
 }
 
 #[async_trait]

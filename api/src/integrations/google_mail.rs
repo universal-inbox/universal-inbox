@@ -5,8 +5,10 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use http::{HeaderMap, HeaderValue};
 use itertools::Itertools;
-use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
-use reqwest_tracing::{SpanBackendWithUrl, TracingMiddleware};
+use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, Extension};
+use reqwest_tracing::{
+    DisableOtelPropagation, OtelPathNames, SpanBackendWithUrl, TracingMiddleware,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use serde_with::serde_as;
@@ -32,6 +34,7 @@ use universal_inbox::{
     },
     user::UserId,
 };
+use url::Url;
 
 use crate::{
     integrations::{
@@ -48,6 +51,7 @@ use crate::{
 #[derive(Clone)]
 pub struct GoogleMailService {
     google_mail_base_url: String,
+    google_mail_base_path: String,
     page_size: usize,
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     notification_service: Weak<RwLock<NotificationService>>,
@@ -172,9 +176,19 @@ impl GoogleMailService {
         integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
         notification_service: Weak<RwLock<NotificationService>>,
     ) -> Result<GoogleMailService, UniversalInboxError> {
+        let google_mail_base_url =
+            google_mail_base_url.unwrap_or_else(|| GOOGLE_MAIL_BASE_URL.to_string());
+        let google_mail_base_path = Url::parse(&google_mail_base_url)
+            .context("Failed to parse Google Mail base URL")?
+            .path()
+            .to_string();
         Ok(GoogleMailService {
-            google_mail_base_url: google_mail_base_url
-                .unwrap_or_else(|| GOOGLE_MAIL_BASE_URL.to_string()),
+            google_mail_base_url,
+            google_mail_base_path: if &google_mail_base_path == "/" {
+                "".to_string()
+            } else {
+                google_mail_base_path
+            },
             page_size,
             integration_connection_service,
             notification_service,
@@ -188,14 +202,53 @@ impl GoogleMailService {
         self.notification_service = notification_service;
     }
 
+    fn build_google_mail_client(
+        &self,
+        access_token: &AccessToken,
+    ) -> Result<ClientWithMiddleware, UniversalInboxError> {
+        let mut headers = HeaderMap::new();
+
+        let mut auth_header_value: HeaderValue = format!("Bearer {access_token}").parse().unwrap();
+        auth_header_value.set_sensitive(true);
+        headers.insert("Authorization", auth_header_value);
+
+        let reqwest_client = reqwest::Client::builder()
+            .default_headers(headers)
+            .user_agent(APP_USER_AGENT)
+            .build()
+            .context("Failed to build Google mail client")?;
+        // Tips: The reqwest_retry crate may help with rate limit errors
+        // https://docs.rs/reqwest-retry/0.3.0/reqwest_retry/trait.RetryableStrategy.html
+        Ok(ClientBuilder::new(reqwest_client)
+            .with_init(Extension(
+                OtelPathNames::known_paths([
+                    format!("{}/users/me/profile", self.google_mail_base_path),
+                    format!(
+                        "{}/users/me/threads/{{thread_id}}/modify",
+                        self.google_mail_base_path
+                    ),
+                    format!(
+                        "{}/users/me/threads/{{thread_id}}",
+                        self.google_mail_base_path
+                    ),
+                    format!("{}/users/me/threads*", self.google_mail_base_path),
+                    format!("{}/users/me/labels", self.google_mail_base_path),
+                ])
+                .context("Cannot build Otel path names")?,
+            ))
+            .with_init(Extension(DisableOtelPropagation))
+            .with(TracingMiddleware::<SpanBackendWithUrl>::new())
+            .build())
+    }
+
     pub async fn get_user_profile(
         &self,
         access_token: &AccessToken,
     ) -> Result<GoogleMailUserProfile, UniversalInboxError> {
         let url = format!("{}/users/me/profile", self.google_mail_base_url);
 
-        let response = build_google_mail_client(access_token)
-            .context("Failed to build GoogleMail client")?
+        let response = self
+            .build_google_mail_client(access_token)?
             .get(&url)
             .send()
             .await
@@ -224,8 +277,8 @@ impl GoogleMailService {
                 .join(""),
         );
 
-        let response = build_google_mail_client(access_token)
-            .context("Failed to build GoogleMail client")?
+        let response = self
+            .build_google_mail_client(access_token)?
             .get(&url)
             .send()
             .await
@@ -263,8 +316,8 @@ impl GoogleMailService {
                 .unwrap_or_default()
         );
 
-        let response = build_google_mail_client(access_token)
-            .context("Failed to build GoogleMail client")?
+        let response = self
+            .build_google_mail_client(access_token)?
             .get(&url)
             .send()
             .await
@@ -295,8 +348,8 @@ impl GoogleMailService {
             "removeLabelIds": label_ids_to_remove
         });
 
-        let response = build_google_mail_client(access_token)
-            .context("Failed to build GoogleMail client")?
+        let response = self
+            .build_google_mail_client(access_token)?
             .post(&url)
             .json(&body)
             .send()
@@ -338,8 +391,8 @@ impl GoogleMailService {
     ) -> Result<GoogleMailLabelList, UniversalInboxError> {
         let url = format!("{}/users/me/labels", self.google_mail_base_url);
 
-        let response = build_google_mail_client(access_token)
-            .context("Failed to build GoogleMail client")?
+        let response = self
+            .build_google_mail_client(access_token)?
             .get(&url)
             .send()
             .await
@@ -367,26 +420,6 @@ impl GoogleMailService {
 
         Ok(config.clone())
     }
-}
-
-fn build_google_mail_client(
-    access_token: &AccessToken,
-) -> Result<ClientWithMiddleware, reqwest::Error> {
-    let mut headers = HeaderMap::new();
-
-    let mut auth_header_value: HeaderValue = format!("Bearer {access_token}").parse().unwrap();
-    auth_header_value.set_sensitive(true);
-    headers.insert("Authorization", auth_header_value);
-
-    let reqwest_client = reqwest::Client::builder()
-        .default_headers(headers)
-        .user_agent(APP_USER_AGENT)
-        .build()?;
-    // Tips: The reqwest_retry crate may help with rate limit errors
-    // https://docs.rs/reqwest-retry/0.3.0/reqwest_retry/trait.RetryableStrategy.html
-    Ok(ClientBuilder::new(reqwest_client)
-        .with(TracingMiddleware::<SpanBackendWithUrl>::new())
-        .build())
 }
 
 #[async_trait]

@@ -11,12 +11,15 @@ use async_trait::async_trait;
 use cached::proc_macro::cached;
 use http::{HeaderMap, HeaderValue, StatusCode};
 use regex::RegexBuilder;
-use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
-use reqwest_tracing::{SpanBackendWithUrl, TracingMiddleware};
+use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, Extension};
+use reqwest_tracing::{
+    DisableOtelPropagation, OtelPathNames, SpanBackendWithUrl, TracingMiddleware,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
+use url::Url;
 use uuid::Uuid;
 
 use universal_inbox::{
@@ -59,6 +62,7 @@ use crate::{
 #[derive(Clone)]
 pub struct TodoistService {
     pub todoist_sync_base_url: String,
+    pub todoist_sync_base_path: String,
     pub projects_cache_index: Arc<AtomicU64>,
     pub integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
 }
@@ -188,12 +192,51 @@ impl TodoistService {
         todoist_sync_base_url: Option<String>,
         integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     ) -> Result<TodoistService, UniversalInboxError> {
+        let todoist_sync_base_url =
+            todoist_sync_base_url.unwrap_or_else(|| TODOIST_SYNC_BASE_URL.to_string());
+        let todoist_sync_base_path = Url::parse(&todoist_sync_base_url)
+            .context("Cannot parse Todoist sync base URL")?
+            .path()
+            .to_string();
+
         Ok(TodoistService {
-            todoist_sync_base_url: todoist_sync_base_url
-                .unwrap_or_else(|| TODOIST_SYNC_BASE_URL.to_string()),
+            todoist_sync_base_url,
+            todoist_sync_base_path: if &todoist_sync_base_path == "/" {
+                "".to_string()
+            } else {
+                todoist_sync_base_path
+            },
             projects_cache_index: Arc::new(AtomicU64::new(0)),
             integration_connection_service,
         })
+    }
+
+    fn build_todoist_client(
+        &self,
+        access_token: &AccessToken,
+    ) -> Result<ClientWithMiddleware, UniversalInboxError> {
+        let mut headers = HeaderMap::new();
+
+        let mut auth_header_value: HeaderValue = format!("Bearer {access_token}").parse().unwrap();
+        auth_header_value.set_sensitive(true);
+        headers.insert("Authorization", auth_header_value);
+
+        let reqwest_client = reqwest::Client::builder()
+            .default_headers(headers)
+            .user_agent(APP_USER_AGENT)
+            .build()
+            .context("Cannot build Todoist client")?;
+        Ok(ClientBuilder::new(reqwest_client)
+            .with_init(Extension(
+                OtelPathNames::known_paths([
+                    format!("{}/sync", self.todoist_sync_base_path),
+                    format!("{}/items/get", self.todoist_sync_base_path),
+                ])
+                .context("Cannot build Otel path names")?,
+            ))
+            .with_init(Extension(DisableOtelPropagation))
+            .with(TracingMiddleware::<SpanBackendWithUrl>::new())
+            .build())
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
@@ -203,8 +246,8 @@ impl TodoistService {
         access_token: &AccessToken,
         sync_token: Option<SyncToken>,
     ) -> Result<TodoistSyncResponse, UniversalInboxError> {
-        let response = build_todoist_client(access_token)
-            .context("Cannot build Todoist client")?
+        let response = self
+            .build_todoist_client(access_token)?
             .post(&format!("{}/sync", self.todoist_sync_base_url))
             .json(&json!({
                 "sync_token": sync_token
@@ -242,8 +285,8 @@ impl TodoistService {
         id: &str,
         access_token: &AccessToken,
     ) -> Result<Option<TodoistItem>, UniversalInboxError> {
-        let response = build_todoist_client(access_token)
-            .context("Cannot build Todoist client")?
+        let response = self
+            .build_todoist_client(access_token)?
             .post(&format!("{}/items/get", self.todoist_sync_base_url))
             .form(&[("item_id", id), ("all_data", "false")])
             .send()
@@ -277,8 +320,8 @@ impl TodoistService {
     ) -> Result<TodoistSyncStatusResponse, UniversalInboxError> {
         let body = json!({ "commands": commands });
 
-        let response = build_todoist_client(access_token)
-            .context("Cannot build Todoist client")?
+        let response = self
+            .build_todoist_client(access_token)?
             .post(&format!("{}/sync", self.todoist_sync_base_url))
             .json(&body)
             .send()
@@ -404,24 +447,6 @@ async fn cached_fetch_all_projects(
     sync_response.projects.ok_or_else(|| {
         UniversalInboxError::Unexpected(anyhow!("Todoist response should include `projects`"))
     })
-}
-
-fn build_todoist_client(
-    access_token: &AccessToken,
-) -> Result<ClientWithMiddleware, reqwest::Error> {
-    let mut headers = HeaderMap::new();
-
-    let mut auth_header_value: HeaderValue = format!("Bearer {access_token}").parse().unwrap();
-    auth_header_value.set_sensitive(true);
-    headers.insert("Authorization", auth_header_value);
-
-    let reqwest_client = reqwest::Client::builder()
-        .default_headers(headers)
-        .user_agent(APP_USER_AGENT)
-        .build()?;
-    Ok(ClientBuilder::new(reqwest_client)
-        .with(TracingMiddleware::<SpanBackendWithUrl>::new())
-        .build())
 }
 
 #[async_trait]
