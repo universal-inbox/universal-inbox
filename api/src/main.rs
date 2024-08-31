@@ -200,7 +200,7 @@ async fn main() -> std::io::Result<()> {
         settings.oauth2.nango_base_url.clone(),
         &settings.oauth2.nango_secret_key,
     )
-    .expect("Failed to create new GithubService");
+    .expect("Failed to create new NangoService");
 
     info!(
         "Connecting to SMTP server on {}",

@@ -5,10 +5,13 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use graphql_client::{GraphQLQuery, Response};
 use http::{HeaderMap, HeaderValue};
-use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
-use reqwest_tracing::{SpanBackendWithUrl, TracingMiddleware};
+use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, Extension};
+use reqwest_tracing::{
+    DisableOtelPropagation, OtelPathNames, SpanBackendWithUrl, TracingMiddleware,
+};
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
+use url::Url;
 use uuid::Uuid;
 
 use universal_inbox::{
@@ -59,6 +62,7 @@ pub mod graphql;
 #[derive(Clone)]
 pub struct LinearService {
     linear_graphql_url: String,
+    linear_graphql_path: String,
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
 }
 
@@ -70,11 +74,43 @@ impl LinearService {
         linear_graphql_url: Option<String>,
         integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     ) -> Result<LinearService, UniversalInboxError> {
+        let linear_graphql_url =
+            linear_graphql_url.unwrap_or_else(|| LINEAR_GRAPHQL_URL.to_string());
+        let linear_graphql_path = Url::parse(&linear_graphql_url)
+            .context("Failed to parse Linear GraphQL URL")?
+            .path()
+            .to_string();
+
         Ok(LinearService {
-            linear_graphql_url: linear_graphql_url
-                .unwrap_or_else(|| LINEAR_GRAPHQL_URL.to_string()),
+            linear_graphql_url,
+            linear_graphql_path,
             integration_connection_service,
         })
+    }
+
+    fn build_linear_client(
+        &self,
+        access_token: &AccessToken,
+    ) -> Result<ClientWithMiddleware, UniversalInboxError> {
+        let mut headers = HeaderMap::new();
+
+        let mut auth_header_value: HeaderValue = format!("Bearer {access_token}").parse().unwrap();
+        auth_header_value.set_sensitive(true);
+        headers.insert("Authorization", auth_header_value);
+
+        let reqwest_client = reqwest::Client::builder()
+            .default_headers(headers)
+            .user_agent(APP_USER_AGENT)
+            .build()
+            .context("Cannot build Linear client")?;
+        Ok(ClientBuilder::new(reqwest_client)
+            .with_init(Extension(
+                OtelPathNames::known_paths([&self.linear_graphql_path])
+                    .context("Cannot build Otel path names")?,
+            ))
+            .with_init(Extension(DisableOtelPropagation))
+            .with(TracingMiddleware::<SpanBackendWithUrl>::new())
+            .build())
     }
 
     pub async fn query_notifications(
@@ -83,8 +119,8 @@ impl LinearService {
     ) -> Result<notifications_query::ResponseData, UniversalInboxError> {
         let request_body = NotificationsQuery::build_query(notifications_query::Variables {});
 
-        let response = build_linear_client(access_token)
-            .context("Failed to build Linear client")?
+        let response = self
+            .build_linear_client(access_token)?
             .post(&self.linear_graphql_url)
             .json(&request_body)
             .send()
@@ -115,8 +151,8 @@ impl LinearService {
                 id: notification_id,
             });
 
-        let response = build_linear_client(access_token)
-            .context("Failed to build Linear client")?
+        let response = self
+            .build_linear_client(access_token)?
             .post(&self.linear_graphql_url)
             .json(&request_body)
             .send()
@@ -146,8 +182,8 @@ impl LinearService {
             id: notification_id,
         });
 
-        let response = build_linear_client(access_token)
-            .context("Failed to build Linear client")?
+        let response = self
+            .build_linear_client(access_token)?
             .post(&self.linear_graphql_url)
             .json(&request_body)
             .send()
@@ -188,8 +224,8 @@ impl LinearService {
                 subscriber_ids,
             });
 
-        let response = build_linear_client(access_token)
-            .context("Failed to build Linear client")?
+        let response = self
+            .build_linear_client(access_token)?
             .post(&self.linear_graphql_url)
             .json(&request_body)
             .send()
@@ -231,8 +267,8 @@ impl LinearService {
             },
         );
 
-        let response = build_linear_client(access_token)
-            .context("Failed to build Linear client")?
+        let response = self
+            .build_linear_client(access_token)?
             .post(&self.linear_graphql_url)
             .json(&request_body)
             .send()
@@ -267,8 +303,8 @@ impl LinearService {
     ) -> Result<assigned_issues_query::ResponseData, UniversalInboxError> {
         let request_body = AssignedIssuesQuery::build_query(assigned_issues_query::Variables {});
 
-        let response = build_linear_client(access_token)
-            .context("Failed to build Linear client")?
+        let response = self
+            .build_linear_client(access_token)?
             .post(&self.linear_graphql_url)
             .json(&request_body)
             .send()
@@ -300,8 +336,8 @@ impl LinearService {
             state_id,
         });
 
-        let response = build_linear_client(access_token)
-            .context("Failed to build Linear client")?
+        let response = self
+            .build_linear_client(access_token)?
             .post(&self.linear_graphql_url)
             .json(&request_body)
             .send()
@@ -329,22 +365,6 @@ impl LinearService {
 
         Ok(())
     }
-}
-
-fn build_linear_client(access_token: &AccessToken) -> Result<ClientWithMiddleware, reqwest::Error> {
-    let mut headers = HeaderMap::new();
-
-    let mut auth_header_value: HeaderValue = format!("Bearer {access_token}").parse().unwrap();
-    auth_header_value.set_sensitive(true);
-    headers.insert("Authorization", auth_header_value);
-
-    let reqwest_client = reqwest::Client::builder()
-        .default_headers(headers)
-        .user_agent(APP_USER_AGENT)
-        .build()?;
-    Ok(ClientBuilder::new(reqwest_client)
-        .with(TracingMiddleware::<SpanBackendWithUrl>::new())
-        .build())
 }
 
 #[async_trait]
