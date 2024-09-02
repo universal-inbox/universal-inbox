@@ -135,6 +135,10 @@ enum CacheCommands {
 async fn main() -> std::io::Result<()> {
     color_backtrace::install();
 
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install rustls crypto provider");
+
     let cli = Cli::parse();
 
     let settings = Settings::new().expect("Cannot load Universal Inbox configuration");
@@ -169,6 +173,7 @@ async fn main() -> std::io::Result<()> {
             log_env_filter,
             tracing_settings,
             service_name,
+            settings.application.version.clone(),
         );
         init_subscriber(subscriber, dep_log_level_filter);
     } else {
@@ -206,9 +211,6 @@ async fn main() -> std::io::Result<()> {
         "Connecting to SMTP server on {}",
         &settings.application.email.safe_connection_string()
     );
-    rustls::crypto::ring::default_provider()
-        .install_default()
-        .expect("Failed to install rustls crypto provider");
     let mailer = Arc::new(RwLock::new(
         SmtpMailer::build(
             settings.application.email.smtp_server.clone(),

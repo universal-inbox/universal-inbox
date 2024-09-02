@@ -55,6 +55,7 @@ COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" api api
 RUN devbox run -- just api/build-release
 
 FROM debian:bookworm-slim AS runtime
+ARG VERSION
 WORKDIR /app
 RUN mkdir /data
 COPY docker/universal-inbox-entrypoint universal-inbox-entrypoint
@@ -70,5 +71,6 @@ COPY --from=release-api-builder /app/api/migrations migrations
 COPY --from=tools /usr/local/cargo/bin/sqlx /usr/local/bin/sqlx
 COPY --from=release-web-builder /app/web/dist/ statics
 ENV CONFIG_FILE /app/config/prod.toml
+ENV UNIVERSAL_INBOX__APPLICATION__VERSION=${VERSION}
 ENTRYPOINT ["/app/universal-inbox-entrypoint"]
 CMD ["serve"]

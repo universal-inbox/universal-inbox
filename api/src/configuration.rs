@@ -39,6 +39,7 @@ pub struct ApplicationSettings {
     pub support_href: Option<String>,
     pub email: EmailSettings,
     pub show_changelog: bool,
+    pub version: Option<String>,
 }
 
 #[derive(Deserialize, Clone, Debug)]

@@ -20,7 +20,6 @@ actix-jwt-authc = { git = "https://github.com/dax/actix-jwt-authc", rev = "b09f0
   "session",
 ] }
 actix-http = "3.0.0"
-actix-web-opentelemetry = { version = "0.18.0", features = ["metrics"] }
 actix-session = { version = "0.9.0", features = ["actix", "cookie-session"] }
 actix-web = "4.0.0"
 actix-web-lab = { version = "0.20.0", features = ["spa"] }
@@ -58,7 +57,6 @@ futures = "0.3.0"
 graphql_client = "0.14.0"
 hostname = "0.4.0"
 http = { workspace = true }
-isahc = { version = "1.4" } # Used for opentelmetry-http
 itertools = { workspace = true }
 jsonwebtoken = "9"
 lettre = { version = "0.11.0", default-features = false, features = [
@@ -74,17 +72,16 @@ log = { workspace = true }
 mailgen = "0.3.0"
 once_cell = "1.19.0"
 openidconnect = { workspace = true }
-opentelemetry = { version = "0.23.0", features = ["trace", "logs", "metrics"] }
-opentelemetry_sdk = { version = "0.23.0", features = [
+opentelemetry = { version = "0.24.0", features = ["trace", "logs"] }
+opentelemetry_sdk = { version = "0.24.0", features = [
   "trace",
   "logs",
   "logs_level_enabled",
-  "metrics",
   "rt-tokio",
 ] }
-opentelemetry-appender-tracing = "0.4.0"
-opentelemetry-http = { version = "0.12.0", features = ["isahc", "tokio"] }
-opentelemetry-otlp = { version = "0.16.0", features = [
+opentelemetry-appender-tracing = "0.5.0"
+opentelemetry-http = { version = "0.13.0", features = ["reqwest"] }
+opentelemetry-otlp = { version = "0.17.0", features = [
   "http-proto",
   "grpc-tonic",
   "trace",
@@ -92,6 +89,7 @@ opentelemetry-otlp = { version = "0.16.0", features = [
   "metrics",
   "reqwest-rustls",
   "tls",
+  "tls-roots"
 ] }
 rand = { version = "0.8", features = ["std_rng"] }
 ring = "0.17.0"
@@ -102,12 +100,8 @@ redis = { version = "0.25.0", features = [
 ] }
 regex = { workspace = true }
 reqwest = { workspace = true, features = ["rustls-tls", "gzip"] }
-reqwest-middleware = { git = "https://github.com/TrueLayer/reqwest-middleware", rev = "88dbfe67fbf56aecf29de9bc0b23a0abc72e3f29", features = [
-  "json",
-] }
-reqwest-tracing = { git = "https://github.com/TrueLayer/reqwest-middleware", rev = "88dbfe67fbf56aecf29de9bc0b23a0abc72e3f29", features = [
-  "opentelemetry_0_23",
-] }
+reqwest-middleware = { version = "0.3.0", features = ["json"] }
+reqwest-tracing = { version = "0.5.0", features = ["opentelemetry_0_24"] }
 rustls = { version = "0.23.0" } # Used to initialize lettre
 secrecy = { workspace = true }
 serde = { workspace = true }
@@ -125,14 +119,14 @@ sqlx = { version = "0.7.0", default-features = false, features = [
 ] }
 thiserror = { workspace = true }
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
-tonic = { version = "0.11.0", features = ["tls", "tls-roots", "gzip"] }
+tonic = { version = "0.12.0", features = ["tls", "tls-roots", "gzip"] }
 tracing = { version = "0.1.0", features = ["log"] }
-tracing-actix-web = { version = "0.7.0", features = [
+tracing-actix-web = { git = "https://github.com/omid/tracing-actix-web", rev = "00e9e15ed96d661e5bada371290031814c004522", features = [
   "emit_event_on_error",
-  "opentelemetry_0_23",
+  "opentelemetry_0_24",
 ] }
 tracing-log = "0.2.0"
-tracing-opentelemetry = { version = "0.24.0", features = ["tracing-log"] }
+tracing-opentelemetry = { version = "0.25.0", features = ["tracing-log"] }
 tracing-subscriber = { version = "0.3.0", features = [
   "std",
   "env-filter",

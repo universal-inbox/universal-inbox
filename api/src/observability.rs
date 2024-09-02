@@ -7,24 +7,20 @@ use actix_web::{
     dev::{ServiceRequest, ServiceResponse},
     HttpMessage,
 };
-use opentelemetry::KeyValue;
+use opentelemetry::{trace::TracerProvider, KeyValue};
 use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
-use opentelemetry_otlp::{
-    LogExporterBuilder, MetricsExporterBuilder, SpanExporterBuilder, WithExportConfig,
-};
+use opentelemetry_otlp::{LogExporterBuilder, SpanExporterBuilder, WithExportConfig};
 use opentelemetry_sdk::{
-    logs::{self},
-    metrics::reader::{DefaultAggregationSelector, DefaultTemporalitySelector},
     runtime,
     trace::{self, RandomIdGenerator, Sampler},
     Resource,
 };
 use tokio::task::JoinHandle;
 use tonic::metadata::{AsciiMetadataKey, MetadataMap};
+use tonic::transport::ClientTlsConfig;
 use tracing::{subscriber::set_global_default, Instrument, Span, Subscriber};
 use tracing_actix_web::{DefaultRootSpanBuilder, RootSpanBuilder};
 use tracing_log::LogTracer;
-use tracing_opentelemetry::MetricsLayer;
 use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Registry};
 
 use universal_inbox::user::UserId;
@@ -39,15 +35,16 @@ pub fn get_subscriber_with_telemetry(
     env_filter_str: &str,
     config: &TracingSettings,
     service_name: &str,
+    version: Option<String>,
 ) -> impl Subscriber + Send + Sync {
     let env_filter =
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(env_filter_str));
 
     let hostname = hostname::get().unwrap().into_string().unwrap();
-    let tracer = opentelemetry_otlp::new_pipeline()
+    let tracer_provider = opentelemetry_otlp::new_pipeline()
         .tracing()
         .with_trace_config(
-            trace::config()
+            trace::Config::default()
                 .with_sampler(Sampler::AlwaysOn)
                 .with_id_generator(RandomIdGenerator::default())
                 .with_max_events_per_span(256)
@@ -65,35 +62,20 @@ pub fn get_subscriber_with_telemetry(
         ))
         .install_batch(runtime::Tokio)
         .unwrap();
+    let mut tracer_builder = tracer_provider.tracer_builder("universal-inbox");
+    if let Some(version) = version {
+        tracer_builder = tracer_builder.with_version(version);
+    }
+    let tracer = tracer_builder.build();
     let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
 
-    let meter = opentelemetry_otlp::new_pipeline()
-        .metrics(opentelemetry_sdk::runtime::Tokio)
+    let logger = opentelemetry_otlp::new_pipeline()
+        .logging()
         .with_resource(Resource::new(vec![
             KeyValue::new("service.name", service_name.to_string()),
             KeyValue::new("host.name", hostname.clone()),
             KeyValue::new("deployment.environment", environment.to_string()),
         ]))
-        .with_period(Duration::from_secs(3))
-        .with_timeout(Duration::from_secs(10))
-        .with_aggregation_selector(DefaultAggregationSelector::new())
-        .with_temporality_selector(DefaultTemporalitySelector::new())
-        .with_exporter(build_exporter_builder::<MetricsExporterBuilder>(
-            config.otlp_exporter_protocol,
-            config.otlp_exporter_endpoint.to_string(),
-            config.otlp_exporter_headers.clone(),
-        ))
-        .build()
-        .unwrap();
-    let metrics = MetricsLayer::new(meter);
-
-    let logger = opentelemetry_otlp::new_pipeline()
-        .logging()
-        .with_log_config(logs::Config::default().with_resource(Resource::new(vec![
-            KeyValue::new("service.name", service_name.to_string()),
-            KeyValue::new("host.name", hostname.clone()),
-            KeyValue::new("deployment.environment", environment.to_string()),
-        ])))
         .with_exporter(build_exporter_builder::<LogExporterBuilder>(
             config.otlp_exporter_protocol,
             config.otlp_exporter_endpoint.to_string(),
@@ -112,7 +94,6 @@ pub fn get_subscriber_with_telemetry(
         .with(fmt)
         .with(telemetry)
         .with(logging)
-        .with(metrics)
 }
 
 pub fn get_subscriber(env_filter_str: &str) -> impl Subscriber + Send + Sync {
@@ -201,7 +182,7 @@ where
 
         opentelemetry_otlp::new_exporter()
             .http()
-            .with_http_client(isahc::HttpClient::new().unwrap())
+            .with_http_client(reqwest::Client::new())
             .with_endpoint(otlp_exporter_endpoint)
             .with_timeout(Duration::from_secs(3))
             .with_headers(headers.clone())
@@ -221,6 +202,7 @@ where
         opentelemetry_otlp::new_exporter()
             .tonic()
             .with_endpoint(otlp_exporter_endpoint)
+            .with_tls_config(ClientTlsConfig::new().with_native_roots())
             .with_timeout(Duration::from_secs(3))
             .with_metadata(headers.clone())
             .into()

@@ -4,6 +4,7 @@ listen_address = "127.0.0.1"
 static_dir = "../web/dist"
 min_sync_tasks_interval_in_minutes = 2
 min_sync_notifications_interval_in_minutes = 2
+version = "dev"
 
 [application.observability.logging]
 log_directive = "info,universal_inbox_api=debug,sqlx=debug,lettre=info,slack_morphism=debug"
