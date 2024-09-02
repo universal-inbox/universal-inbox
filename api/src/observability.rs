@@ -41,6 +41,14 @@ pub fn get_subscriber_with_telemetry(
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(env_filter_str));
 
     let hostname = hostname::get().unwrap().into_string().unwrap();
+    let mut resource = vec![
+        KeyValue::new("service.name", service_name.to_string()),
+        KeyValue::new("host.name", hostname.clone()),
+        KeyValue::new("deployment.environment", environment.to_string()),
+    ];
+    if let Some(ref version) = version {
+        resource.push(KeyValue::new("service.version", version.to_string()));
+    }
     let tracer_provider = opentelemetry_otlp::new_pipeline()
         .tracing()
         .with_trace_config(
@@ -49,11 +57,7 @@ pub fn get_subscriber_with_telemetry(
                 .with_id_generator(RandomIdGenerator::default())
                 .with_max_events_per_span(256)
                 .with_max_attributes_per_span(64)
-                .with_resource(Resource::new(vec![
-                    KeyValue::new("service.name", service_name.to_string()),
-                    KeyValue::new("host.name", hostname.clone()),
-                    KeyValue::new("deployment.environment", environment.to_string()),
-                ])),
+                .with_resource(Resource::new(resource.clone())),
         )
         .with_exporter(build_exporter_builder::<SpanExporterBuilder>(
             config.otlp_exporter_protocol,
@@ -71,11 +75,7 @@ pub fn get_subscriber_with_telemetry(
 
     let logger = opentelemetry_otlp::new_pipeline()
         .logging()
-        .with_resource(Resource::new(vec![
-            KeyValue::new("service.name", service_name.to_string()),
-            KeyValue::new("host.name", hostname.clone()),
-            KeyValue::new("deployment.environment", environment.to_string()),
-        ]))
+        .with_resource(Resource::new(resource))
         .with_exporter(build_exporter_builder::<LogExporterBuilder>(
             config.otlp_exporter_protocol,
             config.otlp_exporter_endpoint.to_string(),
@@ -124,7 +124,7 @@ impl RootSpanBuilder for AuthenticatedRootSpanBuilder {
             .map(|user_id| user_id.to_string())
         {
             Some(user_id) => {
-                tracing_actix_web::root_span!(level = tracing::Level::INFO, request, enduser.id = %user_id)
+                tracing_actix_web::root_span!(level = tracing::Level::INFO, request, user.id = %user_id)
             }
             // No user authenticated
             _ => {
