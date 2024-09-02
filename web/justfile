@@ -21,6 +21,9 @@ install:
 test test-filter="" $RUST_LOG="info":
     cargo test {{test-filter}}
 
+test-ci:
+    cargo test
+
 ## Run recipes
 run:
     trunk serve

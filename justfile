@@ -79,6 +79,9 @@ test-all: test
     just web/test
     just api/test
 
+test-ci:
+    cargo nextest run --profile ci
+
 test-coverage:
     cargo llvm-cov nextest --all-features --lcov --output-path lcov.info --profile ci
 

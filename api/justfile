@@ -25,6 +25,9 @@ migrate-db:
 test test-filter="" $RUST_LOG="info":
     cargo nextest run --color always {{test-filter}}
 
+test-ci:
+    cargo nextest run --profile ci
+
 test-coverage:
     cargo llvm-cov nextest --all-features --lcov --output-path lcov.info --profile ci
 
