@@ -85,7 +85,7 @@ jobs:
       - name: Run tests
         env:
           RUST_MIN_STACK: 104857600
-        run: devbox run -- just test
+        run: devbox run -- just test-ci
       - name: Shared test Report
         uses: dorny/test-reporter@v1
         if: success() || failure()
@@ -111,7 +111,7 @@ jobs:
       - name: Run web tests
         env:
           RUST_MIN_STACK: 104857600
-        run: devbox run -- just web/test
+        run: devbox run -- just web/test-ci
 
   test-ui-api:
     needs: build
@@ -162,7 +162,7 @@ jobs:
         env:
           RUST_MIN_STACK: 104857600
           RUST_BACKTRACE: "full"
-        run: devbox run -- just api/test
+        run: devbox run -- just api/test-ci
       - name: API test Report
         uses: dorny/test-reporter@v1
         if: success() || failure()
