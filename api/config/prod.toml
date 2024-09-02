@@ -1,5 +1,5 @@
 [application]
-environment = "production"
+environment = "prod"
 static_dir = "./statics"
 static_path = ""
 show_changelog = true

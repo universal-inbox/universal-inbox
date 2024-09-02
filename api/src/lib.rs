@@ -26,7 +26,6 @@ use actix_web::{
     web, App, HttpServer, Result as ActixResult,
 };
 use actix_web_lab::web::spa;
-use actix_web_opentelemetry::RequestMetrics;
 use anyhow::Context;
 use apalis::{
     layers::tracing::{DefaultOnRequest, DefaultOnResponse, OnFailure, TraceLayer},
@@ -192,7 +191,6 @@ pub async fn run_server(
                 .cookie_content_security(CookieContentSecurity::Signed)
                 .build(),
             )
-            .wrap(RequestMetrics::default())
             .wrap(middleware::Compress::default())
             .wrap(cors)
             // Cookies are reset when returning an 401 because it can be due to an invalid JWT token
