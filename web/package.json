@@ -1,6 +1,6 @@
 {
   "devDependencies": {
-    "@rspack/cli": "^0.5.9",
+    "@rspack/cli": "^1.0.4",
     "@rspack/core": "^0.5.0",
     "@tailwindcss/typography": "^0.5",
     "daisyui": "^4.4",
