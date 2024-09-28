@@ -18,6 +18,7 @@ use universal_inbox::{
         TaskSummary,
     },
     user::UserId,
+    Page,
 };
 
 use crate::{
@@ -49,6 +50,7 @@ pub fn scope() -> Scope {
 #[derive(Debug, Deserialize)]
 pub struct ListTaskRequest {
     status: TaskStatus,
+    only_synced_tasks: Option<bool>,
     trigger_sync: Option<bool>,
 }
 
@@ -69,10 +71,11 @@ pub async fn list_tasks(
         .begin()
         .await
         .context("Failed to create new transaction while listing tasks")?;
-    let tasks: Vec<Task> = service
+    let tasks_page: Page<Task> = service
         .list_tasks(
             &mut transaction,
             list_task_request.status,
+            list_task_request.only_synced_tasks.unwrap_or_default(),
             user_id,
             list_task_request
                 .trigger_sync
@@ -87,7 +90,7 @@ pub async fn list_tasks(
 
     Ok(HttpResponse::Ok()
         .content_type("application/json")
-        .body(serde_json::to_string(&tasks).context("Cannot serialize tasks")?))
+        .body(serde_json::to_string(&tasks_page).context("Cannot serialize tasks")?))
 }
 
 #[derive(Debug, Deserialize)]

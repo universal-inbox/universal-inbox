@@ -2,29 +2,27 @@
 
 use dioxus::prelude::*;
 
-use universal_inbox::{
-    notification::{
-        NotificationDetails, NotificationId, NotificationMetadata, NotificationWithTask,
-    },
-    task::Task,
-    third_party::item::{ThirdPartyItem, ThirdPartyItemData},
+use universal_inbox::notification::{
+    NotificationDetails, NotificationId, NotificationMetadata, NotificationWithTask,
 };
 
 use crate::{
-    components::integrations::{
-        github::preview::{
-            discussion::GithubDiscussionPreview, pull_request::GithubPullRequestPreview,
-            GithubNotificationDefaultPreview,
+    components::{
+        integrations::{
+            github::preview::{
+                discussion::GithubDiscussionPreview, pull_request::GithubPullRequestPreview,
+                GithubNotificationDefaultPreview,
+            },
+            google_mail::preview::GoogleMailThreadPreview,
+            icons::{NotificationMetadataIcon, TaskIcon},
+            linear::preview::LinearNotificationPreview,
+            slack::preview::{
+                channel::SlackChannelPreview, file::SlackFilePreview,
+                file_comment::SlackFileCommentPreview, group::SlackGroupPreview,
+                im::SlackImPreview, message::SlackMessagePreview,
+            },
         },
-        google_mail::preview::GoogleMailThreadPreview,
-        icons::{NotificationMetadataIcon, TaskIcon},
-        linear::preview::LinearNotificationPreview,
-        slack::preview::{
-            channel::SlackChannelPreview, file::SlackFilePreview,
-            file_comment::SlackFileCommentPreview, group::SlackGroupPreview, im::SlackImPreview,
-            message::SlackMessagePreview,
-        },
-        todoist::preview::TodoistTaskPreview,
+        task_preview::TaskDetailsPreview,
     },
     model::{PreviewPane, UniversalInboxUIModel},
 };
@@ -92,8 +90,12 @@ pub fn NotificationPreview(
             }
 
             match ui_model.read().selected_preview_pane {
-                PreviewPane::Notification => rsx! { NotificationDetailsPreview { notification: notification } },
-                PreviewPane::Task => rsx! { TaskDetailsPreview { notification: notification } },
+                PreviewPane::Notification => rsx! { NotificationDetailsPreview { notification } },
+                PreviewPane::Task => rsx! {
+                    if let Some(task) = notification().task {
+                        TaskDetailsPreview { task }
+                    }
+                },
             }
         }
     }
@@ -110,22 +112,22 @@ fn NotificationDetailsPreview(notification: ReadOnlySignal<NotificationWithTask>
                 GithubDiscussionPreview { github_discussion: github_discussion }
             },
             NotificationDetails::SlackMessage(slack_message) => rsx! {
-                SlackMessagePreview { notification: notification, slack_message: slack_message }
+                SlackMessagePreview { slack_message, title: notification().title }
             },
             NotificationDetails::SlackFile(slack_file) => rsx! {
-                SlackFilePreview { notification: notification, slack_file: slack_file }
+                SlackFilePreview { slack_file, title: notification().title }
             },
             NotificationDetails::SlackFileComment(slack_file_comment) => rsx! {
-                SlackFileCommentPreview { notification: notification, slack_file_comment: slack_file_comment }
+                SlackFileCommentPreview { slack_file_comment, title: notification().title }
             },
             NotificationDetails::SlackChannel(slack_channel) => rsx! {
-                SlackChannelPreview { notification: notification, slack_channel: slack_channel }
+                SlackChannelPreview { slack_channel, title: notification().title }
             },
             NotificationDetails::SlackIm(slack_im) => rsx! {
-                SlackImPreview { notification: notification, slack_im: slack_im }
+                SlackImPreview { slack_im, title: notification().title }
             },
             NotificationDetails::SlackGroup(slack_group) => rsx! {
-                SlackGroupPreview { notification: notification, slack_group: slack_group }
+                SlackGroupPreview { slack_group, title: notification().title }
             },
         };
     }
@@ -147,28 +149,5 @@ fn NotificationDetailsPreview(notification: ReadOnlySignal<NotificationWithTask>
         },
         NotificationMetadata::Slack(_) => None,
         NotificationMetadata::Todoist => None,
-    }
-}
-
-#[component]
-fn TaskDetailsPreview(notification: ReadOnlySignal<NotificationWithTask>) -> Element {
-    match notification().task {
-        Some(
-            ref task @ Task {
-                source_item:
-                    ThirdPartyItem {
-                        data: ThirdPartyItemData::TodoistItem(ref todoist_task),
-                        ..
-                    },
-                ..
-            },
-        ) => rsx! {
-            TodoistTaskPreview {
-                notification: notification,
-                task: task.clone(),
-                todoist_task: todoist_task.clone(),
-            }
-        },
-        _ => None,
     }
 }

@@ -2,6 +2,7 @@
 
 use chrono::{DateTime, Local};
 use dioxus::prelude::*;
+
 use dioxus_free_icons::{
     icons::bs_icons::{
         BsBellSlash, BsBookmarkCheck, BsCalendar2Check, BsCheck2, BsClockHistory, BsLink45deg,
@@ -11,173 +12,109 @@ use dioxus_free_icons::{
 };
 
 use universal_inbox::{
-    notification::{NotificationDetails, NotificationMetadata, NotificationWithTask},
-    task::Task,
+    notification::{NotificationMetadata, NotificationWithTask},
+    task::{Task, TaskId, TaskPlanning},
     third_party::item::ThirdPartyItemData,
     HasHtmlUrl,
 };
 
 use crate::{
-    components::integrations::{
-        github::notification::{
-            GithubDiscussionDetailsDisplay, GithubNotificationDisplay,
-            GithubPullRequestDetailsDisplay,
+    components::{
+        integrations::{
+            github::notification_list_item::GithubNotificationListItem,
+            google_mail::notification_list_item::GoogleMailThreadListItem,
+            linear::notification_list_item::LinearNotificationListItem,
+            slack::notification_list_item::SlackNotificationListItem,
+            todoist::notification_list_item::TodoistNotificationListItem,
         },
-        google_mail::notification::{
-            GoogleMailNotificationDetailsDisplay, GoogleMailThreadDisplay,
-        },
-        icons::NotificationMetadataIcon,
-        linear::notification::{LinearNotificationDetailsDisplay, LinearNotificationDisplay},
-        slack::notification::{
-            SlackChannelDetailsDisplay, SlackFileCommentDetailsDisplay, SlackFileDetailsDisplay,
-            SlackGroupDetailsDisplay, SlackImDetailsDisplay, SlackMessageDetailsDisplay,
-            SlackNotificationDisplay,
-        },
-        todoist::notification::{TodoistNotificationDetailsDisplay, TodoistNotificationDisplay},
+        list::{List, ListContext, ListItem, ListItemActionButton},
+        task_link_modal::TaskLinkModal,
+        task_planning_modal::TaskPlanningModal,
     },
-    model::UniversalInboxUIModel,
+    config::get_api_base_url,
+    model::UI_MODEL,
+    services::{
+        integration_connection_service::TASK_SERVICE_INTEGRATION_CONNECTION,
+        notification_service::NotificationCommand,
+    },
 };
 
+#[derive(Clone, PartialEq)]
+pub struct NotificationListContext {
+    pub is_task_actions_enabled: bool,
+    pub notification_service: Coroutine<NotificationCommand>,
+}
+
 #[component]
-pub fn NotificationsList(
-    notifications: ReadOnlySignal<Vec<NotificationWithTask>>,
-    ui_model: Signal<UniversalInboxUIModel>,
-    on_delete: EventHandler<NotificationWithTask>,
-    on_unsubscribe: EventHandler<NotificationWithTask>,
-    on_snooze: EventHandler<NotificationWithTask>,
-    on_complete_task: EventHandler<NotificationWithTask>,
-    on_plan: EventHandler<NotificationWithTask>,
-    on_link: EventHandler<NotificationWithTask>,
-) -> Element {
-    let selected_notification_index = ui_model.read().selected_notification_index;
-    let is_help_enabled = ui_model.read().is_help_enabled;
-    let is_task_actions_disabled = !ui_model.read().is_task_actions_enabled;
+pub fn NotificationsList(notifications: ReadOnlySignal<Vec<NotificationWithTask>>) -> Element {
+    let api_base_url = use_memo(move || get_api_base_url().unwrap());
+    let notification_service = use_coroutine_handle::<NotificationCommand>();
+    let context = use_memo(move || NotificationListContext {
+        is_task_actions_enabled: UI_MODEL.read().is_task_actions_enabled,
+        notification_service,
+    });
+    use_context_provider(move || context);
 
     rsx! {
-        table {
-            class: "table w-full h-max-full",
+        List {
+            id: "notifications_list",
+            show_shortcut: UI_MODEL.read().is_help_enabled,
 
-            tbody {
-                for (i, notif) in notifications().into_iter().map(Signal::new).enumerate() {
-                    if !notif().is_built_from_task() {
-                        Notification {
-                            notif: notif(),
-                            selected: i == selected_notification_index,
-                            show_shortcut: is_help_enabled,
-                            notification_index: i,
-                            ui_model: ui_model,
+            for (i, notification) in notifications().into_iter().map(Signal::new).enumerate() {
+                NotificationListItem {
+                    notification,
+                    is_selected: i == UI_MODEL.read().selected_notification_index,
+                    on_select: move |_| {
+                        UI_MODEL.write().selected_notification_index = i;
+                    },
+                }
+            }
+        }
 
-                            NotificationButton {
-                                title: "Delete notification",
-                                shortcut: "d",
-                                selected: i == selected_notification_index,
-                                show_shortcut: is_help_enabled,
-                                onclick: move |_| on_delete.call(notif()),
-                                Icon { class: "w-5 h-5", icon: BsTrash }
-                            }
+        if UI_MODEL.read().task_planning_modal_opened {
+            if let Some(notification) = notifications()
+                .get(UI_MODEL.read().selected_notification_index)
+                .map(|notification| Signal::new(notification.clone())) {
+                TaskPlanningModal {
+                    notification_to_plan: notification,
+                    task_service_integration_connection: TASK_SERVICE_INTEGRATION_CONNECTION.signal(),
+                    ui_model: UI_MODEL.signal(),
+                    on_close: move |_| { UI_MODEL.write().task_planning_modal_opened = false; },
+                    on_task_planning: move |(params, task_id): (TaskPlanning, TaskId)| {
+                        UI_MODEL.write().task_planning_modal_opened = false;
+                        notification_service.send(NotificationCommand::PlanTask(
+                            notification(),
+                            task_id,
+                            params
+                        ));
+                    },
+                    on_task_creation: move |params| {
+                        UI_MODEL.write().task_planning_modal_opened = false;
+                        notification_service.send(NotificationCommand::CreateTaskFromNotification(
+                            notification(),
+                            params
+                        ));
+                    },
+                }
+            }
+        }
 
-                            if notif().task.is_some() {
-                                NotificationButton {
-                                    title: "Complete task",
-                                    shortcut: "c",
-                                    selected: i == selected_notification_index,
-                                    disabled_label: is_task_actions_disabled.then_some("No task management service connected".to_string()),
-                                    show_shortcut: is_help_enabled,
-                                    onclick: move |_| on_complete_task.call(notif()),
-                                    Icon { class: "w-5 h-5", icon: BsCheck2 }
-                                }
-                            }
-
-                            NotificationButton {
-                                title: "Unsubscribe from the notification",
-                                shortcut: "u",
-                                selected: i == selected_notification_index,
-                                show_shortcut: is_help_enabled,
-                                onclick: move |_| on_unsubscribe.call(notif()),
-                                Icon { class: "w-5 h-5", icon: BsBellSlash }
-                            }
-
-                            NotificationButton {
-                                title: "Snooze notification",
-                                shortcut: "s",
-                                selected: i == selected_notification_index,
-                                show_shortcut: is_help_enabled,
-                                onclick: move |_| on_snooze.call(notif()),
-                                Icon { class: "w-5 h-5", icon: BsClockHistory }
-                            }
-
-                            if notif().task.is_none() {
-                                NotificationButton {
-                                    title: "Create task",
-                                    shortcut: "p",
-                                    selected: i == selected_notification_index,
-                                    disabled_label: is_task_actions_disabled.then_some("No task management service connected".to_string()),
-                                    show_shortcut: is_help_enabled,
-                                    onclick: move |_| on_plan.call(notif()),
-                                    Icon { class: "w-5 h-5", icon: BsCalendar2Check }
-                                }
-
-                                NotificationButton {
-                                    title: "Link to task",
-                                    shortcut: "l",
-                                    selected: i == selected_notification_index,
-                                    disabled_label: is_task_actions_disabled.then_some("No task management service connected".to_string()),
-                                    show_shortcut: is_help_enabled,
-                                    onclick: move |_| on_link.call(notif()),
-                                    Icon { class: "w-5 h-5", icon: BsLink45deg }
-                                }
-                            }
-                        }
-                    }
-
-                    if notif().is_built_from_task() {
-                        Notification {
-                            notif: notif(),
-                            selected: i == selected_notification_index,
-                            show_shortcut: is_help_enabled,
-                            notification_index: i,
-                            ui_model: ui_model,
-
-                            NotificationButton {
-                                title: "Delete task",
-                                shortcut: "d",
-                                selected: i == selected_notification_index,
-                                disabled_label: is_task_actions_disabled.then_some("No task management service connected".to_string()),
-                                show_shortcut: is_help_enabled,
-                                onclick: move |_| on_delete.call(notif()),
-                                Icon { class: "w-5 h-5", icon: BsTrash }
-                            }
-
-                            NotificationButton {
-                                title: "Complete task",
-                                shortcut: "c",
-                                selected: i == selected_notification_index,
-                                disabled_label: is_task_actions_disabled.then_some("No task management service connected".to_string()),
-                                show_shortcut: is_help_enabled,
-                                onclick: move |_| on_complete_task.call(notif()),
-                                Icon { class: "w-5 h-5", icon: BsCheck2 }
-                            }
-
-                            NotificationButton {
-                                title: "Snooze notification",
-                                shortcut: "s",
-                                selected: i == selected_notification_index,
-                                show_shortcut: is_help_enabled,
-                                onclick: move |_| on_snooze.call(notif()),
-                                Icon { class: "w-5 h-5", icon: BsClockHistory }
-                            }
-
-                            NotificationButton {
-                                title: "Plan task",
-                                shortcut: "p",
-                                selected: i == selected_notification_index,
-                                disabled_label: is_task_actions_disabled.then_some("No task management service connected".to_string()),
-                                show_shortcut: is_help_enabled,
-                                onclick: move |_| on_plan.call(notif()),
-                                Icon { class: "w-5 h-5", icon: BsCalendar2Check }
-                            }
-                        }
-                    }
+        if UI_MODEL.read().task_link_modal_opened {
+            if let Some(notification) = notifications()
+                .get(UI_MODEL.read().selected_notification_index)
+                .map(|notification| Signal::new(notification.clone())) {
+                TaskLinkModal {
+                    api_base_url,
+                    notification_to_link: notification,
+                    ui_model: UI_MODEL.signal(),
+                    on_close: move |_| { UI_MODEL.write().task_link_modal_opened = false; },
+                    on_task_link: move |task_id| {
+                        UI_MODEL.write().task_link_modal_opened = false;
+                        notification_service.send(NotificationCommand::LinkNotificationWithTask(
+                            notification().id,
+                            task_id,
+                        ));
+                    },
                 }
             }
         }
@@ -185,237 +122,264 @@ pub fn NotificationsList(
 }
 
 #[component]
-fn Notification(
-    notif: ReadOnlySignal<NotificationWithTask>,
-    notification_index: ReadOnlySignal<usize>,
-    selected: ReadOnlySignal<bool>,
-    show_shortcut: ReadOnlySignal<bool>,
-    mut ui_model: Signal<UniversalInboxUIModel>,
-    children: Element,
+fn NotificationListItem(
+    notification: ReadOnlySignal<NotificationWithTask>,
+    is_selected: ReadOnlySignal<bool>,
+    on_select: EventHandler<()>,
 ) -> Element {
-    let style = use_memo(move || if selected() { "active" } else { "" });
-
-    rsx! {
-        tr {
-            class: "hover flex items-center py-1 {style} group snap-start cursor-pointer",
-            key: "{notif().id}",
-            onmousemove: move |_| {
-                if ui_model.peek().unhover_element {
-                    ui_model.write().set_unhover_element(false);
-                }
-            },
-            onclick: move |_| {
-                if !selected() {
-                    ui_model.write().selected_notification_index = notification_index();
-                }
-            },
-
-            NotificationDisplay { notif: notif, selected: selected, show_shortcut: show_shortcut, children }
-        }
-    }
-}
-
-#[component]
-fn NotificationDisplay(
-    notif: ReadOnlySignal<NotificationWithTask>,
-    selected: ReadOnlySignal<bool>,
-    show_shortcut: ReadOnlySignal<bool>,
-    children: Element,
-) -> Element {
-    let shortcut_visibility_style = if selected() && show_shortcut() {
-        "visible"
-    } else {
-        "invisible"
-    };
-    // tag: New notification integration
-    let notification_display = match notif().metadata {
+    match notification().metadata {
         NotificationMetadata::Github(github_notification) => rsx! {
-            GithubNotificationDisplay {
-                notif: notif,
+            GithubNotificationListItem {
+                notification: notification,
                 github_notification: *github_notification,
+                is_selected: is_selected,
+                on_select: on_select,
             }
         },
         NotificationMetadata::Linear(linear_notification) => rsx! {
-            LinearNotificationDisplay {
-                notif: notif,
-                linear_notification: *linear_notification
+            LinearNotificationListItem {
+                notification,
+                linear_notification: *linear_notification,
+                is_selected,
+                on_select,
             }
         },
         NotificationMetadata::GoogleMail(google_mail_thread) => rsx! {
-            GoogleMailThreadDisplay {
-                notif: notif,
-                google_mail_thread: *google_mail_thread
+            GoogleMailThreadListItem {
+                notification,
+                google_mail_thread: *google_mail_thread,
+                is_selected,
+                on_select,
             }
         },
         NotificationMetadata::Slack(slack_push_event_callback) => rsx! {
-            SlackNotificationDisplay {
-                notif: notif,
-                slack_push_event_callback: *slack_push_event_callback
+            SlackNotificationListItem {
+                notification,
+                slack_push_event_callback: *slack_push_event_callback,
+                is_selected,
+                on_select,
             },
         },
         NotificationMetadata::Todoist => {
-            if let Some(task) = notif().task {
-                match &task.source_item.data {
-                    ThirdPartyItemData::TodoistItem(todoist_task) => rsx! {
-                        TodoistNotificationDisplay {
-                            notif: notif,
-                            todoist_task: todoist_task.clone(),
+            if let Some(task) = notification().task {
+                match task.source_item.data {
+                    ThirdPartyItemData::TodoistItem(todoist_item) => rsx! {
+                        TodoistNotificationListItem {
+                            notification,
+                            todoist_item,
+                            is_selected,
+                            on_select,
                         }
                     },
-                    _ => rsx! { DefaultNotificationDisplay { notif: notif } },
+                    _ => rsx! {
+                        DefaultNotificationListItem {
+                            notification,
+                            is_selected,
+                            on_select,
+                        }
+                    },
                 }
             } else {
-                rsx! { DefaultNotificationDisplay { notif: notif } }
+                rsx! {
+                    DefaultNotificationListItem {
+                        notification,
+                        is_selected,
+                        on_select,
+                    }
+                }
             }
         }
-    };
+    }
+}
 
-    let (button_active_style, details_style, button_style) = use_memo(move || {
-        if selected() {
-            ("swap-active", "invisible", "")
-        } else {
-            ("", "", "invisible")
-        }
-    })();
-    let notif_updated_at = use_memo(move || {
-        Into::<DateTime<Local>>::into(notif().updated_at)
+#[component]
+fn DefaultNotificationListItem(
+    notification: ReadOnlySignal<NotificationWithTask>,
+    is_selected: ReadOnlySignal<bool>,
+    on_select: EventHandler<()>,
+) -> Element {
+    let notification_updated_at = use_memo(move || {
+        Into::<DateTime<Local>>::into(notification().updated_at)
             .format("%Y-%m-%d %H:%M")
             .to_string()
     });
+    let list_context = use_context::<Memo<ListContext>>();
 
     rsx! {
-        td {
-            class: "flex items-center px-2 py-0 rounded-none relative h-12 indicator",
-            span {
-                class: "{shortcut_visibility_style} indicator-item indicator-top indicator-start badge text-xs text-gray-400 z-50",
-                "▲"
-            }
-            span {
-                class: "{shortcut_visibility_style} indicator-item indicator-bottom indicator-start badge text-xs text-gray-400 z-50",
-                "▼"
-            }
+        ListItem {
+            key: "{notification().id}",
+            title: "{notification().title}",
+            subtitle: None,
+            action_buttons: get_notification_list_item_action_buttons(
+                notification,
+                list_context().show_shortcut
+            ),
+            is_selected,
+            on_select,
 
-            div {
-                class: "flex justify-center",
-                NotificationMetadataIcon { class: "h-5 w-5", notification_metadata: notif().metadata}
-            }
-            if let Some(task) = notif().task {
-                TaskHint { task: task }
-            }
-        }
-        td {
-            class: "px-2 py-0 grow",
-
-            { notification_display }
-        }
-        td {
-            class: "px-2 py-0 rounded-none flex items-center justify-end",
-            div {
-                class: "swap {button_active_style}",
-                div {
-                    class: "swap-on flex items-center justify-end {button_style}",
-                    { children }
-                }
-                div {
-                    class: "swap-off text-xs flex gap-2 items-center justify-end {details_style}",
-
-                    NotificationDetailsDisplay { notification: notif }
-                    span { class: "text-gray-400 whitespace-nowrap text-xs font-mono", "{notif_updated_at}" }
-                }
-            }
+            span { class: "text-gray-400 whitespace-nowrap text-xs font-mono", "{notification_updated_at}" }
         }
     }
 }
 
-#[component]
-fn DefaultNotificationDisplay(notif: ReadOnlySignal<NotificationWithTask>) -> Element {
-    rsx! {
-        div {
-            class: "flex items-center gap-2",
+pub fn get_notification_list_item_action_buttons(
+    notification: ReadOnlySignal<NotificationWithTask>,
+    show_shortcut: bool,
+) -> Vec<Element> {
+    let context = use_context::<Memo<NotificationListContext>>();
 
-            div { class: "flex flex-col h-5 w-5 min-w-5" }
-
-            div {
-                class: "flex flex-col grow",
-                span { "{notif().title}" }
+    if !notification().is_built_from_task() {
+        let mut buttons = vec![rsx! {
+            ListItemActionButton {
+                title: "Delete notification",
+                shortcut: "d",
+                show_shortcut,
+                onclick: move |_| {
+                    context().notification_service
+                        .send(NotificationCommand::DeleteFromNotification(notification()));
+                },
+                Icon { class: "w-5 h-5", icon: BsTrash }
             }
-        }
-    }
-}
+        }];
 
-#[derive(Props, Clone, PartialEq)]
-struct NotificationButtonProps {
-    children: Element,
-    title: ReadOnlySignal<String>,
-    shortcut: ReadOnlySignal<String>,
-    selected: ReadOnlySignal<bool>,
-    disabled_label: Option<Option<String>>,
-    show_shortcut: ReadOnlySignal<bool>,
-    #[props(optional)]
-    onclick: Option<EventHandler<MouseEvent>>,
-}
-
-fn NotificationButton(props: NotificationButtonProps) -> Element {
-    let shortcut_visibility_style = use_memo(move || {
-        if *(props.selected.read()) {
-            if *(props.show_shortcut.read()) {
-                "visible"
-            } else {
-                "invisible group-hover/notification-button:visible"
-            }
-        } else {
-            "invisible"
-        }
-    });
-
-    if let Some(Some(label)) = props.disabled_label {
-        rsx! {
-            div {
-                class: "tooltip tooltip-left text-xs text-gray-400",
-                "data-tip": "{label}",
-
-                button {
-                    class: "btn btn-ghost btn-square btn-disabled",
-                    title: "{props.title}",
-
-                    { props.children }
-                }
-            }
-        }
-    } else {
-        rsx! {
-            div {
-                class: "indicator group/notification-button",
-
-                span {
-                    class: "{shortcut_visibility_style} indicator-item indicator-bottom indicator-center badge text-xs text-gray-400 z-50",
-                    "{props.shortcut}"
-                }
-
-                button {
-                    class: "btn btn-ghost btn-square",
-                    title: "{props.title}",
-                    onclick: move |evt| {
-                        if let Some(handler) = &props.onclick {
-                            handler.call(evt)
-                        }
+        if notification().task.is_some() {
+            buttons.push(rsx! {
+                ListItemActionButton {
+                    title: "Complete task",
+                    shortcut: "c",
+                    disabled_label: (!context().is_task_actions_enabled)
+                        .then_some("No task management service connected".to_string()),
+                    show_shortcut,
+                    onclick: move |_| {
+                        context().notification_service
+                            .send(NotificationCommand::CompleteTaskFromNotification(notification()));
                     },
-
-                    { props.children }
+                    Icon { class: "w-5 h-5", icon: BsCheck2 }
                 }
-            }
+            });
         }
+
+        buttons.push(rsx! {
+            ListItemActionButton {
+                title: "Unsubscribe from the notification",
+                shortcut: "u",
+                show_shortcut,
+                onclick: move |_| {
+                    context().notification_service.send(NotificationCommand::Unsubscribe(notification().id));
+                },
+                Icon { class: "w-5 h-5", icon: BsBellSlash }
+            }
+        });
+
+        buttons.push(rsx! {
+            ListItemActionButton {
+                title: "Snooze notification",
+                shortcut: "s",
+                show_shortcut,
+                onclick: move |_| {
+                    context().notification_service.send(NotificationCommand::Snooze(notification().id));
+                },
+                Icon { class: "w-5 h-5", icon: BsClockHistory }
+            }
+        });
+
+        if notification().task.is_none() {
+            buttons.push(rsx! {
+                ListItemActionButton {
+                    title: "Create task",
+                    shortcut: "p",
+                    disabled_label: (!context().is_task_actions_enabled)
+                        .then_some("No task management service connected".to_string()),
+                    show_shortcut,
+                    onclick: move |_| {
+                        UI_MODEL.write().task_planning_modal_opened = true;
+                    },
+                    Icon { class: "w-5 h-5", icon: BsCalendar2Check }
+                }
+            });
+
+            buttons.push(rsx! {
+                ListItemActionButton {
+                    title: "Link to task",
+                    shortcut: "l",
+                    disabled_label: (!context().is_task_actions_enabled)
+                        .then_some("No task management service connected".to_string()),
+                    show_shortcut,
+                    onclick: move |_| {
+                        UI_MODEL.write().task_link_modal_opened = true;
+                    },
+                    Icon { class: "w-5 h-5", icon: BsLink45deg }
+                }
+            });
+        }
+
+        buttons
+    } else {
+        vec![
+            rsx! {
+                ListItemActionButton {
+                    title: "Delete task",
+                    shortcut: "d",
+                    disabled_label: (!context().is_task_actions_enabled)
+                        .then_some("No task management service connected".to_string()),
+                    show_shortcut,
+                    onclick: move |_| {
+                        context().notification_service
+                            .send(NotificationCommand::DeleteFromNotification(notification()));
+                    },
+                    Icon { class: "w-5 h-5", icon: BsTrash }
+                }
+            },
+            rsx! {
+                ListItemActionButton {
+                    title: "Complete task",
+                    shortcut: "c",
+                    disabled_label: (!context().is_task_actions_enabled)
+                        .then_some("No task management service connected".to_string()),
+                    show_shortcut,
+                    onclick: move |_| {
+                        context().notification_service
+                            .send(NotificationCommand::CompleteTaskFromNotification(notification()));
+                    },
+                    Icon { class: "w-5 h-5", icon: BsCheck2 }
+                }
+            },
+            rsx! {
+                ListItemActionButton {
+                    title: "Snooze notification",
+                    shortcut: "s",
+                    show_shortcut,
+                    onclick: move |_| {
+                        context().notification_service.send(NotificationCommand::Snooze(notification().id));
+                    },
+                    Icon { class: "w-5 h-5", icon: BsClockHistory }
+                }
+            },
+            rsx! {
+                ListItemActionButton {
+                    title: "Plan task",
+                    shortcut: "p",
+                    disabled_label: (!context().is_task_actions_enabled)
+                        .then_some("No task management service connected".to_string()),
+                    show_shortcut,
+                    onclick: move |_| {
+                        UI_MODEL.write().task_planning_modal_opened = true;
+                    },
+                    Icon { class: "w-5 h-5", icon: BsCalendar2Check }
+                }
+            },
+        ]
     }
 }
 
 #[component]
-fn TaskHint(task: ReadOnlySignal<Task>) -> Element {
-    let html_url = task().get_html_url();
+pub fn TaskHint(task: ReadOnlySignal<Option<Task>>) -> Element {
+    let html_url = task()?.get_html_url();
 
     rsx! {
         div {
             class: "absolute top-0 right-0 tooltip tooltip-right text-xs text-gray-400",
-           "data-tip": "Linked to a {task().kind} task",
+            "data-tip": "Linked to a {task()?.kind} task",
 
             a {
                 href: "{html_url}",
@@ -423,59 +387,5 @@ fn TaskHint(task: ReadOnlySignal<Task>) -> Element {
                 Icon { class: "w-4 h-4", icon: BsBookmarkCheck }
             }
         }
-    }
-}
-
-#[component]
-pub fn NotificationDetailsDisplay(notification: ReadOnlySignal<NotificationWithTask>) -> Element {
-    if let Some(details) = notification().details {
-        return match details {
-            NotificationDetails::GithubPullRequest(github_pull_request) => rsx! {
-                GithubPullRequestDetailsDisplay { github_pull_request: github_pull_request }
-            },
-            NotificationDetails::GithubDiscussion(github_discussion) => rsx! {
-                GithubDiscussionDetailsDisplay { github_discussion: github_discussion }
-            },
-            NotificationDetails::SlackMessage(slack_message) => rsx! {
-                SlackMessageDetailsDisplay { slack_message: slack_message }
-            },
-            NotificationDetails::SlackChannel(slack_channel) => rsx! {
-                SlackChannelDetailsDisplay { slack_channel: slack_channel }
-            },
-            NotificationDetails::SlackFile(slack_file) => rsx! {
-                SlackFileDetailsDisplay { slack_file: slack_file }
-            },
-            NotificationDetails::SlackFileComment(slack_file_comment) => rsx! {
-                SlackFileCommentDetailsDisplay { slack_file_comment: slack_file_comment }
-            },
-            NotificationDetails::SlackIm(slack_im) => rsx! {
-                SlackImDetailsDisplay { slack_im: slack_im }
-            },
-            NotificationDetails::SlackGroup(slack_group) => rsx! {
-                SlackGroupDetailsDisplay { slack_group: slack_group }
-            },
-        };
-    }
-    match notification().metadata {
-        NotificationMetadata::Linear(linear_notification) => rsx! {
-            LinearNotificationDetailsDisplay { linear_notification: *linear_notification }
-        },
-        NotificationMetadata::Todoist => {
-            if let Some(task) = notification().task {
-                match &task.source_item.data {
-                    ThirdPartyItemData::TodoistItem(todoist_item) => rsx! {
-                        TodoistNotificationDetailsDisplay { todoist_item: todoist_item.clone() }
-                    },
-                    _ => None,
-                }
-            } else {
-                None
-            }
-        }
-        NotificationMetadata::GoogleMail(google_mail_thread) => rsx! {
-            GoogleMailNotificationDetailsDisplay { google_mail_thread: *google_mail_thread }
-        },
-        NotificationMetadata::Github(_) => None,
-        NotificationMetadata::Slack(_) => None,
     }
 }

@@ -29,8 +29,8 @@ use crate::{
 
 #[component]
 pub fn LinearIssuePreview(
-    linear_notification: ReadOnlySignal<LinearNotification>,
     linear_issue: ReadOnlySignal<LinearIssue>,
+    linear_notification: ReadOnlySignal<Option<LinearNotification>>,
 ) -> Element {
     rsx! {
         div {
@@ -39,11 +39,15 @@ pub fn LinearIssuePreview(
             div {
                 class: "flex gap-2",
 
-                a {
-                    class: "text-xs text-gray-400",
-                    href: "{linear_issue().team.get_url(linear_notification().get_organization())}",
-                    target: "_blank",
-                    "{linear_issue().team.name}"
+                if let Some(linear_notification) = linear_notification() {
+                    a {
+                        class: "text-xs text-gray-400",
+                        href: "{linear_issue().team.get_url(linear_notification.get_organization())}",
+                        target: "_blank",
+                        "{linear_issue().team.name}"
+                    }
+                } else {
+                    span { class: "text-xs text-gray-400", "{linear_issue().team.name}" }
                 }
 
                 a {
@@ -71,18 +75,15 @@ pub fn LinearIssuePreview(
                 }
             }
 
-            LinearIssueDetails {
-                linear_notification: linear_notification,
-                linear_issue: linear_issue
-            }
+            LinearIssueDetails { linear_issue, linear_notification }
         }
     }
 }
 
 #[component]
 fn LinearIssueDetails(
-    linear_notification: ReadOnlySignal<LinearNotification>,
     linear_issue: ReadOnlySignal<LinearIssue>,
+    linear_notification: ReadOnlySignal<Option<LinearNotification>>,
 ) -> Element {
     let issue_priority_style = match linear_issue().priority {
         LinearIssuePriority::Low => PRIORITY_LOW_COLOR_CLASS,
@@ -110,10 +111,12 @@ fn LinearIssueDetails(
                 }
             }
 
-            SmallCard {
-                span { class: "text-gray-400", "Reason:" }
-                TagDisplay {
-                    tag: Into::<Tag>::into(get_notification_type_label(&linear_notification().get_type()))
+            if let Some(linear_notification) = linear_notification() {
+                SmallCard {
+                    span { class: "text-gray-400", "Reason:" }
+                    TagDisplay {
+                        tag: Into::<Tag>::into(get_notification_type_label(&linear_notification.get_type()))
+                    }
                 }
             }
 
@@ -168,8 +171,8 @@ fn LinearIssueDetails(
                 }
             }
 
-            if let Some(project) = linear_issue().project {
-                LinearProjectCard { linear_notification: linear_notification, project: project }
+            if let Some(linear_project) = linear_issue().project {
+                LinearProjectCard { linear_project, linear_notification }
             }
 
             if let Some(project_milestone) = linear_issue().project_milestone {
@@ -180,12 +183,12 @@ fn LinearIssueDetails(
                 }
             }
 
-            if let LinearNotification::IssueNotification { comment: Some(comment), .. } = linear_notification() {
+            if let Some(LinearNotification::IssueNotification { comment: Some(linear_comment), .. }) = linear_notification() {
                 div {
                     class: "card w-full bg-base-200 text-base-content",
                     div {
                         class: "card-body flex flex-col gap-2 p-2",
-                        LinearCommentDisplay { linear_comment: comment }
+                        LinearCommentDisplay { linear_comment }
                     }
                 }
             }
@@ -195,37 +198,37 @@ fn LinearIssueDetails(
 
 #[component]
 pub fn LinearProjectCard(
-    linear_notification: ReadOnlySignal<LinearNotification>,
-    project: ReadOnlySignal<LinearProject>,
+    linear_project: ReadOnlySignal<LinearProject>,
+    linear_notification: ReadOnlySignal<Option<LinearNotification>>,
 ) -> Element {
     rsx! {
         CollapseCard {
             header: rsx! {
                 div {
-                    style: "color: {project().color}",
-                    LinearProjectIcon { class: "h-5 w-5", linear_project: project }
+                    style: "color: {linear_project().color}",
+                    LinearProjectIcon { class: "h-5 w-5", linear_project }
                 },
                 span { class: "text-gray-400", "Project:" }
 
-                if let Some(icon) = project().icon {
+                if let Some(icon) = linear_project().icon {
                     span { "{icon}" }
                 }
                 a {
-                    href: "{project().url}",
+                    href: "{linear_project().url}",
                     target: "_blank",
-                    "{project().name}"
+                    "{linear_project().name}"
                 }
                 a {
                     class: "flex-none",
-                    href: "{project().url}",
+                    href: "{linear_project().url}",
                     target: "_blank",
                     Icon { class: "h-5 w-5 text-gray-400 p-1", icon: BsArrowUpRightSquare }
                 }
             },
 
             LinearProjectDetails {
-                linear_notification: linear_notification,
-                linear_project: project,
+                linear_project,
+                linear_notification,
                 dark_bg: true
             }
         }

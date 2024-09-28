@@ -14,19 +14,11 @@ use universal_inbox::{
 };
 
 use crate::{
-    components::integrations::icons::IntegrationProviderIcon,
-    config::APP_CONFIG,
-    model::UI_MODEL,
-    route::Route,
-    services::{
-        integration_connection_service::INTEGRATION_CONNECTIONS,
-        notification_service::NotificationCommand,
-    },
+    components::integrations::icons::IntegrationProviderIcon, config::APP_CONFIG, route::Route,
+    services::integration_connection_service::INTEGRATION_CONNECTIONS,
 };
 
 pub fn Footer() -> Element {
-    let notification_service = use_coroutine_handle::<NotificationCommand>();
-
     let (message, message_style) = use_memo(move || {
         let Some(integration_connections) = INTEGRATION_CONNECTIONS() else {
             return (None, "");
@@ -95,34 +87,6 @@ pub fn Footer() -> Element {
                             integration_providers: app_config.integration_providers.clone()
                         }
                     }
-                }
-
-                div { class: "divider divider-horizontal" }
-
-                match &UI_MODEL.read().notifications_count {
-                    Some(Ok(count)) => rsx! {
-                        div {
-                            class: "tooltip tooltip-left",
-                            "data-tip": "{count} notifications loaded",
-                            button {
-                                class: "badge badge-success text-xs",
-                                onclick: move |_| notification_service.send(NotificationCommand::Refresh),
-                                "{count}"
-                            }
-                        }
-                    },
-                    Some(Err(error)) => rsx! {
-                        div {
-                            class: "tooltip tooltip-left tooltip-error",
-                            "data-tip": "{error}",
-                            button {
-                                class: "badge badge-error text-xs",
-                                onclick: move |_| notification_service.send(NotificationCommand::Refresh),
-                                "0"
-                            }
-                        }
-                    },
-                    None => rsx! { span { class: "loading loading-ring loading-xs" } },
                 }
 
                 div { class: "w-2" }

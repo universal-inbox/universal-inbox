@@ -47,7 +47,7 @@ use crate::helpers::{
     rest::create_resource_response,
     settings,
     task::{
-        list_tasks,
+        list_synced_tasks, list_tasks,
         todoist::{
             mock_todoist_complete_item_service, mock_todoist_get_item_service,
             mock_todoist_item_add_service, mock_todoist_sync_resources_service,
@@ -769,6 +769,12 @@ async fn test_receive_star_added_event_as_task(
         sink_item.get_third_party_item_source_kind(),
         ThirdPartyItemSourceKind::Todoist
     );
+
+    let synced_tasks =
+        list_synced_tasks(&app.client, &app.app.api_address, TaskStatus::Active, false).await;
+
+    assert_eq!(synced_tasks.len(), 1);
+    assert_eq!(synced_tasks[0].id, tasks[0].id);
 
     // A duplicated event should not create a new task
     let response = create_resource_response(

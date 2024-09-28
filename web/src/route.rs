@@ -12,7 +12,8 @@ use crate::{
         email_verification_page::EmailVerificationPage, login_page::LoginPage,
         notifications_page::NotificationsPage, page_not_found::PageNotFound,
         password_reset_page::PasswordResetPage, password_update_page::PasswordUpdatePage,
-        settings_page::SettingsPage, signup_page::SignupPage, user_profile_page::UserProfilePage,
+        settings_page::SettingsPage, signup_page::SignupPage, synced_tasks_page::SyncedTasksPage,
+        user_profile_page::UserProfilePage,
     },
 };
 
@@ -40,6 +41,8 @@ pub enum Route {
         #[layout(NavBarLayout)]
           #[route("/")]
           NotificationsPage {},
+          #[route("/synced-tasks")]
+          SyncedTasksPage {},
           #[route("/settings")]
           SettingsPage {},
           #[route("/profile")]

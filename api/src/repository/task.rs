@@ -11,6 +11,7 @@ use universal_inbox::{
         TaskSourceKind, TaskStatus, TaskSummary,
     },
     user::UserId,
+    Page,
 };
 
 use crate::universal_inbox::{UniversalInboxError, UpdateStatus, UpsertStatus};
@@ -38,8 +39,9 @@ pub trait TaskRepository {
         &self,
         executor: &mut Transaction<'a, Postgres>,
         status: TaskStatus,
+        only_synced_tasks: bool,
         user_id: UserId,
-    ) -> Result<Vec<Task>, UniversalInboxError>;
+    ) -> Result<Page<Task>, UniversalInboxError>;
     async fn search_tasks<'a, 'b>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -221,8 +223,42 @@ impl TaskRepository for Repository {
         &self,
         executor: &mut Transaction<'a, Postgres>,
         status: TaskStatus,
+        only_synced_tasks: bool,
         user_id: UserId,
-    ) -> Result<Vec<Task>, UniversalInboxError> {
+    ) -> Result<Page<Task>, UniversalInboxError> {
+        fn add_filters(
+            query_builder: &mut QueryBuilder<Postgres>,
+            status: TaskStatus,
+            only_synced_tasks: bool,
+            user_id: UserId,
+        ) {
+            let mut separated = query_builder.separated(" AND ");
+            separated
+                .push("task.status::TEXT = ")
+                .push_bind_unseparated(status.to_string());
+
+            if only_synced_tasks {
+                separated.push("task.source_item_id != task.sink_item_id");
+            }
+
+            separated
+                .push(" task.user_id = ")
+                .push_bind_unseparated(user_id.0);
+        }
+
+        let mut count_query_builder = QueryBuilder::new(r#"SELECT count(*) FROM task WHERE "#);
+
+        add_filters(&mut count_query_builder, status, only_synced_tasks, user_id);
+
+        let count = count_query_builder
+            .build_query_scalar::<i64>()
+            .fetch_one(&mut **executor)
+            .await
+            .map_err(|err| UniversalInboxError::DatabaseError {
+                source: err,
+                message: "Failed to fetch tasks count from storage".to_string(),
+            })?;
+
         let mut query_builder = QueryBuilder::new(
             r#"
                 SELECT
@@ -261,13 +297,12 @@ impl TaskRepository for Repository {
                 LEFT JOIN third_party_item AS sink_item
                   ON task.sink_item_id = sink_item.id
                 WHERE
-                  status::TEXT =
             "#,
         );
-        query_builder.push_bind(status.to_string());
-        query_builder
-            .push(" AND task.user_id = ")
-            .push_bind(user_id.0);
+
+        add_filters(&mut query_builder, status, only_synced_tasks, user_id);
+
+        query_builder.push(" ORDER BY task.updated_at ASC LIMIT 100");
 
         let rows = query_builder
             .build_query_as::<TaskRow>()
@@ -278,7 +313,15 @@ impl TaskRepository for Repository {
                 message: "Failed to fetch tasks from storage".to_string(),
             })?;
 
-        rows.iter().map(|r| r.try_into()).collect()
+        Ok(Page {
+            page: 1,
+            per_page: 100,
+            total: count.try_into().unwrap(), // count(*) cannot be negative
+            content: rows
+                .iter()
+                .map(|r| r.try_into())
+                .collect::<Result<Vec<Task>, UniversalInboxError>>()?,
+        })
     }
 
     #[tracing::instrument(level = "debug", skip(self, executor))]

@@ -4,7 +4,8 @@ use dioxus::prelude::*;
 use dioxus_free_icons::{
     icons::{
         bs_icons::{
-            BsBell, BsBoxArrowInLeft, BsGear, BsInbox, BsMoon, BsPerson, BsQuestionLg, BsSun,
+            BsBell, BsBookmarkCheck, BsBoxArrowInLeft, BsGear, BsInbox, BsMoon, BsPerson,
+            BsQuestionLg, BsSun,
         },
         go_icons::GoMarkGithub,
     },
@@ -14,7 +15,7 @@ use gravatar::{Gravatar, Rating};
 
 use crate::{
     config::APP_CONFIG,
-    model::{DEFAULT_USER_AVATAR, NOT_CONNECTED_USER_NAME},
+    model::{DEFAULT_USER_AVATAR, NOT_CONNECTED_USER_NAME, UI_MODEL},
     route::Route,
     services::user_service::{UserCommand, CONNECTED_USER},
     theme::{toggle_dark_mode, IS_DARK_MODE},
@@ -61,12 +62,33 @@ pub fn NavBar() -> Element {
                     src: "images/ui-logo-transparent.png",
                     alt: "Universal Inbox logo",
                 }
-                Link {
-                    class: "btn btn-ghost gap-2",
-                    active_class: "btn-active",
-                    to: Route::NotificationsPage {},
-                    Icon { class: "w-5 h-5", icon: BsInbox }
-                    p { "Inbox" }
+
+                div {
+                    class: "indicator mx-4",
+                    Link {
+                        class: "btn btn-ghost px-2 min-h-10 h-10",
+                        active_class: "btn-active",
+                        to: Route::NotificationsPage {},
+                        Icon { class: "w-5 h-5", icon: BsInbox }
+                        p { "Inbox" }
+                    }
+                    if let Some(Ok(count)) = &UI_MODEL.read().notifications_count {
+                        span { class: "indicator-item indicator-top badge badge-primary text-xs", "{count}" }
+                    }
+                }
+
+                div {
+                    class: "indicator mx-4",
+                    Link {
+                        class: "btn btn-ghost px-2 min-h-10 h-10",
+                        active_class: "btn-active",
+                        to: Route::SyncedTasksPage {},
+                        Icon { class: "w-5 h-5", icon: BsBookmarkCheck }
+                        p { "Synced tasks" }
+                    }
+                    if let Some(Ok(count)) = &UI_MODEL.read().synced_tasks_count {
+                        span { class: "indicator-item indicator-top badge badge-primary text-xs", "{count}" }
+                    }
                 }
             }
 

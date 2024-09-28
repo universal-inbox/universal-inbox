@@ -5,9 +5,7 @@ use dioxus_free_icons::{icons::bs_icons::BsArrowUpRightSquare, Icon};
 use log::debug;
 use regex::Regex;
 
-use universal_inbox::notification::{
-    integrations::slack::SlackMessageDetails, NotificationMetadata, NotificationWithTask,
-};
+use universal_inbox::notification::integrations::slack::SlackMessageDetails;
 
 use crate::components::{
     integrations::slack::{
@@ -19,12 +17,9 @@ use crate::components::{
 
 #[component]
 pub fn SlackMessagePreview(
-    notification: ReadOnlySignal<NotificationWithTask>,
     slack_message: ReadOnlySignal<SlackMessageDetails>,
+    title: ReadOnlySignal<String>,
 ) -> Element {
-    let NotificationMetadata::Slack(slack_push_event_callback) = notification().metadata else {
-        return None;
-    };
     let channel_name = slack_message()
         .channel
         .name
@@ -50,11 +45,11 @@ pub fn SlackMessagePreview(
             h2 {
                 class: "flex items-center gap-2 text-lg",
 
-                SlackNotificationIcon { class: "h-5 w-5", slack_push_event_callback: *slack_push_event_callback }
+                SlackNotificationIcon { class: "h-5 w-5" }
                 a {
                     href: "{slack_message().url}",
                     target: "_blank",
-                    dangerous_inner_html: "{notification().title}"
+                    dangerous_inner_html: "{title}"
                 }
                 a {
                     class: "flex-none",
@@ -64,7 +59,7 @@ pub fn SlackMessagePreview(
                 }
             }
 
-            SlackMessageDisplay { slack_message: slack_message }
+            SlackMessageDisplay { slack_message }
         }
     }
 }
@@ -85,7 +80,7 @@ fn SlackMessageDisplay(slack_message: ReadOnlySignal<SlackMessageDetails>) -> El
                 rsx! {
                     div {
                         class: "flex items-center gap-2",
-                        SlackMessageActorDisplay { slack_message: slack_message, display_name: true }
+                        SlackMessageActorDisplay { slack_message, display_name: true }
                         if let Some(ref posted_at) = posted_at {
                             span { class: "text-xs text-gray-400", "{posted_at}" }
                         }

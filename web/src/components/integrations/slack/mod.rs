@@ -13,7 +13,9 @@ use crate::components::UserWithAvatar;
 pub mod config;
 pub mod icons;
 pub mod notification;
+pub mod notification_list_item;
 pub mod preview;
+pub mod task_list_item;
 
 #[component]
 pub fn SlackMessageActorDisplay(

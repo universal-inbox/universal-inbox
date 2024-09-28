@@ -1,8 +1,11 @@
 use reqwest::{Client, Response};
 use serde_json::json;
 
-use universal_inbox::task::{
-    ProjectSummary, Task, TaskCreationResult, TaskId, TaskSourceKind, TaskStatus, TaskSummary,
+use universal_inbox::{
+    task::{
+        ProjectSummary, Task, TaskCreationResult, TaskId, TaskSourceKind, TaskStatus, TaskSummary,
+    },
+    Page,
 };
 
 pub mod linear;
@@ -13,14 +16,34 @@ pub async fn list_tasks_response(
     api_address: &str,
     status_filter: TaskStatus,
     trigger_sync: bool,
+    only_synced_tasks: Option<bool>,
 ) -> Response {
+    let params = only_synced_tasks.map_or("".to_string(), |synced| {
+        format!("&only_synced_tasks={}", synced)
+    });
+
     client
         .get(&format!(
-            "{api_address}tasks?status={status_filter}&trigger_sync={trigger_sync}"
+            "{api_address}tasks?status={status_filter}&trigger_sync={trigger_sync}{params}"
         ))
         .send()
         .await
         .expect("Failed to execute request")
+}
+
+pub async fn list_synced_tasks(
+    client: &Client,
+    api_address: &str,
+    status_filter: TaskStatus,
+    trigger_sync: bool,
+) -> Vec<Task> {
+    let tasks: Page<Task> =
+        list_tasks_response(client, api_address, status_filter, trigger_sync, Some(true))
+            .await
+            .json()
+            .await
+            .expect("Cannot parse JSON result");
+    tasks.content
 }
 
 pub async fn list_tasks(
@@ -29,11 +52,13 @@ pub async fn list_tasks(
     status_filter: TaskStatus,
     trigger_sync: bool,
 ) -> Vec<Task> {
-    list_tasks_response(client, api_address, status_filter, trigger_sync)
-        .await
-        .json()
-        .await
-        .expect("Cannot parse JSON result")
+    let tasks: Page<Task> =
+        list_tasks_response(client, api_address, status_filter, trigger_sync, None)
+            .await
+            .json()
+            .await
+            .expect("Cannot parse JSON result");
+    tasks.content
 }
 
 pub async fn get_task_response(client: &Client, api_address: &str, task_id: TaskId) -> Response {

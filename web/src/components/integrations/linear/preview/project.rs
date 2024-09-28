@@ -24,8 +24,8 @@ use crate::components::{
 
 #[component]
 pub fn LinearProjectPreview(
-    linear_notification: ReadOnlySignal<LinearNotification>,
     linear_project: ReadOnlySignal<LinearProject>,
+    linear_notification: ReadOnlySignal<Option<LinearNotification>>,
 ) -> Element {
     rsx! {
         div {
@@ -53,18 +53,15 @@ pub fn LinearProjectPreview(
                 }
             }
 
-            LinearProjectDetails {
-                linear_notification: linear_notification,
-                linear_project: linear_project
-            }
+            LinearProjectDetails { linear_project, linear_notification }
         }
     }
 }
 
 #[component]
 pub fn LinearProjectDetails(
-    linear_notification: ReadOnlySignal<LinearNotification>,
     linear_project: ReadOnlySignal<LinearProject>,
+    linear_notification: ReadOnlySignal<Option<LinearNotification>>,
     dark_bg: Option<bool>,
 ) -> Element {
     let (cards_style, proses_style) = if dark_bg.unwrap_or_default() {
@@ -83,11 +80,13 @@ pub fn LinearProjectDetails(
                 Markdown { class: "{proses_style}", text: linear_project().description.clone() }
             }
 
-            SmallCard {
-                card_class: "{cards_style}",
-                span { class: "text-gray-400", "Reason:" }
-                TagDisplay {
-                    tag: Into::<Tag>::into(get_notification_type_label(&linear_notification().get_type()))
+            if let Some(linear_notification) = linear_notification() {
+                SmallCard {
+                    card_class: "{cards_style}",
+                    span { class: "text-gray-400", "Reason:" }
+                    TagDisplay {
+                        tag: Into::<Tag>::into(get_notification_type_label(&linear_notification.get_type()))
+                    }
                 }
             }
 
@@ -105,7 +104,7 @@ pub fn LinearProjectDetails(
 
             SmallCard {
                 card_class: "{cards_style}",
-                LinearProjectIcon { class: "h-5 w-5", linear_project: linear_project }
+                LinearProjectIcon { class: "h-5 w-5", linear_project }
                 "{linear_project().state}",
                 if linear_project().progress > 0 {
                     div { class: "grow" }
@@ -130,8 +129,8 @@ pub fn LinearProjectDetails(
                 }
             }
 
-            if let LinearNotification::ProjectNotification { project_update: Some(project_update), .. } = linear_notification() {
-                LinearProjectUpdateDetails { project_update: project_update }
+            if let Some(LinearNotification::ProjectNotification { project_update: Some(project_update), .. }) = linear_notification() {
+                LinearProjectUpdateDetails { project_update }
             }
         }
     }
