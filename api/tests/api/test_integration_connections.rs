@@ -550,7 +550,7 @@ mod update_integration_connection_config {
 
         let config: Box<IntegrationConnectionConfig> = app
             .client
-            .put(&format!(
+            .put(format!(
                 "{}integration-connections/{}/config",
                 app.app.api_address, integration_connection1.id
             ))
@@ -647,7 +647,7 @@ mod update_integration_connection_config {
             authenticate_user(&app.app, "5678", "Jane", "Doe", "jane@example.com").await;
 
         let response = client
-            .put(&format!(
+            .put(format!(
                 "{}integration-connections/{}/config",
                 app.app.api_address, integration_connection.id
             ))

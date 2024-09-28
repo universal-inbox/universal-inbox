@@ -102,7 +102,7 @@ pub async fn call_api_and_notify<R: for<'de> serde::de::Deserialize<'de>, B: ser
 
     call_api(method.clone(), base_url, path, body, ui_model)
         .await
-        .map(|result: R| {
+        .inspect(|_| {
             let toast_update = ToastUpdate {
                 id: toast_id,
                 kind: Some(ToastKind::Success),
@@ -110,9 +110,8 @@ pub async fn call_api_and_notify<R: for<'de> serde::de::Deserialize<'de>, B: ser
                 timeout: Some(Some(5_000)),
             };
             toast_service.send(ToastCommand::Update(toast_update));
-            result
         })
-        .map_err(|error| {
+        .inspect_err(|error| {
             error!("An error occurred while calling the API ({method} {base_url}{path}): {error:?}");
             let toast_update = ToastUpdate {
                 id: toast_id,
@@ -121,7 +120,6 @@ pub async fn call_api_and_notify<R: for<'de> serde::de::Deserialize<'de>, B: ser
                 timeout: Some(Some(10_000)),
             };
             toast_service.send(ToastCommand::Update(toast_update));
-            error
         })
 }
 

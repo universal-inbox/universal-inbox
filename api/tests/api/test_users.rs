@@ -674,7 +674,7 @@ mod create_authentication_token {
 
         let auth_token: AuthenticationToken = app
             .client
-            .post(&format!(
+            .post(format!(
                 "{}users/me/authentication-tokens",
                 app.app.api_address
             ))

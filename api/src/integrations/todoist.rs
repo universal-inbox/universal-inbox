@@ -248,7 +248,7 @@ impl TodoistService {
     ) -> Result<TodoistSyncResponse, UniversalInboxError> {
         let response = self
             .build_todoist_client(access_token)?
-            .post(&format!("{}/sync", self.todoist_sync_base_url))
+            .post(format!("{}/sync", self.todoist_sync_base_url))
             .json(&json!({
                 "sync_token": sync_token
                     .map(|sync_token| sync_token.0)
@@ -287,7 +287,7 @@ impl TodoistService {
     ) -> Result<Option<TodoistItem>, UniversalInboxError> {
         let response = self
             .build_todoist_client(access_token)?
-            .post(&format!("{}/items/get", self.todoist_sync_base_url))
+            .post(format!("{}/items/get", self.todoist_sync_base_url))
             .form(&[("item_id", id), ("all_data", "false")])
             .send()
             .await
@@ -322,7 +322,7 @@ impl TodoistService {
 
         let response = self
             .build_todoist_client(access_token)?
-            .post(&format!("{}/sync", self.todoist_sync_base_url))
+            .post(format!("{}/sync", self.todoist_sync_base_url))
             .json(&body)
             .send()
             .await

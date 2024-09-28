@@ -8,7 +8,7 @@ default:
 ## Setup recipes
 init-db:
   #!/usr/bin/env bash
-  
+
   [ -d .devbox/virtenv/postgresql_15/data ] || initdb --username=postgres --pwfile=<(echo password)
 
 install-rust-toolchain:

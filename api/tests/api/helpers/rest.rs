@@ -8,7 +8,7 @@ pub async fn get_resource_response(
     id: uuid::Uuid,
 ) -> Response {
     client
-        .get(&format!("{api_address}{resource_name}/{id}"))
+        .get(format!("{api_address}{resource_name}/{id}"))
         .send()
         .await
         .expect("Failed to execute request")
@@ -34,7 +34,7 @@ pub async fn create_resource_response<T: serde::Serialize>(
     resource: Box<T>,
 ) -> Response {
     client
-        .post(&format!("{api_address}{resource_name}"))
+        .post(format!("{api_address}{resource_name}"))
         .json(&*resource)
         .send()
         .await
@@ -62,7 +62,7 @@ pub async fn patch_resource_response<P: serde::Serialize>(
     patch: &P,
 ) -> Response {
     client
-        .patch(&format!("{api_address}{resource_name}/{id}"))
+        .patch(format!("{api_address}{resource_name}/{id}"))
         .json(patch)
         .send()
         .await
@@ -90,7 +90,7 @@ pub async fn delete_resource_response(
     id: uuid::Uuid,
 ) -> Response {
     client
-        .delete(&format!("{api_address}{resource_name}/{id}"))
+        .delete(format!("{api_address}{resource_name}/{id}"))
         .send()
         .await
         .expect("Failed to execute request")

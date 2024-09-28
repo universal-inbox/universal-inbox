@@ -53,7 +53,7 @@ pub async fn list_notifications_response(
         .unwrap_or_default();
 
     client
-        .get(&format!(
+        .get(format!(
             "{api_address}notifications?trigger_sync={trigger_sync}&{status_parameter}{snoozed_notifications_parameter}{task_id_parameter}{notification_kind_parameter}"
         ))
         .send()
@@ -118,7 +118,7 @@ pub async fn sync_notifications_response(
     asynchronous: bool,
 ) -> Response {
     client
-        .post(&format!("{api_address}notifications/sync"))
+        .post(format!("{api_address}notifications/sync"))
         .json(
             &source
                 .map(|src| {
@@ -154,9 +154,7 @@ pub async fn create_task_from_notification_response(
     task_creation: &TaskCreation,
 ) -> Response {
     client
-        .post(&format!(
-            "{api_address}notifications/{notification_id}/task"
-        ))
+        .post(format!("{api_address}notifications/{notification_id}/task"))
         .json(task_creation)
         .send()
         .await
