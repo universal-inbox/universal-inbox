@@ -43,7 +43,7 @@ mod authenticate_session {
             .build()
             .unwrap();
         let response = client
-            .post(&format!("{}auth/session", app.api_address))
+            .post(format!("{}auth/session", app.api_address))
             .json(&SessionAuthValidationParameters {
                 auth_id_token: ID_TOKEN.to_string().into(),
                 access_token: AccessToken::new("fake_access_token".to_string()),
@@ -55,7 +55,7 @@ mod authenticate_session {
         assert_eq!(response.status(), 200);
 
         let user: User = client
-            .get(&format!("{}users/me", app.api_address))
+            .get(format!("{}users/me", app.api_address))
             .send()
             .await
             .unwrap()
@@ -79,7 +79,7 @@ mod authenticate_session {
 
         // Test a new ID token is updated
         let response = client
-            .post(&format!("{}auth/session", app.api_address))
+            .post(format!("{}auth/session", app.api_address))
             .json(&SessionAuthValidationParameters {
                 auth_id_token: OTHER_ID_TOKEN.to_string().into(),
                 access_token: AccessToken::new("fake_access_token".to_string()),
@@ -91,7 +91,7 @@ mod authenticate_session {
         assert_eq!(response.status(), 200);
 
         let user: User = client
-            .get(&format!("{}users/me", app.api_address))
+            .get(format!("{}users/me", app.api_address))
             .send()
             .await
             .unwrap()
@@ -117,7 +117,7 @@ mod authenticate_session {
         mock_oidc_introspection(&app, "1234", false);
 
         let response = reqwest::Client::new()
-            .post(&format!("{}auth/session", app.api_address))
+            .post(format!("{}auth/session", app.api_address))
             .json(&SessionAuthValidationParameters {
                 auth_id_token: ID_TOKEN.to_string().into(),
                 access_token: AccessToken::new("fake_access_token".to_string()),

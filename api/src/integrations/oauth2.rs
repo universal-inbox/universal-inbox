@@ -145,7 +145,7 @@ impl NangoService {
     ) -> Result<Option<NangoConnection>, UniversalInboxError> {
         let response = self
             .client
-            .get(&format!(
+            .get(format!(
                 "{}connection/{connection_id}?provider_config_key={provider_config_key}",
                 self.nango_base_url
             ))
@@ -183,7 +183,7 @@ impl NangoService {
     ) -> Result<(), UniversalInboxError> {
         let response = self
             .client
-            .delete(&format!(
+            .delete(format!(
                 "{}connection/{connection_id}?provider_config_key={provider_config_key}",
                 self.nango_base_url
             ))

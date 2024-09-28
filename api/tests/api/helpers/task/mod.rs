@@ -23,7 +23,7 @@ pub async fn list_tasks_response(
     });
 
     client
-        .get(&format!(
+        .get(format!(
             "{api_address}tasks?status={status_filter}&trigger_sync={trigger_sync}{params}"
         ))
         .send()
@@ -63,7 +63,7 @@ pub async fn list_tasks(
 
 pub async fn get_task_response(client: &Client, api_address: &str, task_id: TaskId) -> Response {
     client
-        .get(&format!("{api_address}tasks/{task_id}"))
+        .get(format!("{api_address}tasks/{task_id}"))
         .send()
         .await
         .expect("Failed to execute request")
@@ -79,7 +79,7 @@ pub async fn get_task(client: &Client, api_address: &str, task_id: TaskId) -> Op
 
 pub async fn search_tasks_response(client: &Client, api_address: &str, matches: &str) -> Response {
     client
-        .get(&format!("{api_address}tasks/search?matches={matches}"))
+        .get(format!("{api_address}tasks/search?matches={matches}"))
         .send()
         .await
         .expect("Failed to execute request")
@@ -100,7 +100,7 @@ pub async fn sync_tasks_response(
     asynchronous: bool,
 ) -> Response {
     client
-        .post(&format!("{api_address}tasks/sync"))
+        .post(format!("{api_address}tasks/sync"))
         .json(
             &source
                 .map(|src| json!({"source": src.to_string(), "asynchronous": asynchronous}))
@@ -130,7 +130,7 @@ pub async fn search_projects_response(
     matches: &str,
 ) -> Response {
     client
-        .get(&format!(
+        .get(format!(
             "{api_address}tasks/projects/search?matches={matches}"
         ))
         .send()

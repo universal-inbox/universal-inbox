@@ -28,7 +28,7 @@ use crate::helpers::{auth::AuthenticatedApp, load_json_fixture_file, TestedApp};
 
 pub async fn list_integration_connections_response(client: &Client, api_address: &str) -> Response {
     client
-        .get(&format!("{api_address}integration-connections"))
+        .get(format!("{api_address}integration-connections"))
         .send()
         .await
         .expect("Failed to execute request")
@@ -51,7 +51,7 @@ pub async fn verify_integration_connection_response(
     integration_connection_id: IntegrationConnectionId,
 ) -> Response {
     client
-        .patch(&format!(
+        .patch(format!(
             "{api_address}integration-connections/{integration_connection_id}/status"
         ))
         .send()

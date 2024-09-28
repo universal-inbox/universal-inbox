@@ -62,7 +62,7 @@ pub async fn authenticate_user(
     )
     .unwrap();
     let response = client
-        .post(&format!("{}auth/session", app.api_address))
+        .post(format!("{}auth/session", app.api_address))
         .json(&SessionAuthValidationParameters {
             auth_id_token: id_token.to_string().into(),
             access_token: AccessToken::new("fake_token".to_string()),
@@ -74,7 +74,7 @@ pub async fn authenticate_user(
     assert_eq!(response.status(), 200);
 
     let user: User = client
-        .get(&format!("{}users/me", app.api_address))
+        .get(format!("{}users/me", app.api_address))
         .send()
         .await
         .unwrap()

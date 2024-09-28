@@ -173,7 +173,7 @@ impl GithubService {
     ) -> Result<(), UniversalInboxError> {
         let response = self
             .build_github_rest_client(access_token)?
-            .patch(&format!(
+            .patch(format!(
                 "{}/notifications/threads/{thread_id}",
                 self.github_base_url
             ))
@@ -200,7 +200,7 @@ impl GithubService {
     ) -> Result<(), UniversalInboxError> {
         let response = self
             .build_github_rest_client(access_token)?
-            .put(&format!(
+            .put(format!(
                 "{}/notifications/threads/{thread_id}/subscription",
                 self.github_base_url
             ))

@@ -42,7 +42,7 @@ mod content_security_policy {
         let app = tested_app.await;
 
         let response = reqwest::Client::new()
-            .get(&format!("{}/ping", app.app_address))
+            .get(format!("{}/ping", app.app_address))
             .send()
             .await
             .unwrap();
