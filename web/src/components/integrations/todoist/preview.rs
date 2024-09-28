@@ -9,7 +9,6 @@ use dioxus_free_icons::{
 };
 
 use universal_inbox::{
-    notification::NotificationWithTask,
     task::Task,
     third_party::integrations::todoist::{TodoistItem, TodoistItemPriority},
     HasHtmlUrl,
@@ -25,14 +24,13 @@ use crate::{
 
 #[component]
 pub fn TodoistTaskPreview(
-    notification: ReadOnlySignal<NotificationWithTask>,
     task: ReadOnlySignal<Task>,
-    todoist_task: TodoistItem,
+    todoist_item: ReadOnlySignal<TodoistItem>,
 ) -> Element {
-    let link = notification().get_html_url();
+    let link = task().get_html_url();
     let project_link = task().get_html_project_url();
     let priority: u8 = task().priority.into();
-    let task_priority_style = match todoist_task.priority {
+    let task_priority_style = match todoist_item().priority {
         TodoistItemPriority::P1 => PRIORITY_LOW_COLOR_CLASS,
         TodoistItemPriority::P2 => PRIORITY_NORMAL_COLOR_CLASS,
         TodoistItemPriority::P3 => PRIORITY_HIGH_COLOR_CLASS,
@@ -61,7 +59,7 @@ pub fn TodoistTaskPreview(
                 a {
                     href: "{link}",
                     target: "_blank",
-                    Markdown { text: notification().title.clone() }
+                    Markdown { text: task().title.clone() }
                 }
                 a {
                     class: "flex-none",
@@ -78,18 +76,18 @@ pub fn TodoistTaskPreview(
                     class: "flex text-gray-400 gap-1 text-xs",
 
                     "Created at ",
-                    span { class: "text-primary", "{todoist_task.added_at}" }
+                    span { class: "text-primary", "{todoist_item().added_at}" }
                 }
 
                 TagsInCard {
-                    tags: todoist_task
+                    tags: todoist_item()
                         .labels
                         .iter()
                         .map(|label| label.clone().into())
                         .collect()
                 }
 
-                if let Some(due) = &todoist_task.due {
+                if let Some(due) = todoist_item().due {
                     SmallCard {
                         Icon { class: "h-3 w-3", icon: BsCalendar2Check }
                         span { class: "text-gray-400", "Due date:" }

@@ -80,7 +80,7 @@ pub fn GithubPullRequestDetailsDisplay(
 }
 
 #[component]
-fn GithubReviewStatus(github_pull_request: ReadOnlySignal<GithubPullRequest>) -> Element {
+pub fn GithubReviewStatus(github_pull_request: ReadOnlySignal<GithubPullRequest>) -> Element {
     github_pull_request()
         .review_decision
         .as_ref()

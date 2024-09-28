@@ -45,10 +45,7 @@ pub fn SlackNotificationDisplay(
         div {
             class: "flex items-center gap-2",
 
-            SlackNotificationIcon {
-                class: "h-5 w-5 min-w-5",
-                slack_push_event_callback: slack_push_event_callback,
-            }
+            SlackNotificationIcon { class: "h-5 w-5 min-w-5" }
 
             div {
                 class: "flex flex-col grow",

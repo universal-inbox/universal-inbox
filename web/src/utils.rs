@@ -31,6 +31,7 @@ pub async fn focus_element(id: &str) -> Result<HtmlElement> {
     Ok(elt)
 }
 
+#[allow(dead_code)]
 pub fn get_element_by_id(id: &str) -> Result<Element> {
     let window = web_sys::window().context("Unable to load `window`")?;
     let document = window.document().context("Unable to load `document`")?;

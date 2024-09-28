@@ -25,7 +25,7 @@ use crate::{
     },
 };
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum NotificationCommand {
     Refresh,
     Sync(Option<NotificationSyncSourceKind>),
@@ -232,17 +232,6 @@ async fn refresh_notifications(
 
     match result {
         Ok(new_notifications_page) => {
-            // Using notifications_page.set() breaks the UI with an already borrowed error
-            // Thus, copying each field manually
-            // let mut notifications_page = notifications_page.write();
-            // notifications_page.page = new_notifications_page.page;
-            // notifications_page.total = new_notifications_page.total;
-            // notifications_page.per_page = new_notifications_page.per_page;
-            // notifications_page.content.clear();
-            // notifications_page
-            //     .content
-            //     .extend(new_notifications_page.content);
-
             ui_model.write().notifications_count = Some(Ok(new_notifications_page.total));
             *notifications_page.write() = new_notifications_page;
         }

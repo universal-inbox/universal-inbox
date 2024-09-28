@@ -7,13 +7,14 @@ pub const NOT_CONNECTED_USER_NAME: &str = "Not connected";
 #[derive(Debug, Default)]
 pub struct UniversalInboxUIModel {
     pub selected_notification_index: usize,
+    pub selected_task_index: usize,
     pub is_help_enabled: bool,
     pub is_task_actions_enabled: bool,
     pub task_planning_modal_opened: bool,
     pub task_link_modal_opened: bool,
-    pub unhover_element: bool,
     pub authentication_state: AuthenticationState,
     pub notifications_count: Option<Result<usize, String>>,
+    pub synced_tasks_count: Option<Result<usize, String>>,
     pub selected_preview_pane: PreviewPane,
     pub error_message: Option<String>,
     pub confirmation_message: Option<String>,
@@ -24,14 +25,6 @@ pub struct UniversalInboxUIModel {
 impl UniversalInboxUIModel {
     pub fn toggle_help(&mut self) {
         self.is_help_enabled = !self.is_help_enabled;
-    }
-
-    pub fn set_unhover_element(&mut self, unhover_element: bool) -> bool {
-        if self.unhover_element != unhover_element {
-            self.unhover_element = unhover_element;
-            return true;
-        }
-        false
     }
 }
 

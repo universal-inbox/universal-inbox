@@ -24,7 +24,7 @@ use universal_inbox::{
         ThirdPartyItemSource, ThirdPartyItemSourceKind,
     },
     user::UserId,
-    HasHtmlUrl,
+    HasHtmlUrl, Page,
 };
 
 use crate::{
@@ -325,12 +325,13 @@ impl TaskService {
         &self,
         executor: &mut Transaction<'a, Postgres>,
         status: TaskStatus,
+        only_synced_tasks: bool,
         user_id: UserId,
         job_storage: Option<RedisStorage<UniversalInboxJob>>,
-    ) -> Result<Vec<Task>, UniversalInboxError> {
-        let tasks = self
+    ) -> Result<Page<Task>, UniversalInboxError> {
+        let tasks_page = self
             .repository
-            .fetch_all_tasks(executor, status, user_id)
+            .fetch_all_tasks(executor, status, only_synced_tasks, user_id)
             .await?;
 
         if let Some(job_storage) = job_storage {
@@ -341,7 +342,7 @@ impl TaskService {
                 .await?;
         }
 
-        Ok(tasks)
+        Ok(tasks_page)
     }
 
     #[tracing::instrument(level = "debug", skip(self, executor))]

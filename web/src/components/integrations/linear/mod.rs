@@ -1,7 +1,10 @@
 pub mod config;
 pub mod icons;
+pub mod list_item;
 pub mod notification;
+pub mod notification_list_item;
 pub mod preview;
+pub mod task_list_item;
 
 pub fn get_notification_type_label(notification_type: &str) -> String {
     match notification_type {

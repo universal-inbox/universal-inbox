@@ -30,10 +30,16 @@ pub fn LinearNotificationPreview(
 ) -> Element {
     match linear_notification() {
         LinearNotification::IssueNotification { issue, .. } => rsx! {
-            LinearIssuePreview { linear_notification: linear_notification, linear_issue: issue }
+            LinearIssuePreview {
+                linear_issue: issue,
+                linear_notification: Some(linear_notification())
+            }
         },
         LinearNotification::ProjectNotification { project, .. } => rsx! {
-            LinearProjectPreview { linear_notification: linear_notification, linear_project: project }
+            LinearProjectPreview {
+                linear_project: project,
+                linear_notification: Some(linear_notification())
+            }
         },
     }
 }
