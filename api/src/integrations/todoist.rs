@@ -47,6 +47,10 @@ use universal_inbox::{
     user::UserId,
     utils::default_value::DefaultValue,
 };
+use wiremock::{
+    matchers::{body_partial_json, body_string_contains, method, path},
+    Mock, MockServer, ResponseTemplate,
+};
 
 use crate::{
     integrations::{
@@ -209,6 +213,57 @@ impl TodoistService {
             projects_cache_index: Arc::new(AtomicU64::new(0)),
             integration_connection_service,
         })
+    }
+
+    pub async fn mock_all(mock_server: &MockServer) {
+        Mock::given(method("POST"))
+            .and(path("/sync"))
+            .and(body_partial_json(json!({ "resource_types": ["items"] })))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(&TodoistSyncResponse {
+                    items: Some(vec![]),
+                    projects: None,
+                    full_sync: false,
+                    temp_id_mapping: HashMap::new(),
+                    sync_token: SyncToken("abcd".to_string()),
+                }),
+            )
+            .mount(mock_server)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(path("/sync"))
+            .and(body_partial_json(json!({ "resource_types": ["projects"] })))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(&TodoistSyncResponse {
+                    items: None,
+                    projects: Some(vec![]),
+                    full_sync: false,
+                    temp_id_mapping: HashMap::new(),
+                    sync_token: SyncToken("abcd".to_string()),
+                }),
+            )
+            .mount(mock_server)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(path("/sync"))
+            .and(body_string_contains(r#""commands""#))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "application/json")
+                    .set_body_json(&TodoistSyncStatusResponse {
+                        sync_status: HashMap::from([(
+                            Uuid::new_v4(),
+                            TodoistCommandStatus::Ok("ok".to_string()),
+                        )]),
+                        full_sync: false,
+                        temp_id_mapping: HashMap::new(),
+                        sync_token: SyncToken("abcd".to_string()),
+                    }),
+            )
+            .mount(mock_server)
+            .await;
     }
 
     fn build_todoist_client(

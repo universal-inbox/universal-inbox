@@ -3,12 +3,27 @@ use std::sync::Arc;
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use graphql::{
+    issue_update_state::IssueUpdateStateIssueUpdate,
+    issue_update_subscribers::IssueUpdateSubscribersIssueUpdate,
+    notification_archive::NotificationArchiveNotificationArchive,
+    notification_subscribers_query::{
+        NotificationSubscribersQueryNotification,
+        NotificationSubscribersQueryNotificationOnIssueNotification,
+        NotificationSubscribersQueryNotificationOnIssueNotificationIssue,
+        NotificationSubscribersQueryNotificationOnIssueNotificationIssueSubscribers,
+        NotificationSubscribersQueryNotificationOnIssueNotificationUser,
+    },
+    notification_update_snoozed_until_at::NotificationUpdateSnoozedUntilAtNotificationUpdate,
+    notifications_query::{NotificationsQueryNotifications, NotificationsQueryOrganization},
+};
 use graphql_client::{GraphQLQuery, Response};
 use http::{HeaderMap, HeaderValue};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, Extension};
 use reqwest_tracing::{
     DisableOtelPropagation, OtelPathNames, SpanBackendWithUrl, TracingMiddleware,
 };
+use serde_json::json;
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
 use url::Url;
@@ -34,6 +49,10 @@ use universal_inbox::{
     user::UserId,
     utils::default_value::DefaultValue,
     HasHtmlUrl,
+};
+use wiremock::{
+    matchers::{body_partial_json, method},
+    Mock, MockServer, ResponseTemplate,
 };
 
 use crate::{
@@ -86,6 +105,152 @@ impl LinearService {
             linear_graphql_path,
             integration_connection_service,
         })
+    }
+
+    pub async fn mock_all(mock_server: &MockServer) {
+        Mock::given(method("POST"))
+            .and(body_partial_json(
+                json!({ "operationName": "NotificationsQuery" }),
+            ))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "application/json")
+                    .set_body_json(&Response {
+                        data: Some(notifications_query::ResponseData {
+                            organization: NotificationsQueryOrganization {
+                                name: "Test".to_string(),
+                                url_key: "test".to_string(),
+                                logo_url: None,
+                            },
+                            notifications: NotificationsQueryNotifications { nodes: vec![] },
+                        }),
+                        errors: None,
+                        extensions: None,
+                    }),
+            )
+            .mount(mock_server)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(body_partial_json(
+                json!({ "operationName": "NotificationSubscribersQuery" }),
+            ))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "application/json")
+                    .set_body_json(&Response {
+                        data: Some(notification_subscribers_query::ResponseData {
+                            notification: NotificationSubscribersQueryNotification::IssueNotification(NotificationSubscribersQueryNotificationOnIssueNotification  {
+                                user: NotificationSubscribersQueryNotificationOnIssueNotificationUser {
+                                    id: "user_id".to_string()
+                                },
+                                issue: NotificationSubscribersQueryNotificationOnIssueNotificationIssue {
+                                    subscribers: NotificationSubscribersQueryNotificationOnIssueNotificationIssueSubscribers {
+                                        nodes: vec![]
+                                    }
+                                }
+                            })
+                        }),
+                        errors: None,
+                        extensions: None,
+                    }),
+            )
+            .mount(mock_server)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(body_partial_json(
+                json!({ "operationName": "AssignedIssuesQuery" }),
+            ))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "application/json")
+                    .set_body_json(&Response {
+                        data: Some(assigned_issues_query::ResponseData {
+                            issues: assigned_issues_query::AssignedIssuesQueryIssues {
+                                nodes: vec![],
+                            },
+                        }),
+                        errors: None,
+                        extensions: None,
+                    }),
+            )
+            .mount(mock_server)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(body_partial_json(
+                json!({ "operationName": "NotificationArchive" }),
+            ))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "application/json")
+                    .set_body_json(&Response {
+                        data: Some(notification_archive::ResponseData {
+                            notification_archive: NotificationArchiveNotificationArchive {
+                                success: true,
+                            },
+                        }),
+                        errors: None,
+                        extensions: None,
+                    }),
+            )
+            .mount(mock_server)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(body_partial_json(
+                json!({ "operationName": "NotificationUpdateSnoozedUntilAt" }),
+            ))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "application/json")
+                .set_body_json(&Response {
+                    data: Some(notification_update_snoozed_until_at::ResponseData {
+                        notification_update: NotificationUpdateSnoozedUntilAtNotificationUpdate {
+                            success: true,
+                        },
+                    }),
+                    errors: None,
+                    extensions: None,
+                })).mount(mock_server)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(body_partial_json(
+                json!({ "operationName": "IssueUpdateState" }),
+            ))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "application/json")
+                    .set_body_json(&Response {
+                        data: Some(issue_update_state::ResponseData {
+                            issue_update: IssueUpdateStateIssueUpdate { success: true },
+                        }),
+                        errors: None,
+                        extensions: None,
+                    }),
+            )
+            .mount(mock_server)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(body_partial_json(
+                json!({ "operationName": "IssueUpdateSubscribers" }),
+            ))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "application/json")
+                    .set_body_json(&Response {
+                        data: Some(issue_update_subscribers::ResponseData {
+                            issue_update: IssueUpdateSubscribersIssueUpdate { success: true },
+                        }),
+                        errors: None,
+                        extensions: None,
+                    }),
+            )
+            .mount(mock_server)
+            .await;
     }
 
     fn build_linear_client(

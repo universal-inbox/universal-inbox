@@ -6,7 +6,6 @@ use pretty_assertions::assert_eq;
 use rstest::*;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tracing::debug;
 use url::Url;
 use uuid::Uuid;
 
@@ -166,7 +165,6 @@ pub fn mock_todoist_sync_service(
 ) -> Mock {
     let body = json!({ "commands": commands });
 
-    debug!("Mocking Todoist sync service with body: {}", body);
     let response = result.unwrap_or_else(|| {
         let status: HashMap<Uuid, TodoistCommandStatus> = commands
             .iter()

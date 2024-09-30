@@ -142,7 +142,7 @@ pub fn mock_linear_update_issue_subscribers_query(
                         success: successful_response,
                     },
                 }),
-                errors: Some(errors.unwrap_or_default()),
+                errors,
                 extensions: None,
             });
     })
@@ -252,7 +252,7 @@ pub fn mock_linear_update_issue_state_query(
                         success: successful_response,
                     },
                 }),
-                errors: Some(errors.unwrap_or_default()),
+                errors,
                 extensions: None,
             });
     })

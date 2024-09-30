@@ -4,12 +4,13 @@ use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use futures::stream::{self, TryStreamExt};
-use graphql_client::GraphQLQuery;
+use graphql_client::{GraphQLQuery, Response};
 use http::{HeaderMap, HeaderValue};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, Extension};
 use reqwest_tracing::{
     DisableOtelPropagation, OtelPathNames, SpanBackendWithUrl, TracingMiddleware,
 };
+use serde_json::json;
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
 
@@ -23,6 +24,10 @@ use universal_inbox::{
     user::UserId,
 };
 use url::Url;
+use wiremock::{
+    matchers::{body_partial_json, method, path_regex},
+    Mock, MockServer, ResponseTemplate,
+};
 
 use crate::{
     integrations::{
@@ -77,6 +82,66 @@ impl GithubService {
             page_size,
             integration_connection_service,
         })
+    }
+
+    pub async fn mock_all(mock_server: &MockServer) {
+        Mock::given(method("GET"))
+            .and(path_regex("/notifications"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "application/json")
+                    .set_body_json(json!([])),
+            )
+            .mount(mock_server)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(body_partial_json(
+                json!({ "operationName": "PullRequestQuery" }),
+            ))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "application/json")
+                    .set_body_json(&Response::<pull_request_query::ResponseData> {
+                        data: None,
+                        errors: None,
+                        extensions: None,
+                    }),
+            )
+            .mount(mock_server)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(body_partial_json(
+                json!({ "operationName": "DiscussionsSearchQuery" }),
+            ))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "application/json")
+                    .set_body_json(&Response::<discussions_search_query::ResponseData> {
+                        data: None,
+                        errors: None,
+                        extensions: None,
+                    }),
+            )
+            .mount(mock_server)
+            .await;
+
+        Mock::given(method("PATCH"))
+            .and(path_regex("/notifications/threads/.*"))
+            .respond_with(
+                ResponseTemplate::new(200).insert_header("content-type", "application/json"),
+            )
+            .mount(mock_server)
+            .await;
+
+        Mock::given(method("PUT"))
+            .and(path_regex("/notifications/threads/[^/]*/subscription"))
+            .respond_with(
+                ResponseTemplate::new(200).insert_header("content-type", "application/json"),
+            )
+            .mount(mock_server)
+            .await;
     }
 
     fn build_github_rest_client(
