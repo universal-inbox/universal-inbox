@@ -73,3 +73,16 @@ pub struct Page<T> {
     pub total: usize,
     pub content: Vec<T>,
 }
+
+impl<T> Page<T> {
+    pub fn remove_element<F>(&mut self, filter: F)
+    where
+        F: FnMut(&T) -> bool,
+    {
+        let original_len = self.content.len();
+        self.content.retain(filter);
+        if original_len != self.content.len() {
+            self.total -= 1;
+        }
+    }
+}
