@@ -40,6 +40,7 @@ pub struct ApplicationSettings {
     pub email: EmailSettings,
     pub show_changelog: bool,
     pub version: Option<String>,
+    pub dry_run: bool,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -255,23 +256,26 @@ impl RedisSettings {
 
 impl Settings {
     pub fn new_from_file(file: Option<String>) -> Result<Self, ConfigError> {
-        let config_file_required = file.is_some();
         let config_path = env::var("CONFIG_PATH").unwrap_or_else(|_| "config".into());
-        let config_file = file.unwrap_or_else(|| {
-            env::var("CONFIG_FILE").unwrap_or_else(|_| format!("{config_path}/dev"))
-        });
-
-        let default_config_file = format!("{config_path}/default");
-        let local_config_file = format!("{config_path}/local");
-        eprintln!(
-            "Trying to load {:?} config files",
-            vec![&default_config_file, &local_config_file, &config_file]
-        );
-
-        let config = Config::builder()
-            .add_source(File::with_name(&default_config_file))
-            .add_source(File::with_name(&local_config_file).required(false))
-            .add_source(File::with_name(&config_file).required(config_file_required))
+        let mut config_builder =
+            Config::builder().add_source(File::with_name(&format!("{config_path}/default")));
+        eprintln!("Loading {config_path}/default config file");
+        if let Some(file) = file {
+            config_builder = config_builder.add_source(File::with_name(&file).required(true));
+            eprintln!("Loading {file} config file");
+        } else if let Ok(config_file) = env::var("CONFIG_FILE") {
+            config_builder =
+                config_builder.add_source(File::with_name(&config_file).required(true));
+            eprintln!("Loading {config_file} config file");
+        } else {
+            config_builder = config_builder
+                .add_source(File::with_name(&format!("{config_path}/dev")).required(true));
+            eprintln!("Loading {config_path}/dev config file");
+            config_builder = config_builder
+                .add_source(File::with_name(&format!("{config_path}/local")).required(false));
+            eprintln!("Loading {config_path}/local config file");
+        }
+        config_builder
             .add_source(
                 Environment::with_prefix("universal_inbox")
                     .try_parsing(true)
@@ -279,9 +283,8 @@ impl Settings {
                     .list_separator(",")
                     .with_list_parse_key("application.security.csp_extra_connect_src"),
             )
-            .build()?;
-
-        config.try_deserialize()
+            .build()?
+            .try_deserialize()
     }
 
     pub fn new() -> Result<Self, ConfigError> {

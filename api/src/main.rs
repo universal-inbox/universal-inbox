@@ -11,7 +11,7 @@ use sqlx::{
     ConnectOptions,
 };
 use tokio::sync::RwLock;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use universal_inbox::{
     integration_connection::provider::IntegrationProviderKind,
@@ -23,12 +23,16 @@ use universal_inbox::{
 use universal_inbox_api::{
     build_services, commands,
     configuration::Settings,
-    integrations::oauth2::NangoService,
+    integrations::{
+        github::GithubService, google_mail::GoogleMailService, linear::LinearService,
+        oauth2::NangoService, slack::SlackService, todoist::TodoistService,
+    },
     mailer::SmtpMailer,
     observability::{get_subscriber, get_subscriber_with_telemetry, init_subscriber},
     run_server, run_worker,
     utils::{cache::Cache, jwt::JWTBase64EncodedSigningKeys},
 };
+use wiremock::MockServer;
 
 /// Universal Inbox API server and associated commands
 #[derive(Parser)]
@@ -233,6 +237,15 @@ async fn main() -> std::io::Result<()> {
         .expect("Failed to build an SmtpMailer"),
     ));
 
+    if settings.application.dry_run {
+        warn!("⚠️ Starting server in DRY RUN mode, write calls to integrations will be mocked ⚠️");
+    };
+    let github_mock_server = get_github_mock_server(&settings).await;
+    let linear_graphql_mock_server = get_linear_mock_server(&settings).await;
+    let google_mail_mock_server = get_google_mail_mock_server(&settings).await;
+    let slack_mock_server = get_slack_mock_server(&settings).await;
+    let todoist_mock_server = get_todoist_mock_server(&settings).await;
+
     let (
         notification_service,
         task_service,
@@ -243,11 +256,11 @@ async fn main() -> std::io::Result<()> {
     ) = build_services(
         pool,
         &settings,
-        None,
-        None,
-        None,
-        None,
-        None,
+        github_mock_server.map(|mock| mock.uri()),
+        linear_graphql_mock_server.map(|mock| mock.uri()),
+        google_mail_mock_server.map(|mock| mock.uri()),
+        slack_mock_server.map(|mock| mock.uri()),
+        todoist_mock_server.map(|mock| mock.uri()),
         nango_service,
         mailer,
     )
@@ -402,5 +415,55 @@ async fn main() -> std::io::Result<()> {
             panic!("universal-inbox failed: {err:?}")
         }
         Ok(_) => Ok(()),
+    }
+}
+
+async fn get_todoist_mock_server(settings: &Settings) -> Option<MockServer> {
+    if settings.application.dry_run {
+        let mock_server = wiremock::MockServer::start().await;
+        TodoistService::mock_all(&mock_server).await;
+        Some(mock_server)
+    } else {
+        None
+    }
+}
+
+async fn get_slack_mock_server(settings: &Settings) -> Option<MockServer> {
+    if settings.application.dry_run {
+        let mock_server = wiremock::MockServer::start().await;
+        SlackService::mock_all(&mock_server).await;
+        Some(mock_server)
+    } else {
+        None
+    }
+}
+
+async fn get_google_mail_mock_server(settings: &Settings) -> Option<MockServer> {
+    if settings.application.dry_run {
+        let mock_server = wiremock::MockServer::start().await;
+        GoogleMailService::mock_all(&mock_server).await;
+        Some(mock_server)
+    } else {
+        None
+    }
+}
+
+async fn get_linear_mock_server(settings: &Settings) -> Option<MockServer> {
+    if settings.application.dry_run {
+        let mock_server = wiremock::MockServer::start().await;
+        LinearService::mock_all(&mock_server).await;
+        Some(mock_server)
+    } else {
+        None
+    }
+}
+
+async fn get_github_mock_server(settings: &Settings) -> Option<MockServer> {
+    if settings.application.dry_run {
+        let mock_server = wiremock::MockServer::start().await;
+        GithubService::mock_all(&mock_server).await;
+        Some(mock_server)
+    } else {
+        None
     }
 }

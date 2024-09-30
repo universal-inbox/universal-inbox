@@ -4,6 +4,7 @@ use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use cached::{proc_macro::io_cached, Return};
 use chrono::{DateTime, Timelike, Utc};
+use serde_json::json;
 use slack_morphism::{
     errors::{SlackClientApiError, SlackClientError},
     prelude::*,
@@ -38,6 +39,10 @@ use universal_inbox::{
     utils::{default_value::DefaultValue, truncate::truncate_with_ellipse},
     HasHtmlUrl,
 };
+use wiremock::{
+    matchers::{method, path},
+    Mock, MockServer, ResponseTemplate,
+};
 
 use crate::{
     integrations::{notification::NotificationSourceService, task::ThirdPartyTaskService},
@@ -64,6 +69,28 @@ impl SlackService {
             slack_base_url: slack_base_url.unwrap_or_else(|| SLACK_BASE_URL.to_string()),
             integration_connection_service,
         }
+    }
+
+    pub async fn mock_all(mock_server: &MockServer) {
+        Mock::given(method("POST"))
+            .and(path("/stars.add"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "application/json")
+                    .set_body_json(json!({ "ok": true })),
+            )
+            .mount(mock_server)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(path("/stars.remove"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "application/json")
+                    .set_body_json(json!({ "ok": true })),
+            )
+            .mount(mock_server)
+            .await;
     }
 
     #[tracing::instrument(level = "debug", skip(self))]

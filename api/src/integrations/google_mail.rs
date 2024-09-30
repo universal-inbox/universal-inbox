@@ -35,6 +35,10 @@ use universal_inbox::{
     user::UserId,
 };
 use url::Url;
+use wiremock::{
+    matchers::{method, path, path_regex},
+    Mock, MockServer, ResponseTemplate,
+};
 
 use crate::{
     integrations::{
@@ -193,6 +197,69 @@ impl GoogleMailService {
             integration_connection_service,
             notification_service,
         })
+    }
+
+    pub async fn mock_all(mock_server: &MockServer) {
+        Mock::given(method("GET"))
+            .and(path("/users/me/profile"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "application/json")
+                    .set_body_json(&GoogleMailUserProfile {
+                        email_address: "test@test.com".to_string(),
+                        messages_total: 0,
+                        threads_total: 0,
+                        history_id: "123".to_string(),
+                    }),
+            )
+            .mount(mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path_regex("/users/me/threads/.*"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "application/json")
+                    .set_body_json(&RawGoogleMailThread {
+                        id: "123".to_string(),
+                        history_id: "123".to_string(),
+                        messages: vec![],
+                    }),
+            )
+            .mount(mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/users/me/threads"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "application/json")
+                    .set_body_json(&GoogleMailThreadList {
+                        threads: None,
+                        result_size_estimate: 0,
+                        next_page_token: None,
+                    }),
+            )
+            .mount(mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/users/me/labels"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "application/json")
+                    .set_body_json(&GoogleMailLabelList { labels: None }),
+            )
+            .mount(mock_server)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(path_regex("/users/me/threads/[^/]*/modify"))
+            .respond_with(
+                ResponseTemplate::new(200).insert_header("content-type", "application/json"),
+            )
+            .mount(mock_server)
+            .await;
     }
 
     pub fn set_notification_service(

@@ -12,6 +12,7 @@ min_sync_tasks_interval_in_minutes = 5
 # Disabled by default
 # support_href = "mailto:support@universal-inbox.com"
 show_changelog = false
+dry_run = false
 
 [application.email]
 smtp_server = "smtp.example.com"
