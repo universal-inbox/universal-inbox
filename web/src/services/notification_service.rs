@@ -107,8 +107,7 @@ pub async fn notification_service(
             Some(NotificationCommand::Unsubscribe(notification_id)) => {
                 notifications_page
                     .write()
-                    .content
-                    .retain(|notif| notif.id != notification_id);
+                    .remove_element(|notif| notif.id != notification_id);
 
                 let _result: Result<Notification> = call_api_and_notify(
                     Method::PATCH,
@@ -130,8 +129,7 @@ pub async fn notification_service(
 
                 notifications_page
                     .write()
-                    .content
-                    .retain(|notif| notif.id != notification_id);
+                    .remove_element(|notif| notif.id != notification_id);
 
                 let _result: Result<Notification> = call_api_and_notify(
                     Method::PATCH,
@@ -153,8 +151,7 @@ pub async fn notification_service(
                     if notification.is_built_from_task() {
                         notifications_page
                             .write()
-                            .content
-                            .retain(|notif| notif.id != notification.id);
+                            .remove_element(|notif| notif.id != notification.id);
 
                         task_service.send(TaskCommand::Complete(task.id));
                     }
@@ -163,16 +160,14 @@ pub async fn notification_service(
             Some(NotificationCommand::PlanTask(notification, task_id, parameters)) => {
                 notifications_page
                     .write()
-                    .content
-                    .retain(|notif| notif.id != notification.id);
+                    .remove_element(|notif| notif.id != notification.id);
 
                 task_service.send(TaskCommand::Plan(task_id, parameters));
             }
             Some(NotificationCommand::CreateTaskFromNotification(notification, parameters)) => {
                 notifications_page
                     .write()
-                    .content
-                    .retain(|notif| notif.id != notification.id);
+                    .remove_element(|notif| notif.id != notification.id);
 
                 let _result: Result<Option<NotificationWithTask>> = call_api_and_notify(
                     Method::POST,
@@ -189,8 +184,7 @@ pub async fn notification_service(
             Some(NotificationCommand::LinkNotificationWithTask(notification_id, task_id)) => {
                 notifications_page
                     .write()
-                    .content
-                    .retain(|notif| notif.id != notification_id);
+                    .remove_element(|notif| notif.id != notification_id);
 
                 let _result: Result<NotificationWithTask> = call_api_and_notify(
                     Method::PATCH,
@@ -246,22 +240,12 @@ async fn delete_notification(
     api_base_url: &Url,
     notification_id: NotificationId,
     mut notifications_page: Signal<Page<NotificationWithTask>>,
-    mut ui_model: Signal<UniversalInboxUIModel>,
+    ui_model: Signal<UniversalInboxUIModel>,
     toast_service: &Coroutine<ToastCommand>,
 ) {
-    {
-        let mut notifications_page = notifications_page.write();
-        let mut ui_model = ui_model.write();
-
-        notifications_page
-            .content
-            .retain(|notif| notif.id != notification_id);
-        let notifications_count = notifications_page.content.len();
-
-        if notifications_count > 0 && ui_model.selected_notification_index >= notifications_count {
-            ui_model.selected_notification_index = notifications_count - 1;
-        }
-    }
+    notifications_page
+        .write()
+        .remove_element(|notif| notif.id != notification_id);
 
     let _result: Result<Notification, anyhow::Error> = call_api_and_notify(
         Method::PATCH,
@@ -287,8 +271,7 @@ async fn delete_task(
 ) {
     notifications_page
         .write()
-        .content
-        .retain(|notif| notif.id != notification_id);
+        .remove_element(|notif| notif.id != notification_id);
 
     task_service.send(TaskCommand::Delete(task_id));
 }

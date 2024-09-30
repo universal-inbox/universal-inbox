@@ -160,7 +160,7 @@ async fn complete_task(
         let mut synced_tasks_page = synced_tasks_page.write();
         let mut ui_model = ui_model.write();
 
-        synced_tasks_page.content.retain(|t| t.id != task_id);
+        synced_tasks_page.remove_element(|t| t.id != task_id);
         let synced_tasks_count = synced_tasks_page.content.len();
 
         if synced_tasks_count > 0 && ui_model.selected_notification_index >= synced_tasks_count {
