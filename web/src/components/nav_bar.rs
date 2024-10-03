@@ -15,9 +15,13 @@ use gravatar::{Gravatar, Rating};
 
 use crate::{
     config::APP_CONFIG,
-    model::{DEFAULT_USER_AVATAR, NOT_CONNECTED_USER_NAME, UI_MODEL},
+    model::{DEFAULT_USER_AVATAR, NOT_CONNECTED_USER_NAME},
     route::Route,
-    services::user_service::{UserCommand, CONNECTED_USER},
+    services::{
+        notification_service::NOTIFICATIONS_PAGE,
+        task_service::SYNCED_TASKS_PAGE,
+        user_service::{UserCommand, CONNECTED_USER},
+    },
     theme::{toggle_dark_mode, IS_DARK_MODE},
 };
 
@@ -72,8 +76,8 @@ pub fn NavBar() -> Element {
                         Icon { class: "w-5 h-5", icon: BsInbox }
                         p { "Inbox" }
                     }
-                    if let Some(Ok(count)) = &UI_MODEL.read().notifications_count {
-                        span { class: "indicator-item indicator-top badge badge-primary text-xs", "{count}" }
+                    if NOTIFICATIONS_PAGE().total > 0 {
+                      span { class: "indicator-item indicator-top badge badge-primary text-xs", "{NOTIFICATIONS_PAGE().total}" }
                     }
                 }
 
@@ -86,8 +90,8 @@ pub fn NavBar() -> Element {
                         Icon { class: "w-5 h-5", icon: BsBookmarkCheck }
                         p { "Synced tasks" }
                     }
-                    if let Some(Ok(count)) = &UI_MODEL.read().synced_tasks_count {
-                        span { class: "indicator-item indicator-top badge badge-primary text-xs", "{count}" }
+                    if SYNCED_TASKS_PAGE().total > 0 {
+                      span { class: "indicator-item indicator-top badge badge-primary text-xs", "{SYNCED_TASKS_PAGE().total}" }
                     }
                 }
             }

@@ -210,10 +210,8 @@ pub async fn notification_service(
 async fn refresh_notifications(
     api_base_url: &Url,
     mut notifications_page: Signal<Page<NotificationWithTask>>,
-    mut ui_model: Signal<UniversalInboxUIModel>,
+    ui_model: Signal<UniversalInboxUIModel>,
 ) {
-    ui_model.write().notifications_count = None;
-
     let result: Result<Page<NotificationWithTask>> = call_api(
         Method::GET,
         api_base_url,
@@ -224,15 +222,8 @@ async fn refresh_notifications(
     )
     .await;
 
-    match result {
-        Ok(new_notifications_page) => {
-            ui_model.write().notifications_count = Some(Ok(new_notifications_page.total));
-            *notifications_page.write() = new_notifications_page;
-        }
-        Err(err) => {
-            ui_model.write().notifications_count =
-                Some(Err(format!("Failed to load notifications: {err}")));
-        }
+    if let Ok(new_notifications_page) = result {
+        *notifications_page.write() = new_notifications_page;
     }
 }
 

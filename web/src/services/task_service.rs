@@ -124,10 +124,8 @@ pub async fn task_service(
 async fn refresh_synced_tasks(
     api_base_url: &Url,
     mut synced_tasks_page: Signal<Page<Task>>,
-    mut ui_model: Signal<UniversalInboxUIModel>,
+    ui_model: Signal<UniversalInboxUIModel>,
 ) {
-    ui_model.write().synced_tasks_count = None;
-
     let result: Result<Page<Task>> = call_api(
         Method::GET,
         api_base_url,
@@ -137,15 +135,8 @@ async fn refresh_synced_tasks(
     )
     .await;
 
-    match result {
-        Ok(new_synced_tasks_page) => {
-            ui_model.write().synced_tasks_count = Some(Ok(new_synced_tasks_page.total));
-            *synced_tasks_page.write() = new_synced_tasks_page;
-        }
-        Err(err) => {
-            ui_model.write().synced_tasks_count =
-                Some(Err(format!("Failed to load synchronized tasks: {err}")));
-        }
+    if let Ok(new_synced_tasks_page) = result {
+        *synced_tasks_page.write() = new_synced_tasks_page;
     }
 }
 
@@ -153,20 +144,12 @@ async fn complete_task(
     api_base_url: &Url,
     task_id: TaskId,
     mut synced_tasks_page: Signal<Page<Task>>,
-    mut ui_model: Signal<UniversalInboxUIModel>,
+    ui_model: Signal<UniversalInboxUIModel>,
     toast_service: Coroutine<ToastCommand>,
 ) {
-    {
-        let mut synced_tasks_page = synced_tasks_page.write();
-        let mut ui_model = ui_model.write();
-
-        synced_tasks_page.remove_element(|t| t.id != task_id);
-        let synced_tasks_count = synced_tasks_page.content.len();
-
-        if synced_tasks_count > 0 && ui_model.selected_notification_index >= synced_tasks_count {
-            ui_model.selected_notification_index = synced_tasks_count - 1;
-        }
-    }
+    synced_tasks_page
+        .write()
+        .remove_element(|t| t.id != task_id);
 
     let _result: Result<Task> = call_api_and_notify(
         Method::PATCH,

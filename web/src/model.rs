@@ -13,8 +13,6 @@ pub struct UniversalInboxUIModel {
     pub task_planning_modal_opened: bool,
     pub task_link_modal_opened: bool,
     pub authentication_state: AuthenticationState,
-    pub notifications_count: Option<Result<usize, String>>,
-    pub synced_tasks_count: Option<Result<usize, String>>,
     pub selected_preview_pane: PreviewPane,
     pub error_message: Option<String>,
     pub confirmation_message: Option<String>,
