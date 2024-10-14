@@ -1,10 +1,11 @@
 #![allow(clippy::too_many_arguments)]
 
-use chrono::Utc;
+use chrono::{Timelike, Utc};
 use pretty_assertions::assert_eq;
 use rstest::*;
-use slack_morphism::prelude::SlackPushEvent;
+use slack_morphism::prelude::*;
 use tokio::time::{sleep, Duration};
+use uuid::Uuid;
 
 use universal_inbox::{
     integration_connection::{
@@ -12,8 +13,14 @@ use universal_inbox::{
         integrations::{slack::SlackConfig, todoist::TodoistConfig},
     },
     notification::{NotificationSourceKind, NotificationStatus},
-    task::{Task, TaskCreationResult, TaskSourceKind, TaskStatus},
-    third_party::integrations::todoist::TodoistItemPriority,
+    task::{service::TaskPatch, Task, TaskCreationResult, TaskSourceKind, TaskStatus},
+    third_party::{
+        integrations::{
+            slack::{SlackStar, SlackStarItem, SlackStarState},
+            todoist::{TodoistItem, TodoistItemPriority},
+        },
+        item::{ThirdPartyItem, ThirdPartyItemCreationResult, ThirdPartyItemData},
+    },
 };
 
 use universal_inbox_api::{
@@ -33,16 +40,17 @@ use crate::helpers::{
             mock_slack_fetch_channel, mock_slack_fetch_message, mock_slack_fetch_team,
             mock_slack_fetch_user, mock_slack_get_chat_permalink, mock_slack_stars_add,
             mock_slack_stars_remove, slack_push_star_added_event, slack_push_star_removed_event,
+            slack_starred_message,
         },
     },
-    rest::{create_resource_response, get_resource},
+    rest::{create_resource, create_resource_response, get_resource, patch_resource},
     settings,
     task::{
         list_tasks, sync_tasks,
         todoist::{
-            mock_todoist_get_item_service, mock_todoist_item_add_service,
-            mock_todoist_sync_resources_service, sync_todoist_items_response,
-            sync_todoist_projects_response,
+            mock_todoist_complete_item_service, mock_todoist_get_item_service,
+            mock_todoist_item_add_service, mock_todoist_sync_resources_service,
+            sync_todoist_items_response, sync_todoist_projects_response, todoist_item,
         },
     },
 };
@@ -282,4 +290,142 @@ async fn test_sync_todoist_slack_task(
 
         assert_eq!(notifications.len(), 0);
     }
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_patch_slack_task_status_as_done(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    slack_push_star_added_event: Box<SlackPushEvent>,
+    slack_starred_message: Box<SlackStarItem>,
+    todoist_item: Box<TodoistItem>,
+    sync_todoist_projects_response: TodoistSyncResponse,
+    nango_slack_connection: Box<NangoConnection>,
+    nango_todoist_connection: Box<NangoConnection>,
+) {
+    let app = authenticated_app.await;
+    let integration_connection = create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        &settings.oauth2.nango_secret_key,
+        IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_tasks()),
+        &settings,
+        nango_slack_connection,
+        None,
+    )
+    .await;
+    create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        &settings.oauth2.nango_secret_key,
+        IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
+        &settings,
+        nango_todoist_connection,
+        None,
+    )
+    .await;
+
+    mock_todoist_sync_resources_service(
+        &app.app.todoist_mock_server,
+        "projects",
+        &sync_todoist_projects_response,
+        None,
+    );
+
+    mock_todoist_item_add_service(
+        &app.app.todoist_mock_server,
+        &todoist_item.id,
+        "[🔴  *Test title* 🔴...](https://example.com/)".to_string(),
+        Some(
+            "🔴  *Test title* 🔴\n\n- list 1\n- list 2\n1. number 1\n1. number 2\n> quote\n```$ echo Hello world```\n_Some_ `formatted` ~text~.\n\nHere is a [link](https://www.universal-inbox.com)".to_string(),
+        ),
+        todoist_item.project_id.clone(),
+        None,
+        TodoistItemPriority::P1,
+    );
+    mock_todoist_get_item_service(
+        &app.app.todoist_mock_server,
+        Box::new(*todoist_item.clone()),
+    );
+
+    let SlackPushEvent::EventCallback(SlackPushEventCallback {
+        event:
+            SlackEventCallbackBody::StarAdded(
+                SlackStarAddedEvent {
+                    item:
+                        SlackStarsItem::Message(SlackStarsItemMessage {
+                            message:
+                                SlackHistoryMessage {
+                                    origin: SlackMessageOrigin { ts: source_id, .. },
+                                    ..
+                                },
+                            ..
+                        }),
+                    ..
+                },
+                ..,
+            ),
+        ..
+    }) = *slack_push_star_added_event
+    else {
+        unreachable!("Unexpected event type");
+    };
+    let creation: Box<ThirdPartyItemCreationResult> = create_resource(
+        &app.client,
+        &app.app.api_address,
+        "third_party/task/items",
+        Box::new(ThirdPartyItem {
+            id: Uuid::new_v4().into(),
+            source_id: source_id.to_string(),
+            created_at: Utc::now().with_nanosecond(0).unwrap(),
+            updated_at: Utc::now().with_nanosecond(0).unwrap(),
+            user_id: app.user.id,
+            data: ThirdPartyItemData::SlackStar(SlackStar {
+                state: SlackStarState::StarAdded,
+                created_at: Utc::now().with_nanosecond(0).unwrap(),
+                item: *slack_starred_message,
+            }),
+            integration_connection_id: integration_connection.id,
+        }),
+    )
+    .await;
+
+    let exiting_task = creation.task.as_ref().unwrap().clone();
+    assert_eq!(exiting_task.status, TaskStatus::Active);
+
+    let todoist_mock = mock_todoist_complete_item_service(
+        &app.app.todoist_mock_server,
+        &exiting_task.sink_item.as_ref().unwrap().source_id,
+    );
+    let slack_star_add_mock =
+        mock_slack_stars_add(&app.app.slack_mock_server, "C05XXX", "1707686216.825719");
+    let slack_star_remove_mock =
+        mock_slack_stars_remove(&app.app.slack_mock_server, "C05XXX", "1707686216.825719");
+
+    let patched_task: Box<Task> = patch_resource(
+        &app.client,
+        &app.app.api_address,
+        "tasks",
+        exiting_task.id.into(),
+        &TaskPatch {
+            status: Some(TaskStatus::Done),
+            ..Default::default()
+        },
+    )
+    .await;
+
+    todoist_mock.assert();
+    slack_star_add_mock.assert();
+    slack_star_remove_mock.assert();
+
+    assert!(patched_task.completed_at.is_some());
+    assert_eq!(
+        patched_task,
+        Box::new(Task {
+            status: TaskStatus::Done,
+            completed_at: patched_task.completed_at,
+            ..exiting_task
+        })
+    );
 }

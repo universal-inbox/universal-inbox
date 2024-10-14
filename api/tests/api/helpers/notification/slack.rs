@@ -9,9 +9,12 @@ use slack_morphism::prelude::{
     SlackApiTeamInfoResponse, SlackApiUsersInfoResponse, SlackPushEvent,
 };
 
-use universal_inbox::notification::{
-    integrations::slack::{SlackMessageDetails, SlackMessageSenderDetails},
-    NotificationDetails,
+use universal_inbox::{
+    notification::{
+        integrations::slack::{SlackMessageDetails, SlackMessageSenderDetails},
+        NotificationDetails,
+    },
+    third_party::integrations::slack::SlackStarItem,
 };
 
 use crate::helpers::{fixture_path, load_json_fixture_file};
@@ -216,4 +219,25 @@ pub fn mock_slack_get_chat_permalink<'a>(
             .header("content-type", "application/json")
             .body_from_file(fixture_path(fixture_response_file));
     })
+}
+
+#[fixture]
+pub fn slack_starred_message() -> Box<SlackStarItem> {
+    let message_response: SlackApiConversationsHistoryResponse =
+        load_json_fixture_file("slack_fetch_message_response.json");
+    let channel_response: SlackApiConversationsInfoResponse =
+        load_json_fixture_file("slack_fetch_channel_response.json");
+    let user_response: SlackApiUsersInfoResponse =
+        load_json_fixture_file("slack_fetch_user_response.json");
+    let sender = SlackMessageSenderDetails::User(Box::new(user_response.user));
+    let team_response: SlackApiTeamInfoResponse =
+        load_json_fixture_file("slack_fetch_team_response.json");
+
+    Box::new(SlackStarItem::SlackMessage(SlackMessageDetails {
+        url: "https://example.com".parse().unwrap(),
+        message: message_response.messages[0].clone(),
+        channel: channel_response.channel,
+        sender,
+        team: team_response.team,
+    }))
 }
