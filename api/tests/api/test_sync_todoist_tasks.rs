@@ -81,7 +81,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
         create_resource(
             &app.client,
             &app.app.api_address,
-            "third_party/items",
+            "third_party/task/items",
             Box::new(ThirdPartyItem {
                 id: Uuid::new_v4().into(),
                 source_id: todoist_items[1].id.clone(),
@@ -528,7 +528,7 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
             let creation: Box<ThirdPartyItemCreationResult> = create_resource(
                 &app.client,
                 &app.app.api_address,
-                "third_party/items",
+                "third_party/task/items",
                 Box::new(ThirdPartyItem {
                     id: Uuid::new_v4().into(),
                     source_id: todoist_item.id.clone(),
@@ -643,7 +643,7 @@ async fn test_sync_tasks_should_not_update_tasks_and_notifications_with_empty_in
             let creation: Box<ThirdPartyItemCreationResult> = create_resource(
                 &app.client,
                 &app.app.api_address,
-                "third_party/items",
+                "third_party/task/items",
                 Box::new(ThirdPartyItem {
                     id: Uuid::new_v4().into(),
                     source_id: todoist_item.id.clone(),
@@ -832,7 +832,7 @@ async fn test_sync_all_tasks_asynchronously(
         create_resource(
             &app.client,
             &app.app.api_address,
-            "third_party/items",
+            "third_party/task/items",
             Box::new(ThirdPartyItem {
                 id: Uuid::new_v4().into(),
                 source_id: todoist_items[1].id.clone(),

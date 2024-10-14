@@ -531,7 +531,10 @@ impl NotificationRepository for Repository {
             .map(|snoozed_until| snoozed_until.naive_utc());
 
         if let Some(existing_notification) = existing_notification {
-            if existing_notification.updated_at == notification.updated_at {
+            if existing_notification.updated_at == notification.updated_at &&
+                // TODO: Remove once NotificationDetails has been removed
+                existing_notification.title == notification.title
+            {
                 debug!(
                     "Existing {} notification {} (from {}) for {} does not need updating: {:?}",
                     kind,

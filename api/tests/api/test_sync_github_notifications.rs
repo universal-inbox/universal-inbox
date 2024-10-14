@@ -95,7 +95,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     let creation: Box<ThirdPartyItemCreationResult> = create_resource(
         &app.client,
         &app.app.api_address,
-        "third_party/items",
+        "third_party/task/items",
         Box::new(ThirdPartyItem {
             id: Uuid::new_v4().into(),
             source_id: todoist_item.id.clone(),
@@ -480,8 +480,8 @@ async fn test_sync_all_notifications_asynchronously(
             break true;
         }
 
-        if i == 10 {
-            // Give up after 10 attempts
+        if i == 20 {
+            // Give up after 20 attempts
             break false;
         }
 

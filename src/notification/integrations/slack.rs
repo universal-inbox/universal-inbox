@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use slack_blocks_render::render_blocks_as_markdown;
 use slack_morphism::prelude::*;
@@ -67,6 +68,46 @@ impl SlackPushEventCallbackExt for SlackPushEventCallback {
                 blocks,
                 NotificationStatus::Deleted,
             ),
+            SlackPushEventCallback {
+                event_time,
+                event:
+                    SlackEventCallbackBody::ReactionAdded(SlackReactionAddedEvent {
+                        item:
+                            SlackReactionsItem::Message(SlackHistoryMessage {
+                                origin: SlackMessageOrigin { ts, .. },
+                                content: SlackMessageContent { text, blocks, .. },
+                                ..
+                            }),
+                        ..
+                    }),
+                ..
+            } => (
+                event_time.0,
+                ts.to_string(),
+                (*text).clone().unwrap_or("Reaction on message".to_string()),
+                blocks,
+                NotificationStatus::Unread,
+            ),
+            SlackPushEventCallback {
+                event_time,
+                event:
+                    SlackEventCallbackBody::ReactionRemoved(SlackReactionRemovedEvent {
+                        item:
+                            SlackReactionsItem::Message(SlackHistoryMessage {
+                                origin: SlackMessageOrigin { ts, .. },
+                                content: SlackMessageContent { text, blocks, .. },
+                                ..
+                            }),
+                        ..
+                    }),
+                ..
+            } => (
+                event_time.0,
+                ts.to_string(),
+                (*text).clone().unwrap_or("Reaction on message".to_string()),
+                blocks,
+                NotificationStatus::Deleted,
+            ),
             _ => return Err(anyhow!("Unsupported Slack event {self:?}")),
         };
         let content_with_emojis = if let Some(blocks) = &blocks {
@@ -116,6 +157,63 @@ impl SlackMessageDetails {
         .parse()
         .unwrap()
     }
+
+    pub fn content(&self) -> String {
+        if let Some(blocks) = &self.message.content.blocks {
+            if !blocks.is_empty() {
+                return render_blocks_as_markdown(blocks.clone());
+            }
+        }
+
+        if let Some(attachments) = &self.message.content.attachments {
+            if !attachments.is_empty() {
+                let str_blocks = attachments
+                    .iter()
+                    .filter_map(|a| {
+                        a.blocks
+                            .as_ref()
+                            .map(|blocks| render_blocks_as_markdown(blocks.clone()))
+                    })
+                    .collect::<Vec<String>>();
+                if !str_blocks.is_empty() {
+                    return str_blocks.join("\n");
+                }
+            }
+        }
+
+        let message = if let Some(text) = &self.message.content.text {
+            sanitize_slack_markdown(text)
+        } else {
+            "A slack message".to_string()
+        };
+
+        replace_emoji_code_in_string_with_emoji(&message)
+    }
+}
+
+fn sanitize_slack_markdown(slack_markdown: &str) -> String {
+    // Replace slack markdown with common markdown
+    // This could be more robustly implemented using Slack blocks
+    let regexs = [
+        (Regex::new(r"^```").unwrap(), "```\n"),
+        (Regex::new(r"```$").unwrap(), "\n```"),
+        (Regex::new(r"^• ").unwrap(), "- "),
+        (Regex::new(r"^(\s*)◦ ").unwrap(), "$1- "),
+        (Regex::new(r"^&gt; ").unwrap(), "> "),
+        (Regex::new(r"<([^|]+)\|([^>]+)>").unwrap(), "[$2]($1)"),
+    ];
+
+    slack_markdown
+        .lines()
+        .map(|line| {
+            regexs
+                .iter()
+                .fold(line.to_string(), |acc, (re, replacement)| {
+                    re.replace(&acc, *replacement).to_string()
+                })
+        })
+        .collect::<Vec<String>>()
+        .join("\n")
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
@@ -142,6 +240,12 @@ impl HasHtmlUrl for SlackFileDetails {
         )
         .parse()
         .unwrap()
+    }
+}
+
+impl SlackFileDetails {
+    pub fn content(&self) -> String {
+        self.title.clone().unwrap_or_else(|| "File".to_string())
     }
 }
 
@@ -212,5 +316,52 @@ impl HasHtmlUrl for SlackGroupDetails {
         )
         .parse()
         .unwrap()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::*;
+
+    #[rstest]
+    fn test_sanitize_slack_markdown_code() {
+        assert_eq!(
+            sanitize_slack_markdown("```$ echo Hello```"),
+            "```\n$ echo Hello\n```"
+        );
+        assert_eq!(
+            sanitize_slack_markdown("test: ```$ echo Hello```."),
+            "test: ```$ echo Hello```."
+        );
+    }
+
+    #[rstest]
+    fn test_sanitize_slack_markdown_list() {
+        assert_eq!(sanitize_slack_markdown("• item"), "- item");
+        assert_eq!(sanitize_slack_markdown("test: • item"), "test: • item");
+    }
+
+    #[rstest]
+    fn test_sanitize_slack_markdown_sublist() {
+        assert_eq!(sanitize_slack_markdown(" ◦ subitem"), " - subitem");
+        assert_eq!(
+            sanitize_slack_markdown("test: ◦ subitem"),
+            "test: ◦ subitem"
+        );
+    }
+
+    #[rstest]
+    fn test_sanitize_slack_markdown_quote() {
+        assert_eq!(sanitize_slack_markdown("&gt; "), "> ");
+        assert_eq!(sanitize_slack_markdown("test: &gt; "), "test: &gt; ");
+    }
+
+    #[rstest]
+    fn test_sanitize_slack_markdown_link() {
+        assert_eq!(
+            sanitize_slack_markdown("This is a <https://www.example.com|link> to www.example.com"),
+            "This is a [link](https://www.example.com) to www.example.com"
+        );
     }
 }

@@ -31,7 +31,6 @@ js-sys = "0.3"
 lazy_static = { workspace = true }
 log = { workspace = true }
 openidconnect = { workspace = true }
-regex = { workspace = true }
 reqwest = { workspace = true }
 secrecy = { workspace = true }
 serde = { workspace = true }

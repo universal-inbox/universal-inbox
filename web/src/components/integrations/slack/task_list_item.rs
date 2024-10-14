@@ -10,7 +10,10 @@ use universal_inbox::{
         SlackImDetails, SlackMessageDetails,
     },
     task::Task,
-    third_party::integrations::slack::{SlackStar, SlackStarredItem},
+    third_party::integrations::slack::{
+        SlackReaction, SlackReactionItem, SlackStar, SlackStarItem,
+    },
+    utils::emoji::replace_emoji_code_with_emoji,
 };
 
 use crate::components::{
@@ -26,7 +29,7 @@ use crate::components::{
 };
 
 #[component]
-pub fn SlackTaskListItem(
+pub fn SlackStarTaskListItem(
     task: ReadOnlySignal<Task>,
     slack_star: ReadOnlySignal<SlackStar>,
     is_selected: ReadOnlySignal<bool>,
@@ -43,7 +46,7 @@ pub fn SlackTaskListItem(
         ListItem {
             key: "{task().id}",
             title: "{task().title}",
-            subtitle: rsx! { SlackTaskSubtitle { slack_star } },
+            subtitle: rsx! { SlackStarTaskSubtitle { slack_star } },
             icon: rsx! { Icon { class: "h-5 w-5", icon: BsSlack } },
             subicon: rsx! { SlackNotificationIcon { class: "h-5 w-5 min-w-5" } },
             action_buttons: get_task_list_item_action_buttons(
@@ -53,7 +56,7 @@ pub fn SlackTaskListItem(
             is_selected,
             on_select,
 
-            SlackTaskListItemDetails { slack_star }
+            SlackStarTaskListItemDetails { slack_star }
 
             span { class: "text-gray-400 whitespace-nowrap text-xs font-mono", "{task_updated_at}" }
         }
@@ -61,14 +64,51 @@ pub fn SlackTaskListItem(
 }
 
 #[component]
-pub fn SlackTaskSubtitle(slack_star: ReadOnlySignal<SlackStar>) -> Element {
-    let subtitle = match slack_star().starred_item {
-        SlackStarredItem::SlackMessage(SlackMessageDetails { channel, .. })
-        | SlackStarredItem::SlackFile(SlackFileDetails { channel, .. })
-        | SlackStarredItem::SlackFileComment(SlackFileCommentDetails { channel, .. })
-        | SlackStarredItem::SlackChannel(SlackChannelDetails { channel, .. })
-        | SlackStarredItem::SlackIm(SlackImDetails { channel, .. })
-        | SlackStarredItem::SlackGroup(SlackGroupDetails { channel, .. }) => {
+pub fn SlackReactionTaskListItem(
+    task: ReadOnlySignal<Task>,
+    slack_reaction: ReadOnlySignal<SlackReaction>,
+    is_selected: ReadOnlySignal<bool>,
+    on_select: EventHandler<()>,
+) -> Element {
+    let task_updated_at = use_memo(move || {
+        Into::<DateTime<Local>>::into(task().updated_at)
+            .format("%Y-%m-%d %H:%M")
+            .to_string()
+    });
+    let list_context = use_context::<Memo<ListContext>>();
+    let reaction_emoji =
+        replace_emoji_code_with_emoji(&slack_reaction().name.0).unwrap_or("👀".to_string());
+
+    rsx! {
+        ListItem {
+            key: "{task().id}",
+            title: "{task().title}",
+            subtitle: rsx! { SlackReactionTaskSubtitle { slack_reaction } },
+            icon: rsx! { Icon { class: "h-5 w-5", icon: BsSlack } },
+            subicon: rsx! { span { class: "h-5 w-5 min-w-5", "{reaction_emoji}" } },
+            action_buttons: get_task_list_item_action_buttons(
+                task,
+                list_context().show_shortcut,
+            ),
+            is_selected,
+            on_select,
+
+            SlackReactionTaskListItemDetails { slack_reaction }
+
+            span { class: "text-gray-400 whitespace-nowrap text-xs font-mono", "{task_updated_at}" }
+        }
+    }
+}
+
+#[component]
+pub fn SlackStarTaskSubtitle(slack_star: ReadOnlySignal<SlackStar>) -> Element {
+    let subtitle = match slack_star().item {
+        SlackStarItem::SlackMessage(SlackMessageDetails { channel, .. })
+        | SlackStarItem::SlackFile(SlackFileDetails { channel, .. })
+        | SlackStarItem::SlackFileComment(SlackFileCommentDetails { channel, .. })
+        | SlackStarItem::SlackChannel(SlackChannelDetails { channel, .. })
+        | SlackStarItem::SlackIm(SlackImDetails { channel, .. })
+        | SlackStarItem::SlackGroup(SlackGroupDetails { channel, .. }) => {
             if let Some(channel_name) = &channel.name {
                 format!("#{}", channel_name)
             } else {
@@ -86,25 +126,58 @@ pub fn SlackTaskSubtitle(slack_star: ReadOnlySignal<SlackStar>) -> Element {
 }
 
 #[component]
-fn SlackTaskListItemDetails(slack_star: ReadOnlySignal<SlackStar>) -> Element {
-    match slack_star().starred_item {
-        SlackStarredItem::SlackMessage(slack_message) => rsx! {
+pub fn SlackReactionTaskSubtitle(slack_reaction: ReadOnlySignal<SlackReaction>) -> Element {
+    let subtitle = match slack_reaction().item {
+        SlackReactionItem::SlackMessage(SlackMessageDetails { channel, .. })
+        | SlackReactionItem::SlackFile(SlackFileDetails { channel, .. }) => {
+            if let Some(channel_name) = &channel.name {
+                format!("#{}", channel_name)
+            } else {
+                format!("#{}", channel.id)
+            }
+        }
+    };
+
+    rsx! {
+        span {
+            class: "flex gap-2 text-xs text-gray-400",
+            "{subtitle}"
+        }
+    }
+}
+
+#[component]
+fn SlackStarTaskListItemDetails(slack_star: ReadOnlySignal<SlackStar>) -> Element {
+    match slack_star().item {
+        SlackStarItem::SlackMessage(slack_message) => rsx! {
             SlackMessageListItemDetails { slack_message }
         },
-        SlackStarredItem::SlackFile(slack_file) => rsx! {
+        SlackStarItem::SlackFile(slack_file) => rsx! {
             SlackFileListItemDetails { slack_file }
         },
-        SlackStarredItem::SlackFileComment(slack_file_comment) => rsx! {
+        SlackStarItem::SlackFileComment(slack_file_comment) => rsx! {
             SlackFileCommentListItemDetails { slack_file_comment }
         },
-        SlackStarredItem::SlackChannel(slack_channel) => rsx! {
+        SlackStarItem::SlackChannel(slack_channel) => rsx! {
             SlackChannelListItemDetails { slack_channel }
         },
-        SlackStarredItem::SlackIm(slack_im) => rsx! {
+        SlackStarItem::SlackIm(slack_im) => rsx! {
             SlackImListItemDetails { slack_im }
         },
-        SlackStarredItem::SlackGroup(slack_group) => rsx! {
+        SlackStarItem::SlackGroup(slack_group) => rsx! {
             SlackGroupListItemDetails { slack_group }
+        },
+    }
+}
+
+#[component]
+fn SlackReactionTaskListItemDetails(slack_reaction: ReadOnlySignal<SlackReaction>) -> Element {
+    match slack_reaction().item {
+        SlackReactionItem::SlackMessage(slack_message) => rsx! {
+            SlackMessageListItemDetails { slack_message }
+        },
+        SlackReactionItem::SlackFile(slack_file) => rsx! {
+            SlackFileListItemDetails { slack_file }
         },
     }
 }

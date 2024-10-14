@@ -1,22 +1,13 @@
-CREATE TYPE task_kind_new AS ENUM ('Todoist', 'Slack');
-DELETE FROM task
- WHERE kind IN ('Linear');
-ALTER TABLE task
-  ALTER COLUMN kind TYPE task_kind_new 
-  USING (kind::text::task_kind_new);
-DROP TYPE task_kind;
-ALTER TYPE task_kind_new RENAME TO task_kind;
+CREATE TYPE third_party_item_kind_new AS ENUM ('TodoistItem', 'LinearIssue', 'SlackStar');
 
-CREATE TYPE third_party_item_kind_new AS ENUM ('TodoistItem', 'SlackStar');
-
--- Delete tasks where source_item or sink_item has a LinearIssue kind
+-- Delete tasks where source_item or sink_item has a SlackReaction kind
 DELETE FROM task
   USING third_party_item
 WHERE
   task.source_item_id = third_party_item.id
-  AND third_party_item.kind = 'LinearIssue';
+  AND third_party_item.kind = 'SlackReaction';
 
-DELETE FROM third_party_item WHERE kind = 'LinearIssue';
+DELETE FROM third_party_item WHERE kind = 'SlackReaction';
 
 ALTER TABLE third_party_item
   DROP COLUMN kind;
@@ -34,3 +25,15 @@ CREATE FUNCTION text_to_third_party_item_kind(kind TEXT) RETURNS third_party_ite
 
 ALTER TABLE third_party_item
   ADD COLUMN kind third_party_item_kind GENERATED ALWAYS AS (text_to_third_party_item_kind(data->>'type')) STORED;
+
+
+UPDATE
+  integration_connection_config
+SET
+  config = jsonb_set(
+    config::jsonb,
+    '{content}',
+    (config->'content'->'star_config')::jsonb
+  )::json
+WHERE
+  kind = 'Slack';

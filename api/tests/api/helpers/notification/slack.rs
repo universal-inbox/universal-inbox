@@ -22,6 +22,11 @@ pub fn slack_push_star_added_event() -> Box<SlackPushEvent> {
 }
 
 #[fixture]
+pub fn slack_push_reaction_added_event() -> Box<SlackPushEvent> {
+    load_json_fixture_file("slack_push_reaction_added_event.json")
+}
+
+#[fixture]
 pub fn slack_push_bot_star_added_event() -> Box<SlackPushEvent> {
     load_json_fixture_file("slack_push_bot_star_added_event.json")
 }
@@ -29,6 +34,11 @@ pub fn slack_push_bot_star_added_event() -> Box<SlackPushEvent> {
 #[fixture]
 pub fn slack_push_star_removed_event() -> Box<SlackPushEvent> {
     load_json_fixture_file("slack_push_star_removed_event.json")
+}
+
+#[fixture]
+pub fn slack_push_reaction_removed_event() -> Box<SlackPushEvent> {
+    load_json_fixture_file("slack_push_reaction_removed_event.json")
 }
 
 #[fixture]

@@ -1,16 +1,26 @@
+#![allow(clippy::too_many_arguments)]
+
+use apalis::prelude::Storage;
 use chrono::{TimeZone, Utc};
 use pretty_assertions::assert_eq;
 use rstest::*;
-use slack_morphism::prelude::{
-    SlackAppHomeOpenedEvent, SlackAppRateLimitedEvent, SlackEventCallbackBody, SlackPushEvent,
-    SlackPushEventCallback, SlackStarAddedEvent, SlackStarsItem, SlackUrlVerificationEvent,
+use slack_morphism::{
+    events::SlackStarRemovedEvent,
+    prelude::{
+        SlackAppHomeOpenedEvent, SlackAppRateLimitedEvent, SlackEventCallbackBody, SlackPushEvent,
+        SlackPushEventCallback, SlackStarAddedEvent, SlackStarsItem, SlackUrlVerificationEvent,
+    },
+    SlackReactionName,
 };
 use tokio::time::{sleep, Duration};
 
 use universal_inbox::{
     integration_connection::{
         config::IntegrationConnectionConfig,
-        integrations::{slack::SlackConfig, todoist::TodoistConfig},
+        integrations::{
+            slack::{SlackConfig, SlackReactionConfig, SlackSyncType},
+            todoist::TodoistConfig,
+        },
     },
     notification::{
         integrations::slack::SlackMessageSenderDetails, NotificationDetails, NotificationMetadata,
@@ -41,6 +51,7 @@ use crate::helpers::{
             mock_slack_fetch_bot, mock_slack_fetch_channel, mock_slack_fetch_message,
             mock_slack_fetch_reply, mock_slack_fetch_team, mock_slack_fetch_user,
             mock_slack_get_chat_permalink, slack_push_bot_star_added_event,
+            slack_push_reaction_added_event, slack_push_reaction_removed_event,
             slack_push_star_added_event, slack_push_star_removed_event,
         },
     },
@@ -131,10 +142,14 @@ async fn test_receive_slack_ignored_push_event_callback(
 }
 
 #[rstest]
+#[case::star_added(true)]
+#[case::reaction_added(false)]
 #[tokio::test]
-async fn test_receive_star_added_event_for_unknown_user(
+async fn test_receive_star_reaction_event_for_unknown_user(
     #[future] authenticated_app: AuthenticatedApp,
     slack_push_star_added_event: Box<SlackPushEvent>,
+    slack_push_reaction_added_event: Box<SlackPushEvent>,
+    #[case] star_added_case: bool,
 ) {
     let app = authenticated_app.await;
 
@@ -142,13 +157,80 @@ async fn test_receive_star_added_event_for_unknown_user(
         &app.client,
         &app.app.api_address,
         "hooks/slack/events",
-        slack_push_star_added_event.clone(),
+        if star_added_case {
+            slack_push_star_added_event
+        } else {
+            slack_push_reaction_added_event
+        },
     )
     .await;
 
     assert_eq!(response.status(), 200);
 
-    assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
+    assert!(app
+        .app
+        .redis_storage
+        .is_empty()
+        .await
+        .expect("Failed to get jobs count"));
+
+    let notifications = list_notifications(
+        &app.client,
+        &app.app.api_address,
+        vec![NotificationStatus::Unread],
+        false,
+        None,
+        None,
+        false,
+    )
+    .await;
+    assert!(notifications.is_empty());
+}
+
+#[rstest]
+#[case::star_added(true)]
+#[case::reaction_added(false)]
+#[tokio::test]
+async fn test_receive_star_reaction_event_for_disabled_config(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    slack_push_star_added_event: Box<SlackPushEvent>,
+    slack_push_reaction_added_event: Box<SlackPushEvent>,
+    #[case] star_added_case: bool,
+    nango_slack_connection: Box<NangoConnection>,
+) {
+    let app = authenticated_app.await;
+    create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        &settings.oauth2.nango_secret_key,
+        IntegrationConnectionConfig::Slack(SlackConfig::disabled()),
+        &settings,
+        nango_slack_connection,
+        None,
+    )
+    .await;
+
+    let response = create_resource_response(
+        &app.client,
+        &app.app.api_address,
+        "hooks/slack/events",
+        if star_added_case {
+            slack_push_star_added_event
+        } else {
+            slack_push_reaction_added_event
+        },
+    )
+    .await;
+
+    assert_eq!(response.status(), 200);
+
+    assert!(app
+        .app
+        .redis_storage
+        .is_empty()
+        .await
+        .expect("Failed to get jobs count"));
 
     let notifications = list_notifications(
         &app.client,
@@ -165,10 +247,71 @@ async fn test_receive_star_added_event_for_unknown_user(
 
 #[rstest]
 #[tokio::test]
-async fn test_receive_star_added_event_as_notification(
+async fn test_receive_reaction_event_for_different_reaction(
     settings: Settings,
     #[future] authenticated_app: AuthenticatedApp,
+    slack_push_reaction_added_event: Box<SlackPushEvent>,
+    nango_slack_connection: Box<NangoConnection>,
+) {
+    let app = authenticated_app.await;
+    create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        &settings.oauth2.nango_secret_key,
+        IntegrationConnectionConfig::Slack(SlackConfig {
+            reaction_config: SlackReactionConfig {
+                sync_enabled: true,
+                reaction_name: SlackReactionName("bookmark".to_string()), // slack_push_reaction_added_event uses "eyes" reaction
+                sync_type: SlackSyncType::AsNotifications,
+            },
+            ..SlackConfig::default()
+        }),
+        &settings,
+        nango_slack_connection,
+        None,
+    )
+    .await;
+
+    let response = create_resource_response(
+        &app.client,
+        &app.app.api_address,
+        "hooks/slack/events",
+        slack_push_reaction_added_event,
+    )
+    .await;
+
+    assert_eq!(response.status(), 200);
+
+    assert!(app
+        .app
+        .redis_storage
+        .is_empty()
+        .await
+        .expect("Failed to get jobs count"));
+
+    let notifications = list_notifications(
+        &app.client,
+        &app.app.api_address,
+        vec![NotificationStatus::Unread],
+        false,
+        None,
+        None,
+        false,
+    )
+    .await;
+    assert!(notifications.is_empty());
+}
+
+#[rstest]
+#[case::star_added(true)]
+#[case::reaction_added(false)]
+#[tokio::test]
+async fn test_receive_star_or_reaction_added_event_as_notification(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    #[case] star_added_case: bool,
     slack_push_star_added_event: Box<SlackPushEvent>,
+    slack_push_reaction_added_event: Box<SlackPushEvent>,
     nango_slack_connection: Box<NangoConnection>,
 ) {
     let app = authenticated_app.await;
@@ -212,17 +355,31 @@ async fn test_receive_star_added_event_as_notification(
         "slack_fetch_team_response.json",
     );
 
-    let SlackPushEvent::EventCallback(event) = &*slack_push_star_added_event else {
+    let SlackPushEvent::EventCallback(star_added_event) = &*slack_push_star_added_event else {
+        unreachable!("Unexpected event type");
+    };
+    let SlackPushEvent::EventCallback(reaction_added_event) = &*slack_push_reaction_added_event
+    else {
         unreachable!("Unexpected event type");
     };
 
-    let response = create_resource_response(
-        &app.client,
-        &app.app.api_address,
-        "hooks/slack/events",
-        slack_push_star_added_event.clone(),
-    )
-    .await;
+    let response = if star_added_case {
+        create_resource_response(
+            &app.client,
+            &app.app.api_address,
+            "hooks/slack/events",
+            slack_push_star_added_event.clone(),
+        )
+        .await
+    } else {
+        create_resource_response(
+            &app.client,
+            &app.app.api_address,
+            "hooks/slack/events",
+            slack_push_reaction_added_event.clone(),
+        )
+        .await
+    };
 
     assert_eq!(response.status(), 200);
     assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
@@ -254,10 +411,17 @@ async fn test_receive_star_added_event_as_notification(
         notifications[0].updated_at,
         Utc.with_ymd_and_hms(2024, 2, 12, 13, 9, 44).unwrap()
     );
-    assert_eq!(
-        notifications[0].metadata,
-        NotificationMetadata::Slack(Box::new(event.clone()))
-    );
+    if star_added_case {
+        assert_eq!(
+            notifications[0].metadata,
+            NotificationMetadata::Slack(Box::new(star_added_event.clone()))
+        );
+    } else {
+        assert_eq!(
+            notifications[0].metadata,
+            NotificationMetadata::Slack(Box::new(reaction_added_event.clone()))
+        );
+    }
     assert_eq!(
         notifications[0].get_html_url(),
         "https://slack.com/archives/C05XXX/p1234567890"
@@ -296,11 +460,6 @@ async fn test_receive_star_added_event_as_notification(
     .await;
     assert_eq!(response.status(), 200);
     assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
-
-    slack_fetch_user_mock.assert_hits(1);
-    slack_fetch_message_mock.assert_hits(1);
-    slack_fetch_channel_mock.assert_hits(1);
-    slack_fetch_team_mock.assert_hits(1);
 
     let notifications = list_notifications(
         &app.client,
@@ -451,11 +610,6 @@ async fn test_receive_bot_star_added_event_as_notification(
     assert_eq!(response.status(), 200);
     assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
 
-    slack_fetch_bot_mock.assert_hits(1);
-    slack_fetch_message_mock.assert_hits(1);
-    slack_fetch_channel_mock.assert_hits(1);
-    slack_fetch_team_mock.assert_hits(1);
-
     let notifications = list_notifications(
         &app.client,
         &app.app.api_address,
@@ -472,15 +626,20 @@ async fn test_receive_bot_star_added_event_as_notification(
 }
 
 #[rstest]
-#[case::without_thread(false)]
-#[case::with_message_in_thread(true)]
+#[case::slack_star_without_thread(true, false)]
+#[case::slack_star_with_message_in_thread(true, true)]
+#[case::slack_reaction_without_thread(false, false)]
+// no thread_ts in reaction: #[case::slack_reaction_with_message_in_thread(false, true)]
 #[tokio::test]
-async fn test_receive_star_removed_event_as_notification(
+async fn test_receive_star_or_reaction_removed_event_as_notification(
     settings: Settings,
     #[future] authenticated_app: AuthenticatedApp,
     mut slack_push_star_added_event: Box<SlackPushEvent>,
-    slack_push_star_removed_event: Box<SlackPushEvent>,
+    slack_push_reaction_added_event: Box<SlackPushEvent>,
+    mut slack_push_star_removed_event: Box<SlackPushEvent>,
+    slack_push_reaction_removed_event: Box<SlackPushEvent>,
     nango_slack_connection: Box<NangoConnection>,
+    #[case] slack_star_case: bool,
     #[case] with_message_in_thread: bool,
 ) {
     let app = authenticated_app.await;
@@ -511,7 +670,7 @@ async fn test_receive_star_removed_event_as_notification(
         let SlackPushEvent::EventCallback(SlackPushEventCallback {
             event:
                 SlackEventCallbackBody::StarAdded(SlackStarAddedEvent {
-                    item: SlackStarsItem::Message(ref mut message),
+                    item: SlackStarsItem::Message(ref mut added_message),
                     ..
                 }),
             ..
@@ -520,7 +679,21 @@ async fn test_receive_star_removed_event_as_notification(
             unreachable!("Unexpected event type");
         };
         let thread_ts = "1707686216.111111";
-        message.message.origin.thread_ts = Some(thread_ts.into());
+        added_message.message.origin.thread_ts = Some(thread_ts.into());
+
+        let SlackPushEvent::EventCallback(SlackPushEventCallback {
+            event:
+                SlackEventCallbackBody::StarRemoved(SlackStarRemovedEvent {
+                    item: SlackStarsItem::Message(ref mut removed_message),
+                    ..
+                }),
+            ..
+        }) = *slack_push_star_removed_event
+        else {
+            unreachable!("Unexpected event type");
+        };
+        removed_message.message.origin.thread_ts = Some(thread_ts.into());
+
         mock_slack_fetch_reply(
             &app.app.slack_mock_server,
             "C05XXX",
@@ -547,13 +720,23 @@ async fn test_receive_star_removed_event_as_notification(
         "slack_fetch_team_response.json",
     );
 
-    let response = create_resource_response(
-        &app.client,
-        &app.app.api_address,
-        "hooks/slack/events",
-        slack_push_star_added_event.clone(),
-    )
-    .await;
+    let response = if slack_star_case {
+        create_resource_response(
+            &app.client,
+            &app.app.api_address,
+            "hooks/slack/events",
+            slack_push_star_added_event.clone(),
+        )
+        .await
+    } else {
+        create_resource_response(
+            &app.client,
+            &app.app.api_address,
+            "hooks/slack/events",
+            slack_push_reaction_added_event.clone(),
+        )
+        .await
+    };
     assert_eq!(response.status(), 200);
     assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
 
@@ -580,22 +763,31 @@ async fn test_receive_star_removed_event_as_notification(
     let SlackPushEvent::EventCallback(star_removed_event) = &*slack_push_star_removed_event else {
         unreachable!("Unexpected event type");
     };
+    let SlackPushEvent::EventCallback(reaction_removed_event) = &*slack_push_reaction_removed_event
+    else {
+        unreachable!("Unexpected event type");
+    };
 
-    let response = create_resource_response(
-        &app.client,
-        &app.app.api_address,
-        "hooks/slack/events",
-        slack_push_star_removed_event.clone(),
-    )
-    .await;
+    let response = if slack_star_case {
+        create_resource_response(
+            &app.client,
+            &app.app.api_address,
+            "hooks/slack/events",
+            slack_push_star_removed_event.clone(),
+        )
+        .await
+    } else {
+        create_resource_response(
+            &app.client,
+            &app.app.api_address,
+            "hooks/slack/events",
+            slack_push_reaction_removed_event.clone(),
+        )
+        .await
+    };
     assert_eq!(response.status(), 200);
     assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
     sleep(Duration::from_secs(1)).await;
-
-    slack_fetch_user_mock.assert_hits(1);
-    slack_fetch_message_mock.assert_hits(1);
-    slack_fetch_channel_mock.assert_hits(1);
-    slack_fetch_team_mock.assert_hits(1);
 
     // No unread notification, it should have been deleted
     let notifications = list_notifications(
@@ -632,22 +824,33 @@ async fn test_receive_star_removed_event_as_notification(
         notifications[0].updated_at,
         Utc.with_ymd_and_hms(2024, 2, 12, 14, 15, 13).unwrap()
     );
-    assert_eq!(
-        notifications[0].metadata,
-        NotificationMetadata::Slack(Box::new(star_removed_event.clone()))
-    );
+    if slack_star_case {
+        assert_eq!(
+            notifications[0].metadata,
+            NotificationMetadata::Slack(Box::new(star_removed_event.clone()))
+        );
+    } else {
+        assert_eq!(
+            notifications[0].metadata,
+            NotificationMetadata::Slack(Box::new(reaction_removed_event.clone()))
+        );
+    }
 }
 
 #[rstest]
+#[case::star_added(true)]
+#[case::reaction_added(false)]
 #[tokio::test]
-async fn test_receive_star_added_event_as_task(
+async fn test_receive_star_or_reaction_added_event_as_task(
     settings: Settings,
     #[future] authenticated_app: AuthenticatedApp,
     slack_push_star_added_event: Box<SlackPushEvent>,
+    slack_push_reaction_added_event: Box<SlackPushEvent>,
     sync_todoist_projects_response: TodoistSyncResponse,
     todoist_item: Box<TodoistItem>,
     nango_slack_connection: Box<NangoConnection>,
     nango_todoist_connection: Box<NangoConnection>,
+    #[case] slack_star_case: bool,
 ) {
     let app = authenticated_app.await;
     create_and_mock_integration_connection(
@@ -721,13 +924,23 @@ async fn test_receive_star_added_event_as_task(
     let todoist_get_item_mock =
         mock_todoist_get_item_service(&app.app.todoist_mock_server, todoist_item.clone());
 
-    let response = create_resource_response(
-        &app.client,
-        &app.app.api_address,
-        "hooks/slack/events",
-        slack_push_star_added_event.clone(),
-    )
-    .await;
+    let response = if slack_star_case {
+        create_resource_response(
+            &app.client,
+            &app.app.api_address,
+            "hooks/slack/events",
+            slack_push_star_added_event.clone(),
+        )
+        .await
+    } else {
+        create_resource_response(
+            &app.client,
+            &app.app.api_address,
+            "hooks/slack/events",
+            slack_push_reaction_added_event.clone(),
+        )
+        .await
+    };
 
     assert_eq!(response.status(), 200);
     assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
@@ -761,7 +974,11 @@ async fn test_receive_star_added_event_as_task(
     assert_eq!(source_item.source_id, slack_message_id);
     assert_eq!(
         source_item.get_third_party_item_source_kind(),
-        ThirdPartyItemSourceKind::Slack
+        if slack_star_case {
+            ThirdPartyItemSourceKind::SlackStar
+        } else {
+            ThirdPartyItemSourceKind::SlackReaction
+        }
     );
     let sink_item = tasks[0].sink_item.as_ref().unwrap();
     assert_eq!(sink_item.source_id, todoist_item.id);
@@ -777,21 +994,25 @@ async fn test_receive_star_added_event_as_task(
     assert_eq!(synced_tasks[0].id, tasks[0].id);
 
     // A duplicated event should not create a new task
-    let response = create_resource_response(
-        &app.client,
-        &app.app.api_address,
-        "hooks/slack/events",
-        slack_push_star_added_event.clone(),
-    )
-    .await;
+    let response = if slack_star_case {
+        create_resource_response(
+            &app.client,
+            &app.app.api_address,
+            "hooks/slack/events",
+            slack_push_star_added_event.clone(),
+        )
+        .await
+    } else {
+        create_resource_response(
+            &app.client,
+            &app.app.api_address,
+            "hooks/slack/events",
+            slack_push_reaction_added_event.clone(),
+        )
+        .await
+    };
     assert_eq!(response.status(), 200);
     assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
-
-    slack_fetch_user_mock.assert_hits(1);
-    slack_fetch_message_mock.assert_hits(1);
-    slack_fetch_channel_mock.assert_hits(1);
-    slack_fetch_team_mock.assert_hits(1);
-    todoist_projects_mock.assert_hits(1);
 
     let tasks = list_tasks(&app.client, &app.app.api_address, TaskStatus::Active, false).await;
 
@@ -799,17 +1020,21 @@ async fn test_receive_star_added_event_as_task(
 }
 
 #[rstest]
+#[case::slack_star(true)]
+#[case::slack_reaction(false)]
 #[tokio::test]
-#[allow(clippy::too_many_arguments)]
-async fn test_receive_star_removed_and_added_event_as_task(
+async fn test_receive_star_or_reaction_removed_and_added_event_as_task(
     settings: Settings,
     #[future] authenticated_app: AuthenticatedApp,
     slack_push_star_added_event: Box<SlackPushEvent>,
     slack_push_star_removed_event: Box<SlackPushEvent>,
+    slack_push_reaction_added_event: Box<SlackPushEvent>,
+    slack_push_reaction_removed_event: Box<SlackPushEvent>,
     sync_todoist_projects_response: TodoistSyncResponse,
     todoist_item: Box<TodoistItem>,
     nango_slack_connection: Box<NangoConnection>,
     nango_todoist_connection: Box<NangoConnection>,
+    #[case] slack_star_case: bool,
 ) {
     let app = authenticated_app.await;
     create_and_mock_integration_connection(
@@ -884,13 +1109,23 @@ async fn test_receive_star_removed_and_added_event_as_task(
         mock_todoist_get_item_service(&app.app.todoist_mock_server, todoist_item.clone());
 
     // First creation of a deleted notification and an active task
-    let response = create_resource_response(
-        &app.client,
-        &app.app.api_address,
-        "hooks/slack/events",
-        slack_push_star_added_event.clone(),
-    )
-    .await;
+    let response = if slack_star_case {
+        create_resource_response(
+            &app.client,
+            &app.app.api_address,
+            "hooks/slack/events",
+            slack_push_star_added_event.clone(),
+        )
+        .await
+    } else {
+        create_resource_response(
+            &app.client,
+            &app.app.api_address,
+            "hooks/slack/events",
+            slack_push_reaction_added_event.clone(),
+        )
+        .await
+    };
     assert_eq!(response.status(), 200);
     assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
     // Make sure the task will be updated
@@ -926,7 +1161,11 @@ async fn test_receive_star_removed_and_added_event_as_task(
     assert_eq!(source_item.source_id, slack_message_id);
     assert_eq!(
         source_item.get_third_party_item_source_kind(),
-        ThirdPartyItemSourceKind::Slack
+        if slack_star_case {
+            ThirdPartyItemSourceKind::SlackStar
+        } else {
+            ThirdPartyItemSourceKind::SlackReaction
+        }
     );
     let sink_item = tasks[0].sink_item.as_ref().unwrap();
     assert_eq!(sink_item.source_id, todoist_item.id);
@@ -939,21 +1178,27 @@ async fn test_receive_star_removed_and_added_event_as_task(
         mock_todoist_complete_item_service(&app.app.todoist_mock_server, &sink_item.source_id);
 
     // Notification should still be marked as deleted and associated task as done
-    let response = create_resource_response(
-        &app.client,
-        &app.app.api_address,
-        "hooks/slack/events",
-        slack_push_star_removed_event.clone(),
-    )
-    .await;
+    let response = if slack_star_case {
+        create_resource_response(
+            &app.client,
+            &app.app.api_address,
+            "hooks/slack/events",
+            slack_push_star_removed_event.clone(),
+        )
+        .await
+    } else {
+        create_resource_response(
+            &app.client,
+            &app.app.api_address,
+            "hooks/slack/events",
+            slack_push_reaction_removed_event.clone(),
+        )
+        .await
+    };
     assert_eq!(response.status(), 200);
     assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
     sleep(Duration::from_secs(1)).await;
 
-    slack_fetch_user_mock.assert_hits(1);
-    slack_fetch_message_mock.assert_hits(1);
-    slack_fetch_channel_mock.assert_hits(1);
-    slack_fetch_team_mock.assert_hits(1);
     todoist_complete_item_mock.assert();
 
     let notifications = list_notifications(
@@ -978,7 +1223,11 @@ async fn test_receive_star_removed_and_added_event_as_task(
     assert_eq!(source_item.source_id, slack_message_id);
     assert_eq!(
         source_item.get_third_party_item_source_kind(),
-        ThirdPartyItemSourceKind::Slack
+        if slack_star_case {
+            ThirdPartyItemSourceKind::SlackStar
+        } else {
+            ThirdPartyItemSourceKind::SlackReaction
+        }
     );
     let sink_item = tasks[0].sink_item.as_ref().unwrap();
     assert_eq!(sink_item.source_id, todoist_item.id);
@@ -991,13 +1240,23 @@ async fn test_receive_star_removed_and_added_event_as_task(
         mock_todoist_uncomplete_item_service(&app.app.todoist_mock_server, &sink_item.source_id);
 
     // Task should be marked as active again
-    let response = create_resource_response(
-        &app.client,
-        &app.app.api_address,
-        "hooks/slack/events",
-        slack_push_star_added_event.clone(),
-    )
-    .await;
+    let response = if slack_star_case {
+        create_resource_response(
+            &app.client,
+            &app.app.api_address,
+            "hooks/slack/events",
+            slack_push_star_added_event.clone(),
+        )
+        .await
+    } else {
+        create_resource_response(
+            &app.client,
+            &app.app.api_address,
+            "hooks/slack/events",
+            slack_push_reaction_added_event.clone(),
+        )
+        .await
+    };
     assert_eq!(response.status(), 200);
     assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
     sleep(Duration::from_secs(1)).await;

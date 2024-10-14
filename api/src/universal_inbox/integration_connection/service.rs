@@ -2,6 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use anyhow::{anyhow, Context};
 use apalis::{prelude::*, redis::RedisStorage};
+use cached::proc_macro::io_cached;
 use chrono::{TimeDelta, Utc};
 use sqlx::{Postgres, Transaction};
 use tokio_retry::{
@@ -37,6 +38,7 @@ use crate::{
         notification::NotificationRepository,
     },
     universal_inbox::{user::service::UserService, UniversalInboxError, UpdateStatus},
+    utils::cache::build_redis_cache,
 };
 
 pub struct IntegrationConnectionService {
@@ -826,4 +828,40 @@ impl IntegrationConnectionService {
 
         Ok(())
     }
+    #[tracing::instrument(level = "debug", skip(self), ret)]
+    pub async fn get_integration_connection_config_for_provider_user_id<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        provider_kind: IntegrationProviderKind,
+        provider_user_id: String,
+    ) -> Result<Option<IntegrationConnectionConfig>, UniversalInboxError> {
+        // Using cache as the Slack event webhook will receive a lot of requests not related to Universal Inbox users
+        cached_get_integration_connection_config_for_provider_user_id(
+            self.repository.clone(),
+            executor,
+            provider_kind,
+            provider_user_id,
+        )
+        .await
+    }
+}
+
+#[io_cached(
+    key = "String",
+    convert = r#"{ format!("{}{}", provider_kind, provider_user_id) }"#,
+    ty = "cached::AsyncRedisCache<String, Option<IntegrationConnectionConfig>>",
+    map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `is_known_provider_user_id`: {:?}", e))"##,
+    create = r##" { build_redis_cache("slack:is_known_provider_user_id", 86400, false).await }"##
+)]
+async fn cached_get_integration_connection_config_for_provider_user_id(
+    repository: Arc<Repository>,
+    executor: &mut Transaction<'_, Postgres>,
+    provider_kind: IntegrationProviderKind,
+    provider_user_id: String,
+) -> Result<Option<IntegrationConnectionConfig>, UniversalInboxError> {
+    let integration_connection = repository
+        .get_integration_connection_per_provider_user_id(executor, provider_kind, provider_user_id)
+        .await?;
+
+    Ok(integration_connection.map(|connection| connection.provider.config()))
 }

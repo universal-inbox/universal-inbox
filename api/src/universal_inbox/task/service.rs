@@ -19,9 +19,12 @@ use universal_inbox::{
         service::TaskPatch, ProjectSummary, Task, TaskCreation, TaskCreationResult, TaskId,
         TaskSource, TaskSourceKind, TaskStatus, TaskSummary, TaskSyncSourceKind,
     },
-    third_party::item::{
-        ThirdPartyItem, ThirdPartyItemCreationResult, ThirdPartyItemFromSource,
-        ThirdPartyItemSource, ThirdPartyItemSourceKind,
+    third_party::{
+        integrations::slack::{SlackReaction, SlackStar},
+        item::{
+            ThirdPartyItem, ThirdPartyItemFromSource, ThirdPartyItemSource,
+            ThirdPartyItemSourceKind,
+        },
     },
     user::UserId,
     HasHtmlUrl, Page,
@@ -267,8 +270,18 @@ impl TaskService {
                             )
                             .await
                         }
-                        ThirdPartyItemSourceKind::Slack => {
-                            self.apply_updated_task_side_effect(
+                        ThirdPartyItemSourceKind::SlackStar => {
+                            self.apply_updated_task_side_effect::<SlackStar, SlackService>(
+                                executor,
+                                self.slack_service.clone(),
+                                &task_patch,
+                                third_party_item_to_be_updated,
+                                user_id,
+                            )
+                            .await
+                        }
+                        ThirdPartyItemSourceKind::SlackReaction => {
+                            self.apply_updated_task_side_effect::<SlackReaction, SlackService>(
                                 executor,
                                 self.slack_service.clone(),
                                 &task_patch,
@@ -320,7 +333,7 @@ impl TaskService {
         Ok(())
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(level = "debug", skip(self, executor, job_storage))]
     pub async fn list_tasks<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -466,27 +479,131 @@ impl TaskService {
 
         let third_party_item =
             third_party_task.into_third_party_item(user_id, integration_connection.id);
-        let source_id = third_party_item.source_id.clone();
-        let created_third_party_item = self
+
+        let upsert_item = self
             .third_party_item_service
             .upgrade()
             .context("Unable to access third_party_item_service from task_service")?
             .read()
             .await
-            .create_item(executor, third_party_item, user_id)
+            .save_third_party_item(executor, third_party_item)
             .await?;
 
-        let Some(ThirdPartyItemCreationResult {
-            task: Some(created_task),
-            ..
-        }) = created_third_party_item
+        let updated_third_party_item = upsert_item.value();
+        let source_id = updated_third_party_item.source_id.clone();
+
+        if let Some(TaskCreationResult { task, .. }) = self
+            .create_task_from_third_party_item(
+                executor,
+                *updated_third_party_item,
+                third_party_task_service,
+                user_id,
+            )
+            .await?
+        {
+            Ok(Box::new(task))
+        } else {
+            return Err(UniversalInboxError::Unexpected(anyhow!(
+                "A task should have been created from the {integration_provider_kind} task {source_id}",
+            )));
+        }
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, executor, third_party_item, third_party_task_service),
+        fields(
+            third_party_item_id = third_party_item.id.to_string(),
+            third_party_item_source_id = third_party_item.source_id
+        )
+    )]
+    pub async fn create_task_from_third_party_item<'a, T, U>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        third_party_item: ThirdPartyItem,
+        third_party_task_service: Arc<U>,
+        user_id: UserId,
+    ) -> Result<Option<TaskCreationResult>, UniversalInboxError>
+    where
+        T: TryFrom<ThirdPartyItem> + Debug,
+        U: ThirdPartyTaskService<T> + NotificationSource + TaskSource + Send + Sync,
+        <T as TryFrom<ThirdPartyItem>>::Error: Send + Sync,
+    {
+        let integration_provider_kind = third_party_item.get_integration_provider_kind();
+        let Some(integration_connection) = self
+            .integration_connection_service
+            .read()
+            .await
+            .get_validated_integration_connection_per_kind(
+                executor,
+                integration_provider_kind,
+                user_id,
+            )
+            .await?
         else {
             return Err(UniversalInboxError::Unexpected(anyhow!(
-                "A task should have been created from the {integration_provider_kind} task {source_id}"
+                "No validated {integration_provider_kind} integration found for user {user_id}, cannot create third party item"
             )));
         };
 
-        Ok(Box::new(created_task))
+        let task_creation = integration_connection
+            .provider
+            .get_task_creation_default_values(&third_party_item);
+
+        let upsert_task = self
+            .sync_third_party_item_as_task(
+                executor,
+                third_party_task_service.clone(),
+                &third_party_item,
+                task_creation,
+                user_id,
+            )
+            .await?;
+
+        let task_is_modified = upsert_task.is_modified();
+        let task = upsert_task.value();
+        if !task_is_modified {
+            debug!(
+                "Task {} for third party item {} is already up to date",
+                task.id, third_party_item.id
+            );
+            return Ok(Some(TaskCreationResult {
+                task: *task,
+                notifications: vec![],
+            }));
+        };
+
+        let upsert_notification = self
+            .save_task_as_notification(
+                executor,
+                third_party_task_service,
+                &task,
+                &integration_connection.provider,
+                true, // Force incremental here to avoid deleting all other notification for this third party item kind
+                user_id,
+            )
+            .await?;
+
+        let Some(upsert_notification) = upsert_notification else {
+            return Ok(Some(TaskCreationResult {
+                task: *task,
+                notifications: vec![],
+            }));
+        };
+
+        let notification_is_modified = upsert_notification.is_modified();
+        let notification = upsert_notification.value();
+        if !notification_is_modified {
+            debug!(
+                "Notification {} for task {} is already up to date",
+                notification.id, task.id
+            );
+        }
+
+        Ok(Some(TaskCreationResult {
+            task: *task,
+            notifications: vec![*notification],
+        }))
     }
 
     #[tracing::instrument(level = "debug", skip(self, executor, third_party_task_service))]
@@ -508,6 +625,49 @@ impl TaskService {
             + Sync,
         <T as TryFrom<ThirdPartyItem>>::Error: Send + Sync,
     {
+        async fn sync_third_party_tasks<'a, T, U>(
+            task_service: &TaskService,
+            executor: &mut Transaction<'a, Postgres>,
+            third_party_task_service: Arc<U>,
+            user_id: UserId,
+        ) -> Result<Vec<TaskCreationResult>, UniversalInboxError>
+        where
+            T: TryFrom<ThirdPartyItem> + Debug,
+            U: ThirdPartyTaskService<T>
+                + ThirdPartyItemSourceService
+                + ThirdPartyItemSource
+                + NotificationSource
+                + TaskSource
+                + Send
+                + Sync,
+            <T as TryFrom<ThirdPartyItem>>::Error: Send + Sync,
+        {
+            let third_party_items = task_service
+                .third_party_item_service
+                .upgrade()
+                .context("Unable to access third_party_item_service from task_service")?
+                .read()
+                .await
+                .sync_items(executor, third_party_task_service.clone(), user_id)
+                .await?;
+
+            let mut task_creation_results = vec![];
+            for third_party_item in third_party_items {
+                if let Some(task_creation_result) = task_service
+                    .create_task_from_third_party_item(
+                        executor,
+                        third_party_item,
+                        third_party_task_service.clone(),
+                        user_id,
+                    )
+                    .await?
+                {
+                    task_creation_results.push(task_creation_result);
+                }
+            }
+            Ok(task_creation_results)
+        }
+
         let integration_provider_kind = third_party_task_service.get_integration_provider_kind();
         let integration_connection_service = self.integration_connection_service.read().await;
         let min_sync_interval_in_minutes = (!force_sync)
@@ -537,57 +697,33 @@ impl TaskService {
             .start_tasks_sync_status(executor, integration_provider_kind, user_id)
             .await?;
 
-        let third_party_item_creation_results = match self
-            .third_party_item_service
-            .upgrade()
-            .context("Unable to access third_party_item_service from task_service")?
-            .read()
-            .await
-            .sync_items(
-                executor,
-                third_party_task_service,
-                &integration_connection.provider,
-                user_id,
-            )
-            .await
-        {
-            Err(e) => {
-                integration_connection_service
-                    .error_tasks_sync_status(
-                        executor,
-                        integration_provider_kind,
-                        format!("Failed to fetch tasks from {integration_provider_kind}"),
-                        user_id,
-                    )
-                    .await?;
-                return Err(UniversalInboxError::Recoverable(e.into()));
-            }
-            Ok(third_party_item_creation_results) => {
-                integration_connection_service
-                    .complete_tasks_sync_status(executor, integration_provider_kind, user_id)
-                    .await?;
-                third_party_item_creation_results
-            }
-        };
+        let task_creation_results =
+            match sync_third_party_tasks(self, executor, third_party_task_service, user_id).await {
+                Err(e) => {
+                    integration_connection_service
+                        .error_tasks_sync_status(
+                            executor,
+                            integration_provider_kind,
+                            format!("Failed to fetch tasks from {integration_provider_kind}"),
+                            user_id,
+                        )
+                        .await?;
+                    return Err(UniversalInboxError::Recoverable(e.into()));
+                }
+                Ok(task_creation_results) => {
+                    integration_connection_service
+                        .complete_tasks_sync_status(executor, integration_provider_kind, user_id)
+                        .await?;
+                    task_creation_results
+                }
+            };
 
-        let mut tasks_creation_result = vec![];
-        for third_party_item_creation_result in third_party_item_creation_results {
-            if let Some(task) = third_party_item_creation_result.task {
-                tasks_creation_result.push(TaskCreationResult {
-                    task,
-                    notifications: third_party_item_creation_result
-                        .notification
-                        .into_iter()
-                        .collect(),
-                });
-            }
-        }
         info!(
             "Successfully synced {} {integration_provider_kind} tasks for user {user_id}",
-            tasks_creation_result.len()
+            task_creation_results.len()
         );
 
-        Ok(tasks_creation_result)
+        Ok(task_creation_results)
     }
 
     #[tracing::instrument(
@@ -608,7 +744,7 @@ impl TaskService {
     ) -> Result<UpsertStatus<Box<Task>>, UniversalInboxError>
     where
         T: TryFrom<ThirdPartyItem> + Debug,
-        U: ThirdPartyTaskService<T> + ThirdPartyItemSource + TaskSource + Send + Sync,
+        U: ThirdPartyTaskService<T> + TaskSource + Send + Sync,
         <T as TryFrom<ThirdPartyItem>>::Error: Send + Sync,
     {
         let mut upsert_task = self
@@ -652,14 +788,14 @@ impl TaskService {
     ) -> Result<UpsertStatus<Box<Task>>, UniversalInboxError>
     where
         T: TryFrom<ThirdPartyItem> + Debug,
-        U: ThirdPartyTaskService<T> + ThirdPartyItemSource + TaskSource + Send + Sync,
+        U: ThirdPartyTaskService<T> + TaskSource + Send + Sync,
         <T as TryFrom<ThirdPartyItem>>::Error: Send + Sync,
     {
         let data: T = third_party_item.clone().try_into().map_err(|_| {
             anyhow!(
-                "Unexpected third party item kind {}, expecting {}",
+                "Unexpected third party item kind {} for {}",
                 third_party_item.kind(),
-                third_party_task_service.get_third_party_item_source_kind()
+                third_party_task_service.get_integration_provider_kind()
             )
         })?;
 

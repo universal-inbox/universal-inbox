@@ -31,7 +31,7 @@ apalis-redis = { git = "https://github.com/dax/apalis", rev = "778692e95da2dd348
 argon2 = { version = "0.5", features = ["std"] }
 async-trait = "0.1.0"
 base64 = "0.22"
-cached = { version = "0.51.0", features = [
+cached = { version = "0.53.0", features = [
   "async_tokio_rt_multi_thread",
   "redis_tokio",
   "redis_connection_manager",

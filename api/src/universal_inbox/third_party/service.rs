@@ -9,12 +9,15 @@ use tokio::sync::RwLock;
 use tracing::debug;
 
 use universal_inbox::{
-    integration_connection::provider::{IntegrationProvider, IntegrationProviderSource},
+    integration_connection::provider::IntegrationProviderSource,
     notification::NotificationSource,
     task::{service::TaskPatch, Task, TaskCreation, TaskSource},
-    third_party::item::{
-        ThirdPartyItem, ThirdPartyItemCreationResult, ThirdPartyItemFromSource,
-        ThirdPartyItemSource, ThirdPartyItemSourceKind,
+    third_party::{
+        integrations::slack::{SlackReaction, SlackStar},
+        item::{
+            ThirdPartyItem, ThirdPartyItemCreationResult, ThirdPartyItemFromSource,
+            ThirdPartyItemSource, ThirdPartyItemSourceKind,
+        },
     },
     user::UserId,
 };
@@ -72,21 +75,96 @@ impl ThirdPartyItemService {
 
     #[tracing::instrument(
         level = "debug",
-        skip(
-            self,
-            executor,
-            third_party_task_service,
-            integration_connection_provider
+        skip(self, executor, third_party_item),
+        fields(
+            third_party_item_id = third_party_item.id.to_string(),
+            third_party_item_source_id = third_party_item.source_id
         ),
         err
     )]
+    pub async fn create_task_item<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        third_party_item: ThirdPartyItem,
+        user_id: UserId,
+    ) -> Result<Option<ThirdPartyItemCreationResult>, UniversalInboxError> {
+        let upserted_third_party_item = self
+            .save_third_party_item(executor, third_party_item)
+            .await?;
+        let third_party_item = upserted_third_party_item.value();
+        let task_creation = match third_party_item.get_third_party_item_source_kind() {
+            ThirdPartyItemSourceKind::Todoist => {
+                self.task_service
+                    .upgrade()
+                    .context("Unable to access task_service from third_party_service")?
+                    .read()
+                    .await
+                    .create_task_from_third_party_item(
+                        executor,
+                        *third_party_item.clone(),
+                        self.todoist_service.clone(),
+                        user_id,
+                    )
+                    .await?
+            }
+            ThirdPartyItemSourceKind::SlackStar => {
+                self.task_service
+                    .upgrade()
+                    .context("Unable to access task_service from third_party_service")?
+                    .read()
+                    .await
+                    .create_task_from_third_party_item::<SlackStar, SlackService>(
+                        executor,
+                        *third_party_item.clone(),
+                        self.slack_service.clone(),
+                        user_id,
+                    )
+                    .await?
+            }
+            ThirdPartyItemSourceKind::SlackReaction => {
+                self.task_service
+                    .upgrade()
+                    .context("Unable to access task_service from third_party_service")?
+                    .read()
+                    .await
+                    .create_task_from_third_party_item::<SlackReaction, SlackService>(
+                        executor,
+                        *third_party_item.clone(),
+                        self.slack_service.clone(),
+                        user_id,
+                    )
+                    .await?
+            }
+            ThirdPartyItemSourceKind::Linear => {
+                self.task_service
+                    .upgrade()
+                    .context("Unable to access task_service from third_party_service")?
+                    .read()
+                    .await
+                    .create_task_from_third_party_item(
+                        executor,
+                        *third_party_item.clone(),
+                        self.linear_service.clone(),
+                        user_id,
+                    )
+                    .await?
+            }
+        };
+
+        Ok(task_creation.map(|creation| ThirdPartyItemCreationResult {
+            third_party_item: *third_party_item,
+            task: Some(creation.task),
+            notification: creation.notifications.first().cloned(),
+        }))
+    }
+
+    #[tracing::instrument(level = "debug", skip(self, executor, third_party_task_service), err)]
     pub async fn sync_items<'a, T, U>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
         third_party_task_service: Arc<U>,
-        integration_connection_provider: &IntegrationProvider,
         user_id: UserId,
-    ) -> Result<Vec<ThirdPartyItemCreationResult>, UniversalInboxError>
+    ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError>
     where
         T: TryFrom<ThirdPartyItem> + Debug,
         U: ThirdPartyTaskService<T>
@@ -102,36 +180,25 @@ impl ThirdPartyItemService {
         let items = third_party_task_service
             .fetch_items(executor, user_id)
             .await?;
-        let mut creations_result = vec![];
+        let mut upserted_third_party_items = vec![];
 
         debug!("Syncing {kind} third party items for user {user_id}");
         for item in items.into_iter() {
-            let task_creation = integration_connection_provider.get_task_creation_default_values();
+            let upsert_result = self.save_third_party_item(executor, item).await?;
 
-            let creation_result = self
-                .sync_item(
-                    executor,
-                    third_party_task_service.clone(),
-                    item,
-                    integration_connection_provider,
-                    task_creation,
-                    user_id,
-                )
-                .await?;
-
-            if let Some(creation_result) = creation_result {
-                creations_result.push(creation_result);
+            if let Some(upserted_third_party_item) = upsert_result.modified_value() {
+                upserted_third_party_items.push(*upserted_third_party_item);
             }
         }
         debug!(
             "Successfully synced {} third party items for user {user_id}",
-            creations_result.len()
+            upserted_third_party_items.len()
         );
 
         if !third_party_task_service.is_sync_incremental() {
-            let active_task_source_third_party_item_ids = creations_result
+            let active_task_source_third_party_item_ids = upserted_third_party_items
                 .iter()
-                .map(|r| r.third_party_item.id)
+                .map(|tpi| tpi.id)
                 .collect();
 
             let third_party_items_to_mark_as_done = self
@@ -149,22 +216,12 @@ impl ThirdPartyItemService {
                 "Marking {third_party_items_to_mark_as_done_count} stale third party items as done",
             );
             for item in third_party_items_to_mark_as_done.into_iter() {
-                let task_creation =
-                    integration_connection_provider.get_task_creation_default_values();
-
-                let creation_result = self
-                    .sync_item(
-                        executor,
-                        third_party_task_service.clone(),
-                        item.marked_as_done(),
-                        integration_connection_provider,
-                        task_creation,
-                        user_id,
-                    )
+                let upsert_result = self
+                    .save_third_party_item(executor, item.marked_as_done())
                     .await?;
 
-                if let Some(creation_result) = creation_result {
-                    creations_result.push(creation_result);
+                if let Some(upserted_third_party_item) = upsert_result.modified_value() {
+                    upserted_third_party_items.push(*upserted_third_party_item);
                 }
             }
             debug!(
@@ -172,192 +229,7 @@ impl ThirdPartyItemService {
             )
         }
 
-        Ok(creations_result)
-    }
-
-    #[tracing::instrument(
-        level = "debug",
-        skip(self, executor, third_party_item),
-        fields(
-            third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id
-        ),
-        err
-    )]
-    pub async fn create_item<'a>(
-        &self,
-        executor: &mut Transaction<'a, Postgres>,
-        third_party_item: ThirdPartyItem,
-        user_id: UserId,
-    ) -> Result<Option<ThirdPartyItemCreationResult>, UniversalInboxError> {
-        let integration_provider_kind = third_party_item.get_integration_provider_kind();
-        let Some(integration_connection) = self
-            .integration_connection_service
-            .read()
-            .await
-            .get_validated_integration_connection_per_kind(
-                executor,
-                integration_provider_kind,
-                user_id,
-            )
-            .await?
-        else {
-            debug!("No validated {integration_provider_kind} integration found for user {user_id}, cannot create third party item");
-            return Ok(None);
-        };
-
-        let task_creation = integration_connection
-            .provider
-            .get_task_creation_default_values();
-        match third_party_item.get_third_party_item_source_kind() {
-            ThirdPartyItemSourceKind::Todoist => {
-                self.sync_item(
-                    executor,
-                    self.todoist_service.clone(),
-                    third_party_item,
-                    &integration_connection.provider,
-                    task_creation,
-                    user_id,
-                )
-                .await
-            }
-            ThirdPartyItemSourceKind::Slack => {
-                self.sync_item(
-                    executor,
-                    self.slack_service.clone(),
-                    third_party_item,
-                    &integration_connection.provider,
-                    task_creation,
-                    user_id,
-                )
-                .await
-            }
-            ThirdPartyItemSourceKind::Linear => {
-                self.sync_item(
-                    executor,
-                    self.linear_service.clone(),
-                    third_party_item,
-                    &integration_connection.provider,
-                    task_creation,
-                    user_id,
-                )
-                .await
-            }
-        }
-    }
-
-    #[tracing::instrument(
-        level = "debug",
-        skip(self, executor, third_party_task_service, third_party_item, integration_connection_provider),
-        fields(
-            third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id
-        ),
-        err
-    )]
-    pub async fn sync_item<'a, T, U>(
-        &self,
-        executor: &mut Transaction<'a, Postgres>,
-        third_party_task_service: Arc<U>,
-        third_party_item: ThirdPartyItem,
-        integration_connection_provider: &IntegrationProvider,
-        task_creation: Option<TaskCreation>,
-        user_id: UserId,
-    ) -> Result<Option<ThirdPartyItemCreationResult>, UniversalInboxError>
-    where
-        T: TryFrom<ThirdPartyItem> + Debug,
-        U: ThirdPartyTaskService<T>
-            + ThirdPartyItemSource
-            + NotificationSource
-            + TaskSource
-            + Send
-            + Sync,
-        <T as TryFrom<ThirdPartyItem>>::Error: Send + Sync,
-    {
-        let upsert_item = self
-            .save_third_party_item(executor, third_party_item.clone())
-            .await?;
-
-        let third_party_item_id = upsert_item.value_ref().id;
-        let Some(third_party_item) = upsert_item.modified_value() else {
-            debug!("Third party item {third_party_item_id} is already up to date");
-            return Ok(Some(ThirdPartyItemCreationResult {
-                third_party_item: ThirdPartyItem {
-                    id: third_party_item_id,
-                    ..third_party_item
-                },
-                task: None,
-                notification: None,
-            }));
-        };
-
-        let upsert_task = self
-            .task_service
-            .upgrade()
-            .context("Unable to access task_service from third_party_item_service")?
-            .read()
-            .await
-            .sync_third_party_item_as_task(
-                executor,
-                third_party_task_service.clone(),
-                &third_party_item,
-                task_creation,
-                user_id,
-            )
-            .await?;
-
-        let task_is_modified = upsert_task.is_modified();
-        let task = upsert_task.value();
-        if !task_is_modified {
-            debug!(
-                "Task {} for third party item {third_party_item_id} is already up to date",
-                task.id
-            );
-            return Ok(Some(ThirdPartyItemCreationResult {
-                third_party_item: *third_party_item,
-                task: Some(*task),
-                notification: None,
-            }));
-        };
-
-        let upsert_notification = self
-            .task_service
-            .upgrade()
-            .context("Unable to access task_service from third_party_item_service")?
-            .read()
-            .await
-            .save_task_as_notification(
-                executor,
-                third_party_task_service,
-                &task,
-                integration_connection_provider,
-                true, // Force incremental here to avoid deleting all other notification for this third party item kind
-                user_id,
-            )
-            .await?;
-
-        let Some(upsert_notification) = upsert_notification else {
-            return Ok(Some(ThirdPartyItemCreationResult {
-                third_party_item: *third_party_item,
-                task: Some(*task),
-                notification: None,
-            }));
-        };
-
-        let notification_is_modified = upsert_notification.is_modified();
-        let notification = upsert_notification.value();
-        if !notification_is_modified {
-            debug!(
-                "Notification {} for task {} is already up to date",
-                notification.id, task.id
-            );
-        }
-
-        Ok(Some(ThirdPartyItemCreationResult {
-            third_party_item: *third_party_item,
-            task: Some(*task),
-            notification: Some(*notification),
-        }))
+        Ok(upserted_third_party_items)
     }
 
     #[tracing::instrument(
