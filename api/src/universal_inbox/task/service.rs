@@ -258,49 +258,14 @@ impl TaskService {
                     sink_item_id: None,
                 };
 
-                let side_effect_result =
-                    match third_party_item_to_be_updated.get_third_party_item_source_kind() {
-                        ThirdPartyItemSourceKind::Todoist => {
-                            self.apply_updated_task_side_effect(
-                                executor,
-                                self.todoist_service.clone(),
-                                &task_patch,
-                                third_party_item_to_be_updated,
-                                user_id,
-                            )
-                            .await
-                        }
-                        ThirdPartyItemSourceKind::SlackStar => {
-                            self.apply_updated_task_side_effect::<SlackStar, SlackService>(
-                                executor,
-                                self.slack_service.clone(),
-                                &task_patch,
-                                third_party_item_to_be_updated,
-                                user_id,
-                            )
-                            .await
-                        }
-                        ThirdPartyItemSourceKind::SlackReaction => {
-                            self.apply_updated_task_side_effect::<SlackReaction, SlackService>(
-                                executor,
-                                self.slack_service.clone(),
-                                &task_patch,
-                                third_party_item_to_be_updated,
-                                user_id,
-                            )
-                            .await
-                        }
-                        ThirdPartyItemSourceKind::Linear => {
-                            self.apply_updated_task_side_effect(
-                                executor,
-                                self.linear_service.clone(),
-                                &task_patch,
-                                third_party_item_to_be_updated,
-                                user_id,
-                            )
-                            .await
-                        }
-                    };
+                let side_effect_result = self
+                    .apply_task_third_party_item_side_effect(
+                        executor,
+                        &task_patch,
+                        third_party_item_to_be_updated,
+                        user_id,
+                    )
+                    .await;
 
                 let Err(UniversalInboxError::ItemNotFound(_)) = side_effect_result else {
                     return side_effect_result;
@@ -1078,44 +1043,49 @@ impl TaskService {
             UpdateStatus {
                 updated: true,
                 result: Some(ref task),
-            } =>
-            {
-                #[allow(clippy::single_match)]
-                match task.kind {
-                    TaskSourceKind::Todoist => {
-                        if patch.status == Some(TaskStatus::Deleted)
-                            || patch.status == Some(TaskStatus::Done)
-                            || (patch.project.is_some() && !task.is_in_inbox())
-                        {
-                            let notification_patch = NotificationPatch {
-                                status: Some(NotificationStatus::Deleted),
-                                ..Default::default()
-                            };
+            } => {
+                if task.kind == TaskSourceKind::Todoist
+                    && (patch.status == Some(TaskStatus::Deleted)
+                        || patch.status == Some(TaskStatus::Done)
+                        || (patch.project.is_some() && !task.is_in_inbox()))
+                {
+                    let notification_patch = NotificationPatch {
+                        status: Some(NotificationStatus::Deleted),
+                        ..Default::default()
+                    };
 
-                            self.notification_service
-                                .upgrade()
-                                .context("Unable to access notification_service from task_service")?
-                                .read()
-                                .await
-                                .patch_notifications_for_task(
-                                    executor,
-                                    task.id,
-                                    Some(NotificationSourceKind::Todoist),
-                                    &notification_patch,
-                                )
-                                .await?;
-                        }
-
-                        self.apply_updated_task_side_effect(
+                    self.notification_service
+                        .upgrade()
+                        .context("Unable to access notification_service from task_service")?
+                        .read()
+                        .await
+                        .patch_notifications_for_task(
                             executor,
-                            self.todoist_service.clone(),
+                            task.id,
+                            Some(NotificationSourceKind::Todoist),
+                            &notification_patch,
+                        )
+                        .await?;
+                }
+
+                self.apply_task_third_party_item_side_effect(
+                    executor,
+                    patch,
+                    &task.source_item,
+                    for_user_id,
+                )
+                .await?;
+
+                if let Some(sink_item) = &task.sink_item {
+                    if task.source_item.id != sink_item.id {
+                        self.apply_task_third_party_item_side_effect(
+                            executor,
                             patch,
-                            &task.source_item,
+                            sink_item,
                             for_user_id,
                         )
                         .await?;
                     }
-                    _ => {}
                 }
             }
             UpdateStatus {
@@ -1200,5 +1170,61 @@ impl TaskService {
         self.todoist_service
             .get_or_create_project(executor, project_name, user_id, None)
             .await
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, executor, third_party_item),
+        fields(third_party_item_id = third_party_item.id.to_string())
+    )]
+    pub async fn apply_task_third_party_item_side_effect<'a, 'b>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        patch: &TaskPatch,
+        third_party_item: &ThirdPartyItem,
+        for_user_id: UserId,
+    ) -> Result<(), UniversalInboxError> {
+        match third_party_item.get_third_party_item_source_kind() {
+            ThirdPartyItemSourceKind::Todoist => {
+                self.apply_updated_task_side_effect(
+                    executor,
+                    self.todoist_service.clone(),
+                    patch,
+                    third_party_item,
+                    for_user_id,
+                )
+                .await
+            }
+            ThirdPartyItemSourceKind::Linear => {
+                self.apply_updated_task_side_effect(
+                    executor,
+                    self.linear_service.clone(),
+                    patch,
+                    third_party_item,
+                    for_user_id,
+                )
+                .await
+            }
+            ThirdPartyItemSourceKind::SlackReaction => {
+                self.apply_updated_task_side_effect::<SlackReaction, SlackService>(
+                    executor,
+                    self.slack_service.clone(),
+                    patch,
+                    third_party_item,
+                    for_user_id,
+                )
+                .await
+            }
+            ThirdPartyItemSourceKind::SlackStar => {
+                self.apply_updated_task_side_effect::<SlackStar, SlackService>(
+                    executor,
+                    self.slack_service.clone(),
+                    patch,
+                    third_party_item,
+                    for_user_id,
+                )
+                .await
+            }
+        }
     }
 }
