@@ -56,7 +56,6 @@ pub fn ListItem(
     rsx! {
         tr {
             class: "hover flex items-center py-1 {style} group snap-start cursor-pointer",
-            //key: "{key2}",
             onclick: move |_| {
                 if !is_selected() {
                     on_select.call(());

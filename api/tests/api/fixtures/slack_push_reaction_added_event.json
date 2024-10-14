@@ -1,0 +1,27 @@
+{
+  "type": "event_callback",
+  "team_id": "T05XXX",
+  "api_app_id": "A05XXX",
+  "event": {
+    "type": "reaction_added",
+    "user": "U05XXX",
+    "reaction": "eyes",
+    "item_user": "U05YYY",
+    "item": {
+      "type": "message",
+      "ts": "1707686216.825719",
+      "channel": "C05XXX"
+    },
+    "event_ts": "1707743384.739427"
+  },
+  "event_id": "Ev07QL5",
+  "event_time": 1707743384,
+  "event_context": "XXX",
+  "authorizations": [
+    {
+      "team_id": "T05XXX",
+      "user_id": "U05XXX",
+      "is_bot": false
+    }
+  ]
+}

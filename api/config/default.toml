@@ -169,6 +169,8 @@ required_oauth_scopes = [
   "im:read",
   "mpim:history",
   "mpim:read",
+  "reactions:read",
+  "reactions:write",
   "stars:read",
   "stars:write",
   "team:read",

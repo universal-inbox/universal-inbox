@@ -8,7 +8,8 @@ use universal_inbox::{task::Task, third_party::item::ThirdPartyItemData};
 use crate::{
     components::{
         integrations::{
-            linear::task_list_item::LinearTaskListItem, slack::task_list_item::SlackTaskListItem,
+            linear::task_list_item::LinearTaskListItem,
+            slack::task_list_item::{SlackReactionTaskListItem, SlackStarTaskListItem},
             todoist::task_list_item::TodoistTaskListItem,
         },
         list::{List, ListItemActionButton},
@@ -74,9 +75,17 @@ fn TaskListItem(
             }
         },
         ThirdPartyItemData::SlackStar(slack_star) => rsx! {
-            SlackTaskListItem {
+            SlackStarTaskListItem {
                 task,
                 slack_star,
+                is_selected,
+                on_select,
+            }
+        },
+        ThirdPartyItemData::SlackReaction(slack_reaction) => rsx! {
+            SlackReactionTaskListItem {
+                task,
+                slack_reaction,
                 is_selected,
                 on_select,
             }

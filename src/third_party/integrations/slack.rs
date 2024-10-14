@@ -1,9 +1,8 @@
 use chrono::{DateTime, Timelike, Utc};
 use serde::{Deserialize, Serialize};
-use slack_blocks_render::render_blocks_as_markdown;
 use slack_morphism::{
     SlackChannelId, SlackChannelInfo, SlackFileCommentId, SlackFileId, SlackHistoryMessage,
-    SlackMessageOrigin, SlackTs,
+    SlackMessageOrigin, SlackReactionName, SlackTs,
 };
 use url::Url;
 use uuid::Uuid;
@@ -16,7 +15,6 @@ use crate::{
     },
     third_party::item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemFromSource},
     user::UserId,
-    utils::emoji::replace_emoji_code_in_string_with_emoji,
     HasHtmlUrl,
 };
 
@@ -24,7 +22,7 @@ use crate::{
 pub struct SlackStar {
     pub state: SlackStarState,
     pub created_at: DateTime<Utc>,
-    pub starred_item: SlackStarredItem,
+    pub item: SlackStarItem,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
@@ -33,10 +31,9 @@ pub enum SlackStarState {
     StarAdded,
     StarRemoved,
 }
-
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 #[serde(tag = "type", content = "content")]
-pub enum SlackStarredItem {
+pub enum SlackStarItem {
     SlackMessage(SlackMessageDetails),
     SlackFile(SlackFileDetails),
     SlackFileComment(SlackFileCommentDetails),
@@ -45,78 +42,42 @@ pub enum SlackStarredItem {
     SlackGroup(SlackGroupDetails),
 }
 
-impl SlackStarredItem {
+impl SlackStarItem {
     pub fn id(&self) -> String {
         match self {
-            SlackStarredItem::SlackMessage(message) => message.message.origin.ts.to_string(),
-            SlackStarredItem::SlackFile(file) => file.id.as_ref().unwrap().to_string(), // Can use unwrap because new SlackStar all have an `id` value
-            SlackStarredItem::SlackFileComment(comment) => comment.comment_id.to_string(),
-            SlackStarredItem::SlackChannel(channel) => channel.channel.id.to_string(),
-            SlackStarredItem::SlackIm(im) => im.channel.id.to_string(),
-            SlackStarredItem::SlackGroup(group) => group.channel.id.to_string(),
+            SlackStarItem::SlackMessage(message) => message.message.origin.ts.to_string(),
+            SlackStarItem::SlackFile(file) => file.id.as_ref().unwrap().to_string(), // Can use unwrap because new SlackStar all have an `id` value
+            SlackStarItem::SlackFileComment(comment) => comment.comment_id.to_string(),
+            SlackStarItem::SlackChannel(channel) => channel.channel.id.to_string(),
+            SlackStarItem::SlackIm(im) => im.channel.id.to_string(),
+            SlackStarItem::SlackGroup(group) => group.channel.id.to_string(),
         }
     }
 
     pub fn content(&self) -> String {
         match self {
-            SlackStarredItem::SlackMessage(message) => {
-                if let Some(blocks) = &message.message.content.blocks {
-                    if !blocks.is_empty() {
-                        return render_blocks_as_markdown(blocks.clone());
-                    }
-                }
-
-                if let Some(attachments) = &message.message.content.attachments {
-                    if !attachments.is_empty() {
-                        let str_blocks = attachments
-                            .iter()
-                            .filter_map(|a| {
-                                a.blocks
-                                    .as_ref()
-                                    .map(|blocks| render_blocks_as_markdown(blocks.clone()))
-                            })
-                            .collect::<Vec<String>>();
-                        if !str_blocks.is_empty() {
-                            return str_blocks.join("\n");
-                        }
-                    }
-                }
-
-                replace_emoji_code_in_string_with_emoji(
-                    &message
-                        .message
-                        .content
-                        .text
-                        .clone()
-                        .unwrap_or("Starred message".to_string()),
-                )
+            SlackStarItem::SlackMessage(message) => message.content(),
+            SlackStarItem::SlackFile(file) => file.content(),
+            SlackStarItem::SlackFileComment(comment) => comment.comment_id.to_string(),
+            SlackStarItem::SlackChannel(channel) => channel
+                .channel
+                .name
+                .clone()
+                .unwrap_or_else(|| "Channel".to_string()),
+            SlackStarItem::SlackIm(im) => {
+                im.channel.name.clone().unwrap_or_else(|| "IM".to_string())
             }
-            SlackStarredItem::SlackFile(file) => file
-                .title
-                .clone()
-                .unwrap_or_else(|| "Starred file".to_string()),
-            SlackStarredItem::SlackFileComment(comment) => comment.comment_id.to_string(),
-            SlackStarredItem::SlackChannel(channel) => channel
+            SlackStarItem::SlackGroup(group) => group
                 .channel
                 .name
                 .clone()
-                .unwrap_or_else(|| "Starred channel".to_string()),
-            SlackStarredItem::SlackIm(im) => im
-                .channel
-                .name
-                .clone()
-                .unwrap_or_else(|| "Starred IM".to_string()),
-            SlackStarredItem::SlackGroup(group) => group
-                .channel
-                .name
-                .clone()
-                .unwrap_or_else(|| "Starred group".to_string()),
+                .unwrap_or_else(|| "Group".to_string()),
         }
     }
 
     pub fn ids(&self) -> SlackStarIds {
         let (channel_id, message_id, file_id, file_comment_id) = match &self {
-            SlackStarredItem::SlackMessage(SlackMessageDetails {
+            SlackStarItem::SlackMessage(SlackMessageDetails {
                 channel: SlackChannelInfo { id: channel_id, .. },
                 message:
                     SlackHistoryMessage {
@@ -125,24 +86,24 @@ impl SlackStarredItem {
                     },
                 ..
             }) => (Some(channel_id.clone()), Some(ts.clone()), None, None),
-            SlackStarredItem::SlackChannel(SlackChannelDetails {
+            SlackStarItem::SlackChannel(SlackChannelDetails {
                 channel: SlackChannelInfo { id, .. },
                 ..
             }) => (Some(id.clone()), None, None, None),
-            SlackStarredItem::SlackIm(SlackImDetails {
+            SlackStarItem::SlackIm(SlackImDetails {
                 channel: SlackChannelInfo { id, .. },
                 ..
             }) => (Some(id.clone()), None, None, None),
-            SlackStarredItem::SlackGroup(SlackGroupDetails {
+            SlackStarItem::SlackGroup(SlackGroupDetails {
                 channel: SlackChannelInfo { id, .. },
                 ..
             }) => (Some(id.clone()), None, None, None),
-            SlackStarredItem::SlackFile(SlackFileDetails {
+            SlackStarItem::SlackFile(SlackFileDetails {
                 id: file_id,
                 channel: SlackChannelInfo { id: channel_id, .. },
                 ..
             }) => (Some(channel_id.clone()), None, file_id.clone(), None),
-            SlackStarredItem::SlackFileComment(SlackFileCommentDetails {
+            SlackStarItem::SlackFileComment(SlackFileCommentDetails {
                 comment_id,
                 channel: SlackChannelInfo { id: channel_id, .. },
                 ..
@@ -165,13 +126,13 @@ impl SlackStarredItem {
 
 impl HasHtmlUrl for SlackStar {
     fn get_html_url(&self) -> Url {
-        match &self.starred_item {
-            SlackStarredItem::SlackMessage(message) => message.get_html_url(),
-            SlackStarredItem::SlackFile(file) => file.get_html_url(),
-            SlackStarredItem::SlackFileComment(comment) => comment.get_html_url(),
-            SlackStarredItem::SlackChannel(channel) => channel.get_html_url(),
-            SlackStarredItem::SlackIm(im) => im.get_html_url(),
-            SlackStarredItem::SlackGroup(group) => group.get_html_url(),
+        match &self.item {
+            SlackStarItem::SlackMessage(message) => message.get_html_url(),
+            SlackStarItem::SlackFile(file) => file.get_html_url(),
+            SlackStarItem::SlackFileComment(comment) => comment.get_html_url(),
+            SlackStarItem::SlackChannel(channel) => channel.get_html_url(),
+            SlackStarItem::SlackIm(im) => im.get_html_url(),
+            SlackStarItem::SlackGroup(group) => group.get_html_url(),
         }
     }
 }
@@ -193,7 +154,7 @@ impl ThirdPartyItemFromSource for SlackStar {
         user_id: UserId,
         integration_connection_id: IntegrationConnectionId,
     ) -> ThirdPartyItem {
-        let source_id = self.starred_item.id();
+        let source_id = self.item.id();
 
         ThirdPartyItem {
             id: Uuid::new_v4().into(),
@@ -212,6 +173,110 @@ pub struct SlackStarIds {
     pub message_id: Option<SlackTs>,
     pub file_id: Option<SlackFileId>,
     pub file_comment_id: Option<SlackFileCommentId>,
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
+pub struct SlackReaction {
+    pub name: SlackReactionName,
+    pub state: SlackReactionState,
+    pub created_at: DateTime<Utc>,
+    pub item: SlackReactionItem,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[serde(tag = "type", content = "content")]
+pub enum SlackReactionState {
+    ReactionAdded,
+    ReactionRemoved,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[serde(tag = "type", content = "content")]
+#[allow(clippy::large_enum_variant)]
+pub enum SlackReactionItem {
+    SlackMessage(SlackMessageDetails),
+    SlackFile(SlackFileDetails),
+}
+
+impl SlackReactionItem {
+    pub fn id(&self) -> String {
+        match self {
+            SlackReactionItem::SlackMessage(message) => message.message.origin.ts.to_string(),
+            SlackReactionItem::SlackFile(file) => file.id.as_ref().unwrap().to_string(), // Can use unwrap because new SlackReaction all have an `id` value
+        }
+    }
+
+    pub fn content(&self) -> String {
+        match self {
+            SlackReactionItem::SlackMessage(message) => message.content(),
+            SlackReactionItem::SlackFile(file) => file.content(),
+        }
+    }
+
+    pub fn ids(&self) -> Option<SlackReactionIds> {
+        let (channel_id, message_id) = match &self {
+            SlackReactionItem::SlackMessage(SlackMessageDetails {
+                channel: SlackChannelInfo { id: channel_id, .. },
+                message:
+                    SlackHistoryMessage {
+                        origin: SlackMessageOrigin { ts, .. },
+                        ..
+                    },
+                ..
+            }) => (channel_id.clone(), ts.clone()),
+            _ => return None,
+        };
+
+        Some(SlackReactionIds {
+            channel_id,
+            message_id,
+        })
+    }
+}
+
+impl HasHtmlUrl for SlackReaction {
+    fn get_html_url(&self) -> Url {
+        match &self.item {
+            SlackReactionItem::SlackMessage(message) => message.get_html_url(),
+            SlackReactionItem::SlackFile(file) => file.get_html_url(),
+        }
+    }
+}
+
+impl TryFrom<ThirdPartyItem> for SlackReaction {
+    type Error = ();
+
+    fn try_from(item: ThirdPartyItem) -> Result<Self, Self::Error> {
+        match item.data {
+            ThirdPartyItemData::SlackReaction(slack_reaction) => Ok(slack_reaction),
+            _ => Err(()),
+        }
+    }
+}
+
+impl ThirdPartyItemFromSource for SlackReaction {
+    fn into_third_party_item(
+        self,
+        user_id: UserId,
+        integration_connection_id: IntegrationConnectionId,
+    ) -> ThirdPartyItem {
+        let source_id = self.item.id();
+
+        ThirdPartyItem {
+            id: Uuid::new_v4().into(),
+            source_id,
+            data: ThirdPartyItemData::SlackReaction(self.clone()),
+            created_at: Utc::now().with_nanosecond(0).unwrap(),
+            updated_at: Utc::now().with_nanosecond(0).unwrap(),
+            user_id,
+            integration_connection_id,
+        }
+    }
+}
+
+pub struct SlackReactionIds {
+    pub channel_id: SlackChannelId,
+    pub message_id: SlackTs,
 }
 
 #[cfg(test)]
@@ -244,7 +309,7 @@ mod test {
     }
 
     #[fixture]
-    pub fn slack_starred_message() -> Box<SlackStarredItem> {
+    pub fn slack_starred_message() -> Box<SlackStarItem> {
         let message_response: SlackApiConversationsHistoryResponse =
             load_json_fixture_file("slack_fetch_message_response.json");
         let channel_response: SlackApiConversationsInfoResponse =
@@ -255,7 +320,7 @@ mod test {
         let team_response: SlackApiTeamInfoResponse =
             load_json_fixture_file("slack_fetch_team_response.json");
 
-        Box::new(SlackStarredItem::SlackMessage(SlackMessageDetails {
+        Box::new(SlackStarItem::SlackMessage(SlackMessageDetails {
             url: "https://example.com".parse().unwrap(),
             message: message_response.messages[0].clone(),
             channel: channel_response.channel,
@@ -265,7 +330,7 @@ mod test {
     }
 
     #[rstest]
-    fn test_render_starred_message_with_blocks(slack_starred_message: Box<SlackStarredItem>) {
+    fn test_render_starred_message_with_blocks(slack_starred_message: Box<SlackStarItem>) {
         assert_eq!(
             slack_starred_message.content(),
             "🔴  *Test title* 🔴\n\n- list 1\n- list 2\n1. number 1\n1. number 2\n> quote\n```$ echo Hello world```\n_Some_ `formatted` ~text~.\n\nHere is a [link](https://www.universal-inbox.com)"
@@ -274,11 +339,11 @@ mod test {
 
     #[rstest]
     fn test_render_starred_message_with_blocks_in_attachments(
-        mut slack_starred_message: Box<SlackStarredItem>,
+        mut slack_starred_message: Box<SlackStarItem>,
     ) {
-        let SlackStarredItem::SlackMessage(message) = &mut (*slack_starred_message) else {
+        let SlackStarItem::SlackMessage(message) = &mut (*slack_starred_message) else {
             panic!(
-                "Expected SlackStarredItem::SlackMessage, got {:?}",
+                "Expected SlackStarItem::SlackMessage, got {:?}",
                 slack_starred_message
             );
         };
@@ -300,12 +365,10 @@ mod test {
     }
 
     #[rstest]
-    fn test_render_starred_message_with_only_text(
-        mut slack_starred_message: Box<SlackStarredItem>,
-    ) {
-        let SlackStarredItem::SlackMessage(message) = &mut (*slack_starred_message) else {
+    fn test_render_starred_message_with_only_text(mut slack_starred_message: Box<SlackStarItem>) {
+        let SlackStarItem::SlackMessage(message) = &mut (*slack_starred_message) else {
             panic!(
-                "Expected SlackStarredItem::SlackMessage, got {:?}",
+                "Expected SlackStarItem::SlackMessage, got {:?}",
                 slack_starred_message
             );
         };

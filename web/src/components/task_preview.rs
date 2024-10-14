@@ -5,8 +5,9 @@ use dioxus::prelude::*;
 use universal_inbox::{task::Task, third_party::item::ThirdPartyItemData};
 
 use crate::components::integrations::{
-    linear::preview::issue::LinearIssuePreview, slack::preview::slack_star::SlackStarTaskPreview,
-    todoist::preview::TodoistTaskPreview,
+    linear::preview::issue::LinearIssuePreview,
+    slack::preview::slack_reaction::SlackReactionTaskPreview,
+    slack::preview::slack_star::SlackStarTaskPreview, todoist::preview::TodoistTaskPreview,
 };
 
 #[component]
@@ -28,6 +29,9 @@ pub fn TaskDetailsPreview(task: ReadOnlySignal<Task>) -> Element {
         }
         ThirdPartyItemData::SlackStar(slack_star) => {
             rsx! { SlackStarTaskPreview { slack_star, task } }
+        }
+        ThirdPartyItemData::SlackReaction(slack_reaction) => {
+            rsx! { SlackReactionTaskPreview { slack_reaction, task } }
         }
         ThirdPartyItemData::LinearIssue(linear_issue) => {
             rsx! { LinearIssuePreview { linear_issue, linear_notification: None } }

@@ -4,13 +4,19 @@ use chrono::{DateTime, Local};
 use dioxus::prelude::*;
 
 use dioxus_free_icons::{icons::bs_icons::BsSlack, Icon};
-use slack_morphism::events::SlackPushEventCallback;
-use universal_inbox::notification::{
-    integrations::slack::{
-        SlackChannelDetails, SlackFileCommentDetails, SlackFileDetails, SlackGroupDetails,
-        SlackImDetails, SlackMessageDetails,
+use slack_morphism::events::{
+    SlackEventCallbackBody, SlackPushEventCallback, SlackReactionAddedEvent,
+    SlackReactionRemovedEvent,
+};
+use universal_inbox::{
+    notification::{
+        integrations::slack::{
+            SlackChannelDetails, SlackFileCommentDetails, SlackFileDetails, SlackGroupDetails,
+            SlackImDetails, SlackMessageDetails,
+        },
+        NotificationDetails, NotificationWithTask,
     },
-    NotificationDetails, NotificationWithTask,
+    utils::emoji::replace_emoji_code_with_emoji,
 };
 
 use crate::components::{
@@ -34,6 +40,29 @@ pub fn SlackNotificationListItem(
             .to_string()
     });
     let list_context = use_context::<Memo<ListContext>>();
+    let subicon = match slack_push_event_callback {
+        SlackPushEventCallback {
+            event: SlackEventCallbackBody::StarAdded(_),
+            ..
+        }
+        | SlackPushEventCallback {
+            event: SlackEventCallbackBody::StarRemoved(_),
+            ..
+        } => rsx! { SlackNotificationIcon { class: "h-5 w-5 min-w-5" } },
+        SlackPushEventCallback {
+            event: SlackEventCallbackBody::ReactionAdded(SlackReactionAddedEvent { reaction, .. }),
+            ..
+        }
+        | SlackPushEventCallback {
+            event:
+                SlackEventCallbackBody::ReactionRemoved(SlackReactionRemovedEvent { reaction, .. }),
+            ..
+        } => {
+            let emoji = replace_emoji_code_with_emoji(&reaction.0).unwrap_or("👀".to_string());
+            rsx! { span { class: "h-5 w-5 min-w-5", "{emoji}" } }
+        }
+        _ => None,
+    };
 
     rsx! {
         ListItem {
@@ -41,7 +70,7 @@ pub fn SlackNotificationListItem(
             title: "{notification().title}",
             subtitle: rsx! { SlackNotificationSubtitle { notification } },
             icon: rsx! { Icon { class: "h-5 w-5", icon: BsSlack }, TaskHint { task: notification().task } },
-            subicon: rsx! { SlackNotificationIcon { class: "h-5 w-5 min-w-5" } },
+            subicon,
             action_buttons: get_notification_list_item_action_buttons(
                 notification,
                 list_context().show_shortcut,

@@ -39,7 +39,7 @@ use crate::{
 
 // tag: New notification integration
 pub struct NotificationService {
-    repository: Arc<Repository>,
+    pub(super) repository: Arc<Repository>,
     github_service: Arc<GithubService>,
     linear_service: Arc<LinearService>,
     google_mail_service: Arc<RwLock<GoogleMailService>>,

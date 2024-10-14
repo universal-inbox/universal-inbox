@@ -21,6 +21,7 @@ use universal_inbox_api::{
     observability::{get_subscriber, init_subscriber},
     repository::Repository,
     universal_inbox::{task::service::TaskService, user::service::UserService},
+    utils::cache::Cache,
 };
 
 use crate::helpers::mailer::MailerStub;
@@ -50,6 +51,16 @@ pub struct TestedApp {
     pub nango_mock_server: MockServer,
     pub mailer_stub: Arc<RwLock<MailerStub>>,
     pub redis_storage: RedisStorage<UniversalInboxJob>,
+    pub cache: Cache,
+}
+
+impl Drop for TestedApp {
+    fn drop(&mut self) {
+        let cache = self.cache.clone();
+        tokio::spawn(async move {
+            let _ = cache.clear(&None).await;
+        });
+    }
 }
 
 #[fixture]
@@ -136,6 +147,11 @@ pub async fn tested_app(
 
     let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
     let port = listener.local_addr().unwrap().port();
+
+    let cache = Cache::new(settings.redis.connection_string())
+        .await
+        .expect("Failed to create cache");
+    Cache::set_namespace(Uuid::new_v4().to_string()).await;
 
     // tag: New notification integration
     let github_mock_server = MockServer::start();
@@ -249,6 +265,7 @@ pub async fn tested_app(
         nango_mock_server,
         mailer_stub,
         redis_storage,
+        cache,
     }
 }
 
@@ -266,6 +283,11 @@ pub async fn tested_app_with_local_auth(
 
     let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
     let port = listener.local_addr().unwrap().port();
+
+    let cache = Cache::new(settings.redis.connection_string())
+        .await
+        .expect("Failed to create cache");
+    Cache::set_namespace(Uuid::new_v4().to_string()).await;
 
     // tag: New notification integration
     let github_mock_server = MockServer::start();
@@ -368,6 +390,7 @@ pub async fn tested_app_with_local_auth(
         nango_mock_server,
         mailer_stub,
         redis_storage,
+        cache,
     }
 }
 

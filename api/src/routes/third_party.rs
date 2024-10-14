@@ -14,11 +14,8 @@ use crate::{
 
 pub fn scope() -> Scope {
     web::scope("/third_party").service(
-        web::scope("/items").service(
-            web::resource("")
-                .name("items")
-                .route(web::post().to(create_third_party_item)),
-        ),
+        web::scope("/task")
+            .service(web::resource("/items").route(web::post().to(create_third_party_item))),
     )
 }
 
@@ -39,7 +36,7 @@ pub async fn create_third_party_item(
         .context("Failed to create new transaction while creating third party item")?;
 
     let created_third_party_item = service
-        .create_item(&mut transaction, *third_party_item.into_inner(), user_id)
+        .create_task_item(&mut transaction, *third_party_item.into_inner(), user_id)
         .await?;
 
     transaction

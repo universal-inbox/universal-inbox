@@ -19,6 +19,7 @@
 - Render Slack messages from Slack blocks
 - Track required vs registered OAuth scopes to suggest a reconnection if needed
 - Add synced tasks page
+- Synchronize Slack reacted messages as notifications or tasks
 
 ### Changed
 

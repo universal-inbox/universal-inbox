@@ -1,31 +1,43 @@
+use std::sync::Arc;
+
 use anyhow::Context;
 use cached::AsyncRedisCache;
 use once_cell::sync::Lazy;
 use redis::{aio::ConnectionManager, Client, Script};
 use serde::{de::DeserializeOwned, Serialize};
+use tokio::sync::RwLock;
 use tracing::{debug, info};
 
 use crate::{configuration::Settings, universal_inbox::UniversalInboxError};
 
-struct Config {
+pub struct Config {
     settings: Settings,
+    namespace: Arc<RwLock<String>>,
 }
 
 impl Config {
     fn load() -> Self {
         Self {
             settings: Settings::new().unwrap(),
+            namespace: Arc::new(RwLock::new("universal-inbox:cache:".to_string())),
         }
+    }
+
+    async fn namespace(&self) -> String {
+        self.namespace.read().await.clone()
+    }
+
+    async fn set_namespace(&self, namespace: String) {
+        *(self.namespace.write().await) = namespace;
     }
 }
 
-static CONFIG: Lazy<Config> = Lazy::new(Config::load);
+static CACHE_CONFIG: Lazy<Config> = Lazy::new(Config::load);
 
+#[derive(Clone)]
 pub struct Cache {
     pub connection_manager: ConnectionManager,
 }
-
-pub const CACHE_NAMESPACE: &str = "universal-inbox:cache:";
 
 impl Cache {
     pub async fn new(redis_address: String) -> Result<Self, UniversalInboxError> {
@@ -40,10 +52,11 @@ impl Cache {
 
     pub async fn clear(&self, prefix: &Option<String>) -> Result<(), UniversalInboxError> {
         let mut connection = self.connection_manager.clone();
+        let namespace = CACHE_CONFIG.namespace().await;
         let full_prefix = prefix
             .as_ref()
-            .map(|p| format!("{CACHE_NAMESPACE}{p}"))
-            .unwrap_or(CACHE_NAMESPACE.to_string());
+            .map(|p| format!("{namespace}{p}"))
+            .unwrap_or(namespace.to_string());
         let pattern = format!("{full_prefix}*");
 
         let deleted_keys_count: usize =
@@ -56,20 +69,31 @@ impl Cache {
         debug!("Cleared Redis {deleted_keys_count} cache entries with pattern: `{pattern}`");
         Ok(())
     }
+
+    pub async fn set_namespace(namespace: String) {
+        CACHE_CONFIG.set_namespace(namespace).await;
+    }
 }
 
-pub async fn build_redis_cache<T>(namespace: &str, ttl: u64) -> AsyncRedisCache<String, T>
+pub async fn build_redis_cache<T>(
+    prefix: &str,
+    ttl: u64,
+    refresh: bool,
+) -> AsyncRedisCache<String, T>
 where
     T: Serialize + DeserializeOwned + Send + Sync,
 {
-    let settings = &CONFIG.settings;
+    let settings = &CACHE_CONFIG.settings;
+    let namespace = CACHE_CONFIG.namespace().await;
     info!(
-        "Connecting to Redis server for caching on {}",
-        &settings.redis.safe_connection_string()
+        "Connecting to Redis server for caching on {} with namespace: {}:{}",
+        &settings.redis.safe_connection_string(),
+        &namespace,
+        &prefix
     );
-    AsyncRedisCache::new(namespace, ttl)
-        .set_refresh(true)
-        .set_namespace(CACHE_NAMESPACE)
+    AsyncRedisCache::new(prefix, ttl)
+        .set_refresh(refresh)
+        .set_namespace(&namespace)
         .set_connection_string(&settings.redis.connection_string())
         .build()
         .await

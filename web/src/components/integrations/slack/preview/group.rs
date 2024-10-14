@@ -5,12 +5,13 @@ use dioxus_free_icons::{icons::bs_icons::BsArrowUpRightSquare, Icon};
 
 use universal_inbox::{notification::integrations::slack::SlackGroupDetails, HasHtmlUrl};
 
-use crate::components::integrations::slack::{icons::SlackNotificationIcon, SlackTeamDisplay};
+use crate::components::{integrations::slack::SlackTeamDisplay, markdown::Markdown};
 
 #[component]
 pub fn SlackGroupPreview(
     slack_group: ReadOnlySignal<SlackGroupDetails>,
     title: ReadOnlySignal<String>,
+    icon: Option<Element>,
 ) -> Element {
     let channel_name = slack_group()
         .channel
@@ -37,11 +38,12 @@ pub fn SlackGroupPreview(
             h2 {
                 class: "flex items-center gap-2 text-lg",
 
-                SlackNotificationIcon { class: "h-5 w-5" }
+                { icon }
                 a {
                     href: "{slack_group().get_html_url()}",
                     target: "_blank",
-                    dangerous_inner_html: "{title}"
+
+                    Markdown { text: "{title}" }
                 }
                 a {
                     class: "flex-none",

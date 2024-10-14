@@ -85,7 +85,7 @@ mod get_task {
         let creation: Box<ThirdPartyItemCreationResult> = create_resource(
             &app.client,
             &app.app.api_address,
-            "third_party/items",
+            "third_party/task/items",
             Box::new(ThirdPartyItem {
                 id: Uuid::new_v4().into(),
                 source_id: todoist_item.id.clone(),
@@ -164,7 +164,7 @@ mod list_tasks {
         let creation: Box<ThirdPartyItemCreationResult> = create_resource(
             &app.client,
             &app.app.api_address,
-            "third_party/items",
+            "third_party/task/items",
             Box::new(ThirdPartyItem {
                 id: Uuid::new_v4().into(),
                 source_id: todoist_item.id.clone(),
@@ -191,7 +191,7 @@ mod list_tasks {
         let creation: Box<ThirdPartyItemCreationResult> = create_resource(
             &app.client,
             &app.app.api_address,
-            "third_party/items",
+            "third_party/task/items",
             Box::new(ThirdPartyItem {
                 id: Uuid::new_v4().into(),
                 source_id: todoist_item_done.id.clone(),
@@ -264,7 +264,7 @@ mod patch_task {
         let creation: Box<ThirdPartyItemCreationResult> = create_resource(
             &app.client,
             &app.app.api_address,
-            "third_party/items",
+            "third_party/task/items",
             Box::new(ThirdPartyItem {
                 id: Uuid::new_v4().into(),
                 source_id: todoist_item.id.clone(),
@@ -327,7 +327,7 @@ mod patch_task {
         let creation: Box<ThirdPartyItemCreationResult> = create_resource(
             &app.client,
             &app.app.api_address,
-            "third_party/items",
+            "third_party/task/items",
             Box::new(ThirdPartyItem {
                 id: Uuid::new_v4().into(),
                 source_id: todoist_item.id.clone(),
@@ -393,7 +393,7 @@ mod patch_task {
         let creation: Box<ThirdPartyItemCreationResult> = create_resource(
             &app.client,
             &app.app.api_address,
-            "third_party/items",
+            "third_party/task/items",
             Box::new(ThirdPartyItem {
                 id: Uuid::new_v4().into(),
                 source_id: todoist_item.id.clone(),
@@ -510,7 +510,7 @@ mod search_tasks {
         let creation: Box<ThirdPartyItemCreationResult> = create_resource(
             &app.client,
             &app.app.api_address,
-            "third_party/items",
+            "third_party/task/items",
             Box::new(ThirdPartyItem {
                 id: Uuid::new_v4().into(),
                 source_id: todoist_item.id.clone(),
@@ -537,7 +537,7 @@ mod search_tasks {
         let creation: Box<ThirdPartyItemCreationResult> = create_resource(
             &app.client,
             &app.app.api_address,
-            "third_party/items",
+            "third_party/task/items",
             Box::new(ThirdPartyItem {
                 id: Uuid::new_v4().into(),
                 source_id: other_todoist_item.id.clone(),

@@ -16,7 +16,10 @@ use crate::{
     task::{
         integrations::todoist::TODOIST_INBOX_PROJECT, ProjectSummary, TaskCreation, TaskPriority,
     },
+    third_party::item::{ThirdPartyItem, ThirdPartyItemSource, ThirdPartyItemSourceKind},
 };
+
+use super::integrations::slack::{SlackReactionConfig, SlackStarConfig};
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
 #[serde(tag = "type", content = "content")]
@@ -131,9 +134,7 @@ impl IntegrationProvider {
             IntegrationProvider::Github { config } => config.sync_notifications_enabled,
             IntegrationProvider::Linear { config } => config.sync_notifications_enabled,
             IntegrationProvider::GoogleMail { config, .. } => config.sync_notifications_enabled,
-            IntegrationProvider::Slack { config } => {
-                config.sync_enabled && config.sync_type == SlackSyncType::AsNotifications
-            }
+            IntegrationProvider::Slack { .. } => false, // Slack notifications are not synced but received via the webhook
             _ => false,
         }
     }
@@ -142,6 +143,7 @@ impl IntegrationProvider {
         match self {
             IntegrationProvider::Todoist { config, .. } => config.sync_tasks_enabled,
             IntegrationProvider::Linear { config } => config.sync_task_config.enabled,
+            IntegrationProvider::Slack { .. } => false, // Slack tasks are not synced but received via the webhook
             _ => false,
         }
     }
@@ -155,49 +157,82 @@ impl IntegrationProvider {
         }
     }
 
-    pub fn get_task_creation_default_values(&self) -> Option<TaskCreation> {
-        match self {
-            IntegrationProvider::Slack {
-                config:
-                    SlackConfig {
-                        sync_type:
-                            SlackSyncType::AsTasks(SlackSyncTaskConfig {
-                                target_project,
-                                default_due_at,
-                                default_priority,
-                            }),
-                        ..
-                    },
-            } => Some(TaskCreation {
-                title: "Unused".to_string(),
-                body: None,
-                project: target_project.clone().unwrap_or_else(|| ProjectSummary {
-                    source_id: "Unused".to_string(),
-                    name: TODOIST_INBOX_PROJECT.to_string(),
-                }),
-                due_at: default_due_at.as_ref().map(|due_at| due_at.clone().into()),
-                priority: *default_priority,
+    pub fn get_task_creation_default_values(
+        &self,
+        third_party_item: &ThirdPartyItem,
+    ) -> Option<TaskCreation> {
+        let (target_project, default_due_at, default_priority) = match self {
+            IntegrationProvider::Slack { config } => {
+                match third_party_item.get_third_party_item_source_kind() {
+                    ThirdPartyItemSourceKind::SlackStar => {
+                        let SlackConfig {
+                            star_config:
+                                SlackStarConfig {
+                                    sync_type:
+                                        SlackSyncType::AsTasks(SlackSyncTaskConfig {
+                                            target_project,
+                                            default_due_at,
+                                            default_priority,
+                                        }),
+                                    ..
+                                },
+                            ..
+                        } = config
+                        else {
+                            return None;
+                        };
+
+                        (
+                            target_project.as_ref(),
+                            default_due_at.as_ref(),
+                            default_priority,
+                        )
+                    }
+                    ThirdPartyItemSourceKind::SlackReaction => {
+                        let SlackConfig {
+                            reaction_config:
+                                SlackReactionConfig {
+                                    sync_type:
+                                        SlackSyncType::AsTasks(SlackSyncTaskConfig {
+                                            target_project,
+                                            default_due_at,
+                                            default_priority,
+                                        }),
+                                    ..
+                                },
+                            ..
+                        } = config
+                        else {
+                            return None;
+                        };
+
+                        (
+                            target_project.as_ref(),
+                            default_due_at.as_ref(),
+                            default_priority,
+                        )
+                    }
+                    _ => return None,
+                }
+            }
+            IntegrationProvider::Linear { config } => (
+                config.sync_task_config.target_project.as_ref(),
+                config.sync_task_config.default_due_at.as_ref(),
+                &TaskPriority::default(),
+            ),
+            _ => return None,
+        };
+
+        Some(TaskCreation {
+            title: "Unused".to_string(),
+            body: None,
+            project: target_project.cloned().unwrap_or_else(|| ProjectSummary {
+                source_id: "Unused".to_string(),
+                name: TODOIST_INBOX_PROJECT.to_string(),
             }),
-            IntegrationProvider::Linear { config } => Some(TaskCreation {
-                title: "Unused".to_string(),
-                body: None,
-                project: config
-                    .sync_task_config
-                    .target_project
-                    .clone()
-                    .unwrap_or_else(|| ProjectSummary {
-                        source_id: "Unused".to_string(),
-                        name: TODOIST_INBOX_PROJECT.to_string(),
-                    }),
-                due_at: config
-                    .sync_task_config
-                    .default_due_at
-                    .as_ref()
-                    .map(|due_at| due_at.clone().into()),
-                priority: TaskPriority::default(),
-            }),
-            _ => None,
-        }
+            due_at: default_due_at.map(|due_at| due_at.clone().into()),
+            priority: *default_priority,
+        })
     }
 }
 

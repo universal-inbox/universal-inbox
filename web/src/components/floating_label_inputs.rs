@@ -26,6 +26,8 @@ pub struct InputProps<T: Clone + PartialEq + 'static> {
     #[props(default)]
     icon: Option<Element>,
     #[props(default)]
+    on_update: Option<EventHandler<String>>,
+    #[props(default)]
     phantom: PhantomData<T>,
 }
 
@@ -111,7 +113,12 @@ where
                 onchange: move |evt| {
                     props.value.write().clone_from(&evt.value());
                 },
-                onfocusout: move |_| *validate.write() = true,
+                onfocusout: move |_| {
+                    *validate.write() = true;
+                    if let Some(on_update) = &props.on_update {
+                        on_update.call(props.value.read().clone());
+                    }
+                },
                 autofocus: props.autofocus.unwrap_or_default(),
             }
 
