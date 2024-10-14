@@ -30,7 +30,7 @@ use utils::{current_location, get_local_storage};
 use crate::{
     keyboard_manager::KEYBOARD_MANAGER,
     services::{
-        headway::init_headway, integration_connection_service::TASK_SERVICE_INTEGRATION_CONNECTION,
+        integration_connection_service::TASK_SERVICE_INTEGRATION_CONNECTION,
         task_service::SYNCED_TASKS_PAGE,
     },
 };
@@ -107,16 +107,6 @@ pub fn App() -> Element {
             toast_service_handle,
         )
     });
-
-    let show_changelog = APP_CONFIG
-        .read()
-        .as_ref()
-        .map(|config| config.show_changelog)
-        .unwrap_or_default();
-
-    if show_changelog {
-        init_headway();
-    }
 
     use_future(move || async move {
         *IS_DARK_MODE.write() = toggle_dark_mode(false).expect("Failed to initialize the theme");
