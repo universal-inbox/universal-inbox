@@ -89,15 +89,12 @@ where
         // Forward `changeDate` event to `change` event
         let cloned_element = element.clone();
         let closure = Closure::<dyn FnMut(_)>::new(move |_event: CustomEvent| {
+            let input_event_init = InputEventInit::new();
+            input_event_init.set_bubbles(true);
+            input_event_init.set_cancelable(true);
+            input_event_init.set_data(Some(element.value().as_str()));
             let _ = element.dispatch_event(
-                &InputEvent::new_with_event_init_dict(
-                    "change",
-                    InputEventInit::new()
-                        .bubbles(true)
-                        .cancelable(true)
-                        .data(Some(element.value().as_str())),
-                )
-                .unwrap(),
+                &InputEvent::new_with_event_init_dict("change", &input_event_init).unwrap(),
             );
         });
         let _ = cloned_element
