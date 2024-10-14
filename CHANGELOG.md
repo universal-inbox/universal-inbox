@@ -4,6 +4,14 @@
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## 2024-10-14
+
+### Added
+
 - User profile page to create API keys
 - Show message when reaching inbox zero
 - Add notification kind filtering
