@@ -1125,51 +1125,51 @@
         }
       }
     },
-    "sqlx-cli@0.7.4": {
-      "last_modified": "2024-03-15T20:27:35Z",
-      "resolved": "github:NixOS/nixpkgs/9af9c1c87ed3e3ed271934cb896e0cdd33dae212#sqlx-cli",
+    "sqlx-cli@0.8.2": {
+      "last_modified": "2024-09-10T15:01:03Z",
+      "resolved": "github:NixOS/nixpkgs/5ed627539ac84809c78b2dd6d26a5cebeb5ae269#sqlx-cli",
       "source": "devbox-search",
-      "version": "0.7.4",
+      "version": "0.8.2",
       "systems": {
         "aarch64-darwin": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/hdd1fikpsmmr7v55hyqi5l1qrvind32w-sqlx-cli-0.7.4",
+              "path": "/nix/store/dhp3bzp9w27wdvi3nrc277h1craphdwj-sqlx-cli-0.8.2",
               "default": true
             }
           ],
-          "store_path": "/nix/store/hdd1fikpsmmr7v55hyqi5l1qrvind32w-sqlx-cli-0.7.4"
+          "store_path": "/nix/store/dhp3bzp9w27wdvi3nrc277h1craphdwj-sqlx-cli-0.8.2"
         },
         "aarch64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/qbhx2v74s410kw31dlcjn2y73x3i2m3v-sqlx-cli-0.7.4",
+              "path": "/nix/store/aaxvsdnwipv7wr0v2gkzi5l3yc4icpx6-sqlx-cli-0.8.2",
               "default": true
             }
           ],
-          "store_path": "/nix/store/qbhx2v74s410kw31dlcjn2y73x3i2m3v-sqlx-cli-0.7.4"
+          "store_path": "/nix/store/aaxvsdnwipv7wr0v2gkzi5l3yc4icpx6-sqlx-cli-0.8.2"
         },
         "x86_64-darwin": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/c6qb6p18gpkl24yiaw85jjvkzy170mxs-sqlx-cli-0.7.4",
+              "path": "/nix/store/k2mzc7rb2gv01nk6qpjywqpj9dv0p9a1-sqlx-cli-0.8.2",
               "default": true
             }
           ],
-          "store_path": "/nix/store/c6qb6p18gpkl24yiaw85jjvkzy170mxs-sqlx-cli-0.7.4"
+          "store_path": "/nix/store/k2mzc7rb2gv01nk6qpjywqpj9dv0p9a1-sqlx-cli-0.8.2"
         },
         "x86_64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/ancr9rs3fyqhjs0y383p500fzdnqvrax-sqlx-cli-0.7.4",
+              "path": "/nix/store/7q01pna4l674kaf87wzd3yy5zf19pxqh-sqlx-cli-0.8.2",
               "default": true
             }
           ],
-          "store_path": "/nix/store/ancr9rs3fyqhjs0y383p500fzdnqvrax-sqlx-cli-0.7.4"
+          "store_path": "/nix/store/7q01pna4l674kaf87wzd3yy5zf19pxqh-sqlx-cli-0.8.2"
         }
       }
     },
@@ -1269,51 +1269,51 @@
         }
       }
     },
-    "wasm-bindgen-cli@0.2.92": {
-      "last_modified": "2024-06-12T20:55:33Z",
-      "resolved": "github:NixOS/nixpkgs/a9858885e197f984d92d7fe64e9fff6b2e488d40#wasm-bindgen-cli",
+    "wasm-bindgen-cli@0.2.93": {
+      "last_modified": "2024-09-10T15:01:03Z",
+      "resolved": "github:NixOS/nixpkgs/5ed627539ac84809c78b2dd6d26a5cebeb5ae269#wasm-bindgen-cli",
       "source": "devbox-search",
-      "version": "0.2.92",
+      "version": "0.2.93",
       "systems": {
         "aarch64-darwin": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/g099623lcck4l831hdl0vbrx0jkvs0lf-wasm-bindgen-cli-0.2.92",
+              "path": "/nix/store/2nizqmgb3izijdx2iw13hr5imz717fcf-wasm-bindgen-cli-0.2.93",
               "default": true
             }
           ],
-          "store_path": "/nix/store/g099623lcck4l831hdl0vbrx0jkvs0lf-wasm-bindgen-cli-0.2.92"
+          "store_path": "/nix/store/2nizqmgb3izijdx2iw13hr5imz717fcf-wasm-bindgen-cli-0.2.93"
         },
         "aarch64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/lmd32p7wy3208wxpymn2vi0fr2jmz5cs-wasm-bindgen-cli-0.2.92",
+              "path": "/nix/store/lxm0wys0dc69y6l4si4qy360bh2x34p4-wasm-bindgen-cli-0.2.93",
               "default": true
             }
           ],
-          "store_path": "/nix/store/lmd32p7wy3208wxpymn2vi0fr2jmz5cs-wasm-bindgen-cli-0.2.92"
+          "store_path": "/nix/store/lxm0wys0dc69y6l4si4qy360bh2x34p4-wasm-bindgen-cli-0.2.93"
         },
         "x86_64-darwin": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/anmshjr9yay723xq2wpb8sm8n7dbh13j-wasm-bindgen-cli-0.2.92",
+              "path": "/nix/store/b6g3q6fwv67p69li69xwblqn69fcapcj-wasm-bindgen-cli-0.2.93",
               "default": true
             }
           ],
-          "store_path": "/nix/store/anmshjr9yay723xq2wpb8sm8n7dbh13j-wasm-bindgen-cli-0.2.92"
+          "store_path": "/nix/store/b6g3q6fwv67p69li69xwblqn69fcapcj-wasm-bindgen-cli-0.2.93"
         },
         "x86_64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/3wcf2d9by37a8iq7460hcwh8mfn70v7c-wasm-bindgen-cli-0.2.92",
+              "path": "/nix/store/p3jfjh970gl14xm47knv6dvxvgk087xb-wasm-bindgen-cli-0.2.93",
               "default": true
             }
           ],
-          "store_path": "/nix/store/3wcf2d9by37a8iq7460hcwh8mfn70v7c-wasm-bindgen-cli-0.2.92"
+          "store_path": "/nix/store/p3jfjh970gl14xm47knv6dvxvgk087xb-wasm-bindgen-cli-0.2.93"
         }
       }
     },

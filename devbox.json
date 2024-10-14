@@ -1,6 +1,6 @@
 {
   "packages": {
-    "sqlx-cli":       "0.7.4",
+    "sqlx-cli":       "0.8.2",
     "trunk":          "latest",
     "pre-commit":     "latest",
     "rustup":         "latest",
@@ -35,7 +35,7 @@
     "cargo-chef":       "latest",
     "cargo-binstall":   "latest",
     "openssl.dev":      "",
-    "wasm-bindgen-cli": "0.2.92",
+    "wasm-bindgen-cli": "0.2.93",
     "cargo-machete":    "latest"
   },
   "shell": {
