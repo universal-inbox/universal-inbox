@@ -18,6 +18,7 @@ use crate::{
     model::{DEFAULT_USER_AVATAR, NOT_CONNECTED_USER_NAME},
     route::Route,
     services::{
+        headway::init_headway,
         notification_service::NOTIFICATIONS_PAGE,
         task_service::SYNCED_TASKS_PAGE,
         user_service::{UserCommand, CONNECTED_USER},
@@ -48,11 +49,18 @@ pub fn NavBar() -> Element {
         .read()
         .as_ref()
         .and_then(|config| config.support_href.clone());
+
     let show_changelog = APP_CONFIG
         .read()
         .as_ref()
         .map(|config| config.show_changelog)
         .unwrap_or_default();
+
+    use_effect(move || {
+        if show_changelog {
+            init_headway();
+        }
+    });
 
     rsx! {
         div {
