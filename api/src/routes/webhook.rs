@@ -34,6 +34,7 @@ pub async fn push_slack_event(
     slack_push_event: web::Json<SlackPushEvent>,
     storage: web::Data<RedisStorage<UniversalInboxJob>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
+    debug!("Received a push event from Slack: {slack_push_event:?}");
     match slack_push_event.into_inner() {
         SlackPushEvent::UrlVerification(SlackUrlVerificationEvent { challenge }) => {
             return Ok(HttpResponse::Ok()

@@ -37,7 +37,7 @@ use crate::helpers::{
     notification::{
         list_notifications_with_tasks,
         slack::{
-            mock_slack_fetch_channel, mock_slack_fetch_message, mock_slack_fetch_team,
+            mock_slack_fetch_channel, mock_slack_fetch_reply, mock_slack_fetch_team,
             mock_slack_fetch_user, mock_slack_get_chat_permalink, mock_slack_stars_add,
             mock_slack_stars_remove, slack_push_star_added_event, slack_push_star_removed_event,
             slack_starred_message,
@@ -108,7 +108,7 @@ async fn test_sync_todoist_slack_task(
         "slack_fetch_user_response.json",
     );
     let slack_message_id = "1707686216.825719";
-    let slack_fetch_message_mock = mock_slack_fetch_message(
+    let slack_fetch_message_mock = mock_slack_fetch_reply(
         &app.app.slack_mock_server,
         "C05XXX",
         slack_message_id,

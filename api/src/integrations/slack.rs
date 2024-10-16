@@ -117,7 +117,6 @@ impl SlackService {
         slack_api_token: &SlackApiToken,
         channel: &SlackChannelId,
         message: &SlackTs,
-        thread_message: &Option<SlackTs>,
     ) -> Result<SlackHistoryMessage, UniversalInboxError> {
         let result = cached_fetch_message(
             user_id,
@@ -125,7 +124,6 @@ impl SlackService {
             slack_api_token,
             channel,
             message,
-            thread_message,
         )
         .await?;
         if result.was_cached {
@@ -468,7 +466,12 @@ impl SlackService {
                 };
 
                 let message = self
-                    .fetch_message(user_id, &slack_api_token, channel, ts, thread_ts)
+                    .fetch_message(
+                        user_id,
+                        &slack_api_token,
+                        channel,
+                        thread_ts.as_ref().unwrap_or(ts),
+                    )
                     .await?;
                 let channel = self.fetch_channel(&slack_api_token, channel).await?;
                 let team = self
@@ -641,7 +644,12 @@ impl SlackService {
                         .await?,
                 ));
                 let message = self
-                    .fetch_message(user_id, &slack_api_token, channel, ts, thread_ts)
+                    .fetch_message(
+                        user_id,
+                        &slack_api_token,
+                        channel,
+                        thread_ts.as_ref().unwrap_or(ts),
+                    )
                     .await?;
                 let channel = self.fetch_channel(&slack_api_token, channel).await?;
                 let team = self
@@ -835,7 +843,12 @@ impl SlackService {
                 };
 
                 let message = self
-                    .fetch_message(user_id, &slack_api_token, channel, ts, thread_ts)
+                    .fetch_message(
+                        user_id,
+                        &slack_api_token,
+                        channel,
+                        thread_ts.as_ref().unwrap_or(ts),
+                    )
                     .await?;
                 let channel = self.fetch_channel(&slack_api_token, channel).await?;
                 let team = self.fetch_team(&slack_api_token, team_id).await?;
@@ -966,7 +979,12 @@ impl SlackService {
                         .await?,
                 ));
                 let message = self
-                    .fetch_message(user_id, &slack_api_token, channel, ts, thread_ts)
+                    .fetch_message(
+                        user_id,
+                        &slack_api_token,
+                        channel,
+                        thread_ts.as_ref().unwrap_or(ts),
+                    )
                     .await?;
                 let channel = self.fetch_channel(&slack_api_token, channel).await?;
                 let team = self.fetch_team(&slack_api_token, team_id).await?;
@@ -1005,7 +1023,6 @@ async fn cached_fetch_message(
     slack_api_token: &SlackApiToken,
     channel: &SlackChannelId,
     message: &SlackTs,
-    thread_message: &Option<SlackTs>,
 ) -> Result<Return<SlackHistoryMessage>, UniversalInboxError> {
     let client = SlackClient::new(
         SlackClientHyperHttpsConnector::new()
@@ -1014,38 +1031,20 @@ async fn cached_fetch_message(
     );
     let session = client.open_session(slack_api_token);
 
-    let messages = if let Some(thread_message) = thread_message {
-        session
-            .conversations_replies(
-                &SlackApiConversationsRepliesRequest::new(channel.clone(), thread_message.clone())
-                    .with_latest(message.clone())
-                    .with_limit(1)
-                    .with_inclusive(true),
-            )
-            .await
-            .with_context(|| {
-                UniversalInboxError::Unexpected(anyhow!(
-                    "Failed to fetch Slack message {message} in channel {channel}"
-                ))
-            })?
-            .messages
-    } else {
-        session
-            .conversations_history(
-                &SlackApiConversationsHistoryRequest::new()
-                    .with_channel(channel.clone())
-                    .with_latest(message.clone())
-                    .with_limit(1)
-                    .with_inclusive(true),
-            )
-            .await
-            .with_context(|| {
-                UniversalInboxError::Unexpected(anyhow!(
-                    "Failed to fetch Slack message {message} in channel {channel}"
-                ))
-            })?
-            .messages
-    };
+    let messages = session
+        .conversations_replies(
+            &SlackApiConversationsRepliesRequest::new(channel.clone(), message.clone())
+                .with_latest(message.clone())
+                .with_limit(1)
+                .with_inclusive(true),
+        )
+        .await
+        .with_context(|| {
+            UniversalInboxError::Unexpected(anyhow!(
+                "Failed to fetch Slack message {message} in channel {channel}"
+            ))
+        })?
+        .messages;
 
     Ok(Return::new(
         messages

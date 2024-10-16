@@ -48,11 +48,11 @@ use crate::helpers::{
     notification::{
         list_notifications, list_notifications_with_tasks,
         slack::{
-            mock_slack_fetch_bot, mock_slack_fetch_channel, mock_slack_fetch_message,
-            mock_slack_fetch_reply, mock_slack_fetch_team, mock_slack_fetch_user,
-            mock_slack_get_chat_permalink, slack_push_bot_star_added_event,
-            slack_push_reaction_added_event, slack_push_reaction_removed_event,
-            slack_push_star_added_event, slack_push_star_removed_event,
+            mock_slack_fetch_bot, mock_slack_fetch_channel, mock_slack_fetch_reply,
+            mock_slack_fetch_team, mock_slack_fetch_user, mock_slack_get_chat_permalink,
+            slack_push_bot_star_added_event, slack_push_reaction_added_event,
+            slack_push_reaction_removed_event, slack_push_star_added_event,
+            slack_push_star_removed_event,
         },
     },
     rest::create_resource_response,
@@ -338,7 +338,7 @@ async fn test_receive_star_or_reaction_added_event_as_notification(
         "U05YYY", // The message's creator, not the user who starred the message
         "slack_fetch_user_response.json",
     );
-    let slack_fetch_message_mock = mock_slack_fetch_message(
+    let slack_fetch_message_mock = mock_slack_fetch_reply(
         &app.app.slack_mock_server,
         "C05XXX",
         "1707686216.825719",
@@ -508,7 +508,7 @@ async fn test_receive_bot_star_added_event_as_notification(
         "B05YYY", // The message's creator, not the user who starred the message
         "slack_fetch_bot_response.json",
     );
-    let slack_fetch_message_mock = mock_slack_fetch_message(
+    let slack_fetch_message_mock = mock_slack_fetch_reply(
         &app.app.slack_mock_server,
         "C05XXX",
         "1707686216.825719",
@@ -698,11 +698,10 @@ async fn test_receive_star_or_reaction_removed_event_as_notification(
             &app.app.slack_mock_server,
             "C05XXX",
             thread_ts,
-            "1707686216.825719",
             "slack_fetch_message_response.json",
         )
     } else {
-        mock_slack_fetch_message(
+        mock_slack_fetch_reply(
             &app.app.slack_mock_server,
             "C05XXX",
             "1707686216.825719",
@@ -887,7 +886,7 @@ async fn test_receive_star_or_reaction_added_event_as_task(
         "slack_fetch_user_response.json",
     );
     let slack_message_id = "1707686216.825719";
-    let slack_fetch_message_mock = mock_slack_fetch_message(
+    let slack_fetch_message_mock = mock_slack_fetch_reply(
         &app.app.slack_mock_server,
         "C05XXX",
         slack_message_id,
@@ -1071,7 +1070,7 @@ async fn test_receive_star_or_reaction_removed_and_added_event_as_task(
         "slack_fetch_user_response.json",
     );
     let slack_message_id = "1707686216.825719";
-    let slack_fetch_message_mock = mock_slack_fetch_message(
+    let slack_fetch_message_mock = mock_slack_fetch_reply(
         &app.app.slack_mock_server,
         "C05XXX",
         slack_message_id,
