@@ -9,12 +9,10 @@ use slack_morphism::events::{
     SlackReactionRemovedEvent,
 };
 use universal_inbox::{
-    notification::{
-        integrations::slack::{
-            SlackChannelDetails, SlackFileCommentDetails, SlackFileDetails, SlackGroupDetails,
-            SlackImDetails, SlackMessageDetails,
-        },
-        NotificationDetails, NotificationWithTask,
+    notification::{NotificationDetails, NotificationWithTask},
+    third_party::integrations::slack::{
+        SlackChannelDetails, SlackFileCommentDetails, SlackFileDetails, SlackGroupDetails,
+        SlackImDetails, SlackMessageDetails,
     },
     utils::emoji::replace_emoji_code_with_emoji,
 };

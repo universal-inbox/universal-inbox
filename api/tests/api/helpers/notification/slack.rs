@@ -10,11 +10,9 @@ use slack_morphism::prelude::{
 };
 
 use universal_inbox::{
-    notification::{
-        integrations::slack::{SlackMessageDetails, SlackMessageSenderDetails},
-        NotificationDetails,
-    },
+    notification::NotificationDetails,
     third_party::integrations::slack::SlackStarItem,
+    third_party::integrations::slack::{SlackMessageDetails, SlackMessageSenderDetails},
 };
 
 use crate::helpers::{fixture_path, load_json_fixture_file};

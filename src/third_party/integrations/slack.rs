@@ -1,20 +1,16 @@
 use chrono::{DateTime, Timelike, Utc};
+use regex::Regex;
 use serde::{Deserialize, Serialize};
-use slack_morphism::{
-    SlackChannelId, SlackChannelInfo, SlackFileCommentId, SlackFileId, SlackHistoryMessage,
-    SlackMessageOrigin, SlackReactionName, SlackTs,
-};
+use slack_blocks_render::render_blocks_as_markdown;
+use slack_morphism::prelude::*;
 use url::Url;
 use uuid::Uuid;
 
 use crate::{
     integration_connection::IntegrationConnectionId,
-    notification::integrations::slack::{
-        SlackChannelDetails, SlackFileCommentDetails, SlackFileDetails, SlackGroupDetails,
-        SlackImDetails, SlackMessageDetails,
-    },
     third_party::item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemFromSource},
     user::UserId,
+    utils::emoji::replace_emoji_code_in_string_with_emoji,
     HasHtmlUrl,
 };
 
@@ -279,11 +275,254 @@ pub struct SlackReactionIds {
     pub message_id: SlackTs,
 }
 
-#[cfg(test)]
-mod test {
-    use std::{env, fs};
+#[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
+pub struct SlackMessageDetails {
+    pub url: Url,
+    pub message: SlackHistoryMessage,
+    pub channel: SlackChannelInfo,
+    pub sender: SlackMessageSenderDetails,
+    pub team: SlackTeamInfo,
+}
 
-    use crate::notification::integrations::slack::SlackMessageSenderDetails;
+impl HasHtmlUrl for SlackMessageDetails {
+    fn get_html_url(&self) -> Url {
+        self.url.clone()
+    }
+}
+
+impl SlackMessageDetails {
+    pub fn get_channel_html_url(&self) -> Url {
+        format!(
+            "https://app.slack.com/client/{}/{}",
+            self.team.id, self.channel.id
+        )
+        .parse()
+        .unwrap()
+    }
+
+    pub fn content(&self) -> String {
+        if let Some(blocks) = &self.message.content.blocks {
+            if !blocks.is_empty() {
+                return render_blocks_as_markdown(blocks.clone());
+            }
+        }
+
+        if let Some(attachments) = &self.message.content.attachments {
+            if !attachments.is_empty() {
+                let str_blocks = attachments
+                    .iter()
+                    .filter_map(|a| {
+                        if let Some(blocks) = a.blocks.as_ref() {
+                            return Some(render_blocks_as_markdown(blocks.clone()));
+                        }
+
+                        if let Some(text) = a.text.as_ref() {
+                            let sanitized_text = sanitize_slack_markdown(text);
+                            if let Some(title) = a.title.as_ref() {
+                                return Some(format!("{}\n\n{}", title, sanitized_text));
+                            }
+
+                            return Some(sanitized_text);
+                        }
+
+                        None
+                    })
+                    .collect::<Vec<String>>();
+
+                if !str_blocks.is_empty() {
+                    return str_blocks.join("\n");
+                }
+            }
+        }
+
+        let message = if let Some(text) = &self.message.content.text {
+            sanitize_slack_markdown(text)
+        } else {
+            "A slack message".to_string()
+        };
+
+        replace_emoji_code_in_string_with_emoji(&message)
+    }
+}
+
+fn sanitize_slack_markdown(slack_markdown: &str) -> String {
+    // Replace slack markdown with common markdown
+    // This could be more robustly implemented using Slack blocks
+    let regexs = [
+        (Regex::new(r"^```").unwrap(), "```\n"),
+        (Regex::new(r"```$").unwrap(), "\n```"),
+        (Regex::new(r"^• ").unwrap(), "- "),
+        (Regex::new(r"^(\s*)◦ ").unwrap(), "$1- "),
+        (Regex::new(r"^&gt; ").unwrap(), "> "),
+        (Regex::new(r"<([^|]+)\|([^>]+)>").unwrap(), "[$2]($1)"),
+    ];
+
+    slack_markdown
+        .lines()
+        .map(|line| {
+            regexs
+                .iter()
+                .fold(line.to_string(), |acc, (re, replacement)| {
+                    re.replace(&acc, *replacement).to_string()
+                })
+        })
+        .collect::<Vec<String>>()
+        .join("\n")
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
+#[serde(tag = "type", content = "content")]
+pub enum SlackMessageSenderDetails {
+    User(Box<SlackUser>),
+    Bot(SlackBotInfo),
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
+pub struct SlackFileDetails {
+    pub id: Option<SlackFileId>, // Option to ease the transition when the field is added
+    pub title: Option<String>,
+    pub channel: SlackChannelInfo,
+    pub sender: Option<SlackUser>,
+    pub team: SlackTeamInfo,
+}
+
+impl HasHtmlUrl for SlackFileDetails {
+    fn get_html_url(&self) -> Url {
+        format!(
+            "https://app.slack.com/client/{}/{}",
+            self.team.id, self.channel.id
+        )
+        .parse()
+        .unwrap()
+    }
+}
+
+impl SlackFileDetails {
+    pub fn content(&self) -> String {
+        self.title.clone().unwrap_or_else(|| "File".to_string())
+    }
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
+pub struct SlackFileCommentDetails {
+    pub channel: SlackChannelInfo,
+    pub comment_id: SlackFileCommentId,
+    pub sender: Option<SlackUser>,
+    pub team: SlackTeamInfo,
+}
+
+impl HasHtmlUrl for SlackFileCommentDetails {
+    fn get_html_url(&self) -> Url {
+        format!(
+            "https://app.slack.com/client/{}/{}",
+            self.team.id, self.channel.id
+        )
+        .parse()
+        .unwrap()
+    }
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
+pub struct SlackChannelDetails {
+    pub channel: SlackChannelInfo,
+    pub team: SlackTeamInfo,
+}
+
+impl HasHtmlUrl for SlackChannelDetails {
+    fn get_html_url(&self) -> Url {
+        format!(
+            "https://app.slack.com/client/{}/{}",
+            self.team.id, self.channel.id
+        )
+        .parse()
+        .unwrap()
+    }
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
+pub struct SlackImDetails {
+    pub channel: SlackChannelInfo,
+    pub team: SlackTeamInfo,
+}
+
+impl HasHtmlUrl for SlackImDetails {
+    fn get_html_url(&self) -> Url {
+        format!(
+            "https://app.slack.com/client/{}/{}",
+            self.team.id, self.channel.id
+        )
+        .parse()
+        .unwrap()
+    }
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
+pub struct SlackGroupDetails {
+    pub channel: SlackChannelInfo,
+    pub team: SlackTeamInfo,
+}
+
+impl HasHtmlUrl for SlackGroupDetails {
+    fn get_html_url(&self) -> Url {
+        format!(
+            "https://app.slack.com/client/{}/{}",
+            self.team.id, self.channel.id
+        )
+        .parse()
+        .unwrap()
+    }
+}
+
+#[cfg(test)]
+mod test_sanitize_slack_markdown {
+    use super::*;
+    use rstest::*;
+
+    #[rstest]
+    fn test_sanitize_slack_markdown_code() {
+        assert_eq!(
+            sanitize_slack_markdown("```$ echo Hello```"),
+            "```\n$ echo Hello\n```"
+        );
+        assert_eq!(
+            sanitize_slack_markdown("test: ```$ echo Hello```."),
+            "test: ```$ echo Hello```."
+        );
+    }
+
+    #[rstest]
+    fn test_sanitize_slack_markdown_list() {
+        assert_eq!(sanitize_slack_markdown("• item"), "- item");
+        assert_eq!(sanitize_slack_markdown("test: • item"), "test: • item");
+    }
+
+    #[rstest]
+    fn test_sanitize_slack_markdown_sublist() {
+        assert_eq!(sanitize_slack_markdown(" ◦ subitem"), " - subitem");
+        assert_eq!(
+            sanitize_slack_markdown("test: ◦ subitem"),
+            "test: ◦ subitem"
+        );
+    }
+
+    #[rstest]
+    fn test_sanitize_slack_markdown_quote() {
+        assert_eq!(sanitize_slack_markdown("&gt; "), "> ");
+        assert_eq!(sanitize_slack_markdown("test: &gt; "), "test: &gt; ");
+    }
+
+    #[rstest]
+    fn test_sanitize_slack_markdown_link() {
+        assert_eq!(
+            sanitize_slack_markdown("This is a <https://www.example.com|link> to www.example.com"),
+            "This is a [link](https://www.example.com) to www.example.com"
+        );
+    }
+}
+
+#[cfg(test)]
+mod test_message_content {
+    use std::{env, fs};
 
     use super::*;
     use rstest::*;
@@ -361,6 +600,57 @@ mod test {
         assert_eq!(
             slack_starred_message.content(),
             "🔴  *Test title* 🔴\n\n- list 1\n- list 2\n1. number 1\n1. number 2\n> quote\n```$ echo Hello world```\n_Some_ `formatted` ~text~.\n\nHere is a [link](https://www.universal-inbox.com)"
+        );
+    }
+
+    #[rstest]
+    fn test_render_starred_message_with_text_in_attachments(
+        mut slack_starred_message: Box<SlackStarItem>,
+    ) {
+        let SlackStarItem::SlackMessage(message) = &mut (*slack_starred_message) else {
+            panic!(
+                "Expected SlackStarItem::SlackMessage, got {:?}",
+                slack_starred_message
+            );
+        };
+        message.message.content.attachments = Some(vec![SlackMessageAttachment {
+            id: None,
+            color: None,
+            fallback: None,
+            title: None,
+            fields: None,
+            mrkdwn_in: None,
+            text: Some("This is the text".to_string()),
+            blocks: None,
+        }]);
+        message.message.content.blocks = Some(vec![]);
+        assert_eq!(slack_starred_message.content(), "This is the text");
+    }
+
+    #[rstest]
+    fn test_render_starred_message_with_text_and_title_in_attachments(
+        mut slack_starred_message: Box<SlackStarItem>,
+    ) {
+        let SlackStarItem::SlackMessage(message) = &mut (*slack_starred_message) else {
+            panic!(
+                "Expected SlackStarItem::SlackMessage, got {:?}",
+                slack_starred_message
+            );
+        };
+        message.message.content.attachments = Some(vec![SlackMessageAttachment {
+            id: None,
+            color: None,
+            fallback: None,
+            title: Some("This is the title".to_string()),
+            fields: None,
+            mrkdwn_in: None,
+            text: Some("This is the text".to_string()),
+            blocks: None,
+        }]);
+        message.message.content.blocks = Some(vec![]);
+        assert_eq!(
+            slack_starred_message.content(),
+            "This is the title\n\nThis is the text"
         );
     }
 

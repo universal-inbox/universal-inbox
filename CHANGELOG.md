@@ -8,6 +8,8 @@
 
 ### Fixed
 
+- Render Slack messages with attachments with title and text
+
 ## 2024-10-14
 
 ### Added

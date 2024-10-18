@@ -22,16 +22,16 @@ use wiremock::{
 use universal_inbox::{
     integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
     notification::{
-        integrations::slack::{
-            SlackChannelDetails, SlackFileCommentDetails, SlackFileDetails, SlackGroupDetails,
-            SlackImDetails, SlackMessageDetails, SlackMessageSenderDetails,
-        },
         Notification, NotificationDetails, NotificationMetadata, NotificationSource,
         NotificationSourceKind,
     },
     task::{
         service::TaskPatch, CreateOrUpdateTaskRequest, TaskCreation, TaskSource, TaskSourceKind,
         TaskStatus,
+    },
+    third_party::integrations::slack::{
+        SlackChannelDetails, SlackFileCommentDetails, SlackFileDetails, SlackGroupDetails,
+        SlackImDetails, SlackMessageDetails, SlackMessageSenderDetails,
     },
     third_party::{
         integrations::slack::{

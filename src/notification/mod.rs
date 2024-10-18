@@ -14,12 +14,12 @@ use crate::{
         github::{GithubDiscussion, GithubNotification, GithubPullRequest},
         google_mail::GoogleMailThread,
         linear::LinearNotification,
-        slack::{
-            SlackChannelDetails, SlackFileCommentDetails, SlackFileDetails, SlackGroupDetails,
-            SlackImDetails, SlackMessageDetails,
-        },
     },
     task::{integrations::todoist::DEFAULT_TODOIST_HTML_URL, Task, TaskId},
+    third_party::integrations::slack::{
+        SlackChannelDetails, SlackFileCommentDetails, SlackFileDetails, SlackGroupDetails,
+        SlackImDetails, SlackMessageDetails,
+    },
     user::UserId,
     HasHtmlUrl,
 };

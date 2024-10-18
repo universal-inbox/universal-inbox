@@ -22,13 +22,13 @@ use universal_inbox::{
             todoist::TodoistConfig,
         },
     },
-    notification::{
-        integrations::slack::SlackMessageSenderDetails, NotificationDetails, NotificationMetadata,
-        NotificationStatus,
-    },
+    notification::{NotificationDetails, NotificationMetadata, NotificationStatus},
     task::TaskStatus,
     third_party::{
-        integrations::todoist::{TodoistItem, TodoistItemPriority},
+        integrations::{
+            slack::SlackMessageSenderDetails,
+            todoist::{TodoistItem, TodoistItemPriority},
+        },
         item::{ThirdPartyItemSource, ThirdPartyItemSourceKind},
     },
     HasHtmlUrl,
