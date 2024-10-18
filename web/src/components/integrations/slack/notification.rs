@@ -3,12 +3,12 @@
 use dioxus::prelude::*;
 use slack_morphism::prelude::*;
 
-use universal_inbox::notification::{
-    integrations::slack::{
+use universal_inbox::{
+    notification::{NotificationDetails, NotificationWithTask},
+    third_party::integrations::slack::{
         SlackChannelDetails, SlackFileCommentDetails, SlackFileDetails, SlackGroupDetails,
         SlackImDetails, SlackMessageDetails,
     },
-    NotificationDetails, NotificationWithTask,
 };
 
 use crate::components::{

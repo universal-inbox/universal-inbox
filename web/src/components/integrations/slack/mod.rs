@@ -4,7 +4,7 @@ use dioxus::prelude::*;
 use slack_morphism::prelude::*;
 use url::Url;
 
-use universal_inbox::notification::integrations::slack::{
+use universal_inbox::third_party::integrations::slack::{
     SlackMessageDetails, SlackMessageSenderDetails,
 };
 

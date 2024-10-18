@@ -3,7 +3,7 @@
 use dioxus::prelude::*;
 use dioxus_free_icons::{icons::bs_icons::BsArrowUpRightSquare, Icon};
 
-use universal_inbox::notification::integrations::slack::SlackMessageDetails;
+use universal_inbox::third_party::integrations::slack::SlackMessageDetails;
 
 use crate::components::{
     integrations::slack::{SlackMessageActorDisplay, SlackTeamDisplay},

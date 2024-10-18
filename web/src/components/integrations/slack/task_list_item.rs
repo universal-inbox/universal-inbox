@@ -5,11 +5,11 @@ use dioxus::prelude::*;
 use dioxus_free_icons::{icons::bs_icons::BsSlack, Icon};
 
 use universal_inbox::{
-    notification::integrations::slack::{
+    task::Task,
+    third_party::integrations::slack::{
         SlackChannelDetails, SlackFileCommentDetails, SlackFileDetails, SlackGroupDetails,
         SlackImDetails, SlackMessageDetails,
     },
-    task::Task,
     third_party::integrations::slack::{
         SlackReaction, SlackReactionItem, SlackStar, SlackStarItem,
     },
