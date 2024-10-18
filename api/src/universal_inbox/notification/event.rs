@@ -8,7 +8,6 @@ use universal_inbox::{
         NotificationSourceKind,
     },
     user::UserId,
-    utils::truncate::truncate_with_ellipse,
 };
 
 use crate::{
@@ -48,8 +47,7 @@ impl NotificationEventService<SlackPushEventCallback> for NotificationService {
         // It should be fixed when moving NotificationDetails to ThirdPartyItem as there will
         // not be any `notification.metadata` anymore
         if let Some(NotificationDetails::SlackMessage(message)) = &notification.details {
-            let message_content = message.content();
-            notification.title = truncate_with_ellipse(&message_content, 50, "...", true);
+            notification.title = message.title();
             let upsert_result = self
                 .repository
                 .create_or_update_notification(

@@ -1382,13 +1382,8 @@ impl ThirdPartyTaskService<SlackStar> for SlackService {
         };
         let created_at = source.created_at;
         let updated_at = source.created_at;
-        let content_with_emojis = source.item.content();
-        let title = format!(
-            "[{}]({})",
-            truncate_with_ellipse(&content_with_emojis, 50, "...", true),
-            source.get_html_url()
-        );
-        let body = truncate_with_ellipse(&content_with_emojis, 16300, "...", false);
+        let title = format!("[{}]({})", source.item.title(), source.get_html_url());
+        let body = truncate_with_ellipse(&source.item.content(), 16300, "...", false);
         let completed_at = if status == TaskStatus::Done {
             Some(Utc::now())
         } else {
