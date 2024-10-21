@@ -562,7 +562,8 @@ impl SlackService {
                     .await?;
                 let references = self
                     .find_slack_references_in_message(&message, user_id, &slack_api_token)
-                    .await?;
+                    .await
+                    .unwrap_or(None);
 
                 (
                     SlackStarItem::SlackMessage(SlackMessageDetails {
@@ -744,7 +745,8 @@ impl SlackService {
                     .await?;
                 let references = self
                     .find_slack_references_in_message(&message, user_id, &slack_api_token)
-                    .await?;
+                    .await
+                    .unwrap_or(None);
 
                 (
                     ThirdPartyItemData::SlackReaction(SlackReaction {
@@ -945,7 +947,8 @@ impl SlackService {
                 let team = self.fetch_team(team_id, &slack_api_token).await?;
                 let references = self
                     .find_slack_references_in_message(&message, user_id, &slack_api_token)
-                    .await?;
+                    .await
+                    .unwrap_or(None);
 
                 Ok(Some(NotificationDetails::SlackMessage(
                     SlackMessageDetails {
@@ -1085,7 +1088,8 @@ impl SlackService {
                 let team = self.fetch_team(team_id, &slack_api_token).await?;
                 let references = self
                     .find_slack_references_in_message(&message, user_id, &slack_api_token)
-                    .await?;
+                    .await
+                    .unwrap_or(None);
 
                 Ok(Some(NotificationDetails::SlackMessage(
                     SlackMessageDetails {
