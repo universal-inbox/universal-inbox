@@ -2,11 +2,11 @@
 
 ## [Unreleased]
 
-### Added
-
-- Resolve Slack user, channel and usergroup IDs while rendering a Slack message
+## 2024-10-21
 
 ### Changed
+
+- Resolve Slack user, channel and usergroup IDs while rendering a Slack message
 
 ### Fixed
 
