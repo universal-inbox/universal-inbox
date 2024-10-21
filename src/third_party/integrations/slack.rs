@@ -1,7 +1,9 @@
 use chrono::{DateTime, Timelike, Utc};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use slack_blocks_render::{render_blocks_as_markdown, SlackReferences};
+use slack_blocks_render::{
+    render_blocks_as_markdown, text::render_blocks_as_text, SlackReferences,
+};
 use slack_morphism::prelude::*;
 use url::Url;
 use uuid::Uuid;
@@ -338,16 +340,27 @@ impl SlackMessageDetails {
             }
         }
 
-        truncate_with_ellipse(&self.content(), 50, "...", true)
+        truncate_with_ellipse(&self.content_(false), 50, "...", true)
     }
 
     pub fn content(&self) -> String {
+        self.content_(true)
+    }
+
+    fn content_(&self, as_markdown: bool) -> String {
         if let Some(blocks) = &self.message.content.blocks {
             if !blocks.is_empty() {
-                return render_blocks_as_markdown(
-                    blocks.clone(),
-                    self.references.clone().unwrap_or_default(),
-                );
+                return if as_markdown {
+                    render_blocks_as_markdown(
+                        blocks.clone(),
+                        self.references.clone().unwrap_or_default(),
+                    )
+                } else {
+                    render_blocks_as_text(
+                        blocks.clone(),
+                        self.references.clone().unwrap_or_default(),
+                    )
+                };
             }
         }
 
@@ -357,10 +370,17 @@ impl SlackMessageDetails {
                     .iter()
                     .filter_map(|a| {
                         if let Some(blocks) = a.blocks.as_ref() {
-                            return Some(render_blocks_as_markdown(
-                                blocks.clone(),
-                                self.references.clone().unwrap_or_default(),
-                            ));
+                            return if as_markdown {
+                                Some(render_blocks_as_markdown(
+                                    blocks.clone(),
+                                    self.references.clone().unwrap_or_default(),
+                                ))
+                            } else {
+                                Some(render_blocks_as_text(
+                                    blocks.clone(),
+                                    self.references.clone().unwrap_or_default(),
+                                ))
+                            };
                         }
 
                         if let Some(text) = a.text.as_ref() {
@@ -732,7 +752,7 @@ mod test_message_details {
 
         #[rstest]
         fn test_render_starred_message_with_blocks(slack_starred_message: Box<SlackStarItem>) {
-            assert_eq!(slack_starred_message.title(), "🔴  *Test title* 🔴...");
+            assert_eq!(slack_starred_message.title(), "🔴  Test title 🔴...");
         }
 
         #[rstest]
