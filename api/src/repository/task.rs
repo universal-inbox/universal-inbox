@@ -876,6 +876,10 @@ impl TaskRepository for Repository {
             separated.push(" body = ").push_bind_unseparated(body);
         }
 
+        if let Some(title) = &patch.title {
+            separated.push(" title = ").push_bind_unseparated(title);
+        }
+
         if let Some(sink_item_id) = &patch.sink_item_id {
             separated
                 .push(" sink_item_id = ")

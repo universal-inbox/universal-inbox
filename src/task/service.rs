@@ -18,5 +18,6 @@ pub struct TaskPatch {
     pub due_at: Option<Option<DueDate>>,
     pub priority: Option<TaskPriority>,
     pub body: Option<String>,
+    pub title: Option<String>,
     pub sink_item_id: Option<ThirdPartyItemId>,
 }
