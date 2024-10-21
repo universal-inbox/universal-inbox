@@ -11,6 +11,7 @@
 ### Fixed
 
 - Render Slack messages with attachments with title and text
+- Prevent triggering tasks & notifications synchronization concurrently
 
 ## 2024-10-14
 

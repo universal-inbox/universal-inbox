@@ -83,6 +83,7 @@ pub trait IntegrationConnectionRepository {
         executor: &mut Transaction<'a, Postgres>,
         for_user_id: UserId,
         status: Option<IntegrationConnectionStatus>,
+        lock_rows: bool,
     ) -> Result<Vec<IntegrationConnection>, UniversalInboxError>;
 
     async fn create_integration_connection<'a>(
@@ -652,6 +653,7 @@ impl IntegrationConnectionRepository for Repository {
         executor: &mut Transaction<'a, Postgres>,
         for_user_id: UserId,
         status: Option<IntegrationConnectionStatus>,
+        lock_rows: bool,
     ) -> Result<Vec<IntegrationConnection>, UniversalInboxError> {
         let mut query_builder = QueryBuilder::new(
             r#"
@@ -691,6 +693,9 @@ impl IntegrationConnectionRepository for Repository {
             separated
                 .push("integration_connection.status::TEXT = ")
                 .push_bind_unseparated(status.to_string());
+        }
+        if lock_rows {
+            query_builder.push(" FOR UPDATE ");
         }
 
         let rows = query_builder
