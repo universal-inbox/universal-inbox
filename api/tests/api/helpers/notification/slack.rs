@@ -1,13 +1,13 @@
+use std::collections::HashMap;
+
 use httpmock::{
     Method::{GET, POST},
     Mock, MockServer,
 };
 use rstest::*;
 use serde_json::json;
-use slack_morphism::prelude::{
-    SlackApiConversationsHistoryResponse, SlackApiConversationsInfoResponse,
-    SlackApiTeamInfoResponse, SlackApiUsersInfoResponse, SlackPushEvent,
-};
+use slack_blocks_render::SlackReferences;
+use slack_morphism::prelude::*;
 
 use universal_inbox::{
     notification::NotificationDetails,
@@ -60,6 +60,7 @@ pub fn slack_notification_details() -> Box<NotificationDetails> {
         channel: channel_response.channel,
         sender,
         team: team_response.team,
+        references: None,
     }))
 }
 
@@ -148,6 +149,20 @@ pub fn mock_slack_fetch_team<'a>(
     })
 }
 
+pub fn mock_slack_list_usergroups<'a>(
+    slack_mock_server: &'a MockServer,
+    fixture_response_file: &'a str,
+) -> Mock<'a> {
+    slack_mock_server.mock(|when, then| {
+        when.method(GET)
+            .path("/usergroups.list")
+            .header("authorization", "Bearer slack_test_user_access_token");
+        then.status(200)
+            .header("content-type", "application/json")
+            .body_from_file(fixture_path(fixture_response_file));
+    })
+}
+
 pub fn mock_slack_stars_add<'a>(
     slack_mock_server: &'a MockServer,
     channel_id: &'a str,
@@ -216,5 +231,19 @@ pub fn slack_starred_message() -> Box<SlackStarItem> {
         channel: channel_response.channel,
         sender,
         team: team_response.team,
+        references: Some(SlackReferences {
+            users: HashMap::from([(
+                SlackUserId("U05YYY".to_string()),
+                Some("john.doe".to_string()),
+            )]),
+            channels: HashMap::from([(
+                SlackChannelId("C05XXX".to_string()),
+                Some("test".to_string()),
+            )]),
+            usergroups: HashMap::from([(
+                SlackUserGroupId("S05ZZZ".to_string()),
+                Some("admins".to_string()),
+            )]),
+        }),
     }))
 }

@@ -1,0 +1,26 @@
+{
+  "ok": true,
+  "usergroups": [
+    {
+      "id": "S05ZZZ",
+      "team_id": "T05XXXX",
+      "is_usergroup": true,
+      "name": "Admins",
+      "description": "A group of all Administrators",
+      "handle": "admins",
+      "is_external": false,
+      "date_create": 1446598059,
+      "date_update": 1446670362,
+      "date_delete": 0,
+      "auto_type": "admin",
+      "created_by": "U06XXX",
+      "updated_by": "U06XXX",
+      "deleted_by": null,
+      "prefs": {
+        "channels": [],
+        "groups": []
+      },
+      "user_count": "1"
+    }
+  ]
+}

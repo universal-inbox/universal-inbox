@@ -1,7 +1,7 @@
 use chrono::{DateTime, Timelike, Utc};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use slack_blocks_render::render_blocks_as_markdown;
+use slack_blocks_render::{render_blocks_as_markdown, SlackReferences};
 use slack_morphism::prelude::*;
 use url::Url;
 use uuid::Uuid;
@@ -223,6 +223,13 @@ impl SlackReactionItem {
         }
     }
 
+    pub fn title(&self) -> String {
+        match self {
+            SlackReactionItem::SlackMessage(message) => message.title(),
+            SlackReactionItem::SlackFile(file) => file.title(),
+        }
+    }
+
     pub fn content(&self) -> String {
         match self {
             SlackReactionItem::SlackMessage(message) => message.content(),
@@ -303,6 +310,7 @@ pub struct SlackMessageDetails {
     pub channel: SlackChannelInfo,
     pub sender: SlackMessageSenderDetails,
     pub team: SlackTeamInfo,
+    pub references: Option<SlackReferences>,
 }
 
 impl HasHtmlUrl for SlackMessageDetails {
@@ -336,7 +344,10 @@ impl SlackMessageDetails {
     pub fn content(&self) -> String {
         if let Some(blocks) = &self.message.content.blocks {
             if !blocks.is_empty() {
-                return render_blocks_as_markdown(blocks.clone());
+                return render_blocks_as_markdown(
+                    blocks.clone(),
+                    self.references.clone().unwrap_or_default(),
+                );
             }
         }
 
@@ -346,7 +357,10 @@ impl SlackMessageDetails {
                     .iter()
                     .filter_map(|a| {
                         if let Some(blocks) = a.blocks.as_ref() {
-                            return Some(render_blocks_as_markdown(blocks.clone()));
+                            return Some(render_blocks_as_markdown(
+                                blocks.clone(),
+                                self.references.clone().unwrap_or_default(),
+                            ));
                         }
 
                         if let Some(text) = a.text.as_ref() {
@@ -602,6 +616,7 @@ mod test_message_details {
             channel: channel_response.channel,
             sender,
             team: team_response.team,
+            references: None,
         }))
     }
 
@@ -638,9 +653,9 @@ mod test_message_details {
             }]);
             message.message.content.blocks = Some(vec![]);
             assert_eq!(
-            slack_starred_message.content(),
-            "🔴  *Test title* 🔴\n\n- list 1\n- list 2\n1. number 1\n1. number 2\n> quote\n```$ echo Hello world```\n_Some_ `formatted` ~text~.\n\nHere is a [link](https://www.universal-inbox.com)"
-        );
+                slack_starred_message.content(),
+                "🔴  *Test title* 🔴\n\n- list 1\n- list 2\n1. number 1\n1. number 2\n> quote\n```$ echo Hello world```\n_Some_ `formatted` ~text~.\n\nHere is a [link](https://www.universal-inbox.com)"
+            );
         }
 
         #[rstest]
@@ -711,6 +726,8 @@ mod test_message_details {
     }
 
     mod test_message_title {
+        use std::collections::HashMap;
+
         use super::*;
 
         #[rstest]
@@ -764,6 +781,95 @@ mod test_message_details {
             }]);
             message.message.content.blocks = Some(vec![]);
             assert_eq!(slack_starred_message.title(), "This is the title");
+        }
+
+        #[rstest]
+        fn test_render_starred_message_with_blocks_in_attachments(
+            mut slack_starred_message: Box<SlackStarItem>,
+        ) {
+            let SlackStarItem::SlackMessage(message) = &mut (*slack_starred_message) else {
+                panic!(
+                    "Expected SlackStarItem::SlackMessage, got {:?}",
+                    slack_starred_message
+                );
+            };
+            message.message.content.blocks = Some(vec![SlackBlock::RichText(serde_json::json!({
+                "type": "rich_text",
+                "elements": [
+                    {
+                        "type": "rich_text_section",
+                        "elements": [
+                            {
+                                "type": "user",
+                                "user_id": "user1"
+                            }
+                        ]
+                    },
+                    {
+                        "type": "rich_text_section",
+                        "elements": [
+                            {
+                                "type": "user",
+                                "user_id": "user2"
+                            }
+                        ]
+                    },
+                    {
+                        "type": "rich_text_section",
+                        "elements": [
+                            {
+                                "type": "usergroup",
+                                "usergroup_id": "group1"
+                            }
+                        ]
+                    },
+                    {
+                        "type": "rich_text_section",
+                        "elements": [
+                            {
+                                "type": "usergroup",
+                                "usergroup_id": "group2"
+                            }
+                        ]
+                    },
+                    {
+                        "type": "rich_text_section",
+                        "elements": [
+                            {
+                                "type": "channel",
+                                "channel_id": "C0123456"
+                            }
+                        ]
+                    },
+                    {
+                        "type": "rich_text_section",
+                        "elements": [
+                            {
+                                "type": "channel",
+                                "channel_id": "C0011223"
+                            }
+                        ]
+                    },
+                ]
+            }))]);
+            message.references = Some(SlackReferences {
+                users: HashMap::from([(
+                    SlackUserId("user1".to_string()),
+                    Some("John Doe".to_string()),
+                )]),
+                channels: HashMap::from([(
+                    SlackChannelId("C0123456".to_string()),
+                    Some("general".to_string()),
+                )]),
+                usergroups: HashMap::from([(
+                    SlackUserGroupId("group1".to_string()),
+                    Some("Admins".to_string()),
+                )]),
+            });
+            assert_eq!(
+                slack_starred_message.content(),
+                "@John Doe@user2@Admins@group2#general#C0011223"
+            );
         }
     }
 }
