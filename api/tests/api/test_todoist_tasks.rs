@@ -318,6 +318,7 @@ mod patch_task {
                         })),
                         priority: Some(new_priority),
                         description: None,
+                        content: None,
                     },
                 },
             ],

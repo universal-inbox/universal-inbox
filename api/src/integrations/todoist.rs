@@ -149,6 +149,8 @@ pub struct TodoistSyncCommandItemUpdateArgs {
     pub priority: Option<TodoistItemPriority>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
@@ -762,6 +764,7 @@ impl ThirdPartyTaskService<TodoistItem> for TodoistService {
                 .as_ref()
                 .map(|due| due.as_ref().map(|d| d.into()));
             let description = patch.body.clone();
+            let content = patch.title.clone();
 
             commands.push(TodoistSyncCommand::ItemUpdate {
                 uuid: Uuid::new_v4(),
@@ -770,6 +773,7 @@ impl ThirdPartyTaskService<TodoistItem> for TodoistService {
                     due,
                     priority,
                     description,
+                    content,
                 },
             });
         }

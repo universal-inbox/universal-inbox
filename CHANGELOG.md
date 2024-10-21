@@ -12,6 +12,7 @@
 
 - Render Slack messages with attachments with title and text
 - Prevent triggering tasks & notifications synchronization concurrently
+- Update Todoist task title when source title is updated
 
 ## 2024-10-14
 

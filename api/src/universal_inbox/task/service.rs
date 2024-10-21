@@ -255,6 +255,7 @@ impl TaskService {
                     due_at: (new_task.due_at != old_task.due_at).then(|| new_task.due_at.clone()),
                     priority: (new_task.priority != old_task.priority).then_some(new_task.priority),
                     body: (new_task.body != old_task.body).then(|| new_task.body.clone()),
+                    title: (new_task.title != old_task.title).then(|| new_task.title.clone()),
                     sink_item_id: None,
                 };
 
