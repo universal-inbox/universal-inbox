@@ -4,6 +4,8 @@
 
 ### Added
 
+- Resolve Slack user, channel and usergroup IDs while rendering a Slack message
+
 ### Changed
 
 ### Fixed

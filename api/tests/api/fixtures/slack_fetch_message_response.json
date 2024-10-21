@@ -189,6 +189,18 @@
                   "type": "link",
                   "url": "https://www.universal-inbox.com",
                   "text": "link"
+                },
+                {
+                  "type": "user",
+                  "user_id": "U05YYY"
+                },
+                {
+                  "type": "usergroup",
+                  "usergroup_id": "S05ZZZ"
+                },
+                {
+                  "type": "channel",
+                  "channel_id": "C05XXX"
                 }
               ]
             }

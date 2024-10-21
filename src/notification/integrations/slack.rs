@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use slack_blocks_render::render_blocks_as_markdown;
+use slack_blocks_render::{render_blocks_as_markdown, SlackReferences};
 use slack_morphism::prelude::*;
 use uuid::Uuid;
 
@@ -107,7 +107,7 @@ impl SlackPushEventCallbackExt for SlackPushEventCallback {
             _ => return Err(anyhow!("Unsupported Slack event {self:?}")),
         };
         let content_with_emojis = if let Some(blocks) = &blocks {
-            render_blocks_as_markdown(blocks.clone())
+            render_blocks_as_markdown(blocks.clone(), SlackReferences::default())
         } else {
             replace_emoji_code_in_string_with_emoji(&title)
         };

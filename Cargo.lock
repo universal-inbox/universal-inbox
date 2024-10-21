@@ -712,6 +712,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-once-cell"
+version = "0.5.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4288f83726785267c6f2ef073a3d83dc3f9b81464e9f99898240cced85fce35a"
+
+[[package]]
 name = "async-oneshot"
 version = "0.5.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1990,6 +1996,71 @@ dependencies = [
  "quote",
  "syn 2.0.79",
  "unicode-xid",
+]
+
+[[package]]
+name = "despatma"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "82cab35b0c97feea0c77ddfa2613cc9f80e6048283ccfe927a311fd271e69183"
+dependencies = [
+ "async-once-cell",
+ "despatma-abstract-factory",
+ "despatma-dependency-container",
+ "despatma-lib",
+ "despatma-visitor",
+]
+
+[[package]]
+name = "despatma-abstract-factory"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d5d865065521bc25bb80986313f3ed20b653dff3dca6b4616309f520fbe3a065"
+dependencies = [
+ "despatma-lib",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.79",
+ "tokenstream2-tmpl",
+]
+
+[[package]]
+name = "despatma-dependency-container"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "39e920c715e1b8535413227346fbe1af5750dfd18d70edf71e75f8ce73e35f39"
+dependencies = [
+ "despatma-visitor",
+ "proc-macro-error",
+ "proc-macro2",
+ "quote",
+ "strsim",
+ "syn 2.0.79",
+]
+
+[[package]]
+name = "despatma-lib"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0546b10b1c17ab3a35460e99d409187aa42bebc7e52c3b967c8b4bdc1a7a3ef3"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.79",
+ "tokenstream2-tmpl",
+]
+
+[[package]]
+name = "despatma-visitor"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d7d9ec1cd6125cb1b608de8aa806fbdd0bec40de9c89ba1852e957395e8bb0dd"
+dependencies = [
+ "convert_case 0.6.0",
+ "despatma-lib",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.79",
 ]
 
 [[package]]
@@ -3615,7 +3686,7 @@ dependencies = [
  "hyper-util",
  "log",
  "rustls 0.23.14",
- "rustls-native-certs 0.8.0",
+ "rustls-native-certs",
  "rustls-pki-types",
  "tokio",
  "tokio-rustls 0.26.0",
@@ -5649,7 +5720,7 @@ dependencies = [
  "pin-project-lite",
  "quinn",
  "rustls 0.23.14",
- "rustls-native-certs 0.8.0",
+ "rustls-native-certs",
  "rustls-pemfile 2.2.0",
  "rustls-pki-types",
  "serde",
@@ -5855,19 +5926,6 @@ dependencies = [
  "rustls-webpki 0.102.8",
  "subtle",
  "zeroize",
-]
-
-[[package]]
-name = "rustls-native-certs"
-version = "0.7.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e5bfb394eeed242e909609f56089eecfe5fda225042e8b171791b9c95f5931e5"
-dependencies = [
- "openssl-probe",
- "rustls-pemfile 2.2.0",
- "rustls-pki-types",
- "schannel",
- "security-framework",
 ]
 
 [[package]]
@@ -6461,11 +6519,13 @@ dependencies = [
 
 [[package]]
 name = "slack-blocks-render"
-version = "0.1.1"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9fc96e7bbfc59a14795d8f926369ad0a5a6ce342752a4dffcd9587f0dc1e5518"
+checksum = "dc235a83c4d8e2a3d6ac628aea92bf7c57bc54349750f198ce1f1c9a04a07665"
 dependencies = [
+ "despatma",
  "emojis",
+ "serde",
  "serde_json",
  "slack-morphism",
  "url 2.5.2",
@@ -6473,8 +6533,9 @@ dependencies = [
 
 [[package]]
 name = "slack-morphism"
-version = "2.4.0"
-source = "git+https://github.com/dax/slack-morphism-rust?branch=add-blocks-to-message-attachment#e89ea0ad346b5deeabd5b7d7311f08717c10ebf5"
+version = "2.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cef9c4ccf4f28dc7fddf630e06832da19df08571c4621de0c573d4d7715eaca1"
 dependencies = [
  "async-recursion",
  "async-trait",
@@ -7182,6 +7243,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c7c4ceeeca15c8384bbc3e011dbd8fccb7f068a440b752b7d9b32ceb0ca0e2e8"
 
 [[package]]
+name = "tokenstream2-tmpl"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4c980111e734582b1bbad9b1693cdc41c9c470d8a5ddc55a9c79e745cd0edb96"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.79",
+]
+
+[[package]]
 name = "tokio"
 version = "1.40.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7277,14 +7349,14 @@ dependencies = [
 
 [[package]]
 name = "tokio-tungstenite"
-version = "0.23.1"
+version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6989540ced10490aaf14e6bad2e3d33728a2813310a0c71d1574304c49631cd"
+checksum = "edc5f74e248dc973e0dbb7b74c7e0d6fcc301c694ff50049504004ef4d0cdcd9"
 dependencies = [
  "futures-util",
  "log",
  "rustls 0.23.14",
- "rustls-native-certs 0.7.3",
+ "rustls-native-certs",
  "rustls-pki-types",
  "tokio",
  "tokio-rustls 0.26.0",
@@ -7360,7 +7432,7 @@ dependencies = [
  "percent-encoding 2.3.1",
  "pin-project",
  "prost",
- "rustls-native-certs 0.8.0",
+ "rustls-native-certs",
  "rustls-pemfile 2.2.0",
  "socket2",
  "tokio",
@@ -7560,9 +7632,9 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "tungstenite"
-version = "0.23.0"
+version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e2e2ce1e47ed2994fd43b04c8f618008d4cabdd5ee34027cf14f9d918edd9c8"
+checksum = "18e5b8366ee7a95b16d32197d0b2604b43a0be89dc5fac9f8e96ccafbaedda8a"
 dependencies = [
  "byteorder",
  "bytes",
@@ -7771,6 +7843,7 @@ dependencies = [
  "serde_json",
  "serde_urlencoded",
  "serde_with",
+ "slack-blocks-render",
  "slack-morphism",
  "sqlx",
  "thiserror",
