@@ -403,7 +403,7 @@ async fn test_receive_star_or_reaction_added_event_as_notification(
 
     assert_eq!(notifications.len(), 1);
     assert_eq!(notifications[0].source_id, "1707686216.825719");
-    assert_eq!(notifications[0].title, "🔴  *Test title* 🔴...");
+    assert_eq!(notifications[0].title, "🔴  Test title 🔴...");
     assert!(notifications[0].last_read_at.is_none());
     assert!(notifications[0].task_id.is_none());
     assert!(notifications[0].snoozed_until.is_none());
@@ -587,7 +587,7 @@ async fn test_receive_bot_star_added_event_as_notification(
 
     assert_eq!(notifications.len(), 1);
     assert_eq!(notifications[0].source_id, "1707686216.825719");
-    assert_eq!(notifications[0].title, "🔴  *Test title* 🔴...");
+    assert_eq!(notifications[0].title, "🔴  Test title 🔴...");
     assert!(notifications[0].last_read_at.is_none());
     assert!(notifications[0].task_id.is_none());
     assert!(notifications[0].snoozed_until.is_none());
@@ -865,7 +865,7 @@ async fn test_receive_star_or_reaction_removed_event_as_notification(
     assert_eq!(notifications.len(), 1);
     assert_eq!(notifications[0].id, star_added_notification_id);
     assert_eq!(notifications[0].source_id, "1707686216.825719");
-    assert_eq!(notifications[0].title, "🔴  *Test title* 🔴...");
+    assert_eq!(notifications[0].title, "🔴  Test title 🔴...");
     assert!(notifications[0].last_read_at.is_none());
     assert!(notifications[0].task_id.is_none());
     assert!(notifications[0].snoozed_until.is_none());
@@ -966,7 +966,7 @@ async fn test_receive_star_or_reaction_added_event_as_task(
     let todoist_item_add_mock = mock_todoist_item_add_service(
         &app.app.todoist_mock_server,
         &todoist_item.id,
-        "[🔴  *Test title* 🔴...](https://slack.com/archives/C05XXX/p1234567890)".to_string(),
+        "[🔴  Test title 🔴...](https://slack.com/archives/C05XXX/p1234567890)".to_string(),
         Some(
             "🔴  *Test title* 🔴\n\n- list 1\n- list 2\n1. number 1\n1. number 2\n> quote\n```$ echo Hello world```\n_Some_ `formatted` ~text~.\n\nHere is a [link](https://www.universal-inbox.com)@john.doe@admins#test".to_string(),
         ),
@@ -1155,7 +1155,7 @@ async fn test_receive_star_or_reaction_removed_and_added_event_as_task(
     let todoist_item_add_mock = mock_todoist_item_add_service(
         &app.app.todoist_mock_server,
         &todoist_item.id,
-        "[🔴  *Test title* 🔴...](https://slack.com/archives/C05XXX/p1234567890)".to_string(),
+        "[🔴  Test title 🔴...](https://slack.com/archives/C05XXX/p1234567890)".to_string(),
         Some(
             "🔴  *Test title* 🔴\n\n- list 1\n- list 2\n1. number 1\n1. number 2\n> quote\n```$ echo Hello world```\n_Some_ `formatted` ~text~.\n\nHere is a [link](https://www.universal-inbox.com)@john.doe@admins#test".to_string(),
         ),
