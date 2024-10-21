@@ -87,9 +87,10 @@ impl IntegrationConnectionService {
         executor: &mut Transaction<'a, Postgres>,
         for_user_id: UserId,
         status: Option<IntegrationConnectionStatus>,
+        lock_rows: bool,
     ) -> Result<Vec<IntegrationConnection>, UniversalInboxError> {
         self.repository
-            .fetch_all_integration_connections(executor, for_user_id, status)
+            .fetch_all_integration_connections(executor, for_user_id, status, lock_rows)
             .await
     }
 
@@ -105,6 +106,7 @@ impl IntegrationConnectionService {
                 executor,
                 for_user_id,
                 Some(IntegrationConnectionStatus::Validated),
+                true,
             )
             .await?;
         for integration_connection in integration_connections.iter_mut() {
@@ -780,6 +782,7 @@ impl IntegrationConnectionService {
                 executor,
                 user_id,
                 Some(IntegrationConnectionStatus::Validated),
+                true,
             )
             .await?;
 
