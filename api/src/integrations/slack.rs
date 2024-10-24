@@ -525,7 +525,7 @@ impl SlackService {
             SlackStarsItem::Message(SlackStarsItemMessage {
                 message:
                     SlackHistoryMessage {
-                        origin: SlackMessageOrigin { ts, thread_ts, .. },
+                        origin: SlackMessageOrigin { ts, .. },
                         sender: SlackMessageSender { user, bot_id, .. },
                         ..
                     },
@@ -549,12 +549,7 @@ impl SlackService {
                 };
 
                 let message = self
-                    .fetch_message(
-                        channel,
-                        thread_ts.as_ref().unwrap_or(ts),
-                        user_id,
-                        &slack_api_token,
-                    )
+                    .fetch_message(channel, ts, user_id, &slack_api_token)
                     .await?;
                 let channel = self.fetch_channel(channel, &slack_api_token).await?;
                 let team = self
@@ -563,6 +558,7 @@ impl SlackService {
                 let references = self
                     .find_slack_references_in_message(&message, user_id, &slack_api_token)
                     .await
+                    .map_err()
                     .unwrap_or(None);
 
                 (
@@ -718,7 +714,6 @@ impl SlackService {
                 origin:
                     SlackMessageOrigin {
                         ts,
-                        thread_ts,
                         channel: Some(channel),
                         ..
                     },
@@ -732,12 +727,7 @@ impl SlackService {
                         .await?,
                 ));
                 let message = self
-                    .fetch_message(
-                        channel,
-                        thread_ts.as_ref().unwrap_or(ts),
-                        user_id,
-                        &slack_api_token,
-                    )
+                    .fetch_message(channel, ts, user_id, &slack_api_token)
                     .await?;
                 let channel = self.fetch_channel(channel, &slack_api_token).await?;
                 let team = self
@@ -912,7 +902,7 @@ impl SlackService {
             SlackStarsItem::Message(SlackStarsItemMessage {
                 message:
                     SlackHistoryMessage {
-                        origin: SlackMessageOrigin { ts, thread_ts, .. },
+                        origin: SlackMessageOrigin { ts, .. },
                         sender: SlackMessageSender { user, bot_id, .. },
                         ..
                     },
@@ -936,12 +926,7 @@ impl SlackService {
                 };
 
                 let message = self
-                    .fetch_message(
-                        channel,
-                        thread_ts.as_ref().unwrap_or(ts),
-                        user_id,
-                        &slack_api_token,
-                    )
+                    .fetch_message(channel, ts, user_id, &slack_api_token)
                     .await?;
                 let channel = self.fetch_channel(channel, &slack_api_token).await?;
                 let team = self.fetch_team(team_id, &slack_api_token).await?;
@@ -1063,7 +1048,6 @@ impl SlackService {
                 origin:
                     SlackMessageOrigin {
                         ts,
-                        thread_ts,
                         channel: Some(channel),
                         ..
                     },
@@ -1077,12 +1061,7 @@ impl SlackService {
                         .await?,
                 ));
                 let message = self
-                    .fetch_message(
-                        channel,
-                        thread_ts.as_ref().unwrap_or(ts),
-                        user_id,
-                        &slack_api_token,
-                    )
+                    .fetch_message(channel, ts, user_id, &slack_api_token)
                     .await?;
                 let channel = self.fetch_channel(channel, &slack_api_token).await?;
                 let team = self.fetch_team(team_id, &slack_api_token).await?;

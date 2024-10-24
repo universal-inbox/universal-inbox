@@ -711,7 +711,7 @@ async fn test_receive_star_or_reaction_removed_event_as_notification(
         "U05YYY", // The message's creator, not the user who starred the message
         "slack_fetch_user_response.json",
     );
-    let slack_fetch_message_mock = if with_message_in_thread {
+    if with_message_in_thread {
         let SlackPushEvent::EventCallback(SlackPushEventCallback {
             event:
                 SlackEventCallbackBody::StarAdded(SlackStarAddedEvent {
@@ -738,21 +738,13 @@ async fn test_receive_star_or_reaction_removed_event_as_notification(
             unreachable!("Unexpected event type");
         };
         removed_message.message.origin.thread_ts = Some(thread_ts.into());
-
-        mock_slack_fetch_reply(
-            &app.app.slack_mock_server,
-            "C05XXX",
-            thread_ts,
-            "slack_fetch_message_response.json",
-        )
-    } else {
-        mock_slack_fetch_reply(
-            &app.app.slack_mock_server,
-            "C05XXX",
-            "1707686216.825719",
-            "slack_fetch_message_response.json",
-        )
-    };
+    }
+    let slack_fetch_message_mock = mock_slack_fetch_reply(
+        &app.app.slack_mock_server,
+        "C05XXX",
+        "1707686216.825719",
+        "slack_fetch_message_response.json",
+    );
     let slack_fetch_channel_mock = mock_slack_fetch_channel(
         &app.app.slack_mock_server,
         "C05XXX",
