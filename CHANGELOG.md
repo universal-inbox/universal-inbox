@@ -5,6 +5,7 @@
 ### Fixed
 
 - Fix Slack message retrieved in a thread
+- Fix Slack user group ID resolution
 
 ## 2024-10-21
 
