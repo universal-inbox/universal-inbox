@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fix Slack message retrieved in a thread
+
 ## 2024-10-21
 
 ### Changed
