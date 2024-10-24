@@ -5,14 +5,17 @@
       "id": "S05ZZZ",
       "team_id": "T05XXXX",
       "is_usergroup": true,
+      "is_subteam": true,
       "name": "Admins",
       "description": "A group of all Administrators",
       "handle": "admins",
       "is_external": false,
-      "date_create": 1446598059,
-      "date_update": 1446670362,
+      "date_create": 1657026548,
+      "date_update": 1729488269,
       "date_delete": 0,
-      "auto_type": "admin",
+      "auto_type": null,
+      "auto_provision": false,
+      "enterprise_subteam_id": "",
       "created_by": "U06XXX",
       "updated_by": "U06XXX",
       "deleted_by": null,
@@ -20,7 +23,9 @@
         "channels": [],
         "groups": []
       },
-      "user_count": "1"
+      "user_count": 1,
+      "channel_count": 0,
+      "is_section": false
     }
   ]
 }

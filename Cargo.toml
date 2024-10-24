@@ -76,3 +76,7 @@ validator = { version = "0.18.0", features = ["derive"] }
 [dev-dependencies]
 pretty_assertions = { workspace = true }
 rstest = { workspace = true }
+
+[patch.crates-io]
+slack-morphism = { git = "https://github.com/dax/slack-morphism-rust", rev = "55ca1f2fdb47353bef58d2e82ce7fc7b7a859f79" }
+slack-blocks-render = { git = "https://github.com/dax/slack-blocks-render", branch = "fix-usergroup-count-type" }

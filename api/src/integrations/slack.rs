@@ -12,7 +12,7 @@ use slack_morphism::{
 };
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
-use tracing::debug;
+use tracing::{debug, warn};
 use url::Url;
 use uuid::Uuid;
 use wiremock::{
@@ -558,7 +558,12 @@ impl SlackService {
                 let references = self
                     .find_slack_references_in_message(&message, user_id, &slack_api_token)
                     .await
-                    .map_err()
+                    .inspect_err(|err| {
+                        warn!(
+                            "Failed to resolve Slack references in the message: {:?}",
+                            err
+                        )
+                    })
                     .unwrap_or(None);
 
                 (
@@ -736,6 +741,12 @@ impl SlackService {
                 let references = self
                     .find_slack_references_in_message(&message, user_id, &slack_api_token)
                     .await
+                    .inspect_err(|err| {
+                        warn!(
+                            "Failed to resolve Slack references in the message: {:?}",
+                            err
+                        )
+                    })
                     .unwrap_or(None);
 
                 (
@@ -933,6 +944,12 @@ impl SlackService {
                 let references = self
                     .find_slack_references_in_message(&message, user_id, &slack_api_token)
                     .await
+                    .inspect_err(|err| {
+                        warn!(
+                            "Failed to resolve Slack references in the message: {:?}",
+                            err
+                        )
+                    })
                     .unwrap_or(None);
 
                 Ok(Some(NotificationDetails::SlackMessage(
@@ -1068,6 +1085,12 @@ impl SlackService {
                 let references = self
                     .find_slack_references_in_message(&message, user_id, &slack_api_token)
                     .await
+                    .inspect_err(|err| {
+                        warn!(
+                            "Failed to resolve Slack references in the message: {:?}",
+                            err
+                        )
+                    })
                     .unwrap_or(None);
 
                 Ok(Some(NotificationDetails::SlackMessage(
