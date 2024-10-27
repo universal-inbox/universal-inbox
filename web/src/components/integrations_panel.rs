@@ -6,9 +6,7 @@ use chrono::{Local, SecondsFormat};
 use dioxus::prelude::*;
 use dioxus_free_icons::{
     icons::{
-        bs_icons::{
-            BsBellSlash, BsClockHistory, BsExclamationTriangle, BsInfoCircle, BsPlug, BsTrash,
-        },
+        bs_icons::{BsBellSlash, BsClockHistory, BsExclamationTriangle, BsPlug, BsTrash},
         md_action_icons::MdCheckCircleOutline,
     },
     Icon,
@@ -26,16 +24,12 @@ use universal_inbox::{
 };
 
 use crate::{
-    components::{
-        flyonui::collapse::Collapse,
-        integrations::{
-            github::config::GithubProviderConfiguration,
-            google_calendar::config::GoogleCalendarProviderConfiguration,
-            google_mail::config::GoogleMailProviderConfiguration, icons::IntegrationProviderIcon,
-            linear::config::LinearProviderConfiguration, slack::config::SlackProviderConfiguration,
-            todoist::config::TodoistProviderConfiguration,
-        },
-        markdown::Markdown,
+    components::integrations::{
+        github::config::GithubProviderConfiguration,
+        google_calendar::config::GoogleCalendarProviderConfiguration,
+        google_mail::config::GoogleMailProviderConfiguration, icons::IntegrationProviderIcon,
+        linear::config::LinearProviderConfiguration, slack::config::SlackProviderConfiguration,
+        todoist::config::TodoistProviderConfiguration,
     },
     model::UniversalInboxUIModel,
 };
@@ -419,73 +413,6 @@ pub fn IntegrationSettings(
                             ui_model: ui_model,
                             on_config_change: move |c| on_config_change.call((connection.clone(), c)),
                             provider: provider.clone(),
-                        }
-                    }
-                }
-
-                Documentation {
-                    id: "integration-connection-{kind}",
-                    config
-                }
-            }
-        }
-    }
-}
-
-#[component]
-pub fn Documentation(
-    id: ReadOnlySignal<String>,
-    config: ReadOnlySignal<IntegrationProviderStaticConfig>,
-) -> Element {
-    let doc_for_actions = config().doc_for_actions;
-    let mut doc_for_actions: Vec<(&String, &String)> = doc_for_actions.iter().collect();
-    doc_for_actions.sort_by(|e1, e2| e1.0.cmp(e2.0));
-
-    rsx! {
-        if let Some(ref warning_message) = config().warning_message {
-            if !warning_message.is_empty() {
-                div {
-                    class: "alert rounded-md! alert-soft alert-warning shadow-lg my-4 py-2 text-sm flex gap-2",
-                    role: "alert",
-                    Icon { class: "min-w-5 h-5", icon: BsExclamationTriangle }
-                    p { class: "max-w-full prose prose-sm", dangerous_inner_html: "{warning_message}" }
-                }
-            }
-        }
-
-        if !config().doc.is_empty() {
-            div {
-                class: "card bg-neutral text-neutral-content",
-
-                Collapse {
-                    id: "{id}",
-                    header: rsx! {
-                        div {
-                            class: "flex items-center gap-2 grow text-lg font-medium",
-                            Icon { class: "w-5 h-5 text-info", icon: BsInfoCircle }
-                            "Documentation"
-                        }
-                    },
-
-                    Markdown {
-                        class: "prose prose-sm text-neutral-content w-full max-w-full",
-                        text: config().doc.clone()
-                    }
-
-                    if !doc_for_actions.is_empty() {
-                        div { class: "text-lg", "Actions on notifications" }
-                        table {
-                            class: "table-auto",
-
-                            tbody {
-                                for (action, doc) in doc_for_actions.iter() {
-                                    tr {
-                                        td { class: "p-2", IconForAction { action: action.to_string() } }
-                                        td { class: "p-2 font-semibold", "{action}" }
-                                        td { class: "p-2", "{doc}" }
-                                    }
-                                }
-                            }
                         }
                     }
                 }

@@ -105,32 +105,12 @@ kind = "Github"
 nango_key = "github"
 page_size = 50
 required_oauth_scopes = ["notifications", "read:discussion", "read:org", "repo"]
-doc = "Github notifications are synchronized 1 for 1 with Universal Inbox notifications."
-
-[integrations.github.doc_for_actions]
-delete = "The Github notification will only be marked as read. ⚠️ The Github notification API is not fully functional and does not allow to mark it as done."
-unsubscribe = "Unsubscribe from the Github notification. No new update will be received until pinged again."
-snooze = "The Github notification will not be modified. The notification in Universal Inbox will only reappear the next day."
 
 [integrations.linear]
 name = "Linear"
 kind = "Linear"
 nango_key = "linear"
 required_oauth_scopes = ["read", "write"]
-doc = """
-Linear notifications (issue and project notifications) are synchronized 1 for 1 with Universal Inbox notifications. Linear notifications for the same Linear issue are not (yet) merged as one like Linear does.<br>
-
-Assigned Linear issues can also be synchronized as a task in the task management service.
-
-When an assigned Linear issue is synchronized as a task, the synchronization is two way:
-- completed task will set the Linear issue as completed.
-- and completed Linear issue will set the task as completed.
-"""
-
-[integrations.linear.doc_for_actions]
-delete = "The Linear notification will be deleted."
-unsubscribe = "Unsubscribe from the Linear notification. No new update will be received until pinged again. Only issue notifications can be unsubscribed, project notifications cannot be unsubscribed."
-snooze = "The Linear notification will be snoozed and will only reappear the next day."
 
 [integrations.google_mail]
 name = "Google Mail"
@@ -138,32 +118,19 @@ kind = "GoogleMail"
 nango_key = "google-mail"
 page_size = 500
 required_oauth_scopes = ["https://www.googleapis.com/auth/gmail.modify"]
-doc = "Google Mail threads from your Inbox are considered as Universal Inbox notifications. More flexible configuration is coming."
 warning_message = "Google Mail integration is not yet public, it requires your email address to be whitelisted and you will see a warning message from Google while connecting. If you still want to connect it, please send the Google email address you want to use to the <a href='mailto:support@universal-inbox.com' title='Contact support'>support</a>"
-
-[integrations.google_mail.doc_for_actions]
-delete = "The Google Mail thread will be archived."
-unsubscribe = "The Google Mail thread will be archived. New messages in the thread will be ignored and automatically archived unless one unread message is directly addressed to your email address."
-snooze = "Snoozing a notification will only be reflected in Universal Inbox. ⚠️ Google Mail has no public API to snooze a thread."
 
 [integrations.google_calendar]
 name = "Google Calendar"
 kind = "GoogleCalendar"
 nango_key = "google-calendar"
 required_oauth_scopes = ["https://www.googleapis.com/auth/calendar"]
-doc = "Google Calendar integration allow Universal Inbox to display an enhanced preview of Calendar invitations and to answer directly from Universal Inbox."
 
 [integrations.todoist]
 name = "Todoist"
 kind = "Todoist"
 nango_key = "todoist"
 required_oauth_scopes = ["data:read_write", "data:delete"]
-doc = "Tasks from the Todoist Inbox are considered as Universal Inbox notifications."
-
-[integrations.todoist.doc_for_actions]
-delete = "The Todoist task will be deleted."
-complete = "The task associated with the notification (or the task from the Todoist inbox) will be marked as complete."
-snooze = "The Todoist task will not be modified. The notification in Universal Inbox will only reappear the next day."
 
 [integrations.slack]
 name = "Slack"
@@ -188,26 +155,13 @@ required_oauth_scopes = [
   "users:read",
 ]
 use_as_oauth_user_scopes = true
-doc = """
-Slack \"saved for later\" messages can be synchronized 1 for 1 with a Universal Inbox notification or a task in the task management service.
-
-When synchronized as a task, the synchronization is two way:
-- completed task will delete the \"saved for later\" mark in Slack.
-- ⚠️ re-activated task will partially create the \"saved for later\" mark in Slack. Indeed, due to some Slack public API limitations, the Slack message will be marked again but it won't appear in the \"saved for later\" list.
-"""
 warning_message = "Slack mentions synchronization is only one way from Slack to Universal Inbox. Indeed, using Slack public API, it is not possible mark messages as read or to unsubscribe from a thread."
-
-[integrations.slack.doc_for_actions]
-delete = "The Slack \"saved for later\" item will be deleted."
-unsubscribe = "The Slack \"saved for later\" item will be deleted."
-snooze = "The notification will be snoozed and will only reappear the next day. It won't change the Slack \"saved for later\" item."
 
 [integrations.ticktick]
 name = "Tick Tick"
 kind = "TickTick"
 nango_key = "ticktick"
 required_oauth_scopes = ["tasks:read", "tasks:write"]
-doc = "This is still work in progress."
 is_enabled = false
 
 [oauth2]
