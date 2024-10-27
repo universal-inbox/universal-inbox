@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Add Universal Inbox documentation website
+
 ### Changed
 
 - Make Universal Inbox UI mobile friendly

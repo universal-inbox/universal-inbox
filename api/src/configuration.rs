@@ -177,10 +177,7 @@ pub struct IntegrationSettings {
     pub required_oauth_scopes: Vec<String>,
     pub use_as_oauth_user_scopes: Option<bool>,
     pub page_size: Option<usize>,
-    pub doc: String,
     pub warning_message: Option<String>,
-    #[serde(default = "HashMap::new")]
-    pub doc_for_actions: HashMap<String, String>,
     #[serde(default = "yes")]
     pub is_enabled: bool,
 }

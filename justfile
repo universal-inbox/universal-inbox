@@ -54,6 +54,13 @@ build-container:
 publish-container:
     just docker/publish
 
+build-doc:
+    just doc/install
+    just doc/build
+
+run-doc:
+    just doc/run
+
 ## Dev recipes
 run-db:
     process-compose -f .devbox/virtenv/redis/process-compose.yaml -f .devbox/virtenv/postgresql_16/process-compose.yaml -p 9999

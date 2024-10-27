@@ -5,7 +5,7 @@ use dioxus::web::WebEventExt;
 use dioxus_free_icons::{
     icons::{
         bs_icons::{
-            BsBell, BsBookmarkCheck, BsBoxArrowInLeft, BsGear, BsInbox, BsMoon, BsPerson,
+            BsBell, BsBook, BsBookmarkCheck, BsBoxArrowInLeft, BsGear, BsInbox, BsMoon, BsPerson,
             BsQuestionLg, BsSun,
         },
         go_icons::GoMarkGithub,
@@ -211,6 +211,14 @@ fn NavBarUtils(show_changelog: bool, in_menu: bool, class: Option<String>) -> El
                     div { id: "ui-changelog", class: "absolute top-0 left-0" }
                     Icon { class: "w-5 h-5", icon: BsBell }
                 }
+            }
+
+            a {
+                class: "btn btn-text btn-square grow",
+                href: "https://doc.universal-inbox.com",
+                title: "Universal Inbox documentation",
+                target: "_blank",
+                Icon { class: "w-5 h-5", icon: BsBook }
             }
 
             if let Some(support_href) = support_href {

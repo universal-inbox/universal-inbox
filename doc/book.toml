@@ -1,0 +1,31 @@
+[book]
+authors = ["David Rousselie"]
+language = "en"
+multilingual = false
+src = "src"
+title = "Universal Inbox documentation"
+
+[preprocessor]
+
+[preprocessor.admonish]
+command = "mdbook-admonish"
+assets_version = "3.0.2" # do not edit: managed by `mdbook-admonish install`
+
+[preprocessor.image-size]
+command = "mdbook-image-size"
+
+[preprocessor.classy]
+
+[output]
+
+[output.html]
+default-theme = "light"
+preferred-dark-theme = "navy"
+additional-css = ["./css/mdbook-admonish.css", "./css/custom.css"]
+git-repository-url = "https://github.com/universal-inbox/universal-inbox"
+edit-url-template = "https://github.com/universal-inbox/universal-inbox/edit/master/doc/{path}"
+git-repository-icon = "fa-github"
+no-section-label = true
+cname = "doc.universal-inbox.com"
+
+[output.linkcheck]
