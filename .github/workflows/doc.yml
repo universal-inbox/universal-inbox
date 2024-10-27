@@ -1,0 +1,56 @@
+name: doc
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - prod
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install Devbox
+        uses: jetpack-io/devbox-install-action@v0.7.0
+        with:
+          enable-cache: "true"
+      - name: Build documentation
+        run: devbox run -- just build-doc
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: compiled-doc-website
+          path: doc/book/html
+
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    name: Publish to Cloudflare Pages
+    needs: build
+    if: ${{ github.ref_name == 'prod' && github.ref_type == 'tag' }}
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: compiled-doc-website
+          path: doc/book/html
+      - name: Publish to Cloudflare Pages
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: universal-inbox-doc
+          directory: doc/book/html
+          # Optional: Enable this if you want to have GitHub Deployments triggered
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}

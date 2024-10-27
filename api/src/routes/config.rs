@@ -78,9 +78,7 @@ pub async fn front_config(
                     vec![]
                 },
                 required_oauth_scopes: config.required_oauth_scopes.clone(),
-                doc: config.doc.clone(),
                 warning_message: config.warning_message.clone(),
-                doc_for_actions: config.doc_for_actions.clone(),
                 is_enabled: config.is_enabled,
             },
         )

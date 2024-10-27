@@ -1,0 +1,41 @@
+.icon-text {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.icon-text img {
+    flex-shrink: 0;
+    min-width: 30px;
+    object-fit: contain;
+}
+
+.chapter .chapter-item:not(.affix) {
+    display: flex;
+    align-items: center;
+    height: 2rem;
+    transition-property:
+        color, background-color, border-color, text-decoration-color, fill,
+        stroke;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 150ms;
+    padding-left: 1.2rem;
+    padding-right: 1.2rem;
+    padding-top: 0.6rem;
+    padding-bottom: 0.6rem;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    margin-top: 0 !important;
+}
+
+.chapter .chapter-item:has(a.active) {
+    background-color: hsl(
+        212.51396648044692 92.74611398963731% 62.15686274509804% / 0.1
+    );
+}
+
+.chapter .chapter-item:hover {
+    background-color: hsl(
+        212.51396648044692 92.74611398963731% 62.15686274509804% / 0.15
+    );
+}

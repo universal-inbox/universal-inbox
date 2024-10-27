@@ -860,6 +860,150 @@
         }
       }
     },
+    "mdbook-admonish@latest": {
+      "last_modified": "2025-05-12T14:38:58Z",
+      "resolved": "github:NixOS/nixpkgs/eaeed9530c76ce5f1d2d8232e08bec5e26f18ec1#mdbook-admonish",
+      "source": "devbox-search",
+      "version": "1.19.0",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/pcl1rl8dzfc6vhls19bcil6c5dnrirfc-mdbook-admonish-1.19.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/pcl1rl8dzfc6vhls19bcil6c5dnrirfc-mdbook-admonish-1.19.0"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/xcwp6hklkd4wqbps9dkk6yj4va896xqi-mdbook-admonish-1.19.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/xcwp6hklkd4wqbps9dkk6yj4va896xqi-mdbook-admonish-1.19.0"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/bn5i4mrvqyrgym5n7rsp75djv9q3j0ky-mdbook-admonish-1.19.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/bn5i4mrvqyrgym5n7rsp75djv9q3j0ky-mdbook-admonish-1.19.0"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/6r8zp2sy2yqnqd18b7wrl6xc3g25fbry-mdbook-admonish-1.19.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/6r8zp2sy2yqnqd18b7wrl6xc3g25fbry-mdbook-admonish-1.19.0"
+        }
+      }
+    },
+    "mdbook-linkcheck@latest": {
+      "last_modified": "2025-05-16T20:19:48Z",
+      "resolved": "github:NixOS/nixpkgs/12a55407652e04dcf2309436eb06fef0d3713ef3#mdbook-linkcheck",
+      "source": "devbox-search",
+      "version": "0.7.7",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/b4y6nqivdfmr51jzfi21lgw98ai0gw42-mdbook-linkcheck-0.7.7",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/b4y6nqivdfmr51jzfi21lgw98ai0gw42-mdbook-linkcheck-0.7.7"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/ikhrmlmnjl7ghvc0dbzfqi4if04z1lbh-mdbook-linkcheck-0.7.7",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/ikhrmlmnjl7ghvc0dbzfqi4if04z1lbh-mdbook-linkcheck-0.7.7"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/jnxf66ixifzknqja9hb1s18b502iy6qm-mdbook-linkcheck-0.7.7",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/jnxf66ixifzknqja9hb1s18b502iy6qm-mdbook-linkcheck-0.7.7"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/n05c4s100wkzhh6kyi3sr0y4pll40s8k-mdbook-linkcheck-0.7.7",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/n05c4s100wkzhh6kyi3sr0y4pll40s8k-mdbook-linkcheck-0.7.7"
+        }
+      }
+    },
+    "mdbook@latest": {
+      "last_modified": "2025-05-12T14:38:58Z",
+      "resolved": "github:NixOS/nixpkgs/eaeed9530c76ce5f1d2d8232e08bec5e26f18ec1#mdbook",
+      "source": "devbox-search",
+      "version": "0.4.49",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/6c108aazav3m4rn21lfwyqa8q60d84kl-mdbook-0.4.49",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/6c108aazav3m4rn21lfwyqa8q60d84kl-mdbook-0.4.49"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/k3hmjdd19wmxxmsjn3jipn9pmkgbi2kf-mdbook-0.4.49",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/k3hmjdd19wmxxmsjn3jipn9pmkgbi2kf-mdbook-0.4.49"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/a35kywbdmay0h2a7gw9n51is499il021-mdbook-0.4.49",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/a35kywbdmay0h2a7gw9n51is499il021-mdbook-0.4.49"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/hj3llnvhvp6mgj42mcaf65hiqa8jkrv9-mdbook-0.4.49",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/hj3llnvhvp6mgj42mcaf65hiqa8jkrv9-mdbook-0.4.49"
+        }
+      }
+    },
     "nodejs_22@latest": {
       "last_modified": "2025-03-11T17:52:14Z",
       "plugin_version": "0.0.2",

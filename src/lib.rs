@@ -37,9 +37,7 @@ pub struct FrontConfig {
 pub struct IntegrationProviderStaticConfig {
     pub name: String,
     pub nango_config_key: NangoProviderKey,
-    pub doc: String,
     pub warning_message: Option<String>,
-    pub doc_for_actions: HashMap<String, String>,
     pub is_enabled: bool,
     pub oauth_user_scopes: Vec<String>,
     pub required_oauth_scopes: Vec<String>,
