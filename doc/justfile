@@ -1,0 +1,10 @@
+set fallback
+
+default:
+    @just --choose
+
+run:
+    mdbook serve --open
+
+build:
+    mdbook build
