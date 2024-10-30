@@ -142,8 +142,10 @@ async fn send_slack_push_event_callback_job(
         || async {
             storage
                 .clone()
-                .push(UniversalInboxJob::SlackPushEventCallback(
-                    SlackPushEventCallbackJob(event.clone()),
+                .push(UniversalInboxJob::new(
+                    crate::jobs::UniversalInboxJobPayload::SlackPushEventCallback(
+                        SlackPushEventCallbackJob(event.clone()),
+                    ),
                 ))
                 .await
         },
