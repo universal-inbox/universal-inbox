@@ -27,15 +27,15 @@ use crate::{
     integrations::oauth2::{AccessToken, NangoService},
     jobs::{
         sync::{SyncNotificationsJob, SyncTasksJob},
-        UniversalInboxJob,
+        UniversalInboxJob, UniversalInboxJobPayload,
     },
-    repository::Repository,
     repository::{
         integration_connection::{
             IntegrationConnectionRepository, IntegrationConnectionSyncStatusUpdate,
             IntegrationConnectionSyncedBeforeFilter,
         },
         notification::NotificationRepository,
+        Repository,
     },
     universal_inbox::{user::service::UserService, UniversalInboxError, UpdateStatus},
     utils::cache::build_redis_cache,
@@ -189,10 +189,12 @@ impl IntegrationConnectionService {
             || async {
                 job_storage
                     .clone()
-                    .push(UniversalInboxJob::SyncNotifications(SyncNotificationsJob {
-                        source: notification_sync_source_kind,
-                        user_id: for_user_id,
-                    }))
+                    .push(UniversalInboxJob::new(
+                        UniversalInboxJobPayload::SyncNotifications(SyncNotificationsJob {
+                            source: notification_sync_source_kind,
+                            user_id: for_user_id,
+                        }),
+                    ))
                     .await
             },
         )
@@ -223,10 +225,12 @@ impl IntegrationConnectionService {
             || async {
                 job_storage
                     .clone()
-                    .push(UniversalInboxJob::SyncTasks(SyncTasksJob {
-                        source: task_sync_source_kind,
-                        user_id: for_user_id,
-                    }))
+                    .push(UniversalInboxJob::new(UniversalInboxJobPayload::SyncTasks(
+                        SyncTasksJob {
+                            source: task_sync_source_kind,
+                            user_id: for_user_id,
+                        },
+                    )))
                     .await
             },
         )
