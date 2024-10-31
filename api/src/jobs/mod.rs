@@ -67,6 +67,7 @@ impl FromStr for UniversalInboxJobId {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Serialize, Deserialize)]
 pub enum UniversalInboxJobPayload {
     SyncNotifications(sync::SyncNotificationsJob),
