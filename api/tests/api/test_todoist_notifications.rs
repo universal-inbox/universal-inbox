@@ -7,9 +7,7 @@ use universal_inbox::{
     integration_connection::{
         config::IntegrationConnectionConfig, integrations::todoist::TodoistConfig,
     },
-    notification::{
-        service::NotificationPatch, Notification, NotificationMetadata, NotificationStatus,
-    },
+    notification::{service::NotificationPatch, Notification, NotificationStatus},
     task::{Task, TaskStatus},
     third_party::{
         integrations::todoist::TodoistItem,
@@ -34,6 +32,8 @@ use crate::helpers::{
 };
 
 mod patch_notification {
+    use crate::helpers::notification::todoist::create_notification_from_todoist_item;
+
     use super::*;
 
     #[rstest]
@@ -73,11 +73,11 @@ mod patch_notification {
                 created_at: Utc::now().with_nanosecond(0).unwrap(),
                 updated_at: Utc::now().with_nanosecond(0).unwrap(),
                 user_id: app.user.id,
-                data: ThirdPartyItemData::TodoistItem(TodoistItem {
+                data: ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
                     project_id: "1111".to_string(), // ie. "Inbox"
                     added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
                     ..*todoist_item.clone()
-                }),
+                })),
                 integration_connection_id: integration_connection.id,
             }),
         )
@@ -159,11 +159,11 @@ mod patch_notification {
                 created_at: Utc::now().with_nanosecond(0).unwrap(),
                 updated_at: Utc::now().with_nanosecond(0).unwrap(),
                 user_id: app.user.id,
-                data: ThirdPartyItemData::TodoistItem(TodoistItem {
+                data: ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
                     project_id: "1111".to_string(), // ie. "Inbox"
                     added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
                     ..*todoist_item.clone()
-                }),
+                })),
                 integration_connection_id: integration_connection.id,
             }),
         )
@@ -197,36 +197,36 @@ mod patch_notification {
 
     #[rstest]
     #[tokio::test]
-    async fn test_patch_todoist_notification_status(#[future] authenticated_app: AuthenticatedApp) {
+    async fn test_patch_todoist_notification_status(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        todoist_item: Box<TodoistItem>,
+        nango_todoist_connection: Box<NangoConnection>,
+    ) {
         let app = authenticated_app.await;
-        let expected_notification = Box::new(Notification {
-            id: Uuid::new_v4().into(),
-            user_id: app.user.id,
-            title: "task 1".to_string(),
-            status: NotificationStatus::Unread,
-            source_id: "1234".to_string(),
-            metadata: NotificationMetadata::Todoist,
-            updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-            last_read_at: None,
-            snoozed_until: None,
-            details: None,
-            task_id: None,
-        });
-        let created_notification: Box<Notification> = create_resource(
-            &app.client,
-            &app.app.api_address,
-            "notifications",
-            expected_notification.clone(),
+        let todoist_integration_connection = create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            &settings.oauth2.nango_secret_key,
+            IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
+            &settings,
+            nango_todoist_connection,
+            None,
         )
         .await;
-
-        assert_eq!(created_notification, expected_notification);
+        let expected_notification = create_notification_from_todoist_item(
+            &app.app,
+            &todoist_item,
+            app.user.id,
+            todoist_integration_connection.id,
+        )
+        .await;
 
         let response = patch_resource_response(
             &app.client,
             &app.app.api_address,
             "notifications",
-            created_notification.id.into(),
+            expected_notification.id.into(),
             &NotificationPatch {
                 status: Some(NotificationStatus::Unsubscribed),
                 ..Default::default()

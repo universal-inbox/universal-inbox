@@ -78,7 +78,7 @@ pub async fn notification_service(
                     refresh_notifications(&api_base_url, notifications_page, ui_model).await;
                 }
             }
-            Some(NotificationCommand::DeleteFromNotification(notification)) => {
+            Some(NotificationCommand::DeleteFromNotification(ref notification)) => {
                 if let Some(ref task) = notification.task {
                     if notification.is_built_from_task() {
                         delete_task(notification.id, task.id, notifications_page, &task_service)
@@ -146,7 +146,7 @@ pub async fn notification_service(
                 )
                 .await;
             }
-            Some(NotificationCommand::CompleteTaskFromNotification(notification)) => {
+            Some(NotificationCommand::CompleteTaskFromNotification(ref notification)) => {
                 if let Some(ref task) = notification.task {
                     if notification.is_built_from_task() {
                         notifications_page
@@ -157,14 +157,14 @@ pub async fn notification_service(
                     }
                 }
             }
-            Some(NotificationCommand::PlanTask(notification, task_id, parameters)) => {
+            Some(NotificationCommand::PlanTask(ref notification, task_id, parameters)) => {
                 notifications_page
                     .write()
                     .remove_element(|notif| notif.id != notification.id);
 
                 task_service.send(TaskCommand::Plan(task_id, parameters));
             }
-            Some(NotificationCommand::CreateTaskFromNotification(notification, parameters)) => {
+            Some(NotificationCommand::CreateTaskFromNotification(ref notification, parameters)) => {
                 notifications_page
                     .write()
                     .remove_element(|notif| notif.id != notification.id);

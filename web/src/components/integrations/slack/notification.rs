@@ -1,64 +1,15 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
-use slack_morphism::prelude::*;
 
-use universal_inbox::{
-    notification::{NotificationDetails, NotificationWithTask},
-    third_party::integrations::slack::{
-        SlackChannelDetails, SlackFileCommentDetails, SlackFileDetails, SlackGroupDetails,
-        SlackImDetails, SlackMessageDetails,
-    },
+use universal_inbox::third_party::integrations::slack::{
+    SlackChannelDetails, SlackFileCommentDetails, SlackFileDetails, SlackGroupDetails,
+    SlackImDetails, SlackMessageDetails,
 };
 
-use crate::components::{
-    integrations::slack::{
-        icons::SlackNotificationIcon, SlackMessageActorDisplay, SlackTeamDisplay, SlackUserDisplay,
-    },
-    markdown::Markdown,
+use crate::components::integrations::slack::{
+    SlackMessageActorDisplay, SlackTeamDisplay, SlackUserDisplay,
 };
-
-#[component]
-pub fn SlackNotificationDisplay(
-    notif: ReadOnlySignal<NotificationWithTask>,
-    slack_push_event_callback: SlackPushEventCallback,
-) -> Element {
-    let subtitle = match notif().details {
-        Some(NotificationDetails::SlackMessage(SlackMessageDetails { channel, .. }))
-        | Some(NotificationDetails::SlackFile(SlackFileDetails { channel, .. }))
-        | Some(NotificationDetails::SlackFileComment(SlackFileCommentDetails {
-            channel, ..
-        }))
-        | Some(NotificationDetails::SlackChannel(SlackChannelDetails { channel, .. }))
-        | Some(NotificationDetails::SlackIm(SlackImDetails { channel, .. }))
-        | Some(NotificationDetails::SlackGroup(SlackGroupDetails { channel, .. })) => {
-            if let Some(channel_name) = &channel.name {
-                format!("#{}", channel_name)
-            } else {
-                format!("#{}", channel.id)
-            }
-        }
-        _ => "".to_string(),
-    };
-
-    rsx! {
-        div {
-            class: "flex items-center gap-2",
-
-            SlackNotificationIcon { class: "h-5 w-5 min-w-5" }
-
-            div {
-                class: "flex flex-col grow",
-
-                Markdown { text: notif().title.clone() }
-                span {
-                    class: "flex gap-2 text-xs text-gray-400",
-                    "{subtitle}"
-                }
-            }
-        }
-    }
-}
 
 #[component]
 pub fn SlackMessageDetailsDisplay(slack_message: ReadOnlySignal<SlackMessageDetails>) -> Element {

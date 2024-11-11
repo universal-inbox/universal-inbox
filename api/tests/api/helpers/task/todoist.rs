@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use universal_inbox::{
     integration_connection::integrations::todoist::SyncToken,
-    notification::{NotificationMetadata, NotificationStatus},
+    notification::{NotificationSourceKind, NotificationStatus},
     task::{DueDate, TaskCreationResult, TaskStatus},
     third_party::{
         integrations::todoist::{TodoistItem, TodoistItemDue, TodoistItemPriority},
@@ -250,13 +250,13 @@ pub fn assert_sync_items(
                 assert_eq!(task.project, "Inbox".to_string());
                 assert_eq!(
                     task.source_item.data,
-                    ThirdPartyItemData::TodoistItem(sync_todoist_items[0].clone())
+                    ThirdPartyItemData::TodoistItem(Box::new(sync_todoist_items[0].clone()))
                 );
 
                 assert!(notification.is_some());
                 let notif = notification.unwrap();
                 assert_eq!(notif.title, task.title);
-                assert_eq!(notif.source_id, task.source_item.source_id.clone());
+                assert_eq!(notif.kind, NotificationSourceKind::Todoist);
                 assert_eq!(
                     notif.status,
                     if sync_todoist_items[0].checked {
@@ -265,7 +265,7 @@ pub fn assert_sync_items(
                         NotificationStatus::Unread
                     }
                 );
-                assert_eq!(notif.metadata, NotificationMetadata::Todoist);
+                assert_eq!(notif.source_item.id, task.source_item.id);
                 assert_eq!(notif.task_id, Some(task.id));
                 assert_eq!(notif.user_id, expected_user_id);
             }
@@ -282,11 +282,13 @@ pub fn assert_sync_items(
                 assert_eq!(task.project, "Project2".to_string());
                 assert_eq!(
                     task.source_item.data,
-                    ThirdPartyItemData::TodoistItem(sync_todoist_items[1].clone())
+                    ThirdPartyItemData::TodoistItem(Box::new(sync_todoist_items[1].clone()))
                 );
                 assert!(notification.is_some());
                 let notif = notification.unwrap();
                 assert_eq!(notif.status, NotificationStatus::Deleted);
+                assert_eq!(notif.kind, NotificationSourceKind::Todoist);
+                assert_eq!(notif.source_item.id, task.source_item.id);
             }
             _ => {
                 unreachable!("Unexpected task title '{}'", &task.title);

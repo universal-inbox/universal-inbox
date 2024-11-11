@@ -4,9 +4,11 @@ use chrono::{DateTime, Local};
 use dioxus::prelude::*;
 
 use dioxus_free_icons::{icons::bs_icons::BsChatTextFill, Icon};
-use universal_inbox::notification::{
-    integrations::github::{GithubDiscussion, GithubNotification, GithubPullRequest},
-    NotificationDetails, NotificationWithTask,
+use universal_inbox::{
+    notification::NotificationWithTask,
+    third_party::integrations::github::{
+        GithubDiscussion, GithubNotification, GithubNotificationItem, GithubPullRequest,
+    },
 };
 
 use crate::components::{
@@ -27,8 +29,11 @@ pub fn GithubNotificationListItem(
     is_selected: ReadOnlySignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
-    match notification().details {
-        Some(NotificationDetails::GithubPullRequest(github_pull_request)) => rsx! {
+    match github_notification() {
+        GithubNotification {
+            item: Some(GithubNotificationItem::GithubPullRequest(github_pull_request)),
+            ..
+        } => rsx! {
             GithubPullRequestNotificationListItem {
                 notification,
                 github_notification,
@@ -37,7 +42,10 @@ pub fn GithubNotificationListItem(
                 on_select,
             }
         },
-        Some(NotificationDetails::GithubDiscussion(github_discussion)) => rsx! {
+        GithubNotification {
+            item: Some(GithubNotificationItem::GithubDiscussion(github_discussion)),
+            ..
+        } => rsx! {
             GithubDiscussionNotificationListItem {
                 notification,
                 github_notification,

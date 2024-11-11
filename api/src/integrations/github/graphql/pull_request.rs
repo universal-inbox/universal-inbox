@@ -1,17 +1,13 @@
 use anyhow::Context;
 use url::Url;
 
-use universal_inbox::notification::{
-    integrations::github::{
-        GithubActor, GithubBotSummary, GithubCheckConclusionState, GithubCheckRun,
-        GithubCheckStatusState, GithubCheckSuite, GithubCheckSuiteApp, GithubCommitChecks,
-        GithubIssueComment, GithubLabel, GithubMannequinSummary, GithubMergeStateStatus,
-        GithubMergeableState, GithubPullRequest, GithubPullRequestReview,
-        GithubPullRequestReviewDecision, GithubPullRequestReviewState, GithubPullRequestState,
-        GithubRepositorySummary, GithubReviewer, GithubTeamSummary, GithubUserSummary,
-        GithubWorkflow,
-    },
-    NotificationDetails,
+use universal_inbox::third_party::integrations::github::{
+    GithubActor, GithubBotSummary, GithubCheckConclusionState, GithubCheckRun,
+    GithubCheckStatusState, GithubCheckSuite, GithubCheckSuiteApp, GithubCommitChecks,
+    GithubIssueComment, GithubLabel, GithubMannequinSummary, GithubMergeStateStatus,
+    GithubMergeableState, GithubPullRequest, GithubPullRequestReview,
+    GithubPullRequestReviewDecision, GithubPullRequestReviewState, GithubPullRequestState,
+    GithubRepositorySummary, GithubReviewer, GithubTeamSummary, GithubUserSummary, GithubWorkflow,
 };
 
 use crate::{
@@ -614,7 +610,7 @@ impl TryFrom<pull_request_query::PullRequestQueryRepositoryPullRequestCommentsNo
         })
     }
 }
-impl TryFrom<pull_request_query::ResponseData> for NotificationDetails {
+impl TryFrom<pull_request_query::ResponseData> for GithubPullRequest {
     type Error = UniversalInboxError;
 
     fn try_from(value: pull_request_query::ResponseData) -> Result<Self, Self::Error> {
@@ -628,7 +624,7 @@ impl TryFrom<pull_request_query::ResponseData> for NotificationDetails {
             .parse()
             .with_context(|| format!("Unable to parse Github pull request URL: {:?}", pr.url))?;
 
-        Ok(NotificationDetails::GithubPullRequest(GithubPullRequest {
+        Ok(GithubPullRequest {
             id: pr.id,
             number: pr.number,
             url: pr_url.clone(),
@@ -710,6 +706,6 @@ impl TryFrom<pull_request_query::ResponseData> for NotificationDetails {
                 .map(|review_requests| review_requests.try_into())
                 .transpose()?
                 .unwrap_or_default(),
-        }))
+        })
     }
 }

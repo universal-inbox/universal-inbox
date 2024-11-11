@@ -4,8 +4,8 @@ use dioxus::prelude::*;
 use dioxus_free_icons::{icons::bs_icons::BsSlack, Icon};
 
 use universal_inbox::{
-    integration_connection::provider::IntegrationProviderKind, notification::NotificationMetadata,
-    task::TaskSourceKind,
+    integration_connection::provider::IntegrationProviderKind,
+    notification::NotificationSourceKind, task::TaskSourceKind,
 };
 
 use crate::components::integrations::{
@@ -84,17 +84,14 @@ pub fn IntegrationProviderIcon(class: String, provider_kind: IntegrationProvider
 }
 
 #[component]
-pub fn NotificationMetadataIcon(
-    class: String,
-    notification_metadata: ReadOnlySignal<NotificationMetadata>,
-) -> Element {
+pub fn NotificationIcon(class: String, kind: NotificationSourceKind) -> Element {
     // tag: New notification integration
-    match notification_metadata() {
-        NotificationMetadata::Github(_) => rsx! { Github { class: class } },
-        NotificationMetadata::Linear(_) => rsx! { Linear { class: class } },
-        NotificationMetadata::GoogleMail(_) => rsx! { GoogleMail { class: class } },
-        NotificationMetadata::Todoist => rsx! { Todoist { class: class } },
-        NotificationMetadata::Slack(_) => rsx! { Icon { class: class, icon: BsSlack } },
+    match kind {
+        NotificationSourceKind::Github => rsx! { Github { class: class } },
+        NotificationSourceKind::Linear => rsx! { Linear { class: class } },
+        NotificationSourceKind::GoogleMail => rsx! { GoogleMail { class: class } },
+        NotificationSourceKind::Todoist => rsx! { Todoist { class: class } },
+        NotificationSourceKind::Slack => rsx! { Icon { class: class, icon: BsSlack } },
     }
 }
 

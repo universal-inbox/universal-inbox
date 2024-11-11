@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use chrono::Utc;
 use httpmock::{
     Method::{GET, POST},
     Mock, MockServer,
@@ -10,12 +11,23 @@ use slack_blocks_render::SlackReferences;
 use slack_morphism::prelude::*;
 
 use universal_inbox::{
-    notification::NotificationDetails,
-    third_party::integrations::slack::SlackStarItem,
-    third_party::integrations::slack::{SlackMessageDetails, SlackMessageSenderDetails},
+    integration_connection::IntegrationConnectionId,
+    notification::Notification,
+    third_party::{
+        integrations::slack::{
+            SlackMessageDetails, SlackMessageSenderDetails, SlackStar, SlackStarItem,
+            SlackStarState,
+        },
+        item::ThirdPartyItemData,
+    },
+    user::UserId,
 };
+use universal_inbox_api::integrations::slack::SlackService;
 
-use crate::helpers::{fixture_path, load_json_fixture_file};
+use crate::helpers::{
+    fixture_path, load_json_fixture_file, notification::create_notification_from_source_item,
+    TestedApp,
+};
 
 #[fixture]
 pub fn slack_push_star_added_event() -> Box<SlackPushEvent> {
@@ -43,7 +55,7 @@ pub fn slack_push_reaction_removed_event() -> Box<SlackPushEvent> {
 }
 
 #[fixture]
-pub fn slack_notification_details() -> Box<NotificationDetails> {
+pub fn slack_star_added() -> Box<SlackStar> {
     let message_response: SlackApiConversationsHistoryResponse =
         load_json_fixture_file("slack_fetch_message_response.json");
     let channel_response: SlackApiConversationsInfoResponse =
@@ -54,14 +66,35 @@ pub fn slack_notification_details() -> Box<NotificationDetails> {
     let team_response: SlackApiTeamInfoResponse =
         load_json_fixture_file("slack_fetch_team_response.json");
 
-    Box::new(NotificationDetails::SlackMessage(SlackMessageDetails {
-        url: "https://example.com".parse().unwrap(),
-        message: message_response.messages[0].clone(),
-        channel: channel_response.channel,
-        sender,
-        team: team_response.team,
-        references: None,
-    }))
+    Box::new(SlackStar {
+        state: SlackStarState::StarAdded,
+        created_at: Utc::now(),
+        item: SlackStarItem::SlackMessage(SlackMessageDetails {
+            url: "https://example.com".parse().unwrap(),
+            message: message_response.messages[0].clone(),
+            channel: channel_response.channel,
+            sender,
+            team: team_response.team,
+            references: None,
+        }),
+    })
+}
+
+pub async fn create_notification_from_slack_star(
+    app: &TestedApp,
+    slack_star: &SlackStar,
+    user_id: UserId,
+    slack_integration_connection_id: IntegrationConnectionId,
+) -> Box<Notification> {
+    create_notification_from_source_item::<SlackStar, SlackService>(
+        app,
+        slack_star.item.id(),
+        ThirdPartyItemData::SlackStar(Box::new(slack_star.clone())),
+        app.notification_service.read().await.slack_service.clone(),
+        user_id,
+        slack_integration_connection_id,
+    )
+    .await
 }
 
 pub fn mock_slack_fetch_user<'a>(

@@ -14,12 +14,13 @@ use universal_inbox::{
         IntegrationConnectionStatus,
     },
     notification::{
-        integrations::github::{GithubNotification, GithubNotificationSubject},
-        Notification, NotificationDetails, NotificationMetadata, NotificationSourceKind,
-        NotificationStatus,
+        service::NotificationPatch, Notification, NotificationSourceKind, NotificationStatus,
     },
     third_party::{
-        integrations::todoist::TodoistItem,
+        integrations::{
+            github::{GithubNotification, GithubNotificationItem, GithubNotificationSubject},
+            todoist::TodoistItem,
+        },
         item::{ThirdPartyItem, ThirdPartyItemCreationResult, ThirdPartyItemData},
     },
 };
@@ -49,7 +50,7 @@ use crate::helpers::{
             mock_github_discussions_search_query, mock_github_notifications_service,
             mock_github_pull_request_query, sync_github_notifications,
         },
-        list_notifications, sync_notifications, sync_notifications_response,
+        list_notifications, sync_notifications, sync_notifications_response, update_notification,
     },
     rest::{create_resource, get_resource},
     settings,
@@ -102,36 +103,18 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
             created_at: Utc::now().with_nanosecond(0).unwrap(),
             updated_at: Utc::now().with_nanosecond(0).unwrap(),
             user_id: app.user.id,
-            data: ThirdPartyItemData::TodoistItem(TodoistItem {
+            data: ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
                 project_id: "2222".to_string(), // ie. "Project2"
                 added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
                 ..*todoist_item.clone()
-            }),
+            })),
             integration_connection_id: integration_connection.id,
         }),
     )
     .await;
     let existing_todoist_task = creation.task.as_ref().unwrap();
-    let existing_notification: Box<Notification> = create_resource(
-        &app.client,
-        &app.app.api_address,
-        "notifications",
-        Box::new(Notification {
-            id: Uuid::new_v4().into(),
-            user_id: app.user.id,
-            title: "Greetings 2".to_string(),
-            status: NotificationStatus::Unread,
-            source_id: sync_github_notifications[1].id.clone(),
-            metadata: NotificationMetadata::Github(Box::new(sync_github_notifications[1].clone())),
-            updated_at: Utc.with_ymd_and_hms(2014, 11, 6, 0, 0, 0).unwrap(),
-            last_read_at: None,
-            snoozed_until: Some(Utc.with_ymd_and_hms(2064, 1, 1, 0, 0, 0).unwrap()),
-            details: None,
-            task_id: Some(existing_todoist_task.id),
-        }),
-    )
-    .await;
-    create_and_mock_integration_connection(
+
+    let github_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
         &settings.oauth2.nango_secret_key,
@@ -141,12 +124,25 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         None,
     )
     .await;
-    let expected_notification_123_details: NotificationDetails = github_pull_request_123_response
-        .data
-        .clone()
-        .unwrap()
-        .try_into()
-        .unwrap();
+
+    let existing_notification = create_notification_from_github_notification(
+        &app.app,
+        &sync_github_notifications[1],
+        app.user.id,
+        github_integration_connection.id,
+    )
+    .await;
+    update_notification(
+        &app,
+        existing_notification.id,
+        &NotificationPatch {
+            snoozed_until: Some(Utc.with_ymd_and_hms(2064, 1, 1, 0, 0, 0).unwrap()),
+            task_id: Some(existing_todoist_task.id),
+            ..NotificationPatch::default()
+        },
+        app.user.id,
+    )
+    .await;
 
     let github_notifications_mock = mock_github_notifications_service(
         &app.app.github_mock_server,
@@ -179,7 +175,13 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         &notifications,
         &sync_github_notifications,
         app.user.id,
-        Some(expected_notification_123_details),
+        Some(GithubNotificationItem::GithubPullRequest(
+            github_pull_request_123_response
+                .data
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        )),
     );
     github_notifications_mock.assert();
     github_notifications_mock2.assert();
@@ -193,22 +195,15 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     .await;
     assert_eq!(updated_notification.id, existing_notification.id);
     assert_eq!(
-        updated_notification.source_id,
-        existing_notification.source_id
+        updated_notification.source_item.source_id,
+        existing_notification.source_item.source_id
     );
     assert_eq!(updated_notification.status, NotificationStatus::Read);
-    assert_eq!(
-        updated_notification.updated_at,
-        Utc.with_ymd_and_hms(2014, 11, 7, 23, 1, 45).unwrap()
-    );
     assert_eq!(
         updated_notification.last_read_at,
         Some(Utc.with_ymd_and_hms(2014, 11, 7, 23, 2, 45).unwrap())
     );
-    assert_eq!(
-        updated_notification.metadata,
-        NotificationMetadata::Github(Box::new(sync_github_notifications[1].clone()))
-    );
+    assert_eq!(updated_notification.kind, NotificationSourceKind::Github);
     // `snoozed_until` and `task_id` should not be reset
     assert_eq!(
         updated_notification.snoozed_until,
@@ -249,6 +244,7 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
     #[future] tested_app_with_local_auth: TestedApp,
     // Vec[GithubNotification { source_id: "123", ... }, GithubNotification { source_id: "456", ... } ]
     sync_github_notifications: Vec<GithubNotification>,
+    github_pull_request_123_response: Response<pull_request_query::ResponseData>,
     nango_github_connection: Box<NangoConnection>,
 ) {
     let app = tested_app_with_local_auth.await;
@@ -262,23 +258,25 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
     )
     .await;
 
-    let other_user_existing_notification: Box<Notification> = create_resource(
-        &other_client,
-        &app.api_address,
-        "notifications",
-        Box::new(Notification {
-            id: Uuid::new_v4().into(),
-            user_id: other_user.id,
-            title: "Greetings other".to_string(),
-            status: NotificationStatus::Unread,
-            source_id: "789".to_string(), // Same for both users as they may share the same source of notification
-            metadata: NotificationMetadata::Github(Box::new(sync_github_notifications[1].clone())), // reusing github notification but not useful
-            updated_at: Utc.with_ymd_and_hms(2014, 11, 6, 0, 0, 0).unwrap(),
-            last_read_at: None,
-            snoozed_until: None,
-            details: None,
-            task_id: None,
-        }),
+    let other_github_integration_connection = create_and_mock_integration_connection(
+        &app,
+        other_user.id,
+        &settings.oauth2.nango_secret_key,
+        IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+        &settings,
+        nango_github_connection.clone(),
+        None,
+    )
+    .await;
+
+    let mut other_existing_github_notification = sync_github_notifications[1].clone();
+    other_existing_github_notification.id = "789".to_string();
+    other_existing_github_notification.unread = true;
+    let other_user_existing_notification = create_notification_from_github_notification(
+        &app,
+        &other_existing_github_notification,
+        other_user.id,
+        other_github_integration_connection.id,
     )
     .await;
 
@@ -291,37 +289,7 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
     )
     .await;
 
-    for github_notification in sync_github_notifications.iter() {
-        create_notification_from_github_notification(
-            &client,
-            &app.api_address,
-            github_notification,
-            user.id,
-        )
-        .await;
-    }
-
-    // to be deleted during sync
-    let existing_notification: Box<Notification> = create_resource(
-        &client,
-        &app.api_address,
-        "notifications",
-        Box::new(Notification {
-            id: Uuid::new_v4().into(),
-            user_id: user.id,
-            title: "Greetings 3".to_string(),
-            status: NotificationStatus::Unread,
-            source_id: "789".to_string(),
-            metadata: NotificationMetadata::Github(Box::new(sync_github_notifications[1].clone())), // reusing github notification but not useful
-            updated_at: Utc.with_ymd_and_hms(2014, 11, 6, 0, 0, 0).unwrap(),
-            last_read_at: None,
-            snoozed_until: None,
-            details: None,
-            task_id: None,
-        }),
-    )
-    .await;
-    create_and_mock_integration_connection(
+    let github_integration_connection = create_and_mock_integration_connection(
         &app,
         user.id,
         &settings.oauth2.nango_secret_key,
@@ -332,11 +300,42 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
     )
     .await;
 
+    for github_notification in sync_github_notifications.iter() {
+        create_notification_from_github_notification(
+            &app,
+            github_notification,
+            user.id,
+            github_integration_connection.id,
+        )
+        .await;
+    }
+
+    // to be deleted during sync
+    let mut existing_github_notification = sync_github_notifications[1].clone();
+    existing_github_notification.id = "789".to_string();
+    let existing_notification = create_notification_from_github_notification(
+        &app,
+        &existing_github_notification,
+        user.id,
+        github_integration_connection.id,
+    )
+    .await;
+
     let github_notifications_mock =
         mock_github_notifications_service(&app.github_mock_server, "1", &sync_github_notifications);
     let empty_result = Vec::<GithubNotification>::new();
     let github_notifications_mock2 =
         mock_github_notifications_service(&app.github_mock_server, "2", &empty_result);
+
+    // Sync of Github notification 123 will trigger a query of the associated pull request
+    // sync_github_notifications[1] won't trigger any query
+    let github_pull_request_123_query_mock = mock_github_pull_request_query(
+        &app.github_mock_server,
+        "octokit".to_string(),
+        "octokit.rb".to_string(),
+        123,
+        &github_pull_request_123_response,
+    );
 
     let notifications: Vec<Notification> = sync_notifications(
         &client,
@@ -347,7 +346,19 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
     .await;
 
     assert_eq!(notifications.len(), sync_github_notifications.len());
-    assert_sync_notifications(&notifications, &sync_github_notifications, user.id, None);
+    github_pull_request_123_query_mock.assert();
+    assert_sync_notifications(
+        &notifications,
+        &sync_github_notifications,
+        user.id,
+        Some(GithubNotificationItem::GithubPullRequest(
+            github_pull_request_123_response
+                .data
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        )),
+    );
     github_notifications_mock.assert();
     github_notifications_mock2.assert();
 
@@ -389,26 +400,7 @@ async fn test_sync_all_notifications_asynchronously(
     #[case] trigger_sync_when_listing_notifications: bool,
 ) {
     let app = authenticated_app.await;
-    let _existing_notification: Box<Notification> = create_resource(
-        &app.client,
-        &app.app.api_address,
-        "notifications",
-        Box::new(Notification {
-            id: Uuid::new_v4().into(),
-            user_id: app.user.id,
-            title: "Greetings 2".to_string(),
-            status: NotificationStatus::Unread,
-            source_id: sync_github_notifications[1].id.clone(),
-            metadata: NotificationMetadata::Github(Box::new(sync_github_notifications[1].clone())),
-            updated_at: Utc.with_ymd_and_hms(2014, 11, 6, 0, 0, 0).unwrap(),
-            last_read_at: None,
-            snoozed_until: None,
-            details: None,
-            task_id: None,
-        }),
-    )
-    .await;
-    create_and_mock_integration_connection(
+    let github_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
         &settings.oauth2.nango_secret_key,
@@ -416,6 +408,23 @@ async fn test_sync_all_notifications_asynchronously(
         &settings,
         nango_github_connection,
         None,
+    )
+    .await;
+    let existing_notification = create_notification_from_github_notification(
+        &app.app,
+        &sync_github_notifications[1],
+        app.user.id,
+        github_integration_connection.id,
+    )
+    .await;
+    update_notification(
+        &app,
+        existing_notification.id,
+        &NotificationPatch {
+            status: Some(NotificationStatus::Unread),
+            ..NotificationPatch::default()
+        },
+        app.user.id,
     )
     .await;
 
@@ -759,9 +768,21 @@ async fn test_sync_discussion_notification_with_details(
     .await;
 
     assert_eq!(notifications.len(), 1);
-    match &notifications[0].details {
-        Some(NotificationDetails::GithubDiscussion(details)) => {
-            assert_eq!(details.title, "test discussion");
+    assert_eq!(notifications[0].kind, NotificationSourceKind::Github);
+    match &notifications[0].source_item.data {
+        ThirdPartyItemData::GithubNotification(github_notification) => {
+            match &github_notification.item {
+                Some(GithubNotificationItem::GithubDiscussion(discussion)) => {
+                    assert_eq!(discussion.title, "test discussion");
+                    assert_eq!(
+                        discussion.url,
+                        "https://github.com/octocat/Hello-World/discussions/1"
+                            .parse()
+                            .unwrap()
+                    );
+                }
+                _ => unreachable!("Expected a GithubDiscussion notification"),
+            }
         }
         _ => unreachable!("Expected a GithubDiscussion notification"),
     }
@@ -840,8 +861,7 @@ async fn test_sync_discussion_notification_with_error(
     )
     .await;
 
-    assert_eq!(notifications.len(), 1);
-    assert!(notifications[0].details.is_none());
+    assert_eq!(notifications.len(), 0);
 
     let integration_connection = get_integration_connection_per_provider(
         &app,
@@ -863,7 +883,7 @@ async fn test_sync_discussion_notification_with_error(
             .last_notifications_sync_failure_message
             .unwrap()
             .as_str(),
-        "Failed to fetch notification details from Github"
+        "Failed to fetch notifications from Github"
     );
     assert_eq!(integration_connection.notifications_sync_failures, 1);
     assert_eq!(

@@ -5,6 +5,7 @@ use graphql_client::Response;
 use pretty_assertions::assert_eq;
 use rstest::*;
 
+use tracing::debug;
 use universal_inbox::{
     integration_connection::{
         config::IntegrationConnectionConfig,
@@ -173,8 +174,7 @@ async fn test_sync_todoist_linear_task(
 
     assert_eq!(task_creations.len(), 2);
     for task_creation in task_creations.iter() {
-        // A new notification is created only after the first sync (ie. not when receiving
-        // the Slack star added event) and when the synced task is in the Inbox
+        // A new notification is created only after the first sync and when the synced task is in the Inbox
         if new_project_id == "1111" {
             assert_eq!(task_creation.notifications.len(), 1);
         }
@@ -198,6 +198,17 @@ async fn test_sync_todoist_linear_task(
     assert_eq!(updated_task.status, expected_new_task_status);
 
     if new_project_id == "1111" {
+        let notifications = list_notifications_with_tasks(
+            &app.client,
+            &app.app.api_address,
+            vec![],
+            false,
+            None,
+            None,
+            false,
+        )
+        .await;
+        debug!("{:?}", notifications);
         let notifications = list_notifications_with_tasks(
             &app.client,
             &app.app.api_address,

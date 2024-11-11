@@ -2,10 +2,7 @@
 
 use dioxus::prelude::*;
 
-use universal_inbox::{
-    notification::integrations::linear::LinearNotification,
-    third_party::integrations::linear::LinearLabel,
-};
+use universal_inbox::third_party::integrations::linear::{LinearLabel, LinearNotification};
 
 use crate::components::{
     integrations::linear::preview::{issue::LinearIssuePreview, project::LinearProjectPreview},

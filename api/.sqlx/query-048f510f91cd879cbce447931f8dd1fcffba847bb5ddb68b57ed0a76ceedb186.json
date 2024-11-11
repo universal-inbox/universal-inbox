@@ -1,0 +1,49 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                INSERT INTO notification\n                  (\n                    id,\n                    title,\n                    status,\n                    created_at,\n                    updated_at,\n                    last_read_at,\n                    snoozed_until,\n                    kind,\n                    user_id,\n                    task_id,\n                    source_item_id\n                  )\n                VALUES\n                  ($1, $2, $3::notification_status, $4, $5, $6, $7, $8, $9, $10, $11)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        {
+          "Custom": {
+            "name": "notification_status",
+            "kind": {
+              "Enum": [
+                "Unread",
+                "Read",
+                "Deleted",
+                "Unsubscribed"
+              ]
+            }
+          }
+        },
+        "Timestamp",
+        "Timestamp",
+        "Timestamp",
+        "Timestamp",
+        {
+          "Custom": {
+            "name": "notification_source_kind",
+            "kind": {
+              "Enum": [
+                "Github",
+                "Todoist",
+                "Linear",
+                "GoogleMail",
+                "Slack"
+              ]
+            }
+          }
+        },
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "048f510f91cd879cbce447931f8dd1fcffba847bb5ddb68b57ed0a76ceedb186"
+}

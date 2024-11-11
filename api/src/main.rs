@@ -15,9 +15,7 @@ use tracing::{error, info, warn};
 
 use universal_inbox::{
     integration_connection::provider::IntegrationProviderKind,
-    notification::{NotificationSourceKind, NotificationSyncSourceKind},
-    task::TaskSyncSourceKind,
-    user::UserId,
+    notification::NotificationSyncSourceKind, task::TaskSyncSourceKind, user::UserId,
 };
 
 use universal_inbox_api::{
@@ -73,12 +71,6 @@ enum Commands {
         user_id: Option<UserId>,
         #[clap(short, long, value_enum, value_parser)]
         provider_kind: Option<IntegrationProviderKind>,
-    },
-
-    /// Clear notifications details from the database. Useful when stored data is no longer valid.
-    DeleteNotificationDetails {
-        #[clap(short, long, value_enum, value_parser)]
-        source: NotificationSourceKind,
     },
 
     /// Send welcome and verification email to user
@@ -288,9 +280,6 @@ async fn main() -> std::io::Result<()> {
                 *user_id,
             )
             .await
-        }
-        Commands::DeleteNotificationDetails { source } => {
-            commands::migration::delete_notification_details(notification_service, *source).await
         }
         Commands::SendVerificationEmail {
             user_email,

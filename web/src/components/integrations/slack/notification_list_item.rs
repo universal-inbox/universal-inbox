@@ -2,17 +2,16 @@
 
 use chrono::{DateTime, Local};
 use dioxus::prelude::*;
-
 use dioxus_free_icons::{icons::bs_icons::BsSlack, Icon};
-use slack_morphism::events::{
-    SlackEventCallbackBody, SlackPushEventCallback, SlackReactionAddedEvent,
-    SlackReactionRemovedEvent,
-};
+
 use universal_inbox::{
-    notification::{NotificationDetails, NotificationWithTask},
-    third_party::integrations::slack::{
-        SlackChannelDetails, SlackFileCommentDetails, SlackFileDetails, SlackGroupDetails,
-        SlackImDetails, SlackMessageDetails,
+    notification::NotificationWithTask,
+    third_party::{
+        integrations::slack::{
+            SlackChannelDetails, SlackFileCommentDetails, SlackFileDetails, SlackGroupDetails,
+            SlackImDetails, SlackMessageDetails, SlackReaction, SlackReactionItem, SlackStarItem,
+        },
+        item::ThirdPartyItemData,
     },
     utils::emoji::replace_emoji_code_with_emoji,
 };
@@ -26,9 +25,44 @@ use crate::components::{
 };
 
 #[component]
+pub fn SlackStarNotificationListItem(
+    notification: ReadOnlySignal<NotificationWithTask>,
+    is_selected: ReadOnlySignal<bool>,
+    on_select: EventHandler<()>,
+) -> Element {
+    rsx! {
+        SlackNotificationListItem {
+            notification,
+            subicon: rsx! { SlackNotificationIcon { class: "h-5 w-5 min-w-5" } },
+            is_selected,
+            on_select,
+        }
+    }
+}
+
+#[component]
+pub fn SlackReactionNotificationListItem(
+    notification: ReadOnlySignal<NotificationWithTask>,
+    slack_reaction: ReadOnlySignal<SlackReaction>,
+    is_selected: ReadOnlySignal<bool>,
+    on_select: EventHandler<()>,
+) -> Element {
+    let emoji = replace_emoji_code_with_emoji(&slack_reaction().name.0).unwrap_or("👀".to_string());
+
+    rsx! {
+        SlackNotificationListItem {
+            notification,
+            subicon: rsx! { span { class: "h-5 w-5 min-w-5", "{emoji}" } },
+            is_selected,
+            on_select,
+        }
+    }
+}
+
+#[component]
 pub fn SlackNotificationListItem(
     notification: ReadOnlySignal<NotificationWithTask>,
-    slack_push_event_callback: SlackPushEventCallback,
+    subicon: Option<Element>,
     is_selected: ReadOnlySignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
@@ -38,29 +72,6 @@ pub fn SlackNotificationListItem(
             .to_string()
     });
     let list_context = use_context::<Memo<ListContext>>();
-    let subicon = match slack_push_event_callback {
-        SlackPushEventCallback {
-            event: SlackEventCallbackBody::StarAdded(_),
-            ..
-        }
-        | SlackPushEventCallback {
-            event: SlackEventCallbackBody::StarRemoved(_),
-            ..
-        } => rsx! { SlackNotificationIcon { class: "h-5 w-5 min-w-5" } },
-        SlackPushEventCallback {
-            event: SlackEventCallbackBody::ReactionAdded(SlackReactionAddedEvent { reaction, .. }),
-            ..
-        }
-        | SlackPushEventCallback {
-            event:
-                SlackEventCallbackBody::ReactionRemoved(SlackReactionRemovedEvent { reaction, .. }),
-            ..
-        } => {
-            let emoji = replace_emoji_code_with_emoji(&reaction.0).unwrap_or("👀".to_string());
-            rsx! { span { class: "h-5 w-5 min-w-5", "{emoji}" } }
-        }
-        _ => None,
-    };
 
     rsx! {
         ListItem {
@@ -85,23 +96,30 @@ pub fn SlackNotificationListItem(
 
 #[component]
 pub fn SlackNotificationSubtitle(notification: ReadOnlySignal<NotificationWithTask>) -> Element {
-    let subtitle = match notification().details {
-        Some(NotificationDetails::SlackMessage(SlackMessageDetails { channel, .. }))
-        | Some(NotificationDetails::SlackFile(SlackFileDetails { channel, .. }))
-        | Some(NotificationDetails::SlackFileComment(SlackFileCommentDetails {
-            channel, ..
-        }))
-        | Some(NotificationDetails::SlackChannel(SlackChannelDetails { channel, .. }))
-        | Some(NotificationDetails::SlackIm(SlackImDetails { channel, .. }))
-        | Some(NotificationDetails::SlackGroup(SlackGroupDetails { channel, .. })) => {
+    let channel = match notification().source_item.data {
+        ThirdPartyItemData::SlackStar(slack_star) => match slack_star.item {
+            SlackStarItem::SlackMessage(SlackMessageDetails { channel, .. })
+            | SlackStarItem::SlackFile(SlackFileDetails { channel, .. })
+            | SlackStarItem::SlackFileComment(SlackFileCommentDetails { channel, .. })
+            | SlackStarItem::SlackChannel(SlackChannelDetails { channel, .. })
+            | SlackStarItem::SlackIm(SlackImDetails { channel, .. })
+            | SlackStarItem::SlackGroup(SlackGroupDetails { channel, .. }) => Some(channel),
+        },
+        ThirdPartyItemData::SlackReaction(slack_reaction) => match slack_reaction.item {
+            SlackReactionItem::SlackMessage(SlackMessageDetails { channel, .. })
+            | SlackReactionItem::SlackFile(SlackFileDetails { channel, .. }) => Some(channel),
+        },
+        _ => None,
+    };
+    let subtitle = channel
+        .map(|channel| {
             if let Some(channel_name) = &channel.name {
                 format!("#{}", channel_name)
             } else {
                 format!("#{}", channel.id)
             }
-        }
-        _ => "".to_string(),
-    };
+        })
+        .unwrap_or("".to_string());
 
     rsx! {
         span {
@@ -113,24 +131,34 @@ pub fn SlackNotificationSubtitle(notification: ReadOnlySignal<NotificationWithTa
 
 #[component]
 fn SlackNotificationListItemDetails(notification: ReadOnlySignal<NotificationWithTask>) -> Element {
-    match notification().details {
-        Some(NotificationDetails::SlackMessage(slack_message)) => rsx! {
-            SlackMessageListItemDetails { slack_message }
+    match notification().source_item.data {
+        ThirdPartyItemData::SlackStar(slack_star) => match slack_star.item {
+            SlackStarItem::SlackMessage(slack_message) => rsx! {
+                SlackMessageListItemDetails { slack_message }
+            },
+            SlackStarItem::SlackFile(slack_file) => rsx! {
+                SlackFileListItemDetails { slack_file }
+            },
+            SlackStarItem::SlackChannel(slack_channel) => rsx! {
+                SlackChannelListItemDetails { slack_channel }
+            },
+            SlackStarItem::SlackFileComment(slack_file_comment) => rsx! {
+                SlackFileCommentListItemDetails { slack_file_comment }
+            },
+            SlackStarItem::SlackIm(slack_im) => rsx! {
+                SlackImListItemDetails { slack_im }
+            },
+            SlackStarItem::SlackGroup(slack_group) => rsx! {
+                SlackGroupListItemDetails { slack_group }
+            },
         },
-        Some(NotificationDetails::SlackChannel(slack_channel)) => rsx! {
-            SlackChannelListItemDetails { slack_channel }
-        },
-        Some(NotificationDetails::SlackFile(slack_file)) => rsx! {
-            SlackFileListItemDetails { slack_file }
-        },
-        Some(NotificationDetails::SlackFileComment(slack_file_comment)) => rsx! {
-            SlackFileCommentListItemDetails { slack_file_comment }
-        },
-        Some(NotificationDetails::SlackIm(slack_im)) => rsx! {
-            SlackImListItemDetails { slack_im }
-        },
-        Some(NotificationDetails::SlackGroup(slack_group)) => rsx! {
-            SlackGroupListItemDetails { slack_group }
+        ThirdPartyItemData::SlackReaction(slack_reaction) => match slack_reaction.item {
+            SlackReactionItem::SlackMessage(slack_message) => rsx! {
+                SlackMessageListItemDetails { slack_message }
+            },
+            SlackReactionItem::SlackFile(slack_file) => rsx! {
+                SlackFileListItemDetails { slack_file }
+            },
         },
         _ => None,
     }

@@ -10,12 +10,12 @@ use dioxus_free_icons::{
     Icon,
 };
 
-use universal_inbox::notification::{
-    integrations::github::{
-        GithubDiscussion, GithubDiscussionStateReason, GithubNotification, GithubPullRequest,
-        GithubPullRequestState,
+use universal_inbox::{
+    notification::NotificationWithTask,
+    third_party::integrations::github::{
+        GithubDiscussion, GithubDiscussionStateReason, GithubNotification, GithubNotificationItem,
+        GithubPullRequest, GithubPullRequestState,
     },
-    NotificationDetails, NotificationWithTask,
 };
 
 use crate::theme::{
@@ -48,14 +48,20 @@ pub fn GithubNotificationIcon(
     class: Option<String>,
 ) -> Element {
     let class = class.unwrap_or_default();
-    match &notif().details {
-        Some(NotificationDetails::GithubPullRequest(pr)) => rsx! {
+    match github_notification() {
+        GithubNotification {
+            item: Some(GithubNotificationItem::GithubPullRequest(pr)),
+            ..
+        } => rsx! {
             GithubPullRequestIcon { class: "{class}", github_pull_request: pr.clone() }
         },
-        Some(NotificationDetails::GithubDiscussion(discussion)) => rsx! {
+        GithubNotification {
+            item: Some(GithubNotificationItem::GithubDiscussion(discussion)),
+            ..
+        } => rsx! {
             GithubDiscussionIcon { class: "{class}", github_discussion: discussion.clone() }
         },
-        Some(_) | None => match github_notification().subject.r#type.as_str() {
+        _ => match github_notification().subject.r#type.as_str() {
             "PullRequest" => rsx! { GithubPullRequestIcon { class: "{class}" } },
             "Issue" => rsx! { Icon { class: "{class}", icon: BsRecordCircle } },
             "Discussion" => rsx! { GithubDiscussionIcon { class: "{class}" } },

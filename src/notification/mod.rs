@@ -1,96 +1,90 @@
 use std::fmt;
 
+use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
-use slack_morphism::prelude::SlackPushEventCallback;
 use url::Url;
 use uuid::Uuid;
 
 use crate::{
     integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
-    notification::integrations::{
-        github::{GithubDiscussion, GithubNotification, GithubPullRequest},
-        google_mail::GoogleMailThread,
-        linear::LinearNotification,
-    },
-    task::{integrations::todoist::DEFAULT_TODOIST_HTML_URL, Task, TaskId},
-    third_party::integrations::slack::{
-        SlackChannelDetails, SlackFileCommentDetails, SlackFileDetails, SlackGroupDetails,
-        SlackImDetails, SlackMessageDetails,
-    },
+    task::{Task, TaskId},
+    third_party::item::{ThirdPartyItem, ThirdPartyItemSourceKind},
     user::UserId,
     HasHtmlUrl,
 };
 
-pub mod integrations;
 pub mod service;
 
 #[serde_as]
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Notification {
     pub id: NotificationId,
     pub title: String,
-    pub source_id: String,
     pub status: NotificationStatus,
-    pub metadata: NotificationMetadata,
+    pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub last_read_at: Option<DateTime<Utc>>,
     pub snoozed_until: Option<DateTime<Utc>>,
     pub user_id: UserId,
     pub task_id: Option<TaskId>,
-    pub details: Option<NotificationDetails>,
+    pub kind: NotificationSourceKind,
+    pub source_item: ThirdPartyItem,
+}
+
+impl PartialEq for Notification {
+    fn eq(&self, other: &Self) -> bool {
+        self.title == other.title
+            && self.status == other.status
+            && self.last_read_at == other.last_read_at
+            && self.user_id == other.user_id
+            && self.task_id == other.task_id
+            && self.kind == other.kind
+            && self.source_item.id == other.source_item.id
+    }
 }
 
 impl HasHtmlUrl for Notification {
-    // tag: New notification integration
     fn get_html_url(&self) -> Url {
-        if let Some(details) = &self.details {
-            details.get_html_url()
-        } else {
-            match &self.metadata {
-                NotificationMetadata::Github(github_notification) => {
-                    github_notification.get_html_url_from_metadata()
-                }
-                NotificationMetadata::Todoist => DEFAULT_TODOIST_HTML_URL.parse::<Url>().unwrap(),
-                NotificationMetadata::Linear(linear_notification) => {
-                    linear_notification.get_html_url_from_metadata()
-                }
-                NotificationMetadata::GoogleMail(google_mail_thread) => {
-                    google_mail_thread.get_html_url_from_metadata()
-                }
-                NotificationMetadata::Slack(_) => {
-                    // See https://api.slack.com/methods/chat.getPermalink
-                    // Hardcoding it for now
-                    "https://slack.com".parse::<Url>().unwrap()
-                }
-            }
-        }
+        self.source_item.get_html_url()
     }
 }
 
 #[serde_as]
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct NotificationWithTask {
     pub id: NotificationId,
     pub title: String,
-    pub source_id: String,
     pub status: NotificationStatus,
-    pub metadata: NotificationMetadata,
+    pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub last_read_at: Option<DateTime<Utc>>,
     pub snoozed_until: Option<DateTime<Utc>>,
     pub user_id: UserId,
     pub task: Option<Task>,
-    pub details: Option<NotificationDetails>,
+    pub kind: NotificationSourceKind,
+    pub source_item: ThirdPartyItem,
+}
+
+impl PartialEq for NotificationWithTask {
+    fn eq(&self, other: &Self) -> bool {
+        self.title == other.title
+            && self.status == other.status
+            && self.last_read_at == other.last_read_at
+            && self.user_id == other.user_id
+            && self.task.as_ref().map(|t| t.id) == other.task.as_ref().map(|t| t.id)
+            && self.kind == other.kind
+            && self.source_item.id == other.source_item.id
+    }
 }
 
 impl HasHtmlUrl for NotificationWithTask {
     fn get_html_url(&self) -> Url {
         match &self {
             NotificationWithTask {
-                metadata: NotificationMetadata::Todoist,
+                kind: NotificationSourceKind::Todoist,
                 task: Some(task),
                 ..
             } => task.get_html_url(),
@@ -110,89 +104,35 @@ impl NotificationWithTask {
         NotificationWithTask {
             id: notification.id,
             title: notification.title.clone(),
-            source_id: notification.source_id.clone(),
             status: notification.status,
-            metadata: notification.metadata.clone(),
+            created_at: notification.created_at,
             updated_at: notification.updated_at,
             last_read_at: notification.last_read_at,
             snoozed_until: notification.snoozed_until,
             user_id: notification.user_id,
-            details: notification.details.clone(),
+            source_item: notification.source_item.clone(),
+            kind: notification.kind,
             task,
         }
     }
 
     pub fn is_built_from_task(&self) -> bool {
-        matches!(self.metadata, NotificationMetadata::Todoist)
-    }
-
-    pub fn get_source_kind(&self) -> NotificationSourceKind {
-        // tag: New notification integration
-        match &self.metadata {
-            NotificationMetadata::Github(_) => NotificationSourceKind::Github,
-            NotificationMetadata::Todoist => NotificationSourceKind::Todoist,
-            NotificationMetadata::Linear(_) => NotificationSourceKind::Linear,
-            NotificationMetadata::GoogleMail(_) => NotificationSourceKind::GoogleMail,
-            NotificationMetadata::Slack(_) => NotificationSourceKind::Slack,
-        }
+        matches!(self.kind, NotificationSourceKind::Todoist)
     }
 
     pub fn into_notification(self) -> Notification {
         Notification {
             id: self.id,
             title: self.title.clone(),
-            source_id: self.source_id.clone(),
             status: self.status,
-            metadata: self.metadata.clone(),
+            created_at: self.created_at,
             updated_at: self.updated_at,
             last_read_at: self.last_read_at,
             snoozed_until: self.snoozed_until,
             user_id: self.user_id,
-            details: self.details,
             task_id: self.task.as_ref().map(|task| task.id),
-        }
-    }
-}
-
-// tag: New notification integration
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
-#[serde(tag = "type", content = "content")]
-pub enum NotificationMetadata {
-    Github(Box<GithubNotification>),
-    Todoist,
-    Linear(Box<LinearNotification>),
-    GoogleMail(Box<GoogleMailThread>),
-    Slack(Box<SlackPushEventCallback>),
-}
-
-// tag: New notification integration
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
-#[serde(tag = "type", content = "content")]
-pub enum NotificationDetails {
-    GithubPullRequest(GithubPullRequest),
-    GithubDiscussion(GithubDiscussion),
-    SlackMessage(SlackMessageDetails),
-    SlackFile(SlackFileDetails),
-    SlackFileComment(SlackFileCommentDetails),
-    SlackChannel(SlackChannelDetails),
-    SlackIm(SlackImDetails),
-    SlackGroup(SlackGroupDetails),
-}
-
-impl HasHtmlUrl for NotificationDetails {
-    // tag: New notification integration
-    fn get_html_url(&self) -> Url {
-        match &self {
-            NotificationDetails::GithubPullRequest(GithubPullRequest { url, .. }) => url.clone(),
-            NotificationDetails::GithubDiscussion(GithubDiscussion { url, .. }) => url.clone(),
-            NotificationDetails::SlackMessage(SlackMessageDetails { url, .. }) => url.clone(),
-            NotificationDetails::SlackFile(f @ SlackFileDetails { .. }) => f.get_html_url(),
-            NotificationDetails::SlackFileComment(fc @ SlackFileCommentDetails { .. }) => {
-                fc.get_html_url()
-            }
-            NotificationDetails::SlackChannel(c @ SlackChannelDetails { .. }) => c.get_html_url(),
-            NotificationDetails::SlackIm(im @ SlackImDetails { .. }) => im.get_html_url(),
-            NotificationDetails::SlackGroup(g @ SlackGroupDetails { .. }) => g.get_html_url(),
+            kind: self.kind,
+            source_item: self.source_item,
         }
     }
 }
@@ -253,8 +193,27 @@ macro_attr! {
     }
 }
 
+impl TryFrom<ThirdPartyItemSourceKind> for NotificationSourceKind {
+    type Error = anyhow::Error;
+
+    fn try_from(source_kind: ThirdPartyItemSourceKind) -> Result<Self, Self::Error> {
+        match source_kind {
+            ThirdPartyItemSourceKind::Todoist => Ok(Self::Todoist),
+            ThirdPartyItemSourceKind::GithubNotification => Ok(Self::Github),
+            ThirdPartyItemSourceKind::LinearNotification => Ok(Self::Linear),
+            ThirdPartyItemSourceKind::GoogleMailThread => Ok(Self::GoogleMail),
+            ThirdPartyItemSourceKind::SlackReaction | ThirdPartyItemSourceKind::SlackStar => {
+                Ok(Self::Slack)
+            }
+            _ => Err(anyhow!(
+                "ThirdPartyItemSourceKind {source_kind} is not a valid NotificationSourceKind"
+            )),
+        }
+    }
+}
+
 impl TryFrom<IntegrationProviderKind> for NotificationSyncSourceKind {
-    type Error = ();
+    type Error = anyhow::Error;
 
     // tag: New notification integration
     fn try_from(provider_kind: IntegrationProviderKind) -> Result<Self, Self::Error> {
@@ -262,7 +221,9 @@ impl TryFrom<IntegrationProviderKind> for NotificationSyncSourceKind {
             IntegrationProviderKind::Github => Ok(Self::Github),
             IntegrationProviderKind::Linear => Ok(Self::Linear),
             IntegrationProviderKind::GoogleMail => Ok(Self::GoogleMail),
-            _ => Err(()),
+            _ => Err(anyhow!(
+                "IntegrationProviderKind {provider_kind} is not a valid NotificationSyncSourceKind"
+            )),
         }
     }
 }
@@ -297,193 +258,4 @@ impl TryFrom<IntegrationProviderKind> for NotificationSourceKind {
 pub trait NotificationSource: IntegrationProviderSource {
     fn get_notification_source_kind(&self) -> NotificationSourceKind;
     fn is_supporting_snoozed_notifications(&self) -> bool;
-}
-
-#[cfg(test)]
-mod tests {
-    use std::{env, fs};
-
-    use chrono::{TimeZone, Timelike, Utc};
-
-    use super::*;
-    use rstest::*;
-
-    mod get_html_url {
-        use pretty_assertions::assert_eq;
-
-        use crate::{
-            task::{TaskPriority, TaskSourceKind, TaskStatus},
-            third_party::{
-                integrations::todoist::TodoistItem,
-                item::{ThirdPartyItem, ThirdPartyItemData},
-            },
-        };
-
-        use super::*;
-
-        #[fixture]
-        pub fn github_notification() -> Box<GithubNotification> {
-            let fixture_path = format!(
-                "{}/tests/fixtures/github_notification.json",
-                env::var("CARGO_MANIFEST_DIR").unwrap(),
-            );
-            let input_str = fs::read_to_string(fixture_path).unwrap();
-            serde_json::from_str(&input_str).unwrap()
-        }
-
-        #[fixture]
-        pub fn todoist_item() -> Box<TodoistItem> {
-            let fixture_path = format!(
-                "{}/tests/fixtures/todoist_item.json",
-                env::var("CARGO_MANIFEST_DIR").unwrap(),
-            );
-            let input_str = fs::read_to_string(fixture_path).unwrap();
-            serde_json::from_str(&input_str).unwrap()
-        }
-
-        #[rstest]
-        fn test_get_html_url_for_github_pr_notification(
-            github_notification: Box<GithubNotification>,
-        ) {
-            let expected_url: Url = "https://github.com/octokit/octokit.rb/issues/123"
-                .parse()
-                .unwrap();
-            let notification = Notification {
-                id: Uuid::new_v4().into(),
-                title: "notif1".to_string(),
-                status: NotificationStatus::Unread,
-                source_id: "1234".to_string(),
-                metadata: NotificationMetadata::Github(github_notification),
-                updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-                last_read_at: None,
-                snoozed_until: None,
-                user_id: Uuid::new_v4().into(),
-                details: None,
-                task_id: None,
-            };
-
-            assert_eq!(notification.get_html_url(), expected_url);
-        }
-
-        #[rstest]
-        fn test_get_html_url_for_github_ci_notification(
-            mut github_notification: Box<GithubNotification>,
-        ) {
-            github_notification.subject.r#type = "CheckSuite".to_string();
-            let expected_url: Url = "https://github.com/octocat/Hello-World/actions"
-                .parse()
-                .unwrap();
-            let notification = Notification {
-                id: Uuid::new_v4().into(),
-                title: "notif1".to_string(),
-                status: NotificationStatus::Unread,
-                source_id: "1234".to_string(),
-                metadata: NotificationMetadata::Github(github_notification),
-                updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-                last_read_at: None,
-                snoozed_until: None,
-                user_id: Uuid::new_v4().into(),
-                details: None,
-                task_id: None,
-            };
-
-            assert_eq!(notification.get_html_url(), expected_url);
-        }
-
-        #[rstest]
-        fn test_get_html_url_for_github_discussion_notification(
-            mut github_notification: Box<GithubNotification>,
-        ) {
-            github_notification.subject.r#type = "Discussion".to_string();
-            github_notification.subject.title = "Test with spaces".to_string();
-            let expected_url: Url =
-                "https://github.com/octocat/Hello-World/discussions?discussions_q=Test+with+spaces"
-                    .parse()
-                    .unwrap();
-            let notification = Notification {
-                id: Uuid::new_v4().into(),
-                title: "notif1".to_string(),
-                status: NotificationStatus::Unread,
-                source_id: "1234".to_string(),
-                metadata: NotificationMetadata::Github(github_notification),
-                updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-                last_read_at: None,
-                snoozed_until: None,
-                user_id: Uuid::new_v4().into(),
-                details: None,
-                task_id: None,
-            };
-
-            assert_eq!(notification.get_html_url(), expected_url);
-        }
-
-        #[rstest]
-        fn test_get_html_url_for_todoist_notification(todoist_item: Box<TodoistItem>) {
-            let todoist_item_id = todoist_item.id.clone();
-            let expected_url: Url = format!("https://todoist.com/showTask?id={}", todoist_item_id)
-                .parse()
-                .unwrap();
-            let notification = NotificationWithTask {
-                id: Uuid::new_v4().into(),
-                title: "notif1".to_string(),
-                status: NotificationStatus::Unread,
-                source_id: "1234".to_string(),
-                metadata: NotificationMetadata::Todoist,
-                updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-                last_read_at: None,
-                snoozed_until: None,
-                user_id: Uuid::new_v4().into(),
-                details: None,
-                task: Some(Task {
-                    id: Uuid::new_v4().into(),
-                    title: "task1".to_string(),
-                    body: "test".to_string(),
-                    status: TaskStatus::Done,
-                    completed_at: None,
-                    priority: TaskPriority::P1,
-                    due_at: None,
-                    tags: vec![],
-                    parent_id: None,
-                    project: "Project".to_string(),
-                    is_recurring: false,
-                    created_at: Utc::now().with_nanosecond(0).unwrap(),
-                    updated_at: Utc::now().with_nanosecond(0).unwrap(),
-                    kind: TaskSourceKind::Todoist,
-                    source_item: ThirdPartyItem {
-                        id: Uuid::new_v4().into(),
-                        data: ThirdPartyItemData::TodoistItem(*todoist_item),
-                        source_id: todoist_item_id,
-                        created_at: Utc::now().with_nanosecond(0).unwrap(),
-                        updated_at: Utc::now().with_nanosecond(0).unwrap(),
-                        user_id: Uuid::new_v4().into(),
-                        integration_connection_id: Uuid::new_v4().into(),
-                    },
-                    sink_item: None,
-                    user_id: Uuid::new_v4().into(),
-                }),
-            };
-
-            assert_eq!(notification.get_html_url(), expected_url);
-        }
-
-        #[rstest]
-        fn test_get_html_url_for_todoist_notification_without_task() {
-            let expected_url: Url = "https://todoist.com/app/".parse().unwrap();
-            let notification = Notification {
-                id: Uuid::new_v4().into(),
-                title: "notif1".to_string(),
-                status: NotificationStatus::Unread,
-                source_id: "1234".to_string(),
-                metadata: NotificationMetadata::Todoist,
-                updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-                last_read_at: None,
-                snoozed_until: None,
-                user_id: Uuid::new_v4().into(),
-                details: None,
-                task_id: None,
-            };
-
-            assert_eq!(notification.get_html_url(), expected_url);
-        }
-    }
 }

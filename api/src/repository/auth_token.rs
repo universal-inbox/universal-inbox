@@ -70,9 +70,12 @@ impl AuthenticationTokenRepository for Repository {
         )
         .execute(&mut **executor)
         .await
-        .map_err(|err| UniversalInboxError::DatabaseError {
-            source: err,
-            message: "Failed to insert new authentication token into storage".to_string(),
+        .map_err(|err| {
+            let message = format!("Failed to insert new authentication token into storage: {err}");
+            UniversalInboxError::DatabaseError {
+                source: err,
+                message,
+            }
         })?;
 
         Ok(auth_token)
@@ -112,9 +115,12 @@ impl AuthenticationTokenRepository for Repository {
             .build_query_as::<AuthenticationTokenRow>()
             .fetch_all(&mut **executor)
             .await
-            .map_err(|err| UniversalInboxError::DatabaseError {
-                source: err,
-                message: "Failed to fetch authentication tokens from storage".to_string(),
+            .map_err(|err| {
+                let message = format!("Failed to fetch authentication tokens from storage: {err}");
+                UniversalInboxError::DatabaseError {
+                    source: err,
+                    message,
+                }
             })?;
 
         Ok(rows.into_iter().map(|r| r.into()).collect())

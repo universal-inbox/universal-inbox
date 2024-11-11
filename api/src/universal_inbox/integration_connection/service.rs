@@ -291,9 +291,8 @@ impl IntegrationConnectionService {
             }
         } else if let Some(kind) = integration_connection_config.notification_source_kind() {
             self.repository
-                .delete_notification_details(executor, kind)
+                .delete_notifications(executor, kind, for_user_id)
                 .await?;
-            self.repository.delete_notifications(executor, kind).await?;
             self.repository
                 .update_integration_connection_context(executor, integration_connection_id, None)
                 .await?;

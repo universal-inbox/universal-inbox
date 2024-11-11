@@ -3,11 +3,11 @@
 use dioxus::prelude::*;
 
 use dioxus_free_icons::{icons::bs_icons::BsChatTextFill, Icon};
-use universal_inbox::notification::{
-    integrations::github::{
+use universal_inbox::{
+    notification::NotificationWithTask,
+    third_party::integrations::github::{
         GithubDiscussion, GithubNotification, GithubPullRequest, GithubPullRequestReviewDecision,
     },
-    NotificationWithTask,
 };
 
 use crate::components::{

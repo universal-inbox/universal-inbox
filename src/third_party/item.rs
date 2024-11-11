@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use chrono::{DateTime, Timelike, Utc};
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
@@ -23,12 +24,14 @@ use crate::{
 };
 
 use super::integrations::{
-    linear::{LinearWorkflowState, LinearWorkflowStateType},
+    github::GithubNotification,
+    google_mail::GoogleMailThread,
+    linear::{LinearNotification, LinearWorkflowState, LinearWorkflowStateType},
     slack::{SlackReactionState, SlackStarState},
 };
 
 #[serde_as]
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ThirdPartyItem {
     pub id: ThirdPartyItemId,
     pub source_id: String,
@@ -39,6 +42,15 @@ pub struct ThirdPartyItem {
     pub integration_connection_id: IntegrationConnectionId,
 }
 
+impl PartialEq for ThirdPartyItem {
+    fn eq(&self, other: &Self) -> bool {
+        self.source_id == other.source_id
+            && self.data == other.data
+            && self.user_id == other.user_id
+            && self.integration_connection_id == other.integration_connection_id
+    }
+}
+
 impl HasHtmlUrl for ThirdPartyItem {
     fn get_html_url(&self) -> Url {
         match self.data {
@@ -46,6 +58,9 @@ impl HasHtmlUrl for ThirdPartyItem {
             ThirdPartyItemData::SlackStar(ref star) => star.get_html_url(),
             ThirdPartyItemData::SlackReaction(ref reaction) => reaction.get_html_url(),
             ThirdPartyItemData::LinearIssue(ref issue) => issue.get_html_url(),
+            ThirdPartyItemData::LinearNotification(ref notification) => notification.get_html_url(),
+            ThirdPartyItemData::GithubNotification(ref notification) => notification.get_html_url(),
+            ThirdPartyItemData::GoogleMailThread(ref thread) => thread.get_html_url(),
         }
     }
 }
@@ -54,12 +69,14 @@ pub type ThirdPartyItemId = TypedId<Uuid, ThirdPartyItem>;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 #[serde(tag = "type", content = "content")]
-#[allow(clippy::large_enum_variant)]
 pub enum ThirdPartyItemData {
-    TodoistItem(TodoistItem),
-    SlackStar(SlackStar),
-    SlackReaction(SlackReaction),
-    LinearIssue(LinearIssue),
+    TodoistItem(Box<TodoistItem>),
+    SlackStar(Box<SlackStar>),
+    SlackReaction(Box<SlackReaction>),
+    LinearIssue(Box<LinearIssue>),
+    LinearNotification(Box<LinearNotification>),
+    GithubNotification(Box<GithubNotification>),
+    GoogleMailThread(Box<GoogleMailThread>),
 }
 
 macro_attr! {
@@ -68,7 +85,10 @@ macro_attr! {
         TodoistItem,
         SlackStar,
         SlackReaction,
-        LinearIssue
+        LinearIssue,
+        LinearNotification,
+        GithubNotification,
+        GoogleMailThread,
     }
 }
 
@@ -83,7 +103,11 @@ impl IntegrationProviderSource for ThirdPartyItem {
             ThirdPartyItemData::SlackStar(_) | ThirdPartyItemData::SlackReaction(_) => {
                 IntegrationProviderKind::Slack
             }
-            ThirdPartyItemData::LinearIssue(_) => IntegrationProviderKind::Linear,
+            ThirdPartyItemData::LinearIssue(_) | ThirdPartyItemData::LinearNotification(_) => {
+                IntegrationProviderKind::Linear
+            }
+            ThirdPartyItemData::GithubNotification(_) => IntegrationProviderKind::Github,
+            ThirdPartyItemData::GoogleMailThread(_) => IntegrationProviderKind::GoogleMail,
         }
     }
 }
@@ -94,7 +118,14 @@ impl ThirdPartyItemSource for ThirdPartyItem {
             ThirdPartyItemData::TodoistItem(_) => ThirdPartyItemSourceKind::Todoist,
             ThirdPartyItemData::SlackStar(_) => ThirdPartyItemSourceKind::SlackStar,
             ThirdPartyItemData::SlackReaction(_) => ThirdPartyItemSourceKind::SlackReaction,
-            ThirdPartyItemData::LinearIssue(_) => ThirdPartyItemSourceKind::Linear,
+            ThirdPartyItemData::LinearIssue(_) => ThirdPartyItemSourceKind::LinearIssue,
+            ThirdPartyItemData::LinearNotification(_) => {
+                ThirdPartyItemSourceKind::LinearNotification
+            }
+            ThirdPartyItemData::GithubNotification(_) => {
+                ThirdPartyItemSourceKind::GithubNotification
+            }
+            ThirdPartyItemData::GoogleMailThread(_) => ThirdPartyItemSourceKind::GoogleMailThread,
         }
     }
 }
@@ -123,39 +154,45 @@ impl ThirdPartyItem {
             ThirdPartyItemData::SlackStar(_) => ThirdPartyItemKind::SlackStar,
             ThirdPartyItemData::SlackReaction(_) => ThirdPartyItemKind::SlackReaction,
             ThirdPartyItemData::LinearIssue(_) => ThirdPartyItemKind::LinearIssue,
+            ThirdPartyItemData::LinearNotification(_) => ThirdPartyItemKind::LinearNotification,
+            ThirdPartyItemData::GithubNotification(_) => ThirdPartyItemKind::GithubNotification,
+            ThirdPartyItemData::GoogleMailThread(_) => ThirdPartyItemKind::GoogleMailThread,
         }
     }
 
     pub fn marked_as_done(&self) -> ThirdPartyItem {
         let new_data = match self.data {
             ThirdPartyItemData::TodoistItem(ref item) => {
-                ThirdPartyItemData::TodoistItem(TodoistItem {
+                ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
                     checked: true,
                     completed_at: Some(Utc::now()),
-                    ..item.clone()
-                })
+                    ..*item.clone()
+                }))
             }
             ThirdPartyItemData::SlackStar(ref slack_star) => {
-                ThirdPartyItemData::SlackStar(SlackStar {
+                ThirdPartyItemData::SlackStar(Box::new(SlackStar {
                     state: SlackStarState::StarRemoved,
-                    ..slack_star.clone()
-                })
+                    ..*slack_star.clone()
+                }))
             }
             ThirdPartyItemData::SlackReaction(ref slack_reaction) => {
-                ThirdPartyItemData::SlackReaction(SlackReaction {
+                ThirdPartyItemData::SlackReaction(Box::new(SlackReaction {
                     state: SlackReactionState::ReactionRemoved,
-                    ..slack_reaction.clone()
-                })
+                    ..*slack_reaction.clone()
+                }))
             }
             ThirdPartyItemData::LinearIssue(ref issue) => {
-                ThirdPartyItemData::LinearIssue(LinearIssue {
+                ThirdPartyItemData::LinearIssue(Box::new(LinearIssue {
                     state: LinearWorkflowState {
                         r#type: LinearWorkflowStateType::Completed,
                         ..issue.state.clone()
                     },
                     completed_at: Some(Utc::now()),
-                    ..issue.clone()
-                })
+                    ..*issue.clone()
+                }))
+            }
+            _ => {
+                return self.clone();
             }
         };
 
@@ -180,7 +217,8 @@ macro_attr! {
     #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!)]
     pub enum ThirdPartyItemSyncSourceKind {
         Todoist,
-        Linear
+        Linear,
+        Github,
     }
 }
 
@@ -190,20 +228,26 @@ macro_attr! {
         Todoist,
         SlackStar,
         SlackReaction,
-        Linear
+        LinearIssue,
+        LinearNotification,
+        GithubNotification,
+        GoogleMailThread,
     }
 }
 
 impl TryFrom<IntegrationProviderKind> for ThirdPartyItemSyncSourceKind {
-    type Error = ();
+    type Error = anyhow::Error;
 
     fn try_from(provider_kind: IntegrationProviderKind) -> Result<Self, Self::Error> {
         match provider_kind {
             IntegrationProviderKind::Todoist => Ok(Self::Todoist),
-            _ => Err(()),
+            IntegrationProviderKind::Linear => Ok(Self::Linear),
+            IntegrationProviderKind::Github => Ok(Self::Github),
+            _ => Err(anyhow!("IntegrationProviderKind {provider_kind} is not a valid ThirdPartyItemSyncSourceKind")),
         }
     }
 }
+
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct ThirdPartyItemCreationResult {
     pub third_party_item: ThirdPartyItem,

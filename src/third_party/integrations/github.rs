@@ -1,7 +1,7 @@
 use std::fmt;
 
 use anyhow::{anyhow, Context, Result};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Timelike, Utc};
 use git_url_parse::GitUrl;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
@@ -9,10 +9,135 @@ use url::{Host, Url};
 use uuid::Uuid;
 
 use crate::{
-    notification::{Notification, NotificationMetadata, NotificationStatus},
+    integration_connection::IntegrationConnectionId,
+    third_party::item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemFromSource},
     user::UserId,
+    HasHtmlUrl,
 };
 
+#[serde_as]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct GithubNotification {
+    pub id: String,
+    pub repository: GithubRepository,
+    pub subject: GithubNotificationSubject,
+    pub reason: String,
+    pub unread: bool,
+    pub updated_at: DateTime<Utc>,
+    pub last_read_at: Option<DateTime<Utc>>,
+    #[serde_as(as = "DisplayFromStr")]
+    pub url: Url,
+    #[serde_as(as = "DisplayFromStr")]
+    pub subscription_url: Url,
+    pub item: Option<GithubNotificationItem>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
+#[serde(tag = "type", content = "content")]
+pub enum GithubNotificationItem {
+    GithubPullRequest(GithubPullRequest),
+    GithubDiscussion(GithubDiscussion),
+}
+
+impl GithubNotification {
+    pub fn extract_id(&self) -> Option<String> {
+        let url = self.subject.url.clone()?;
+        let mut url_parts = url.path().split('/').collect::<Vec<_>>();
+        let id = url_parts.pop()?;
+        Some(id.to_string())
+    }
+
+    fn get_html_url_from_api_url(api_url: &Option<Url>) -> Option<Url> {
+        api_url.as_ref().and_then(|url| {
+            if url.host() == Some(Host::Domain("api.github.com"))
+                && url.path().starts_with("/repos")
+            {
+                let mut result = url.clone();
+                result.set_host(Some("github.com")).unwrap(); // safe to unwrap
+                result.set_path(
+                    url.path()
+                        .trim_start_matches("/repos")
+                        // Pull requests have a different URL
+                        .replace("/pulls/", "/pull/")
+                        .as_str(),
+                );
+                return Some(result);
+            }
+            None
+        })
+    }
+
+    pub fn get_html_url_from_metadata(&self) -> Url {
+        match self.subject.r#type.as_str() {
+            // There is no enough information in the notification to link to the source
+            "CheckSuite" => {
+                let mut result = self.repository.html_url.clone();
+                result.set_path(&format!("{}/actions", self.repository.html_url.path()));
+                result
+            }
+            "Discussion" => {
+                let mut result = self.repository.html_url.clone();
+                result.set_path(&format!("{}/discussions", self.repository.html_url.path()));
+                result.set_query(
+                    serde_urlencoded::to_string([("discussions_q", self.subject.title.clone())])
+                        .ok()
+                        .as_deref(),
+                );
+                result
+            }
+            _ => GithubNotification::get_html_url_from_api_url(&self.subject.url)
+                .unwrap_or_else(|| self.repository.html_url.clone()),
+        }
+    }
+}
+
+impl ThirdPartyItemFromSource for GithubNotification {
+    fn into_third_party_item(
+        self,
+        user_id: UserId,
+        integration_connection_id: IntegrationConnectionId,
+    ) -> ThirdPartyItem {
+        ThirdPartyItem {
+            id: Uuid::new_v4().into(),
+            source_id: self.id.clone(),
+            data: ThirdPartyItemData::GithubNotification(Box::new(self.clone())),
+            created_at: Utc::now().with_nanosecond(0).unwrap(),
+            updated_at: Utc::now().with_nanosecond(0).unwrap(),
+            user_id,
+            integration_connection_id,
+        }
+    }
+}
+
+impl HasHtmlUrl for GithubNotification {
+    fn get_html_url(&self) -> Url {
+        if let Some(GithubNotificationItem::GithubPullRequest(github_pull_request)) = &self.item {
+            return github_pull_request.url.clone();
+        }
+        if let Some(GithubNotificationItem::GithubDiscussion(github_discussion)) = &self.item {
+            return github_discussion.url.clone();
+        }
+        if let Some(html_url) = GithubNotification::get_html_url_from_api_url(&self.subject.url) {
+            return html_url;
+        }
+
+        self.get_html_url_from_metadata()
+    }
+}
+
+impl TryFrom<ThirdPartyItem> for GithubNotification {
+    type Error = anyhow::Error;
+
+    fn try_from(item: ThirdPartyItem) -> Result<Self, Self::Error> {
+        match item.data {
+            ThirdPartyItemData::GithubNotification(notification) => Ok(*notification),
+            _ => Err(anyhow!(
+                "Unable to convert ThirdPartyItem {} to GithubNotification",
+                item.id
+            )),
+        }
+    }
+}
 #[serde_as]
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct GithubNotificationSubject {
@@ -382,94 +507,6 @@ pub struct GithubRepositoryTemplate {
     pub watchers: u32,
     pub master_branch: String,
     pub starred_at: DateTime<Utc>,
-}
-
-#[serde_as]
-#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
-pub struct GithubNotification {
-    pub id: String,
-    pub repository: GithubRepository,
-    pub subject: GithubNotificationSubject,
-    pub reason: String,
-    pub unread: bool,
-    pub updated_at: DateTime<Utc>,
-    pub last_read_at: Option<DateTime<Utc>>,
-    #[serde_as(as = "DisplayFromStr")]
-    pub url: Url,
-    #[serde_as(as = "DisplayFromStr")]
-    pub subscription_url: Url,
-}
-
-impl GithubNotification {
-    pub fn extract_id(&self) -> Option<String> {
-        let url = self.subject.url.clone()?;
-        let mut url_parts = url.path().split('/').collect::<Vec<_>>();
-        let id = url_parts.pop()?;
-        Some(id.to_string())
-    }
-
-    fn get_html_url_from_api_url(api_url: &Option<Url>) -> Option<Url> {
-        api_url.as_ref().and_then(|url| {
-            if url.host() == Some(Host::Domain("api.github.com"))
-                && url.path().starts_with("/repos")
-            {
-                let mut result = url.clone();
-                result.set_host(Some("github.com")).unwrap(); // safe to unwrap
-                result.set_path(
-                    url.path()
-                        .trim_start_matches("/repos")
-                        // Pull requests have a different URL
-                        .replace("/pulls/", "/pull/")
-                        .as_str(),
-                );
-                return Some(result);
-            }
-            None
-        })
-    }
-
-    pub fn get_html_url_from_metadata(&self) -> Url {
-        match self.subject.r#type.as_str() {
-            // There is no enough information in the notification to link to the source
-            "CheckSuite" => {
-                let mut result = self.repository.html_url.clone();
-                result.set_path(&format!("{}/actions", self.repository.html_url.path()));
-                result
-            }
-            "Discussion" => {
-                let mut result = self.repository.html_url.clone();
-                result.set_path(&format!("{}/discussions", self.repository.html_url.path()));
-                result.set_query(
-                    serde_urlencoded::to_string([("discussions_q", self.subject.title.clone())])
-                        .ok()
-                        .as_deref(),
-                );
-                result
-            }
-            _ => GithubNotification::get_html_url_from_api_url(&self.subject.url)
-                .unwrap_or_else(|| self.repository.html_url.clone()),
-        }
-    }
-
-    pub fn into_notification(self, user_id: UserId) -> Notification {
-        Notification {
-            id: Uuid::new_v4().into(),
-            title: self.subject.title.clone(),
-            source_id: self.id.clone(),
-            status: if self.unread {
-                NotificationStatus::Unread
-            } else {
-                NotificationStatus::Read
-            },
-            metadata: NotificationMetadata::Github(Box::new(self.clone())),
-            updated_at: self.updated_at,
-            last_read_at: self.last_read_at,
-            snoozed_until: None,
-            user_id,
-            details: None,
-            task_id: None,
-        }
-    }
 }
 
 #[serde_as]

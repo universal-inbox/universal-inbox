@@ -81,18 +81,21 @@ impl ThirdPartyItemRepository for Repository {
         )
         .fetch_optional(&mut **executor)
         .await
-        .map_err(|err| UniversalInboxError::DatabaseError {
-            source: err,
-            message: format!(
-                "Failed to search for third_party_item with source ID {} from storage",
+        .map_err(|err| {
+            let message = format!(
+                "Failed to search for third_party_item with source ID {} from storage: {err}",
                 third_party_item.source_id
-            ),
+            );
+            UniversalInboxError::DatabaseError {
+                source: err,
+                message,
+            }
         })?
         .map(TryInto::try_into)
         .transpose()?;
 
         if let Some(existing_third_party_item) = existing_third_party_item {
-            if existing_third_party_item.updated_at == third_party_item.updated_at {
+            if existing_third_party_item == *third_party_item {
                 debug!(
                     "Existing third_party_item {} {} (from {}) for {} does not need updating",
                     kind,
@@ -126,12 +129,15 @@ impl ThirdPartyItemRepository for Repository {
                 .build()
                 .execute(&mut **executor)
                 .await
-                .map_err(|err| UniversalInboxError::DatabaseError {
-                    source: err,
-                    message: format!(
-                        "Failed to update third_party_item {} from storage",
+                .map_err(|err| {
+                    let message = format!(
+                        "Failed to update third_party_item {} from storage: {err}",
                         existing_third_party_item.id
-                    ),
+                    );
+                    UniversalInboxError::DatabaseError {
+                        source: err,
+                        message,
+                    }
                 })?;
 
             let third_party_item_to_return = Box::new(ThirdPartyItem {
@@ -180,7 +186,7 @@ impl ThirdPartyItemRepository for Repository {
             .await
             .map_err(|err| {
                 UniversalInboxError::Unexpected(anyhow!(
-                    "Failed to update third_party_item with source ID {} from storage: {err:?}",
+                    "Failed to update third_party_item with source ID {} from storage: {err}",
                     third_party_item.source_id
                 ))
             })?
@@ -229,9 +235,12 @@ impl ThirdPartyItemRepository for Repository {
         )
         .fetch_all(&mut **executor)
         .await
-        .map_err(|err| UniversalInboxError::DatabaseError {
-            source: err,
-            message: "Failed to update stale notification status from storage".to_string(),
+        .map_err(|err| {
+            let message = format!("Failed to get stale third party items from storage: {err}");
+            UniversalInboxError::DatabaseError {
+                source: err,
+                message,
+            }
         })?;
 
         records

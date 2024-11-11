@@ -48,6 +48,7 @@ impl TaskEventService<SlackPushEventCallback> for TaskService {
             .save_third_party_item(executor, third_party_item.clone())
             .await?;
 
+        debug!("[TASK] Upserted third party item: {:?}", upsert_item);
         let third_party_item_id = upsert_item.value_ref().id;
         let Some(third_party_item) = upsert_item.modified_value() else {
             debug!("Third party item {third_party_item_id} is already up to date");

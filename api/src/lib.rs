@@ -387,7 +387,7 @@ pub async fn build_services(
         GoogleMailService::new(
             google_mail_base_url,
             google_mail_settings.page_size.unwrap_or(100),
-            integration_connection_service.clone(),
+            Arc::downgrade(&integration_connection_service),
             Weak::new(),
         )
         .expect("Failed to create new GoogleMailService"),
@@ -396,6 +396,16 @@ pub async fn build_services(
         slack_base_url,
         integration_connection_service.clone(),
     ));
+
+    let third_party_item_service = Arc::new(RwLock::new(ThirdPartyItemService::new(
+        repository.clone(),
+        Weak::new(),
+        Weak::new(),
+        integration_connection_service.clone(),
+        todoist_service.clone(),
+        slack_service.clone(),
+        linear_service.clone(),
+    )));
 
     // tag: New notification integration
     let notification_service = Arc::new(RwLock::new(NotificationService::new(
@@ -406,6 +416,7 @@ pub async fn build_services(
         slack_service.clone(),
         Weak::new(),
         integration_connection_service.clone(),
+        Arc::downgrade(&third_party_item_service),
         user_service.clone(),
         settings
             .application
@@ -416,15 +427,6 @@ pub async fn build_services(
         .write()
         .await
         .set_notification_service(Arc::downgrade(&notification_service));
-
-    let third_party_item_service = Arc::new(RwLock::new(ThirdPartyItemService::new(
-        repository.clone(),
-        Weak::new(),
-        integration_connection_service.clone(),
-        todoist_service.clone(),
-        slack_service.clone(),
-        linear_service.clone(),
-    )));
 
     let task_service = Arc::new(RwLock::new(TaskService::new(
         repository,
@@ -447,6 +449,11 @@ pub async fn build_services(
         .write()
         .await
         .set_task_service(Arc::downgrade(&task_service));
+
+    third_party_item_service
+        .write()
+        .await
+        .set_notification_service(Arc::downgrade(&notification_service));
 
     (
         notification_service,

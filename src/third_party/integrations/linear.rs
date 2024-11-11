@@ -57,6 +57,159 @@ impl HasHtmlUrl for LinearIssue {
     }
 }
 
+#[serde_as]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+#[serde(tag = "type", content = "content")]
+#[allow(clippy::large_enum_variant)]
+pub enum LinearNotification {
+    IssueNotification {
+        id: Uuid,
+        r#type: String, // Could be an enum, but no exhaustive list of values (LinearWorkflowStateType?)
+        read_at: Option<DateTime<Utc>>,
+        updated_at: DateTime<Utc>,
+        snoozed_until_at: Option<DateTime<Utc>>,
+        organization: LinearOrganization,
+        issue: LinearIssue,
+        comment: Option<LinearComment>,
+    },
+    ProjectNotification {
+        id: Uuid,
+        r#type: String, // Could be an enum, but no exhaustive list of values
+        read_at: Option<DateTime<Utc>>,
+        updated_at: DateTime<Utc>,
+        snoozed_until_at: Option<DateTime<Utc>>,
+        organization: LinearOrganization,
+        project: LinearProject,
+        project_update: Option<LinearProjectUpdate>,
+    },
+}
+
+impl LinearNotification {
+    pub fn get_type(&self) -> String {
+        match self {
+            LinearNotification::IssueNotification { r#type, .. }
+            | LinearNotification::ProjectNotification { r#type, .. } => r#type.clone(),
+        }
+    }
+
+    pub fn get_organization(&self) -> LinearOrganization {
+        match self {
+            LinearNotification::IssueNotification { organization, .. }
+            | LinearNotification::ProjectNotification { organization, .. } => organization.clone(),
+        }
+    }
+
+    pub fn get_team(&self) -> Option<LinearTeam> {
+        match self {
+            LinearNotification::IssueNotification {
+                issue: LinearIssue { team, .. },
+                ..
+            } => Some(team.clone()),
+            LinearNotification::ProjectNotification { .. } => None,
+        }
+    }
+}
+
+impl HasHtmlUrl for LinearNotification {
+    fn get_html_url(&self) -> Url {
+        match self {
+            LinearNotification::IssueNotification { issue, .. } => issue.get_html_url(),
+            LinearNotification::ProjectNotification { project, .. } => project.get_html_url(),
+        }
+    }
+}
+
+impl TryFrom<ThirdPartyItem> for LinearNotification {
+    type Error = anyhow::Error;
+
+    fn try_from(item: ThirdPartyItem) -> Result<Self, Self::Error> {
+        match item.data {
+            ThirdPartyItemData::LinearNotification(linear_notification) => Ok(*linear_notification),
+            _ => Err(anyhow!(
+                "Unable to convert ThirdPartyItem {} into LinearNotification",
+                item.id
+            )),
+        }
+    }
+}
+
+impl ThirdPartyItemFromSource for LinearNotification {
+    fn into_third_party_item(
+        self,
+        user_id: UserId,
+        integration_connection_id: IntegrationConnectionId,
+    ) -> ThirdPartyItem {
+        match &self {
+            LinearNotification::IssueNotification { id, .. }
+            | LinearNotification::ProjectNotification { id, .. } => ThirdPartyItem {
+                id: Uuid::new_v4().into(),
+                source_id: id.to_string(),
+                data: ThirdPartyItemData::LinearNotification(Box::new(self.clone())),
+                created_at: Utc::now().with_nanosecond(0).unwrap(),
+                updated_at: Utc::now().with_nanosecond(0).unwrap(),
+                user_id,
+                integration_connection_id,
+            },
+        }
+    }
+}
+
+#[serde_as]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct LinearProjectUpdate {
+    pub updated_at: DateTime<Utc>,
+    pub body: String,
+    pub health: LinearProjectUpdateHealthType,
+    pub user: LinearUser,
+    pub url: Url,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
+pub enum LinearProjectUpdateHealthType {
+    OnTrack,
+    AtRisk,
+    OffTrack,
+}
+
+impl TryFrom<String> for LinearProjectUpdateHealthType {
+    type Error = anyhow::Error;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        match value.as_str() {
+            "onTrack" => Ok(LinearProjectUpdateHealthType::OnTrack),
+            "atRisk" => Ok(LinearProjectUpdateHealthType::AtRisk),
+            "offTrack" => Ok(LinearProjectUpdateHealthType::OffTrack),
+            _ => Err(anyhow!(
+                "Unable to find LinearProjectUpdateHealthType value for `{}`",
+                value
+            )),
+        }
+    }
+}
+
+impl fmt::Display for LinearProjectUpdateHealthType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                LinearProjectUpdateHealthType::OnTrack => "onTrack",
+                LinearProjectUpdateHealthType::AtRisk => "atRisk",
+                LinearProjectUpdateHealthType::OffTrack => "offTrack",
+            }
+        )
+    }
+}
+
+#[serde_as]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct LinearComment {
+    pub updated_at: DateTime<Utc>,
+    pub body: String,
+    pub user: Option<LinearUser>,
+    pub url: Url,
+    pub children: Vec<LinearComment>,
+}
 #[derive(Serialize_repr, Deserialize_repr, PartialEq, Debug, Clone, Eq, Copy)]
 #[repr(u8)]
 pub enum LinearIssuePriority {
@@ -290,12 +443,15 @@ impl LinearTeam {
 }
 
 impl TryFrom<ThirdPartyItem> for LinearIssue {
-    type Error = ();
+    type Error = anyhow::Error;
 
     fn try_from(item: ThirdPartyItem) -> Result<Self, Self::Error> {
         match item.data {
-            ThirdPartyItemData::LinearIssue(todoist_item) => Ok(todoist_item),
-            _ => Err(()),
+            ThirdPartyItemData::LinearIssue(linear_issue) => Ok(*linear_issue),
+            _ => Err(anyhow!(
+                "Unable to convert ThirdPartyItem {} into LinearIssue",
+                item.id
+            )),
         }
     }
 }
@@ -309,7 +465,7 @@ impl ThirdPartyItemFromSource for LinearIssue {
         ThirdPartyItem {
             id: Uuid::new_v4().into(),
             source_id: self.id.to_string(),
-            data: ThirdPartyItemData::LinearIssue(self.clone()),
+            data: ThirdPartyItemData::LinearIssue(Box::new(self.clone())),
             created_at: Utc::now().with_nanosecond(0).unwrap(),
             updated_at: Utc::now().with_nanosecond(0).unwrap(),
             user_id,

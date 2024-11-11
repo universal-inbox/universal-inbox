@@ -8,7 +8,7 @@ use dioxus_free_icons::{
 };
 
 use universal_inbox::{
-    notification::{integrations::github::GithubNotification, NotificationWithTask},
+    notification::NotificationWithTask, third_party::integrations::github::GithubNotification,
     HasHtmlUrl,
 };
 

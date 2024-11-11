@@ -3,8 +3,8 @@
 use dioxus::prelude::*;
 
 use universal_inbox::{
-    notification::{integrations::linear::LinearNotification, NotificationWithTask},
-    third_party::integrations::linear::{LinearIssue, LinearProject},
+    notification::NotificationWithTask,
+    third_party::integrations::linear::{LinearIssue, LinearNotification, LinearProject},
 };
 
 use crate::components::{

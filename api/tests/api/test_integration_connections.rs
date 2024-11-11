@@ -12,10 +12,8 @@ use universal_inbox::{
         provider::{IntegrationConnectionContext, IntegrationProvider, IntegrationProviderKind},
         IntegrationConnection, IntegrationConnectionCreation, IntegrationConnectionStatus,
     },
-    notification::{
-        integrations::google_mail::{EmailAddress, GoogleMailLabel, GoogleMailThread},
-        Notification,
-    },
+    notification::Notification,
+    third_party::integrations::google_mail::{EmailAddress, GoogleMailLabel, GoogleMailThread},
 };
 
 use universal_inbox_api::{
@@ -489,6 +487,8 @@ mod disconnect_integration_connections {
 }
 
 mod update_integration_connection_config {
+    use crate::helpers::notification::google_mail::create_notification_from_google_mail_thread;
+
     use super::*;
 
     #[rstest]
@@ -505,20 +505,6 @@ mod update_integration_connection_config {
                 name: "Label 1".to_string(),
             },
         };
-        let synced_label_id = google_mail_config.synced_label.id.clone();
-
-        let existing_notification = Box::new(google_mail_thread_get_123.into_notification(
-            app.user.id,
-            None,
-            &synced_label_id,
-        ));
-        let _created_notification: Box<Notification> = create_resource(
-            &app.client,
-            &app.app.api_address,
-            "notifications",
-            existing_notification,
-        )
-        .await;
 
         let integration_connection1 = create_integration_connection(
             &app.app,
@@ -545,6 +531,14 @@ mod update_integration_connection_config {
             None,
             None,
             None,
+        )
+        .await;
+
+        create_notification_from_google_mail_thread(
+            &app.app,
+            &google_mail_thread_get_123,
+            app.user.id,
+            integration_connection1.id,
         )
         .await;
 

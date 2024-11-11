@@ -2,7 +2,7 @@ use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use sqlx::{postgres::PgRow, types::Json, FromRow, Postgres, QueryBuilder, Row, Transaction};
-use tracing::{debug, error};
+use tracing::debug;
 use uuid::Uuid;
 
 use universal_inbox::{
@@ -101,20 +101,20 @@ impl TaskRepository for Repository {
                   task.updated_at as task__updated_at,
                   task.kind::TEXT as task__kind,
                   task.user_id as task__user_id,
-                  source_item.id as source_item__id,
-                  source_item.source_id as source_item__source_id,
-                  source_item.data as source_item__data,
-                  source_item.created_at as source_item__created_at,
-                  source_item.updated_at as source_item__updated_at,
-                  source_item.user_id as source_item__user_id,
-                  source_item.integration_connection_id as source_item__integration_connection_id,
-                  sink_item.id as sink_item__id,
-                  sink_item.source_id as sink_item__source_id,
-                  sink_item.data as sink_item__data,
-                  sink_item.created_at as sink_item__created_at,
-                  sink_item.updated_at as sink_item__updated_at,
-                  sink_item.user_id as sink_item__user_id,
-                  sink_item.integration_connection_id as sink_item__integration_connection_id
+                  source_item.id as task__source_item__id,
+                  source_item.source_id as task__source_item__source_id,
+                  source_item.data as task__source_item__data,
+                  source_item.created_at as task__source_item__created_at,
+                  source_item.updated_at as task__source_item__updated_at,
+                  source_item.user_id as task__source_item__user_id,
+                  source_item.integration_connection_id as task__source_item__integration_connection_id,
+                  sink_item.id as task__sink_item__id,
+                  sink_item.source_id as task__sink_item__source_id,
+                  sink_item.data as task__sink_item__data,
+                  sink_item.created_at as task__sink_item__created_at,
+                  sink_item.updated_at as task__sink_item__updated_at,
+                  sink_item.user_id as task__sink_item__user_id,
+                  sink_item.integration_connection_id as task__sink_item__integration_connection_id
                 FROM task
                 INNER JOIN third_party_item AS source_item
                   ON task.source_item_id = source_item.id
@@ -127,9 +127,9 @@ impl TaskRepository for Repository {
         .build_query_as::<TaskRow>()
         .fetch_optional(&mut **executor)
         .await
-        .map_err(|err| UniversalInboxError::DatabaseError {
-            source: err,
-            message: format!("Failed to fetch task {id} from storage"),
+        .map_err(|err| {
+            let message = format!("Failed to fetch task {id} from storage: {err}");
+            UniversalInboxError::DatabaseError { source: err, message }
         })?;
 
         row.map(|task_row| task_row.try_into()).transpose()
@@ -145,9 +145,12 @@ impl TaskRepository for Repository {
             sqlx::query_scalar!(r#"SELECT count(*) FROM task WHERE id = $1"#, id.0)
                 .fetch_one(&mut **executor)
                 .await
-                .map_err(|err| UniversalInboxError::DatabaseError {
-                    source: err,
-                    message: format!("Failed to check if task {id} exists"),
+                .map_err(|err| {
+                    let message = format!("Failed to check if task {id} exists: {err}");
+                    UniversalInboxError::DatabaseError {
+                        source: err,
+                        message,
+                    }
                 })?;
 
         if let Some(1) = count {
@@ -181,20 +184,20 @@ impl TaskRepository for Repository {
                   task.updated_at as task__updated_at,
                   task.kind::TEXT as task__kind,
                   task.user_id as task__user_id,
-                  source_item.id as source_item__id,
-                  source_item.source_id as source_item__source_id,
-                  source_item.data as source_item__data,
-                  source_item.created_at as source_item__created_at,
-                  source_item.updated_at as source_item__updated_at,
-                  source_item.user_id as source_item__user_id,
-                  source_item.integration_connection_id as source_item__integration_connection_id,
-                  sink_item.id as sink_item__id,
-                  sink_item.source_id as sink_item__source_id,
-                  sink_item.data as sink_item__data,
-                  sink_item.created_at as sink_item__created_at,
-                  sink_item.updated_at as sink_item__updated_at,
-                  sink_item.user_id as sink_item__user_id,
-                  sink_item.integration_connection_id as sink_item__integration_connection_id
+                  source_item.id as task__source_item__id,
+                  source_item.source_id as task__source_item__source_id,
+                  source_item.data as task__source_item__data,
+                  source_item.created_at as task__source_item__created_at,
+                  source_item.updated_at as task__source_item__updated_at,
+                  source_item.user_id as task__source_item__user_id,
+                  source_item.integration_connection_id as task__source_item__integration_connection_id,
+                  sink_item.id as task__sink_item__id,
+                  sink_item.source_id as task__sink_item__source_id,
+                  sink_item.data as task__sink_item__data,
+                  sink_item.created_at as task__sink_item__created_at,
+                  sink_item.updated_at as task__sink_item__updated_at,
+                  sink_item.user_id as task__sink_item__user_id,
+                  sink_item.integration_connection_id as task__sink_item__integration_connection_id
                 FROM task
                 INNER JOIN third_party_item AS source_item
                   ON task.source_item_id = source_item.id
@@ -208,9 +211,9 @@ impl TaskRepository for Repository {
         .build_query_as::<TaskRow>()
         .fetch_all(&mut **executor)
         .await
-        .map_err(|err| UniversalInboxError::DatabaseError {
-            source: err,
-            message: format!("Failed to fetch tasks {uuids:?} from storage"),
+        .map_err(|err| {
+            let message = format!("Failed to fetch tasks {uuids:?} from storage: {err}");
+            UniversalInboxError::DatabaseError { source: err, message }
         })?;
 
         rows.iter()
@@ -254,9 +257,12 @@ impl TaskRepository for Repository {
             .build_query_scalar::<i64>()
             .fetch_one(&mut **executor)
             .await
-            .map_err(|err| UniversalInboxError::DatabaseError {
-                source: err,
-                message: "Failed to fetch tasks count from storage".to_string(),
+            .map_err(|err| {
+                let message = format!("Failed to fetch tasks count from storage: {err}");
+                UniversalInboxError::DatabaseError {
+                    source: err,
+                    message,
+                }
             })?;
 
         let mut query_builder = QueryBuilder::new(
@@ -277,20 +283,20 @@ impl TaskRepository for Repository {
                   task.updated_at as task__updated_at,
                   task.kind::TEXT as task__kind,
                   task.user_id as task__user_id,
-                  source_item.id as source_item__id,
-                  source_item.source_id as source_item__source_id,
-                  source_item.data as source_item__data,
-                  source_item.created_at as source_item__created_at,
-                  source_item.updated_at as source_item__updated_at,
-                  source_item.user_id as source_item__user_id,
-                  source_item.integration_connection_id as source_item__integration_connection_id,
-                  sink_item.id as sink_item__id,
-                  sink_item.source_id as sink_item__source_id,
-                  sink_item.data as sink_item__data,
-                  sink_item.created_at as sink_item__created_at,
-                  sink_item.updated_at as sink_item__updated_at,
-                  sink_item.user_id as sink_item__user_id,
-                  sink_item.integration_connection_id as sink_item__integration_connection_id
+                  source_item.id as task__source_item__id,
+                  source_item.source_id as task__source_item__source_id,
+                  source_item.data as task__source_item__data,
+                  source_item.created_at as task__source_item__created_at,
+                  source_item.updated_at as task__source_item__updated_at,
+                  source_item.user_id as task__source_item__user_id,
+                  source_item.integration_connection_id as task__source_item__integration_connection_id,
+                  sink_item.id as task__sink_item__id,
+                  sink_item.source_id as task__sink_item__source_id,
+                  sink_item.data as task__sink_item__data,
+                  sink_item.created_at as task__sink_item__created_at,
+                  sink_item.updated_at as task__sink_item__updated_at,
+                  sink_item.user_id as task__sink_item__user_id,
+                  sink_item.integration_connection_id as task__sink_item__integration_connection_id
                 FROM task
                 INNER JOIN third_party_item AS source_item
                   ON task.source_item_id = source_item.id
@@ -308,9 +314,12 @@ impl TaskRepository for Repository {
             .build_query_as::<TaskRow>()
             .fetch_all(&mut **executor)
             .await
-            .map_err(|err| UniversalInboxError::DatabaseError {
-                source: err,
-                message: "Failed to fetch tasks from storage".to_string(),
+            .map_err(|err| {
+                let message = format!("Failed to fetch tasks from storage: {err}");
+                UniversalInboxError::DatabaseError {
+                    source: err,
+                    message,
+                }
             })?;
 
         Ok(Page {
@@ -367,9 +376,12 @@ impl TaskRepository for Repository {
         )
         .fetch_all(&mut **executor)
         .await
-        .map_err(|err| UniversalInboxError::DatabaseError {
-            source: err,
-            message: "Failed to search tasks from storage".to_string(),
+        .map_err(|err| {
+            let message = format!("Failed to search tasks from storage: {err}");
+            UniversalInboxError::DatabaseError {
+                source: err,
+                message,
+            }
         })?;
 
         rows.iter()
@@ -497,7 +509,7 @@ impl TaskRepository for Repository {
         let mut separated = query_builder.separated(" AND ");
         separated.push(" task.id = t.id ");
         separated
-            .push(" source_item.source_id = ANY(")
+            .push(" NOT source_item.source_id = ANY(")
             .push_bind(&active_source_task_ids[..])
             .push(")");
         separated
@@ -524,20 +536,20 @@ impl TaskRepository for Repository {
                   task.updated_at as task__updated_at,
                   task.kind::TEXT as task__kind,
                   task.user_id as task__user_id,
-                  source_item.id as source_item__id,
-                  source_item.source_id as source_item__source_id,
-                  source_item.data as source_item__data,
-                  source_item.created_at as source_item__created_at,
-                  source_item.updated_at as source_item__updated_at,
-                  source_item.user_id as source_item__user_id,
-                  source_item.integration_connection_id as source_item__integration_connection_id,
-                  sink_item.id as sink_item__id,
-                  sink_item.source_id as sink_item__source_id,
-                  sink_item.data as sink_item__data,
-                  sink_item.created_at as sink_item__created_at,
-                  sink_item.updated_at as sink_item__updated_at,
-                  sink_item.user_id as sink_item__user_id,
-                  sink_item.integration_connection_id as sink_item__integration_connection_id
+                  source_item.id as task__source_item__id,
+                  source_item.source_id as task__source_item__source_id,
+                  source_item.data as task__source_item__data,
+                  source_item.created_at as task__source_item__created_at,
+                  source_item.updated_at as task__source_item__updated_at,
+                  source_item.user_id as task__source_item__user_id,
+                  source_item.integration_connection_id as task__source_item__integration_connection_id,
+                  sink_item.id as task__sink_item__id,
+                  sink_item.source_id as task__sink_item__source_id,
+                  sink_item.data as task__sink_item__data,
+                  sink_item.created_at as task__sink_item__created_at,
+                  sink_item.updated_at as task__sink_item__updated_at,
+                  sink_item.user_id as task__sink_item__user_id,
+                  sink_item.integration_connection_id as task__sink_item__integration_connection_id
               "#,
         );
 
@@ -545,9 +557,12 @@ impl TaskRepository for Repository {
             .build_query_as::<TaskRow>()
             .fetch_all(&mut **executor)
             .await
-            .map_err(|err| UniversalInboxError::DatabaseError {
-                source: err,
-                message: "Failed to update stale task status from storage".to_string(),
+            .map_err(|err| {
+                let message = format!("Failed to update stale tasks status from storage: {err}");
+                UniversalInboxError::DatabaseError {
+                    source: err,
+                    message,
+                }
             })?;
 
         rows.iter()
@@ -590,20 +605,20 @@ impl TaskRepository for Repository {
                 task.updated_at as task__updated_at,
                 task.kind::TEXT as task__kind,
                 task.user_id as task__user_id,
-                source_item.id as source_item__id,
-                source_item.source_id as source_item__source_id,
-                source_item.data as source_item__data,
-                source_item.created_at as source_item__created_at,
-                source_item.updated_at as source_item__updated_at,
-                source_item.user_id as source_item__user_id,
-                source_item.integration_connection_id as source_item__integration_connection_id,
-                sink_item.id as sink_item__id,
-                sink_item.source_id as sink_item__source_id,
-                sink_item.data as sink_item__data,
-                sink_item.created_at as sink_item__created_at,
-                sink_item.updated_at as sink_item__updated_at,
-                sink_item.user_id as sink_item__user_id,
-                sink_item.integration_connection_id as sink_item__integration_connection_id
+                source_item.id as task__source_item__id,
+                source_item.source_id as task__source_item__source_id,
+                source_item.data as task__source_item__data,
+                source_item.created_at as task__source_item__created_at,
+                source_item.updated_at as task__source_item__updated_at,
+                source_item.user_id as task__source_item__user_id,
+                source_item.integration_connection_id as task__source_item__integration_connection_id,
+                sink_item.id as task__sink_item__id,
+                sink_item.source_id as task__sink_item__source_id,
+                sink_item.data as task__sink_item__data,
+                sink_item.created_at as task__sink_item__created_at,
+                sink_item.updated_at as task__sink_item__updated_at,
+                sink_item.user_id as task__sink_item__user_id,
+                sink_item.integration_connection_id as task__sink_item__integration_connection_id
               FROM task
               INNER JOIN third_party_item AS source_item
                 ON task.source_item_id = source_item.id
@@ -634,12 +649,15 @@ impl TaskRepository for Repository {
             .build_query_as::<TaskRow>()
             .fetch_optional(&mut **executor)
             .await
-            .map_err(|err| UniversalInboxError::DatabaseError {
-                source: err,
-                message: format!(
-                    "Failed to search for task with source ID {} from storage",
+            .map_err(|err| {
+                let message = format!(
+                    "Failed to search for task with source ID {} from storage: {err}",
                     task_request.source_item.source_id
-                ),
+                );
+                UniversalInboxError::DatabaseError {
+                    source: err,
+                    message,
+                }
             })?
             .map(TryInto::try_into)
             .transpose()?;
@@ -650,6 +668,18 @@ impl TaskRepository for Repository {
         let parent_id = task_request.parent_id.map(|id| id.0);
 
         if let Some(existing_task) = existing_task {
+            if existing_task == (*task_request.clone()).into() {
+                debug!(
+                    "Existing {} task {} (from {}) for {} does not need updating: {:?}",
+                    existing_task.kind,
+                    existing_task.id,
+                    existing_task.source_item.source_id,
+                    existing_task.user_id,
+                    existing_task.updated_at
+                );
+                return Ok(UpsertStatus::Untouched(Box::new(existing_task)));
+            }
+
             if existing_task.kind != task_request.kind {
                 // Built task may be a sink item after all
                 debug!(
@@ -722,13 +752,13 @@ impl TaskRepository for Repository {
                 .execute(&mut **executor)
                 .await
                 .map_err(|err| {
-                    error!(
-                        "Failed to update task {} from storage: {:?}",
-                        existing_task.id, err
+                    let message = format!(
+                        "Failed to update task {} from storage: {err}",
+                        existing_task.id
                     );
                     UniversalInboxError::DatabaseError {
                         source: err,
-                        message: format!("Failed to update task {} from storage", existing_task.id),
+                        message,
                     }
                 })?;
 
@@ -810,12 +840,12 @@ impl TaskRepository for Repository {
                 )
                 .fetch_one(&mut **executor)
                 .await
-                    .map_err(|err| UniversalInboxError::DatabaseError {
-                        source: err,
-                        message: format!(
-                        "Failed to update task with source ID {} from storage",
-                        task_request.source_item.source_id
-                    )
+                    .map_err(|err| {
+                        let message = format!(
+                            "Failed to update task with source ID {} from storage: {err}",
+                            task_request.source_item.source_id
+                        );
+                        UniversalInboxError::DatabaseError { source: err, message }
                 })?,
             );
 
@@ -923,20 +953,20 @@ impl TaskRepository for Repository {
                   task.updated_at as task__updated_at,
                   task.kind::TEXT as task__kind,
                   task.user_id as task__user_id,
-                  source_item.id as source_item__id,
-                  source_item.source_id as source_item__source_id,
-                  source_item.data as source_item__data,
-                  source_item.created_at as source_item__created_at,
-                  source_item.updated_at as source_item__updated_at,
-                  source_item.user_id as source_item__user_id,
-                  source_item.integration_connection_id as source_item__integration_connection_id,
-                  sink_item.id as sink_item__id,
-                  sink_item.source_id as sink_item__source_id,
-                  sink_item.data as sink_item__data,
-                  sink_item.created_at as sink_item__created_at,
-                  sink_item.updated_at as sink_item__updated_at,
-                  sink_item.user_id as sink_item__user_id,
-                  sink_item.integration_connection_id as sink_item__integration_connection_id,
+                  source_item.id as task__source_item__id,
+                  source_item.source_id as task__source_item__source_id,
+                  source_item.data as task__source_item__data,
+                  source_item.created_at as task__source_item__created_at,
+                  source_item.updated_at as task__source_item__updated_at,
+                  source_item.user_id as task__source_item__user_id,
+                  source_item.integration_connection_id as task__source_item__integration_connection_id,
+                  sink_item.id as task__sink_item__id,
+                  sink_item.source_id as task__sink_item__source_id,
+                  sink_item.data as task__sink_item__data,
+                  sink_item.created_at as task__sink_item__created_at,
+                  sink_item.updated_at as task__sink_item__updated_at,
+                  sink_item.user_id as task__sink_item__user_id,
+                  sink_item.integration_connection_id as task__sink_item__integration_connection_id,
                   (SELECT"#,
         );
 
@@ -989,9 +1019,12 @@ impl TaskRepository for Repository {
             .build_query_as::<UpdatedTaskRow>()
             .fetch_optional(&mut **executor)
             .await
-            .map_err(|err| UniversalInboxError::DatabaseError {
-                source: err,
-                message: format!("Failed to update task {task_id} from storage"),
+            .map_err(|err| {
+                let message = format!("Failed to update task {task_id} from storage: {err}");
+                UniversalInboxError::DatabaseError {
+                    source: err,
+                    message,
+                }
             })?;
 
         if let Some(updated_task_row) = row {
@@ -1061,10 +1094,18 @@ impl FromRowWithPrefix<'_, PgRow> for TaskRow {
             updated_at: row.try_get(format!("{prefix}updated_at").as_str())?,
             kind: row.try_get(format!("{prefix}kind").as_str())?,
             user_id: row.try_get(format!("{prefix}user_id").as_str())?,
-            source_item: ThirdPartyItemRow::from_row_with_prefix(row, "source_item__")?,
+            source_item: ThirdPartyItemRow::from_row_with_prefix(
+                row,
+                format!("{prefix}source_item__").as_str(),
+            )?,
             sink_item: row
-                .try_get::<Option<Uuid>, &str>("sink_item__id")?
-                .map(|_| ThirdPartyItemRow::from_row_with_prefix(row, "sink_item__"))
+                .try_get::<Option<Uuid>, &str>(format!("{prefix}sink_item__id").as_str())?
+                .map(|_| {
+                    ThirdPartyItemRow::from_row_with_prefix(
+                        row,
+                        format!("{prefix}sink_item__").as_str(),
+                    )
+                })
                 .transpose()?,
         })
     }

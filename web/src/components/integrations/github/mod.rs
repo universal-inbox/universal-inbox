@@ -2,7 +2,7 @@
 
 use dioxus::prelude::*;
 
-use universal_inbox::notification::integrations::github::{
+use universal_inbox::third_party::integrations::github::{
     GithubActor, GithubBotSummary, GithubUserSummary,
 };
 

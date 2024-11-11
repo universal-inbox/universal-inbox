@@ -9,6 +9,7 @@ use std::{
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use cached::proc_macro::cached;
+use chrono::{DateTime, Utc};
 use http::{HeaderMap, HeaderValue, StatusCode};
 use regex::RegexBuilder;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, Extension};
@@ -21,6 +22,10 @@ use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
 use url::Url;
 use uuid::Uuid;
+use wiremock::{
+    matchers::{body_partial_json, body_string_contains, method, path},
+    Mock, MockServer, ResponseTemplate,
+};
 
 use universal_inbox::{
     integration_connection::{
@@ -30,7 +35,7 @@ use universal_inbox::{
             IntegrationProviderSource,
         },
     },
-    notification::{NotificationSource, NotificationSourceKind},
+    notification::{Notification, NotificationSource, NotificationSourceKind, NotificationStatus},
     task::{
         integrations::todoist::{TodoistProject, TODOIST_INBOX_PROJECT},
         service::TaskPatch,
@@ -39,21 +44,15 @@ use universal_inbox::{
     },
     third_party::{
         integrations::todoist::{TodoistItem, TodoistItemDue, TodoistItemPriority},
-        item::{
-            ThirdPartyItem, ThirdPartyItemFromSource, ThirdPartyItemSource,
-            ThirdPartyItemSourceKind,
-        },
+        item::{ThirdPartyItem, ThirdPartyItemFromSource, ThirdPartyItemSourceKind},
     },
     user::UserId,
     utils::default_value::DefaultValue,
 };
-use wiremock::{
-    matchers::{body_partial_json, body_string_contains, method, path},
-    Mock, MockServer, ResponseTemplate,
-};
 
 use crate::{
     integrations::{
+        notification::ThirdPartyNotificationSourceService,
         oauth2::AccessToken,
         task::{ThirdPartyTaskService, ThirdPartyTaskSourceService},
         third_party::ThirdPartyItemSourceService,
@@ -507,7 +506,7 @@ async fn cached_fetch_all_projects(
 }
 
 #[async_trait]
-impl ThirdPartyItemSourceService for TodoistService {
+impl ThirdPartyItemSourceService<TodoistItem> for TodoistService {
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn fetch_items<'a>(
@@ -565,6 +564,10 @@ impl ThirdPartyItemSourceService for TodoistService {
 
     fn is_sync_incremental(&self) -> bool {
         true
+    }
+
+    fn get_third_party_item_source_kind(&self) -> ThirdPartyItemSourceKind {
+        ThirdPartyItemSourceKind::Todoist
     }
 }
 
@@ -942,6 +945,83 @@ impl ThirdPartyTaskSourceService<TodoistItem> for TodoistService {
     }
 }
 
+#[async_trait]
+impl ThirdPartyNotificationSourceService<TodoistItem> for TodoistService {
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, source, source_third_party_item),
+        fields(
+            source_id = source_third_party_item.source_id,
+            third_party_item_id = source_third_party_item.id.to_string()
+        ),
+    )]
+    async fn third_party_item_into_notification(
+        &self,
+        source: &TodoistItem,
+        source_third_party_item: &ThirdPartyItem,
+        user_id: UserId,
+    ) -> Result<Box<Notification>, UniversalInboxError> {
+        Ok(Box::new(Notification {
+            id: Uuid::new_v4().into(),
+            title: source.content.clone(),
+            status: if source.checked || source.is_deleted {
+                NotificationStatus::Deleted
+            } else {
+                NotificationStatus::Unread
+            },
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            last_read_at: None,
+            snoozed_until: None,
+            user_id,
+            kind: NotificationSourceKind::Todoist,
+            source_item: source_third_party_item.clone(),
+            task_id: None,
+        }))
+    }
+
+    #[allow(clippy::blocks_in_conditions)]
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, _executor, notification),
+        fields(notification_id = notification.id.0.to_string())
+    )]
+    async fn delete_notification_from_source<'a>(
+        &self,
+        _executor: &mut Transaction<'a, Postgres>,
+        notification: &Notification,
+        _user_id: UserId,
+    ) -> Result<(), UniversalInboxError> {
+        unimplemented!("Todoist notifications cannot be deleted, only Todoist Task can");
+    }
+
+    #[allow(clippy::blocks_in_conditions)]
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, _executor, notification),
+        fields(notification_id = notification.id.0.to_string())
+    )]
+    async fn unsubscribe_notification_from_source<'a>(
+        &self,
+        _executor: &mut Transaction<'a, Postgres>,
+        notification: &Notification,
+        _user_id: UserId,
+    ) -> Result<(), UniversalInboxError> {
+        unimplemented!("Todoist notifications cannot be unsubscribed, only Todoist Task can");
+    }
+
+    async fn snooze_notification_from_source<'a>(
+        &self,
+        _executor: &mut Transaction<'a, Postgres>,
+        _notification: &Notification,
+        _snoozed_until_at: DateTime<Utc>,
+        _user_id: UserId,
+    ) -> Result<(), UniversalInboxError> {
+        // Todoist notifications cannot be snoozed => no-op
+        Ok(())
+    }
+}
+
 impl TaskSource for TodoistService {
     fn get_task_source_kind(&self) -> TaskSourceKind {
         TaskSourceKind::Todoist
@@ -951,12 +1031,6 @@ impl TaskSource for TodoistService {
 impl IntegrationProviderSource for TodoistService {
     fn get_integration_provider_kind(&self) -> IntegrationProviderKind {
         IntegrationProviderKind::Todoist
-    }
-}
-
-impl ThirdPartyItemSource for TodoistService {
-    fn get_third_party_item_source_kind(&self) -> ThirdPartyItemSourceKind {
-        ThirdPartyItemSourceKind::Todoist
     }
 }
 

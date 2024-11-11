@@ -12,7 +12,7 @@ use dioxus_free_icons::{
 };
 use itertools::Itertools;
 
-use universal_inbox::notification::integrations::github::{
+use universal_inbox::third_party::integrations::github::{
     GithubActor, GithubBotSummary, GithubCheckConclusionState, GithubCheckRun,
     GithubCheckStatusState, GithubCheckSuite, GithubCheckSuiteApp, GithubCommitChecks,
     GithubIssueComment, GithubLabel, GithubMannequinSummary, GithubMergeableState,

@@ -9,9 +9,11 @@ use serde_json::json;
 use url::Url;
 
 use universal_inbox::{
-    notification::{
+    integration_connection::IntegrationConnectionId,
+    notification::{Notification, NotificationSourceKind, NotificationStatus},
+    third_party::{
         integrations::google_mail::{EmailAddress, GoogleMailThread},
-        Notification, NotificationMetadata, NotificationStatus,
+        item::ThirdPartyItemData,
     },
     user::UserId,
     HasHtmlUrl,
@@ -21,7 +23,34 @@ use universal_inbox_api::integrations::google_mail::{
     GoogleMailLabelList, GoogleMailThreadList, GoogleMailUserProfile, RawGoogleMailThread,
 };
 
-use crate::helpers::load_json_fixture_file;
+use crate::helpers::{
+    load_json_fixture_file, notification::create_notification_from_source_item, TestedApp,
+};
+
+pub async fn create_notification_from_google_mail_thread(
+    app: &TestedApp,
+    google_mail_thread: &GoogleMailThread,
+    user_id: UserId,
+    google_mail_integration_connection_id: IntegrationConnectionId,
+) -> Box<Notification> {
+    create_notification_from_source_item(
+        app,
+        google_mail_thread.id.to_string(),
+        ThirdPartyItemData::GoogleMailThread(Box::new(google_mail_thread.clone())),
+        (*app
+            .notification_service
+            .read()
+            .await
+            .google_mail_service
+            .read()
+            .await)
+            .clone()
+            .into(),
+        user_id,
+        google_mail_integration_connection_id,
+    )
+    .await
+}
 
 pub fn mock_google_mail_get_user_profile_service<'a>(
     google_mail_mock_server: &'a MockServer,
@@ -178,15 +207,16 @@ pub fn google_mail_thread_get_456(
 
 pub fn assert_sync_notifications(
     notifications: &[Notification],
-    sync_google_mail_thread_123: &GoogleMailThread,
-    sync_google_mail_thread_456: &GoogleMailThread,
+    google_mail_thread_123: &GoogleMailThread,
+    google_mail_thread_456: &GoogleMailThread,
     expected_user_id: UserId,
 ) {
     for notification in notifications.iter() {
         assert_eq!(notification.user_id, expected_user_id);
-        match notification.source_id.as_ref() {
+        match notification.source_item.source_id.as_ref() {
             "123" => {
                 assert_eq!(notification.title, "test subject 123".to_string());
+                assert_eq!(notification.kind, NotificationSourceKind::GoogleMail);
                 assert_eq!(notification.status, NotificationStatus::Unread);
                 assert_eq!(
                     notification.get_html_url(),
@@ -194,19 +224,16 @@ pub fn assert_sync_notifications(
                         .parse::<Url>()
                         .unwrap()
                 );
-                assert_eq!(
-                    notification.updated_at,
-                    Utc.with_ymd_and_hms(2023, 9, 16, 21, 11, 28).unwrap()
-                );
                 assert_eq!(notification.last_read_at, None,);
                 assert_eq!(
-                    notification.metadata,
-                    NotificationMetadata::GoogleMail(Box::new(sync_google_mail_thread_123.clone()))
+                    notification.source_item.data,
+                    ThirdPartyItemData::GoogleMailThread(Box::new(google_mail_thread_123.clone()))
                 );
             }
             // This notification should be updated
             "456" => {
                 assert_eq!(notification.title, "test 456".to_string());
+                assert_eq!(notification.kind, NotificationSourceKind::GoogleMail);
                 assert_eq!(notification.status, NotificationStatus::Read);
                 assert_eq!(
                     notification.get_html_url(),
@@ -215,16 +242,12 @@ pub fn assert_sync_notifications(
                         .unwrap()
                 );
                 assert_eq!(
-                    notification.updated_at,
-                    Utc.with_ymd_and_hms(2023, 9, 13, 20, 27, 16).unwrap()
-                );
-                assert_eq!(
                     notification.last_read_at,
                     Some(Utc.with_ymd_and_hms(2023, 9, 13, 20, 27, 16).unwrap())
                 );
                 assert_eq!(
-                    notification.metadata,
-                    NotificationMetadata::GoogleMail(Box::new(sync_google_mail_thread_456.clone()))
+                    notification.source_item.data,
+                    ThirdPartyItemData::GoogleMailThread(Box::new(google_mail_thread_456.clone()))
                 );
             }
             _ => {

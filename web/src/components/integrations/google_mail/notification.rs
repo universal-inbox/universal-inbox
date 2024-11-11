@@ -8,11 +8,11 @@ use dioxus_free_icons::{
     Icon,
 };
 
-use universal_inbox::notification::{
-    integrations::google_mail::{
+use universal_inbox::{
+    notification::NotificationWithTask,
+    third_party::integrations::google_mail::{
         GoogleMailThread, MessageSelection, GOOGLE_MAIL_IMPORTANT_LABEL, GOOGLE_MAIL_STARRED_LABEL,
     },
-    NotificationWithTask,
 };
 
 use crate::components::integrations::google_mail::icons::Mail;

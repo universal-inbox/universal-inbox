@@ -25,16 +25,17 @@ pub fn TaskPreview(task: ReadOnlySignal<Task>) -> Element {
 pub fn TaskDetailsPreview(task: ReadOnlySignal<Task>) -> Element {
     match task().source_item.data {
         ThirdPartyItemData::TodoistItem(todoist_item) => {
-            rsx! { TodoistTaskPreview { todoist_item, task } }
+            rsx! { TodoistTaskPreview { todoist_item: *todoist_item, task } }
         }
         ThirdPartyItemData::SlackStar(slack_star) => {
-            rsx! { SlackStarTaskPreview { slack_star, task } }
+            rsx! { SlackStarTaskPreview { slack_star: *slack_star, task } }
         }
         ThirdPartyItemData::SlackReaction(slack_reaction) => {
-            rsx! { SlackReactionTaskPreview { slack_reaction, task } }
+            rsx! { SlackReactionTaskPreview { slack_reaction: *slack_reaction, task } }
         }
         ThirdPartyItemData::LinearIssue(linear_issue) => {
-            rsx! { LinearIssuePreview { linear_issue, linear_notification: None } }
+            rsx! { LinearIssuePreview { linear_issue: *linear_issue, linear_notification: None } }
         }
+        _ => None,
     }
 }
