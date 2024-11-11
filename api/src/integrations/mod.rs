@@ -3,9 +3,9 @@ use chrono::{DateTime, Utc};
 use sqlx::{Postgres, Transaction};
 
 use universal_inbox::{
-    notification::{Notification, NotificationDetails, NotificationSource},
+    notification::{Notification, NotificationSource},
     task::{service::TaskPatch, CreateOrUpdateTaskRequest, ProjectSummary, TaskCreation},
-    third_party::item::ThirdPartyItem,
+    third_party::item::{ThirdPartyItem, ThirdPartyItemSourceKind},
     user::UserId,
 };
 
@@ -22,12 +22,10 @@ pub mod slack;
 pub mod todoist;
 
 pub mod third_party {
-    use universal_inbox::third_party::item::ThirdPartyItemSource;
-
     use super::*;
 
     #[async_trait]
-    pub trait ThirdPartyItemSourceService: ThirdPartyItemSource {
+    pub trait ThirdPartyItemSourceService<T> {
         async fn fetch_items<'a>(
             &self,
             executor: &mut Transaction<'a, Postgres>,
@@ -35,6 +33,8 @@ pub mod third_party {
         ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError>;
 
         fn is_sync_incremental(&self) -> bool;
+
+        fn get_third_party_item_source_kind(&self) -> ThirdPartyItemSourceKind;
     }
 }
 
@@ -42,7 +42,13 @@ pub mod notification {
     use super::*;
 
     #[async_trait]
-    pub trait NotificationSourceService: NotificationSource {
+    pub trait ThirdPartyNotificationSourceService<T>: NotificationSource {
+        async fn third_party_item_into_notification(
+            &self,
+            source: &T,
+            source_third_party_item: &ThirdPartyItem,
+            user_id: UserId,
+        ) -> Result<Box<Notification>, UniversalInboxError>;
         async fn delete_notification_from_source<'a>(
             &self,
             executor: &mut Transaction<'a, Postgres>,
@@ -62,21 +68,6 @@ pub mod notification {
             snoozed_until_at: DateTime<Utc>,
             user_id: UserId,
         ) -> Result<(), UniversalInboxError>;
-        async fn fetch_notification_details<'a>(
-            &self,
-            executor: &mut Transaction<'a, Postgres>,
-            notification: &Notification,
-            user_id: UserId,
-        ) -> Result<Option<NotificationDetails>, UniversalInboxError>;
-    }
-
-    #[async_trait]
-    pub trait NotificationSyncSourceService: NotificationSourceService {
-        async fn fetch_all_notifications<'a>(
-            &self,
-            executor: &mut Transaction<'a, Postgres>,
-            user_id: UserId,
-        ) -> Result<Vec<Notification>, UniversalInboxError>;
     }
 }
 

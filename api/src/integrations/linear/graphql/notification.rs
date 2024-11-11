@@ -2,11 +2,9 @@ use anyhow::Context;
 use uuid::Uuid;
 
 use universal_inbox::{
-    notification::integrations::linear::{
-        LinearComment, LinearNotification, LinearProjectUpdate, LinearProjectUpdateHealthType,
-    },
     third_party::integrations::linear::{
-        LinearIssue, LinearLabel, LinearOrganization, LinearProject, LinearProjectMilestone,
+        LinearComment, LinearIssue, LinearLabel, LinearNotification, LinearOrganization,
+        LinearProject, LinearProjectMilestone, LinearProjectUpdate, LinearProjectUpdateHealthType,
         LinearTeam, LinearUser, LinearWorkflowState, LinearWorkflowStateIds,
     },
     utils::emoji::replace_emoji_code_with_emoji,

@@ -3,6 +3,7 @@ use std::{
     str::FromStr,
 };
 
+use anyhow::anyhow;
 use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, ParseError, TimeDelta, Utc};
 use clap::ValueEnum;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
@@ -14,7 +15,7 @@ use uuid::Uuid;
 
 use crate::{
     integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
-    notification::{Notification, NotificationMetadata, NotificationStatus, NotificationWithTask},
+    notification::Notification,
     task::integrations::todoist::{DEFAULT_TODOIST_HTML_URL, TODOIST_INBOX_PROJECT},
     third_party::item::{
         ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemSource, ThirdPartyItemSourceKind,
@@ -28,7 +29,7 @@ pub mod integrations;
 pub mod service;
 
 #[serde_as]
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Task {
     pub id: TaskId,
     pub title: String,
@@ -47,6 +48,25 @@ pub struct Task {
     pub source_item: ThirdPartyItem,
     pub sink_item: Option<ThirdPartyItem>,
     pub user_id: UserId,
+}
+
+impl PartialEq for Task {
+    fn eq(&self, other: &Self) -> bool {
+        self.title == other.title
+            && self.body == other.body
+            && self.status == other.status
+            && self.priority == other.priority
+            && self.due_at == other.due_at
+            && self.tags == other.tags
+            && self.parent_id == other.parent_id
+            && self.project == other.project
+            && self.is_recurring == other.is_recurring
+            && self.kind == other.kind
+            && self.source_item.id == other.source_item.id
+            && self.sink_item.as_ref().map(|tpi| tpi.id)
+                == other.sink_item.as_ref().map(|tpi| tpi.id)
+            && self.user_id == other.user_id
+    }
 }
 
 #[serde_as]
@@ -346,46 +366,6 @@ impl Display for TaskPriority {
     }
 }
 
-impl From<Task> for Notification {
-    fn from(task: Task) -> Self {
-        Notification {
-            id: Uuid::new_v4().into(),
-            title: task.title.clone(),
-            source_id: task.source_item.source_id.clone(),
-            status: if task.status != TaskStatus::Active {
-                NotificationStatus::Deleted
-            } else {
-                NotificationStatus::Unread
-            },
-            metadata: NotificationMetadata::Todoist,
-            updated_at: task.updated_at,
-            last_read_at: None,
-            snoozed_until: None,
-            user_id: task.user_id,
-            details: None,
-            task_id: Some(task.id),
-        }
-    }
-}
-
-impl From<Task> for NotificationWithTask {
-    fn from(task: Task) -> Self {
-        NotificationWithTask {
-            id: Uuid::new_v4().into(),
-            title: task.title.clone(),
-            source_id: task.source_item.source_id.clone(),
-            status: NotificationStatus::Unread,
-            metadata: NotificationMetadata::Todoist,
-            updated_at: task.updated_at,
-            last_read_at: None,
-            snoozed_until: None,
-            user_id: task.user_id,
-            details: None,
-            task: Some(task),
-        }
-    }
-}
-
 macro_attr! {
     // Synchronization sources for tasks
     #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!)]
@@ -404,14 +384,33 @@ macro_attr! {
     }
 }
 
+impl TryFrom<ThirdPartyItemSourceKind> for TaskSourceKind {
+    type Error = anyhow::Error;
+
+    fn try_from(source_kind: ThirdPartyItemSourceKind) -> Result<Self, Self::Error> {
+        match source_kind {
+            ThirdPartyItemSourceKind::Todoist => Ok(Self::Todoist),
+            ThirdPartyItemSourceKind::LinearIssue => Ok(Self::Linear),
+            ThirdPartyItemSourceKind::SlackReaction | ThirdPartyItemSourceKind::SlackStar => {
+                Ok(Self::Slack)
+            }
+            _ => Err(anyhow!(
+                "ThirdPartyItemSourceKind {source_kind} is not a valid TaskSourceKind"
+            )),
+        }
+    }
+}
+
 impl TryFrom<IntegrationProviderKind> for TaskSyncSourceKind {
-    type Error = ();
+    type Error = anyhow::Error;
 
     fn try_from(provider_kind: IntegrationProviderKind) -> Result<Self, Self::Error> {
         match provider_kind {
             IntegrationProviderKind::Todoist => Ok(Self::Todoist),
             IntegrationProviderKind::Linear => Ok(Self::Linear),
-            _ => Err(()),
+            _ => Err(anyhow!(
+                "IntegrationProviderKind {provider_kind} is not a valid TaskSyncSourceKind"
+            )),
         }
     }
 }

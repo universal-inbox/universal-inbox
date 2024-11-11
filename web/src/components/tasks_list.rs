@@ -61,7 +61,7 @@ fn TaskListItem(
         ThirdPartyItemData::TodoistItem(todoist_item) => rsx! {
             TodoistTaskListItem {
                 task,
-                todoist_item,
+                todoist_item: *todoist_item,
                 is_selected,
                 on_select,
             }
@@ -69,7 +69,7 @@ fn TaskListItem(
         ThirdPartyItemData::LinearIssue(linear_issue) => rsx! {
             LinearTaskListItem {
                 task,
-                linear_issue,
+                linear_issue: *linear_issue,
                 is_selected,
                 on_select,
             }
@@ -77,7 +77,7 @@ fn TaskListItem(
         ThirdPartyItemData::SlackStar(slack_star) => rsx! {
             SlackStarTaskListItem {
                 task,
-                slack_star,
+                slack_star: *slack_star,
                 is_selected,
                 on_select,
             }
@@ -85,11 +85,12 @@ fn TaskListItem(
         ThirdPartyItemData::SlackReaction(slack_reaction) => rsx! {
             SlackReactionTaskListItem {
                 task,
-                slack_reaction,
+                slack_reaction: *slack_reaction,
                 is_selected,
                 on_select,
             }
         },
+        _ => None,
     }
 }
 

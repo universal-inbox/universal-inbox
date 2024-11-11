@@ -1,25 +1,34 @@
 #![allow(clippy::useless_conversion)]
 
+use std::{fmt::Debug, sync::Arc};
+
 use reqwest::{Client, Response};
 use serde_json::json;
 
 use universal_inbox::{
+    integration_connection::IntegrationConnectionId,
     notification::{
-        Notification, NotificationDetails, NotificationId, NotificationSourceKind,
-        NotificationStatus, NotificationWithTask,
+        service::NotificationPatch, Notification, NotificationId, NotificationSource,
+        NotificationSourceKind, NotificationStatus, NotificationWithTask,
     },
     task::{TaskCreation, TaskId},
+    third_party::item::{ThirdPartyItem, ThirdPartyItemData},
+    user::UserId,
     Page,
 };
 
-use universal_inbox_api::repository::notification::NotificationRepository;
+use universal_inbox_api::{
+    integrations::notification::ThirdPartyNotificationSourceService,
+    repository::{notification::NotificationRepository, third_party::ThirdPartyItemRepository},
+};
 
-use crate::helpers::auth::AuthenticatedApp;
+use crate::helpers::{auth::AuthenticatedApp, TestedApp};
 
 pub mod github;
 pub mod google_mail;
 pub mod linear;
 pub mod slack;
+pub mod todoist;
 
 pub async fn list_notifications_response(
     client: &Client,
@@ -174,20 +183,67 @@ pub async fn create_task_from_notification(
         .expect("Cannot parse JSON result")
 }
 
-pub async fn create_or_update_notification_details(
+pub async fn create_notification_from_source_item<T, U>(
+    app: &TestedApp,
+    source_item_id: String,
+    third_party_item_data: ThirdPartyItemData,
+    third_party_notification_service: Arc<U>,
+    user_id: UserId,
+    integration_connection_id: IntegrationConnectionId,
+) -> Box<Notification>
+where
+    T: TryFrom<ThirdPartyItem> + Debug,
+    U: ThirdPartyNotificationSourceService<T> + NotificationSource + Send + Sync,
+    <T as TryFrom<ThirdPartyItem>>::Error: Send + Sync,
+{
+    let mut transaction = app.repository.begin().await.unwrap();
+    let third_party_item = ThirdPartyItem::new(
+        source_item_id,
+        third_party_item_data,
+        user_id,
+        integration_connection_id,
+    );
+    let third_party_item = app
+        .repository
+        .create_or_update_third_party_item(&mut transaction, Box::new(third_party_item))
+        .await
+        .unwrap()
+        .value();
+
+    let notification = app
+        .notification_service
+        .read()
+        .await
+        .create_notification_from_third_party_item(
+            &mut transaction,
+            *third_party_item,
+            third_party_notification_service,
+            user_id,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+
+    transaction.commit().await.unwrap();
+
+    Box::new(notification)
+}
+
+pub async fn update_notification(
     app: &AuthenticatedApp,
     notification_id: NotificationId,
-    details: NotificationDetails,
-) -> NotificationDetails {
+    patch: &NotificationPatch,
+    user_id: UserId,
+) -> Box<Notification> {
     let mut transaction = app.app.repository.begin().await.unwrap();
-    let upsert_status = app
+    let update_status = app
         .app
         .repository
-        .create_or_update_notification_details(&mut transaction, notification_id, details)
+        .update_notification(&mut transaction, notification_id, patch, user_id)
         .await
         .unwrap();
 
     transaction.commit().await.unwrap();
 
-    upsert_status.value()
+    update_status.result.unwrap()
 }

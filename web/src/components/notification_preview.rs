@@ -2,8 +2,15 @@
 
 use dioxus::prelude::*;
 
-use universal_inbox::notification::{
-    NotificationDetails, NotificationId, NotificationMetadata, NotificationWithTask,
+use universal_inbox::{
+    notification::{NotificationId, NotificationWithTask},
+    third_party::{
+        integrations::{
+            github::GithubNotificationItem,
+            slack::{SlackReactionItem, SlackStarItem},
+        },
+        item::ThirdPartyItemData,
+    },
 };
 
 use crate::{
@@ -14,7 +21,7 @@ use crate::{
                 GithubNotificationDefaultPreview,
             },
             google_mail::preview::GoogleMailThreadPreview,
-            icons::{NotificationMetadataIcon, TaskIcon},
+            icons::{NotificationIcon, TaskIcon},
             linear::preview::LinearNotificationPreview,
             slack::preview::{
                 channel::SlackChannelPreview, file::SlackFilePreview,
@@ -68,7 +75,7 @@ pub fn NotificationPreview(
                         onclick: move |_| { ui_model.write().selected_preview_pane = PreviewPane::Notification },
                         div {
                             class: "flex gap-2",
-                            NotificationMetadataIcon { class: "h-5 w-5", notification_metadata: notification().metadata }
+                            NotificationIcon { class: "h-5 w-5", kind: notification().kind }
                             "Notification"
                         }
                     }
@@ -103,51 +110,60 @@ pub fn NotificationPreview(
 
 #[component]
 fn NotificationDetailsPreview(notification: ReadOnlySignal<NotificationWithTask>) -> Element {
-    if let Some(details) = notification().details {
-        return match details {
-            NotificationDetails::GithubPullRequest(github_pull_request) => rsx! {
-                GithubPullRequestPreview { github_pull_request: github_pull_request }
-            },
-            NotificationDetails::GithubDiscussion(github_discussion) => rsx! {
-                GithubDiscussionPreview { github_discussion: github_discussion }
-            },
-            NotificationDetails::SlackMessage(slack_message) => rsx! {
-                SlackMessagePreview { slack_message, title: notification().title }
-            },
-            NotificationDetails::SlackFile(slack_file) => rsx! {
-                SlackFilePreview { slack_file, title: notification().title }
-            },
-            NotificationDetails::SlackFileComment(slack_file_comment) => rsx! {
+    match notification().source_item.data {
+        ThirdPartyItemData::GithubNotification(github_notification) => {
+            match github_notification.item {
+                Some(GithubNotificationItem::GithubPullRequest(github_pull_request)) => {
+                    rsx! { GithubPullRequestPreview { github_pull_request } }
+                }
+                Some(GithubNotificationItem::GithubDiscussion(github_discussion)) => {
+                    rsx! { GithubDiscussionPreview { github_discussion } }
+                }
+                _ => rsx! {
+                    GithubNotificationDefaultPreview {
+                        notification,
+                        github_notification: *github_notification
+                    }
+                },
+            }
+        }
+        ThirdPartyItemData::SlackReaction(slack_reaction) => match slack_reaction.item {
+            SlackReactionItem::SlackMessage(slack_message) => {
+                rsx! { SlackMessagePreview { slack_message, title: notification().title } }
+            }
+            SlackReactionItem::SlackFile(slack_file) => {
+                rsx! { SlackFilePreview { slack_file, title: notification().title } }
+            }
+        },
+        ThirdPartyItemData::SlackStar(slack_star) => match slack_star.item {
+            SlackStarItem::SlackMessage(slack_message) => {
+                rsx! { SlackMessagePreview { slack_message, title: notification().title } }
+            }
+            SlackStarItem::SlackFile(slack_file) => {
+                rsx! { SlackFilePreview { slack_file, title: notification().title } }
+            }
+            SlackStarItem::SlackFileComment(slack_file_comment) => rsx! {
                 SlackFileCommentPreview { slack_file_comment, title: notification().title }
             },
-            NotificationDetails::SlackChannel(slack_channel) => rsx! {
-                SlackChannelPreview { slack_channel, title: notification().title }
-            },
-            NotificationDetails::SlackIm(slack_im) => rsx! {
-                SlackImPreview { slack_im, title: notification().title }
-            },
-            NotificationDetails::SlackGroup(slack_group) => rsx! {
-                SlackGroupPreview { slack_group, title: notification().title }
-            },
-        };
-    }
-    match notification().metadata {
-        NotificationMetadata::Github(github_notification) => rsx! {
-            GithubNotificationDefaultPreview {
-                notification: notification,
-                github_notification: *github_notification,
+            SlackStarItem::SlackChannel(slack_channel) => {
+                rsx! { SlackChannelPreview { slack_channel, title: notification().title } }
+            }
+            SlackStarItem::SlackIm(slack_im) => {
+                rsx! { SlackImPreview { slack_im, title: notification().title } }
+            }
+            SlackStarItem::SlackGroup(slack_group) => {
+                rsx! { SlackGroupPreview { slack_group, title: notification().title } }
             }
         },
-        NotificationMetadata::Linear(linear_notification) => rsx! {
+        ThirdPartyItemData::LinearNotification(linear_notification) => rsx! {
             LinearNotificationPreview { linear_notification: *linear_notification }
         },
-        NotificationMetadata::GoogleMail(google_mail_thread) => rsx! {
+        ThirdPartyItemData::GoogleMailThread(google_mail_thread) => rsx! {
             GoogleMailThreadPreview {
-                notification: notification,
-                google_mail_thread: *google_mail_thread.clone()
+                notification,
+                google_mail_thread: *google_mail_thread
             }
         },
-        NotificationMetadata::Slack(_) => None,
-        NotificationMetadata::Todoist => None,
+        _ => None,
     }
 }

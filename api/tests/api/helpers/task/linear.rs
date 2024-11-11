@@ -29,7 +29,7 @@ pub async fn create_linear_task(
     let mut transaction = app.repository.begin().await.unwrap();
     let source_third_party_item = ThirdPartyItem::new(
         linear_issue.id.to_string(),
-        ThirdPartyItemData::LinearIssue(linear_issue.clone()),
+        ThirdPartyItemData::LinearIssue(Box::new(linear_issue.clone())),
         user_id,
         source_integration_connection_id,
     );

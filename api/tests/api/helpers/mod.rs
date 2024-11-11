@@ -20,7 +20,10 @@ use universal_inbox_api::{
     jobs::UniversalInboxJob,
     observability::{get_subscriber, init_subscriber},
     repository::Repository,
-    universal_inbox::{task::service::TaskService, user::service::UserService},
+    universal_inbox::{
+        notification::service::NotificationService, task::service::TaskService,
+        user::service::UserService,
+    },
     utils::cache::Cache,
 };
 
@@ -42,6 +45,7 @@ pub struct TestedApp {
     pub repository: Arc<Repository>,
     pub user_service: Arc<UserService>,
     pub task_service: Arc<RwLock<TaskService>>,
+    pub notification_service: Arc<RwLock<NotificationService>>,
     pub github_mock_server: MockServer,
     pub linear_mock_server: MockServer,
     pub google_mail_mock_server: MockServer,
@@ -240,7 +244,7 @@ pub async fn tested_app(
     let worker = universal_inbox_api::run_worker(
         Some(1),
         redis_storage.clone(),
-        notification_service,
+        notification_service.clone(),
         task_service.clone(),
         integration_connection_service,
     )
@@ -256,6 +260,7 @@ pub async fn tested_app(
         repository,
         user_service,
         task_service,
+        notification_service,
         github_mock_server,
         linear_mock_server,
         google_mail_mock_server,
@@ -365,7 +370,7 @@ pub async fn tested_app_with_local_auth(
     let worker = universal_inbox_api::run_worker(
         Some(1),
         redis_storage.clone(),
-        notification_service,
+        notification_service.clone(),
         task_service.clone(),
         integration_connection_service,
     )
@@ -381,6 +386,7 @@ pub async fn tested_app_with_local_auth(
         repository,
         user_service,
         task_service,
+        notification_service,
         github_mock_server,
         linear_mock_server,
         google_mail_mock_server,

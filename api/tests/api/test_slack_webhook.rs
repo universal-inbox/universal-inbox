@@ -2,7 +2,7 @@
 use std::collections::HashMap;
 
 use apalis::prelude::Storage;
-use chrono::{TimeZone, Utc};
+use chrono::Utc;
 use pretty_assertions::assert_eq;
 use rstest::*;
 use slack_blocks_render::SlackReferences;
@@ -17,14 +17,14 @@ use universal_inbox::{
             todoist::TodoistConfig,
         },
     },
-    notification::{NotificationDetails, NotificationMetadata, NotificationStatus},
+    notification::{NotificationSourceKind, NotificationStatus},
     task::TaskStatus,
     third_party::{
         integrations::{
-            slack::SlackMessageSenderDetails,
+            slack::{SlackMessageSenderDetails, SlackReactionState, SlackStarItem, SlackStarState},
             todoist::{TodoistItem, TodoistItemPriority},
         },
-        item::{ThirdPartyItemSource, ThirdPartyItemSourceKind},
+        item::{ThirdPartyItemData, ThirdPartyItemSource, ThirdPartyItemSourceKind},
     },
     HasHtmlUrl,
 };
@@ -309,6 +309,8 @@ async fn test_receive_star_or_reaction_added_event_as_notification(
     slack_push_reaction_added_event: Box<SlackPushEvent>,
     nango_slack_connection: Box<NangoConnection>,
 ) {
+    use universal_inbox::third_party::integrations::slack::SlackReactionItem;
+
     let app = authenticated_app.await;
     create_and_mock_integration_connection(
         &app.app,
@@ -354,14 +356,6 @@ async fn test_receive_star_or_reaction_added_event_as_notification(
         "slack_list_usergroups_response.json",
     );
 
-    let SlackPushEvent::EventCallback(star_added_event) = &*slack_push_star_added_event else {
-        unreachable!("Unexpected event type");
-    };
-    let SlackPushEvent::EventCallback(reaction_added_event) = &*slack_push_reaction_added_event
-    else {
-        unreachable!("Unexpected event type");
-    };
-
     let response = if star_added_case {
         create_resource_response(
             &app.client,
@@ -402,25 +396,95 @@ async fn test_receive_star_or_reaction_added_event_as_notification(
     .await;
 
     assert_eq!(notifications.len(), 1);
-    assert_eq!(notifications[0].source_id, "1707686216.825719");
+    assert_eq!(notifications[0].source_item.source_id, "1707686216.825719");
     assert_eq!(notifications[0].title, "🔴  Test title 🔴...");
+    assert_eq!(notifications[0].kind, NotificationSourceKind::Slack);
     assert!(notifications[0].last_read_at.is_none());
     assert!(notifications[0].task_id.is_none());
     assert!(notifications[0].snoozed_until.is_none());
-    assert_eq!(
-        notifications[0].updated_at,
-        Utc.with_ymd_and_hms(2024, 2, 12, 13, 9, 44).unwrap()
-    );
+
     if star_added_case {
+        let ThirdPartyItemData::SlackStar(slack_star) = &notifications[0].source_item.data else {
+            unreachable!("Expected a SlackStar data");
+        };
+        assert_eq!(slack_star.state, SlackStarState::StarAdded);
+        let SlackStarItem::SlackMessage(message) = &slack_star.item else {
+            unreachable!("Expected a SlackMessage item");
+        };
         assert_eq!(
-            notifications[0].metadata,
-            NotificationMetadata::Slack(Box::new(star_added_event.clone()))
+            message.url,
+            "https://slack.com/archives/C05XXX/p1234567890"
+                .parse()
+                .unwrap()
         );
+        assert_eq!(message.message.origin.ts, "1707686216.825719".into());
+        assert_eq!(message.channel.id, "C05XXX".into());
+        assert_eq!(
+            message.references,
+            Some(SlackReferences {
+                users: HashMap::from([(
+                    SlackUserId("U05YYY".to_string()),
+                    Some("john.doe".to_string()),
+                )]),
+                channels: HashMap::from([(
+                    SlackChannelId("C05XXX".to_string()),
+                    Some("test".to_string()),
+                )]),
+                usergroups: HashMap::from([(
+                    SlackUserGroupId("S05ZZZ".to_string()),
+                    Some("admins".to_string()),
+                )]),
+            })
+        );
+        match &message.sender {
+            SlackMessageSenderDetails::User(user) => {
+                assert_eq!(user.id, "U05YYY".into());
+            }
+            _ => unreachable!("Expected a SlackMessageSenderDetails::User"),
+        }
+        assert_eq!(message.team.id, "T05XXX".into());
     } else {
+        let ThirdPartyItemData::SlackReaction(slack_reaction) = &notifications[0].source_item.data
+        else {
+            unreachable!("Expected a SlackStar data");
+        };
+        let SlackReactionItem::SlackMessage(message) = &slack_reaction.item else {
+            unreachable!("Expected a SlackMessage item");
+        };
+        assert_eq!(slack_reaction.state, SlackReactionState::ReactionAdded);
+        assert_eq!(slack_reaction.name, "eyes".into());
         assert_eq!(
-            notifications[0].metadata,
-            NotificationMetadata::Slack(Box::new(reaction_added_event.clone()))
+            message.url,
+            "https://slack.com/archives/C05XXX/p1234567890"
+                .parse()
+                .unwrap()
         );
+        assert_eq!(message.message.origin.ts, "1707686216.825719".into());
+        assert_eq!(message.channel.id, "C05XXX".into());
+        assert_eq!(
+            message.references,
+            Some(SlackReferences {
+                users: HashMap::from([(
+                    SlackUserId("U05YYY".to_string()),
+                    Some("john.doe".to_string()),
+                )]),
+                channels: HashMap::from([(
+                    SlackChannelId("C05XXX".to_string()),
+                    Some("test".to_string()),
+                )]),
+                usergroups: HashMap::from([(
+                    SlackUserGroupId("S05ZZZ".to_string()),
+                    Some("admins".to_string()),
+                )]),
+            })
+        );
+        match &message.sender {
+            SlackMessageSenderDetails::User(user) => {
+                assert_eq!(user.id, "U05YYY".into());
+            }
+            _ => unreachable!("Expected a SlackMessageSenderDetails::User"),
+        }
+        assert_eq!(message.team.id, "T05XXX".into());
     }
     assert_eq!(
         notifications[0].get_html_url(),
@@ -429,52 +493,24 @@ async fn test_receive_star_or_reaction_added_event_as_notification(
             .unwrap()
     );
 
-    match &notifications[0].details {
-        Some(NotificationDetails::SlackMessage(details)) => {
-            assert_eq!(
-                details.url,
-                "https://slack.com/archives/C05XXX/p1234567890"
-                    .parse()
-                    .unwrap()
-            );
-            assert_eq!(details.message.origin.ts, "1707686216.825719".into());
-            assert_eq!(details.channel.id, "C05XXX".into());
-            assert_eq!(
-                details.references,
-                Some(SlackReferences {
-                    users: HashMap::from([(
-                        SlackUserId("U05YYY".to_string()),
-                        Some("john.doe".to_string()),
-                    )]),
-                    channels: HashMap::from([(
-                        SlackChannelId("C05XXX".to_string()),
-                        Some("test".to_string()),
-                    )]),
-                    usergroups: HashMap::from([(
-                        SlackUserGroupId("S05ZZZ".to_string()),
-                        Some("admins".to_string()),
-                    )]),
-                })
-            );
-            match &details.sender {
-                SlackMessageSenderDetails::User(user) => {
-                    assert_eq!(user.id, "U05YYY".into());
-                }
-                _ => unreachable!("Expected a SlackMessageSenderDetails::User"),
-            }
-            assert_eq!(details.team.id, "T05XXX".into());
-        }
-        _ => unreachable!("Expected a GithubDiscussion notification"),
-    }
-
     // A duplicated event should not create a new notification
-    let response = create_resource_response(
-        &app.client,
-        &app.app.api_address,
-        "hooks/slack/events",
-        slack_push_star_added_event.clone(),
-    )
-    .await;
+    let response = if star_added_case {
+        create_resource_response(
+            &app.client,
+            &app.app.api_address,
+            "hooks/slack/events",
+            slack_push_star_added_event.clone(),
+        )
+        .await
+    } else {
+        create_resource_response(
+            &app.client,
+            &app.app.api_address,
+            "hooks/slack/events",
+            slack_push_reaction_added_event.clone(),
+        )
+        .await
+    };
     assert_eq!(response.status(), 200);
     assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
 
@@ -490,7 +526,7 @@ async fn test_receive_star_or_reaction_added_event_as_notification(
     .await;
 
     assert_eq!(notifications.len(), 1);
-    assert_eq!(notifications[0].source_id, "1707686216.825719");
+    assert_eq!(notifications[0].source_item.source_id, "1707686216.825719");
 }
 
 #[rstest]
@@ -551,10 +587,6 @@ async fn test_receive_bot_star_added_event_as_notification(
         "slack_list_usergroups_response.json",
     );
 
-    let SlackPushEvent::EventCallback(event) = &*slack_push_bot_star_added_event else {
-        unreachable!("Unexpected event type");
-    };
-
     let response = create_resource_response(
         &app.client,
         &app.app.api_address,
@@ -586,19 +618,12 @@ async fn test_receive_bot_star_added_event_as_notification(
     .await;
 
     assert_eq!(notifications.len(), 1);
-    assert_eq!(notifications[0].source_id, "1707686216.825719");
+    assert_eq!(notifications[0].source_item.source_id, "1707686216.825719");
     assert_eq!(notifications[0].title, "🔴  Test title 🔴...");
+    assert_eq!(notifications[0].kind, NotificationSourceKind::Slack);
     assert!(notifications[0].last_read_at.is_none());
     assert!(notifications[0].task_id.is_none());
     assert!(notifications[0].snoozed_until.is_none());
-    assert_eq!(
-        notifications[0].updated_at,
-        Utc.with_ymd_and_hms(2024, 2, 12, 13, 9, 44).unwrap()
-    );
-    assert_eq!(
-        notifications[0].metadata,
-        NotificationMetadata::Slack(Box::new(event.clone()))
-    );
     assert_eq!(
         notifications[0].get_html_url(),
         "https://slack.com/archives/C05XXX/p1234567890"
@@ -606,43 +631,45 @@ async fn test_receive_bot_star_added_event_as_notification(
             .unwrap()
     );
 
-    match &notifications[0].details {
-        Some(NotificationDetails::SlackMessage(details)) => {
-            assert_eq!(
-                details.url,
-                "https://slack.com/archives/C05XXX/p1234567890"
-                    .parse()
-                    .unwrap()
-            );
-            assert_eq!(details.message.origin.ts, "1707686216.825719".into());
-            assert_eq!(details.channel.id, "C05XXX".into());
-            assert_eq!(
-                details.references,
-                Some(SlackReferences {
-                    users: HashMap::from([(
-                        SlackUserId("U05YYY".to_string()),
-                        Some("john.doe".to_string()),
-                    )]),
-                    channels: HashMap::from([(
-                        SlackChannelId("C05XXX".to_string()),
-                        Some("test".to_string()),
-                    )]),
-                    usergroups: HashMap::from([(
-                        SlackUserGroupId("S05ZZZ".to_string()),
-                        Some("admins".to_string()),
-                    )]),
-                })
-            );
-            match &details.sender {
-                SlackMessageSenderDetails::Bot(bot) => {
-                    assert_eq!(bot.id, Some("B05YYY".into()));
-                }
-                _ => unreachable!("Expected a SlackMessageSenderDetails::Bot"),
-            }
-            assert_eq!(details.team.id, "T05XXX".into());
+    let ThirdPartyItemData::SlackStar(slack_star) = &notifications[0].source_item.data else {
+        unreachable!("Expected a SlackStar data");
+    };
+    assert_eq!(slack_star.state, SlackStarState::StarAdded);
+    let SlackStarItem::SlackMessage(message) = &slack_star.item else {
+        unreachable!("Expected a SlackMessage item");
+    };
+    assert_eq!(
+        message.url,
+        "https://slack.com/archives/C05XXX/p1234567890"
+            .parse()
+            .unwrap()
+    );
+    assert_eq!(message.message.origin.ts, "1707686216.825719".into());
+    assert_eq!(message.channel.id, "C05XXX".into());
+    assert_eq!(
+        message.references,
+        Some(SlackReferences {
+            users: HashMap::from([(
+                SlackUserId("U05YYY".to_string()),
+                Some("john.doe".to_string()),
+            )]),
+            channels: HashMap::from([(
+                SlackChannelId("C05XXX".to_string()),
+                Some("test".to_string()),
+            )]),
+            usergroups: HashMap::from([(
+                SlackUserGroupId("S05ZZZ".to_string()),
+                Some("admins".to_string()),
+            )]),
+        })
+    );
+    match &message.sender {
+        SlackMessageSenderDetails::Bot(bot) => {
+            assert_eq!(bot.id, Some("B05YYY".into()));
         }
-        _ => unreachable!("Expected a GithubDiscussion notification"),
+        _ => unreachable!("Expected a SlackMessageSenderDetails::User"),
     }
+    assert_eq!(message.team.id, "T05XXX".into());
 
     // A duplicated event should not create a new notification
     let response = create_resource_response(
@@ -667,7 +694,7 @@ async fn test_receive_bot_star_added_event_as_notification(
     .await;
 
     assert_eq!(notifications.len(), 1);
-    assert_eq!(notifications[0].source_id, "1707686216.825719");
+    assert_eq!(notifications[0].source_item.source_id, "1707686216.825719");
 }
 
 #[rstest]
@@ -798,16 +825,9 @@ async fn test_receive_star_or_reaction_removed_event_as_notification(
     .await;
 
     assert_eq!(notifications.len(), 1);
-    assert_eq!(notifications[0].source_id, "1707686216.825719");
+    assert_eq!(notifications[0].source_item.source_id, "1707686216.825719");
+    assert_eq!(notifications[0].kind, NotificationSourceKind::Slack);
     let star_added_notification_id = notifications[0].id;
-
-    let SlackPushEvent::EventCallback(star_removed_event) = &*slack_push_star_removed_event else {
-        unreachable!("Unexpected event type");
-    };
-    let SlackPushEvent::EventCallback(reaction_removed_event) = &*slack_push_reaction_removed_event
-    else {
-        unreachable!("Unexpected event type");
-    };
 
     let response = if slack_star_case {
         create_resource_response(
@@ -856,25 +876,23 @@ async fn test_receive_star_or_reaction_removed_event_as_notification(
 
     assert_eq!(notifications.len(), 1);
     assert_eq!(notifications[0].id, star_added_notification_id);
-    assert_eq!(notifications[0].source_id, "1707686216.825719");
+    assert_eq!(notifications[0].source_item.source_id, "1707686216.825719");
     assert_eq!(notifications[0].title, "🔴  Test title 🔴...");
+    assert_eq!(notifications[0].kind, NotificationSourceKind::Slack);
     assert!(notifications[0].last_read_at.is_none());
     assert!(notifications[0].task_id.is_none());
     assert!(notifications[0].snoozed_until.is_none());
-    assert_eq!(
-        notifications[0].updated_at,
-        Utc.with_ymd_and_hms(2024, 2, 12, 14, 15, 13).unwrap()
-    );
     if slack_star_case {
-        assert_eq!(
-            notifications[0].metadata,
-            NotificationMetadata::Slack(Box::new(star_removed_event.clone()))
-        );
+        let ThirdPartyItemData::SlackStar(slack_star) = &notifications[0].source_item.data else {
+            unreachable!("Expected a SlackStar data");
+        };
+        assert_eq!(slack_star.state, SlackStarState::StarRemoved);
     } else {
-        assert_eq!(
-            notifications[0].metadata,
-            NotificationMetadata::Slack(Box::new(reaction_removed_event.clone()))
-        );
+        let ThirdPartyItemData::SlackReaction(slack_reaction) = &notifications[0].source_item.data
+        else {
+            unreachable!("Expected a SlackReaction data");
+        };
+        assert_eq!(slack_reaction.state, SlackReactionState::ReactionRemoved);
     }
 }
 

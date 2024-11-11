@@ -529,7 +529,7 @@ async fn test_sync_tasks_should_complete_existing_task_and_recreate_sink_task_if
         &app.app.todoist_mock_server,
         Box::new(TodoistItem {
             id: new_todoist_item_id.clone(),
-            ..todoist_item.clone()
+            ..*todoist_item.clone()
         }),
     );
 

@@ -2,7 +2,8 @@
 
 use chrono::{DateTime as ChronoDateTime, Utc};
 use graphql_client::GraphQLQuery;
-use universal_inbox::notification::integrations::github::GitObjectId;
+
+use universal_inbox::third_party::integrations::github::GitObjectId;
 
 pub mod discussions_search;
 pub mod pull_request;

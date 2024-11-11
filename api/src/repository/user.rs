@@ -128,9 +128,12 @@ impl UserRepository for Repository {
         )
         .fetch_optional(&mut **executor)
         .await
-        .map_err(|err| UniversalInboxError::DatabaseError {
-            source: err,
-            message: format!("Failed to fetch user {id} from storage"),
+        .map_err(|err| {
+            let message = format!("Failed to fetch user {id} from storage: {err}");
+            UniversalInboxError::DatabaseError {
+                source: err,
+                message,
+            }
         })?;
 
         row.map(|user_row| user_row.try_into()).transpose()
@@ -165,9 +168,12 @@ impl UserRepository for Repository {
         )
         .fetch_all(&mut **executor)
         .await
-        .map_err(|err| UniversalInboxError::DatabaseError {
-            source: err,
-            message: "Failed to fetch all users from storage".to_string(),
+        .map_err(|err| {
+            let message = format!("Failed to fetch all users from storage: {err}");
+            UniversalInboxError::DatabaseError {
+                source: err,
+                message,
+            }
         })?;
 
         rows.iter().map(|r| r.try_into()).collect()
@@ -205,11 +211,14 @@ impl UserRepository for Repository {
         )
         .fetch_optional(&mut **executor)
         .await
-        .map_err(|err| UniversalInboxError::DatabaseError {
-            source: err,
-            message: format!(
-                "Failed to fetch user with auth provider user ID {auth_user_id} from storage"
-            ),
+        .map_err(|err| {
+            let message = format!(
+                "Failed to fetch user with auth provider user ID {auth_user_id} from storage: {err}"
+            );
+            UniversalInboxError::DatabaseError {
+                source: err,
+                message,
+            }
         })?;
 
         row.map(|user_row| user_row.try_into()).transpose()
@@ -247,9 +256,12 @@ impl UserRepository for Repository {
         )
         .fetch_optional(&mut **executor)
         .await
-        .map_err(|err| UniversalInboxError::DatabaseError {
-            source: err,
-            message: "Failed to fetch user by email from storage".to_string(),
+        .map_err(|err| {
+            let message = format!("Failed to fetch user by email from storage: {err}");
+            UniversalInboxError::DatabaseError {
+                source: err,
+                message,
+            }
         })?;
 
         row.map(|user_row| user_row.try_into()).transpose()
@@ -295,7 +307,7 @@ impl UserRepository for Repository {
                         source: e,
                         id: user.id.0,
                     },
-                    _ => UniversalInboxError::Unexpected(anyhow!("Failed to create new user")),
+                    _ => UniversalInboxError::Unexpected(anyhow!("Failed to create new user: {e}")),
                 }
             })?,
         );
@@ -341,9 +353,12 @@ impl UserRepository for Repository {
         )
         .execute(&mut **executor)
         .await
-        .map_err(|err| UniversalInboxError::DatabaseError {
-            source: err,
-            message: format!("Failed to user auth paramters for user {user_id}"),
+        .map_err(|err| {
+            let message = format!("Failed to user auth paramters for user {user_id}: {err}");
+            UniversalInboxError::DatabaseError {
+                source: err,
+                message,
+            }
         })?;
 
         Ok(User {
@@ -401,9 +416,14 @@ impl UserRepository for Repository {
             .build_query_as::<UpdatedUserRow>()
             .fetch_optional(&mut **executor)
             .await
-            .map_err(|err| UniversalInboxError::DatabaseError {
-                source: err,
-                message: format!("Failed to update user with auth ID {auth_user_id} from storage"),
+            .map_err(|err| {
+                let message = format!(
+                    "Failed to update user with auth ID {auth_user_id} from storage: {err}"
+                );
+                UniversalInboxError::DatabaseError {
+                    source: err,
+                    message,
+                }
             })?;
 
         if let Some(updated_user_row) = record {
@@ -509,11 +529,11 @@ impl UserRepository for Repository {
             .build_query_as::<UpdatedUserRow>()
             .fetch_optional(&mut **executor)
             .await
-            .map_err(|err| UniversalInboxError::DatabaseError {
-                source: err,
-                message: format!(
-                "Failed to update user email validation parameter with ID {user_id} from storage"
-                ),
+            .map_err(|err| {
+                let message = format!(
+                    "Failed to update user email validation parameter with ID {user_id} from storage: {err}"
+                );
+                UniversalInboxError::DatabaseError { source: err, message }
             })?;
 
         if let Some(updated_user_row) = record {
@@ -541,11 +561,11 @@ impl UserRepository for Repository {
         )
         .fetch_optional(&mut **executor)
         .await
-        .map_err(|err| UniversalInboxError::DatabaseError {
-            source: err,
-            message: format!(
-                "Failed to fetch user email validation token for user ID {user_id} from storage"
-            ),
+        .map_err(|err| {
+            let message = format!(
+                "Failed to fetch user email validation token for user ID {user_id} from storage: {err}"
+            );
+            UniversalInboxError::DatabaseError { source: err, message }
         })?;
 
         Ok(row.and_then(|row| row.map(|token| token.into())))
@@ -610,11 +630,12 @@ impl UserRepository for Repository {
             .build_query_as::<UpdatedUserRow>()
             .fetch_optional(&mut **executor)
             .await
-            .map_err(|err| UniversalInboxError::DatabaseError {
-                source: err,
-                message: format!(
-                "Failed to update password parameters with for user with email {email_address} from storage"
-                )})?;
+            .map_err(|err| {
+                let message = format!(
+                    "Failed to update password parameters with for user with email {email_address} from storage: {err}"
+                );
+                UniversalInboxError::DatabaseError { source: err, message }
+            })?;
 
         if let Some(updated_user_row) = record {
             Ok(UpdateStatus {
@@ -693,12 +714,15 @@ impl UserRepository for Repository {
             .build_query_as::<UpdatedUserRow>()
             .fetch_optional(&mut **executor)
             .await
-            .map_err(|err| UniversalInboxError::DatabaseError {
-                source: err,
-                message: format!(
-                    "Failed to update password for user {} from storage",
+            .map_err(|err| {
+                let message = format!(
+                    "Failed to update password for user {} from storage: {err}",
                     user_id.0
-                ),
+                );
+                UniversalInboxError::DatabaseError {
+                    source: err,
+                    message,
+                }
             })?;
 
         if let Some(updated_user_row) = record {
@@ -726,11 +750,14 @@ impl UserRepository for Repository {
         )
         .fetch_optional(&mut **executor)
         .await
-        .map_err(|err| UniversalInboxError::DatabaseError {
-            source: err,
-            message: format!(
-                "Failed to fetch password reset token for user ID {user_id} from storage"
-            ),
+        .map_err(|err| {
+            let message = format!(
+                "Failed to fetch password reset token for user ID {user_id} from storage: {err}"
+            );
+            UniversalInboxError::DatabaseError {
+                source: err,
+                message,
+            }
         })?;
 
         Ok(row.and_then(|row| row.map(|token| token.into())))

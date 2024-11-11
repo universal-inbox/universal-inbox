@@ -14,7 +14,7 @@ use universal_inbox::{
 
 use crate::{
     components::floating_label_inputs::FloatingLabelInputSearchSelect,
-    components::integrations::{icons::NotificationMetadataIcon, todoist::icons::Todoist},
+    components::integrations::{icons::NotificationIcon, todoist::icons::Todoist},
     model::UniversalInboxUIModel,
     services::api::call_api,
     utils::focus_element,
@@ -81,7 +81,7 @@ pub fn TaskLinkModal(
                             class: "flex flex-none items-center",
                             div {
                                 class: "block py-2 px-4 bg-transparent",
-                                NotificationMetadataIcon { class: "h-5 w-5", notification_metadata: notification_to_link().metadata }
+                                NotificationIcon { class: "h-5 w-5", kind: notification_to_link().kind }
                             }
                             div {
                                 id: "notification-to-link",

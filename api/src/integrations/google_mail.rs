@@ -1,4 +1,4 @@
-use std::sync::{Arc, Weak};
+use std::sync::Weak;
 
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
@@ -24,17 +24,18 @@ use universal_inbox::{
         },
         IntegrationConnection,
     },
-    notification::{
+    notification::{Notification, NotificationSource, NotificationSourceKind, NotificationStatus},
+    third_party::{
         integrations::google_mail::{
-            EmailAddress, GoogleMailLabel, GoogleMailMessage, GoogleMailThread,
-            GOOGLE_MAIL_INBOX_LABEL,
+            EmailAddress, GoogleMailLabel, GoogleMailMessage, GoogleMailThread, MessageSelection,
+            GOOGLE_MAIL_INBOX_LABEL, GOOGLE_MAIL_UNREAD_LABEL,
         },
-        Notification, NotificationDetails, NotificationSource, NotificationSourceKind,
-        NotificationStatus,
+        item::{ThirdPartyItem, ThirdPartyItemFromSource, ThirdPartyItemSourceKind},
     },
     user::UserId,
 };
 use url::Url;
+use uuid::Uuid;
 use wiremock::{
     matchers::{method, path, path_regex},
     Mock, MockServer, ResponseTemplate,
@@ -42,9 +43,8 @@ use wiremock::{
 
 use crate::{
     integrations::{
-        notification::{NotificationSourceService, NotificationSyncSourceService},
-        oauth2::AccessToken,
-        APP_USER_AGENT,
+        notification::ThirdPartyNotificationSourceService, oauth2::AccessToken,
+        third_party::ThirdPartyItemSourceService, APP_USER_AGENT,
     },
     universal_inbox::{
         integration_connection::service::IntegrationConnectionService,
@@ -57,10 +57,11 @@ pub struct GoogleMailService {
     google_mail_base_url: String,
     google_mail_base_path: String,
     page_size: usize,
-    integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
+    integration_connection_service: Weak<RwLock<IntegrationConnectionService>>,
     notification_service: Weak<RwLock<NotificationService>>,
 }
 
+static DEFAULT_SUBJECT: &str = "No subject";
 static GOOGLE_MAIL_BASE_URL: &str = "https://gmail.googleapis.com/gmail/v1";
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
@@ -177,7 +178,7 @@ impl GoogleMailService {
     pub fn new(
         google_mail_base_url: Option<String>,
         page_size: usize,
-        integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
+        integration_connection_service: Weak<RwLock<IntegrationConnectionService>>,
         notification_service: Weak<RwLock<NotificationService>>,
     ) -> Result<GoogleMailService, UniversalInboxError> {
         let google_mail_base_url =
@@ -490,16 +491,18 @@ impl GoogleMailService {
 }
 
 #[async_trait]
-impl NotificationSyncSourceService for GoogleMailService {
+impl ThirdPartyItemSourceService<GoogleMailThread> for GoogleMailService {
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(level = "debug", skip(self, executor))]
-    async fn fetch_all_notifications<'a>(
+    async fn fetch_items<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
         user_id: UserId,
-    ) -> Result<Vec<Notification>, UniversalInboxError> {
+    ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError> {
         let (access_token, integration_connection) = self
             .integration_connection_service
+            .upgrade()
+            .context("Unable to access integration_connection_service from google_mail_service")?
             .read()
             .await
             .find_access_token(executor, IntegrationProviderKind::GoogleMail, user_id)
@@ -531,6 +534,8 @@ impl NotificationSyncSourceService for GoogleMailService {
         };
 
         self.integration_connection_service
+            .upgrade()
+            .context("Unable to access integration_connection_service from google_mail_service")?
             .read()
             .await
             .update_integration_connection_context(
@@ -566,7 +571,7 @@ impl NotificationSyncSourceService for GoogleMailService {
                 )
                 .await?;
 
-            // Tips: The batch API can be used to for better performance
+            // Tips: The batch API can be used for better performance
             // https://developers.google.com/gmail/api/guides/batch
             for thread in &google_mail_thread_list.threads.unwrap_or_default() {
                 let google_mail_thread = self
@@ -583,8 +588,8 @@ impl NotificationSyncSourceService for GoogleMailService {
             };
         }
 
-        let mut notifications: Vec<Notification> = vec![];
-        for google_mail_thread in google_mail_threads {
+        let mut third_party_items = vec![];
+        for mut google_mail_thread in google_mail_threads {
             let existing_notification = self
                 .notification_service
                 .upgrade()
@@ -593,32 +598,127 @@ impl NotificationSyncSourceService for GoogleMailService {
                 .await
                 .get_notification_for_source_id(executor, &google_mail_thread.id, user_id)
                 .await?;
-            let existing_notification_status = existing_notification.map(|notif| notif.status);
-            let notification = google_mail_thread.into_notification(
-                user_id,
-                existing_notification_status,
-                &config.synced_label.id,
-            );
-            if notification.status == NotificationStatus::Unsubscribed {
-                self.modify_thread(
-                    &notification.source_id,
-                    vec![],
-                    vec![GOOGLE_MAIL_INBOX_LABEL, &config.synced_label.id],
-                    &access_token,
-                )
-                .await?;
+
+            if existing_notification.map(|notif| notif.status)
+                == Some(NotificationStatus::Unsubscribed)
+            {
+                let first_unread_message_index = google_mail_thread
+                    .messages
+                    .iter()
+                    .position(|msg| msg.is_tagged_with(GOOGLE_MAIL_UNREAD_LABEL));
+                let clear_labels = if let Some(i) = first_unread_message_index {
+                    let has_directly_addressed_messages =
+                        google_mail_thread.messages.iter().skip(i).any(|msg| {
+                            msg.payload.headers.iter().any(|header| {
+                                header.name == *"To"
+                                    && header
+                                        .value
+                                        .contains(&google_mail_thread.user_email_address.0)
+                            })
+                        });
+                    if has_directly_addressed_messages {
+                        false
+                    } else {
+                        google_mail_thread
+                            .remove_labels(vec![GOOGLE_MAIL_INBOX_LABEL, &config.synced_label.id]);
+                        true
+                    }
+                } else {
+                    google_mail_thread
+                        .remove_labels(vec![GOOGLE_MAIL_INBOX_LABEL, &config.synced_label.id]);
+                    true
+                };
+
+                if clear_labels {
+                    self.modify_thread(
+                        &google_mail_thread.id,
+                        vec![],
+                        vec![GOOGLE_MAIL_INBOX_LABEL, &config.synced_label.id],
+                        &access_token,
+                    )
+                    .await?;
+                }
             }
-            notifications.push(notification);
+
+            let third_party_item =
+                google_mail_thread.into_third_party_item(user_id, integration_connection.id);
+
+            third_party_items.push(third_party_item);
         }
 
-        Ok(notifications)
+        Ok(third_party_items)
+    }
+
+    fn is_sync_incremental(&self) -> bool {
+        false
+    }
+
+    fn get_third_party_item_source_kind(&self) -> ThirdPartyItemSourceKind {
+        ThirdPartyItemSourceKind::GoogleMailThread
     }
 }
 
 #[async_trait]
-impl NotificationSourceService for GoogleMailService {
+impl ThirdPartyNotificationSourceService<GoogleMailThread> for GoogleMailService {
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, source, source_third_party_item),
+        fields(
+            source_id = source_third_party_item.source_id,
+            third_party_item_id = source_third_party_item.id.to_string()
+        ),
+    )]
+    async fn third_party_item_into_notification(
+        &self,
+        source: &GoogleMailThread,
+        source_third_party_item: &ThirdPartyItem,
+        user_id: UserId,
+    ) -> Result<Box<Notification>, UniversalInboxError> {
+        let title = source
+            .get_message_header(MessageSelection::First, "Subject")
+            .unwrap_or_else(|| DEFAULT_SUBJECT.to_string());
+        let first_unread_message_index = source
+            .messages
+            .iter()
+            .position(|msg| msg.is_tagged_with(GOOGLE_MAIL_UNREAD_LABEL));
+        let last_read_at = if let Some(i) = first_unread_message_index {
+            (i > 0).then(|| source.messages[i - 1].internal_date)
+        } else {
+            Some(source.messages[source.messages.len() - 1].internal_date)
+        };
+        let thread_is_archived = !source.is_tagged_with(GOOGLE_MAIL_INBOX_LABEL, None);
+        let status = if thread_is_archived {
+            NotificationStatus::Unsubscribed
+        } else {
+            let thread_is_unread = source.is_tagged_with(GOOGLE_MAIL_UNREAD_LABEL, None);
+            if thread_is_unread {
+                NotificationStatus::Unread
+            } else {
+                NotificationStatus::Read
+            }
+        };
+
+        Ok(Box::new(Notification {
+            id: Uuid::new_v4().into(),
+            title,
+            status,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            last_read_at,
+            snoozed_until: None,
+            user_id,
+            kind: NotificationSourceKind::GoogleMail,
+            source_item: source_third_party_item.clone(),
+            task_id: None,
+        }))
+    }
+
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.0.to_string()))]
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, executor, notification),
+        fields(notification_id = notification.id.0.to_string())
+    )]
     async fn delete_notification_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -627,6 +727,8 @@ impl NotificationSourceService for GoogleMailService {
     ) -> Result<(), UniversalInboxError> {
         let (access_token, integration_connection) = self
             .integration_connection_service
+            .upgrade()
+            .context("Unable to access integration_connection_service from google_mail_service")?
             .read()
             .await
             .find_access_token(executor, IntegrationProviderKind::GoogleMail, user_id)
@@ -637,7 +739,7 @@ impl NotificationSourceService for GoogleMailService {
         let config = GoogleMailService::get_config(&integration_connection)?;
 
         self.archive_thread(
-            &notification.source_id,
+            &notification.source_item.source_id,
             &config.synced_label.id,
             &access_token,
         )
@@ -654,6 +756,8 @@ impl NotificationSourceService for GoogleMailService {
     ) -> Result<(), UniversalInboxError> {
         let (access_token, integration_connection) = self
             .integration_connection_service
+            .upgrade()
+            .context("Unable to access integration_connection_service from google_mail_service")?
             .read()
             .await
             .find_access_token(executor, IntegrationProviderKind::GoogleMail, user_id)
@@ -664,7 +768,7 @@ impl NotificationSourceService for GoogleMailService {
         let config = GoogleMailService::get_config(&integration_connection)?;
 
         self.archive_thread(
-            &notification.source_id,
+            &notification.source_item.source_id,
             &config.synced_label.id,
             &access_token,
         )
@@ -680,20 +784,6 @@ impl NotificationSourceService for GoogleMailService {
     ) -> Result<(), UniversalInboxError> {
         // Google Mail threads cannot be snoozed from the API => no-op
         Ok(())
-    }
-
-    #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, _executor, _notification), fields(notification_id = _notification.id.0.to_string()))]
-    async fn fetch_notification_details<'a>(
-        &self,
-        _executor: &mut Transaction<'a, Postgres>,
-        _notification: &Notification,
-        _user_id: UserId,
-    ) -> Result<Option<NotificationDetails>, UniversalInboxError> {
-        // Google Mail threads details are fetch as part of the get_thread call in
-        // fetch_all_notification
-        // Should it be moved here?
-        Ok(None)
     }
 }
 
@@ -711,5 +801,435 @@ impl NotificationSource for GoogleMailService {
     // Snoozing messages is available in Google Mail but not via their public API
     fn is_supporting_snoozed_notifications(&self) -> bool {
         false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::*;
+
+    mod notification_conversion {
+        use super::*;
+        use chrono::TimeZone;
+        use pretty_assertions::assert_eq;
+        use universal_inbox::{
+            third_party::integrations::google_mail::{
+                GoogleMailMessageHeader, GoogleMailMessagePayload, GOOGLE_MAIL_STARRED_LABEL,
+            },
+            HasHtmlUrl,
+        };
+
+        #[fixture]
+        fn google_mail_service() -> GoogleMailService {
+            GoogleMailService::new(
+                Some("https://gmail.googleapis.com/gmail/v1".to_string()),
+                10,
+                Weak::new(),
+                Weak::new(),
+            )
+            .unwrap()
+        }
+
+        #[rstest]
+        #[tokio::test]
+        async fn test_google_mail_thread_into_notification(google_mail_service: GoogleMailService) {
+            let google_mail_thread = GoogleMailThread {
+                id: "18a909f8178".to_string(),
+                history_id: "1234".to_string(),
+                user_email_address: "test@example.com".to_string().into(),
+                messages: vec![
+                    GoogleMailMessage {
+                        id: "18a909f8178".to_string(),
+                        thread_id: "18a909f8178".to_string(),
+                        label_ids: Some(vec![GOOGLE_MAIL_INBOX_LABEL.to_string()]),
+                        snippet: "test".to_string(),
+                        size_estimate: 4,
+                        history_id: "5678".to_string(),
+                        internal_date: Utc.with_ymd_and_hms(2023, 9, 13, 20, 19, 32).unwrap(),
+                        payload: GoogleMailMessagePayload {
+                            mime_type: "multipart/mixed".to_string(),
+                            headers: vec![
+                                GoogleMailMessageHeader {
+                                    name: "Subject".to_string(),
+                                    value: "test subject".to_string(),
+                                },
+                                GoogleMailMessageHeader {
+                                    name: "To".to_string(),
+                                    value: "dest@example.com".to_string(),
+                                },
+                            ],
+                        },
+                    },
+                    GoogleMailMessage {
+                        id: "18a909f8179".to_string(),
+                        thread_id: "18a909f8178".to_string(),
+                        label_ids: Some(vec![GOOGLE_MAIL_UNREAD_LABEL.to_string()]),
+                        snippet: "test 2".to_string(),
+                        size_estimate: 6,
+                        history_id: "5678".to_string(),
+                        internal_date: Utc.with_ymd_and_hms(2023, 9, 13, 20, 19, 33).unwrap(),
+                        payload: GoogleMailMessagePayload {
+                            mime_type: "multipart/mixed".to_string(),
+                            headers: vec![GoogleMailMessageHeader {
+                                name: "Subject".to_string(),
+                                value: "test subject".to_string(),
+                            }],
+                        },
+                    },
+                ],
+            };
+            let user_id = Uuid::new_v4().into();
+            let google_mail_thread_tpi = google_mail_thread
+                .clone()
+                .into_third_party_item(user_id, Uuid::new_v4().into());
+
+            let google_mail_notification = google_mail_service
+                .third_party_item_into_notification(
+                    &google_mail_thread,
+                    &google_mail_thread_tpi,
+                    user_id,
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(google_mail_notification.title, "test subject".to_string());
+            assert_eq!(
+                google_mail_notification.source_item.source_id,
+                "18a909f8178".to_string()
+            );
+            assert_eq!(
+                google_mail_notification.get_html_url(),
+                "https://mail.google.com/mail/u/test@example.com/#inbox/18a909f8178"
+                    .parse::<Url>()
+                    .unwrap()
+            );
+            assert_eq!(google_mail_notification.status, NotificationStatus::Unread);
+            assert_eq!(
+                google_mail_notification.last_read_at,
+                Some(Utc.with_ymd_and_hms(2023, 9, 13, 20, 19, 32).unwrap())
+            );
+        }
+
+        #[rstest]
+        #[tokio::test]
+        async fn test_google_mail_thread_with_missing_headers_into_notification(
+            google_mail_service: GoogleMailService,
+        ) {
+            let google_mail_thread = GoogleMailThread {
+                id: "18a909f8178".to_string(),
+                history_id: "1234".to_string(),
+                user_email_address: "test@example.com".to_string().into(),
+                messages: vec![
+                    GoogleMailMessage {
+                        id: "18a909f8178".to_string(),
+                        thread_id: "18a909f8178".to_string(),
+                        label_ids: Some(vec![
+                            GOOGLE_MAIL_INBOX_LABEL.to_string(),
+                            GOOGLE_MAIL_UNREAD_LABEL.to_string(),
+                        ]),
+                        snippet: "test".to_string(),
+                        size_estimate: 4,
+                        history_id: "5678".to_string(),
+                        internal_date: Utc.with_ymd_and_hms(2023, 9, 13, 20, 19, 32).unwrap(),
+                        payload: GoogleMailMessagePayload {
+                            mime_type: "multipart/mixed".to_string(),
+                            headers: vec![],
+                        },
+                    },
+                    GoogleMailMessage {
+                        id: "18a909f8179".to_string(),
+                        thread_id: "18a909f8178".to_string(),
+                        label_ids: Some(vec![
+                            GOOGLE_MAIL_INBOX_LABEL.to_string(),
+                            GOOGLE_MAIL_UNREAD_LABEL.to_string(),
+                        ]),
+                        snippet: "test 2".to_string(),
+                        size_estimate: 6,
+                        history_id: "5678".to_string(),
+                        internal_date: Utc.with_ymd_and_hms(2023, 9, 13, 20, 19, 33).unwrap(),
+                        payload: GoogleMailMessagePayload {
+                            mime_type: "multipart/mixed".to_string(),
+                            headers: vec![],
+                        },
+                    },
+                ],
+            };
+            let user_id = Uuid::new_v4().into();
+            let google_mail_thread_tpi = google_mail_thread
+                .clone()
+                .into_third_party_item(user_id, Uuid::new_v4().into());
+
+            let google_mail_notification = google_mail_service
+                .third_party_item_into_notification(
+                    &google_mail_thread,
+                    &google_mail_thread_tpi,
+                    user_id,
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(google_mail_notification.title, DEFAULT_SUBJECT.to_string());
+            assert_eq!(
+                google_mail_notification.get_html_url(),
+                "https://mail.google.com/mail/u/test@example.com/#inbox/18a909f8178"
+                    .parse::<Url>()
+                    .unwrap()
+            );
+            assert_eq!(google_mail_notification.status, NotificationStatus::Unread);
+            assert_eq!(google_mail_notification.last_read_at, None);
+        }
+
+        #[rstest]
+        #[tokio::test]
+        async fn test_google_mail_read_thread_into_notification(
+            google_mail_service: GoogleMailService,
+        ) {
+            let google_mail_thread = GoogleMailThread {
+                id: "18a909f8178".to_string(),
+                history_id: "1234".to_string(),
+                user_email_address: "test@example.com".to_string().into(),
+                messages: vec![
+                    GoogleMailMessage {
+                        id: "18a909f8178".to_string(),
+                        thread_id: "18a909f8178".to_string(),
+                        label_ids: Some(vec![GOOGLE_MAIL_INBOX_LABEL.to_string()]),
+                        snippet: "test".to_string(),
+                        size_estimate: 4,
+                        history_id: "5678".to_string(),
+                        internal_date: Utc.with_ymd_and_hms(2023, 9, 13, 20, 19, 32).unwrap(),
+                        payload: GoogleMailMessagePayload {
+                            mime_type: "multipart/mixed".to_string(),
+                            headers: vec![],
+                        },
+                    },
+                    GoogleMailMessage {
+                        id: "18a909f8179".to_string(),
+                        thread_id: "18a909f8178".to_string(),
+                        label_ids: Some(vec![GOOGLE_MAIL_INBOX_LABEL.to_string()]),
+                        snippet: "test 2".to_string(),
+                        size_estimate: 6,
+                        history_id: "5678".to_string(),
+                        internal_date: Utc.with_ymd_and_hms(2023, 9, 13, 20, 19, 33).unwrap(),
+                        payload: GoogleMailMessagePayload {
+                            mime_type: "multipart/mixed".to_string(),
+                            headers: vec![],
+                        },
+                    },
+                ],
+            };
+            let user_id = Uuid::new_v4().into();
+            let google_mail_thread_tpi = google_mail_thread
+                .clone()
+                .into_third_party_item(user_id, Uuid::new_v4().into());
+
+            let google_mail_notification = google_mail_service
+                .third_party_item_into_notification(
+                    &google_mail_thread,
+                    &google_mail_thread_tpi,
+                    user_id,
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(google_mail_notification.status, NotificationStatus::Read);
+            assert_eq!(
+                google_mail_notification.last_read_at,
+                Some(Utc.with_ymd_and_hms(2023, 9, 13, 20, 19, 33).unwrap())
+            );
+        }
+
+        #[rstest]
+        #[tokio::test]
+        async fn test_google_mail_unsubscribed_thread_with_no_new_message_into_notification(
+            google_mail_service: GoogleMailService,
+        ) {
+            let google_mail_thread = GoogleMailThread {
+                id: "18a909f8178".to_string(),
+                history_id: "1234".to_string(),
+                user_email_address: "test@example.com".to_string().into(),
+                messages: vec![
+                    GoogleMailMessage {
+                        id: "18a909f8178".to_string(),
+                        thread_id: "18a909f8178".to_string(),
+                        label_ids: Some(vec![GOOGLE_MAIL_STARRED_LABEL.to_string()]),
+                        snippet: "test".to_string(),
+                        size_estimate: 4,
+                        history_id: "5678".to_string(),
+                        internal_date: Utc.with_ymd_and_hms(2023, 9, 13, 20, 19, 32).unwrap(),
+                        payload: GoogleMailMessagePayload {
+                            mime_type: "multipart/mixed".to_string(),
+                            headers: vec![],
+                        },
+                    },
+                    GoogleMailMessage {
+                        id: "18a909f8179".to_string(),
+                        thread_id: "18a909f8178".to_string(),
+                        label_ids: Some(vec![GOOGLE_MAIL_STARRED_LABEL.to_string()]),
+                        snippet: "test 2".to_string(),
+                        size_estimate: 6,
+                        history_id: "5678".to_string(),
+                        internal_date: Utc.with_ymd_and_hms(2023, 9, 13, 20, 19, 33).unwrap(),
+                        payload: GoogleMailMessagePayload {
+                            mime_type: "multipart/mixed".to_string(),
+                            headers: vec![],
+                        },
+                    },
+                ],
+            };
+            let user_id = Uuid::new_v4().into();
+            let google_mail_thread_tpi = google_mail_thread
+                .clone()
+                .into_third_party_item(user_id, Uuid::new_v4().into());
+
+            let google_mail_notification = google_mail_service
+                .third_party_item_into_notification(
+                    &google_mail_thread,
+                    &google_mail_thread_tpi,
+                    user_id,
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(
+                google_mail_notification.status,
+                NotificationStatus::Unsubscribed
+            );
+            assert_eq!(
+                google_mail_notification.last_read_at,
+                Some(Utc.with_ymd_and_hms(2023, 9, 13, 20, 19, 33).unwrap())
+            );
+        }
+
+        #[rstest]
+        #[tokio::test]
+        async fn test_google_mail_unsubscribed_thread_with_new_unread_message_into_notification(
+            google_mail_service: GoogleMailService,
+        ) {
+            let google_mail_thread = GoogleMailThread {
+                id: "18a909f8178".to_string(),
+                history_id: "1234".to_string(),
+                user_email_address: "test@example.com".to_string().into(),
+                messages: vec![
+                    GoogleMailMessage {
+                        id: "18a909f8178".to_string(),
+                        thread_id: "18a909f8178".to_string(),
+                        label_ids: Some(vec![GOOGLE_MAIL_STARRED_LABEL.to_string()]),
+                        snippet: "test".to_string(),
+                        size_estimate: 4,
+                        history_id: "5678".to_string(),
+                        internal_date: Utc.with_ymd_and_hms(2023, 9, 13, 20, 19, 32).unwrap(),
+                        payload: GoogleMailMessagePayload {
+                            mime_type: "multipart/mixed".to_string(),
+                            headers: vec![],
+                        },
+                    },
+                    GoogleMailMessage {
+                        id: "18a909f8179".to_string(),
+                        thread_id: "18a909f8178".to_string(),
+                        label_ids: Some(vec![
+                            GOOGLE_MAIL_STARRED_LABEL.to_string(),
+                            GOOGLE_MAIL_UNREAD_LABEL.to_string(),
+                        ]),
+                        snippet: "test 2".to_string(),
+                        size_estimate: 6,
+                        history_id: "5678".to_string(),
+                        internal_date: Utc.with_ymd_and_hms(2023, 9, 13, 20, 19, 33).unwrap(),
+                        payload: GoogleMailMessagePayload {
+                            mime_type: "multipart/mixed".to_string(),
+                            headers: vec![],
+                        },
+                    },
+                ],
+            };
+            let user_id = Uuid::new_v4().into();
+            let google_mail_thread_tpi = google_mail_thread
+                .clone()
+                .into_third_party_item(user_id, Uuid::new_v4().into());
+
+            let google_mail_notification = google_mail_service
+                .third_party_item_into_notification(
+                    &google_mail_thread,
+                    &google_mail_thread_tpi,
+                    user_id,
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(
+                google_mail_notification.status,
+                NotificationStatus::Unsubscribed
+            );
+            assert_eq!(
+                google_mail_notification.last_read_at,
+                Some(Utc.with_ymd_and_hms(2023, 9, 13, 20, 19, 32).unwrap())
+            );
+        }
+
+        #[rstest]
+        #[tokio::test]
+        async fn test_google_mail_unsubscribed_thread_with_new_unread_message_directly_addressed_into_notification(
+            google_mail_service: GoogleMailService,
+        ) {
+            let google_mail_thread = GoogleMailThread {
+                id: "18a909f8178".to_string(),
+                history_id: "1234".to_string(),
+                user_email_address: "test@example.com".to_string().into(),
+                messages: vec![
+                    GoogleMailMessage {
+                        id: "18a909f8178".to_string(),
+                        thread_id: "18a909f8178".to_string(),
+                        label_ids: Some(vec![GOOGLE_MAIL_STARRED_LABEL.to_string()]),
+                        snippet: "test".to_string(),
+                        size_estimate: 4,
+                        history_id: "5678".to_string(),
+                        internal_date: Utc.with_ymd_and_hms(2023, 9, 13, 20, 19, 32).unwrap(),
+                        payload: GoogleMailMessagePayload {
+                            mime_type: "multipart/mixed".to_string(),
+                            headers: vec![],
+                        },
+                    },
+                    GoogleMailMessage {
+                        id: "18a909f8179".to_string(),
+                        thread_id: "18a909f8178".to_string(),
+                        label_ids: Some(vec![
+                            GOOGLE_MAIL_STARRED_LABEL.to_string(),
+                            GOOGLE_MAIL_INBOX_LABEL.to_string(),
+                            GOOGLE_MAIL_UNREAD_LABEL.to_string(),
+                        ]),
+                        snippet: "test 2".to_string(),
+                        size_estimate: 6,
+                        history_id: "5678".to_string(),
+                        internal_date: Utc.with_ymd_and_hms(2023, 9, 13, 20, 19, 33).unwrap(),
+                        payload: GoogleMailMessagePayload {
+                            mime_type: "multipart/mixed".to_string(),
+                            headers: vec![GoogleMailMessageHeader {
+                                name: "To".to_string(),
+                                value: "test@example.com".to_string(),
+                            }],
+                        },
+                    },
+                ],
+            };
+            let user_id = Uuid::new_v4().into();
+            let google_mail_thread_tpi = google_mail_thread
+                .clone()
+                .into_third_party_item(user_id, Uuid::new_v4().into());
+
+            let google_mail_notification = google_mail_service
+                .third_party_item_into_notification(
+                    &google_mail_thread,
+                    &google_mail_thread_tpi,
+                    user_id,
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(google_mail_notification.status, NotificationStatus::Unread);
+            assert_eq!(
+                google_mail_notification.last_read_at,
+                Some(Utc.with_ymd_and_hms(2023, 9, 13, 20, 19, 32).unwrap())
+            );
+        }
     }
 }

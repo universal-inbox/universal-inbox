@@ -10,14 +10,16 @@ use universal_inbox::{
         integrations::todoist::TodoistConfig,
     },
     notification::{
-        integrations::github::GithubNotification, service::NotificationPatch, Notification,
-        NotificationStatus, NotificationWithTask,
+        service::NotificationPatch, Notification, NotificationStatus, NotificationWithTask,
     },
     task::{
         service::TaskPatch, DueDate, ProjectSummary, Task, TaskCreation, TaskPriority, TaskStatus,
     },
     third_party::{
-        integrations::todoist::{TodoistItem, TodoistItemDue, TodoistItemPriority},
+        integrations::{
+            github::GithubNotification,
+            todoist::{TodoistItem, TodoistItemDue, TodoistItemPriority},
+        },
         item::{ThirdPartyItem, ThirdPartyItemCreationResult, ThirdPartyItemData},
     },
     HasHtmlUrl,
@@ -95,11 +97,11 @@ mod patch_task {
                 created_at: Utc::now().with_nanosecond(0).unwrap(),
                 updated_at: Utc::now().with_nanosecond(0).unwrap(),
                 user_id: app.user.id,
-                data: ThirdPartyItemData::TodoistItem(TodoistItem {
+                data: ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
                     project_id: "1111".to_string(), // ie. "Inbox"
                     added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
                     ..*todoist_item.clone()
-                }),
+                })),
                 integration_connection_id: integration_connection.id,
             }),
         )
@@ -181,11 +183,11 @@ mod patch_task {
                 created_at: Utc::now().with_nanosecond(0).unwrap(),
                 updated_at: Utc::now().with_nanosecond(0).unwrap(),
                 user_id: app.user.id,
-                data: ThirdPartyItemData::TodoistItem(TodoistItem {
+                data: ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
                     project_id: "1111".to_string(), // ie. "Inbox"
                     added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
                     ..*todoist_item.clone()
-                }),
+                })),
                 integration_connection_id: integration_connection.id,
             }),
         )
@@ -269,11 +271,11 @@ mod patch_task {
                 created_at: Utc::now().with_nanosecond(0).unwrap(),
                 updated_at: Utc::now().with_nanosecond(0).unwrap(),
                 user_id: app.user.id,
-                data: ThirdPartyItemData::TodoistItem(TodoistItem {
+                data: ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
                     project_id: "1111".to_string(), // ie. "Inbox"
                     added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
                     ..*todoist_item.clone()
-                }),
+                })),
                 integration_connection_id: integration_connection.id,
             }),
         )
@@ -378,13 +380,25 @@ mod patch_task {
     ) {
         let app = authenticated_app.await;
 
-        let notification = create_notification_from_github_notification(
-            &app.client,
-            &app.app.api_address,
-            &github_notification,
+        let github_integration_connection = create_and_mock_integration_connection(
+            &app.app,
             app.user.id,
+            &settings.oauth2.nango_secret_key,
+            IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+            &settings,
+            nango_github_connection,
+            None,
         )
         .await;
+
+        let notification = create_notification_from_github_notification(
+            &app.app,
+            &github_notification,
+            app.user.id,
+            github_integration_connection.id,
+        )
+        .await;
+
         // Existing project in sync_todoist_projects_response
         let project = "Project2".to_string();
         let project_id = "2222".to_string();
@@ -398,23 +412,13 @@ mod patch_task {
             notification.title,
             notification.get_html_url().as_ref()
         ));
-        let integration_connection = create_and_mock_integration_connection(
+        let todoist_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
             &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
             nango_todoist_connection,
-            None,
-        )
-        .await;
-        create_and_mock_integration_connection(
-            &app.app,
-            app.user.id,
-            &settings.oauth2.nango_secret_key,
-            IntegrationConnectionConfig::Github(GithubConfig::enabled()),
-            &settings,
-            nango_github_connection,
             None,
         )
         .await;
@@ -519,8 +523,8 @@ mod patch_task {
                                 .source_item
                                 .updated_at,
                             user_id: app.user.id,
-                            data: ThirdPartyItemData::TodoistItem(*todoist_item.clone()),
-                            integration_connection_id: integration_connection.id,
+                            data: ThirdPartyItemData::TodoistItem(todoist_item.clone()),
+                            integration_connection_id: todoist_integration_connection.id,
                         },
                         app.user.id
                     )
@@ -555,16 +559,27 @@ mod patch_notification {
         todoist_item: Box<TodoistItem>,
         sync_todoist_projects_response: TodoistSyncResponse,
         nango_todoist_connection: Box<NangoConnection>,
+        nango_github_connection: Box<NangoConnection>,
     ) {
         let app = authenticated_app.await;
-        let notification = create_notification_from_github_notification(
-            &app.client,
-            &app.app.api_address,
-            &github_notification,
+        let github_integration_connection = create_and_mock_integration_connection(
+            &app.app,
             app.user.id,
+            &settings.oauth2.nango_secret_key,
+            IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+            &settings,
+            nango_github_connection,
+            None,
         )
         .await;
-        let integration_connection = create_and_mock_integration_connection(
+        let notification = create_notification_from_github_notification(
+            &app.app,
+            &github_notification,
+            app.user.id,
+            github_integration_connection.id,
+        )
+        .await;
+        let todoist_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
             &settings.oauth2.nango_secret_key,
@@ -591,12 +606,12 @@ mod patch_notification {
                 created_at: Utc::now().with_nanosecond(0).unwrap(),
                 updated_at: Utc::now().with_nanosecond(0).unwrap(),
                 user_id: app.user.id,
-                data: ThirdPartyItemData::TodoistItem(TodoistItem {
+                data: ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
                     project_id: "2222".to_string(), // ie. "Project2"
                     added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
                     ..*todoist_item.clone()
-                }),
-                integration_connection_id: integration_connection.id,
+                })),
+                integration_connection_id: todoist_integration_connection.id,
             }),
         )
         .await;

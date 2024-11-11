@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use chrono::{DateTime, Timelike, Utc};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -105,12 +106,15 @@ impl From<TaskPriority> for TodoistItemPriority {
 }
 
 impl TryFrom<ThirdPartyItem> for TodoistItem {
-    type Error = ();
+    type Error = anyhow::Error;
 
     fn try_from(item: ThirdPartyItem) -> Result<Self, Self::Error> {
         match item.data {
-            ThirdPartyItemData::TodoistItem(todoist_item) => Ok(todoist_item),
-            _ => Err(()),
+            ThirdPartyItemData::TodoistItem(todoist_item) => Ok(*todoist_item),
+            _ => Err(anyhow!(
+                "Unable to convert ThirdPartyItem {} to TodoistItem",
+                item.id
+            )),
         }
     }
 }
@@ -124,7 +128,7 @@ impl ThirdPartyItemFromSource for TodoistItem {
         ThirdPartyItem {
             id: Uuid::new_v4().into(),
             source_id: self.id.clone(),
-            data: ThirdPartyItemData::TodoistItem(self.clone()),
+            data: ThirdPartyItemData::TodoistItem(Box::new(self.clone())),
             created_at: Utc::now().with_nanosecond(0).unwrap(),
             updated_at: Utc::now().with_nanosecond(0).unwrap(),
             user_id,

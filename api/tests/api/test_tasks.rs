@@ -92,11 +92,11 @@ mod get_task {
                 created_at: Utc::now().with_nanosecond(0).unwrap(),
                 updated_at: Utc::now().with_nanosecond(0).unwrap(),
                 user_id: app.user.id,
-                data: ThirdPartyItemData::TodoistItem(TodoistItem {
+                data: ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
                     project_id: "1111".to_string(), // ie. "Inbox"
                     added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
                     ..*todoist_item.clone()
-                }),
+                })),
                 integration_connection_id: integration_connection.id,
             }),
         )
@@ -171,11 +171,11 @@ mod list_tasks {
                 created_at: Utc::now().with_nanosecond(0).unwrap(),
                 updated_at: Utc::now().with_nanosecond(0).unwrap(),
                 user_id: app.user.id,
-                data: ThirdPartyItemData::TodoistItem(TodoistItem {
+                data: ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
                     project_id: "1111".to_string(), // ie. "Inbox"
                     added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
                     ..*todoist_item.clone()
-                }),
+                })),
                 integration_connection_id: integration_connection.id,
             }),
         )
@@ -198,11 +198,11 @@ mod list_tasks {
                 created_at: Utc::now().with_nanosecond(0).unwrap(),
                 updated_at: Utc::now().with_nanosecond(0).unwrap(),
                 user_id: app.user.id,
-                data: ThirdPartyItemData::TodoistItem(TodoistItem {
+                data: ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
                     project_id: "1111".to_string(), // ie. "Inbox"
                     added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
                     ..*todoist_item_done.clone()
-                }),
+                })),
                 integration_connection_id: integration_connection.id,
             }),
         )
@@ -271,11 +271,11 @@ mod patch_task {
                 created_at: Utc::now().with_nanosecond(0).unwrap(),
                 updated_at: Utc::now().with_nanosecond(0).unwrap(),
                 user_id: app.user.id,
-                data: ThirdPartyItemData::TodoistItem(TodoistItem {
+                data: ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
                     project_id: "1111".to_string(), // ie. "Inbox"
                     added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
                     ..*todoist_item.clone()
-                }),
+                })),
                 integration_connection_id: integration_connection.id,
             }),
         )
@@ -334,11 +334,11 @@ mod patch_task {
                 created_at: Utc::now().with_nanosecond(0).unwrap(),
                 updated_at: Utc::now().with_nanosecond(0).unwrap(),
                 user_id: app.user.id,
-                data: ThirdPartyItemData::TodoistItem(TodoistItem {
+                data: ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
                     project_id: "1111".to_string(), // ie. "Inbox"
                     added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
                     ..*todoist_item.clone()
-                }),
+                })),
                 integration_connection_id: integration_connection.id,
             }),
         )
@@ -400,11 +400,11 @@ mod patch_task {
                 created_at: Utc::now().with_nanosecond(0).unwrap(),
                 updated_at: Utc::now().with_nanosecond(0).unwrap(),
                 user_id: app.user.id,
-                data: ThirdPartyItemData::TodoistItem(TodoistItem {
+                data: ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
                     project_id: "1111".to_string(), // ie. "Inbox"
                     added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
                     ..*todoist_item.clone()
-                }),
+                })),
                 integration_connection_id: integration_connection.id,
             }),
         )
@@ -517,11 +517,11 @@ mod search_tasks {
                 created_at: Utc::now().with_nanosecond(0).unwrap(),
                 updated_at: Utc::now().with_nanosecond(0).unwrap(),
                 user_id: app.user.id,
-                data: ThirdPartyItemData::TodoistItem(TodoistItem {
+                data: ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
                     project_id: "1111".to_string(), // ie. "Inbox"
                     added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
                     ..*todoist_item.clone()
-                }),
+                })),
                 integration_connection_id: integration_connection.id,
             }),
         )
@@ -544,11 +544,11 @@ mod search_tasks {
                 created_at: Utc::now().with_nanosecond(0).unwrap(),
                 updated_at: Utc::now().with_nanosecond(0).unwrap(),
                 user_id: app.user.id,
-                data: ThirdPartyItemData::TodoistItem(TodoistItem {
+                data: ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
                     project_id: "1111".to_string(), // ie. "Inbox"
                     added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
                     ..*other_todoist_item.clone()
-                }),
+                })),
                 integration_connection_id: integration_connection.id,
             }),
         )

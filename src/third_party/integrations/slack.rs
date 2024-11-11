@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use chrono::{DateTime, Timelike, Utc};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -157,12 +158,15 @@ impl HasHtmlUrl for SlackStar {
 }
 
 impl TryFrom<ThirdPartyItem> for SlackStar {
-    type Error = ();
+    type Error = anyhow::Error;
 
     fn try_from(item: ThirdPartyItem) -> Result<Self, Self::Error> {
         match item.data {
-            ThirdPartyItemData::SlackStar(slack_star) => Ok(slack_star),
-            _ => Err(()),
+            ThirdPartyItemData::SlackStar(slack_star) => Ok(*slack_star),
+            _ => Err(anyhow!(
+                "Unable to convert ThirdPartyItem {} to SlackStar",
+                item.id
+            )),
         }
     }
 }
@@ -173,12 +177,10 @@ impl ThirdPartyItemFromSource for SlackStar {
         user_id: UserId,
         integration_connection_id: IntegrationConnectionId,
     ) -> ThirdPartyItem {
-        let source_id = self.item.id();
-
         ThirdPartyItem {
             id: Uuid::new_v4().into(),
-            source_id,
-            data: ThirdPartyItemData::SlackStar(self.clone()),
+            source_id: self.item.id(),
+            data: ThirdPartyItemData::SlackStar(Box::new(self.clone())),
             created_at: Utc::now().with_nanosecond(0).unwrap(),
             updated_at: Utc::now().with_nanosecond(0).unwrap(),
             user_id,
@@ -270,12 +272,15 @@ impl HasHtmlUrl for SlackReaction {
 }
 
 impl TryFrom<ThirdPartyItem> for SlackReaction {
-    type Error = ();
+    type Error = anyhow::Error;
 
     fn try_from(item: ThirdPartyItem) -> Result<Self, Self::Error> {
         match item.data {
-            ThirdPartyItemData::SlackReaction(slack_reaction) => Ok(slack_reaction),
-            _ => Err(()),
+            ThirdPartyItemData::SlackReaction(slack_reaction) => Ok(*slack_reaction),
+            _ => Err(anyhow!(
+                "Unable to convert ThirdPartyItem {} to SlackReaction",
+                item.id
+            )),
         }
     }
 }
@@ -286,12 +291,10 @@ impl ThirdPartyItemFromSource for SlackReaction {
         user_id: UserId,
         integration_connection_id: IntegrationConnectionId,
     ) -> ThirdPartyItem {
-        let source_id = self.item.id();
-
         ThirdPartyItem {
             id: Uuid::new_v4().into(),
-            source_id,
-            data: ThirdPartyItemData::SlackReaction(self.clone()),
+            source_id: self.item.id(),
+            data: ThirdPartyItemData::SlackReaction(Box::new(self.clone())),
             created_at: Utc::now().with_nanosecond(0).unwrap(),
             updated_at: Utc::now().with_nanosecond(0).unwrap(),
             user_id,

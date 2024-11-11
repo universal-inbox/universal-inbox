@@ -1,4 +1,7 @@
-use std::sync::{Arc, Weak};
+use std::{
+    fmt::Debug,
+    sync::{Arc, Weak},
+};
 
 use anyhow::{anyhow, Context};
 use apalis_redis::RedisStorage;
@@ -7,23 +10,26 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, info};
 
 use universal_inbox::{
+    integration_connection::provider::IntegrationProvider,
     notification::{
-        service::NotificationPatch, Notification, NotificationDetails, NotificationId,
-        NotificationMetadata, NotificationSourceKind, NotificationStatus,
-        NotificationSyncSourceKind, NotificationWithTask,
+        service::NotificationPatch, Notification, NotificationId, NotificationSource,
+        NotificationSourceKind, NotificationStatus, NotificationSyncSourceKind,
+        NotificationWithTask,
     },
-    task::{service::TaskPatch, TaskCreation, TaskId, TaskStatus},
+    task::{service::TaskPatch, Task, TaskCreation, TaskId, TaskStatus},
+    third_party::{
+        integrations::slack::{SlackReaction, SlackStar},
+        item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemId},
+    },
     user::UserId,
     Page,
 };
 
 use crate::{
     integrations::{
-        github::GithubService,
-        google_mail::GoogleMailService,
-        linear::LinearService,
-        notification::{NotificationSourceService, NotificationSyncSourceService},
-        slack::SlackService,
+        github::GithubService, google_mail::GoogleMailService, linear::LinearService,
+        notification::ThirdPartyNotificationSourceService, slack::SlackService,
+        third_party::ThirdPartyItemSourceService,
     },
     jobs::UniversalInboxJob,
     repository::{notification::NotificationRepository, Repository},
@@ -32,6 +38,7 @@ use crate::{
             IntegrationConnectionService, IntegrationConnectionSyncType,
         },
         task::service::TaskService,
+        third_party::service::ThirdPartyItemService,
         user::service::UserService,
         UniversalInboxError, UpdateStatus, UpsertStatus,
     },
@@ -40,12 +47,13 @@ use crate::{
 // tag: New notification integration
 pub struct NotificationService {
     pub(super) repository: Arc<Repository>,
-    github_service: Arc<GithubService>,
-    linear_service: Arc<LinearService>,
-    google_mail_service: Arc<RwLock<GoogleMailService>>,
-    pub(super) slack_service: Arc<SlackService>,
+    pub github_service: Arc<GithubService>,
+    pub linear_service: Arc<LinearService>,
+    pub google_mail_service: Arc<RwLock<GoogleMailService>>,
+    pub slack_service: Arc<SlackService>,
     pub(super) task_service: Weak<RwLock<TaskService>>,
     pub integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
+    pub(super) third_party_item_service: Weak<RwLock<ThirdPartyItemService>>,
     user_service: Arc<UserService>,
     min_sync_notifications_interval_in_minutes: i64,
 }
@@ -60,6 +68,7 @@ impl NotificationService {
         slack_service: Arc<SlackService>,
         task_service: Weak<RwLock<TaskService>>,
         integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
+        third_party_item_service: Weak<RwLock<ThirdPartyItemService>>,
         user_service: Arc<UserService>,
         min_sync_notifications_interval_in_minutes: i64,
     ) -> NotificationService {
@@ -71,6 +80,7 @@ impl NotificationService {
             slack_service,
             task_service,
             integration_connection_service,
+            third_party_item_service,
             user_service,
             min_sync_notifications_interval_in_minutes,
         }
@@ -84,8 +94,12 @@ impl NotificationService {
         self.repository.begin().await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor, notification_source_service, notification), fields(notification_id = notification.id.to_string()))]
-    pub async fn apply_updated_notification_side_effect<'a, U>(
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, executor, notification_source_service, notification),
+        fields(notification_id = notification.id.to_string())
+    )]
+    pub async fn apply_updated_notification_side_effect<'a, T, U>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
         notification_source_service: Arc<U>,
@@ -94,7 +108,9 @@ impl NotificationService {
         user_id: UserId,
     ) -> Result<(), UniversalInboxError>
     where
-        U: NotificationSourceService + Send + Sync,
+        T: TryFrom<ThirdPartyItem> + Debug,
+        U: ThirdPartyNotificationSourceService<T> + NotificationSource + Send + Sync,
+        <T as TryFrom<ThirdPartyItem>>::Error: Send + Sync,
     {
         match patch.status {
             Some(NotificationStatus::Deleted) => {
@@ -234,260 +250,31 @@ impl NotificationService {
             .await
     }
 
-    async fn sync_source_notification_details<'a, U>(
+    #[tracing::instrument(level = "debug", skip(self, executor))]
+    pub async fn delete_stale_notifications_status_from_source_ids<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        notification_source_service: Arc<U>,
-        notification: &Notification,
-        user_id: UserId,
-    ) -> Result<Option<NotificationDetails>, UniversalInboxError>
-    where
-        U: NotificationSourceService + Send + Sync,
-    {
-        let notification_details = notification_source_service
-            .fetch_notification_details(executor, notification, user_id)
-            .await?;
-        let Some(details) = notification_details else {
-            return Ok(None);
-        };
-        let details_upsert = self
-            .repository
-            .create_or_update_notification_details(executor, notification.id, details)
-            .await?;
-        Ok(Some(details_upsert.value()))
-    }
-
-    async fn sync_source_notifications<'a, U>(
-        &self,
-        executor: &mut Transaction<'a, Postgres>,
-        notification_source_service: Arc<U>,
-        user_id: UserId,
-        force_sync: bool,
-    ) -> Result<Vec<Notification>, UniversalInboxError>
-    where
-        U: NotificationSyncSourceService + Send + Sync,
-    {
-        let integration_provider_kind = notification_source_service.get_integration_provider_kind();
-        let integration_connection_service = self.integration_connection_service.read().await;
-        let min_sync_interval_in_minutes = (!force_sync)
-            .then_some(self.min_sync_notifications_interval_in_minutes)
-            .unwrap_or_default();
-        let Some(integration_connection) = integration_connection_service
-            .get_integration_connection_to_sync(
-                executor,
-                integration_provider_kind,
-                min_sync_interval_in_minutes,
-                IntegrationConnectionSyncType::Notifications,
-                user_id,
-            )
-            .await?
-        else {
-            debug!("No validated {integration_provider_kind} integration found for user {user_id}, skipping notifications sync.");
-            return Ok(vec![]);
-        };
-
-        if !integration_connection
-            .provider
-            .is_sync_notifications_enabled()
-        {
-            debug!("{integration_provider_kind} integration for user {user_id} is disabled, skipping notifications sync.");
-            return Ok(vec![]);
-        }
-
-        info!("Syncing {integration_provider_kind} notifications for user {user_id}.");
-        let mut transaction = self.begin().await.context(format!(
-            "Failed to create new transaction while registering start sync date for {integration_provider_kind}"
-        ))?;
-        integration_connection_service
-            .start_notifications_sync_status(&mut transaction, integration_provider_kind, user_id)
-            .await?;
-        transaction.commit().await.context(
-            "Failed to commit while registering start sync date for {integration_provider_kind}",
-        )?;
-        match notification_source_service
-            .fetch_all_notifications(executor, user_id)
-            .await
-        {
-            Ok(source_notifications) => {
-                let notifications = self
-                    .save_notifications_and_sync_details(
-                        executor,
-                        notification_source_service,
-                        source_notifications,
-                        user_id,
-                    )
-                    .await?;
-                integration_connection_service
-                    .complete_notifications_sync_status(
-                        executor,
-                        integration_provider_kind,
-                        user_id,
-                    )
-                    .await?;
-
-                Ok(notifications)
-            }
-            Err(error @ UniversalInboxError::Recoverable(_)) => {
-                integration_connection_service
-                    .error_notifications_sync_status(
-                        executor,
-                        integration_provider_kind,
-                        format!("Failed to fetch notifications from {integration_provider_kind}"),
-                        user_id,
-                    )
-                    .await?;
-                Err(error)
-            }
-            Err(error) => {
-                integration_connection_service
-                    .error_notifications_sync_status(
-                        executor,
-                        integration_provider_kind,
-                        format!("Failed to fetch notifications from {integration_provider_kind}"),
-                        user_id,
-                    )
-                    .await?;
-                Err(UniversalInboxError::Recoverable(error.into()))
-            }
-        }
-    }
-
-    #[tracing::instrument(level = "debug", skip(self, executor, source_notifications))]
-    pub async fn save_notifications_from_source<'a>(
-        &self,
-        executor: &mut Transaction<'a, Postgres>,
+        active_source_third_party_item_ids: Vec<ThirdPartyItemId>,
         notification_source_kind: NotificationSourceKind,
-        source_notifications: Vec<Notification>,
-        is_incremental_update: bool,
-        update_snoozed_until: bool,
         user_id: UserId,
-    ) -> Result<Vec<UpsertStatus<Box<Notification>>>, UniversalInboxError> {
-        let mut upsert_notifications: Vec<UpsertStatus<Box<Notification>>> = vec![];
-        for notification in source_notifications {
-            let upsert_notification = self
-                .repository
-                .create_or_update_notification(
-                    executor,
-                    Box::new(notification),
-                    notification_source_kind,
-                    update_snoozed_until,
-                )
-                .await?;
-            upsert_notifications.push(upsert_notification);
-        }
-        info!(
-            "{} {notification_source_kind} notifications successfully synced for user {user_id}.",
-            upsert_notifications.len()
-        );
-
-        // For incremental synchronization, there is no need to update stale notifications
-        if !is_incremental_update {
-            let source_notification_ids = upsert_notifications
-                .iter()
-                .map(|upsert_notification| upsert_notification.value_ref().source_id.clone())
-                .collect::<Vec<String>>();
-
-            let deleted_notifications = self
-                .repository
-                .update_stale_notifications_status_from_source_ids(
-                    executor,
-                    source_notification_ids,
-                    notification_source_kind,
-                    NotificationStatus::Deleted,
-                    user_id,
-                )
-                .await?;
-            info!(
-                "{} {notification_source_kind} notifications marked as deleted for user {user_id}.",
-                deleted_notifications.len()
-            );
-        }
-
-        Ok(upsert_notifications)
-    }
-
-    #[tracing::instrument(
-        level = "debug",
-        skip(self, executor, notification_source_service, source_notifications),
-        err
-    )]
-    pub async fn save_notifications_and_sync_details<'a, U>(
-        &self,
-        executor: &mut Transaction<'a, Postgres>,
-        notification_source_service: Arc<U>,
-        source_notifications: Vec<Notification>,
-        user_id: UserId,
-    ) -> Result<Vec<Notification>, UniversalInboxError>
-    where
-        U: NotificationSourceService + Send + Sync,
-    {
-        let integration_provider_kind = notification_source_service.get_integration_provider_kind();
-        let notification_source_kind = notification_source_service.get_notification_source_kind();
-        let notification_upserts = self
-            .save_notifications_from_source(
+    ) -> Result<Vec<Notification>, UniversalInboxError> {
+        let deleted_notifications = self
+            .repository
+            .update_stale_notifications_status_from_source_ids(
                 executor,
+                active_source_third_party_item_ids,
                 notification_source_kind,
-                source_notifications,
-                false,
-                notification_source_service.is_supporting_snoozed_notifications(),
+                NotificationStatus::Deleted,
                 user_id,
             )
             .await?;
-
-        let mut notifications = vec![];
-        let mut notification_details_synced = 0;
-        for notification_upsert in notification_upserts {
-            let notification = match notification_upsert {
-                UpsertStatus::Created(notification)
-                | UpsertStatus::Updated {
-                    new: notification, ..
-                } => {
-                    let notification_details = self
-                        .sync_source_notification_details(
-                            executor,
-                            notification_source_service.clone(),
-                            &notification,
-                            user_id,
-                        )
-                        .await;
-                    match notification_details {
-                        Ok(notification_details) => {
-                            notification_details_synced += 1;
-
-                            Notification {
-                                details: notification_details,
-                                ..*notification
-                            }
-                        }
-                        Err(error @ UniversalInboxError::Recoverable(_)) => {
-                            // A recoverable error is considered not transient and we should mark the integration connection as failed.
-                            self.integration_connection_service
-                                    .read()
-                                    .await
-                                    .error_notifications_sync_status(
-                                        executor,
-                                        integration_provider_kind,
-                                        format!(
-                                            "Failed to fetch notification details from {integration_provider_kind}"
-                                        ),
-                                        user_id,
-                                    )
-                                    .await?;
-                            return Err(error);
-                        }
-                        // Making any other errors recoverable so that we can continue syncing other notifications.
-                        Err(error) => return Err(UniversalInboxError::Recoverable(error.into())),
-                    }
-                }
-                UpsertStatus::Untouched(notification) => *notification,
-            };
-            notifications.push(notification);
-        }
-
+        debug!("XXX Deleted stale notif: {:?}", deleted_notifications);
         info!(
-            "{notification_details_synced} {notification_source_kind} notification details successfully synced for user {user_id}."
+            "{} {notification_source_kind} notifications marked as deleted for user {user_id}.",
+            deleted_notifications.len()
         );
-        Ok(notifications)
+
+        Ok(deleted_notifications)
     }
 
     #[tracing::instrument(level = "debug", skip(self, executor))]
@@ -501,7 +288,7 @@ impl NotificationService {
         // tag: New notification integration
         match source {
             NotificationSyncSourceKind::Github => {
-                self.sync_source_notifications(
+                self.sync_third_party_notifications(
                     executor,
                     self.github_service.clone(),
                     user_id,
@@ -510,7 +297,7 @@ impl NotificationService {
                 .await
             }
             NotificationSyncSourceKind::Linear => {
-                self.sync_source_notifications(
+                self.sync_third_party_notifications(
                     executor,
                     self.linear_service.clone(),
                     user_id,
@@ -519,7 +306,7 @@ impl NotificationService {
                 .await
             }
             NotificationSyncSourceKind::GoogleMail => {
-                self.sync_source_notifications(
+                self.sync_third_party_notifications(
                     executor,
                     (*self.google_mail_service.read().await).clone().into(),
                     user_id,
@@ -676,8 +463,8 @@ impl NotificationService {
                 result: Some(ref notification),
             } => {
                 // tag: New notification integration
-                match notification.metadata {
-                    NotificationMetadata::Github(_) => {
+                match notification.kind {
+                    NotificationSourceKind::Github => {
                         self.apply_updated_notification_side_effect(
                             executor,
                             self.github_service.clone(),
@@ -687,7 +474,7 @@ impl NotificationService {
                         )
                         .await?;
                     }
-                    NotificationMetadata::Linear(_) => {
+                    NotificationSourceKind::Linear => {
                         self.apply_updated_notification_side_effect(
                             executor,
                             self.linear_service.clone(),
@@ -697,7 +484,7 @@ impl NotificationService {
                         )
                         .await?
                     }
-                    NotificationMetadata::GoogleMail(_) => {
+                    NotificationSourceKind::GoogleMail => {
                         self.apply_updated_notification_side_effect(
                             executor,
                             (*self.google_mail_service.read().await).clone().into(),
@@ -707,17 +494,34 @@ impl NotificationService {
                         )
                         .await?
                     }
-                    NotificationMetadata::Slack(_) => {
-                        self.apply_updated_notification_side_effect(
-                            executor,
-                            self.slack_service.clone(),
-                            patch,
-                            notification.clone(),
-                            for_user_id,
-                        )
-                        .await?
-                    }
-                    NotificationMetadata::Todoist => {
+                    NotificationSourceKind::Slack => match notification.source_item.data {
+                        ThirdPartyItemData::SlackReaction(_) => self
+                            .apply_updated_notification_side_effect::<SlackReaction, SlackService>(
+                                executor,
+                                self.slack_service.clone(),
+                                patch,
+                                notification.clone(),
+                                for_user_id,
+                            )
+                            .await?,
+                        ThirdPartyItemData::SlackStar(_) => {
+                            self.apply_updated_notification_side_effect::<SlackStar, SlackService>(
+                                executor,
+                                self.slack_service.clone(),
+                                patch,
+                                notification.clone(),
+                                for_user_id,
+                            )
+                            .await?
+                        }
+                        _ => {
+                            return Err(UniversalInboxError::Unexpected(anyhow!(
+                                "Unsupported Slack notification data type for third party item {}",
+                                notification.source_item.id
+                            )))
+                        }
+                    },
+                    NotificationSourceKind::Todoist => {
                         if let Some(NotificationStatus::Deleted) = patch.status {
                             if let Some(task_id) = notification.task_id {
                                 if apply_task_side_effects {
@@ -854,14 +658,319 @@ impl NotificationService {
         Ok(None)
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
-    pub async fn delete_notification_details<'a>(
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, executor, third_party_item, third_party_notification_service),
+        fields(
+            third_party_item_id = third_party_item.id.to_string(),
+            third_party_item_source_id = third_party_item.source_id
+        )
+    )]
+    pub async fn create_notification_from_third_party_item<'a, T, U>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        source: NotificationSourceKind,
-    ) -> Result<u64, UniversalInboxError> {
+        third_party_item: ThirdPartyItem,
+        third_party_notification_service: Arc<U>,
+        user_id: UserId,
+    ) -> Result<Option<Notification>, UniversalInboxError>
+    where
+        T: TryFrom<ThirdPartyItem> + Debug,
+        U: ThirdPartyNotificationSourceService<T> + NotificationSource + Send + Sync,
+        <T as TryFrom<ThirdPartyItem>>::Error: Send + Sync,
+    {
+        let upsert_notification = self
+            .save_third_party_item_as_notification(
+                executor,
+                &third_party_item,
+                third_party_notification_service.clone(),
+                None,
+                user_id,
+            )
+            .await?;
+
+        Ok(Some(*upsert_notification.value()))
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, executor, third_party_notification_service)
+    )]
+    async fn sync_third_party_notifications<'a, T, U>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        third_party_notification_service: Arc<U>,
+        user_id: UserId,
+        force_sync: bool,
+    ) -> Result<Vec<Notification>, UniversalInboxError>
+    where
+        T: TryFrom<ThirdPartyItem> + Debug,
+        U: ThirdPartyNotificationSourceService<T>
+            + ThirdPartyItemSourceService<T>
+            + NotificationSource
+            + Send
+            + Sync,
+        <T as TryFrom<ThirdPartyItem>>::Error: Send + Sync,
+    {
+        async fn sync_third_party_notifications<'a, T, U>(
+            notification_service: &NotificationService,
+            executor: &mut Transaction<'a, Postgres>,
+            third_party_notification_service: Arc<U>,
+            user_id: UserId,
+        ) -> Result<Vec<Notification>, UniversalInboxError>
+        where
+            T: TryFrom<ThirdPartyItem> + Debug,
+            U: ThirdPartyNotificationSourceService<T>
+                + ThirdPartyItemSourceService<T>
+                + NotificationSource
+                + Send
+                + Sync,
+            <T as TryFrom<ThirdPartyItem>>::Error: Send + Sync,
+        {
+            let third_party_items = notification_service
+                .third_party_item_service
+                .upgrade()
+                .context("Unable to access third_party_item_service from notification_service")?
+                .read()
+                .await
+                .sync_items(executor, third_party_notification_service.clone(), user_id)
+                .await?;
+
+            let mut notification_creation_results = vec![];
+            for third_party_item in third_party_items {
+                if let Some(notification_creation_result) = notification_service
+                    .create_notification_from_third_party_item(
+                        executor,
+                        third_party_item,
+                        third_party_notification_service.clone(),
+                        user_id,
+                    )
+                    .await?
+                {
+                    notification_creation_results.push(notification_creation_result);
+                }
+            }
+            Ok(notification_creation_results)
+        }
+
+        let integration_provider_kind =
+            third_party_notification_service.get_integration_provider_kind();
+        let integration_connection_service = self.integration_connection_service.read().await;
+        let min_sync_interval_in_minutes = (!force_sync)
+            .then_some(self.min_sync_notifications_interval_in_minutes)
+            .unwrap_or_default();
+        let Some(integration_connection) = integration_connection_service
+            .get_integration_connection_to_sync(
+                executor,
+                integration_provider_kind,
+                min_sync_interval_in_minutes,
+                IntegrationConnectionSyncType::Notifications,
+                user_id,
+            )
+            .await?
+        else {
+            debug!("No validated {integration_provider_kind} integration found for user {user_id}, skipping notifications sync");
+            return Ok(vec![]);
+        };
+
+        if !integration_connection
+            .provider
+            .is_sync_notifications_enabled()
+        {
+            debug!("{integration_provider_kind} integration for user {user_id} is disabled, skipping notifications sync");
+            return Ok(vec![]);
+        }
+
+        info!("Syncing {integration_provider_kind} notifications for user {user_id}");
+        integration_connection_service
+            .start_notifications_sync_status(executor, integration_provider_kind, user_id)
+            .await?;
+
+        let notification_creation_results = match sync_third_party_notifications(
+            self,
+            executor,
+            third_party_notification_service,
+            user_id,
+        )
+        .await
+        {
+            Err(e) => {
+                integration_connection_service
+                    .error_notifications_sync_status(
+                        executor,
+                        integration_provider_kind,
+                        format!("Failed to fetch notifications from {integration_provider_kind}"),
+                        user_id,
+                    )
+                    .await?;
+                return Err(UniversalInboxError::Recoverable(e.into()));
+            }
+            Ok(notification_creation_results) => {
+                integration_connection_service
+                    .complete_notifications_sync_status(
+                        executor,
+                        integration_provider_kind,
+                        user_id,
+                    )
+                    .await?;
+                notification_creation_results
+            }
+        };
+
+        info!(
+            "Successfully synced {} {integration_provider_kind} notifications for user {user_id}",
+            notification_creation_results.len()
+        );
+
+        Ok(notification_creation_results)
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, executor, third_party_notification_service, third_party_item),
+        fields(
+            third_party_item_id = third_party_item.id.to_string(),
+            third_party_item_source_id = third_party_item.source_id
+        ),
+    )]
+    pub async fn save_third_party_item_as_notification<'a, T, U>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        third_party_item: &ThirdPartyItem,
+        third_party_notification_service: Arc<U>,
+        task_id: Option<TaskId>,
+        user_id: UserId,
+    ) -> Result<UpsertStatus<Box<Notification>>, UniversalInboxError>
+    where
+        T: TryFrom<ThirdPartyItem> + Debug,
+        U: ThirdPartyNotificationSourceService<T> + NotificationSource + Send + Sync,
+        <T as TryFrom<ThirdPartyItem>>::Error: Send + Sync,
+    {
+        let data: T = third_party_item.clone().try_into().map_err(|_| {
+            anyhow!(
+                "Unexpected third party item kind {} for {}",
+                third_party_item.kind(),
+                third_party_notification_service.get_integration_provider_kind()
+            )
+        })?;
+
+        let mut notification = third_party_notification_service
+            .third_party_item_into_notification(&data, third_party_item, user_id)
+            .await?;
+        notification.task_id = task_id;
         self.repository
-            .delete_notification_details(executor, source)
+            .create_or_update_notification(
+                executor,
+                notification,
+                third_party_notification_service.get_notification_source_kind(),
+                third_party_notification_service.is_supporting_snoozed_notifications(),
+            )
             .await
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip(
+            self,
+            executor,
+            third_party_task_service,
+            task,
+            integration_connection_provider
+        ),
+        fields(task_id = task.id.to_string()),
+    )]
+    #[allow(clippy::too_many_arguments)]
+    pub async fn save_task_as_notification<'a, T, U>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        third_party_task_service: Arc<U>,
+        task: &Task,
+        third_party_item: &ThirdPartyItem,
+        integration_connection_provider: &IntegrationProvider,
+        is_incremental_update: bool,
+        user_id: UserId,
+    ) -> Result<Option<UpsertStatus<Box<Notification>>>, UniversalInboxError>
+    where
+        T: TryFrom<ThirdPartyItem> + Debug,
+        U: ThirdPartyNotificationSourceService<T> + NotificationSource + Send + Sync,
+        <T as TryFrom<ThirdPartyItem>>::Error: Send + Sync,
+    {
+        let existing_notifications = self
+            .list_notifications(executor, vec![], true, Some(task.id), None, user_id, None)
+            .await?
+            // Considering the list of notifications for a task is small enough to fit in a single page
+            .content;
+
+        let notification_source_kind = third_party_task_service.get_notification_source_kind();
+
+        if task.is_in_inbox() {
+            if !integration_connection_provider.should_create_notification_from_inbox_task() {
+                return Ok(None);
+            }
+
+            // Create notifications from tasks in the inbox if there is no existing notification
+            // for this task or if there is an existing notification for the task with the same
+            // source kind
+            let task_has_a_notification_from_the_same_source = existing_notifications
+                .iter()
+                .any(|n| n.kind == notification_source_kind);
+            if !existing_notifications.is_empty() && !task_has_a_notification_from_the_same_source {
+                return Ok(None);
+            }
+
+            debug!(
+                "Creating notification from {} task {}",
+                notification_source_kind, task.id
+            );
+            return self
+                .save_third_party_item_as_notification(
+                    executor,
+                    third_party_item,
+                    third_party_task_service,
+                    Some(task.id),
+                    user_id,
+                )
+                .await
+                .map(Some);
+        }
+
+        // Update existing notifications for a task that is not in the Inbox anymore
+        let mut updated_notifications = self
+            .patch_notifications_for_task(
+                executor,
+                task.id,
+                Some(notification_source_kind),
+                &NotificationPatch {
+                    status: Some(NotificationStatus::Deleted),
+                    ..Default::default()
+                },
+            )
+            .await?;
+        debug!(
+            "{} {} notifications deleted for task {}",
+            updated_notifications.len(),
+            notification_source_kind,
+            task.id
+        );
+
+        updated_notifications
+            .pop()
+            .map(|update_status| {
+                Ok::<UpsertStatus<Box<Notification>>, UniversalInboxError>({
+                    let notification =
+                        Box::new(update_status.result.clone().ok_or_else(|| {
+                            anyhow!("Expected a notification from the UpdateStatus")
+                        })?);
+                    if update_status.updated {
+                        // the `old` value is wrong here, but we don't need it
+                        UpsertStatus::Updated {
+                            new: notification.clone(),
+                            old: notification,
+                        }
+                    } else {
+                        UpsertStatus::Untouched(notification)
+                    }
+                })
+            })
+            .transpose()
     }
 }

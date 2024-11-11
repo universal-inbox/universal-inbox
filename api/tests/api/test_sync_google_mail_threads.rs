@@ -16,14 +16,16 @@ use universal_inbox::{
         IntegrationConnection,
     },
     notification::{
-        integrations::google_mail::{
-            EmailAddress, GoogleMailMessageHeader, GoogleMailThread, GOOGLE_MAIL_INBOX_LABEL,
-            GOOGLE_MAIL_UNREAD_LABEL,
-        },
-        Notification, NotificationMetadata, NotificationSourceKind, NotificationStatus,
+        service::NotificationPatch, Notification, NotificationSourceKind, NotificationStatus,
     },
     third_party::{
-        integrations::todoist::TodoistItem,
+        integrations::{
+            google_mail::{
+                EmailAddress, GoogleMailMessageHeader, GoogleMailThread, GOOGLE_MAIL_INBOX_LABEL,
+                GOOGLE_MAIL_UNREAD_LABEL,
+            },
+            todoist::TodoistItem,
+        },
         item::{ThirdPartyItem, ThirdPartyItemCreationResult, ThirdPartyItemData},
     },
 };
@@ -48,13 +50,13 @@ use crate::helpers::{
     },
     notification::{
         google_mail::{
-            assert_sync_notifications, google_mail_labels_list, google_mail_thread_get_123,
-            google_mail_thread_get_456, google_mail_user_profile,
-            mock_google_mail_get_user_profile_service, mock_google_mail_labels_list_service,
-            mock_google_mail_thread_get_service, mock_google_mail_thread_modify_service,
-            mock_google_mail_threads_list_service,
+            assert_sync_notifications, create_notification_from_google_mail_thread,
+            google_mail_labels_list, google_mail_thread_get_123, google_mail_thread_get_456,
+            google_mail_user_profile, mock_google_mail_get_user_profile_service,
+            mock_google_mail_labels_list_service, mock_google_mail_thread_get_service,
+            mock_google_mail_thread_modify_service, mock_google_mail_threads_list_service,
         },
-        sync_notifications,
+        sync_notifications, update_notification,
     },
     rest::{create_resource, get_resource},
     settings,
@@ -95,7 +97,8 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         result_size_estimate: 1,
         next_page_token: Some("next_token".to_string()),
     };
-    let integration_connection = create_and_mock_integration_connection(
+
+    let todoist_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
         &settings.oauth2.nango_secret_key,
@@ -122,39 +125,19 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
             created_at: Utc::now().with_nanosecond(0).unwrap(),
             updated_at: Utc::now().with_nanosecond(0).unwrap(),
             user_id: app.user.id,
-            data: ThirdPartyItemData::TodoistItem(TodoistItem {
+            data: ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
                 project_id: "2222".to_string(), // ie. "Project2"
                 added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
                 ..*todoist_item.clone()
-            }),
-            integration_connection_id: integration_connection.id,
+            })),
+            integration_connection_id: todoist_integration_connection.id,
         }),
     )
     .await;
     let existing_todoist_task = creation.task.as_ref().unwrap();
-    let existing_notification: Box<Notification> = create_resource(
-        &app.client,
-        &app.app.api_address,
-        "notifications",
-        Box::new(Notification {
-            id: Uuid::new_v4().into(),
-            user_id: app.user.id,
-            title: "test subject 456".to_string(),
-            status: NotificationStatus::Unread,
-            source_id: google_mail_thread_get_456.id.clone(),
-            metadata: NotificationMetadata::GoogleMail(Box::new(
-                google_mail_thread_get_456.clone(),
-            )),
-            updated_at: Utc.with_ymd_and_hms(2023, 9, 13, 20, 19, 32).unwrap(),
-            last_read_at: None,
-            snoozed_until: Some(Utc.with_ymd_and_hms(2064, 1, 1, 0, 0, 0).unwrap()),
-            details: None,
-            task_id: Some(existing_todoist_task.id),
-        }),
-    )
-    .await;
+
     let google_mail_config = GoogleMailConfig::enabled();
-    let integration_connection = create_and_mock_integration_connection(
+    let google_mail_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
         &settings.oauth2.nango_secret_key,
@@ -162,6 +145,24 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         &settings,
         nango_google_mail_connection,
         None,
+    )
+    .await;
+    let existing_notification = create_notification_from_google_mail_thread(
+        &app.app,
+        &google_mail_thread_get_456,
+        app.user.id,
+        google_mail_integration_connection.id,
+    )
+    .await;
+    let existing_notification = update_notification(
+        &app,
+        existing_notification.id,
+        &NotificationPatch {
+            task_id: Some(existing_todoist_task.id),
+            snoozed_until: Some(Utc.with_ymd_and_hms(2064, 1, 1, 0, 0, 0).unwrap()),
+            ..NotificationPatch::default()
+        },
+        app.user.id,
     )
     .await;
 
@@ -246,21 +247,21 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     .await;
     assert_eq!(updated_notification.id, existing_notification.id);
     assert_eq!(
-        updated_notification.source_id,
-        existing_notification.source_id
+        updated_notification.kind,
+        NotificationSourceKind::GoogleMail
+    );
+    assert_eq!(
+        updated_notification.source_item.source_id,
+        existing_notification.source_item.source_id
     );
     assert_eq!(updated_notification.status, NotificationStatus::Read);
-    assert_eq!(
-        updated_notification.updated_at,
-        Utc.with_ymd_and_hms(2023, 9, 13, 20, 27, 16).unwrap()
-    );
     assert_eq!(
         updated_notification.last_read_at,
         Some(Utc.with_ymd_and_hms(2023, 9, 13, 20, 27, 16).unwrap())
     );
     assert_eq!(
-        updated_notification.metadata,
-        NotificationMetadata::GoogleMail(Box::new(google_mail_thread_get_456.clone()))
+        updated_notification.source_item.data,
+        ThirdPartyItemData::GoogleMailThread(Box::new(google_mail_thread_get_456))
     );
     // `snoozed_until` and `task_id` should not be reset
     assert_eq!(
@@ -270,7 +271,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     assert_eq!(updated_notification.task_id, Some(existing_todoist_task.id));
 
     let updated_integration_connection =
-        get_integration_connection(&app, integration_connection.id)
+        get_integration_connection(&app, google_mail_integration_connection.id)
             .await
             .unwrap();
     assert_eq!(
@@ -338,8 +339,8 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
     } else {
         vec![
             "TEST_LABEL".to_string(),
-            synced_label_id.clone(),
             GOOGLE_MAIL_INBOX_LABEL.to_string(),
+            synced_label_id.clone(),
         ]
     });
 
@@ -352,25 +353,31 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
         },
     }];
 
-    let existing_notification: Box<Notification> = create_resource(
-        &app.client,
-        &app.app.api_address,
-        "notifications",
-        Box::new(Notification {
-            id: Uuid::new_v4().into(),
-            user_id: app.user.id,
-            title: "test subject 456".to_string(),
-            status: NotificationStatus::Unsubscribed,
-            source_id: google_mail_thread_get_456.id.clone(),
-            metadata: NotificationMetadata::GoogleMail(Box::new(
-                google_mail_thread_get_456.clone(),
-            )),
-            updated_at: Utc.with_ymd_and_hms(2023, 9, 13, 20, 19, 32).unwrap(),
-            last_read_at: None,
-            snoozed_until: None,
-            details: None,
-            task_id: None,
-        }),
+    let google_mail_integration_connection = create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        &settings.oauth2.nango_secret_key,
+        IntegrationConnectionConfig::GoogleMail(google_mail_config.clone()),
+        &settings,
+        nango_google_mail_connection,
+        None,
+    )
+    .await;
+    let existing_notification = create_notification_from_google_mail_thread(
+        &app.app,
+        &google_mail_thread_get_456,
+        app.user.id,
+        google_mail_integration_connection.id,
+    )
+    .await;
+    update_notification(
+        &app,
+        existing_notification.id,
+        &NotificationPatch {
+            status: Some(NotificationStatus::Unsubscribed),
+            ..NotificationPatch::default()
+        },
+        app.user.id,
     )
     .await;
 
@@ -383,17 +390,6 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
         result_size_estimate: 1,
         next_page_token: None,
     };
-
-    create_and_mock_integration_connection(
-        &app.app,
-        app.user.id,
-        &settings.oauth2.nango_secret_key,
-        IntegrationConnectionConfig::GoogleMail(google_mail_config.clone()),
-        &settings,
-        nango_google_mail_connection,
-        None,
-    )
-    .await;
 
     let google_mail_get_user_profile_mock = mock_google_mail_get_user_profile_service(
         &app.app.google_mail_mock_server,
@@ -460,22 +456,24 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
         updated_notification.status,
         expected_notification_status_after_sync
     );
-    match updated_notification.metadata {
-        NotificationMetadata::GoogleMail(thread) => {
-            assert_eq!(thread.messages.len(), 2);
-            assert_eq!(thread.messages[0].label_ids, None);
-
-            let mut expected_labels = vec!["TEST_LABEL".to_string()];
-            if has_new_unread_message {
-                if has_new_message_addressed_directly {
-                    expected_labels.push(GOOGLE_MAIL_INBOX_LABEL.to_string());
-                    expected_labels.push(synced_label_id.clone());
-                }
-                expected_labels.push(GOOGLE_MAIL_UNREAD_LABEL.to_string());
-            }
-
-            assert_eq!(thread.messages[1].label_ids, Some(expected_labels));
-        }
-        _ => unreachable!("Unexpected metadata {:?}", updated_notification.metadata),
+    let ThirdPartyItemData::GoogleMailThread(thread) = &updated_notification.source_item.data
+    else {
+        unreachable!(
+            "Unexpected source item data {:?}",
+            updated_notification.source_item.data
+        );
     };
+    assert_eq!(thread.messages.len(), 2);
+    assert_eq!(thread.messages[0].label_ids, None);
+
+    let mut expected_labels = vec!["TEST_LABEL".to_string()];
+    if has_new_unread_message {
+        if has_new_message_addressed_directly {
+            expected_labels.push(GOOGLE_MAIL_INBOX_LABEL.to_string());
+            expected_labels.push(synced_label_id.clone());
+        }
+        expected_labels.push(GOOGLE_MAIL_UNREAD_LABEL.to_string());
+    }
+
+    assert_eq!(thread.messages[1].label_ids, Some(expected_labels));
 }

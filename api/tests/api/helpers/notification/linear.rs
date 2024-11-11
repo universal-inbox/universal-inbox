@@ -6,11 +6,12 @@ use url::Url;
 use uuid::Uuid;
 
 use universal_inbox::{
-    notification::{
-        integrations::linear::LinearNotification, Notification, NotificationMetadata,
-        NotificationStatus,
+    integration_connection::IntegrationConnectionId,
+    notification::{Notification, NotificationStatus},
+    third_party::{
+        integrations::linear::{LinearNotification, LinearProject},
+        item::ThirdPartyItemData,
     },
-    third_party::integrations::linear::LinearProject,
     user::UserId,
     HasHtmlUrl,
 };
@@ -36,7 +37,30 @@ use universal_inbox_api::integrations::linear::graphql::{
     NotificationsQuery,
 };
 
-use crate::helpers::load_json_fixture_file;
+use crate::helpers::{
+    load_json_fixture_file, notification::create_notification_from_source_item, TestedApp,
+};
+
+pub async fn create_notification_from_linear_notification(
+    app: &TestedApp,
+    linear_notification: &LinearNotification,
+    user_id: UserId,
+    linear_integration_connection_id: IntegrationConnectionId,
+) -> Box<Notification> {
+    let linear_notification_id = match &linear_notification {
+        LinearNotification::IssueNotification { id, .. } => id.to_string(),
+        LinearNotification::ProjectNotification { id, .. } => id.to_string(),
+    };
+    create_notification_from_source_item(
+        app,
+        linear_notification_id,
+        ThirdPartyItemData::LinearNotification(Box::new(linear_notification.clone())),
+        app.notification_service.read().await.linear_service.clone(),
+        user_id,
+        linear_integration_connection_id,
+    )
+    .await
+}
 
 pub fn mock_linear_notifications_query<'a>(
     linear_mock_server: &'a MockServer,
@@ -265,7 +289,7 @@ pub fn assert_sync_notifications(
 ) {
     for notification in notifications.iter() {
         assert_eq!(notification.user_id, expected_user_id);
-        match notification.source_id.as_ref() {
+        match notification.source_item.source_id.as_ref() {
             // This Issue notification should have been updated
             "0c28d222-c599-43bb-af99-fcd3e99daff0" => {
                 assert_eq!(notification.title, "Test issue 3".to_string());
@@ -274,15 +298,6 @@ pub fn assert_sync_notifications(
                     notification.get_html_url(),
                     "https://linear.app/universal-inbox/issue/UNI-13/test-issue-3"
                         .parse::<Url>()
-                        .unwrap()
-                );
-                assert_eq!(
-                    notification.updated_at,
-                    NaiveDate::from_ymd_opt(2023, 7, 31)
-                        .unwrap()
-                        .and_hms_milli_opt(6, 1, 27, 112)
-                        .unwrap()
-                        .and_local_timezone(Utc)
                         .unwrap()
                 );
                 assert_eq!(
@@ -297,8 +312,10 @@ pub fn assert_sync_notifications(
                     )
                 );
                 assert_eq!(
-                    notification.metadata,
-                    NotificationMetadata::Linear(Box::new(sync_linear_notifications[2].clone()))
+                    notification.source_item.data,
+                    ThirdPartyItemData::LinearNotification(Box::new(
+                        sync_linear_notifications[2].clone()
+                    ))
                 );
             }
 
@@ -312,22 +329,15 @@ pub fn assert_sync_notifications(
                         .parse::<Url>()
                         .unwrap()
                 );
-                assert_eq!(
-                    notification.updated_at,
-                    NaiveDate::from_ymd_opt(2023, 7, 31)
-                        .unwrap()
-                        .and_hms_milli_opt(6, 1, 27, 137)
-                        .unwrap()
-                        .and_local_timezone(Utc)
-                        .unwrap()
-                );
                 assert_eq!(notification.last_read_at, None);
                 assert_eq!(
-                    notification.metadata,
-                    NotificationMetadata::Linear(Box::new(sync_linear_notifications[0].clone()))
+                    notification.source_item.data,
+                    ThirdPartyItemData::LinearNotification(Box::new(
+                        sync_linear_notifications[0].clone()
+                    ))
                 );
-                match &notification.metadata {
-                    NotificationMetadata::Linear(linear_notification) => {
+                match &notification.source_item.data {
+                    ThirdPartyItemData::LinearNotification(linear_notification) => {
                         match &**linear_notification {
                             LinearNotification::ProjectNotification {
                                 project: LinearProject { id, name, icon, .. },

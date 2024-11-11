@@ -6,12 +6,9 @@ use dioxus::prelude::*;
 use dioxus_free_icons::{icons::bs_icons::BsArrowUpRightSquare, Icon};
 
 use universal_inbox::{
-    notification::{
-        integrations::google_mail::{
-            GoogleMailMessage, GoogleMailThread, GOOGLE_MAIL_IMPORTANT_LABEL,
-            GOOGLE_MAIL_STARRED_LABEL,
-        },
-        NotificationWithTask,
+    notification::NotificationWithTask,
+    third_party::integrations::google_mail::{
+        GoogleMailMessage, GoogleMailThread, GOOGLE_MAIL_IMPORTANT_LABEL, GOOGLE_MAIL_STARRED_LABEL,
     },
     HasHtmlUrl,
 };

@@ -5,29 +5,42 @@ use rstest::*;
 use serde_json::json;
 use uuid::Uuid;
 
-use universal_inbox::notification::{
-    integrations::{github::GithubNotification, linear::LinearNotification},
-    service::NotificationPatch,
-    Notification, NotificationMetadata, NotificationSourceKind, NotificationStatus,
+use universal_inbox::{
+    integration_connection::{
+        config::IntegrationConnectionConfig,
+        integrations::{github::GithubConfig, linear::LinearConfig},
+    },
+    notification::{
+        service::NotificationPatch, Notification, NotificationSourceKind, NotificationStatus,
+    },
+    third_party::integrations::{github::GithubNotification, linear::LinearNotification},
 };
 
-use universal_inbox_api::integrations::linear::graphql::notifications_query;
+use universal_inbox_api::{
+    configuration::Settings, integrations::linear::graphql::notifications_query,
+    integrations::oauth2::NangoConnection,
+};
 
 use crate::helpers::{
     auth::{authenticate_user, authenticated_app, AuthenticatedApp},
+    integration_connection::{
+        create_and_mock_integration_connection, nango_github_connection, nango_linear_connection,
+    },
     notification::{
         github::{create_notification_from_github_notification, github_notification},
-        linear::sync_linear_notifications_response,
-        list_notifications,
+        linear::{
+            create_notification_from_linear_notification, sync_linear_notifications_response,
+        },
+        list_notifications, update_notification,
     },
-    rest::{
-        create_resource, create_resource_response, get_resource, get_resource_response,
-        patch_resource, patch_resource_response,
-    },
+    rest::{get_resource, get_resource_response, patch_resource, patch_resource_response},
+    settings,
 };
 
 mod list_notifications {
     use super::*;
+
+    use pretty_assertions::assert_eq;
 
     #[rstest]
     #[tokio::test]
@@ -50,96 +63,91 @@ mod list_notifications {
     #[rstest]
     #[tokio::test]
     async fn test_list_notifications(
+        settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
+        nango_github_connection: Box<NangoConnection>,
     ) {
+        let app = authenticated_app.await;
+
+        let github_integration_connection = create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            &settings.oauth2.nango_secret_key,
+            IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+            &settings,
+            nango_github_connection,
+            None,
+        )
+        .await;
+
+        let expected_notification1 = create_notification_from_github_notification(
+            &app.app,
+            &github_notification,
+            app.user.id,
+            github_integration_connection.id,
+        )
+        .await;
+
         let mut github_notification2 = github_notification.clone();
         github_notification2.id = "43".to_string();
-
-        let app = authenticated_app.await;
-        let expected_notification1: Box<Notification> = create_resource(
-            &app.client,
-            &app.app.api_address,
-            "notifications",
-            Box::new(Notification {
-                id: Uuid::new_v4().into(),
-                title: "notif1".to_string(),
-                status: NotificationStatus::Unread,
-                source_id: "1234".to_string(),
-                metadata: NotificationMetadata::Github(github_notification.clone()),
-                updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-                last_read_at: None,
-                snoozed_until: None,
-                user_id: app.user.id,
-                details: None,
-                task_id: None,
-            }),
+        let expected_notification2 = create_notification_from_github_notification(
+            &app.app,
+            &github_notification2,
+            app.user.id,
+            github_integration_connection.id,
+        )
+        .await;
+        let expected_notification2 = update_notification(
+            &app,
+            expected_notification2.id,
+            &NotificationPatch {
+                status: Some(NotificationStatus::Read),
+                ..NotificationPatch::default()
+            },
+            app.user.id,
         )
         .await;
 
-        let expected_notification2: Box<Notification> = create_resource(
-            &app.client,
-            &app.app.api_address,
-            "notifications",
-            Box::new(Notification {
-                id: Uuid::new_v4().into(),
-                title: "notif2".to_string(),
-                status: NotificationStatus::Read,
-                source_id: "5678".to_string(),
-                metadata: NotificationMetadata::Github(github_notification2.clone()),
-                updated_at: Utc.with_ymd_and_hms(2022, 2, 1, 0, 0, 0).unwrap(),
-                last_read_at: Some(Utc.with_ymd_and_hms(2022, 2, 1, 1, 0, 0).unwrap()),
-                // Snooze time has expired
-                snoozed_until: Some(
-                    Utc::now().with_nanosecond(0).unwrap() - TimeDelta::try_minutes(1).unwrap(),
-                ),
-                user_id: app.user.id,
-                details: None,
-                task_id: None,
-            }),
+        let mut github_notification_deleted = github_notification.clone();
+        github_notification_deleted.id = "54".to_string();
+        let deleted_notification = create_notification_from_github_notification(
+            &app.app,
+            &github_notification_deleted,
+            app.user.id,
+            github_integration_connection.id,
+        )
+        .await;
+        let deleted_notification = update_notification(
+            &app,
+            deleted_notification.id,
+            &NotificationPatch {
+                status: Some(NotificationStatus::Deleted),
+                ..NotificationPatch::default()
+            },
+            app.user.id,
         )
         .await;
 
-        let deleted_notification: Box<Notification> = create_resource(
-            &app.client,
-            &app.app.api_address,
-            "notifications",
-            Box::new(Notification {
-                id: Uuid::new_v4().into(),
-                title: "notif3".to_string(),
-                status: NotificationStatus::Deleted,
-                source_id: "9012".to_string(),
-                metadata: NotificationMetadata::Github(github_notification),
-                updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-                last_read_at: None,
-                snoozed_until: None,
-                user_id: app.user.id,
-                details: None,
-                task_id: None,
-            }),
+        let mut github_notification_snoozed = github_notification.clone();
+        github_notification_snoozed.id = "65".to_string();
+        let snoozed_notification = create_notification_from_github_notification(
+            &app.app,
+            &github_notification_snoozed,
+            app.user.id,
+            github_integration_connection.id,
         )
         .await;
-
-        let snoozed_notification: Box<Notification> = create_resource(
-            &app.client,
-            &app.app.api_address,
-            "notifications",
-            Box::new(Notification {
-                id: Uuid::new_v4().into(),
-                title: "notif4".to_string(),
-                status: NotificationStatus::Unread,
-                source_id: "3456".to_string(),
-                metadata: NotificationMetadata::Github(github_notification2),
-                updated_at: Utc.with_ymd_and_hms(2022, 2, 1, 0, 0, 0).unwrap(),
-                last_read_at: Some(Utc.with_ymd_and_hms(2022, 2, 1, 1, 0, 0).unwrap()),
-                // Snooze time in the future
+        let snoozed_notification = update_notification(
+            &app,
+            snoozed_notification.id,
+            &NotificationPatch {
                 snoozed_until: Some(
                     Utc::now().with_nanosecond(0).unwrap() + TimeDelta::try_minutes(1).unwrap(),
                 ),
-                user_id: app.user.id,
-                details: None,
-                task_id: None,
-            }),
+                ..NotificationPatch::default()
+            },
+            app.user.id,
         )
         .await;
 
@@ -236,31 +244,30 @@ mod list_notifications {
     #[rstest]
     #[tokio::test]
     async fn test_list_notifications_filtered_by_kind(
+        settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
         sync_linear_notifications_response: Response<notifications_query::ResponseData>,
+        nango_github_connection: Box<NangoConnection>,
+        nango_linear_connection: Box<NangoConnection>,
     ) {
-        let mut github_notification2 = github_notification.clone();
-        github_notification2.id = "43".to_string();
-
         let app = authenticated_app.await;
-        let expected_notification1: Box<Notification> = create_resource(
-            &app.client,
-            &app.app.api_address,
-            "notifications",
-            Box::new(Notification {
-                id: Uuid::new_v4().into(),
-                title: "notif1".to_string(),
-                status: NotificationStatus::Unread,
-                source_id: "1234".to_string(),
-                metadata: NotificationMetadata::Github(github_notification.clone()),
-                updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-                last_read_at: None,
-                snoozed_until: None,
-                user_id: app.user.id,
-                details: None,
-                task_id: None,
-            }),
+        let github_integration_connection = create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            &settings.oauth2.nango_secret_key,
+            IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+            &settings,
+            nango_github_connection,
+            None,
+        )
+        .await;
+
+        let expected_notification1 = create_notification_from_github_notification(
+            &app.app,
+            &github_notification,
+            app.user.id,
+            github_integration_connection.id,
         )
         .await;
 
@@ -270,11 +277,21 @@ mod list_notifications {
             .try_into()
             .unwrap();
         let linear_notification = linear_notifications[2].clone(); // Get an IssueNotification
-        let expected_notification2: Box<Notification> = create_resource(
-            &app.client,
-            &app.app.api_address,
-            "notifications",
-            Box::new(linear_notification.into_notification(app.user.id)),
+        let linear_integration_connection = create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            &settings.oauth2.nango_secret_key,
+            IntegrationConnectionConfig::Linear(LinearConfig::enabled()),
+            &settings,
+            nango_linear_connection,
+            None,
+        )
+        .await;
+        let expected_notification2 = create_notification_from_linear_notification(
+            &app.app,
+            &linear_notification,
+            app.user.id,
+            linear_integration_connection.id,
         )
         .await;
 
@@ -321,147 +338,35 @@ mod list_notifications {
     }
 }
 
-mod create_notification {
-    use super::*;
-
-    #[rstest]
-    #[tokio::test]
-    async fn test_create_notification(
-        #[future] authenticated_app: AuthenticatedApp,
-        github_notification: Box<GithubNotification>,
-    ) {
-        let app = authenticated_app.await;
-        let expected_notification = Box::new(Notification {
-            id: Uuid::new_v4().into(),
-            title: "notif1".to_string(),
-            status: NotificationStatus::Unread,
-            source_id: "1234".to_string(),
-            metadata: NotificationMetadata::Github(github_notification),
-            updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-            last_read_at: None,
-            snoozed_until: None,
-            user_id: app.user.id,
-            details: None,
-            task_id: None,
-        });
-        let created_notification: Box<Notification> = create_resource(
-            &app.client,
-            &app.app.api_address,
-            "notifications",
-            expected_notification.clone(),
-        )
-        .await;
-
-        assert_eq!(created_notification, expected_notification);
-
-        let notification = get_resource(
-            &app.client,
-            &app.app.api_address,
-            "notifications",
-            created_notification.id.into(),
-        )
-        .await;
-
-        assert_eq!(notification, expected_notification);
-    }
-
-    #[rstest]
-    #[tokio::test]
-    async fn test_create_notification_duplicate_notification(
-        #[future] authenticated_app: AuthenticatedApp,
-        github_notification: Box<GithubNotification>,
-    ) {
-        let app = authenticated_app.await;
-        let expected_notification = Box::new(Notification {
-            id: Uuid::new_v4().into(),
-            title: "notif1".to_string(),
-            status: NotificationStatus::Unread,
-            source_id: "1234".to_string(),
-            metadata: NotificationMetadata::Github(github_notification),
-            updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-            last_read_at: None,
-            snoozed_until: None,
-            user_id: app.user.id,
-            details: None,
-            task_id: None,
-        });
-        let created_notification: Box<Notification> = create_resource(
-            &app.client,
-            &app.app.api_address,
-            "notifications",
-            expected_notification.clone(),
-        )
-        .await;
-
-        assert_eq!(created_notification, expected_notification);
-
-        let response = create_resource_response(
-            &app.client,
-            &app.app.api_address,
-            "notifications",
-            expected_notification,
-        )
-        .await;
-
-        assert_eq!(response.status(), StatusCode::CONFLICT);
-        let body = response.text().await.expect("Cannot get response body");
-        assert_eq!(
-            body,
-            json!({ "message": format!("The entity {} already exists", created_notification.id) })
-                .to_string()
-        );
-    }
-
-    #[rstest]
-    #[tokio::test]
-    async fn test_create_notification_with_wrong_user_id(
-        #[future] authenticated_app: AuthenticatedApp,
-        github_notification: Box<GithubNotification>,
-    ) {
-        let app = authenticated_app.await;
-
-        let expected_notification = Box::new(Notification {
-            id: Uuid::new_v4().into(),
-            title: "notif1".to_string(),
-            status: NotificationStatus::Unread,
-            source_id: "1234".to_string(),
-            metadata: NotificationMetadata::Github(github_notification),
-            updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-            last_read_at: None,
-            snoozed_until: None,
-            user_id: Uuid::new_v4().into(),
-            details: None,
-            task_id: None,
-        });
-
-        let response = create_resource_response(
-            &app.client,
-            &app.app.api_address,
-            "notifications",
-            expected_notification.clone(),
-        )
-        .await;
-
-        assert_eq!(response.status(), StatusCode::FORBIDDEN);
-    }
-}
-
 mod get_notification {
     use super::*;
 
     #[rstest]
     #[tokio::test]
     async fn test_get_notification_of_another_user(
+        settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
+        nango_github_connection: Box<NangoConnection>,
     ) {
         let app = authenticated_app.await;
 
+        let github_integration_connection = create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            &settings.oauth2.nango_secret_key,
+            IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+            &settings,
+            nango_github_connection,
+            None,
+        )
+        .await;
+
         let notification = create_notification_from_github_notification(
-            &app.client,
-            &app.app.api_address,
+            &app.app,
             &github_notification,
             app.user.id,
+            github_integration_connection.id,
         )
         .await;
 
@@ -515,44 +420,42 @@ mod get_notification {
 }
 
 mod patch_notification {
+
     use super::*;
 
     #[rstest]
     #[tokio::test]
     async fn test_patch_notification_snoozed_until(
+        settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
+        nango_github_connection: Box<NangoConnection>,
     ) {
         let app = authenticated_app.await;
-        let expected_notification = Box::new(Notification {
-            id: Uuid::new_v4().into(),
-            title: "notif1".to_string(),
-            status: NotificationStatus::Unread,
-            source_id: "1234".to_string(),
-            metadata: NotificationMetadata::Github(github_notification),
-            updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-            last_read_at: None,
-            snoozed_until: None,
-            user_id: app.user.id,
-            details: None,
-            task_id: None,
-        });
-        let snoozed_time = Utc.with_ymd_and_hms(2022, 1, 1, 1, 2, 3).unwrap();
-        let created_notification: Box<Notification> = create_resource(
-            &app.client,
-            &app.app.api_address,
-            "notifications",
-            expected_notification.clone(),
+        let github_integration_connection = create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            &settings.oauth2.nango_secret_key,
+            IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+            &settings,
+            nango_github_connection,
+            None,
         )
         .await;
-
-        assert_eq!(created_notification, expected_notification);
+        let expected_notification = create_notification_from_github_notification(
+            &app.app,
+            &github_notification,
+            app.user.id,
+            github_integration_connection.id,
+        )
+        .await;
+        let snoozed_time = Utc.with_ymd_and_hms(2022, 1, 1, 1, 2, 3).unwrap();
 
         let patched_notification = patch_resource(
             &app.client,
             &app.app.api_address,
             "notifications",
-            created_notification.id.into(),
+            expected_notification.id.into(),
             &NotificationPatch {
                 snoozed_until: Some(snoozed_time),
                 ..Default::default()
@@ -564,7 +467,7 @@ mod patch_notification {
             patched_notification,
             Box::new(Notification {
                 snoozed_until: Some(snoozed_time),
-                ..*created_notification
+                ..*expected_notification
             })
         );
     }
@@ -572,41 +475,48 @@ mod patch_notification {
     #[rstest]
     #[tokio::test]
     async fn test_patch_notification_status_without_modification(
+        settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
+        nango_github_connection: Box<NangoConnection>,
     ) {
         let app = authenticated_app.await;
         let snoozed_time = Utc.with_ymd_and_hms(2022, 1, 1, 1, 2, 3).unwrap();
-        let expected_notification = Box::new(Notification {
-            id: Uuid::new_v4().into(),
-            title: "notif1".to_string(),
-            status: NotificationStatus::Unread,
-            source_id: "1234".to_string(),
-            metadata: NotificationMetadata::Github(github_notification),
-            updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-            last_read_at: None,
-            snoozed_until: Some(snoozed_time),
-            user_id: app.user.id,
-            details: None,
-            task_id: None,
-        });
-        let created_notification: Box<Notification> = create_resource(
-            &app.client,
-            &app.app.api_address,
-            "notifications",
-            expected_notification.clone(),
+        let github_integration_connection = create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            &settings.oauth2.nango_secret_key,
+            IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+            &settings,
+            nango_github_connection,
+            None,
         )
         .await;
-
-        assert_eq!(created_notification, expected_notification);
+        let expected_notification = create_notification_from_github_notification(
+            &app.app,
+            &github_notification,
+            app.user.id,
+            github_integration_connection.id,
+        )
+        .await;
+        let expected_notification = update_notification(
+            &app,
+            expected_notification.id,
+            &NotificationPatch {
+                snoozed_until: Some(snoozed_time),
+                ..NotificationPatch::default()
+            },
+            app.user.id,
+        )
+        .await;
 
         let response = patch_resource_response(
             &app.client,
             &app.app.api_address,
             "notifications",
-            created_notification.id.into(),
+            expected_notification.id.into(),
             &NotificationPatch {
-                status: Some(created_notification.status),
+                status: Some(expected_notification.status),
                 snoozed_until: Some(snoozed_time),
                 ..Default::default()
             },
@@ -619,17 +529,32 @@ mod patch_notification {
     #[rstest]
     #[tokio::test]
     async fn test_patch_notification_of_another_user(
+        settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
+        nango_github_connection: Box<NangoConnection>,
     ) {
         let app = authenticated_app.await;
-        let notification = create_notification_from_github_notification(
-            &app.client,
-            &app.app.api_address,
-            &github_notification,
+
+        let github_integration_connection = create_and_mock_integration_connection(
+            &app.app,
             app.user.id,
+            &settings.oauth2.nango_secret_key,
+            IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+            &settings,
+            nango_github_connection,
+            None,
         )
         .await;
+
+        let notification = create_notification_from_github_notification(
+            &app.app,
+            &github_notification,
+            app.user.id,
+            github_integration_connection.id,
+        )
+        .await;
+
         let (client, _user) =
             authenticate_user(&app.app, "5678", "Jane", "Doe", "jane@example.com").await;
 
@@ -662,38 +587,35 @@ mod patch_notification {
     #[rstest]
     #[tokio::test]
     async fn test_patch_notification_without_values_to_update(
+        settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
+        nango_github_connection: Box<NangoConnection>,
     ) {
         let app = authenticated_app.await;
-        let expected_notification = Box::new(Notification {
-            id: Uuid::new_v4().into(),
-            title: "notif1".to_string(),
-            status: NotificationStatus::Unread,
-            source_id: "1234".to_string(),
-            metadata: NotificationMetadata::Github(github_notification),
-            updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
-            last_read_at: None,
-            snoozed_until: None,
-            user_id: app.user.id,
-            details: None,
-            task_id: None,
-        });
-        let created_notification: Box<Notification> = create_resource(
-            &app.client,
-            &app.app.api_address,
-            "notifications",
-            expected_notification.clone(),
+        let github_integration_connection = create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            &settings.oauth2.nango_secret_key,
+            IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+            &settings,
+            nango_github_connection,
+            None,
         )
         .await;
-
-        assert_eq!(created_notification, expected_notification);
+        let expected_notification = create_notification_from_github_notification(
+            &app.app,
+            &github_notification,
+            app.user.id,
+            github_integration_connection.id,
+        )
+        .await;
 
         let response = patch_resource_response(
             &app.client,
             &app.app.api_address,
             "notifications",
-            created_notification.id.into(),
+            expected_notification.id.into(),
             &NotificationPatch {
                 ..Default::default()
             },

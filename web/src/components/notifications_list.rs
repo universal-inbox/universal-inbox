@@ -12,7 +12,7 @@ use dioxus_free_icons::{
 };
 
 use universal_inbox::{
-    notification::{NotificationMetadata, NotificationWithTask},
+    notification::NotificationWithTask,
     task::{Task, TaskId, TaskPlanning},
     third_party::item::ThirdPartyItemData,
     HasHtmlUrl,
@@ -24,7 +24,9 @@ use crate::{
             github::notification_list_item::GithubNotificationListItem,
             google_mail::notification_list_item::GoogleMailThreadListItem,
             linear::notification_list_item::LinearNotificationListItem,
-            slack::notification_list_item::SlackNotificationListItem,
+            slack::notification_list_item::{
+                SlackReactionNotificationListItem, SlackStarNotificationListItem,
+            },
             todoist::notification_list_item::TodoistNotificationListItem,
         },
         list::{List, ListContext, ListItem, ListItemActionButton},
@@ -127,16 +129,16 @@ fn NotificationListItem(
     is_selected: ReadOnlySignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
-    match notification().metadata {
-        NotificationMetadata::Github(github_notification) => rsx! {
+    match notification().source_item.data {
+        ThirdPartyItemData::GithubNotification(github_notification) => rsx! {
             GithubNotificationListItem {
-                notification: notification,
+                notification,
                 github_notification: *github_notification,
-                is_selected: is_selected,
-                on_select: on_select,
+                is_selected,
+                on_select
             }
         },
-        NotificationMetadata::Linear(linear_notification) => rsx! {
+        ThirdPartyItemData::LinearNotification(linear_notification) => rsx! {
             LinearNotificationListItem {
                 notification,
                 linear_notification: *linear_notification,
@@ -144,7 +146,7 @@ fn NotificationListItem(
                 on_select,
             }
         },
-        NotificationMetadata::GoogleMail(google_mail_thread) => rsx! {
+        ThirdPartyItemData::GoogleMailThread(google_mail_thread) => rsx! {
             GoogleMailThreadListItem {
                 notification,
                 google_mail_thread: *google_mail_thread,
@@ -152,43 +154,32 @@ fn NotificationListItem(
                 on_select,
             }
         },
-        NotificationMetadata::Slack(slack_push_event_callback) => rsx! {
-            SlackNotificationListItem {
+        ThirdPartyItemData::SlackStar(_) => rsx! {
+            SlackStarNotificationListItem { notification, is_selected, on_select },
+        },
+        ThirdPartyItemData::SlackReaction(slack_reaction) => rsx! {
+            SlackReactionNotificationListItem {
                 notification,
-                slack_push_event_callback: *slack_push_event_callback,
+                slack_reaction: *slack_reaction,
                 is_selected,
                 on_select,
             },
         },
-        NotificationMetadata::Todoist => {
-            if let Some(task) = notification().task {
-                match task.source_item.data {
-                    ThirdPartyItemData::TodoistItem(todoist_item) => rsx! {
-                        TodoistNotificationListItem {
-                            notification,
-                            todoist_item,
-                            is_selected,
-                            on_select,
-                        }
-                    },
-                    _ => rsx! {
-                        DefaultNotificationListItem {
-                            notification,
-                            is_selected,
-                            on_select,
-                        }
-                    },
-                }
-            } else {
-                rsx! {
-                    DefaultNotificationListItem {
-                        notification,
-                        is_selected,
-                        on_select,
-                    }
-                }
+        ThirdPartyItemData::TodoistItem(todoist_item) => rsx! {
+            TodoistNotificationListItem {
+                notification,
+                todoist_item: *todoist_item,
+                is_selected,
+                on_select,
             }
-        }
+        },
+        _ => rsx! {
+            DefaultNotificationListItem {
+                notification,
+                is_selected,
+                on_select,
+            }
+        },
     }
 }
 

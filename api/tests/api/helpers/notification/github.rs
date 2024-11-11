@@ -4,15 +4,16 @@ use httpmock::{
     Method::{GET, POST},
     Mock, MockServer,
 };
-use reqwest::Client;
+use pretty_assertions::assert_eq;
 use rstest::*;
 use url::Url;
-use uuid::Uuid;
 
 use universal_inbox::{
-    notification::{
-        integrations::github::GithubNotification, Notification, NotificationDetails,
-        NotificationMetadata, NotificationStatus,
+    integration_connection::IntegrationConnectionId,
+    notification::{Notification, NotificationSourceKind, NotificationStatus},
+    third_party::{
+        integrations::github::{GithubNotification, GithubNotificationItem},
+        item::ThirdPartyItemData,
     },
     user::UserId,
     HasHtmlUrl,
@@ -22,35 +23,23 @@ use universal_inbox_api::integrations::github::graphql::{
     discussions_search_query, pull_request_query, DiscussionsSearchQuery, PullRequestQuery,
 };
 
-use crate::helpers::{load_json_fixture_file, rest::create_resource};
+use crate::helpers::{
+    load_json_fixture_file, notification::create_notification_from_source_item, TestedApp,
+};
 
 pub async fn create_notification_from_github_notification(
-    client: &Client,
-    api_address: &str,
+    app: &TestedApp,
     github_notification: &GithubNotification,
     user_id: UserId,
+    github_integration_connection_id: IntegrationConnectionId,
 ) -> Box<Notification> {
-    create_resource(
-        client,
-        api_address,
-        "notifications",
-        Box::new(Notification {
-            id: Uuid::new_v4().into(),
-            title: github_notification.subject.title.clone(),
-            source_id: github_notification.id.to_string(),
-            status: if github_notification.unread {
-                NotificationStatus::Unread
-            } else {
-                NotificationStatus::Read
-            },
-            metadata: NotificationMetadata::Github(Box::new(github_notification.clone())),
-            updated_at: github_notification.updated_at,
-            last_read_at: github_notification.last_read_at,
-            snoozed_until: None,
-            user_id,
-            details: None,
-            task_id: None,
-        }),
+    create_notification_from_source_item(
+        app,
+        github_notification.id.to_string(),
+        ThirdPartyItemData::GithubNotification(Box::new(github_notification.clone())),
+        app.notification_service.read().await.github_service.clone(),
+        user_id,
+        github_integration_connection_id,
     )
     .await
 }
@@ -137,11 +126,12 @@ pub fn assert_sync_notifications(
     notifications: &[Notification],
     sync_github_notifications: &[GithubNotification],
     expected_user_id: UserId,
-    expected_notification_123_details: Option<NotificationDetails>,
+    expected_notification_123_item: Option<GithubNotificationItem>,
 ) {
     for notification in notifications.iter() {
         assert_eq!(notification.user_id, expected_user_id);
-        match notification.source_id.as_ref() {
+        assert_eq!(notification.kind, NotificationSourceKind::Github);
+        match notification.source_item.source_id.as_ref() {
             "123" => {
                 assert_eq!(notification.title, "Greetings 1".to_string());
                 assert_eq!(notification.status, NotificationStatus::Unread);
@@ -152,20 +142,16 @@ pub fn assert_sync_notifications(
                         .unwrap()
                 );
                 assert_eq!(
-                    notification.updated_at,
-                    Utc.with_ymd_and_hms(2014, 11, 7, 22, 1, 45).unwrap()
-                );
-                assert_eq!(
                     notification.last_read_at,
                     Some(Utc.with_ymd_and_hms(2014, 11, 7, 22, 2, 45).unwrap())
                 );
                 assert_eq!(
-                    notification.metadata,
-                    NotificationMetadata::Github(Box::new(sync_github_notifications[0].clone()))
+                    notification.source_item.data,
+                    ThirdPartyItemData::GithubNotification(Box::new(GithubNotification {
+                        item: expected_notification_123_item.clone(),
+                        ..sync_github_notifications[0].clone()
+                    }))
                 );
-                if let Some(ref details) = expected_notification_123_details {
-                    assert_eq!(notification.details, Some(details.clone()));
-                }
             }
             // This notification should be updated
             "456" => {
@@ -178,22 +164,18 @@ pub fn assert_sync_notifications(
                         .unwrap()
                 );
                 assert_eq!(
-                    notification.updated_at,
-                    Utc.with_ymd_and_hms(2014, 11, 7, 23, 1, 45).unwrap()
-                );
-                assert_eq!(
                     notification.last_read_at,
                     Some(Utc.with_ymd_and_hms(2014, 11, 7, 23, 2, 45).unwrap())
                 );
                 assert_eq!(
-                    notification.metadata,
-                    NotificationMetadata::Github(Box::new(sync_github_notifications[1].clone()))
+                    notification.source_item.data,
+                    ThirdPartyItemData::GithubNotification(Box::new(GithubNotification {
+                        item: None,
+                        ..sync_github_notifications[1].clone()
+                    }))
                 );
-                assert!(notification.details.is_none());
             }
-            _ => {
-                unreachable!("Unexpected notification title '{}'", &notification.title);
-            }
+            _ => {}
         }
     }
 }

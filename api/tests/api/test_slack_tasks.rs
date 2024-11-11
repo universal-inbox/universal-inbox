@@ -386,11 +386,11 @@ async fn test_patch_slack_task_status_as_done(
             created_at: Utc::now().with_nanosecond(0).unwrap(),
             updated_at: Utc::now().with_nanosecond(0).unwrap(),
             user_id: app.user.id,
-            data: ThirdPartyItemData::SlackStar(SlackStar {
+            data: ThirdPartyItemData::SlackStar(Box::new(SlackStar {
                 state: SlackStarState::StarAdded,
                 created_at: Utc::now().with_nanosecond(0).unwrap(),
                 item: *slack_starred_message,
-            }),
+            })),
             integration_connection_id: integration_connection.id,
         }),
     )

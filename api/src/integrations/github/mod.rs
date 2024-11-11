@@ -6,6 +6,7 @@ use chrono::{DateTime, Utc};
 use futures::stream::{self, TryStreamExt};
 use graphql_client::{GraphQLQuery, Response};
 use http::{HeaderMap, HeaderValue};
+use notification::RawGithubNotification;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, Extension};
 use reqwest_tracing::{
     DisableOtelPropagation, OtelPathNames, SpanBackendWithUrl, TracingMiddleware,
@@ -13,20 +14,21 @@ use reqwest_tracing::{
 use serde_json::json;
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
-
-use universal_inbox::{
-    integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
-    notification::{
-        integrations::github::{GithubNotification, GithubUrl},
-        Notification, NotificationDetails, NotificationMetadata, NotificationSource,
-        NotificationSourceKind,
-    },
-    user::UserId,
-};
 use url::Url;
+use uuid::Uuid;
 use wiremock::{
     matchers::{body_partial_json, method, path_regex},
     Mock, MockServer, ResponseTemplate,
+};
+
+use universal_inbox::{
+    integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
+    notification::{Notification, NotificationSource, NotificationSourceKind, NotificationStatus},
+    third_party::{
+        integrations::github::{GithubNotification, GithubNotificationItem, GithubUrl},
+        item::{ThirdPartyItem, ThirdPartyItemFromSource, ThirdPartyItemSourceKind},
+    },
+    user::UserId,
 };
 
 use crate::{
@@ -34,7 +36,7 @@ use crate::{
         github::graphql::{
             discussions_search_query, pull_request_query, DiscussionsSearchQuery, PullRequestQuery,
         },
-        notification::{NotificationSourceService, NotificationSyncSourceService},
+        notification::ThirdPartyNotificationSourceService,
         oauth2::AccessToken,
         APP_USER_AGENT,
     },
@@ -44,7 +46,10 @@ use crate::{
     utils::graphql::assert_no_error_in_graphql_response,
 };
 
+use super::third_party::ThirdPartyItemSourceService;
+
 pub mod graphql;
+pub mod notification;
 
 #[derive(Clone)]
 pub struct GithubService {
@@ -210,7 +215,7 @@ impl GithubService {
         page: u32,
         per_page: usize,
         access_token: &AccessToken,
-    ) -> Result<Vec<GithubNotification>, UniversalInboxError> {
+    ) -> Result<Vec<RawGithubNotification>, UniversalInboxError> {
         let url = format!(
             "{}/notifications?page={page}&per_page={per_page}",
             self.github_base_url
@@ -225,7 +230,7 @@ impl GithubService {
             .await
             .context("Failed to fetch notifications response from Github API")?;
 
-        let notifications: Vec<GithubNotification> = serde_json::from_str(&response)
+        let notifications: Vec<RawGithubNotification> = serde_json::from_str(&response)
             .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
 
         Ok(notifications)
@@ -357,18 +362,72 @@ impl GithubService {
             .data
             .ok_or_else(|| anyhow!("Failed to parse `data` from Github graphql response"))?)
     }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, executor, raw_github_notification),
+        fields(raw_github_notification_id = raw_github_notification.id.to_string())
+    )]
+    pub async fn fetch_github_notification_item<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        raw_github_notification: &RawGithubNotification,
+        user_id: UserId,
+    ) -> Result<Option<GithubNotificationItem>, UniversalInboxError> {
+        let (access_token, _) = self
+            .integration_connection_service
+            .read()
+            .await
+            .find_access_token(executor, IntegrationProviderKind::Github, user_id)
+            .await?
+            .ok_or_else(|| {
+                anyhow!("Cannot fetch Github notification details without an access token")
+            })?;
+
+        let github_notification_item =
+            if let Some(ref resource_url) = raw_github_notification.subject.url {
+                match GithubUrl::try_from_api_url(resource_url) {
+                    Ok(GithubUrl::PullRequest {
+                        owner,
+                        repository,
+                        number,
+                    }) => Some(GithubNotificationItem::GithubPullRequest(
+                        self.query_pull_request(owner, repository, number, &access_token)
+                            .await?
+                            .try_into()?,
+                    )),
+                    // Not yet implemented resource type
+                    Err(_) => None,
+                }
+            } else {
+                match raw_github_notification.subject.r#type.as_str() {
+                    "Discussion" => Some(GithubNotificationItem::GithubDiscussion(
+                        self.search_discussion(
+                            &raw_github_notification.repository.full_name,
+                            &raw_github_notification.subject.title,
+                            &access_token,
+                        )
+                        .await?
+                        .try_into()?,
+                    )),
+                    _ => None,
+                }
+            };
+
+        Ok(github_notification_item)
+    }
 }
 
 #[async_trait]
-impl NotificationSyncSourceService for GithubService {
+impl ThirdPartyItemSourceService<GithubNotification> for GithubService {
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(level = "debug", skip(self, executor))]
-    async fn fetch_all_notifications<'a>(
+    async fn fetch_items<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
         user_id: UserId,
-    ) -> Result<Vec<Notification>, UniversalInboxError> {
-        let (access_token, _) = self
+    ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError> {
+        let (access_token, integration_connection) = self
             .integration_connection_service
             .read()
             .await
@@ -376,7 +435,7 @@ impl NotificationSyncSourceService for GithubService {
             .await?
             .ok_or_else(|| anyhow!("Cannot fetch Github notifications without an access token"))?;
 
-        Ok(stream::try_unfold(
+        let raw_github_notifications = stream::try_unfold(
             (1, false, access_token),
             |(page, stop, access_token)| async move {
                 if stop {
@@ -394,19 +453,83 @@ impl NotificationSyncSourceService for GithubService {
                 })
             },
         )
-        .try_collect::<Vec<Vec<GithubNotification>>>()
-        .await?
-        .into_iter()
-        .flatten()
-        .map(|github_notif| github_notif.into_notification(user_id))
-        .collect())
+        .try_collect::<Vec<Vec<RawGithubNotification>>>()
+        .await?;
+
+        let mut third_party_items = vec![];
+        for raw_github_notification in raw_github_notifications.into_iter().flatten() {
+            let github_notification_item = self
+                .fetch_github_notification_item(executor, &raw_github_notification, user_id)
+                .await?;
+            let github_notification = GithubNotification {
+                id: raw_github_notification.id.clone(),
+                repository: raw_github_notification.repository.clone(),
+                subject: raw_github_notification.subject.clone(),
+                reason: raw_github_notification.reason.clone(),
+                unread: raw_github_notification.unread,
+                updated_at: raw_github_notification.updated_at,
+                last_read_at: raw_github_notification.last_read_at,
+                url: raw_github_notification.url.clone(),
+                subscription_url: raw_github_notification.subscription_url.clone(),
+                item: github_notification_item,
+            };
+            third_party_items
+                .push(github_notification.into_third_party_item(user_id, integration_connection.id))
+        }
+
+        Ok(third_party_items)
+    }
+
+    fn is_sync_incremental(&self) -> bool {
+        false
+    }
+
+    fn get_third_party_item_source_kind(&self) -> ThirdPartyItemSourceKind {
+        ThirdPartyItemSourceKind::GithubNotification
     }
 }
 
 #[async_trait]
-impl NotificationSourceService for GithubService {
+impl ThirdPartyNotificationSourceService<GithubNotification> for GithubService {
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, source, source_third_party_item),
+        fields(
+            source_id = source_third_party_item.source_id,
+            third_party_item_id = source_third_party_item.id.to_string()
+        ),
+    )]
+    async fn third_party_item_into_notification(
+        &self,
+        source: &GithubNotification,
+        source_third_party_item: &ThirdPartyItem,
+        user_id: UserId,
+    ) -> Result<Box<Notification>, UniversalInboxError> {
+        Ok(Box::new(Notification {
+            id: Uuid::new_v4().into(),
+            title: source.subject.title.clone(),
+            status: if source.unread {
+                NotificationStatus::Unread
+            } else {
+                NotificationStatus::Read
+            },
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            last_read_at: source.last_read_at,
+            snoozed_until: None,
+            user_id,
+            kind: NotificationSourceKind::Github,
+            source_item: source_third_party_item.clone(),
+            task_id: None,
+        }))
+    }
+
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.0.to_string()))]
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, executor, notification),
+        fields(notification_id = notification.id.0.to_string())
+    )]
     async fn delete_notification_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -421,12 +544,16 @@ impl NotificationSourceService for GithubService {
             .await?
             .ok_or_else(|| anyhow!("Cannot delete Github notification without an access token"))?;
 
-        self.mark_thread_as_read(&notification.source_id, &access_token)
+        self.mark_thread_as_read(&notification.source_item.source_id, &access_token)
             .await
     }
 
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.0.to_string()))]
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, executor, notification),
+        fields(notification_id = notification.id.0.to_string())
+    )]
     async fn unsubscribe_notification_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -443,9 +570,9 @@ impl NotificationSourceService for GithubService {
                 anyhow!("Cannot unsubscribe from Github notifications without an access token")
             })?;
 
-        self.mark_thread_as_read(&notification.source_id, &access_token)
+        self.mark_thread_as_read(&notification.source_item.source_id, &access_token)
             .await?;
-        self.unsubscribe_from_thread(&notification.source_id, &access_token)
+        self.unsubscribe_from_thread(&notification.source_item.source_id, &access_token)
             .await
     }
 
@@ -458,60 +585,6 @@ impl NotificationSourceService for GithubService {
     ) -> Result<(), UniversalInboxError> {
         // Github notifications cannot be snoozed => no-op
         Ok(())
-    }
-
-    #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.0.to_string()))]
-    async fn fetch_notification_details<'a>(
-        &self,
-        executor: &mut Transaction<'a, Postgres>,
-        notification: &Notification,
-        user_id: UserId,
-    ) -> Result<Option<NotificationDetails>, UniversalInboxError> {
-        let (access_token, _) = self
-            .integration_connection_service
-            .read()
-            .await
-            .find_access_token(executor, IntegrationProviderKind::Github, user_id)
-            .await?
-            .ok_or_else(|| {
-                anyhow!("Cannot fetch Github notification details without an access token")
-            })?;
-
-        let NotificationMetadata::Github(ref github_notification) = notification.metadata else {
-            return Err(UniversalInboxError::Unexpected(anyhow!(
-                "Given notification must have been built from a Github notification"
-            )));
-        };
-
-        let notification_details = if let Some(ref resource_url) = github_notification.subject.url {
-            match GithubUrl::try_from_api_url(resource_url) {
-                Ok(GithubUrl::PullRequest {
-                    owner,
-                    repository,
-                    number,
-                }) => self
-                    .query_pull_request(owner, repository, number, &access_token)
-                    .await?
-                    .try_into()?,
-                // Not yet implemented resource type
-                Err(_) => return Ok(None),
-            }
-        } else {
-            match github_notification.subject.r#type.as_str() {
-                "Discussion" => self
-                    .search_discussion(
-                        &github_notification.repository.full_name,
-                        &github_notification.subject.title,
-                        &access_token,
-                    )
-                    .await?
-                    .try_into()?,
-                _ => return Ok(None),
-            }
-        };
-
-        Ok(Some(notification_details))
     }
 }
 

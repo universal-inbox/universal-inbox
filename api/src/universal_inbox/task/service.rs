@@ -10,7 +10,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, info};
 
 use universal_inbox::{
-    integration_connection::provider::{IntegrationProvider, IntegrationProviderSource},
+    integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
     notification::{
         service::NotificationPatch, Notification, NotificationSource, NotificationSourceKind,
         NotificationStatus,
@@ -53,7 +53,7 @@ use crate::{
 
 pub struct TaskService {
     repository: Arc<Repository>,
-    todoist_service: Arc<TodoistService>,
+    pub todoist_service: Arc<TodoistService>,
     pub linear_service: Arc<LinearService>,
     notification_service: Weak<RwLock<NotificationService>>,
     pub slack_service: Arc<SlackService>,
@@ -379,23 +379,9 @@ impl TaskService {
         }
 
         let task = self.repository.create_task(executor, task).await?;
-        let notification = if task.is_in_inbox() {
-            Some(
-                self.notification_service
-                    .upgrade()
-                    .context("Unable to access notification_service from task_service")?
-                    .read()
-                    .await
-                    .create_notification(executor, Box::new((*task).clone().into()), for_user_id)
-                    .await?,
-            )
-        } else {
-            None
-        };
-
         Ok(Box::new(TaskCreationResult {
             task: *task,
-            notifications: notification.into_iter().map(|n| *n).collect(),
+            notifications: vec![], // notification.into_iter().map(|n| *n).collect(),
         }))
     }
 
@@ -475,6 +461,9 @@ impl TaskService {
         }
     }
 
+    /// Create a task from a third party item and apply side effects
+    /// Then create a notification from the task if needed and return
+    /// the task and the notification if any
     #[tracing::instrument(
         level = "debug",
         skip(self, executor, third_party_item, third_party_task_service),
@@ -526,6 +515,10 @@ impl TaskService {
             )
             .await?;
 
+        debug!("{:?}", upsert_task);
+        debug!("{:?}", third_party_item);
+        debug!("{:?}", integration_provider_kind);
+
         let task_is_modified = upsert_task.is_modified();
         let task = upsert_task.value();
         if !task_is_modified {
@@ -539,16 +532,25 @@ impl TaskService {
             }));
         };
 
-        let upsert_notification = self
-            .save_task_as_notification(
-                executor,
-                third_party_task_service,
-                &task,
-                &integration_connection.provider,
-                true, // Force incremental here to avoid deleting all other notification for this third party item kind
-                user_id,
-            )
-            .await?;
+        let upsert_notification = if integration_provider_kind == IntegrationProviderKind::Todoist {
+            self.notification_service
+                .upgrade()
+                .context("Unable to access notification_service from task_service")?
+                .read()
+                .await
+                .save_task_as_notification(
+                    executor,
+                    self.todoist_service.clone(),
+                    &task,
+                    &third_party_item,
+                    &integration_connection.provider,
+                    true, // Force incremental here to avoid deleting all other notification for this third party item kind
+                    user_id,
+                )
+                .await?
+        } else {
+            None
+        };
 
         let Some(upsert_notification) = upsert_notification else {
             return Ok(Some(TaskCreationResult {
@@ -583,8 +585,7 @@ impl TaskService {
     where
         T: TryFrom<ThirdPartyItem> + Debug,
         U: ThirdPartyTaskService<T>
-            + ThirdPartyItemSourceService
-            + ThirdPartyItemSource
+            + ThirdPartyItemSourceService<T>
             + NotificationSource
             + TaskSource
             + Send
@@ -600,8 +601,7 @@ impl TaskService {
         where
             T: TryFrom<ThirdPartyItem> + Debug,
             U: ThirdPartyTaskService<T>
-                + ThirdPartyItemSourceService
-                + ThirdPartyItemSource
+                + ThirdPartyItemSourceService<T>
                 + NotificationSource
                 + TaskSource
                 + Send
@@ -692,6 +692,7 @@ impl TaskService {
         Ok(task_creation_results)
     }
 
+    /// Save a third party item as a task and apply side effects
     #[tracing::instrument(
         level = "debug",
         skip(self, executor, third_party_task_service, third_party_item),
@@ -771,127 +772,6 @@ impl TaskService {
         self.repository
             .create_or_update_task(executor, task_request)
             .await
-    }
-
-    #[tracing::instrument(
-        level = "debug",
-        skip(
-            self,
-            executor,
-            third_party_task_service,
-            task,
-            integration_connection_provider
-        ),
-        fields(task_id = task.id.to_string()),
-    )]
-    pub async fn save_task_as_notification<'a, T: Debug, U>(
-        &self,
-        executor: &mut Transaction<'a, Postgres>,
-        third_party_task_service: Arc<U>,
-        task: &Task,
-        integration_connection_provider: &IntegrationProvider,
-        is_incremental_update: bool,
-        user_id: UserId,
-    ) -> Result<Option<UpsertStatus<Box<Notification>>>, UniversalInboxError>
-    where
-        U: ThirdPartyTaskService<T> + NotificationSource + Send + Sync,
-    {
-        let existing_notifications = self
-            .notification_service
-            .upgrade()
-            .context("Unable to access notification_service from task_service")?
-            .read()
-            .await
-            .list_notifications(executor, vec![], true, Some(task.id), None, user_id, None)
-            .await?
-            // Considering the list of notifications for a task is small enough to fit in a single page
-            .content;
-
-        let notification_source_kind = third_party_task_service.get_notification_source_kind();
-
-        if task.is_in_inbox() {
-            if !integration_connection_provider.should_create_notification_from_inbox_task() {
-                return Ok(None);
-            }
-
-            // Create notifications from tasks in the inbox if there is no existing notification
-            // for this task or if there is an existing notification for the task with the same
-            // source kind
-            let task_has_a_notification_from_the_same_source = existing_notifications
-                .iter()
-                .any(|n| n.get_source_kind() == notification_source_kind);
-            if !existing_notifications.is_empty() && !task_has_a_notification_from_the_same_source {
-                return Ok(None);
-            }
-
-            debug!(
-                "Creating notification from {} task {}",
-                notification_source_kind, task.id
-            );
-            let notification_from_task = task.clone().into();
-            // Create/update notifications for tasks in the Inbox
-            return self
-                .notification_service
-                .upgrade()
-                .context("Unable to access notification_service from task_service")?
-                .read()
-                .await
-                .save_notifications_from_source(
-                    executor,
-                    notification_source_kind,
-                    vec![notification_from_task],
-                    is_incremental_update,
-                    third_party_task_service.is_supporting_snoozed_notifications(),
-                    user_id,
-                )
-                .await
-                .map(|mut notifications| notifications.pop());
-        }
-
-        // Update existing notifications for a task that is not in the Inbox anymore
-        let mut updated_notifications = self
-            .notification_service
-            .upgrade()
-            .context("Unable to access notification_service from task_service")?
-            .read()
-            .await
-            .patch_notifications_for_task(
-                executor,
-                task.id,
-                Some(notification_source_kind),
-                &NotificationPatch {
-                    status: Some(NotificationStatus::Deleted),
-                    ..Default::default()
-                },
-            )
-            .await?;
-        debug!(
-            "{} {} notifications deleted for task {}",
-            updated_notifications.len(),
-            notification_source_kind,
-            task.id
-        );
-
-        updated_notifications
-            .pop()
-            .map(|update_status| {
-                Ok::<UpsertStatus<Box<Notification>>, UniversalInboxError>({
-                    let notification =
-                        Box::new(update_status.result.clone().ok_or_else(|| {
-                            anyhow!("Expected a notification from the UpdateStatus")
-                        })?);
-                    if update_status.updated {
-                        // the `old` value is wrong here, but we don't need it
-                        UpsertStatus::Updated {
-                            new: notification.clone(),
-                            old: notification,
-                        }
-                    } else {
-                        UpsertStatus::Untouched(notification)
-                    }
-                })
-            })
-            .transpose()
     }
 
     #[tracing::instrument(level = "debug", skip(self, executor))]
@@ -1196,7 +1076,7 @@ impl TaskService {
                 )
                 .await
             }
-            ThirdPartyItemSourceKind::Linear => {
+            ThirdPartyItemSourceKind::LinearIssue => {
                 self.apply_updated_task_side_effect(
                     executor,
                     self.linear_service.clone(),
@@ -1226,6 +1106,9 @@ impl TaskService {
                 )
                 .await
             }
+            kind => Err(UniversalInboxError::Unexpected(anyhow!(
+                "Cannot apply task side effect for third party item source kind {kind}"
+            ))),
         }
     }
 }

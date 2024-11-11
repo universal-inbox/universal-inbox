@@ -88,7 +88,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
                 created_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
                 updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
                 user_id: app.user.id,
-                data: ThirdPartyItemData::TodoistItem(TodoistItem {
+                data: ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
                     content: "old task 1".to_string(),
                     description: "more details".to_string(),
                     checked: false,
@@ -101,7 +101,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
                     project_id: "1111".to_string(), // ie. "Inbox"
                     //added_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
                     ..todoist_items[1].clone()
-                }),
+                })),
                 integration_connection_id: integration_connection.id,
             }),
         )
@@ -159,7 +159,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
     );
     assert_eq!(
         updated_todoist_task.source_item.data,
-        ThirdPartyItemData::TodoistItem(todoist_items[1].clone())
+        ThirdPartyItemData::TodoistItem(Box::new(todoist_items[1].clone()))
     );
 
     let updated_todoist_notification: Box<Notification> = get_resource(
@@ -174,8 +174,8 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
         existing_todoist_notification.id
     );
     assert_eq!(
-        updated_todoist_notification.source_id,
-        existing_todoist_notification.source_id
+        updated_todoist_notification.source_item.source_id,
+        existing_todoist_notification.source_item.source_id
     );
     assert_eq!(
         updated_todoist_notification.task_id,
@@ -206,7 +206,10 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
     .await;
 
     assert_eq!(notifications.len(), 1);
-    assert_eq!(notifications[0].source_id, new_task.source_item.source_id);
+    assert_eq!(
+        notifications[0].source_item.source_id,
+        new_task.source_item.source_id
+    );
     assert_eq!(notifications[0].task, Some(new_task.clone()));
     assert_eq!(
         Into::<Notification>::into(notifications[0].clone()),
@@ -535,11 +538,11 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
                     created_at: Utc::now().with_nanosecond(0).unwrap(),
                     updated_at: Utc::now().with_nanosecond(0).unwrap() - TimeDelta::seconds(1),
                     user_id: app.user.id,
-                    data: ThirdPartyItemData::TodoistItem(TodoistItem {
+                    data: ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
                         project_id: "1111".to_string(), // ie. "Inbox"
                         added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
                         ..todoist_item.clone()
-                    }),
+                    })),
                     integration_connection_id: integration_connection.id,
                 }),
             )
@@ -650,11 +653,11 @@ async fn test_sync_tasks_should_not_update_tasks_and_notifications_with_empty_in
                     created_at: Utc::now().with_nanosecond(0).unwrap(),
                     updated_at: Utc::now().with_nanosecond(0).unwrap() - TimeDelta::seconds(1),
                     user_id: app.user.id,
-                    data: ThirdPartyItemData::TodoistItem(TodoistItem {
+                    data: ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
                         project_id: "1111".to_string(), // ie. "Inbox"
                         //added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
                         ..todoist_item.clone()
-                    }),
+                    })),
                     integration_connection_id: integration_connection.id,
                 }),
             )
@@ -839,7 +842,7 @@ async fn test_sync_all_tasks_asynchronously(
                 created_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
                 updated_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
                 user_id: app.user.id,
-                data: ThirdPartyItemData::TodoistItem(TodoistItem {
+                data: ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
                     content: "old task 1".to_string(),
                     description: "more details".to_string(),
                     checked: false,
@@ -852,7 +855,7 @@ async fn test_sync_all_tasks_asynchronously(
                     project_id: "1111".to_string(), // ie. "Inbox"
                     //added_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
                     ..todoist_items[1].clone()
-                }),
+                })),
                 integration_connection_id: integration_connection.id,
             }),
         )

@@ -13,8 +13,7 @@ use tokio::sync::RwLock;
 use universal_inbox::{
     notification::{
         service::{NotificationPatch, SyncNotificationsParameters},
-        Notification, NotificationId, NotificationSourceKind, NotificationStatus,
-        NotificationWithTask,
+        NotificationId, NotificationSourceKind, NotificationStatus, NotificationWithTask,
     },
     task::{TaskCreation, TaskId},
     user::UserId,
@@ -36,8 +35,7 @@ pub fn scope() -> Scope {
         .service(
             web::resource("")
                 .name("notifications")
-                .route(web::get().to(list_notifications))
-                .route(web::post().to(create_notification)),
+                .route(web::get().to(list_notifications)),
         )
         .service(
             web::resource("/{notification_id}")
@@ -135,36 +133,6 @@ pub async fn get_notification(
                     .to_string(),
             ))),
     }
-}
-
-pub async fn create_notification(
-    notification: web::Json<Box<Notification>>,
-    notification_service: web::Data<Arc<RwLock<NotificationService>>>,
-    authenticated: Authenticated<Claims>,
-) -> Result<HttpResponse, UniversalInboxError> {
-    let user_id = authenticated
-        .claims
-        .sub
-        .parse::<UserId>()
-        .context("Wrong user ID format")?;
-    let service = notification_service.read().await;
-    let mut transaction = service
-        .begin()
-        .await
-        .context("Failed to create new transaction while creating notification")?;
-
-    let created_notification = service
-        .create_notification(&mut transaction, notification.into_inner(), user_id)
-        .await?;
-
-    transaction
-        .commit()
-        .await
-        .context("Failed to commit while creating notification")?;
-
-    Ok(HttpResponse::Ok().content_type("application/json").body(
-        serde_json::to_string(&created_notification).context("Cannot serialize notification")?,
-    ))
 }
 
 pub async fn sync_notifications(

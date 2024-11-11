@@ -11,11 +11,10 @@ use universal_inbox::{
         IntegrationConnectionStatus,
     },
     notification::{
-        integrations::linear::LinearNotification, Notification, NotificationMetadata,
-        NotificationSourceKind, NotificationStatus,
+        service::NotificationPatch, Notification, NotificationSourceKind, NotificationStatus,
     },
     third_party::{
-        integrations::todoist::TodoistItem,
+        integrations::{linear::LinearNotification, todoist::TodoistItem},
         item::{ThirdPartyItem, ThirdPartyItemCreationResult, ThirdPartyItemData},
     },
 };
@@ -35,10 +34,10 @@ use crate::helpers::{
     },
     notification::{
         linear::{
-            assert_sync_notifications, mock_linear_notifications_query,
-            sync_linear_notifications_response,
+            assert_sync_notifications, create_notification_from_linear_notification,
+            mock_linear_notifications_query, sync_linear_notifications_response,
         },
-        sync_notifications,
+        sync_notifications, update_notification,
     },
     rest::{create_resource, get_resource},
     settings,
@@ -59,7 +58,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     nango_todoist_connection: Box<NangoConnection>,
 ) {
     let app = authenticated_app.await;
-    let integration_connection = create_and_mock_integration_connection(
+    let todoist_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
         &settings.oauth2.nango_secret_key,
@@ -86,12 +85,12 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
             created_at: Utc::now().with_nanosecond(0).unwrap(),
             updated_at: Utc::now().with_nanosecond(0).unwrap(),
             user_id: app.user.id,
-            data: ThirdPartyItemData::TodoistItem(TodoistItem {
+            data: ThirdPartyItemData::TodoistItem(Box::new(TodoistItem {
                 project_id: "2222".to_string(), // ie. "Project2"
                 added_at: Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
                 ..*todoist_item.clone()
-            }),
-            integration_connection_id: integration_connection.id,
+            })),
+            integration_connection_id: todoist_integration_connection.id,
         }),
     )
     .await;
@@ -136,31 +135,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         }
     }
 
-    let existing_notification: Box<Notification> = match &sync_linear_notifications[2] {
-        notif @ LinearNotification::IssueNotification { id, .. } => {
-            create_resource(
-                &app.client,
-                &app.app.api_address,
-                "notifications",
-                Box::new(Notification {
-                    id: Uuid::new_v4().into(),
-                    user_id: app.user.id,
-                    title: "title to be updated".to_string(),
-                    status: NotificationStatus::Unread,
-                    source_id: id.to_string(),
-                    metadata: NotificationMetadata::Linear(Box::new(notif.clone())),
-                    updated_at: Utc.with_ymd_and_hms(2014, 11, 6, 0, 0, 0).unwrap(),
-                    last_read_at: None,
-                    snoozed_until: Some(Utc.with_ymd_and_hms(2064, 1, 1, 0, 0, 0).unwrap()),
-                    details: None,
-                    task_id: Some(existing_task_id),
-                }),
-            )
-            .await
-        }
-        _ => unreachable!(),
-    };
-    create_and_mock_integration_connection(
+    let linear_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
         &settings.oauth2.nango_secret_key,
@@ -168,6 +143,25 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         &settings,
         nango_linear_connection,
         None,
+    )
+    .await;
+
+    let existing_notification = create_notification_from_linear_notification(
+        &app.app,
+        &sync_linear_notifications[2],
+        app.user.id,
+        linear_integration_connection.id,
+    )
+    .await;
+    let existing_notification = update_notification(
+        &app,
+        existing_notification.id,
+        &NotificationPatch {
+            task_id: Some(existing_task_id),
+            snoozed_until: Some(Utc.with_ymd_and_hms(2064, 1, 1, 0, 0, 0).unwrap()),
+            ..NotificationPatch::default()
+        },
+        app.user.id,
     )
     .await;
 
@@ -196,20 +190,12 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     )
     .await;
     assert_eq!(updated_notification.id, existing_notification.id);
+    assert_eq!(updated_notification.kind, NotificationSourceKind::Linear);
     assert_eq!(
-        updated_notification.source_id,
-        existing_notification.source_id
+        updated_notification.source_item.source_id,
+        existing_notification.source_item.source_id
     );
     assert_eq!(updated_notification.status, NotificationStatus::Read);
-    assert_eq!(
-        updated_notification.updated_at,
-        NaiveDate::from_ymd_opt(2023, 7, 31)
-            .unwrap()
-            .and_hms_milli_opt(6, 1, 27, 112)
-            .unwrap()
-            .and_local_timezone(Utc)
-            .unwrap()
-    );
     assert_eq!(
         updated_notification.last_read_at,
         Some(
@@ -222,8 +208,8 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         )
     );
     assert_eq!(
-        updated_notification.metadata,
-        NotificationMetadata::Linear(Box::new(sync_linear_notifications[2].clone()))
+        updated_notification.source_item.data,
+        ThirdPartyItemData::LinearNotification(Box::new(sync_linear_notifications[2].clone()))
     );
     assert_eq!(
         updated_notification.snoozed_until,

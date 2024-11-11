@@ -1,12 +1,9 @@
 use anyhow::{anyhow, Context};
 use url::Url;
 
-use universal_inbox::notification::{
-    integrations::github::{
-        GithubActor, GithubBotSummary, GithubDiscussion, GithubDiscussionComment,
-        GithubDiscussionStateReason, GithubLabel, GithubRepositorySummary, GithubUserSummary,
-    },
-    NotificationDetails,
+use universal_inbox::third_party::integrations::github::{
+    GithubActor, GithubBotSummary, GithubDiscussion, GithubDiscussionComment,
+    GithubDiscussionStateReason, GithubLabel, GithubRepositorySummary, GithubUserSummary,
 };
 
 use crate::{
@@ -188,7 +185,7 @@ impl TryFrom<discussions_search_query::DiscussionsSearchQuerySearchNodesOnDiscus
     }
 }
 
-impl TryFrom<discussions_search_query::ResponseData> for NotificationDetails {
+impl TryFrom<discussions_search_query::ResponseData> for GithubDiscussion {
     type Error = UniversalInboxError;
 
     fn try_from(value: discussions_search_query::ResponseData) -> Result<Self, Self::Error> {
@@ -204,7 +201,7 @@ impl TryFrom<discussions_search_query::ResponseData> for NotificationDetails {
         };
         let discussion = discussion.clone();
 
-        Ok(NotificationDetails::GithubDiscussion(GithubDiscussion {
+        Ok(GithubDiscussion {
             id: discussion.id,
             number: discussion.number,
             url: discussion.url.parse().with_context(|| {
@@ -244,6 +241,6 @@ impl TryFrom<discussions_search_query::ResponseData> for NotificationDetails {
                 .author
                 .map(|author| author.try_into())
                 .transpose()?,
-        }))
+        })
     }
 }

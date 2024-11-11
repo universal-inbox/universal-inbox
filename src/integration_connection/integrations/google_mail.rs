@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::notification::integrations::google_mail::{
+use crate::third_party::integrations::google_mail::{
     EmailAddress, GoogleMailLabel, GOOGLE_MAIL_STARRED_LABEL,
 };
 

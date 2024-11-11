@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            DELETE FROM notification\n            WHERE notification.kind::TEXT = $1\n            AND notification.user_id = $2\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f171e0e1bd739daf1ff857ee9f01ef17c791a63c49272beff71bdff430ff0560"
+}

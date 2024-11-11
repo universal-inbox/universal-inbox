@@ -31,19 +31,15 @@ use uuid::Uuid;
 
 use universal_inbox::{
     integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
-    notification::{
-        integrations::linear::LinearNotification, Notification, NotificationDetails,
-        NotificationSource, NotificationSourceKind,
-    },
+    notification::{Notification, NotificationSource, NotificationSourceKind, NotificationStatus},
     task::{
         service::TaskPatch, CreateOrUpdateTaskRequest, TaskCreation, TaskSource, TaskSourceKind,
         TaskStatus,
     },
     third_party::{
-        integrations::linear::LinearIssue,
+        integrations::linear::{LinearIssue, LinearNotification},
         item::{
-            ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemFromSource, ThirdPartyItemSource,
-            ThirdPartyItemSourceKind,
+            ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemFromSource, ThirdPartyItemSourceKind,
         },
     },
     user::UserId,
@@ -64,7 +60,7 @@ use crate::{
             IssueUpdateState, IssueUpdateSubscribers, NotificationArchive,
             NotificationSubscribersQuery, NotificationUpdateSnoozedUntilAt, NotificationsQuery,
         },
-        notification::{NotificationSourceService, NotificationSyncSourceService},
+        notification::ThirdPartyNotificationSourceService,
         oauth2::AccessToken,
         task::ThirdPartyTaskService,
         third_party::ThirdPartyItemSourceService,
@@ -533,15 +529,14 @@ impl LinearService {
 }
 
 #[async_trait]
-impl NotificationSyncSourceService for LinearService {
-    #[allow(clippy::blocks_in_conditions)]
+impl ThirdPartyItemSourceService<LinearNotification> for LinearService {
     #[tracing::instrument(level = "debug", skip(self, executor))]
-    async fn fetch_all_notifications<'a>(
+    async fn fetch_items<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
         user_id: UserId,
-    ) -> Result<Vec<Notification>, UniversalInboxError> {
-        let (access_token, _) = self
+    ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError> {
+        let (access_token, integration_connection) = self
             .integration_connection_service
             .read()
             .await
@@ -549,21 +544,96 @@ impl NotificationSyncSourceService for LinearService {
             .await?
             .ok_or_else(|| anyhow!("Cannot fetch Linear notifications without an access token"))?;
 
-        let notifications_response = self.query_notifications(&access_token).await?;
+        let linear_notifications: Vec<LinearNotification> =
+            self.query_notifications(&access_token).await?.try_into()?;
 
-        TryInto::<Vec<LinearNotification>>::try_into(notifications_response).map(|linear_notifs| {
-            linear_notifs
-                .into_iter()
-                .map(|linear_notif| linear_notif.into_notification(user_id))
-                .collect()
-        })
+        Ok(linear_notifications
+            .into_iter()
+            .map(|linear_notification| {
+                linear_notification.into_third_party_item(user_id, integration_connection.id)
+            })
+            .collect())
+    }
+
+    fn is_sync_incremental(&self) -> bool {
+        false
+    }
+
+    fn get_third_party_item_source_kind(&self) -> ThirdPartyItemSourceKind {
+        ThirdPartyItemSourceKind::LinearNotification
     }
 }
 
 #[async_trait]
-impl NotificationSourceService for LinearService {
+impl ThirdPartyNotificationSourceService<LinearNotification> for LinearService {
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, source, source_third_party_item),
+        fields(
+            source_id = source_third_party_item.source_id,
+            third_party_item_id = source_third_party_item.id.to_string()
+        ),
+    )]
+    async fn third_party_item_into_notification(
+        &self,
+        source: &LinearNotification,
+        source_third_party_item: &ThirdPartyItem,
+        user_id: UserId,
+    ) -> Result<Box<Notification>, UniversalInboxError> {
+        match &source {
+            LinearNotification::IssueNotification {
+                read_at,
+                snoozed_until_at,
+                issue,
+                ..
+            } => Ok(Box::new(Notification {
+                id: Uuid::new_v4().into(),
+                title: issue.title.clone(),
+                status: if read_at.is_some() {
+                    NotificationStatus::Read
+                } else {
+                    NotificationStatus::Unread
+                },
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+                last_read_at: *read_at,
+                snoozed_until: *snoozed_until_at,
+                user_id,
+                kind: NotificationSourceKind::Linear,
+                source_item: source_third_party_item.clone(),
+                task_id: None,
+            })),
+            LinearNotification::ProjectNotification {
+                read_at,
+                snoozed_until_at,
+                project,
+                ..
+            } => Ok(Box::new(Notification {
+                id: Uuid::new_v4().into(),
+                title: project.name.clone(),
+                status: if read_at.is_some() {
+                    NotificationStatus::Read
+                } else {
+                    NotificationStatus::Unread
+                },
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+                last_read_at: *read_at,
+                snoozed_until: *snoozed_until_at,
+                user_id,
+                kind: NotificationSourceKind::Linear,
+                source_item: source_third_party_item.clone(),
+                task_id: None,
+            })),
+        }
+    }
+
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.0.to_string()))]
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, executor, notification),
+        fields(notification_id = notification.id.0.to_string())
+    )]
     async fn delete_notification_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -578,8 +648,11 @@ impl NotificationSourceService for LinearService {
             .await?
             .ok_or_else(|| anyhow!("Cannot delete Linear notification without an access token"))?;
 
-        self.archive_notification(&access_token, notification.source_id.to_string())
-            .await?;
+        self.archive_notification(
+            &access_token,
+            notification.source_item.source_id.to_string(),
+        )
+        .await?;
 
         Ok(())
     }
@@ -603,7 +676,10 @@ impl NotificationSourceService for LinearService {
             })?;
 
         let subscribers_response = self
-            .query_notification_subscribers(&access_token, notification.source_id.to_string())
+            .query_notification_subscribers(
+                &access_token,
+                notification.source_item.source_id.to_string(),
+            )
             .await?;
 
         // Only Issue notification have subscribers and can be unsubscribed
@@ -629,7 +705,7 @@ impl NotificationSourceService for LinearService {
                 ).collect();
             if initial_subscribers_count > subscriber_ids.len() {
                 self
-                    .update_issue_subscribers(&access_token, notification.source_id.to_string(), subscriber_ids)
+                    .update_issue_subscribers(&access_token, notification.source_item.source_id.to_string(), subscriber_ids)
                     .await?;
             }
         }
@@ -657,23 +733,10 @@ impl NotificationSourceService for LinearService {
 
         self.update_notification_snoozed_until_at(
             &access_token,
-            notification.source_id.to_string(),
+            notification.source_item.source_id.to_string(),
             snoozed_until_at,
         )
         .await
-    }
-
-    #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, _executor, _notification), fields(notification_id = _notification.id.to_string()))]
-    async fn fetch_notification_details<'a>(
-        &self,
-        _executor: &mut Transaction<'a, Postgres>,
-        _notification: &Notification,
-        _user_id: UserId,
-    ) -> Result<Option<NotificationDetails>, UniversalInboxError> {
-        // Linear notification details are fetch as part of the fetch_all_notifications call
-        // all details are fetch in a single GraphQL call
-        Ok(None)
     }
 }
 
@@ -699,14 +762,8 @@ impl TaskSource for LinearService {
     }
 }
 
-impl ThirdPartyItemSource for LinearService {
-    fn get_third_party_item_source_kind(&self) -> ThirdPartyItemSourceKind {
-        ThirdPartyItemSourceKind::Linear
-    }
-}
-
 #[async_trait]
-impl ThirdPartyItemSourceService for LinearService {
+impl ThirdPartyItemSourceService<LinearIssue> for LinearService {
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn fetch_items<'a>(
@@ -736,6 +793,9 @@ impl ThirdPartyItemSourceService for LinearService {
 
     fn is_sync_incremental(&self) -> bool {
         false
+    }
+    fn get_third_party_item_source_kind(&self) -> ThirdPartyItemSourceKind {
+        ThirdPartyItemSourceKind::LinearIssue
     }
 }
 
