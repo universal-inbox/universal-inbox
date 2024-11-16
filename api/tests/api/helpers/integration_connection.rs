@@ -220,6 +220,7 @@ pub async fn update_integration_connection_context(
     result
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn create_and_mock_integration_connection(
     app: &TestedApp,
     user_id: UserId,
@@ -228,6 +229,7 @@ pub async fn create_and_mock_integration_connection(
     settings: &Settings,
     nango_connection: Box<NangoConnection>,
     initial_sync_failures: Option<u32>,
+    context: Option<IntegrationConnectionContext>,
 ) -> Box<IntegrationConnection> {
     let provider_kind = config.kind();
     let integration_connection = create_integration_connection(
@@ -235,7 +237,7 @@ pub async fn create_and_mock_integration_connection(
         user_id,
         config,
         IntegrationConnectionStatus::Validated,
-        None,
+        context,
         nango_connection.get_provider_user_id(),
         initial_sync_failures,
     )

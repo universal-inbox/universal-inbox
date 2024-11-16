@@ -16,13 +16,14 @@ use universal_inbox_api::{
     configuration::{
         AuthenticationSettings, LocalAuthenticationSettings, OIDCFlowSettings, Settings,
     },
-    integrations::oauth2::NangoService,
+    integrations::{oauth2::NangoService, slack::SlackService},
     jobs::UniversalInboxJob,
     observability::{get_subscriber, init_subscriber},
     repository::Repository,
     universal_inbox::{
+        integration_connection::service::IntegrationConnectionService,
         notification::service::NotificationService, task::service::TaskService,
-        user::service::UserService,
+        third_party::service::ThirdPartyItemService, user::service::UserService,
     },
     utils::cache::Cache,
 };
@@ -46,6 +47,9 @@ pub struct TestedApp {
     pub user_service: Arc<UserService>,
     pub task_service: Arc<RwLock<TaskService>>,
     pub notification_service: Arc<RwLock<NotificationService>>,
+    pub integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
+    pub third_party_item_service: Arc<RwLock<ThirdPartyItemService>>,
+    pub slack_service: Arc<SlackService>,
     pub github_mock_server: MockServer,
     pub linear_mock_server: MockServer,
     pub google_mail_mock_server: MockServer,
@@ -208,6 +212,7 @@ pub async fn tested_app(
         integration_connection_service,
         auth_token_service,
         third_party_item_service,
+        slack_service,
     ) = universal_inbox_api::build_services(
         pool.clone(),
         &settings,
@@ -234,7 +239,7 @@ pub async fn tested_app(
         user_service.clone(),
         integration_connection_service.clone(),
         auth_token_service,
-        third_party_item_service,
+        third_party_item_service.clone(),
     )
     .await
     .expect("Failed to bind address");
@@ -246,7 +251,9 @@ pub async fn tested_app(
         redis_storage.clone(),
         notification_service.clone(),
         task_service.clone(),
-        integration_connection_service,
+        integration_connection_service.clone(),
+        third_party_item_service.clone(),
+        slack_service.clone(),
     )
     .await;
 
@@ -261,6 +268,9 @@ pub async fn tested_app(
         user_service,
         task_service,
         notification_service,
+        integration_connection_service,
+        third_party_item_service,
+        slack_service,
         github_mock_server,
         linear_mock_server,
         google_mail_mock_server,
@@ -334,6 +344,7 @@ pub async fn tested_app_with_local_auth(
         integration_connection_service,
         auth_token_service,
         third_party_item_service,
+        slack_service,
     ) = universal_inbox_api::build_services(
         pool.clone(),
         &settings,
@@ -360,7 +371,7 @@ pub async fn tested_app_with_local_auth(
         user_service.clone(),
         integration_connection_service.clone(),
         auth_token_service,
-        third_party_item_service,
+        third_party_item_service.clone(),
     )
     .await
     .expect("Failed to bind address");
@@ -372,7 +383,9 @@ pub async fn tested_app_with_local_auth(
         redis_storage.clone(),
         notification_service.clone(),
         task_service.clone(),
-        integration_connection_service,
+        integration_connection_service.clone(),
+        third_party_item_service.clone(),
+        slack_service.clone(),
     )
     .await;
 
@@ -387,6 +400,9 @@ pub async fn tested_app_with_local_auth(
         user_service,
         task_service,
         notification_service,
+        integration_connection_service,
+        third_party_item_service,
+        slack_service,
         github_mock_server,
         linear_mock_server,
         google_mail_mock_server,

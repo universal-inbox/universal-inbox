@@ -6518,8 +6518,7 @@ dependencies = [
 
 [[package]]
 name = "slack-blocks-render"
-version = "0.2.1"
-source = "git+https://github.com/dax/slack-blocks-render?branch=fix-usergroup-count-type#206e0292f3553007523f00b30220f3de0b94b919"
+version = "0.2.3"
 dependencies = [
  "despatma",
  "emojis",
@@ -6531,8 +6530,7 @@ dependencies = [
 
 [[package]]
 name = "slack-morphism"
-version = "2.5.0"
-source = "git+https://github.com/dax/slack-morphism-rust?rev=55ca1f2fdb47353bef58d2e82ce7fc7b7a859f79#55ca1f2fdb47353bef58d2e82ce7fc7b7a859f79"
+version = "2.6.2"
 dependencies = [
  "async-recursion",
  "async-trait",
@@ -7780,6 +7778,7 @@ dependencies = [
  "url 2.5.2",
  "uuid",
  "validator",
+ "vec1",
 ]
 
 [[package]]
@@ -7856,6 +7855,7 @@ dependencies = [
  "url 2.5.2",
  "uuid",
  "validator",
+ "vec1",
  "wiremock",
 ]
 
@@ -8029,6 +8029,15 @@ name = "vcpkg"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
+
+[[package]]
+name = "vec1"
+version = "1.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eab68b56840f69efb0fefbe3ab6661499217ffdc58e2eef7c3f6f69835386322"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "version_check"

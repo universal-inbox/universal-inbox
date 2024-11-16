@@ -82,6 +82,7 @@ async fn test_sync_todoist_slack_task(
         &settings,
         nango_slack_connection,
         None,
+        None,
     )
     .await;
     create_and_mock_integration_connection(
@@ -91,6 +92,7 @@ async fn test_sync_todoist_slack_task(
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
         nango_todoist_connection,
+        None,
         None,
     )
     .await;
@@ -318,6 +320,7 @@ async fn test_patch_slack_task_status_as_done(
         &settings,
         nango_slack_connection,
         None,
+        None,
     )
     .await;
     create_and_mock_integration_connection(
@@ -327,6 +330,7 @@ async fn test_patch_slack_task_status_as_done(
         IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
         &settings,
         nango_todoist_connection,
+        None,
         None,
     )
     .await;

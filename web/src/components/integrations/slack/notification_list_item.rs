@@ -2,14 +2,19 @@
 
 use chrono::{DateTime, Local};
 use dioxus::prelude::*;
-use dioxus_free_icons::{icons::bs_icons::BsSlack, Icon};
+use dioxus_free_icons::{
+    icons::bs_icons::{BsChatText, BsSlack},
+    Icon,
+};
+use slack_morphism::{SlackChannelInfo, SlackMessageSender};
 
 use universal_inbox::{
     notification::NotificationWithTask,
     third_party::{
         integrations::slack::{
             SlackChannelDetails, SlackFileCommentDetails, SlackFileDetails, SlackGroupDetails,
-            SlackImDetails, SlackMessageDetails, SlackReaction, SlackReactionItem, SlackStarItem,
+            SlackImDetails, SlackMessageDetails, SlackMessageRender, SlackReaction,
+            SlackReactionItem, SlackStarItem, SlackThread,
         },
         item::ThirdPartyItemData,
     },
@@ -60,6 +65,22 @@ pub fn SlackReactionNotificationListItem(
 }
 
 #[component]
+pub fn SlackThreadNotificationListItem(
+    notification: ReadOnlySignal<NotificationWithTask>,
+    is_selected: ReadOnlySignal<bool>,
+    on_select: EventHandler<()>,
+) -> Element {
+    rsx! {
+        SlackNotificationListItem {
+            notification,
+            subicon: rsx! { Icon { class: "h-5 w-5 min-w-5", icon: BsChatText } },
+            is_selected,
+            on_select,
+        }
+    }
+}
+
+#[component]
 pub fn SlackNotificationListItem(
     notification: ReadOnlySignal<NotificationWithTask>,
     subicon: Option<Element>,
@@ -96,30 +117,43 @@ pub fn SlackNotificationListItem(
 
 #[component]
 pub fn SlackNotificationSubtitle(notification: ReadOnlySignal<NotificationWithTask>) -> Element {
-    let channel = match notification().source_item.data {
+    fn channel_str(channel: &SlackChannelInfo) -> String {
+        if let Some(channel_name) = &channel.name {
+            format!("#{}", channel_name)
+        } else {
+            format!("#{}", channel.id)
+        }
+    }
+    let subtitle = match notification().source_item.data {
         ThirdPartyItemData::SlackStar(slack_star) => match slack_star.item {
-            SlackStarItem::SlackMessage(SlackMessageDetails { channel, .. })
-            | SlackStarItem::SlackFile(SlackFileDetails { channel, .. })
-            | SlackStarItem::SlackFileComment(SlackFileCommentDetails { channel, .. })
-            | SlackStarItem::SlackChannel(SlackChannelDetails { channel, .. })
-            | SlackStarItem::SlackIm(SlackImDetails { channel, .. })
-            | SlackStarItem::SlackGroup(SlackGroupDetails { channel, .. }) => Some(channel),
+            SlackStarItem::SlackMessage(item) => channel_str(&item.channel),
+            SlackStarItem::SlackFile(item) => channel_str(&item.channel),
+            SlackStarItem::SlackFileComment(item) => channel_str(&item.channel),
+            SlackStarItem::SlackChannel(item) => channel_str(&item.channel),
+            SlackStarItem::SlackIm(item) => channel_str(&item.channel),
+            SlackStarItem::SlackGroup(item) => channel_str(&item.channel),
         },
         ThirdPartyItemData::SlackReaction(slack_reaction) => match slack_reaction.item {
-            SlackReactionItem::SlackMessage(SlackMessageDetails { channel, .. })
-            | SlackReactionItem::SlackFile(SlackFileDetails { channel, .. }) => Some(channel),
+            SlackReactionItem::SlackMessage(item) => channel_str(&item.channel),
+            SlackReactionItem::SlackFile(item) => channel_str(&item.channel),
         },
-        _ => None,
-    };
-    let subtitle = channel
-        .map(|channel| {
-            if let Some(channel_name) = &channel.name {
-                format!("#{}", channel_name)
+        ThirdPartyItemData::SlackThread(slack_thread) => {
+            if slack_thread.messages.len() > 1 {
+                let first_message_text = slack_thread
+                    .messages
+                    .first()
+                    .render_content(slack_thread.references.clone(), false);
+                format!(
+                    "Reply to `{}` in {}",
+                    first_message_text,
+                    channel_str(&slack_thread.channel)
+                )
             } else {
-                format!("#{}", channel.id)
+                format!("in {}", channel_str(&slack_thread.channel))
             }
-        })
-        .unwrap_or("".to_string());
+        }
+        _ => "".to_string(),
+    };
 
     rsx! {
         span {
@@ -134,22 +168,22 @@ fn SlackNotificationListItemDetails(notification: ReadOnlySignal<NotificationWit
     match notification().source_item.data {
         ThirdPartyItemData::SlackStar(slack_star) => match slack_star.item {
             SlackStarItem::SlackMessage(slack_message) => rsx! {
-                SlackMessageListItemDetails { slack_message }
+                SlackMessageListItemDetails { slack_message: *slack_message }
             },
             SlackStarItem::SlackFile(slack_file) => rsx! {
-                SlackFileListItemDetails { slack_file }
+                SlackFileListItemDetails { slack_file: *slack_file }
             },
             SlackStarItem::SlackChannel(slack_channel) => rsx! {
-                SlackChannelListItemDetails { slack_channel }
+                SlackChannelListItemDetails { slack_channel: *slack_channel }
             },
             SlackStarItem::SlackFileComment(slack_file_comment) => rsx! {
-                SlackFileCommentListItemDetails { slack_file_comment }
+                SlackFileCommentListItemDetails { slack_file_comment: *slack_file_comment }
             },
             SlackStarItem::SlackIm(slack_im) => rsx! {
-                SlackImListItemDetails { slack_im }
+                SlackImListItemDetails { slack_im: *slack_im }
             },
             SlackStarItem::SlackGroup(slack_group) => rsx! {
-                SlackGroupListItemDetails { slack_group }
+                SlackGroupListItemDetails { slack_group: *slack_group }
             },
         },
         ThirdPartyItemData::SlackReaction(slack_reaction) => match slack_reaction.item {
@@ -160,7 +194,35 @@ fn SlackNotificationListItemDetails(notification: ReadOnlySignal<NotificationWit
                 SlackFileListItemDetails { slack_file }
             },
         },
+        ThirdPartyItemData::SlackThread(slack_thread) => rsx! {
+            SlackThreadListItemDetails { slack_thread: *slack_thread }
+        },
         _ => None,
+    }
+}
+
+#[component]
+pub fn SlackThreadListItemDetails(slack_thread: ReadOnlySignal<SlackThread>) -> Element {
+    let slack_thread = slack_thread();
+    let first_unread_message = slack_thread.first_unread_message();
+    let sender_id = match &first_unread_message.sender {
+        SlackMessageSender {
+            user: Some(ref user_id),
+            ..
+        } => Some(user_id.to_string()),
+        SlackMessageSender {
+            bot_id: Some(ref bot_id),
+            ..
+        } => Some(bot_id.to_string()),
+        _ => None,
+    };
+    let sender = sender_id.and_then(|id| slack_thread.sender_profiles.get(&id).cloned());
+
+    rsx! {
+        SlackTeamDisplay { team: slack_thread.team }
+        if let Some(sender) = sender {
+            SlackMessageActorDisplay { sender }
+        }
     }
 }
 
@@ -168,7 +230,7 @@ fn SlackNotificationListItemDetails(notification: ReadOnlySignal<NotificationWit
 pub fn SlackMessageListItemDetails(slack_message: ReadOnlySignal<SlackMessageDetails>) -> Element {
     rsx! {
         SlackTeamDisplay { team: slack_message().team }
-        SlackMessageActorDisplay { slack_message }
+        SlackMessageActorDisplay { sender: slack_message().sender }
     }
 }
 

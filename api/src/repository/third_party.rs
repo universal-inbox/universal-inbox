@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use universal_inbox::{
     task::TaskSourceKind,
-    third_party::item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemId},
+    third_party::item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemId, ThirdPartyItemKind},
     user::UserId,
 };
 
@@ -32,6 +32,20 @@ pub trait ThirdPartyItemRepository {
         active_task_source_third_party_item_ids: Vec<ThirdPartyItemId>,
         task_source_kind: TaskSourceKind,
         user_id: UserId,
+    ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError>;
+
+    async fn has_third_party_item_for_source_id<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        kind: ThirdPartyItemKind,
+        source_id: &str,
+    ) -> Result<bool, UniversalInboxError>;
+
+    async fn find_third_party_items_for_source_id<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        kind: ThirdPartyItemKind,
+        source_id: &str,
     ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError>;
 }
 
@@ -237,6 +251,84 @@ impl ThirdPartyItemRepository for Repository {
         .await
         .map_err(|err| {
             let message = format!("Failed to get stale third party items from storage: {err}");
+            UniversalInboxError::DatabaseError {
+                source: err,
+                message,
+            }
+        })?;
+
+        records
+            .iter()
+            .map(|r| r.try_into())
+            .collect::<Result<Vec<ThirdPartyItem>, UniversalInboxError>>()
+    }
+
+    #[tracing::instrument(level = "debug", skip(self, executor))]
+    async fn has_third_party_item_for_source_id<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        kind: ThirdPartyItemKind,
+        source_id: &str,
+    ) -> Result<bool, UniversalInboxError> {
+        let count: Option<i64> = sqlx::query_scalar!(
+            r#"
+              SELECT
+                count(*)
+              FROM third_party_item
+              WHERE
+                source_id = $1
+                AND kind::TEXT = $2
+            "#,
+            source_id,
+            kind.to_string(),
+        )
+        .fetch_one(&mut **executor)
+        .await
+        .map_err(|err| {
+            let message =
+                format!("Failed to find {kind} third party item from source_id {source_id} from storage: {err}");
+            UniversalInboxError::DatabaseError {
+                source: err,
+                message,
+            }
+        })?;
+
+        if let Some(1) = count {
+            return Ok(true);
+        }
+        return Ok(false);
+    }
+
+    #[tracing::instrument(level = "debug", skip(self, executor))]
+    async fn find_third_party_items_for_source_id<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        kind: ThirdPartyItemKind,
+        source_id: &str,
+    ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError> {
+        let records = sqlx::query_as!(
+            ThirdPartyItemRow,
+            r#"
+              SELECT
+                third_party_item.id,
+                third_party_item.source_id,
+                third_party_item.data as "data: Json<ThirdPartyItemData>",
+                third_party_item.created_at,
+                third_party_item.updated_at,
+                third_party_item.user_id,
+                third_party_item.integration_connection_id
+              FROM third_party_item
+              WHERE
+                source_id = $1
+                AND kind::TEXT = $2
+            "#,
+            source_id,
+            kind.to_string(),
+        )
+        .fetch_all(&mut **executor)
+        .await
+        .map_err(|err| {
+            let message = format!("Failed to find {kind} third party item from source_id {source_id} from storage: {err}");
             UniversalInboxError::DatabaseError {
                 source: err,
                 message,

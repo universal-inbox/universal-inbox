@@ -18,7 +18,7 @@ use universal_inbox::{
     },
     task::{service::TaskPatch, Task, TaskCreation, TaskId, TaskStatus},
     third_party::{
-        integrations::slack::{SlackReaction, SlackStar},
+        integrations::slack::{SlackReaction, SlackStar, SlackThread},
         item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemId},
     },
     user::UserId,
@@ -268,7 +268,6 @@ impl NotificationService {
                 user_id,
             )
             .await?;
-        debug!("XXX Deleted stale notif: {:?}", deleted_notifications);
         info!(
             "{} {notification_source_kind} notifications marked as deleted for user {user_id}.",
             deleted_notifications.len()
@@ -448,7 +447,7 @@ impl NotificationService {
         apply_notification_side_effects: bool,
         for_user_id: UserId,
     ) -> Result<UpdateStatus<Box<Notification>>, UniversalInboxError> {
-        let updated_notification = self
+        let mut updated_notification = self
             .repository
             .update_notification(executor, notification_id, patch, for_user_id)
             .await?;
@@ -460,7 +459,7 @@ impl NotificationService {
         match updated_notification {
             UpdateStatus {
                 updated: true,
-                result: Some(ref notification),
+                result: Some(ref mut notification),
             } => {
                 // tag: New notification integration
                 match notification.kind {
@@ -506,6 +505,59 @@ impl NotificationService {
                             .await?,
                         ThirdPartyItemData::SlackStar(_) => {
                             self.apply_updated_notification_side_effect::<SlackStar, SlackService>(
+                                executor,
+                                self.slack_service.clone(),
+                                patch,
+                                notification.clone(),
+                                for_user_id,
+                            )
+                            .await?
+                        }
+                        ThirdPartyItemData::SlackThread(_) => {
+                            match patch.status {
+                                Some(NotificationStatus::Deleted) => {
+                                    let ThirdPartyItemData::SlackThread(ref mut slack_thread) =
+                                        notification.source_item.data
+                                    else {
+                                        return Err(UniversalInboxError::Unexpected(anyhow!(
+                                            "Unexpected third party item data type {} for {}, expected SlackThread",
+                                            notification.source_item.kind() ,  notification.source_item.id
+                                        )));
+                                    };
+                                    slack_thread.last_read =
+                                        Some(slack_thread.messages.last().origin.ts.clone());
+
+                                    self.third_party_item_service
+                                        .upgrade()
+                                        .context("Unable to access third_party_item_service from notification_service")?
+                                        .read()
+                                        .await
+                                        .create_or_update_third_party_item(executor, notification.source_item.clone())
+                                        .await?;
+                                }
+                                Some(NotificationStatus::Unsubscribed) => {
+                                    let ThirdPartyItemData::SlackThread(ref mut slack_thread) =
+                                        notification.source_item.data
+                                    else {
+                                        return Err(UniversalInboxError::Unexpected(anyhow!(
+                                            "Unexpected third party item data type {} for {}, expected SlackThread",
+                                            notification.source_item.kind() ,  notification.source_item.id
+                                        )));
+                                    };
+                                    slack_thread.subscribed = false;
+
+                                    self.third_party_item_service
+                                        .upgrade()
+                                        .context("Unable to access third_party_item_service from notification_service")?
+                                        .read()
+                                        .await
+                                        .create_or_update_third_party_item(executor, notification.source_item.clone())
+                                        .await?;
+                                }
+                                _ => {}
+                            };
+                            self
+                            .apply_updated_notification_side_effect::<SlackThread, SlackService>(
                                 executor,
                                 self.slack_service.clone(),
                                 patch,

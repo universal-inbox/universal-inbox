@@ -26,7 +26,7 @@ use crate::{
             slack::preview::{
                 channel::SlackChannelPreview, file::SlackFilePreview,
                 file_comment::SlackFileCommentPreview, group::SlackGroupPreview,
-                im::SlackImPreview, message::SlackMessagePreview,
+                im::SlackImPreview, message::SlackMessagePreview, thread::SlackThreadPreview,
             },
         },
         task_preview::TaskDetailsPreview,
@@ -113,12 +113,12 @@ fn NotificationDetailsPreview(notification: ReadOnlySignal<NotificationWithTask>
     match notification().source_item.data {
         ThirdPartyItemData::GithubNotification(github_notification) => {
             match github_notification.item {
-                Some(GithubNotificationItem::GithubPullRequest(github_pull_request)) => {
-                    rsx! { GithubPullRequestPreview { github_pull_request } }
-                }
-                Some(GithubNotificationItem::GithubDiscussion(github_discussion)) => {
-                    rsx! { GithubDiscussionPreview { github_discussion } }
-                }
+                Some(GithubNotificationItem::GithubPullRequest(github_pull_request)) => rsx! {
+                    GithubPullRequestPreview { github_pull_request }
+                },
+                Some(GithubNotificationItem::GithubDiscussion(github_discussion)) => rsx! {
+                    GithubDiscussionPreview { github_discussion }
+                },
                 _ => rsx! {
                     GithubNotificationDefaultPreview {
                         notification,
@@ -128,32 +128,53 @@ fn NotificationDetailsPreview(notification: ReadOnlySignal<NotificationWithTask>
             }
         }
         ThirdPartyItemData::SlackReaction(slack_reaction) => match slack_reaction.item {
-            SlackReactionItem::SlackMessage(slack_message) => {
-                rsx! { SlackMessagePreview { slack_message, title: notification().title } }
-            }
-            SlackReactionItem::SlackFile(slack_file) => {
-                rsx! { SlackFilePreview { slack_file, title: notification().title } }
-            }
+            SlackReactionItem::SlackMessage(slack_message) => rsx! {
+                SlackMessagePreview { slack_message, title: notification().title }
+            },
+            SlackReactionItem::SlackFile(slack_file) => rsx! {
+                SlackFilePreview { slack_file, title: notification().title }
+            },
         },
         ThirdPartyItemData::SlackStar(slack_star) => match slack_star.item {
-            SlackStarItem::SlackMessage(slack_message) => {
-                rsx! { SlackMessagePreview { slack_message, title: notification().title } }
-            }
-            SlackStarItem::SlackFile(slack_file) => {
-                rsx! { SlackFilePreview { slack_file, title: notification().title } }
-            }
-            SlackStarItem::SlackFileComment(slack_file_comment) => rsx! {
-                SlackFileCommentPreview { slack_file_comment, title: notification().title }
+            SlackStarItem::SlackMessage(slack_message) => rsx! {
+                SlackMessagePreview {
+                    slack_message: *slack_message,
+                    title: notification().title
+                }
             },
-            SlackStarItem::SlackChannel(slack_channel) => {
-                rsx! { SlackChannelPreview { slack_channel, title: notification().title } }
-            }
-            SlackStarItem::SlackIm(slack_im) => {
-                rsx! { SlackImPreview { slack_im, title: notification().title } }
-            }
-            SlackStarItem::SlackGroup(slack_group) => {
-                rsx! { SlackGroupPreview { slack_group, title: notification().title } }
-            }
+            SlackStarItem::SlackFile(slack_file) => rsx! {
+                SlackFilePreview {
+                    slack_file: *slack_file,
+                    title: notification().title
+                }
+            },
+            SlackStarItem::SlackFileComment(slack_file_comment) => rsx! {
+                SlackFileCommentPreview {
+                    slack_file_comment: *slack_file_comment,
+                    title: notification().title
+                }
+            },
+            SlackStarItem::SlackChannel(slack_channel) => rsx! {
+                SlackChannelPreview {
+                    slack_channel: *slack_channel,
+                    title: notification().title
+                }
+            },
+            SlackStarItem::SlackIm(slack_im) => rsx! {
+                SlackImPreview {
+                    slack_im: *slack_im,
+                    title: notification().title
+                }
+            },
+            SlackStarItem::SlackGroup(slack_group) => rsx! {
+                SlackGroupPreview {
+                    slack_group: *slack_group,
+                    title: notification().title
+                }
+            },
+        },
+        ThirdPartyItemData::SlackThread(slack_thread) => rsx! {
+            SlackThreadPreview { slack_thread: *slack_thread, title: notification().title }
         },
         ThirdPartyItemData::LinearNotification(linear_notification) => rsx! {
             LinearNotificationPreview { linear_notification: *linear_notification }

@@ -78,6 +78,7 @@ mod list_notifications {
             &settings,
             nango_github_connection,
             None,
+            None,
         )
         .await;
 
@@ -260,6 +261,7 @@ mod list_notifications {
             &settings,
             nango_github_connection,
             None,
+            None,
         )
         .await;
 
@@ -284,6 +286,7 @@ mod list_notifications {
             IntegrationConnectionConfig::Linear(LinearConfig::enabled()),
             &settings,
             nango_linear_connection,
+            None,
             None,
         )
         .await;
@@ -358,6 +361,7 @@ mod get_notification {
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
             nango_github_connection,
+            None,
             None,
         )
         .await;
@@ -440,6 +444,7 @@ mod patch_notification {
             &settings,
             nango_github_connection,
             None,
+            None,
         )
         .await;
         let expected_notification = create_notification_from_github_notification(
@@ -489,6 +494,7 @@ mod patch_notification {
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
             nango_github_connection,
+            None,
             None,
         )
         .await;
@@ -543,6 +549,7 @@ mod patch_notification {
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
             nango_github_connection,
+            None,
             None,
         )
         .await;
@@ -600,6 +607,7 @@ mod patch_notification {
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
             nango_github_connection,
+            None,
             None,
         )
         .await;

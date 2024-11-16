@@ -7,8 +7,10 @@ use tracing::debug;
 use universal_inbox::{
     notification::Notification,
     third_party::{
-        integrations::slack::{SlackReaction, SlackStar},
-        item::{ThirdPartyItemSource, ThirdPartyItemSourceKind},
+        integrations::slack::{SlackReaction, SlackStar, SlackThread},
+        item::{
+            ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemSource, ThirdPartyItemSourceKind,
+        },
     },
     user::UserId,
 };
@@ -28,16 +30,36 @@ impl NotificationEventService<SlackPushEventCallback> for NotificationService {
     async fn save_notification_from_event<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        event: SlackPushEventCallback,
+        event: &SlackPushEventCallback,
+        existing_third_party_item: Option<&ThirdPartyItem>,
         user_id: UserId,
     ) -> Result<Option<Notification>, UniversalInboxError> {
-        let Some(third_party_item) = self
+        let Some(mut third_party_item) = self
             .slack_service
-            .fetch_item_from_event(executor, &event, user_id)
+            .fetch_item_from_event(executor, event, user_id)
             .await?
         else {
             return Ok(None);
         };
+
+        // When given a third party item of a SlackThread, we want to ensure that we keep the subscribed status
+        // This happen when 2 way sync is disabled
+        if let Some(ThirdPartyItem {
+            data: ThirdPartyItemData::SlackThread(existing_slack_thread),
+            ..
+        }) = existing_third_party_item
+        {
+            if let ThirdPartyItem {
+                data: ThirdPartyItemData::SlackThread(ref mut slack_thread),
+                ..
+            } = third_party_item
+            {
+                // If the existing thread is not subscribed, we want to keep it that way
+                if !existing_slack_thread.subscribed {
+                    slack_thread.subscribed = false;
+                }
+            }
+        }
 
         let upsert_item = self
             .third_party_item_service
@@ -45,13 +67,9 @@ impl NotificationEventService<SlackPushEventCallback> for NotificationService {
             .context("Unable to access third_party_item_service from notification_service")?
             .read()
             .await
-            .save_third_party_item(executor, third_party_item.clone())
+            .create_or_update_third_party_item(executor, third_party_item.clone())
             .await?;
 
-        debug!(
-            "[NOTIFICATION] Upserted third party item: {:?}",
-            upsert_item
-        );
         let third_party_item_id = upsert_item.value_ref().id;
         let Some(third_party_item) = upsert_item.modified_value() else {
             debug!("Third party item {third_party_item_id} is already up to date");
@@ -69,6 +87,14 @@ impl NotificationEventService<SlackPushEventCallback> for NotificationService {
                 .await?),
             ThirdPartyItemSourceKind::SlackReaction => Ok(self
                 .create_notification_from_third_party_item::<SlackReaction, SlackService>(
+                    executor,
+                    *third_party_item,
+                    self.slack_service.clone(),
+                    user_id,
+                )
+                .await?),
+            ThirdPartyItemSourceKind::SlackThread => Ok(self
+                .create_notification_from_third_party_item::<SlackThread, SlackService>(
                     executor,
                     *third_party_item,
                     self.slack_service.clone(),

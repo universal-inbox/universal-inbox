@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT\n                  integration_connection.id,\n                  integration_connection.user_id,\n                  integration_connection.provider_user_id,\n                  integration_connection.connection_id,\n                  integration_connection.status as \"status: _\",\n                  integration_connection.failure_message,\n                  integration_connection.created_at,\n                  integration_connection.updated_at,\n                  integration_connection.last_notifications_sync_scheduled_at,\n                  integration_connection.last_notifications_sync_started_at,\n                  integration_connection.last_notifications_sync_completed_at,\n                  integration_connection.last_notifications_sync_failure_message,\n                  integration_connection.notifications_sync_failures,\n                  integration_connection.last_tasks_sync_scheduled_at,\n                  integration_connection.last_tasks_sync_started_at,\n                  integration_connection.last_tasks_sync_completed_at,\n                  integration_connection.last_tasks_sync_failure_message,\n                  integration_connection.tasks_sync_failures,\n                  integration_connection_config.config as \"config: Json<IntegrationConnectionConfig>\",\n                  integration_connection.context as \"context: Json<IntegrationConnectionContext>\",\n                  integration_connection.registered_oauth_scopes as \"registered_oauth_scopes: Json<Vec<String>>\"\n                FROM integration_connection\n                INNER JOIN integration_connection_config\n                  ON integration_connection.id = integration_connection_config.integration_connection_id\n                WHERE\n                    integration_connection.provider_user_id = $1\n                    AND integration_connection.provider_kind::TEXT = $2\n            ",
+  "query": "\n                SELECT\n                  integration_connection.id,\n                  integration_connection.user_id,\n                  integration_connection.provider_user_id,\n                  integration_connection.connection_id,\n                  integration_connection.status as \"status: _\",\n                  integration_connection.failure_message,\n                  integration_connection.created_at,\n                  integration_connection.updated_at,\n                  integration_connection.last_notifications_sync_scheduled_at,\n                  integration_connection.last_notifications_sync_started_at,\n                  integration_connection.last_notifications_sync_completed_at,\n                  integration_connection.last_notifications_sync_failure_message,\n                  integration_connection.notifications_sync_failures,\n                  integration_connection.last_tasks_sync_scheduled_at,\n                  integration_connection.last_tasks_sync_started_at,\n                  integration_connection.last_tasks_sync_completed_at,\n                  integration_connection.last_tasks_sync_failure_message,\n                  integration_connection.tasks_sync_failures,\n                  integration_connection_config.config as \"config: Json<IntegrationConnectionConfig>\",\n                  integration_connection.context as \"context: Json<IntegrationConnectionContext>\",\n                  integration_connection.registered_oauth_scopes as \"registered_oauth_scopes: Json<Vec<String>>\"\n                FROM integration_connection\n                INNER JOIN integration_connection_config\n                  ON integration_connection.id = integration_connection_config.integration_connection_id\n                WHERE\n                    integration_connection.context->'content'->>'team_id' = $1\n                    AND integration_connection.provider_kind::TEXT = 'Slack'\n                    AND integration_connection.status::TEXT = 'Validated'\n                LIMIT 1\n            ",
   "describe": {
     "columns": [
       {
@@ -122,7 +122,6 @@
     ],
     "parameters": {
       "Left": [
-        "Text",
         "Text"
       ]
     },
@@ -150,5 +149,5 @@
       false
     ]
   },
-  "hash": "1a597738ce89867da1f54f1f8c8c861543a8a8d7d9f7fea94102c50fea4aeba9"
+  "hash": "f8d36debe2575380aca9c092a4895212d57e35428b9e1b7e66fc258e726a660c"
 }

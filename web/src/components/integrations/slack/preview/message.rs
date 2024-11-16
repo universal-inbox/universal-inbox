@@ -65,7 +65,7 @@ pub fn SlackMessagePreview(
 #[component]
 fn SlackMessageDisplay(slack_message: ReadOnlySignal<SlackMessageDetails>) -> Element {
     let posted_at = slack_message().message.origin.ts.to_date_time_opt();
-    let message = slack_message().content();
+    let text = slack_message().render_content();
 
     rsx! {
         CardWithHeaders {
@@ -73,7 +73,7 @@ fn SlackMessageDisplay(slack_message: ReadOnlySignal<SlackMessageDetails>) -> El
                 rsx! {
                     div {
                         class: "flex items-center gap-2",
-                        SlackMessageActorDisplay { slack_message, display_name: true }
+                        SlackMessageActorDisplay { sender: slack_message().sender, display_name: true }
                         if let Some(ref posted_at) = posted_at {
                             span { class: "text-xs text-gray-400", "{posted_at}" }
                         }
@@ -81,7 +81,7 @@ fn SlackMessageDisplay(slack_message: ReadOnlySignal<SlackMessageDetails>) -> El
                 }
             ],
 
-            Markdown { text: message }
+            Markdown { text }
         }
     }
 }
