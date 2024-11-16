@@ -13,7 +13,7 @@ pub trait TaskEventService<T> {
     async fn save_task_from_event<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        event: T,
+        event: &T,
         user_id: UserId,
     ) -> Result<Option<Task>, UniversalInboxError>;
 }

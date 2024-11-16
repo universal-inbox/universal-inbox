@@ -1,12 +1,15 @@
 #![allow(non_snake_case)]
-use dioxus::prelude::*;
 
+use dioxus::prelude::*;
+use dioxus_free_icons::{icons::bs_icons::BsChatText, Icon};
 use slack_morphism::SlackReactionName;
+
 use universal_inbox::{
     integration_connection::{
         config::IntegrationConnectionConfig,
         integrations::slack::{
-            SlackConfig, SlackReactionConfig, SlackStarConfig, SlackSyncTaskConfig, SlackSyncType,
+            SlackConfig, SlackMessageConfig, SlackReactionConfig, SlackStarConfig,
+            SlackSyncTaskConfig, SlackSyncType,
         },
     },
     task::{PresetDueDate, ProjectSummary, TaskPriority},
@@ -73,6 +76,23 @@ pub fn SlackProviderConfiguration(
                     role: "tabpanel",
                     class: "tab-content bg-base-100 border-base-300 rounded-box p-6",
                     SlackReactionConfiguration { config, ui_model, on_config_change }
+                }
+
+                input {
+                    "type": "radio",
+                    name: "slack_config",
+                    role: "tab",
+                    class: "tab",
+                    div {
+                        class: "flex items-center gap-2",
+                        Icon { class: "h-5 w-5 min-w-5", icon: BsChatText },
+                        span { "Mention" }
+                    }
+                }
+                div {
+                    role: "tabpanel",
+                    class: "tab-content bg-base-100 border-base-300 rounded-box p-6",
+                    SlackMessageConfiguration { config, ui_model, on_config_change }
                 }
             }
         }
@@ -585,5 +605,39 @@ fn SlackReactionConfiguration(
             }
         }
 
+    }
+}
+
+#[component]
+fn SlackMessageConfiguration(
+    config: ReadOnlySignal<SlackConfig>,
+    ui_model: Signal<UniversalInboxUIModel>,
+    on_config_change: EventHandler<IntegrationConnectionConfig>,
+) -> Element {
+    rsx! {
+        div {
+            class: "form-control",
+            label {
+                class: "cursor-pointer label py-1",
+                span {
+                    class: "label-text",
+                    "Synchronize Slack mentions"
+                }
+                input {
+                    r#type: "checkbox",
+                    class: "toggle toggle-ghost",
+                    oninput: move |event| {
+                        on_config_change.call(IntegrationConnectionConfig::Slack(SlackConfig {
+                            message_config: SlackMessageConfig {
+                                sync_enabled: event.value() == "true",
+                                ..config().message_config
+                            },
+                            ..config()
+                        }))
+                    },
+                    checked: config().message_config.sync_enabled
+                }
+            }
+        }
     }
 }

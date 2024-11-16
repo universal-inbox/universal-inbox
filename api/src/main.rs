@@ -245,6 +245,7 @@ async fn main() -> std::io::Result<()> {
         integration_connection_service,
         auth_token_service,
         third_party_item_service,
+        slack_service,
     ) = build_services(
         pool,
         &settings,
@@ -335,7 +336,7 @@ async fn main() -> std::io::Result<()> {
                 user_service,
                 integration_connection_service.clone(),
                 auth_token_service,
-                third_party_item_service,
+                third_party_item_service.clone(),
             )
             .await
             .expect("Failed to start HTTP server");
@@ -347,6 +348,8 @@ async fn main() -> std::io::Result<()> {
                     notification_service,
                     task_service,
                     integration_connection_service,
+                    third_party_item_service,
+                    slack_service,
                 )
                 .await;
 
@@ -376,6 +379,8 @@ async fn main() -> std::io::Result<()> {
                 notification_service,
                 task_service,
                 integration_connection_service,
+                third_party_item_service,
+                slack_service,
             )
             .await;
 

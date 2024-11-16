@@ -26,6 +26,7 @@ use crate::{
             linear::notification_list_item::LinearNotificationListItem,
             slack::notification_list_item::{
                 SlackReactionNotificationListItem, SlackStarNotificationListItem,
+                SlackThreadNotificationListItem,
             },
             todoist::notification_list_item::TodoistNotificationListItem,
         },
@@ -164,6 +165,9 @@ fn NotificationListItem(
                 is_selected,
                 on_select,
             },
+        },
+        ThirdPartyItemData::SlackThread(_) => rsx! {
+            SlackThreadNotificationListItem { notification, is_selected, on_select },
         },
         ThirdPartyItemData::TodoistItem(todoist_item) => rsx! {
             TodoistNotificationListItem {

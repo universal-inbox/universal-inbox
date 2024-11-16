@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use slack_morphism::SlackReactionName;
+use slack_morphism::{SlackReactionName, SlackTeamId};
 
 use crate::task::{PresetDueDate, ProjectSummary, TaskPriority};
 
@@ -7,6 +7,7 @@ use crate::task::{PresetDueDate, ProjectSummary, TaskPriority};
 pub struct SlackConfig {
     pub star_config: SlackStarConfig,
     pub reaction_config: SlackReactionConfig,
+    pub message_config: SlackMessageConfig,
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
@@ -20,6 +21,15 @@ pub struct SlackReactionConfig {
     pub sync_enabled: bool,
     pub reaction_name: SlackReactionName,
     pub sync_type: SlackSyncType,
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct SlackMessageConfig {
+    pub sync_enabled: bool,
+    // 2way sync is not really possible with current Slack public API
+    // Keeping it for now as the logic is already implemented and it
+    // might be possible to workaround this limitation in the future
+    pub is_2way_sync: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
@@ -41,6 +51,10 @@ impl Default for SlackConfig {
                 reaction_name: SlackReactionName("eyes".to_string()),
                 sync_type: SlackSyncType::AsNotifications,
             },
+            message_config: SlackMessageConfig {
+                sync_enabled: false,
+                is_2way_sync: false,
+            },
         }
     }
 }
@@ -57,6 +71,10 @@ impl SlackConfig {
                 reaction_name: SlackReactionName("eyes".to_string()),
                 sync_type: SlackSyncType::AsNotifications,
             },
+            message_config: SlackMessageConfig {
+                sync_enabled: true,
+                is_2way_sync: false,
+            },
         }
     }
 
@@ -71,6 +89,10 @@ impl SlackConfig {
                 reaction_name: SlackReactionName("eyes".to_string()),
                 sync_type: SlackSyncType::AsTasks(SlackSyncTaskConfig::default()),
             },
+            message_config: SlackMessageConfig {
+                sync_enabled: false,
+                is_2way_sync: false,
+            },
         }
     }
 
@@ -84,6 +106,10 @@ impl SlackConfig {
                 sync_enabled: false,
                 reaction_name: SlackReactionName("eyes".to_string()),
                 sync_type: SlackSyncType::AsNotifications,
+            },
+            message_config: SlackMessageConfig {
+                sync_enabled: false,
+                is_2way_sync: false,
             },
         }
     }
@@ -104,4 +130,9 @@ impl Default for SlackSyncTaskConfig {
             default_priority: TaskPriority::P4,
         }
     }
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct SlackContext {
+    pub team_id: SlackTeamId,
 }

@@ -4,12 +4,10 @@ use chrono::{DateTime, Local};
 use dioxus::prelude::*;
 use dioxus_free_icons::{icons::bs_icons::BsSlack, Icon};
 
+use slack_morphism::SlackChannelInfo;
 use universal_inbox::{
     task::Task,
-    third_party::integrations::slack::{
-        SlackChannelDetails, SlackFileCommentDetails, SlackFileDetails, SlackGroupDetails,
-        SlackImDetails, SlackMessageDetails,
-    },
+    third_party::integrations::slack::{SlackFileDetails, SlackMessageDetails},
     third_party::integrations::slack::{
         SlackReaction, SlackReactionItem, SlackStar, SlackStarItem,
     },
@@ -103,18 +101,12 @@ pub fn SlackReactionTaskListItem(
 #[component]
 pub fn SlackStarTaskSubtitle(slack_star: ReadOnlySignal<SlackStar>) -> Element {
     let subtitle = match slack_star().item {
-        SlackStarItem::SlackMessage(SlackMessageDetails { channel, .. })
-        | SlackStarItem::SlackFile(SlackFileDetails { channel, .. })
-        | SlackStarItem::SlackFileComment(SlackFileCommentDetails { channel, .. })
-        | SlackStarItem::SlackChannel(SlackChannelDetails { channel, .. })
-        | SlackStarItem::SlackIm(SlackImDetails { channel, .. })
-        | SlackStarItem::SlackGroup(SlackGroupDetails { channel, .. }) => {
-            if let Some(channel_name) = &channel.name {
-                format!("#{}", channel_name)
-            } else {
-                format!("#{}", channel.id)
-            }
-        }
+        SlackStarItem::SlackMessage(item) => channel_str(&item.channel),
+        SlackStarItem::SlackFile(item) => channel_str(&item.channel),
+        SlackStarItem::SlackFileComment(item) => channel_str(&item.channel),
+        SlackStarItem::SlackChannel(item) => channel_str(&item.channel),
+        SlackStarItem::SlackIm(item) => channel_str(&item.channel),
+        SlackStarItem::SlackGroup(item) => channel_str(&item.channel),
     };
 
     rsx! {
@@ -150,22 +142,22 @@ pub fn SlackReactionTaskSubtitle(slack_reaction: ReadOnlySignal<SlackReaction>) 
 fn SlackStarTaskListItemDetails(slack_star: ReadOnlySignal<SlackStar>) -> Element {
     match slack_star().item {
         SlackStarItem::SlackMessage(slack_message) => rsx! {
-            SlackMessageListItemDetails { slack_message }
+            SlackMessageListItemDetails { slack_message: *slack_message }
         },
         SlackStarItem::SlackFile(slack_file) => rsx! {
-            SlackFileListItemDetails { slack_file }
+            SlackFileListItemDetails { slack_file: *slack_file }
         },
         SlackStarItem::SlackFileComment(slack_file_comment) => rsx! {
-            SlackFileCommentListItemDetails { slack_file_comment }
+            SlackFileCommentListItemDetails { slack_file_comment: *slack_file_comment }
         },
         SlackStarItem::SlackChannel(slack_channel) => rsx! {
-            SlackChannelListItemDetails { slack_channel }
+            SlackChannelListItemDetails { slack_channel: *slack_channel }
         },
         SlackStarItem::SlackIm(slack_im) => rsx! {
-            SlackImListItemDetails { slack_im }
+            SlackImListItemDetails { slack_im: *slack_im }
         },
         SlackStarItem::SlackGroup(slack_group) => rsx! {
-            SlackGroupListItemDetails { slack_group }
+            SlackGroupListItemDetails { slack_group: *slack_group }
         },
     }
 }
@@ -179,5 +171,13 @@ fn SlackReactionTaskListItemDetails(slack_reaction: ReadOnlySignal<SlackReaction
         SlackReactionItem::SlackFile(slack_file) => rsx! {
             SlackFileListItemDetails { slack_file }
         },
+    }
+}
+
+fn channel_str(channel: &SlackChannelInfo) -> String {
+    if let Some(channel_name) = &channel.name {
+        format!("#{}", channel_name)
+    } else {
+        format!("#{}", channel.id)
     }
 }

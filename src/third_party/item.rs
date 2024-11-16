@@ -15,19 +15,14 @@ use crate::{
     notification::Notification,
     task::Task,
     third_party::integrations::{
-        linear::LinearIssue,
-        slack::{SlackReaction, SlackStar},
+        github::GithubNotification,
+        google_mail::GoogleMailThread,
+        linear::{LinearIssue, LinearNotification, LinearWorkflowState, LinearWorkflowStateType},
+        slack::{SlackReaction, SlackReactionState, SlackStar, SlackStarState, SlackThread},
         todoist::TodoistItem,
     },
     user::UserId,
     HasHtmlUrl,
-};
-
-use super::integrations::{
-    github::GithubNotification,
-    google_mail::GoogleMailThread,
-    linear::{LinearNotification, LinearWorkflowState, LinearWorkflowStateType},
-    slack::{SlackReactionState, SlackStarState},
 };
 
 #[serde_as]
@@ -57,6 +52,7 @@ impl HasHtmlUrl for ThirdPartyItem {
             ThirdPartyItemData::TodoistItem(ref item) => item.get_html_url(),
             ThirdPartyItemData::SlackStar(ref star) => star.get_html_url(),
             ThirdPartyItemData::SlackReaction(ref reaction) => reaction.get_html_url(),
+            ThirdPartyItemData::SlackThread(ref thread) => thread.get_html_url(),
             ThirdPartyItemData::LinearIssue(ref issue) => issue.get_html_url(),
             ThirdPartyItemData::LinearNotification(ref notification) => notification.get_html_url(),
             ThirdPartyItemData::GithubNotification(ref notification) => notification.get_html_url(),
@@ -73,6 +69,7 @@ pub enum ThirdPartyItemData {
     TodoistItem(Box<TodoistItem>),
     SlackStar(Box<SlackStar>),
     SlackReaction(Box<SlackReaction>),
+    SlackThread(Box<SlackThread>),
     LinearIssue(Box<LinearIssue>),
     LinearNotification(Box<LinearNotification>),
     GithubNotification(Box<GithubNotification>),
@@ -85,6 +82,7 @@ macro_attr! {
         TodoistItem,
         SlackStar,
         SlackReaction,
+        SlackThread,
         LinearIssue,
         LinearNotification,
         GithubNotification,
@@ -100,9 +98,9 @@ impl IntegrationProviderSource for ThirdPartyItem {
     fn get_integration_provider_kind(&self) -> IntegrationProviderKind {
         match self.data {
             ThirdPartyItemData::TodoistItem(_) => IntegrationProviderKind::Todoist,
-            ThirdPartyItemData::SlackStar(_) | ThirdPartyItemData::SlackReaction(_) => {
-                IntegrationProviderKind::Slack
-            }
+            ThirdPartyItemData::SlackStar(_)
+            | ThirdPartyItemData::SlackReaction(_)
+            | ThirdPartyItemData::SlackThread(_) => IntegrationProviderKind::Slack,
             ThirdPartyItemData::LinearIssue(_) | ThirdPartyItemData::LinearNotification(_) => {
                 IntegrationProviderKind::Linear
             }
@@ -118,6 +116,7 @@ impl ThirdPartyItemSource for ThirdPartyItem {
             ThirdPartyItemData::TodoistItem(_) => ThirdPartyItemSourceKind::Todoist,
             ThirdPartyItemData::SlackStar(_) => ThirdPartyItemSourceKind::SlackStar,
             ThirdPartyItemData::SlackReaction(_) => ThirdPartyItemSourceKind::SlackReaction,
+            ThirdPartyItemData::SlackThread(_) => ThirdPartyItemSourceKind::SlackThread,
             ThirdPartyItemData::LinearIssue(_) => ThirdPartyItemSourceKind::LinearIssue,
             ThirdPartyItemData::LinearNotification(_) => {
                 ThirdPartyItemSourceKind::LinearNotification
@@ -153,6 +152,7 @@ impl ThirdPartyItem {
             ThirdPartyItemData::TodoistItem(_) => ThirdPartyItemKind::TodoistItem,
             ThirdPartyItemData::SlackStar(_) => ThirdPartyItemKind::SlackStar,
             ThirdPartyItemData::SlackReaction(_) => ThirdPartyItemKind::SlackReaction,
+            ThirdPartyItemData::SlackThread(_) => ThirdPartyItemKind::SlackThread,
             ThirdPartyItemData::LinearIssue(_) => ThirdPartyItemKind::LinearIssue,
             ThirdPartyItemData::LinearNotification(_) => ThirdPartyItemKind::LinearNotification,
             ThirdPartyItemData::GithubNotification(_) => ThirdPartyItemKind::GithubNotification,
@@ -179,6 +179,16 @@ impl ThirdPartyItem {
                 ThirdPartyItemData::SlackReaction(Box::new(SlackReaction {
                     state: SlackReactionState::ReactionRemoved,
                     ..*slack_reaction.clone()
+                }))
+            }
+            ThirdPartyItemData::SlackThread(ref slack_thread) => {
+                let mut messages = slack_thread.messages.clone();
+                let last_message = slack_thread.messages.last();
+                let first_message = messages.first_mut();
+                first_message.parent.last_read = Some(last_message.origin.ts.clone());
+                ThirdPartyItemData::SlackThread(Box::new(SlackThread {
+                    messages,
+                    ..*slack_thread.clone()
                 }))
             }
             ThirdPartyItemData::LinearIssue(ref issue) => {
@@ -228,6 +238,7 @@ macro_attr! {
         Todoist,
         SlackStar,
         SlackReaction,
+        SlackThread,
         LinearIssue,
         LinearNotification,
         GithubNotification,
@@ -253,4 +264,71 @@ pub struct ThirdPartyItemCreationResult {
     pub third_party_item: ThirdPartyItem,
     pub task: Option<Task>,
     pub notification: Option<Notification>,
+}
+
+#[cfg(test)]
+mod tests {
+    use pretty_assertions::assert_eq;
+    use rstest::*;
+    use slack_morphism::api::{
+        SlackApiConversationsHistoryResponse, SlackApiConversationsInfoResponse,
+        SlackApiTeamInfoResponse,
+    };
+
+    use crate::test_helpers::load_json_fixture_file;
+
+    use super::*;
+
+    #[fixture]
+    pub fn slack_thread_third_party_item() -> ThirdPartyItem {
+        let message_response: SlackApiConversationsHistoryResponse =
+            load_json_fixture_file("slack_fetch_thread_response.json");
+        let channel_response: SlackApiConversationsInfoResponse =
+            load_json_fixture_file("slack_fetch_channel_response.json");
+        let team_response: SlackApiTeamInfoResponse =
+            load_json_fixture_file("slack_fetch_team_response.json");
+
+        let slack_thread = SlackThread {
+            url: "https://example.com".parse().unwrap(),
+            messages: message_response.messages.try_into().unwrap(),
+            subscribed: true,
+            last_read: None,
+            channel: channel_response.channel.clone(),
+            team: team_response.team.clone(),
+            references: None,
+            sender_profiles: Default::default(),
+        };
+
+        ThirdPartyItem::new(
+            "123".to_string(),
+            ThirdPartyItemData::SlackThread(Box::new(slack_thread)),
+            Uuid::new_v4().into(),
+            Uuid::new_v4().into(),
+        )
+    }
+
+    #[rstest]
+    fn test_mark_as_done_a_slack_thread(slack_thread_third_party_item: ThirdPartyItem) {
+        let ThirdPartyItemData::SlackThread(ref slack_thread) = slack_thread_third_party_item.data
+        else {
+            unreachable!("Expected SlackThread data");
+        };
+        let first_message = slack_thread.messages.first();
+        assert_eq!(
+            first_message.parent.last_read,
+            Some(first_message.origin.ts.clone())
+        );
+
+        let ThirdPartyItemData::SlackThread(ref slack_thread_marked_as_done) =
+            slack_thread_third_party_item.marked_as_done().data
+        else {
+            unreachable!("Expected SlackThread data");
+        };
+        let first_message = slack_thread_marked_as_done.messages.first();
+        let last_message = slack_thread_marked_as_done.messages.last();
+        assert_eq!(
+            first_message.parent.last_read,
+            Some(last_message.origin.ts.clone())
+        );
+    }
 }

@@ -5,7 +5,6 @@ use graphql_client::Response;
 use pretty_assertions::assert_eq;
 use rstest::*;
 
-use tracing::debug;
 use universal_inbox::{
     integration_connection::{
         config::IntegrationConnectionConfig,
@@ -76,6 +75,7 @@ async fn test_sync_todoist_linear_task(
         &settings,
         nango_todoist_connection,
         None,
+        None,
     )
     .await;
     let project = ProjectSummary {
@@ -96,6 +96,7 @@ async fn test_sync_todoist_linear_task(
         }),
         &settings,
         nango_linear_connection,
+        None,
         None,
     )
     .await;
@@ -198,17 +199,6 @@ async fn test_sync_todoist_linear_task(
     assert_eq!(updated_task.status, expected_new_task_status);
 
     if new_project_id == "1111" {
-        let notifications = list_notifications_with_tasks(
-            &app.client,
-            &app.app.api_address,
-            vec![],
-            false,
-            None,
-            None,
-            false,
-        )
-        .await;
-        debug!("{:?}", notifications);
         let notifications = list_notifications_with_tasks(
             &app.client,
             &app.app.api_address,

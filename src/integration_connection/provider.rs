@@ -9,7 +9,10 @@ use crate::{
             github::GithubConfig,
             google_mail::{GoogleMailConfig, GoogleMailContext},
             linear::LinearConfig,
-            slack::{SlackConfig, SlackSyncTaskConfig, SlackSyncType},
+            slack::{
+                SlackConfig, SlackContext, SlackReactionConfig, SlackStarConfig,
+                SlackSyncTaskConfig, SlackSyncType,
+            },
             todoist::{TodoistConfig, TodoistContext},
         },
     },
@@ -18,8 +21,6 @@ use crate::{
     },
     third_party::item::{ThirdPartyItem, ThirdPartyItemSource, ThirdPartyItemSourceKind},
 };
-
-use super::integrations::slack::{SlackReactionConfig, SlackStarConfig};
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
 #[serde(tag = "type", content = "content")]
@@ -37,6 +38,7 @@ pub enum IntegrationProvider {
     Notion,
     GoogleDocs,
     Slack {
+        context: Option<SlackContext>,
         config: SlackConfig,
     },
     Todoist {
@@ -68,7 +70,18 @@ impl IntegrationProvider {
             }),
             IntegrationConnectionConfig::Notion => Ok(Self::Notion),
             IntegrationConnectionConfig::GoogleDocs => Ok(Self::GoogleDocs),
-            IntegrationConnectionConfig::Slack(config) => Ok(Self::Slack { config }),
+            IntegrationConnectionConfig::Slack(config) => Ok(Self::Slack {
+                context: context
+                    .map(|c| {
+                        if let IntegrationConnectionContext::Slack(c) = c {
+                            Ok(c)
+                        } else {
+                            Err(anyhow!("Unexpect context for Slack provider: {c:?}"))
+                        }
+                    })
+                    .transpose()?,
+                config,
+            }),
             IntegrationConnectionConfig::Todoist(config) => Ok(Self::Todoist {
                 context: context
                     .map(|c| {
@@ -82,6 +95,19 @@ impl IntegrationProvider {
                 config,
             }),
             IntegrationConnectionConfig::TickTick => Ok(Self::TickTick),
+        }
+    }
+
+    pub fn context_is_empty(&self) -> bool {
+        match self {
+            IntegrationProvider::Github { .. } => false,
+            IntegrationProvider::Linear { .. } => false,
+            IntegrationProvider::GoogleMail { context, .. } => context.is_none(),
+            IntegrationProvider::Notion => false,
+            IntegrationProvider::GoogleDocs => false,
+            IntegrationProvider::Slack { context, .. } => context.is_none(),
+            IntegrationProvider::Todoist { context, .. } => context.is_none(),
+            IntegrationProvider::TickTick => false,
         }
     }
 
@@ -122,7 +148,7 @@ impl IntegrationProvider {
             }
             IntegrationProvider::Notion => IntegrationConnectionConfig::Notion,
             IntegrationProvider::GoogleDocs => IntegrationConnectionConfig::GoogleDocs,
-            IntegrationProvider::Slack { config } => {
+            IntegrationProvider::Slack { config, .. } => {
                 IntegrationConnectionConfig::Slack(config.clone())
             }
             IntegrationProvider::TickTick => IntegrationConnectionConfig::TickTick,
@@ -162,7 +188,7 @@ impl IntegrationProvider {
         third_party_item: &ThirdPartyItem,
     ) -> Option<TaskCreation> {
         let (target_project, default_due_at, default_priority) = match self {
-            IntegrationProvider::Slack { config } => {
+            IntegrationProvider::Slack { config, .. } => {
                 match third_party_item.get_third_party_item_source_kind() {
                     ThirdPartyItemSourceKind::SlackStar => {
                         let SlackConfig {
@@ -241,6 +267,7 @@ impl IntegrationProvider {
 pub enum IntegrationConnectionContext {
     Todoist(TodoistContext),
     GoogleMail(GoogleMailContext),
+    Slack(SlackContext),
 }
 
 pub trait IntegrationProviderSource {
