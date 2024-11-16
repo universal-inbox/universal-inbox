@@ -438,7 +438,7 @@ impl TaskService {
             .context("Unable to access third_party_item_service from task_service")?
             .read()
             .await
-            .save_third_party_item(executor, third_party_item)
+            .create_or_update_third_party_item(executor, third_party_item)
             .await?;
 
         let updated_third_party_item = upsert_item.value();
@@ -514,10 +514,6 @@ impl TaskService {
                 user_id,
             )
             .await?;
-
-        debug!("{:?}", upsert_task);
-        debug!("{:?}", third_party_item);
-        debug!("{:?}", integration_provider_kind);
 
         let task_is_modified = upsert_task.is_modified();
         let task = upsert_task.value();

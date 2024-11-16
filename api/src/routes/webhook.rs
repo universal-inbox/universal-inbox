@@ -11,16 +11,21 @@ use tokio_retry::{
     Retry,
 };
 use tracing::debug;
-use universal_inbox::integration_connection::{
-    config::IntegrationConnectionConfig,
-    integrations::slack::{SlackConfig, SlackReactionConfig, SlackStarConfig},
-    provider::IntegrationProviderKind,
+use universal_inbox::{
+    integration_connection::{
+        config::IntegrationConnectionConfig,
+        integrations::slack::{SlackConfig, SlackReactionConfig, SlackStarConfig},
+        provider::IntegrationProviderKind,
+    },
+    third_party::item::ThirdPartyItemKind,
 };
 
 use crate::{
+    integrations::slack::has_slack_references_in_message,
     jobs::{slack::SlackPushEventCallbackJob, UniversalInboxJob},
     universal_inbox::{
-        integration_connection::service::IntegrationConnectionService, UniversalInboxError,
+        integration_connection::service::IntegrationConnectionService,
+        third_party::service::ThirdPartyItemService, UniversalInboxError,
     },
 };
 
@@ -31,10 +36,11 @@ pub fn scope() -> Scope {
 
 pub async fn push_slack_event(
     integration_connection_service: web::Data<Arc<RwLock<IntegrationConnectionService>>>,
+    third_party_item_service: web::Data<Arc<RwLock<ThirdPartyItemService>>>,
     slack_push_event: web::Json<SlackPushEvent>,
     storage: web::Data<RedisStorage<UniversalInboxJob>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    debug!("Received a push event from Slack: {slack_push_event:?}");
+    debug!("{}", &serde_json::to_string(&slack_push_event).unwrap());
     match slack_push_event.into_inner() {
         SlackPushEvent::UrlVerification(SlackUrlVerificationEvent { challenge }) => {
             return Ok(HttpResponse::Ok()
@@ -122,6 +128,43 @@ pub async fn push_slack_event(
             {
                 if reaction_name == *reaction {
                     send_slack_push_event_callback_job(storage.as_ref(), event.clone()).await?;
+                }
+            }
+        }
+        SlackPushEvent::EventCallback(
+            ref event @ SlackPushEventCallback {
+                event:
+                    SlackEventCallbackBody::Message(SlackMessageEvent {
+                        origin: SlackMessageOrigin { ref thread_ts, .. },
+                        content: Some(ref content),
+                        ..
+                    }),
+                ..
+            },
+        ) => {
+            //
+            let service = third_party_item_service.read().await;
+            let mut transaction = service.begin().await.context(
+                "Failed to create new transaction while checking for known Slack threads",
+            )?;
+
+            if has_slack_references_in_message(content) {
+                send_slack_push_event_callback_job(storage.as_ref(), event.clone()).await?;
+                return Ok(HttpResponse::Ok().finish());
+            }
+
+            // Check if the message is a reply to a known thread
+            if let Some(thread_ts) = &thread_ts {
+                if service
+                    .has_third_party_item_for_source_id(
+                        &mut transaction,
+                        ThirdPartyItemKind::SlackThread,
+                        &thread_ts.0,
+                    )
+                    .await?
+                {
+                    send_slack_push_event_callback_job(storage.as_ref(), event.clone()).await?;
+                    return Ok(HttpResponse::Ok().finish());
                 }
             }
         }

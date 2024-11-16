@@ -60,6 +60,12 @@ pub trait IntegrationConnectionRepository {
         provider_user_id: String,
     ) -> Result<Option<IntegrationConnection>, UniversalInboxError>;
 
+    async fn get_integration_connection_per_context<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        context: IntegrationConnectionContext,
+    ) -> Result<Option<IntegrationConnection>, UniversalInboxError>;
+
     async fn update_integration_connection_status<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -298,6 +304,7 @@ impl IntegrationConnectionRepository for Repository {
                 WHERE
                     integration_connection.provider_user_id = $1
                     AND integration_connection.provider_kind::TEXT = $2
+                    AND integration_connection.status::TEXT = 'Validated'
             "#,
             provider_user_id,
             integration_provider_kind.to_string()
@@ -307,6 +314,66 @@ impl IntegrationConnectionRepository for Repository {
             .map_err(|err| {
                 let message = format!(
                     "Failed to fetch integration connection for {integration_provider_kind} user {provider_user_id} from storage: {err}"
+                );
+                UniversalInboxError::DatabaseError { source: err, message }
+            })?;
+
+        row.map(|r| r.try_into()).transpose()
+    }
+
+    #[tracing::instrument(level = "debug", skip(self, executor))]
+    async fn get_integration_connection_per_context<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        context: IntegrationConnectionContext,
+    ) -> Result<Option<IntegrationConnection>, UniversalInboxError> {
+        let IntegrationConnectionContext::Slack(ref slack_context) = context else {
+            return Err(UniversalInboxError::UnsupportedAction(format!(
+                "Unsupported integration connection context: {context:?}"
+            )));
+        };
+
+        let row = sqlx::query_as!(
+            IntegrationConnectionRow,
+            r#"
+                SELECT
+                  integration_connection.id,
+                  integration_connection.user_id,
+                  integration_connection.provider_user_id,
+                  integration_connection.connection_id,
+                  integration_connection.status as "status: _",
+                  integration_connection.failure_message,
+                  integration_connection.created_at,
+                  integration_connection.updated_at,
+                  integration_connection.last_notifications_sync_scheduled_at,
+                  integration_connection.last_notifications_sync_started_at,
+                  integration_connection.last_notifications_sync_completed_at,
+                  integration_connection.last_notifications_sync_failure_message,
+                  integration_connection.notifications_sync_failures,
+                  integration_connection.last_tasks_sync_scheduled_at,
+                  integration_connection.last_tasks_sync_started_at,
+                  integration_connection.last_tasks_sync_completed_at,
+                  integration_connection.last_tasks_sync_failure_message,
+                  integration_connection.tasks_sync_failures,
+                  integration_connection_config.config as "config: Json<IntegrationConnectionConfig>",
+                  integration_connection.context as "context: Json<IntegrationConnectionContext>",
+                  integration_connection.registered_oauth_scopes as "registered_oauth_scopes: Json<Vec<String>>"
+                FROM integration_connection
+                INNER JOIN integration_connection_config
+                  ON integration_connection.id = integration_connection_config.integration_connection_id
+                WHERE
+                    integration_connection.context->'content'->>'team_id' = $1
+                    AND integration_connection.provider_kind::TEXT = 'Slack'
+                    AND integration_connection.status::TEXT = 'Validated'
+                LIMIT 1
+            "#,
+            slack_context.team_id.to_string()
+        )
+            .fetch_optional(&mut **executor)
+            .await
+            .map_err(|err| {
+                let message = format!(
+                    "Failed to fetch Slack integration connection with context {context:?} from storage: {err}"
                 );
                 UniversalInboxError::DatabaseError { source: err, message }
             })?;

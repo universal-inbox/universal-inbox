@@ -10,8 +10,12 @@ use reqwest_tracing::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_with::serde_as;
+use slack_morphism::SlackTeamId;
 use tracing::warn;
-use universal_inbox::integration_connection::{ConnectionId, NangoProviderKey};
+use universal_inbox::integration_connection::{
+    integrations::slack::SlackContext, provider::IntegrationConnectionContext, ConnectionId,
+    NangoProviderKey,
+};
 use url::Url;
 
 use crate::{integrations::APP_USER_AGENT, universal_inbox::UniversalInboxError};
@@ -59,6 +63,15 @@ impl NangoConnection {
                     .as_str()?
                     .to_string(),
             ),
+            _ => None,
+        }
+    }
+
+    pub fn get_provider_context(&self) -> Option<IntegrationConnectionContext> {
+        match self.provider_config_key.0.as_str() {
+            "slack" => Some(IntegrationConnectionContext::Slack(SlackContext {
+                team_id: SlackTeamId(self.credentials.raw["team"]["id"].as_str()?.to_string()),
+            })),
             _ => None,
         }
     }

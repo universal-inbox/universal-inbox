@@ -86,3 +86,21 @@ impl<T> Page<T> {
         }
     }
 }
+
+#[cfg(test)]
+pub mod test_helpers {
+    use std::{env, fs};
+
+    pub fn fixture_path(fixture_file_name: &str) -> String {
+        format!(
+            "{}/tests/fixtures/{fixture_file_name}",
+            env::var("CARGO_MANIFEST_DIR").unwrap()
+        )
+    }
+    pub fn load_json_fixture_file<T: for<'de> serde::de::Deserialize<'de>>(
+        fixture_file_name: &str,
+    ) -> T {
+        let input_str = fs::read_to_string(fixture_path(fixture_file_name)).unwrap();
+        serde_json::from_str::<T>(&input_str).unwrap()
+    }
+}

@@ -73,6 +73,7 @@ mod get_task {
             &settings,
             nango_todoist_connection,
             None,
+            None,
         )
         .await;
         mock_todoist_sync_resources_service(
@@ -151,6 +152,7 @@ mod list_tasks {
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
             nango_todoist_connection,
+            None,
             None,
         )
         .await;
@@ -252,6 +254,7 @@ mod patch_task {
             &settings,
             nango_todoist_connection,
             None,
+            None,
         )
         .await;
         mock_todoist_sync_resources_service(
@@ -314,6 +317,7 @@ mod patch_task {
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
             nango_todoist_connection,
+            None,
             None,
         )
         .await;
@@ -380,6 +384,7 @@ mod patch_task {
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
             nango_todoist_connection,
+            None,
             None,
         )
         .await;
@@ -498,6 +503,7 @@ mod search_tasks {
             &settings,
             nango_todoist_connection,
             None,
+            None,
         )
         .await;
         mock_todoist_sync_resources_service(
@@ -610,6 +616,7 @@ mod search_projects {
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
             nango_todoist_connection,
+            None,
             None,
         )
         .await;
