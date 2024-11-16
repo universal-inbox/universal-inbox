@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
@@ -15,6 +15,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, warn};
 use url::Url;
 use uuid::Uuid;
+use vec1::Vec1;
 use wiremock::{
     matchers::{method, path},
     Mock, MockServer, ResponseTemplate,
@@ -32,6 +33,7 @@ use universal_inbox::{
             SlackChannelDetails, SlackFileCommentDetails, SlackFileDetails, SlackGroupDetails,
             SlackImDetails, SlackMessageDetails, SlackMessageSenderDetails, SlackReaction,
             SlackReactionItem, SlackReactionState, SlackStar, SlackStarItem, SlackStarState,
+            SlackThread,
         },
         item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemFromSource},
     },
@@ -130,6 +132,34 @@ impl SlackService {
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
+    pub async fn fetch_thread(
+        &self,
+        channel: &SlackChannelId,
+        root_message: &SlackTs,
+        current_message: &SlackTs,
+        user_id: UserId,
+        slack_api_token: &SlackApiToken,
+    ) -> Result<Vec1<SlackHistoryMessage>, UniversalInboxError> {
+        let result = cached_fetch_thread(
+            user_id,
+            &self.slack_base_url,
+            slack_api_token,
+            channel,
+            root_message,
+            current_message,
+        )
+        .await?;
+        if result.was_cached {
+            debug!("`fetch_thread` cache hit");
+        }
+        result.value.try_into().map_err(|_| {
+            UniversalInboxError::Unexpected(anyhow!(
+                "A Slack thread must have at least one message"
+            ))
+        })
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn fetch_channel(
         &self,
         channel: &SlackChannelId,
@@ -158,6 +188,32 @@ impl SlackService {
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
+    pub async fn fetch_user_profile(
+        &self,
+        user: &SlackUserId,
+        user_id: UserId,
+        slack_api_token: &SlackApiToken,
+    ) -> Result<SlackUserProfile, UniversalInboxError> {
+        let slack_user = self.fetch_user(user, user_id, slack_api_token).await?;
+
+        Ok(slack_user.profile.unwrap_or_else(|| {
+            let mut profile = SlackUserProfile::new().with_id(slack_user.id);
+
+            if let Some(name) = slack_user.name {
+                profile = profile.with_display_name(name);
+            }
+            if let Some(real_name) = slack_user.real_name {
+                profile = profile.with_real_name(real_name);
+            }
+            if let Some(team) = slack_user.team_id {
+                profile = profile.with_team(team);
+            }
+
+            profile
+        }))
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn fetch_usergroup(
         &self,
         usergroup_id: &SlackUserGroupId,
@@ -179,6 +235,21 @@ impl SlackService {
                     usergroup_id
                 ))
             })
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    pub async fn list_users_in_usergroup(
+        &self,
+        usergroup_id: &SlackUserGroupId,
+        slack_api_token: &SlackApiToken,
+    ) -> Result<Vec<SlackUserId>, UniversalInboxError> {
+        let result =
+            cached_list_users_in_usergroup(&self.slack_base_url, usergroup_id, slack_api_token)
+                .await?;
+        if result.was_cached {
+            debug!("`list_users_in_usergroup` cache hit");
+        }
+        Ok(result.value)
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
@@ -428,45 +499,38 @@ impl SlackService {
                 )
                 .await
             }
+            SlackEventCallbackBody::Message(SlackMessageEvent { origin, .. }) => {
+                self.fetch_item_from_slack_message(
+                    executor,
+                    slack_push_event_callback,
+                    origin,
+                    user_id,
+                )
+                .await
+            }
             // Not yet implemented resource type
             _ => return Ok(None),
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self, message, slack_api_token))]
-    async fn find_slack_references_in_message(
+    #[tracing::instrument(level = "debug", skip(self, message_content, slack_api_token))]
+    async fn find_and_resolve_slack_references_in_message(
         &self,
-        message: &SlackHistoryMessage,
+        message_content: &SlackMessageContent,
         user_id: UserId,
         slack_api_token: &SlackApiToken,
     ) -> Result<Option<SlackReferences>, UniversalInboxError> {
-        let mut references = if let Some(blocks) = &message.content.blocks {
-            find_slack_references_in_blocks(blocks)
-        } else {
-            SlackReferences::default()
-        };
-        if let Some(attachements) = &message.content.attachments {
-            for attachment in attachements {
-                if let Some(blocks) = &attachment.blocks {
-                    references.extend(find_slack_references_in_blocks(blocks));
-                }
-            }
-        }
-
+        let mut references = find_slack_references_in_message(message_content);
         if references.is_empty() {
             return Ok(None);
         }
 
         let slack_user_ids = references.users.keys().cloned().collect::<Vec<_>>();
         for slack_user_id in slack_user_ids {
-            let user = self
-                .fetch_user(&slack_user_id, user_id, slack_api_token)
+            let user_profile = self
+                .fetch_user_profile(&slack_user_id, user_id, slack_api_token)
                 .await?;
-            let user_name = if let Some(profile) = user.profile {
-                profile.display_name.or(profile.real_name)
-            } else {
-                user.name.or(user.real_name)
-            };
+            let user_name = user_profile.display_name.or(user_profile.real_name);
             references.users.insert(slack_user_id, user_name);
         }
 
@@ -533,11 +597,13 @@ impl SlackService {
                     .await?;
                 let sender = if let Some(slack_user_id) = user {
                     SlackMessageSenderDetails::User(Box::new(
-                        self.fetch_user(slack_user_id, user_id, &slack_api_token)
+                        self.fetch_user_profile(slack_user_id, user_id, &slack_api_token)
                             .await?,
                     ))
                 } else if let Some(bot_id) = bot_id {
-                    SlackMessageSenderDetails::Bot(self.fetch_bot(bot_id, &slack_api_token).await?)
+                    SlackMessageSenderDetails::Bot(Box::new(
+                        self.fetch_bot(bot_id, &slack_api_token).await?,
+                    ))
                 } else {
                     return Err(UniversalInboxError::Unexpected(anyhow!(
                         "No user or bot found for Slack message {ts} in channel {channel}"
@@ -552,7 +618,11 @@ impl SlackService {
                     .fetch_team(&slack_push_event_callback.team_id, &slack_api_token)
                     .await?;
                 let references = self
-                    .find_slack_references_in_message(&message, user_id, &slack_api_token)
+                    .find_and_resolve_slack_references_in_message(
+                        &message.content,
+                        user_id,
+                        &slack_api_token,
+                    )
                     .await
                     .inspect_err(|err| {
                         warn!(
@@ -562,14 +632,14 @@ impl SlackService {
                     })
                     .unwrap_or(None);
 
-                SlackStarItem::SlackMessage(SlackMessageDetails {
+                SlackStarItem::SlackMessage(Box::new(SlackMessageDetails {
                     url,
                     message,
                     channel,
                     sender,
                     team,
                     references,
-                })
+                }))
             }
             SlackStarsItem::File(SlackStarsItemFile {
                 channel,
@@ -580,7 +650,7 @@ impl SlackService {
             }) => {
                 let sender = if let Some(slack_user_id) = user {
                     Some(
-                        self.fetch_user(slack_user_id, user_id, &slack_api_token)
+                        self.fetch_user_profile(slack_user_id, user_id, &slack_api_token)
                             .await?,
                     )
                 } else {
@@ -591,13 +661,13 @@ impl SlackService {
                     .fetch_team(&slack_push_event_callback.team_id, &slack_api_token)
                     .await?;
 
-                SlackStarItem::SlackFile(SlackFileDetails {
+                SlackStarItem::SlackFile(Box::new(SlackFileDetails {
                     id: Some(id.clone()),
                     title: title.clone(),
                     channel,
                     sender,
                     team,
-                })
+                }))
             }
             SlackStarsItem::FileComment(SlackStarsItemFileComment {
                 channel,
@@ -607,7 +677,7 @@ impl SlackService {
             }) => {
                 let sender = if let Some(slack_user_id) = user {
                     Some(
-                        self.fetch_user(slack_user_id, user_id, &slack_api_token)
+                        self.fetch_user_profile(slack_user_id, user_id, &slack_api_token)
                             .await?,
                     )
                 } else {
@@ -618,12 +688,12 @@ impl SlackService {
                     .fetch_team(&slack_push_event_callback.team_id, &slack_api_token)
                     .await?;
 
-                SlackStarItem::SlackFileComment(SlackFileCommentDetails {
+                SlackStarItem::SlackFileComment(Box::new(SlackFileCommentDetails {
                     channel,
                     comment_id: comment.clone(),
                     sender,
                     team,
-                })
+                }))
             }
             SlackStarsItem::Channel(SlackStarsItemChannel { channel, .. }) => {
                 let channel = self.fetch_channel(channel, &slack_api_token).await?;
@@ -631,7 +701,7 @@ impl SlackService {
                     .fetch_team(&slack_push_event_callback.team_id, &slack_api_token)
                     .await?;
 
-                SlackStarItem::SlackChannel(SlackChannelDetails { channel, team })
+                SlackStarItem::SlackChannel(Box::new(SlackChannelDetails { channel, team }))
             }
             SlackStarsItem::Im(SlackStarsItemIm { channel, .. }) => {
                 let channel = self.fetch_channel(channel, &slack_api_token).await?;
@@ -639,7 +709,7 @@ impl SlackService {
                     .fetch_team(&slack_push_event_callback.team_id, &slack_api_token)
                     .await?;
 
-                SlackStarItem::SlackIm(SlackImDetails { channel, team })
+                SlackStarItem::SlackIm(Box::new(SlackImDetails { channel, team }))
             }
             SlackStarsItem::Group(SlackStarsItemGroup { group, .. }) => {
                 let channel = self.fetch_channel(group, &slack_api_token).await?;
@@ -647,7 +717,7 @@ impl SlackService {
                     .fetch_team(&slack_push_event_callback.team_id, &slack_api_token)
                     .await?;
 
-                SlackStarItem::SlackGroup(SlackGroupDetails { channel, team })
+                SlackStarItem::SlackGroup(Box::new(SlackGroupDetails { channel, team }))
             }
         };
 
@@ -703,7 +773,7 @@ impl SlackService {
                     .get_chat_permalink(channel, ts, &slack_api_token)
                     .await?;
                 let sender = SlackMessageSenderDetails::User(Box::new(
-                    self.fetch_user(slack_reaction_item_user_id, user_id, &slack_api_token)
+                    self.fetch_user_profile(slack_reaction_item_user_id, user_id, &slack_api_token)
                         .await?,
                 ));
                 let message = self
@@ -714,7 +784,11 @@ impl SlackService {
                     .fetch_team(&slack_push_event_callback.team_id, &slack_api_token)
                     .await?;
                 let references = self
-                    .find_slack_references_in_message(&message, user_id, &slack_api_token)
+                    .find_and_resolve_slack_references_in_message(
+                        &message.content,
+                        user_id,
+                        &slack_api_token,
+                    )
                     .await
                     .inspect_err(|err| {
                         warn!(
@@ -748,6 +822,163 @@ impl SlackService {
         Ok(Some(
             slack_reaction.into_third_party_item(user_id, integration_connection.id),
         ))
+    }
+
+    #[allow(clippy::blocks_in_conditions, clippy::too_many_arguments)]
+    #[tracing::instrument(level = "debug", skip(self, executor, slack_push_event_callback))]
+    pub async fn fetch_item_from_slack_message<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        slack_push_event_callback: &SlackPushEventCallback,
+        origin: &SlackMessageOrigin,
+        user_id: UserId,
+    ) -> Result<Option<ThirdPartyItem>, UniversalInboxError> {
+        let (access_token, integration_connection) = self
+            .integration_connection_service
+            .read()
+            .await
+            .find_access_token(executor, IntegrationProviderKind::Slack, user_id)
+            .await?
+            .ok_or_else(|| {
+                anyhow!("Cannot fetch Slack notification details without an access token")
+            })?;
+
+        let slack_api_token = SlackApiToken::new(SlackApiTokenValue(access_token.to_string()));
+
+        let Some(channel_id) = &origin.channel else {
+            return Ok(None);
+        };
+        let root_ts = origin.thread_ts.as_ref().unwrap_or(&origin.ts);
+        let messages = self
+            .fetch_thread(channel_id, root_ts, &origin.ts, user_id, &slack_api_token)
+            .await?;
+        let channel = self.fetch_channel(channel_id, &slack_api_token).await?;
+        let team = self
+            .fetch_team(&slack_push_event_callback.team_id, &slack_api_token)
+            .await?;
+        let sender_profiles = self
+            .fetch_sender_profiles_from_messages(&slack_api_token, &messages, user_id)
+            .await?;
+        let thread_params = &messages.first().parent;
+        let first_unread_message =
+            SlackThread::first_unread_message_from_last_read(&thread_params.last_read, &messages);
+        let url = self
+            .get_chat_permalink(
+                channel_id,
+                &first_unread_message.origin.ts,
+                &slack_api_token,
+            )
+            .await?;
+
+        let mut references = SlackReferences::new();
+        for message in messages.iter() {
+            if let Some(refs) = self
+                .find_and_resolve_slack_references_in_message(
+                    &message.content,
+                    user_id,
+                    &slack_api_token,
+                )
+                .await
+                .inspect_err(|err| {
+                    warn!("Failed to resolve Slack references in the message: {err:?}")
+                })
+                .unwrap_or(None)
+            {
+                references.extend(refs);
+            }
+        }
+
+        let slack_thread = SlackThread {
+            url,
+            subscribed: thread_params.subscribed.unwrap_or(true),
+            last_read: thread_params.last_read.clone(),
+            sender_profiles,
+            messages,
+            channel,
+            team,
+            references: Some(references),
+        };
+
+        Ok(Some(
+            slack_thread.into_third_party_item(user_id, integration_connection.id),
+        ))
+    }
+
+    #[tracing::instrument(level = "debug", skip(self, messages))]
+    async fn fetch_sender_profiles_from_messages<'a>(
+        &self,
+        slack_api_token: &SlackApiToken,
+        messages: &[SlackHistoryMessage],
+        user_id: UserId,
+    ) -> Result<HashMap<String, SlackMessageSenderDetails>, UniversalInboxError> {
+        let mut sender_profiles = HashMap::new();
+        let mut slack_user_ids = Vec::new();
+        let mut slack_bot_ids = Vec::new();
+        for message in messages {
+            match &message.sender {
+                SlackMessageSender {
+                    bot_id: Some(bot_id),
+                    bot_profile: Some(bot_profile),
+                    ..
+                } => {
+                    sender_profiles.insert(
+                        bot_id.to_string(),
+                        SlackMessageSenderDetails::Bot(Box::new(bot_profile.clone())),
+                    );
+                }
+                SlackMessageSender {
+                    bot_id: Some(bot_id),
+                    ..
+                } => {
+                    slack_bot_ids.push(bot_id);
+                }
+                SlackMessageSender {
+                    user: Some(slack_user_id),
+                    user_profile: Some(user_profile),
+                    ..
+                } => {
+                    sender_profiles.insert(
+                        slack_user_id.to_string(),
+                        SlackMessageSenderDetails::User(Box::new(user_profile.clone())),
+                    );
+                }
+                SlackMessageSender {
+                    user: Some(slack_user_id),
+                    ..
+                } => {
+                    slack_user_ids.push(slack_user_id);
+                }
+                _ => {}
+            }
+        }
+
+        for slack_user_id in slack_user_ids {
+            if !sender_profiles.contains_key(slack_user_id.0.as_str()) {
+                let user_profile = self
+                    .fetch_user_profile(slack_user_id, user_id, slack_api_token)
+                    .await
+                    .with_context(|| format!("Failed to fetch user profile {slack_user_id}"))?;
+                sender_profiles.insert(
+                    slack_user_id.to_string(),
+                    SlackMessageSenderDetails::User(Box::new(user_profile)),
+                );
+            }
+        }
+
+        for slack_bot_id in slack_bot_ids {
+            if !sender_profiles.contains_key(slack_bot_id.0.as_str()) {
+                let bot = self
+                    .fetch_bot(slack_bot_id, slack_api_token)
+                    .await
+                    .with_context(|| format!("Failed to fetch bot profile {slack_bot_id}"))?;
+                sender_profiles.insert(
+                    slack_bot_id.to_string(),
+                    SlackMessageSenderDetails::Bot(Box::new(bot)),
+                );
+            }
+        }
+
+        Ok(sender_profiles)
     }
 
     #[tracing::instrument(level = "debug", skip(self, executor, slack_star_item), err)]
@@ -884,230 +1115,6 @@ impl SlackService {
 
         Ok(())
     }
-
-    // #[allow(clippy::blocks_in_conditions)]
-    // #[tracing::instrument(level = "debug", skip(self, executor, item))]
-    // async fn fetch_slack_star_notification_details<'a>(
-    //     &self,
-    //     executor: &mut Transaction<'a, Postgres>,
-    //     item: &SlackStarsItem,
-    //     team_id: &SlackTeamId,
-    //     user_id: UserId,
-    // ) -> Result<Option<NotificationDetails>, UniversalInboxError> {
-    //     // Will soon be deprecated as NotificationDetails will become SlackStarItem
-    //     let (access_token, _) = self
-    //         .integration_connection_service
-    //         .read()
-    //         .await
-    //         .find_access_token(executor, IntegrationProviderKind::Slack, user_id)
-    //         .await?
-    //         .ok_or_else(|| {
-    //             anyhow!("Cannot fetch Slack notification details without an access token")
-    //         })?;
-    //     let slack_api_token = SlackApiToken::new(SlackApiTokenValue(access_token.to_string()));
-
-    //     match item {
-    //         SlackStarsItem::Message(SlackStarsItemMessage {
-    //             message:
-    //                 SlackHistoryMessage {
-    //                     origin: SlackMessageOrigin { ts, .. },
-    //                     sender: SlackMessageSender { user, bot_id, .. },
-    //                     ..
-    //                 },
-    //             channel,
-    //             ..
-    //         }) => {
-    //             let url = self
-    //                 .get_chat_permalink(channel, ts, &slack_api_token)
-    //                 .await?;
-    //             let sender = if let Some(slack_user_id) = user {
-    //                 SlackMessageSenderDetails::User(Box::new(
-    //                     self.fetch_user(slack_user_id, user_id, &slack_api_token)
-    //                         .await?,
-    //                 ))
-    //             } else if let Some(bot_id) = bot_id {
-    //                 SlackMessageSenderDetails::Bot(self.fetch_bot(bot_id, &slack_api_token).await?)
-    //             } else {
-    //                 return Err(UniversalInboxError::Unexpected(anyhow!(
-    //                     "No user or bot found for Slack message {ts} in channel {channel}"
-    //                 )));
-    //             };
-
-    //             let message = self
-    //                 .fetch_message(channel, ts, user_id, &slack_api_token)
-    //                 .await?;
-    //             let channel = self.fetch_channel(channel, &slack_api_token).await?;
-    //             let team = self.fetch_team(team_id, &slack_api_token).await?;
-    //             let references = self
-    //                 .find_slack_references_in_message(&message, user_id, &slack_api_token)
-    //                 .await
-    //                 .inspect_err(|err| {
-    //                     warn!(
-    //                         "Failed to resolve Slack references in the message: {:?}",
-    //                         err
-    //                     )
-    //                 })
-    //                 .unwrap_or(None);
-
-    //             Ok(Some(NotificationDetails::SlackMessage(
-    //                 SlackMessageDetails {
-    //                     url,
-    //                     message,
-    //                     channel,
-    //                     sender,
-    //                     team,
-    //                     references,
-    //                 },
-    //             )))
-    //         }
-    //         SlackStarsItem::File(SlackStarsItemFile {
-    //             channel,
-    //             file: SlackFile {
-    //                 id, user, title, ..
-    //             },
-    //             ..
-    //         }) => {
-    //             let sender = if let Some(slack_user_id) = user {
-    //                 Some(
-    //                     self.fetch_user(slack_user_id, user_id, &slack_api_token)
-    //                         .await?,
-    //                 )
-    //             } else {
-    //                 None
-    //             };
-    //             let channel = self.fetch_channel(channel, &slack_api_token).await?;
-    //             let team = self.fetch_team(team_id, &slack_api_token).await?;
-    //             Ok(Some(NotificationDetails::SlackFile(SlackFileDetails {
-    //                 id: Some(id.clone()),
-    //                 title: title.clone(),
-    //                 channel,
-    //                 sender,
-    //                 team,
-    //             })))
-    //         }
-    //         SlackStarsItem::FileComment(SlackStarsItemFileComment {
-    //             channel,
-    //             comment,
-    //             file: SlackFile { user, .. },
-    //             ..
-    //         }) => {
-    //             let sender = if let Some(slack_user_id) = user {
-    //                 Some(
-    //                     self.fetch_user(slack_user_id, user_id, &slack_api_token)
-    //                         .await?,
-    //                 )
-    //             } else {
-    //                 None
-    //             };
-    //             let channel = self.fetch_channel(channel, &slack_api_token).await?;
-    //             let team = self.fetch_team(team_id, &slack_api_token).await?;
-    //             Ok(Some(NotificationDetails::SlackFileComment(
-    //                 SlackFileCommentDetails {
-    //                     channel,
-    //                     comment_id: comment.clone(),
-    //                     sender,
-    //                     team,
-    //                 },
-    //             )))
-    //         }
-    //         SlackStarsItem::Channel(SlackStarsItemChannel { channel, .. }) => {
-    //             let channel = self.fetch_channel(channel, &slack_api_token).await?;
-    //             let team = self.fetch_team(team_id, &slack_api_token).await?;
-    //             Ok(Some(NotificationDetails::SlackChannel(
-    //                 SlackChannelDetails { channel, team },
-    //             )))
-    //         }
-    //         SlackStarsItem::Im(SlackStarsItemIm { channel, .. }) => {
-    //             let channel = self.fetch_channel(channel, &slack_api_token).await?;
-    //             let team = self.fetch_team(team_id, &slack_api_token).await?;
-    //             Ok(Some(NotificationDetails::SlackIm(SlackImDetails {
-    //                 channel,
-    //                 team,
-    //             })))
-    //         }
-    //         SlackStarsItem::Group(SlackStarsItemGroup { group, .. }) => {
-    //             let channel = self.fetch_channel(group, &slack_api_token).await?;
-    //             let team = self.fetch_team(team_id, &slack_api_token).await?;
-    //             Ok(Some(NotificationDetails::SlackGroup(SlackGroupDetails {
-    //                 channel,
-    //                 team,
-    //             })))
-    //         }
-    //     }
-    // }
-
-    // #[tracing::instrument(level = "debug", skip(self, executor, item))]
-    // async fn fetch_slack_reaction_notification_details<'a>(
-    //     &self,
-    //     executor: &mut Transaction<'a, Postgres>,
-    //     item: &SlackReactionsItem,
-    //     team_id: &SlackTeamId,
-    //     item_user_id: &SlackUserId,
-    //     user_id: UserId,
-    // ) -> Result<Option<NotificationDetails>, UniversalInboxError> {
-    //     // Will soon be deprecated as NotificationDetails will become SlackReactionItem
-    //     let (access_token, _) = self
-    //         .integration_connection_service
-    //         .read()
-    //         .await
-    //         .find_access_token(executor, IntegrationProviderKind::Slack, user_id)
-    //         .await?
-    //         .ok_or_else(|| {
-    //             anyhow!("Cannot fetch Slack notification details without an access token")
-    //         })?;
-    //     let slack_api_token = SlackApiToken::new(SlackApiTokenValue(access_token.to_string()));
-
-    //     match item {
-    //         SlackReactionsItem::Message(SlackHistoryMessage {
-    //             origin:
-    //                 SlackMessageOrigin {
-    //                     ts,
-    //                     channel: Some(channel),
-    //                     ..
-    //                 },
-    //             ..
-    //         }) => {
-    //             let url = self
-    //                 .get_chat_permalink(channel, ts, &slack_api_token)
-    //                 .await?;
-    //             let sender = SlackMessageSenderDetails::User(Box::new(
-    //                 self.fetch_user(item_user_id, user_id, &slack_api_token)
-    //                     .await?,
-    //             ));
-    //             let message = self
-    //                 .fetch_message(channel, ts, user_id, &slack_api_token)
-    //                 .await?;
-    //             let channel = self.fetch_channel(channel, &slack_api_token).await?;
-    //             let team = self.fetch_team(team_id, &slack_api_token).await?;
-    //             let references = self
-    //                 .find_slack_references_in_message(&message, user_id, &slack_api_token)
-    //                 .await
-    //                 .inspect_err(|err| {
-    //                     warn!(
-    //                         "Failed to resolve Slack references in the message: {:?}",
-    //                         err
-    //                     )
-    //                 })
-    //                 .unwrap_or(None);
-
-    //             Ok(Some(NotificationDetails::SlackMessage(
-    //                 SlackMessageDetails {
-    //                     url,
-    //                     message,
-    //                     channel,
-    //                     sender,
-    //                     team,
-    //                     references,
-    //                 },
-    //             )))
-    //         }
-    //         SlackReactionsItem::Message(SlackHistoryMessage {
-    //             origin: SlackMessageOrigin { channel: None, .. },
-    //             ..
-    //         })
-    //         | SlackReactionsItem::File(_) => Ok(None),
-    //     }
-    // }
 }
 
 #[io_cached(
@@ -1158,6 +1165,47 @@ async fn cached_fetch_message(
             })?
             .clone(),
     ))
+}
+
+#[io_cached(
+    key = "String",
+    // Use user_id to avoid leaking a message to an unauthorized user
+    convert = r#"{ format!("{}__{}__{}__{}__{}", slack_base_url, _user_id, channel, root_message, current_message) }"#,
+    ty = "cached::AsyncRedisCache<String, Vec<SlackHistoryMessage>>",
+    map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `fetch_thread`: {:?}", e))"##,
+    create = r##" { build_redis_cache("slack:fetch_thread", 60, true).await }"##,
+    with_cached_flag = true
+)]
+async fn cached_fetch_thread(
+    _user_id: UserId,
+    slack_base_url: &str,
+    slack_api_token: &SlackApiToken,
+    channel: &SlackChannelId,
+    root_message: &SlackTs,
+    current_message: &SlackTs,
+) -> Result<Return<Vec<SlackHistoryMessage>>, UniversalInboxError> {
+    let client = SlackClient::new(
+        SlackClientHyperHttpsConnector::new()
+            .context("Failed to initialize new Slack client")?
+            .with_slack_api_url(slack_base_url),
+    );
+    let session = client.open_session(slack_api_token);
+
+    let messages = session
+        .conversations_replies(
+            &SlackApiConversationsRepliesRequest::new(channel.clone(), root_message.clone())
+                .with_latest(current_message.clone())
+                .with_inclusive(true),
+        )
+        .await
+        .with_context(|| {
+            UniversalInboxError::Unexpected(anyhow!(
+                "Failed to fetch Slack thread {root_message} in channel {channel}"
+            ))
+        })?
+        .messages;
+
+    Ok(Return::new(messages))
 }
 
 #[io_cached(
@@ -1243,6 +1291,36 @@ async fn cached_list_usergroups(
         .with_context(|| "Failed to fetch Slack usergroups".to_string())?;
 
     Ok(Return::new(response.usergroups))
+}
+
+#[io_cached(
+    key = "String",
+    convert = r#"{ format!("{}__{}", slack_base_url, usergroup_id) }"#,
+    ty = "cached::AsyncRedisCache<String, Vec<SlackUserId>>",
+    map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `list_users_in_usergroup`: {:?}", e))"##,
+    create = r##" { build_redis_cache("slack:list_users_in_usergroup", 24 * 60 * 60, true).await }"##,
+    with_cached_flag = true
+)]
+async fn cached_list_users_in_usergroup(
+    slack_base_url: &str,
+    usergroup_id: &SlackUserGroupId,
+    slack_api_token: &SlackApiToken,
+) -> Result<Return<Vec<SlackUserId>>, UniversalInboxError> {
+    let client = SlackClient::new(
+        SlackClientHyperHttpsConnector::new()
+            .context("Failed to initialize new Slack client")?
+            .with_slack_api_url(slack_base_url),
+    );
+    let session = client.open_session(slack_api_token);
+
+    let response = session
+        .usergroups_users_list(&SlackApiUserGroupsUsersListRequest::new(
+            usergroup_id.clone(),
+        ))
+        .await
+        .with_context(|| "Failed to fetch Slack users in usergroup".to_string())?;
+
+    Ok(Return::new(response.users))
 }
 
 #[io_cached(
@@ -1380,7 +1458,7 @@ impl ThirdPartyNotificationSourceService<SlackStar> for SlackService {
 
         Ok(Box::new(Notification {
             id: Uuid::new_v4().into(),
-            title: source.item.title(),
+            title: source.item.render_title(),
             status,
             created_at: Utc::now(),
             updated_at: Utc::now(),
@@ -1475,7 +1553,7 @@ impl ThirdPartyNotificationSourceService<SlackReaction> for SlackService {
 
         Ok(Box::new(Notification {
             id: Uuid::new_v4().into(),
-            title: source.item.title(),
+            title: source.item.render_title(),
             status,
             created_at: Utc::now(),
             updated_at: Utc::now(),
@@ -1560,6 +1638,95 @@ impl ThirdPartyNotificationSourceService<SlackReaction> for SlackService {
 }
 
 #[async_trait]
+impl ThirdPartyNotificationSourceService<SlackThread> for SlackService {
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, source, source_third_party_item),
+        fields(
+            source_id = source_third_party_item.source_id,
+            third_party_item_id = source_third_party_item.id.to_string()
+        ),
+    )]
+    async fn third_party_item_into_notification(
+        &self,
+        source: &SlackThread,
+        source_third_party_item: &ThirdPartyItem,
+        user_id: UserId,
+    ) -> Result<Box<Notification>, UniversalInboxError> {
+        let last_message = &source.messages.last();
+        let status = if !source.subscribed {
+            NotificationStatus::Unsubscribed
+        } else {
+            match &source.last_read {
+                Some(last_read) if *last_read == last_message.origin.ts => NotificationStatus::Read,
+                _ => NotificationStatus::Unread,
+            }
+        };
+
+        Ok(Box::new(Notification {
+            id: Uuid::new_v4().into(),
+            title: source.render_title(),
+            status,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            last_read_at: None,
+            snoozed_until: None,
+            user_id,
+            kind: NotificationSourceKind::Slack,
+            source_item: source_third_party_item.clone(),
+            task_id: None,
+        }))
+    }
+
+    #[allow(clippy::blocks_in_conditions)]
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, _executor, notification),
+        fields(notification_id = notification.id.0.to_string()),
+        err
+    )]
+    async fn delete_notification_from_source<'a>(
+        &self,
+        _executor: &mut Transaction<'a, Postgres>,
+        notification: &Notification,
+        _user_id: UserId,
+    ) -> Result<(), UniversalInboxError> {
+        // There is no way to mark a Slack thread as read with public API
+        // For message in the channel, the read mark can be updated but will mark as
+        // read all messages before the given timestamp.
+        // This might not be what we want for now, perhaps later with an option
+        Ok(())
+    }
+
+    #[allow(clippy::blocks_in_conditions)]
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, _executor, notification),
+        fields(notification_id = notification.id.0.to_string())
+    )]
+    async fn unsubscribe_notification_from_source<'a>(
+        &self,
+        _executor: &mut Transaction<'a, Postgres>,
+        notification: &Notification,
+        _user_id: UserId,
+    ) -> Result<(), UniversalInboxError> {
+        // The is no way to unsubscribe from a Slack thread with the public API
+        Ok(())
+    }
+
+    async fn snooze_notification_from_source<'a>(
+        &self,
+        _executor: &mut Transaction<'a, Postgres>,
+        _notification: &Notification,
+        _snoozed_until_at: DateTime<Utc>,
+        _user_id: UserId,
+    ) -> Result<(), UniversalInboxError> {
+        // Slack messages cannot be snoozed from the API => no-op
+        Ok(())
+    }
+}
+
+#[async_trait]
 impl ThirdPartyTaskService<SlackStar> for SlackService {
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(
@@ -1587,8 +1754,12 @@ impl ThirdPartyTaskService<SlackStar> for SlackService {
         };
         let created_at = source.created_at;
         let updated_at = source.created_at;
-        let title = format!("[{}]({})", source.item.title(), source.get_html_url());
-        let body = truncate_with_ellipse(&source.item.content(), 16300, "...", false);
+        let title = format!(
+            "[{}]({})",
+            source.item.render_title(),
+            source.get_html_url()
+        );
+        let body = truncate_with_ellipse(&source.item.render_content(), 16300, "...", false);
         let completed_at = if status == TaskStatus::Done {
             Some(Utc::now())
         } else {
@@ -1736,8 +1907,12 @@ impl ThirdPartyTaskService<SlackReaction> for SlackService {
         };
         let created_at = source.created_at;
         let updated_at = source.created_at;
-        let title = format!("[{}]({})", source.item.title(), source.get_html_url());
-        let body = truncate_with_ellipse(&source.item.content(), 16300, "...", false);
+        let title = format!(
+            "[{}]({})",
+            source.item.render_title(),
+            source.get_html_url()
+        );
+        let body = truncate_with_ellipse(&source.item.render_content(), 16300, "...", false);
         let completed_at = if status == TaskStatus::Done {
             Some(Utc::now())
         } else {
@@ -1866,4 +2041,26 @@ impl ThirdPartyTaskService<SlackReaction> for SlackService {
         // There is nothing to update in Slack tasks
         Ok(())
     }
+}
+
+pub fn find_slack_references_in_message(message_content: &SlackMessageContent) -> SlackReferences {
+    let mut references = if let Some(blocks) = &message_content.blocks {
+        find_slack_references_in_blocks(blocks)
+    } else {
+        SlackReferences::default()
+    };
+
+    if let Some(attachements) = &message_content.attachments {
+        for attachment in attachements {
+            if let Some(blocks) = &attachment.blocks {
+                references.extend(find_slack_references_in_blocks(blocks));
+            }
+        }
+    }
+
+    references
+}
+
+pub fn has_slack_references_in_message(message_content: &SlackMessageContent) -> bool {
+    !find_slack_references_in_message(message_content).is_empty()
 }

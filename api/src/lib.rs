@@ -273,6 +273,8 @@ pub async fn run_worker(
     notification_service: Arc<RwLock<NotificationService>>,
     task_service: Arc<RwLock<TaskService>>,
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
+    third_party_item_service: Arc<RwLock<ThirdPartyItemService>>,
+    slack_service: Arc<SlackService>,
 ) -> Monitor<TokioExecutor> {
     let count = workers_count.unwrap_or_else(|| {
         thread::available_parallelism()
@@ -294,6 +296,8 @@ pub async fn run_worker(
                 .data(notification_service)
                 .data(task_service)
                 .data(integration_connection_service)
+                .data(third_party_item_service)
+                .data(slack_service)
                 .build_fn(handle_universal_inbox_job),
         )
         .on_event(|e| {
@@ -332,6 +336,7 @@ pub async fn build_services(
     Arc<RwLock<IntegrationConnectionService>>,
     Arc<RwLock<AuthenticationTokenService>>,
     Arc<RwLock<ThirdPartyItemService>>,
+    Arc<SlackService>,
 ) {
     let repository = Arc::new(Repository::new(pool.clone()));
 
@@ -462,6 +467,7 @@ pub async fn build_services(
         integration_connection_service,
         auth_token_service,
         third_party_item_service,
+        slack_service,
     )
 }
 

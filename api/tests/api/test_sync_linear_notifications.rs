@@ -66,6 +66,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         &settings,
         nango_todoist_connection,
         None,
+        None,
     )
     .await;
     mock_todoist_sync_resources_service(
@@ -142,6 +143,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         IntegrationConnectionConfig::Linear(LinearConfig::enabled()),
         &settings,
         nango_linear_connection,
+        None,
         None,
     )
     .await;

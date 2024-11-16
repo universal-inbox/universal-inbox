@@ -78,6 +78,7 @@ mod patch_task {
             &settings,
             nango_todoist_connection,
             None,
+            None,
         )
         .await;
         mock_todoist_sync_resources_service(
@@ -163,6 +164,7 @@ mod patch_task {
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
             nango_todoist_connection,
+            None,
             None,
         )
         .await;
@@ -251,6 +253,7 @@ mod patch_task {
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
             nango_todoist_connection,
+            None,
             None,
         )
         .await;
@@ -388,6 +391,7 @@ mod patch_task {
             &settings,
             nango_github_connection,
             None,
+            None,
         )
         .await;
 
@@ -419,6 +423,7 @@ mod patch_task {
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
             nango_todoist_connection,
+            None,
             None,
         )
         .await;
@@ -570,6 +575,7 @@ mod patch_notification {
             &settings,
             nango_github_connection,
             None,
+            None,
         )
         .await;
         let notification = create_notification_from_github_notification(
@@ -586,6 +592,7 @@ mod patch_notification {
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
             nango_todoist_connection,
+            None,
             None,
         )
         .await;

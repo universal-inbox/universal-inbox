@@ -24,42 +24,42 @@ pub fn SlackStarTaskPreview(
     match slack_star().item {
         SlackStarItem::SlackChannel(slack_channel) => rsx! {
             SlackChannelPreview {
-                slack_channel,
+                slack_channel: *slack_channel,
                 title: task().title,
                 icon: rsx! { SlackNotificationIcon { class: "h-5 w-5" } },
             }
         },
         SlackStarItem::SlackFile(slack_file) => rsx! {
             SlackFilePreview {
-                slack_file,
+                slack_file: *slack_file,
                 title: task().title,
                 icon: rsx! { SlackNotificationIcon { class: "h-5 w-5" } },
             }
         },
         SlackStarItem::SlackFileComment(slack_file_comment) => rsx! {
             SlackFileCommentPreview {
-                slack_file_comment,
+                slack_file_comment: *slack_file_comment,
                 title: task().title,
                 icon: rsx! { SlackNotificationIcon { class: "h-5 w-5" } },
             }
         },
         SlackStarItem::SlackGroup(slack_group) => rsx! {
             SlackGroupPreview {
-                slack_group,
+                slack_group: *slack_group,
                 title: task().title,
                 icon: rsx! { SlackNotificationIcon { class: "h-5 w-5" } },
             }
         },
         SlackStarItem::SlackIm(slack_im) => rsx! {
             SlackImPreview {
-                slack_im,
+                slack_im: *slack_im,
                 title: task().title,
                 icon: rsx! { SlackNotificationIcon { class: "h-5 w-5" } },
             }
         },
         SlackStarItem::SlackMessage(slack_message) => rsx! {
             SlackMessagePreview {
-                slack_message,
+                slack_message: *slack_message,
                 title: task().title,
                 icon: rsx! { SlackNotificationIcon { class: "h-5 w-5" } },
             }

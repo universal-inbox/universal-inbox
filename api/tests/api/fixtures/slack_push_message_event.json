@@ -1,0 +1,41 @@
+{
+  "type": "event_callback",
+  "team_id": "T01",
+  "api_app_id": "A01",
+  "event": {
+    "type": "message",
+    "ts": "1732535291.911209",
+    "channel": "C05XXX",
+    "channel_type": "group",
+    "client_msg_id": "b42a41fd-2e2a-4812-b029-ea449eb94a76",
+    "text": "Hello",
+    "blocks": [
+      {
+        "type": "rich_text",
+        "block_id": "5qxVa",
+        "elements": [
+          {
+            "type": "rich_text_section",
+            "elements": [
+              {
+                "type": "text",
+                "text": "Hello"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "user": "U01"
+  },
+  "event_id": "Ev081WTALNTZ",
+  "event_time": 1732535291,
+  "event_context": "4-YYY",
+  "authorizations": [
+    {
+      "team_id": "T01",
+      "user_id": "U01",
+      "is_bot": false
+    }
+  ]
+}

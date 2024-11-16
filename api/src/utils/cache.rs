@@ -77,7 +77,7 @@ impl Cache {
 
 pub async fn build_redis_cache<T>(
     prefix: &str,
-    ttl: u64,
+    ttl_in_seconds: u64,
     refresh: bool,
 ) -> AsyncRedisCache<String, T>
 where
@@ -91,7 +91,7 @@ where
         &namespace,
         &prefix
     );
-    AsyncRedisCache::new(prefix, ttl)
+    AsyncRedisCache::new(prefix, ttl_in_seconds)
         .set_refresh(refresh)
         .set_namespace(&namespace)
         .set_connection_string(&settings.redis.connection_string())

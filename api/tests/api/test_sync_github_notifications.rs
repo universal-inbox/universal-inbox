@@ -84,6 +84,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         &settings,
         nango_todoist_connection,
         None,
+        None,
     )
     .await;
     mock_todoist_sync_resources_service(
@@ -121,6 +122,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         &settings,
         nango_github_connection,
+        None,
         None,
     )
     .await;
@@ -266,6 +268,7 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
         &settings,
         nango_github_connection.clone(),
         None,
+        None,
     )
     .await;
 
@@ -296,6 +299,7 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
         IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         &settings,
         nango_github_connection,
+        None,
         None,
     )
     .await;
@@ -407,6 +411,7 @@ async fn test_sync_all_notifications_asynchronously(
         IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         &settings,
         nango_github_connection,
+        None,
         None,
     )
     .await;
@@ -593,6 +598,7 @@ async fn test_sync_all_notifications_with_synchronization_disabled(
         &settings,
         nango_github_connection,
         None,
+        None,
     )
     .await;
 
@@ -630,6 +636,7 @@ async fn test_sync_all_notifications_asynchronously_in_error(
         nango_github_connection,
         // Starting with max sync failures minus 1, it should mark the connection as failing with a new failure
         Some(MAX_SYNC_FAILURES_BEFORE_DISCONNECT - 1),
+        None,
     )
     .await;
 
@@ -728,6 +735,7 @@ async fn test_sync_discussion_notification_with_details(
         &settings,
         nango_github_connection,
         None,
+        None,
     )
     .await;
 
@@ -811,6 +819,7 @@ async fn test_sync_discussion_notification_with_error(
         IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         &settings,
         nango_github_connection,
+        None,
         None,
     )
     .await;

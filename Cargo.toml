@@ -41,6 +41,7 @@ unicode-segmentation = "1.11.0"
 url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true, features = ["serde"] }
 validator = { workspace = true }
+vec1 = { workspace = true }
 
 [workspace.dependencies]
 anyhow = { version = "1.0" }
@@ -67,16 +68,17 @@ serde_json = { version = "1.0" }
 serde_urlencoded = { version = "0.7.0" }
 serde_with = { version = "3.8.0" }
 slack-blocks-render = { version = "0.2.0" }
-slack-morphism = { version = "2.5.0" }
+slack-morphism = { version = "2.6.0" }
 thiserror = { version = "1.0" }
 url = { version = "2.5.0" }
 uuid = { version = "1.0", features = ["v4"] }
 validator = { version = "0.18.0", features = ["derive"] }
+vec1 = { version = "1.12.0", features = ["serde"] }
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }
 rstest = { workspace = true }
 
 [patch.crates-io]
-slack-morphism = { git = "https://github.com/dax/slack-morphism-rust", rev = "55ca1f2fdb47353bef58d2e82ce7fc7b7a859f79" }
-slack-blocks-render = { git = "https://github.com/dax/slack-blocks-render", branch = "fix-usergroup-count-type" }
+slack-blocks-render = { path = "../slack-blocks-render" }
+slack-morphism = { path = "../slack-morphism-rust" }

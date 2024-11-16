@@ -9,7 +9,7 @@ use tokio_retry::{
     strategy::{jitter, ExponentialBackoff},
     Retry,
 };
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 use universal_inbox::{
     integration_connection::{
@@ -79,6 +79,17 @@ impl IntegrationConnectionService {
 
     pub async fn begin(&self) -> Result<Transaction<Postgres>, UniversalInboxError> {
         self.repository.begin().await
+    }
+
+    #[tracing::instrument(level = "debug", skip(self, executor))]
+    pub async fn get_integration_connection<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        integration_connection_id: IntegrationConnectionId,
+    ) -> Result<Option<IntegrationConnection>, UniversalInboxError> {
+        self.repository
+            .get_integration_connection(executor, integration_connection_id)
+            .await
     }
 
     #[tracing::instrument(level = "debug", skip(self, executor))]
@@ -358,6 +369,17 @@ impl IntegrationConnectionService {
                 )
                 .await?;
         }
+
+        if let Some(provider_context) = nango_connection.get_provider_context() {
+            self.repository
+                .update_integration_connection_context(
+                    executor,
+                    integration_connection_id,
+                    Some(provider_context),
+                )
+                .await?;
+        }
+
         self.repository
             .update_integration_connection_status(
                 executor,
@@ -474,6 +496,27 @@ impl IntegrationConnectionService {
             .await
     }
 
+    /// This function randomly search for a validated Slack integration connection to access
+    /// Slack API endpoint not related to a specific user.
+    #[tracing::instrument(level = "debug", skip(self, executor))]
+    pub async fn find_slack_access_token<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        context: IntegrationConnectionContext,
+    ) -> Result<Option<(AccessToken, IntegrationConnection)>, UniversalInboxError> {
+        let integration_connection = self
+            .repository
+            .get_integration_connection_per_context(executor, context)
+            .await?;
+
+        let Some(integration_connection) = integration_connection else {
+            return Ok(None);
+        };
+
+        self.fetch_access_token_from_nango(executor, integration_connection, None)
+            .await
+    }
+
     #[tracing::instrument(level = "debug", skip(self, executor))]
     pub async fn find_access_token<'a>(
         &self,
@@ -492,54 +535,82 @@ impl IntegrationConnectionService {
             )
             .await?;
 
-        if let Some(integration_connection) = integration_connection {
-            let provider_kind = integration_connection.provider.kind();
-            let provider_config_key =
-                self.nango_provider_keys
-                    .get(&provider_kind)
-                    .context(format!(
-                        "No Nango provider config key found for {provider_kind}"
-                    ))?;
+        let Some(integration_connection) = integration_connection else {
+            return Ok(None);
+        };
 
-            if let Some(nango_connection) = self
-                .nango_service
-                .get_connection(integration_connection.connection_id, provider_config_key)
-                .await?
-            {
-                if integration_provider_kind == IntegrationProviderKind::Slack {
-                    if let Some(access_token) =
-                        nango_connection.credentials.raw["authed_user"]["access_token"].as_str()
-                    {
-                        return Ok(Some((
-                            AccessToken(access_token.to_string()),
-                            integration_connection,
-                        )));
-                    }
-                }
-                return Ok(Some((
-                    nango_connection.credentials.access_token,
-                    integration_connection,
-                )));
+        self.fetch_access_token_from_nango(executor, integration_connection, Some(for_user_id))
+            .await
+    }
+
+    async fn fetch_access_token_from_nango<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        integration_connection: IntegrationConnection,
+        for_user_id: Option<UserId>,
+    ) -> Result<Option<(AccessToken, IntegrationConnection)>, UniversalInboxError> {
+        let provider_kind = integration_connection.provider.kind();
+        let provider_config_key = self
+            .nango_provider_keys
+            .get(&provider_kind)
+            .context(format!(
+                "No Nango provider config key found for {provider_kind}"
+            ))?;
+
+        let Some(nango_connection) = self
+            .nango_service
+            .get_connection(integration_connection.connection_id, provider_config_key)
+            .await?
+        else {
+            // Only mark the connection as failing if we have a user_id to notify
+            if let Some(for_user_id) = for_user_id {
+                self.repository
+                    .update_integration_connection_status(
+                        executor,
+                        integration_connection.id,
+                        IntegrationConnectionStatus::Failing,
+                        Some(UNKNOWN_NANGO_CONNECTION_ERROR_MESSAGE.to_string()),
+                        None,
+                        for_user_id,
+                    )
+                    .await?;
             }
-
-            self.repository
-                .update_integration_connection_status(
-                    executor,
-                    integration_connection.id,
-                    IntegrationConnectionStatus::Failing,
-                    Some(UNKNOWN_NANGO_CONNECTION_ERROR_MESSAGE.to_string()),
-                    None,
-                    for_user_id,
-                )
-                .await?;
 
             return Err(UniversalInboxError::Recoverable(anyhow!(
                 "Unknown Nango connection: {}",
                 integration_connection.connection_id
             )));
+        };
+
+        // This is only useful to update incomplete connection context as it was added
+        // during the validation afterward
+        if integration_connection.provider.context_is_empty() {
+            if let Some(provider_context) = nango_connection.get_provider_context() {
+                self.repository
+                    .update_integration_connection_context(
+                        executor,
+                        integration_connection.id,
+                        Some(provider_context),
+                    )
+                    .await?;
+            }
         }
 
-        Ok(None)
+        if provider_kind == IntegrationProviderKind::Slack {
+            if let Some(access_token) =
+                nango_connection.credentials.raw["authed_user"]["access_token"].as_str()
+            {
+                return Ok(Some((
+                    AccessToken(access_token.to_string()),
+                    integration_connection,
+                )));
+            }
+        }
+
+        Ok(Some((
+            nango_connection.credentials.access_token,
+            integration_connection,
+        )))
     }
 
     #[tracing::instrument(level = "debug", skip(self, executor))]

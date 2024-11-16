@@ -64,6 +64,7 @@ mod patch_resource {
             &settings,
             nango_github_connection,
             None,
+            None,
         )
         .await;
 
@@ -81,6 +82,7 @@ mod patch_resource {
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
             nango_todoist_connection,
+            None,
             None,
         )
         .await;
@@ -179,6 +181,7 @@ mod patch_resource {
             &settings,
             nango_github_connection,
             None,
+            None,
         )
         .await;
 
@@ -246,6 +249,7 @@ mod patch_resource {
             &settings,
             nango_github_connection,
             None,
+            None,
         )
         .await;
 
@@ -312,6 +316,7 @@ mod patch_resource {
             &settings,
             nango_github_connection,
             None,
+            None,
         )
         .await;
         let expected_notification = create_notification_from_github_notification(
@@ -360,6 +365,7 @@ mod patch_resource {
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
             nango_github_connection,
+            None,
             None,
         )
         .await;
@@ -419,6 +425,7 @@ mod patch_resource {
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             &settings,
             nango_github_connection,
+            None,
             None,
         )
         .await;

@@ -6,7 +6,7 @@ use httpmock::{
     Mock, MockServer,
 };
 use rstest::*;
-use serde_json::json;
+use serde_json::{json, Value};
 use slack_blocks_render::SlackReferences;
 use slack_morphism::prelude::*;
 
@@ -16,7 +16,7 @@ use universal_inbox::{
     third_party::{
         integrations::slack::{
             SlackMessageDetails, SlackMessageSenderDetails, SlackStar, SlackStarItem,
-            SlackStarState,
+            SlackStarState, SlackThread,
         },
         item::ThirdPartyItemData,
     },
@@ -55,6 +55,16 @@ pub fn slack_push_reaction_removed_event() -> Box<SlackPushEvent> {
 }
 
 #[fixture]
+pub fn slack_push_message_event() -> Box<SlackPushEvent> {
+    load_json_fixture_file("slack_push_message_event.json")
+}
+
+#[fixture]
+pub fn slack_push_message_in_thread_event() -> Box<SlackPushEvent> {
+    load_json_fixture_file("slack_push_message_in_thread_event.json")
+}
+
+#[fixture]
 pub fn slack_star_added() -> Box<SlackStar> {
     let message_response: SlackApiConversationsHistoryResponse =
         load_json_fixture_file("slack_fetch_message_response.json");
@@ -62,21 +72,21 @@ pub fn slack_star_added() -> Box<SlackStar> {
         load_json_fixture_file("slack_fetch_channel_response.json");
     let user_response: SlackApiUsersInfoResponse =
         load_json_fixture_file("slack_fetch_user_response.json");
-    let sender = SlackMessageSenderDetails::User(Box::new(user_response.user));
+    let sender = SlackMessageSenderDetails::User(Box::new(user_response.user.profile.unwrap()));
     let team_response: SlackApiTeamInfoResponse =
         load_json_fixture_file("slack_fetch_team_response.json");
 
     Box::new(SlackStar {
         state: SlackStarState::StarAdded,
         created_at: Utc::now(),
-        item: SlackStarItem::SlackMessage(SlackMessageDetails {
+        item: SlackStarItem::SlackMessage(Box::new(SlackMessageDetails {
             url: "https://example.com".parse().unwrap(),
             message: message_response.messages[0].clone(),
             channel: channel_response.channel,
             sender,
             team: team_response.team,
             references: None,
-        }),
+        })),
     })
 }
 
@@ -90,6 +100,44 @@ pub async fn create_notification_from_slack_star(
         app,
         slack_star.item.id(),
         ThirdPartyItemData::SlackStar(Box::new(slack_star.clone())),
+        app.notification_service.read().await.slack_service.clone(),
+        user_id,
+        slack_integration_connection_id,
+    )
+    .await
+}
+
+#[fixture]
+pub fn slack_thread() -> Box<SlackThread> {
+    let message_response: SlackApiConversationsHistoryResponse =
+        load_json_fixture_file("slack_fetch_thread_response.json");
+    let channel_response: SlackApiConversationsInfoResponse =
+        load_json_fixture_file("slack_fetch_channel_response.json");
+    let team_response: SlackApiTeamInfoResponse =
+        load_json_fixture_file("slack_fetch_team_response.json");
+
+    Box::new(SlackThread {
+        url: "https://example.com".parse().unwrap(),
+        messages: message_response.messages.try_into().unwrap(),
+        subscribed: true,
+        last_read: None,
+        channel: channel_response.channel.clone(),
+        team: team_response.team.clone(),
+        references: None,
+        sender_profiles: Default::default(),
+    })
+}
+
+pub async fn create_notification_from_slack_thread(
+    app: &TestedApp,
+    slack_thread: &SlackThread,
+    user_id: UserId,
+    slack_integration_connection_id: IntegrationConnectionId,
+) -> Box<Notification> {
+    create_notification_from_source_item::<SlackThread, SlackService>(
+        app,
+        slack_thread.messages.first().origin.ts.to_string(),
+        ThirdPartyItemData::SlackThread(Box::new(slack_thread.clone())),
         app.notification_service.read().await.slack_service.clone(),
         user_id,
         slack_integration_connection_id,
@@ -150,6 +198,40 @@ pub fn mock_slack_fetch_reply<'a>(
     })
 }
 
+pub fn mock_slack_fetch_thread<'a>(
+    slack_mock_server: &'a MockServer,
+    channel_id: &'a str,
+    first_message_id: &'a str,
+    message_id: &'a str,
+    fixture_response_file: &'a str,
+    subscribed: bool,
+    last_read_message_index: Option<usize>,
+) -> Mock<'a> {
+    let mut json_body: Value = load_json_fixture_file(fixture_response_file);
+    json_body["messages"][0]["subscribed"] = Value::Bool(subscribed);
+    json_body["messages"][0]["last_read"] = match last_read_message_index {
+        Some(index) => Value::String(
+            json_body["messages"][index]["ts"]
+                .as_str()
+                .unwrap()
+                .to_string(),
+        ),
+        None => Value::Null,
+    };
+
+    slack_mock_server.mock(|when, then| {
+        when.method(GET)
+            .path("/conversations.replies")
+            .header("authorization", "Bearer slack_test_user_access_token")
+            .query_param("channel", channel_id)
+            .query_param("ts", first_message_id)
+            .query_param("latest", message_id)
+            .query_param("inclusive", "true");
+        then.status(200)
+            .header("content-type", "application/json")
+            .json_body(json_body);
+    })
+}
 pub fn mock_slack_fetch_channel<'a>(
     slack_mock_server: &'a MockServer,
     channel_id: &'a str,
@@ -190,6 +272,22 @@ pub fn mock_slack_list_usergroups<'a>(
         when.method(GET)
             .path("/usergroups.list")
             .header("authorization", "Bearer slack_test_user_access_token");
+        then.status(200)
+            .header("content-type", "application/json")
+            .body_from_file(fixture_path(fixture_response_file));
+    })
+}
+
+pub fn mock_slack_list_users_in_usergroup<'a>(
+    slack_mock_server: &'a MockServer,
+    usergroup_id: &'a str,
+    fixture_response_file: &'a str,
+) -> Mock<'a> {
+    slack_mock_server.mock(|when, then| {
+        when.method(GET)
+            .path("/usergroups.users.list")
+            .header("authorization", "Bearer slack_test_user_access_token")
+            .query_param("usergroup", usergroup_id);
         then.status(200)
             .header("content-type", "application/json")
             .body_from_file(fixture_path(fixture_response_file));
@@ -254,11 +352,11 @@ pub fn slack_starred_message() -> Box<SlackStarItem> {
         load_json_fixture_file("slack_fetch_channel_response.json");
     let user_response: SlackApiUsersInfoResponse =
         load_json_fixture_file("slack_fetch_user_response.json");
-    let sender = SlackMessageSenderDetails::User(Box::new(user_response.user));
+    let sender = SlackMessageSenderDetails::User(Box::new(user_response.user.profile.unwrap()));
     let team_response: SlackApiTeamInfoResponse =
         load_json_fixture_file("slack_fetch_team_response.json");
 
-    Box::new(SlackStarItem::SlackMessage(SlackMessageDetails {
+    Box::new(SlackStarItem::SlackMessage(Box::new(SlackMessageDetails {
         url: "https://example.com".parse().unwrap(),
         message: message_response.messages[0].clone(),
         channel: channel_response.channel,
@@ -278,5 +376,5 @@ pub fn slack_starred_message() -> Box<SlackStarItem> {
                 Some("admins".to_string()),
             )]),
         }),
-    }))
+    })))
 }

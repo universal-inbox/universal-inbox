@@ -522,7 +522,7 @@ pub fn IntegrationConnectionProviderConfiguration(
                 config: config.clone()
             }
         },
-        IntegrationProvider::Slack { config } => rsx! {
+        IntegrationProvider::Slack { config, .. } => rsx! {
             SlackProviderConfiguration {
                 ui_model: ui_model,
                 on_config_change: move |c| on_config_change.call(c),

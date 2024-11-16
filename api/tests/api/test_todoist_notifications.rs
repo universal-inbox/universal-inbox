@@ -54,6 +54,7 @@ mod patch_notification {
             &settings,
             nango_todoist_connection,
             None,
+            None,
         )
         .await;
         mock_todoist_sync_resources_service(
@@ -140,6 +141,7 @@ mod patch_notification {
             &settings,
             nango_todoist_connection,
             None,
+            None,
         )
         .await;
         mock_todoist_sync_resources_service(
@@ -211,6 +213,7 @@ mod patch_notification {
             IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
             &settings,
             nango_todoist_connection,
+            None,
             None,
         )
         .await;

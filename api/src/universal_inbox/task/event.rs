@@ -28,12 +28,12 @@ impl TaskEventService<SlackPushEventCallback> for TaskService {
     async fn save_task_from_event<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        event: SlackPushEventCallback,
+        event: &SlackPushEventCallback,
         user_id: UserId,
     ) -> Result<Option<Task>, UniversalInboxError> {
         let Some(third_party_item) = self
             .slack_service
-            .fetch_item_from_event(executor, &event, user_id)
+            .fetch_item_from_event(executor, event, user_id)
             .await?
         else {
             return Ok(None);
@@ -45,10 +45,9 @@ impl TaskEventService<SlackPushEventCallback> for TaskService {
             .context("Unable to access third_party_item_service from task_service")?
             .read()
             .await
-            .save_third_party_item(executor, third_party_item.clone())
+            .create_or_update_third_party_item(executor, third_party_item.clone())
             .await?;
 
-        debug!("[TASK] Upserted third party item: {:?}", upsert_item);
         let third_party_item_id = upsert_item.value_ref().id;
         let Some(third_party_item) = upsert_item.modified_value() else {
             debug!("Third party item {third_party_item_id} is already up to date");

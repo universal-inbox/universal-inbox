@@ -6,9 +6,13 @@ use tokio::sync::RwLock;
 use tracing::{error, info};
 use uuid::Uuid;
 
-use crate::universal_inbox::{
-    integration_connection::service::IntegrationConnectionService,
-    notification::service::NotificationService, task::service::TaskService, UniversalInboxError,
+use crate::{
+    integrations::slack::SlackService,
+    universal_inbox::{
+        integration_connection::service::IntegrationConnectionService,
+        notification::service::NotificationService, task::service::TaskService,
+        third_party::service::ThirdPartyItemService, UniversalInboxError,
+    },
 };
 
 pub mod slack;
@@ -85,7 +89,9 @@ impl Job for UniversalInboxJob {
         job,
         notification_service,
         task_service,
-        integration_connection_service
+        integration_connection_service,
+        third_party_item_service,
+        slack_service
     ),
     fields(job_id = %job.id),
     err
@@ -95,6 +101,8 @@ pub async fn handle_universal_inbox_job(
     notification_service: Data<Arc<RwLock<NotificationService>>>,
     task_service: Data<Arc<RwLock<TaskService>>>,
     integration_connection_service: Data<Arc<RwLock<IntegrationConnectionService>>>,
+    third_party_item_service: Data<Arc<RwLock<ThirdPartyItemService>>>,
+    slack_service: Data<Arc<SlackService>>,
 ) -> Result<(), UniversalInboxError> {
     let result = match job.payload {
         UniversalInboxJobPayload::SyncNotifications(job) => {
@@ -109,6 +117,8 @@ pub async fn handle_universal_inbox_job(
                 notification_service,
                 task_service,
                 integration_connection_service,
+                third_party_item_service,
+                slack_service,
             )
             .await
         }

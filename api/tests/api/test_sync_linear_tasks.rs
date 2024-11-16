@@ -82,6 +82,7 @@ async fn test_sync_tasks_should_create_new_task(
         &settings,
         nango_todoist_connection,
         None,
+        None,
     )
     .await;
     create_and_mock_integration_connection(
@@ -101,6 +102,7 @@ async fn test_sync_tasks_should_create_new_task(
         }),
         &settings,
         nango_linear_connection,
+        None,
         None,
     )
     .await;
@@ -219,6 +221,7 @@ async fn test_sync_tasks_should_not_update_default_values(
         &settings,
         nango_todoist_connection,
         None,
+        None,
     )
     .await;
     let project = ProjectSummary {
@@ -240,6 +243,7 @@ async fn test_sync_tasks_should_not_update_default_values(
         }),
         &settings,
         nango_linear_connection,
+        None,
         None,
     )
     .await;
@@ -330,6 +334,7 @@ async fn test_sync_tasks_should_complete_existing_task(
         &settings,
         nango_todoist_connection,
         None,
+        None,
     )
     .await;
     let project = ProjectSummary {
@@ -350,6 +355,7 @@ async fn test_sync_tasks_should_complete_existing_task(
         }),
         &settings,
         nango_linear_connection,
+        None,
         None,
     )
     .await;
@@ -431,6 +437,7 @@ async fn test_sync_tasks_should_complete_existing_task_and_recreate_sink_task_if
         &settings,
         nango_todoist_connection,
         None,
+        None,
     )
     .await;
     let project = ProjectSummary {
@@ -451,6 +458,7 @@ async fn test_sync_tasks_should_complete_existing_task_and_recreate_sink_task_if
         }),
         &settings,
         nango_linear_connection,
+        None,
         None,
     )
     .await;

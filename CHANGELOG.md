@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Synchronize one way (Slack => Universal Inbox) Slack mentions as notifications
+
 ### Fixed
 
 - Fix Slack message retrieved in a thread
