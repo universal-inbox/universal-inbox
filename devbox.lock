@@ -653,6 +653,54 @@
         }
       }
     },
+    "mdbook@latest": {
+      "last_modified": "2024-10-13T23:44:06Z",
+      "resolved": "github:NixOS/nixpkgs/d4f247e89f6e10120f911e2e2d2254a050d0f732#mdbook",
+      "source": "devbox-search",
+      "version": "0.4.40",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/pg86bsqx7c0yglh5m92cbgmv8w04qmmw-mdbook-0.4.40",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/pg86bsqx7c0yglh5m92cbgmv8w04qmmw-mdbook-0.4.40"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/x3n6w0c9lmqkgb7qydq3m1f8qlgcyfsl-mdbook-0.4.40",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/x3n6w0c9lmqkgb7qydq3m1f8qlgcyfsl-mdbook-0.4.40"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/0gwy137m5kq1fy3vq74fcpn4i0n9cpv5-mdbook-0.4.40",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/0gwy137m5kq1fy3vq74fcpn4i0n9cpv5-mdbook-0.4.40"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/713gmxss5ivv84bzp9zj6r8jjb2nk9k2-mdbook-0.4.40",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/713gmxss5ivv84bzp9zj6r8jjb2nk9k2-mdbook-0.4.40"
+        }
+      }
+    },
     "nodejs@latest": {
       "last_modified": "2024-03-09T07:11:56Z",
       "plugin_version": "0.0.2",
