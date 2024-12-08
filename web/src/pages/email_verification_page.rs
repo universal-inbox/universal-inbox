@@ -33,7 +33,7 @@ pub fn EmailVerificationPage(
     if UI_MODEL.read().authentication_state == AuthenticationState::NotAuthenticated {
         nav.push(Route::LoginPage {});
         needs_update();
-        None
+        rsx! {}
     } else if CONNECTED_USER
         .read()
         .as_ref()
@@ -42,7 +42,7 @@ pub fn EmailVerificationPage(
     {
         nav.push(Route::NotificationsPage {});
         needs_update();
-        None
+        rsx! {}
     } else {
         rsx! {
             div {

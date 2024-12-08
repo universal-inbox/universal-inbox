@@ -197,7 +197,7 @@ fn SlackNotificationListItemDetails(notification: ReadOnlySignal<NotificationWit
         ThirdPartyItemData::SlackThread(slack_thread) => rsx! {
             SlackThreadListItemDetails { slack_thread: *slack_thread }
         },
-        _ => None,
+        _ => rsx! {},
     }
 }
 

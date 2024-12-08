@@ -28,7 +28,7 @@ pub fn Github(class: Option<String>) -> Element {
     rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
-            class: "{class.unwrap_or_default()}",
+            class: class.unwrap_or_default(),
             role: "img",
             "viewBox": "0 0 24 24",
             fill: "currentColor",
@@ -67,7 +67,7 @@ pub fn GithubNotificationIcon(
             "Discussion" => rsx! { GithubDiscussionIcon { class: "{class}" } },
             "CheckSuite" => rsx! { Icon { class: "{class}", icon: BsCheckCircle } },
             "Commit" => rsx! { Icon { class: "{class}", icon: GoGitCommit } },
-            _ => None,
+            _ => rsx! {},
         },
     }
 }
@@ -116,7 +116,7 @@ pub fn GithubDiscussionOpened(class: Option<String>) -> Element {
     rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
-            class: "{class.unwrap_or_default()}",
+            class: class.unwrap_or_default(),
             role: "img",
             "viewBox": "0 0 24 24",
             fill: "currentColor",
@@ -137,7 +137,7 @@ pub fn GithubDiscussionClosed(class: Option<String>) -> Element {
     rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
-            class: "{class.unwrap_or_default()}",
+            class: class.unwrap_or_default(),
             role: "img",
             "viewBox": "0 0 24 24",
             fill: "currentColor",
@@ -155,7 +155,7 @@ pub fn GithubDiscussionDuplicate(class: Option<String>) -> Element {
     rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
-            class: "{class.unwrap_or_default()}",
+            class: class.unwrap_or_default(),
             role: "img",
             "viewBox": "0 0 24 24",
             fill: "currentColor",
@@ -173,7 +173,7 @@ pub fn GithubDiscussionOutdated(class: Option<String>) -> Element {
     rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
-            class: "{class.unwrap_or_default()}",
+            class: class.unwrap_or_default(),
             role: "img",
             "viewBox": "0 0 24 24",
             fill: "currentColor",

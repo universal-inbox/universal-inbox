@@ -1,6 +1,10 @@
 FROM jetpackio/devbox:latest as devbox
 
 FROM devbox as base
+ARG VERSION
+ENV VERSION=${VERSION}
+ENV PATH="/home/devbox/.cargo/bin:${PATH}"
+ENV DOCKER_BUILD=true
 WORKDIR /app
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" devbox.json devbox.json
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" devbox.lock devbox.lock
@@ -21,8 +25,12 @@ RUN cargo install sqlx-cli --version 0.8.2
 FROM base as dep-web-builder
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/justfile web/justfile
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/.cargo web/.cargo
+COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/rspack.config.js web/rspack.config.js
+COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/tailwind.config.js web/tailwind.config.js
+COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/js web/js
+COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/css web/css
 # Create fake index.html for Trunk build to succeed without the real index.html
-RUN touch web/index.html
+RUN touch web/index-trunk.html
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/package.json web/package.json
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/package-lock.json web/package-lock.json
 RUN devbox run -- just web/install
@@ -39,15 +47,13 @@ RUN devbox run -- cargo chef cook --release -p universal-inbox-api --recipe-path
 RUN devbox run -- just api/build-release
 
 FROM dep-web-builder as release-web-builder
-ARG VERSION
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" Cargo.toml Cargo.lock ./
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/Cargo.toml web/Cargo.toml
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" src src
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web web
-ENV VERSION=${VERSION}
 RUN devbox run -- just web/build-release
-RUN sed -i 's#http://localhost:8000/api#/api#' web/dist/snippets/universal-inbox-web-*/js/api.js
-RUN sed -i 's#http://localhost:8000/api#/api#' web/dist/index.html
+RUN sed -i 's#http://localhost:8000/api#/api#' target/dx/universal-inbox-web/release/web/public/wasm/snippets/universal-inbox-web-*/js/api.js
+RUN sed -i 's#http://localhost:8000/api#/api#' target/dx/universal-inbox-web/release/web/public/index.html
 
 FROM dep-api-builder as release-api-builder
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" Cargo.toml Cargo.lock ./
@@ -57,7 +63,6 @@ COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" api api
 RUN devbox run -- just api/build-release
 
 FROM debian:bookworm-slim AS runtime
-ARG VERSION
 WORKDIR /app
 RUN mkdir /data
 COPY docker/universal-inbox-entrypoint universal-inbox-entrypoint
@@ -71,7 +76,9 @@ COPY --from=release-api-builder /app/api/config/default.toml config/default.toml
 COPY --from=release-api-builder /app/api/config/prod.toml config/prod.toml
 COPY --from=release-api-builder /app/api/migrations migrations
 COPY --from=tools /usr/local/cargo/bin/sqlx /usr/local/bin/sqlx
-COPY --from=release-web-builder /app/web/dist/ statics
+COPY --from=release-web-builder /app/target/dx/universal-inbox-web/release/web/public statics
+COPY web/images/favicon.ico statics/images/
+COPY web/images/ui-logo-light.jpg statics/images/
 ENV CONFIG_FILE /app/config/prod.toml
 ENV UNIVERSAL_INBOX__APPLICATION__VERSION=${VERSION}
 ENTRYPOINT ["/app/universal-inbox-entrypoint"]

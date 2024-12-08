@@ -249,10 +249,11 @@ fn LinearCommentDisplay(
         .updated_at
         .format("%Y-%m-%d %H:%M")
         .to_string();
+    let class = class.unwrap_or_default();
 
     rsx! {
         div {
-            class: "flex flex-col gap-2 {class.unwrap_or_default()}",
+            class: "flex flex-col gap-2 {class}",
 
             SmallCard {
                 class: "flex flex-row items-center gap-2 text-xs",

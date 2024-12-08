@@ -11,6 +11,7 @@ use universal_inbox::{task::Task, HasHtmlUrl};
 
 use crate::{
     components::{task_preview::TaskPreview, tasks_list::TasksList},
+    images::UI_LOGO_SYMBOL_TRANSPARENT,
     keyboard_manager::{KeyboardHandler, KEYBOARD_MANAGER},
     model::UI_MODEL,
     services::task_service::{TaskCommand, SYNCED_TASKS_PAGE},
@@ -66,7 +67,7 @@ pub fn SyncedTasksPage() -> Element {
                     class: "relative w-full h-full flex justify-center items-center",
                     img {
                         class: "h-full opacity-30 dark:opacity-10",
-                        src: "images/ui-logo-symbol-transparent.svg",
+                        src: "{UI_LOGO_SYMBOL_TRANSPARENT}",
                         alt: "No synchronized tasks"
                     }
                     div {

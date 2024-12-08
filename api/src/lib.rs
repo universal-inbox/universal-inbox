@@ -498,6 +498,7 @@ fn build_csp_header(settings: &Settings) -> String {
             Sources::new_with(Source::Self_)
                 .push(Source::WasmUnsafeEval)
                 .push(Source::UnsafeInline)
+                .push(Source::UnsafeEval)
                 .push(Source::Host("https://cdn.headwayapp.co")),
         ))
         .push(Directive::StyleSrc(

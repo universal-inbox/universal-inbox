@@ -13,12 +13,16 @@ use crate::components::integrations::{
     todoist::icons::Todoist,
 };
 
+const NOTION_LOGO: Asset = asset!("/images/notion-logo.svg");
+
 #[component]
 pub fn Notion(class: Option<String>) -> Element {
-    rsx! {img {
-        class: "{class.unwrap_or_default()}",
-        src: "images/notion-logo.svg"
-    }}
+    rsx! {
+        img {
+            class: class.unwrap_or_default(),
+            src: "{NOTION_LOGO}",
+        }
+    }
 }
 
 #[component]
@@ -26,7 +30,7 @@ pub fn GoogleDocs(class: Option<String>) -> Element {
     rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
-            class: "{class.unwrap_or_default()}",
+            class: class.unwrap_or_default(),
             role: "img",
             "viewBox": "0 0 24 24",
             fill: "currentColor",
@@ -43,7 +47,7 @@ pub fn TickTick(class: Option<String>) -> Element {
     rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
-            class: "{class.unwrap_or_default()}",
+            class: class.unwrap_or_default(),
             "viewBox": "0 0 192 192",
             fill: "none",
             g { id: "bg", "stroke-width": "0" }

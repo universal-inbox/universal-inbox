@@ -37,7 +37,8 @@ cached = { version = "0.54.0", features = [
 chrono = { workspace = true, features = ["serde"] }
 clap = { workspace = true }
 color-backtrace = "0.6"
-config = { version = "0.15.0", default-features = false, features = [
+# TODO: 0.15.3 is broken with: invalid type: unit value, expected map
+config = { version = "=0.15.2", default-features = false, features = [
   "toml",
   "convert-case",
   "async",
@@ -118,7 +119,7 @@ sqlx = { version = "0.8.0", default-features = false, features = [
 thiserror = { workspace = true }
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
 tonic = { version = "0.12.3", features = ["tls", "tls-roots", "gzip"] }
-tracing = { version = "0.1.0", features = ["log"] }
+tracing = { workspace = true }
 tracing-actix-web = { git = "https://github.com/omid/tracing-actix-web", rev = "00e9e15ed96d661e5bada371290031814c004522", features = [
   "emit_event_on_error",
   "opentelemetry_0_24",

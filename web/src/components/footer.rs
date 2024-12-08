@@ -8,7 +8,8 @@ use dioxus_free_icons::{icons::bs_icons::BsPlug, Icon};
 
 use universal_inbox::{
     integration_connection::{
-        provider::IntegrationProviderKind, IntegrationConnection, IntegrationConnectionStatus,
+        provider::IntegrationProviderKind, IntegrationConnection,
+        IntegrationConnectionStatus as ConnectionStatus,
     },
     IntegrationProviderStaticConfig,
 };
@@ -175,7 +176,7 @@ pub fn IntegrationConnectionStatus(
     let connection_is_syncing = connection.is_syncing();
     let (connection_style, tooltip) = use_memo(move || match &connection {
         IntegrationConnection {
-            status: IntegrationConnectionStatus::Validated,
+            status: ConnectionStatus::Validated,
             last_notifications_sync_started_at: notifs_started_at,
             last_tasks_sync_started_at: tasks_started_at,
             last_notifications_sync_failure_message: None,
@@ -214,7 +215,7 @@ pub fn IntegrationConnectionStatus(
             }
         }
         IntegrationConnection {
-            status: IntegrationConnectionStatus::Failing,
+            status: ConnectionStatus::Failing,
             failure_message: message,
             ..
         } => (

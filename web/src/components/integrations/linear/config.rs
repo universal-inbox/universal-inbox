@@ -27,7 +27,7 @@ pub fn LinearProviderConfiguration(
     let mut default_due_at: Signal<Option<PresetDueDate>> = use_signal(|| None);
     let selected_project: Signal<Option<ProjectSummary>> = use_signal(|| None);
     let mut task_config_enabled = use_signal(|| false);
-    let _ = use_memo(move || {
+    use_effect(move || {
         *default_project.write() = config()
             .sync_task_config
             .target_project

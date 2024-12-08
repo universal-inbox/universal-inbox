@@ -290,47 +290,47 @@ pub fn ChecksGithubPullRequest(
         }
     });
 
-    if let Some(checks_state) = checks_state {
-        if with_details {
-            return rsx! {
-                CollapseCardWithIcon {
-                    title: "{checks_state.0}",
-                    icon: checks_state.1,
-                    opened: expand_details(),
-                    ChecksGithubPullRequestDetails { latest_commit: latest_commit }
-                }
-            };
-        } else {
-            checks_state.1
-        }
+    let Some(checks_state) = checks_state else {
+        return rsx! {};
+    };
+
+    if with_details {
+        return rsx! {
+            CollapseCardWithIcon {
+                title: "{checks_state.0}",
+                icon: checks_state.1,
+                opened: expand_details(),
+                ChecksGithubPullRequestDetails { latest_commit: latest_commit }
+            }
+        };
     } else {
-        None
+        checks_state.1
     }
 }
 
 #[component]
 fn ChecksGithubPullRequestDetails(latest_commit: ReadOnlySignal<GithubCommitChecks>) -> Element {
-    if let Some(check_suites) = &latest_commit().check_suites {
-        rsx! {
-            table {
-                class: "table table-auto table-xs w-full",
-                tbody {
-                    for check_suite in check_suites {
-                        if check_suite.status != GithubCheckStatusState::Queued {
-                            for check_run in check_suite.check_runs.iter() {
-                                GithubCheckRunLine {
-                                    check_run: check_run.clone(),
-                                    workflow: check_suite.workflow.clone(),
-                                    app: check_suite.app.clone(),
-                                }
+    let Some(check_suites) = &latest_commit().check_suites else {
+        return rsx! {};
+    };
+
+    rsx! {
+        table {
+            class: "table table-auto table-xs w-full",
+            tbody {
+                for check_suite in check_suites {
+                    if check_suite.status != GithubCheckStatusState::Queued {
+                        for check_run in check_suite.check_runs.iter() {
+                            GithubCheckRunLine {
+                                check_run: check_run.clone(),
+                                workflow: check_suite.workflow.clone(),
+                                app: check_suite.app.clone(),
                             }
                         }
                     }
                 }
             }
         }
-    } else {
-        None
     }
 }
 
@@ -527,7 +527,7 @@ fn ReviewsGithubPullRequestDetails(
     );
 
     if reviews.is_empty() {
-        return None;
+        return rsx! {};
     }
 
     rsx! {

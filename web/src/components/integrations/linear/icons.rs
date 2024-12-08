@@ -16,7 +16,7 @@ pub fn Linear(class: Option<String>) -> Element {
     rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
-            class: "{class.unwrap_or_default()}",
+            class: class.unwrap_or_default(),
             role: "img",
             "viewBox": "0 0 100 100",
             fill: "currentColor",
@@ -73,7 +73,7 @@ pub fn LinearIssueTriageIcon(class: Option<String>) -> Element {
     rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
-            class: "{class.unwrap_or_default()}",
+            class: class.unwrap_or_default(),
             role: "img",
             "viewBox": "0 0 14 14",
             fill: "currentColor",
@@ -90,7 +90,7 @@ pub fn LinearIssueBacklogIcon(class: Option<String>) -> Element {
     rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
-            class: "{class.unwrap_or_default()}",
+            class: class.unwrap_or_default(),
             role: "img",
             "viewBox": "0 0 14 14",
             fill: "currentColor",
@@ -108,7 +108,7 @@ pub fn LinearIssueCompletedIcon(class: Option<String>) -> Element {
     rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
-            class: "{class.unwrap_or_default()}",
+            class: class.unwrap_or_default(),
             role: "img",
             "viewBox": "0 0 14 14",
             fill: "currentColor",
@@ -127,7 +127,7 @@ pub fn LinearIssueCanceledIcon(class: Option<String>) -> Element {
     rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
-            class: "{class.unwrap_or_default()}",
+            class: class.unwrap_or_default(),
             role: "img",
             "viewBox": "0 0 14 14",
             fill: "currentColor",
@@ -146,7 +146,7 @@ pub fn LinearIssueUnstartedIcon(class: Option<String>) -> Element {
     rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
-            class: "{class.unwrap_or_default()}",
+            class: class.unwrap_or_default(),
             role: "img",
             "viewBox": "0 0 14 14",
             fill: "none",
@@ -167,7 +167,7 @@ pub fn LinearIssueStartedIcon(class: Option<String>) -> Element {
     rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
-            class: "{class.unwrap_or_default()}",
+            class: class.unwrap_or_default(),
             role: "img",
             "viewBox": "0 0 14 14",
             fill: "none",
@@ -227,7 +227,7 @@ pub fn LinearProjectPlannedIcon(class: Option<String>) -> Element {
     rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
-            class: "{class.unwrap_or_default()}",
+            class: class.unwrap_or_default(),
             role: "img",
             "viewBox": "1 1 14 14",
             fill: "currentColor",
@@ -246,7 +246,7 @@ pub fn LinearProjectBacklogIcon(class: Option<String>) -> Element {
     rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
-            class: "{class.unwrap_or_default()}",
+            class: class.unwrap_or_default(),
             role: "img",
             "viewBox": "1 1 14 14",
             fill: "currentColor",
@@ -295,7 +295,7 @@ pub fn LinearProjectCompletedIcon(class: Option<String>) -> Element {
     rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
-            class: "{class.unwrap_or_default()}",
+            class: class.unwrap_or_default(),
             role: "img",
             "viewBox": "1 1 14 14",
             fill: "currentColor",
@@ -319,7 +319,7 @@ pub fn LinearProjectCanceledIcon(class: Option<String>) -> Element {
     rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
-            class: "{class.unwrap_or_default()}",
+            class: class.unwrap_or_default(),
             role: "img",
             "viewBox": "1 1 14 14",
             fill: "currentColor",
@@ -341,7 +341,7 @@ pub fn LinearProjectPausedIcon(class: Option<String>) -> Element {
     rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
-            class: "{class.unwrap_or_default()}",
+            class: class.unwrap_or_default(),
             role: "img",
             "viewBox": "1 1 14 14",
             fill: "currentColor",
@@ -370,7 +370,7 @@ pub fn LinearProjectStartedIcon(class: Option<String>) -> Element {
     rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
-            class: "{class.unwrap_or_default()}",
+            class: class.unwrap_or_default(),
             "viewBox": "1 1 14 14",
             fill: "currentColor",
             title { "In progress Linear project" }
@@ -410,7 +410,7 @@ pub fn LinearProjectMilestoneIcon(class: Option<String>) -> Element {
     rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
-            class: "{class.unwrap_or_default()}",
+            class: class.unwrap_or_default(),
             "viewBox": "0 0 16 16",
             fill: "none",
             title { "Linear project milestone" }
@@ -431,7 +431,7 @@ pub fn LinearProjectHealtIcon(class: Option<String>) -> Element {
         svg {
             "viewBox": "0 0 16 16",
             fill: "none",
-            class: "{class.unwrap_or_default()}",
+            class: class.unwrap_or_default(),
             path {
                 stroke: "currentColor",
                 fill: "none",
@@ -448,7 +448,7 @@ pub fn LinearProjectHealtIcon(class: Option<String>) -> Element {
 pub fn LinearProjectDefaultIcon(class: Option<String>) -> Element {
     rsx! {
         svg {
-            class: "{class.unwrap_or_default()}",
+            class: class.unwrap_or_default(),
              style: "--icon-color: #DCD8FE93;",
             "viewBox": "0 0 16 16",
             fill: "currentColor",

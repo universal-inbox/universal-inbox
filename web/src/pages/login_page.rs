@@ -26,7 +26,7 @@ pub fn LoginPage() -> Element {
     if CONNECTED_USER.read().is_some() {
         nav.push(Route::NotificationsPage {});
         needs_update();
-        return None;
+        return rsx! {};
     };
 
     rsx! {

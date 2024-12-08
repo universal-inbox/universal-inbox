@@ -112,7 +112,7 @@ pub fn AuthenticationTokensCard() -> Element {
                                         td { colspan: "4", "Failed to create a new API key: {error}" }
                                     }
                                 },
-                                _ => None
+                                _ => rsx! {}
                             }
                             for auth_token in authentication_tokens.into_iter() {
                                 AuthenticationToken {

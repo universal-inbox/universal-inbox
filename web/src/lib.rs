@@ -39,6 +39,7 @@ mod auth;
 mod components;
 mod config;
 mod form;
+mod images;
 mod keyboard_manager;
 mod layouts;
 mod model;
@@ -52,7 +53,7 @@ pub fn App() -> Element {
     let api_base_url = use_memo(move || get_api_base_url().unwrap());
 
     let toast_service_handle = use_coroutine(|rx| toast_service(rx, TOASTS.signal()));
-    let task_service_handle = use_coroutine(|rx| {
+    let task_service_handle = use_coroutine(move |rx| {
         to_owned![toast_service_handle];
 
         task_service(
@@ -63,7 +64,7 @@ pub fn App() -> Element {
             toast_service_handle,
         )
     });
-    let notification_service_handle = use_coroutine(|rx| {
+    let notification_service_handle = use_coroutine(move |rx| {
         to_owned![toast_service_handle];
         to_owned![task_service_handle];
 
@@ -76,7 +77,7 @@ pub fn App() -> Element {
             toast_service_handle,
         )
     });
-    let _user_service_handle = use_coroutine(|rx| {
+    let _user_service_handle = use_coroutine(move |rx| {
         user_service(
             rx,
             api_base_url(),
@@ -84,7 +85,7 @@ pub fn App() -> Element {
             UI_MODEL.signal(),
         )
     });
-    let _integration_connection_service_handle = use_coroutine(|rx| {
+    let _integration_connection_service_handle = use_coroutine(move |rx| {
         integration_connnection_service(
             rx,
             APP_CONFIG.signal().into(),
@@ -97,7 +98,7 @@ pub fn App() -> Element {
         )
     });
 
-    let _authentication_token_service_handle = use_coroutine(|rx| {
+    let _authentication_token_service_handle = use_coroutine(move |rx| {
         authentication_token_service(
             rx,
             api_base_url(),
@@ -135,10 +136,12 @@ pub fn App() -> Element {
 
     debug!("Rendering app");
     rsx! {
+        document::Stylesheet { href: asset!("./dist/css/universal-inbox.min.css") }
+        document::Link { rel: "icon", href: asset!("./images/favicon.ico") }
+
         Router::<Route> {
             config: move || {
                 RouterConfig::default()
-                    .history(WebHistory::<Route>::default())
                     .on_update(move |_state| {
                         UI_MODEL.write().error_message = None;
                         UI_MODEL.write().confirmation_message = None;

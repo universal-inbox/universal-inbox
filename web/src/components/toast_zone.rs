@@ -51,7 +51,7 @@ pub fn ToastZone() -> Element {
             class: "toast toast-bottom toast-end items-end absolute bottom-0 right-0",
 
             for (id, toast) in TOASTS() {
-                Toast {
+                ToastElement {
                     key: "{id}",
                     message: toast.message.clone(),
                     kind: toast.kind,
@@ -66,7 +66,7 @@ pub fn ToastZone() -> Element {
 }
 
 #[component]
-fn Toast(
+fn ToastElement(
     message: ReadOnlySignal<String>,
     kind: ReadOnlySignal<ToastKind>,
     timeout: ReadOnlySignal<Option<Option<u128>>>,
@@ -134,7 +134,7 @@ fn Toast(
                 class: "w-full flex items-center px-4 py-2 h-12 gap-4",
 
                 match kind() {
-                    ToastKind::Message => None,
+                    ToastKind::Message => rsx! {},
                     ToastKind::Loading => rsx! {
                         Spinner { class: "w-4 h-4" }
                     },

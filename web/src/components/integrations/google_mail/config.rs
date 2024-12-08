@@ -16,7 +16,7 @@ pub fn GoogleMailProviderConfiguration(
     on_config_change: EventHandler<IntegrationConnectionConfig>,
 ) -> Element {
     let mut selected_label_id = use_signal(|| None);
-    let _ = use_memo(move || {
+    use_effect(move || {
         *selected_label_id.write() = Some(config().synced_label.id);
     });
 

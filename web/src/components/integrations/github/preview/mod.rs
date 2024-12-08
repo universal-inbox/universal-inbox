@@ -29,7 +29,7 @@ pub fn GithubNotificationDefaultPreview(
         "Issue" => rsx! { Icon { class: "flex-none h-5 w-5", icon: BsRecordCircle } },
         "Discussion" => rsx! { GithubDiscussionIcon { class: "flex-none h-5 w-5" } },
         "CheckSuite" => rsx! { Icon { class: "flex-none h-5 w-5", icon: BsCheckCircle } },
-        _ => None,
+        _ => rsx! {},
     };
 
     rsx! {

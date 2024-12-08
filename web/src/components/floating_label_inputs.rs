@@ -185,10 +185,11 @@ where
             validate_value::<T>(&value_to_validate(), error_message, required);
         }
     });
+    let class = props.class.unwrap_or_default();
 
     rsx! {
         div {
-            class: "relative {props.class.unwrap_or_default()}",
+            class: "relative {class}",
             select {
                 id: "{props.name}",
                 name: "{props.name}",
@@ -265,7 +266,7 @@ where
         .unwrap_or_default();
 
     let mut selected_index = use_signal(|| 0);
-    let _ = use_memo(move || *selected_index.write() = 0);
+    use_effect(move || *selected_index.write() = 0);
 
     let selected_result_title = use_memo(move || {
         (*props.value)()
@@ -357,10 +358,11 @@ where
             props.on_select.call(result.clone());
         }
     });
+    let class = props.class.unwrap_or_default();
 
     rsx! {
         div {
-            class: "dropdown group {props.class.unwrap_or_default()}",
+            class: "dropdown group {class}",
 
             label {
                 class: "join h-10 group w-full",
@@ -491,7 +493,7 @@ fn ArrowDown(class: Option<String>) -> Element {
     rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
-            class: "{class.unwrap_or_default()}",
+            class: class.unwrap_or_default(),
             role: "img",
             "viewBox": "0 0 24 24",
             fill: "currentColor",
@@ -521,7 +523,7 @@ pub fn ErrorMessage(message: ReadOnlySignal<Option<String>>) -> Element {
             }
         }
     } else {
-        None
+        rsx! {}
     }
 }
 
@@ -536,8 +538,8 @@ fn SearchResultRow(
     rsx! {
         li {
             class: "w-full inline-block",
-            prevent_default: "onclick",
-            onclick: move |_| {
+            onclick: move |event| {
+                event.prevent_default();
                 on_select.call(());
             },
 
