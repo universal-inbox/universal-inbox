@@ -68,7 +68,7 @@ serde_json = { version = "1.0" }
 serde_urlencoded = { version = "0.7.0" }
 serde_with = { version = "3.8.0" }
 slack-blocks-render = { version = "0.2.0" }
-slack-morphism = { version = "2.6.0" }
+slack-morphism = { version = "2.7.0" }
 thiserror = { version = "1.0" }
 url = { version = "2.5.0" }
 uuid = { version = "1.0", features = ["v4"] }
@@ -78,7 +78,3 @@ vec1 = { version = "1.12.0", features = ["serde"] }
 [dev-dependencies]
 pretty_assertions = { workspace = true }
 rstest = { workspace = true }
-
-[patch.crates-io]
-slack-blocks-render = { path = "../slack-blocks-render" }
-slack-morphism = { path = "../slack-morphism-rust" }
