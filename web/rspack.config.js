@@ -1,3 +1,5 @@
+const path = require('path');
+
 module.exports = {
   entry: {
     web: __dirname + "/js/index.js",
@@ -6,7 +8,7 @@ module.exports = {
     outputModule: true,
   },
   output: {
-    path: "/tmp/rspack",
+    path: path.resolve(__dirname, "dist/js"),
     filename: "index.js",
     library: {
       type: "module",

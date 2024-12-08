@@ -78,6 +78,7 @@ fn SmallCard(card_class: Option<String>, class: Option<String>, children: Elemen
     let card_class = card_class
         .and_then(|card_class| (!card_class.is_empty()).then_some(card_class))
         .unwrap_or("bg-base-200 text-base-content".to_string());
+    let class = class.unwrap_or_default();
 
     rsx! {
         div {
@@ -85,7 +86,7 @@ fn SmallCard(card_class: Option<String>, class: Option<String>, children: Elemen
             div {
                 class: "card-body p-2",
                 div {
-                    class: "flex items-center gap-2 {class.unwrap_or_default()}",
+                    class: "flex items-center gap-2 {class}",
                     { children }
                 }
             }
@@ -147,7 +148,7 @@ pub fn UserWithAvatar(
                         }
                     }
                 }
-                None => None
+                None => rsx! {}
             }
 
             if display_name {
@@ -206,7 +207,7 @@ impl Tag {
 #[component]
 pub fn TagsInCard(tags: Vec<Tag>) -> Element {
     if tags.is_empty() {
-        return None;
+        return rsx! {};
     }
 
     rsx! {
@@ -230,10 +231,11 @@ pub fn TagDisplay(tag: Tag, class: Option<String>) -> Element {
             "".to_string()
         }
     });
+    let class = class.unwrap_or_default();
 
     rsx! {
         div {
-            class: "badge {badge_text_class} {badge_class} text-xs text-light {class.unwrap_or_default()} whitespace-nowrap",
+            class: "badge {badge_text_class} {badge_class} text-xs text-light {class} whitespace-nowrap",
             style: "{badge_style}",
             "{tag.get_name()}"
         }

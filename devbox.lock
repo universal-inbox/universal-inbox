@@ -399,6 +399,54 @@
         }
       }
     },
+    "docker-compose@latest": {
+      "last_modified": "2024-11-28T07:51:56Z",
+      "resolved": "github:NixOS/nixpkgs/226216574ada4c3ecefcbbec41f39ce4655f78ef#docker-compose",
+      "source": "devbox-search",
+      "version": "2.30.3",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/cv4v65bgmypc262hnf08p1svc7chnygh-docker-compose-2.30.3",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/cv4v65bgmypc262hnf08p1svc7chnygh-docker-compose-2.30.3"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/7hgs9452nndxy95yvi4801qhq6bs7p3w-docker-compose-2.30.3",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/7hgs9452nndxy95yvi4801qhq6bs7p3w-docker-compose-2.30.3"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/xmmsfzliypvdhl4h7zf12q425gcd9vbd-docker-compose-2.30.3",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/xmmsfzliypvdhl4h7zf12q425gcd9vbd-docker-compose-2.30.3"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/z62cg42chfdl8ml1a92ynqrv5ncss506-docker-compose-2.30.3",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/z62cg42chfdl8ml1a92ynqrv5ncss506-docker-compose-2.30.3"
+        }
+      }
+    },
     "fzf@latest": {
       "last_modified": "2024-11-28T07:51:56Z",
       "resolved": "github:NixOS/nixpkgs/226216574ada4c3ecefcbbec41f39ce4655f78ef#fzf",
@@ -1017,8 +1065,8 @@
       }
     },
     "process-compose@latest": {
-      "last_modified": "2024-11-28T07:51:56Z",
-      "resolved": "github:NixOS/nixpkgs/226216574ada4c3ecefcbbec41f39ce4655f78ef#process-compose",
+      "last_modified": "2024-12-04T16:45:45Z",
+      "resolved": "github:NixOS/nixpkgs/2f9d395f057a50f8076f633c10519035fce8d773#process-compose",
       "source": "devbox-search",
       "version": "1.40.1",
       "systems": {
@@ -1026,11 +1074,11 @@
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/ndvh1v1881a3pwxyw1g38mhp5xzrpz16-process-compose-1.40.1",
+              "path": "/nix/store/iz6ckcr1s8vy71b3wqvs680g2mwpf9jk-process-compose-1.40.1",
               "default": true
             }
           ],
-          "store_path": "/nix/store/ndvh1v1881a3pwxyw1g38mhp5xzrpz16-process-compose-1.40.1"
+          "store_path": "/nix/store/iz6ckcr1s8vy71b3wqvs680g2mwpf9jk-process-compose-1.40.1"
         },
         "aarch64-linux": {
           "outputs": [
@@ -1046,11 +1094,11 @@
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/qz9gb3briakkvylq3markxd1s7plaw47-process-compose-1.40.1",
+              "path": "/nix/store/mrdrciqg6zjrblgjaya6bxqd57knf09r-process-compose-1.40.1",
               "default": true
             }
           ],
-          "store_path": "/nix/store/qz9gb3briakkvylq3markxd1s7plaw47-process-compose-1.40.1"
+          "store_path": "/nix/store/mrdrciqg6zjrblgjaya6bxqd57knf09r-process-compose-1.40.1"
         },
         "x86_64-linux": {
           "outputs": [
@@ -1367,54 +1415,6 @@
             }
           ],
           "store_path": "/nix/store/j41rcb4151a2cv8sc35p0py2iwnbajj3-trunk-0.18.8"
-        }
-      }
-    },
-    "wasm-bindgen-cli@0.2.93": {
-      "last_modified": "2024-09-10T15:01:03Z",
-      "resolved": "github:NixOS/nixpkgs/5ed627539ac84809c78b2dd6d26a5cebeb5ae269#wasm-bindgen-cli",
-      "source": "devbox-search",
-      "version": "0.2.93",
-      "systems": {
-        "aarch64-darwin": {
-          "outputs": [
-            {
-              "name": "out",
-              "path": "/nix/store/2nizqmgb3izijdx2iw13hr5imz717fcf-wasm-bindgen-cli-0.2.93",
-              "default": true
-            }
-          ],
-          "store_path": "/nix/store/2nizqmgb3izijdx2iw13hr5imz717fcf-wasm-bindgen-cli-0.2.93"
-        },
-        "aarch64-linux": {
-          "outputs": [
-            {
-              "name": "out",
-              "path": "/nix/store/lxm0wys0dc69y6l4si4qy360bh2x34p4-wasm-bindgen-cli-0.2.93",
-              "default": true
-            }
-          ],
-          "store_path": "/nix/store/lxm0wys0dc69y6l4si4qy360bh2x34p4-wasm-bindgen-cli-0.2.93"
-        },
-        "x86_64-darwin": {
-          "outputs": [
-            {
-              "name": "out",
-              "path": "/nix/store/b6g3q6fwv67p69li69xwblqn69fcapcj-wasm-bindgen-cli-0.2.93",
-              "default": true
-            }
-          ],
-          "store_path": "/nix/store/b6g3q6fwv67p69li69xwblqn69fcapcj-wasm-bindgen-cli-0.2.93"
-        },
-        "x86_64-linux": {
-          "outputs": [
-            {
-              "name": "out",
-              "path": "/nix/store/p3jfjh970gl14xm47knv6dvxvgk087xb-wasm-bindgen-cli-0.2.93",
-              "default": true
-            }
-          ],
-          "store_path": "/nix/store/p3jfjh970gl14xm47knv6dvxvgk087xb-wasm-bindgen-cli-0.2.93"
         }
       }
     },

@@ -7,6 +7,7 @@ use dioxus_free_icons::{
 };
 
 use crate::{
+    images::UI_LOGO_TRANSPARENT,
     model::UI_MODEL,
     route::Route,
     services::user_service::{UserCommand, CONNECTED_USER},
@@ -37,7 +38,7 @@ pub fn FullpageLayout() -> Element {
                         class: "flex flex-col items-center justify-center",
                         img {
                             class: "rounded-full w-48 h-48",
-                            src: "/images/ui-logo-transparent.png",
+                            src: "{UI_LOGO_TRANSPARENT}",
                             alt: "Universal Inbox logo",
                         }
                     }

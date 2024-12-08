@@ -15,6 +15,7 @@ use gravatar_rs::Generator;
 
 use crate::{
     config::APP_CONFIG,
+    images::UI_LOGO_TRANSPARENT,
     model::{DEFAULT_USER_AVATAR, NOT_CONNECTED_USER_NAME, UI_MODEL, VERSION},
     route::Route,
     services::{
@@ -70,7 +71,7 @@ pub fn NavBar() -> Element {
 
                 img {
                     class: "rounded-full w-12 h-12",
-                    src: "images/ui-logo-transparent.png",
+                    src: "{UI_LOGO_TRANSPARENT}",
                     alt: "Universal Inbox logo",
                 }
 

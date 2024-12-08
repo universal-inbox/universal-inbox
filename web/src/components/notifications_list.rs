@@ -206,7 +206,7 @@ fn DefaultNotificationListItem(
         ListItem {
             key: "{notification().id}",
             title: "{notification().title}",
-            subtitle: None,
+            subtitle: rsx! {  },
             action_buttons: get_notification_list_item_action_buttons(
                 notification,
                 list_context().show_shortcut
@@ -371,31 +371,33 @@ pub fn get_notification_list_item_action_buttons(
 
 #[component]
 pub fn TaskHint(task: ReadOnlySignal<Option<Task>>) -> Element {
-    let html_url = task()?.get_html_url();
-    let style = match task() {
-        Some(Task {
+    let Some(task) = task() else {
+        return rsx! {};
+    };
+    let html_url = task.get_html_url();
+    let style = match task {
+        Task {
             priority: TaskPriority::P1,
             ..
-        }) => "text-red-500",
-        Some(Task {
+        } => "text-red-500",
+        Task {
             priority: TaskPriority::P2,
             ..
-        }) => "text-orange-500",
-        Some(Task {
+        } => "text-orange-500",
+        Task {
             priority: TaskPriority::P3,
             ..
-        }) => "text-yellow-500",
-        Some(Task {
+        } => "text-yellow-500",
+        Task {
             priority: TaskPriority::P4,
             ..
-        }) => "text-gray-500",
-        _ => "text-gray-500",
+        } => "text-gray-500",
     };
 
     rsx! {
         div {
             class: "absolute top-0 right-0 tooltip tooltip-right text-xs {style}",
-            "data-tip": "Linked to a {task()?.kind} task",
+            "data-tip": "Linked to a {task.kind} task",
 
             a {
                 href: "{html_url}",

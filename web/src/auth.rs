@@ -23,9 +23,9 @@ use universal_inbox::{
 
 use crate::{
     components::spinner::Spinner,
-    model::{AuthenticationState, UniversalInboxUIModel},
+    model::{AuthenticationState, UI_MODEL},
     route::Route,
-    services::api::call_api,
+    services::{api::call_api, user_service::UserCommand},
     utils::{current_location, get_local_storage, redirect_to},
 };
 
@@ -46,13 +46,12 @@ pub fn AuthPage(query: String) -> Element {
 pub fn Authenticated(
     authentication_config: FrontAuthenticationConfig,
     api_base_url: Url,
-    mut ui_model: Signal<UniversalInboxUIModel>,
     children: Element,
 ) -> Element {
+    let user_service = use_coroutine_handle::<UserCommand>();
     let mut error = use_signal(|| None::<anyhow::Error>);
     let current_url = current_location().unwrap();
     let nav = use_navigator();
-    let history = WebHistory::<Route>::default();
     // Workaround for Dioxus 0.4.1 bug: https://github.com/DioxusLabs/dioxus/issues/1511
     let local_storage = get_local_storage().unwrap();
     let auth_code = if let FrontAuthenticationConfig::OIDCAuthorizationCodePKCEFlow {
@@ -75,10 +74,10 @@ pub fn Authenticated(
 
     // If we are on the authentication redirection URL with an authentication code,
     // we should exchange it for an access token and authentication state is not unknown anymore
-    if auth_code.is_some() && ui_model.read().authentication_state == AuthenticationState::Unknown {
-        ui_model.write().authentication_state = AuthenticationState::FetchingAccessToken;
+    if auth_code.is_some() && UI_MODEL.peek().authentication_state == AuthenticationState::Unknown {
+        UI_MODEL.write().authentication_state = AuthenticationState::FetchingAccessToken;
     }
-    let authentication_state = ui_model.read().authentication_state;
+    let authentication_state = UI_MODEL.read().authentication_state;
 
     let auth_config = authentication_config.clone();
     let _ = use_resource(move || {
@@ -87,9 +86,13 @@ pub fn Authenticated(
         to_owned![api_base_url];
 
         async move {
-            let authentication_state = ui_model.read().authentication_state;
+            let authentication_state = UI_MODEL.peek().authentication_state;
+            if authentication_state == AuthenticationState::Unknown {
+                user_service.send(UserCommand::GetUser);
+                debug!("auth: Unknown authentication state, triggering API call");
+                return;
+            }
             if authentication_state == AuthenticationState::Authenticated
-                || authentication_state == AuthenticationState::Unknown
                 || authentication_state == AuthenticationState::RedirectingToAuthProvider
             {
                 debug!("auth: Already authenticated or authenticating, skipping authentication");
@@ -104,7 +107,6 @@ pub fn Authenticated(
                     ..
                 } => {
                     if let Err(auth_error) = authenticate_pkce_flow(
-                        ui_model,
                         &api_base_url,
                         auth_code,
                         &oidc_issuer_url,
@@ -118,7 +120,7 @@ pub fn Authenticated(
                 }
                 FrontAuthenticationConfig::OIDCGoogleAuthorizationCodeFlow { .. } => {
                     if let Err(auth_error) =
-                        authenticate_authorization_code_flow(ui_model, &api_base_url).await
+                        authenticate_authorization_code_flow(&api_base_url).await
                     {
                         *error.write() = Some(auth_error);
                     }
@@ -147,23 +149,20 @@ pub fn Authenticated(
                     debug!("auth: Authenticated, redirecting to /");
                     needs_update();
                     nav.replace(Route::NotificationsPage {});
-                    return None;
+                    return rsx! {};
                 }
             }
             rsx! { { children } }
         }
-        AuthenticationState::Unknown => {
-            rsx! { { children } }
-        }
         value => {
             if authentication_config == FrontAuthenticationConfig::Local {
-                if history.current_route() != (Route::LoginPage {})
-                    && history.current_route() != (Route::SignupPage {})
-                    && history.current_route() != (Route::PasswordResetPage {})
+                if history().current_route() != *"/login"
+                    && history().current_route() != *"/signup"
+                    && history().current_route() != *"/password-reset"
                 {
                     nav.replace(Route::LoginPage {});
                     needs_update();
-                    None
+                    rsx! {}
                 } else {
                     rsx! { Outlet::<Route> {} }
                 }
@@ -181,16 +180,13 @@ pub fn Authenticated(
     }
 }
 
-async fn authenticate_authorization_code_flow(
-    mut ui_model: Signal<UniversalInboxUIModel>,
-    api_base_url: &Url,
-) -> Result<()> {
+async fn authenticate_authorization_code_flow(api_base_url: &Url) -> Result<()> {
     debug!("auth: Authenticating with Authorization code flow (server flow)");
     debug!("auth: Not authenticated, redirecting to login");
     let auth_url = get_authorization_code_flow_auth_url(api_base_url)
         .await?
         .to_string();
-    ui_model.write().authentication_state = AuthenticationState::RedirectingToAuthProvider;
+    UI_MODEL.write().authentication_state = AuthenticationState::RedirectingToAuthProvider;
     debug!("auth: Redirecting to auth provider: {auth_url}");
     redirect_to(&auth_url)
 }
@@ -200,7 +196,6 @@ async fn authenticate_authorization_code_flow(
 // - if called on the auth callback URL with a `code` query parameter, fetch the access token and create
 // an authenticated session against the API
 async fn authenticate_pkce_flow(
-    mut ui_model: Signal<UniversalInboxUIModel>,
     api_base_url: &Url,
     auth_code: Option<String>,
     issuer_url: &Url,
@@ -218,13 +213,13 @@ async fn authenticate_pkce_flow(
 
     if let Some(auth_code) = auth_code {
         // We are on the auth callback URL with a code from the auth provider, so we can fetch the access token
-        ui_model.write().authentication_state = AuthenticationState::FetchingAccessToken;
+        UI_MODEL.write().authentication_state = AuthenticationState::FetchingAccessToken;
         let (access_token, auth_id_token) =
             fetch_access_token(oidc_provider, AuthorizationCode::new(auth_code)).await?;
-        create_authenticated_session(api_base_url, &access_token, &auth_id_token, ui_model).await
+        create_authenticated_session(api_base_url, &access_token, &auth_id_token).await
     } else {
         debug!("auth: Not authenticated, redirecting to login");
-        ui_model.write().authentication_state = AuthenticationState::RedirectingToAuthProvider;
+        UI_MODEL.write().authentication_state = AuthenticationState::RedirectingToAuthProvider;
         // let auth_url = build_auth_url(client).await?.to_string();
         let auth_url = build_auth_url(oidc_provider).await?.to_string();
         debug!("auth: Redirecting to auth provider: {auth_url}");
@@ -312,13 +307,12 @@ async fn create_authenticated_session(
     api_base_url: &Url,
     access_token: &AccessToken,
     auth_id_token: &AuthIdToken,
-    mut ui_model: Signal<UniversalInboxUIModel>,
 ) -> Result<()> {
     debug!("auth: Creating authenticated session");
-    ui_model.write().authentication_state = AuthenticationState::VerifyingAccessToken;
+    UI_MODEL.write().authentication_state = AuthenticationState::VerifyingAccessToken;
     let is_authenticated =
         is_session_authenticated(api_base_url, access_token, auth_id_token).await?;
-    ui_model.write().authentication_state = if is_authenticated {
+    UI_MODEL.write().authentication_state = if is_authenticated {
         AuthenticationState::Authenticated
     } else {
         AuthenticationState::NotAuthenticated

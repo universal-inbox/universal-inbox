@@ -14,7 +14,9 @@ processes:
         scheme: http
         path: "/ping"
         port: 8000
-      failure_threshold: 10
+      initial_delay_seconds: 60
+      period_seconds: 10
+      failure_threshold: 3
     availability:
       restart: no
     namespace: "universal-inbox"
@@ -32,18 +34,30 @@ processes:
 
   ui-web:
     command: "just run-web"
-    depends_on:
-      ui-api:
-        condition: process_healthy
     readiness_probe:
       http_get:
         host: 127.0.0.1
         scheme: http
         path: "/"
         port: 8080
-      failure_threshold: 10
+      initial_delay_seconds: 60
+      period_seconds: 10
+      failure_threshold: 3
     availability:
       restart: no
+    # dx does not yet output anything in non-interactive mode
+    disabled: true
+    is_tty: true
+    namespace: "universal-inbox"
+
+  build-tailwind:
+    command: "just web/run-tailwind"
+    is_tty: true
+    namespace: "universal-inbox"
+
+  bundle-js:
+    command: "just web/run-bundle-js"
+    is_tty: true
     namespace: "universal-inbox"
 
   sync-notifications:

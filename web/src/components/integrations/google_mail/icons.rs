@@ -7,7 +7,7 @@ pub fn GoogleMail(class: Option<String>) -> Element {
     rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
-            class: "{class.unwrap_or_default()}",
+            class: class.unwrap_or_default(),
             role: "img",
             "viewBox": "0 0 50 50",
             fill: "currentColor",
@@ -24,7 +24,7 @@ pub fn Mail(class: Option<String>) -> Element {
     rsx! {
         svg {
             xmlns: "http://www.w3.org/2000/svg",
-            class: "{class.unwrap_or_default()}",
+            class: class.unwrap_or_default(),
             "viewBox": "0 0 512 512",
             fill: "currentColor",
             stroke: "currentColor",

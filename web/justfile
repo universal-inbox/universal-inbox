@@ -4,11 +4,17 @@ default:
     @just --choose
 
 ## Build recipes
-build:
-    trunk build
+build: bundle-js build-tailwind
+    dx build --verbose
 
-build-release:
-    trunk build --release
+build-release: bundle-js build-tailwind
+    dx build --verbose --release
+
+build-tailwind:
+    npx tailwindcss -i css/universal-inbox.css -o dist/css/universal-inbox.min.css --minify
+
+bundle-js:
+    npx rspack build
 
 ## Dev recipes
 check:
@@ -26,5 +32,10 @@ test-ci:
 
 ## Run recipes
 run:
-    trunk serve
+    dx serve --verbose
 
+run-tailwind:
+    npx tailwindcss -i css/universal-inbox.css -o dist/css/universal-inbox.min.css --minify --watch
+
+run-bundle-js:
+    npx rspack build --watch

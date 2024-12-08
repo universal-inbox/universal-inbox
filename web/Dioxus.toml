@@ -1,0 +1,22 @@
+[application]
+name = "universal-inbox"
+default_platform = "web"
+out_dir = "dist"
+asset_dir = "public"
+
+[web.app]
+title = "Universal Inbox | take control of your notifications, seamlessly manage tasks"
+
+[web.resource]
+image = ["images/favicon.ico"]
+
+[web.resource.dev]
+
+[web.watcher]
+# when watcher trigger, regenerate the `index.html`
+reload_html = true
+# which files or dirs will be watcher monitoring
+watch_path = ["src", "dist", "js"]
+
+[web.wasm_opt]
+level = "z"

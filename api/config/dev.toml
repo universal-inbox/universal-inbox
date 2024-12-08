@@ -1,7 +1,7 @@
 [application]
 environment = "dev"
 listen_address = "127.0.0.1"
-static_dir = "../web/dist"
+static_dir = "../target/dx/universal-inbox-web/debug/web/public"
 min_sync_tasks_interval_in_minutes = 2
 min_sync_notifications_interval_in_minutes = 2
 version = "dev"

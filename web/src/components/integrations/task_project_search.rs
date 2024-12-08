@@ -53,7 +53,7 @@ pub fn TaskProjectSearch(
     rsx! {
         FloatingLabelInputSearchSelect {
             name: "project-search-input".to_string(),
-            class: "{class.unwrap_or_default()}",
+            class: class.unwrap_or_default(),
             label: label,
             required: required.unwrap_or_default(),
             disabled: disabled.unwrap_or_default(),

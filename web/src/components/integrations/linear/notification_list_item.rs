@@ -116,7 +116,7 @@ pub fn LinearProjectNotificationListItem(
         ListItem {
             key: "{notification().id}",
             title: "{notification().title}",
-            subtitle: None,
+            subtitle: rsx! { },
             icon: rsx! { Linear { class: "h-5 w-5" }, TaskHint { task: notification().task } },
             subicon: rsx! {
                 LinearProjectIcon {

@@ -106,7 +106,7 @@ fn TaskListItem(
                 on_select,
             }
         },
-        _ => None,
+        _ => rsx! {},
     }
 }
 

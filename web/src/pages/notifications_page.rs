@@ -11,6 +11,7 @@ use crate::{
     components::{
         notification_preview::NotificationPreview, notifications_list::NotificationsList,
     },
+    images::UI_LOGO_SYMBOL_TRANSPARENT,
     keyboard_manager::{KeyboardHandler, KEYBOARD_MANAGER},
     model::{PreviewPane, UI_MODEL},
     services::notification_service::{NotificationCommand, NOTIFICATIONS_PAGE},
@@ -48,7 +49,7 @@ pub fn NotificationsPage() -> Element {
                     class: "relative w-full h-full flex justify-center items-center",
                     img {
                         class: "h-full opacity-30 dark:opacity-10",
-                        src: "images/ui-logo-symbol-transparent.svg",
+                        src: "{UI_LOGO_SYMBOL_TRANSPARENT}",
                         alt: "No notifications"
                     }
                     div {

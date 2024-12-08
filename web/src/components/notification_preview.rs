@@ -50,15 +50,18 @@ pub fn NotificationPreview(
     });
 
     let mut latest_shown_notification_id = use_signal(|| None::<NotificationId>);
-    // reset selected_preview_pane when showing another notification
-    if latest_shown_notification_id() != Some(notification().id) {
-        ui_model.write().selected_preview_pane = if has_notification_details_preview {
-            PreviewPane::Notification
-        } else {
-            PreviewPane::Task
-        };
-        *latest_shown_notification_id.write() = Some(notification().id);
-    }
+    use_effect(move || {
+        // reset selected_preview_pane when showing another notification
+        let mut latest_shown_notification_id = latest_shown_notification_id.write();
+        if *latest_shown_notification_id != Some(notification().id) {
+            ui_model.write().selected_preview_pane = if has_notification_details_preview {
+                PreviewPane::Notification
+            } else {
+                PreviewPane::Task
+            };
+            *latest_shown_notification_id = Some(notification().id);
+        }
+    });
 
     let (notification_tab_style, task_tab_style) =
         if ui_model.read().selected_preview_pane == PreviewPane::Notification {
@@ -232,6 +235,6 @@ fn NotificationDetailsPreview(
                 google_mail_thread: *google_mail_thread
             }
         },
-        _ => None,
+        _ => rsx! {},
     }
 }

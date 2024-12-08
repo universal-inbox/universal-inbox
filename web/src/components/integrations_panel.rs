@@ -529,6 +529,6 @@ pub fn IntegrationConnectionProviderConfiguration(
                 config: config.clone(),
             }
         },
-        _ => None,
+        _ => rsx! {},
     }
 }

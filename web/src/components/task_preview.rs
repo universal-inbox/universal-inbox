@@ -75,6 +75,6 @@ pub fn TaskDetailsPreview(
                 expand_details
             }
         },
-        _ => None,
+        _ => rsx! {},
     }
 }

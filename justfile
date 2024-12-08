@@ -23,7 +23,12 @@ install-rust-toolchain:
   rustup component list --installed | grep -q '^llvm-tools-' || rustup component add llvm-tools-preview
 
 install-rust-tools:
-  cargo binstall -y cargo-llvm-cov --version 0.6.8
+  #!/usr/bin/env bash
+  if [ -z "$DOCKER_BUILD" ]; then
+    cargo binstall -y cargo-llvm-cov --version 0.6.15
+  fi
+  cargo binstall -y wasm-bindgen-cli --version 0.2.99
+  cargo binstall -y dioxus-cli --version 0.6.1
 
 ## Build recipes
 clean:

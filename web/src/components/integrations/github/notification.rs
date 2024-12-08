@@ -100,7 +100,7 @@ pub fn GithubReviewStatus(github_pull_request: ReadOnlySignal<GithubPullRequest>
                 rsx! { div { class: "badge p-1 whitespace-nowrap bg-info text-xs text-white", "Review required" } }
             }
         })
-        .unwrap_or(None)
+        .unwrap_or_else(|| rsx! {})
 }
 
 #[component]

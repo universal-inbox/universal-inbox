@@ -3,6 +3,7 @@
 use chrono::Utc;
 use dioxus::prelude::*;
 use gloo_timers::future::TimeoutFuture;
+use log::debug;
 
 use crate::{
     auth::Authenticated,
@@ -14,7 +15,6 @@ use crate::{
         integration_connection_service::{IntegrationConnectionCommand, INTEGRATION_CONNECTIONS},
         notification_service::NotificationCommand,
         task_service::TaskCommand,
-        user_service::UserCommand,
     },
 };
 
@@ -26,7 +26,6 @@ pub fn AuthenticatedLayout() -> Element {
         return rsx! {
             Authenticated {
                 authentication_config: app_config.authentication_config.clone(),
-                ui_model: UI_MODEL.signal(),
                 api_base_url: api_base_url(),
 
                 AuthenticatedApp {}
@@ -46,15 +45,13 @@ pub fn AuthenticatedLayout() -> Element {
 
 #[component]
 pub fn AuthenticatedApp() -> Element {
-    let user_service = use_coroutine_handle::<UserCommand>();
+    debug!("AuthenticatedApp: rendering");
     let integration_connection_service = use_coroutine_handle::<IntegrationConnectionCommand>();
     let notification_service = use_coroutine_handle::<NotificationCommand>();
     let task_service = use_coroutine_handle::<TaskCommand>();
-    let history = WebHistory::<Route>::default();
     let nav = use_navigator();
 
     use_future(move || async move {
-        user_service.send(UserCommand::GetUser);
         if UI_MODEL.read().authentication_state == AuthenticationState::Authenticated {
             // Load integration connections status
             integration_connection_service.send(IntegrationConnectionCommand::Refresh);
@@ -79,11 +76,10 @@ pub fn AuthenticatedApp() -> Element {
     });
 
     if let Some(integration_connections) = INTEGRATION_CONNECTIONS.read().as_ref() {
-        if integration_connections.is_empty() && history.current_route() != (Route::SettingsPage {})
-        {
+        if integration_connections.is_empty() && history().current_route() != *"/settings" {
             nav.push(Route::SettingsPage {});
             needs_update();
-            None
+            rsx! {}
         } else {
             rsx! { Outlet::<Route> {} }
         }
