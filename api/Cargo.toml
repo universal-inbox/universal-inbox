@@ -22,14 +22,14 @@ actix-jwt-authc = { git = "https://github.com/dax/actix-jwt-authc", rev = "d0467
 actix-http = "3.0.0"
 actix-session = { version = "0.10.0", features = ["cookie-session"] }
 actix-web = "4.0.0"
-actix-web-lab = { version = "0.22.0", features = ["spa"] }
+actix-web-lab = { version = "0.23.0", features = ["spa"] }
 anyhow = { workspace = true }
 apalis = { git = "https://github.com/dax/apalis", rev = "84ffdb8563068ae2055e5ad6d7ce7074c4c0a500", default-features = false, features = ["redis", "tokio-comp", "tracing"] }
 apalis-redis = { git = "https://github.com/dax/apalis", rev = "84ffdb8563068ae2055e5ad6d7ce7074c4c0a500" }
 argon2 = { version = "0.5", features = ["std"] }
 async-trait = "0.1.0"
 base64 = "0.22"
-cached = { version = "0.53.0", features = [
+cached = { version = "0.54.0", features = [
   "async_tokio_rt_multi_thread",
   "redis_tokio",
   "redis_connection_manager",
@@ -70,16 +70,15 @@ log = { workspace = true }
 mailgen = "0.3.0"
 once_cell = "1.20.0"
 openidconnect = { workspace = true }
-opentelemetry = { version = "0.26.0", features = ["trace", "logs"] }
-opentelemetry_sdk = { version = "0.26.0", features = [
+opentelemetry = { version = "0.27.0", features = ["trace", "logs"] }
+opentelemetry_sdk = { version = "0.27.0", features = [
   "trace",
   "logs",
-  "logs_level_enabled",
   "rt-tokio",
 ] }
-opentelemetry-appender-tracing = "0.26.0"
-opentelemetry-http = { version = "0.26.0", features = ["reqwest"] }
-opentelemetry-otlp = { version = "0.26.0", features = [
+opentelemetry-appender-tracing = "0.27.0"
+opentelemetry-http = { version = "0.27.0", features = ["reqwest"] }
+opentelemetry-otlp = { version = "0.27.0", features = [
   "http-proto",
   "grpc-tonic",
   "trace",
@@ -98,7 +97,7 @@ redis = { version = "0.27.0", features = [
 ] }
 regex = { workspace = true }
 reqwest = { workspace = true, features = ["rustls-tls", "gzip"] }
-reqwest-middleware = { version = "0.3.0", features = ["json"] }
+reqwest-middleware = { version = "0.4.0", features = ["json"] }
 reqwest-tracing = { version = "0.5.0", features = ["opentelemetry_0_24"] }
 rustls = { version = "0.23.0" } # Used to initialize lettre
 secrecy = { workspace = true }
@@ -125,7 +124,7 @@ tracing-actix-web = { git = "https://github.com/omid/tracing-actix-web", rev = "
   "opentelemetry_0_24",
 ] }
 tracing-log = "0.2.0"
-tracing-opentelemetry = { version = "0.27.0", features = ["tracing-log"] }
+tracing-opentelemetry = { version = "0.28.0", features = ["tracing-log"] }
 tracing-subscriber = { version = "0.3.0", features = [
   "std",
   "env-filter",

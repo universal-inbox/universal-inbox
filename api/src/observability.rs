@@ -7,12 +7,16 @@ use actix_web::{
     dev::{ServiceRequest, ServiceResponse},
     HttpMessage,
 };
-use opentelemetry::{trace::TracerProvider, KeyValue};
+use opentelemetry::trace::TracerProvider as _;
+use opentelemetry::KeyValue;
 use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
-use opentelemetry_otlp::{LogExporterBuilder, SpanExporterBuilder, WithExportConfig};
+use opentelemetry_otlp::{
+    LogExporter, SpanExporter, WithExportConfig, WithHttpConfig, WithTonicConfig,
+};
 use opentelemetry_sdk::{
+    logs::LoggerProvider,
     runtime,
-    trace::{self, RandomIdGenerator, Sampler},
+    trace::{RandomIdGenerator, Sampler, TracerProvider},
     Resource,
 };
 use tokio::task::JoinHandle;
@@ -49,40 +53,35 @@ pub fn get_subscriber_with_telemetry(
     if let Some(ref version) = version {
         resource.push(KeyValue::new("service.version", version.to_string()));
     }
-    let tracer_provider = opentelemetry_otlp::new_pipeline()
-        .tracing()
-        .with_trace_config(
-            trace::Config::default()
-                .with_sampler(Sampler::AlwaysOn)
-                .with_id_generator(RandomIdGenerator::default())
-                .with_max_events_per_span(256)
-                .with_max_attributes_per_span(64)
-                .with_resource(Resource::new(resource.clone())),
+    let tracer_provider = TracerProvider::builder()
+        .with_sampler(Sampler::AlwaysOn)
+        .with_id_generator(RandomIdGenerator::default())
+        .with_max_events_per_span(256)
+        .with_max_attributes_per_span(64)
+        .with_resource(Resource::new(resource.clone()))
+        .with_batch_exporter(
+            build_span_exporter(
+                config.otlp_exporter_protocol,
+                config.otlp_exporter_endpoint.to_string(),
+                config.otlp_exporter_headers.clone(),
+            ),
+            runtime::Tokio,
         )
-        .with_exporter(build_exporter_builder::<SpanExporterBuilder>(
-            config.otlp_exporter_protocol,
-            config.otlp_exporter_endpoint.to_string(),
-            config.otlp_exporter_headers.clone(),
-        ))
-        .install_batch(runtime::Tokio)
-        .unwrap();
-    let mut tracer_builder = tracer_provider.tracer_builder("universal-inbox");
-    if let Some(version) = version {
-        tracer_builder = tracer_builder.with_version(version);
-    }
-    let tracer = tracer_builder.build();
+        .build();
+    let tracer = tracer_provider.tracer("universal-inbox");
     let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
 
-    let logger = opentelemetry_otlp::new_pipeline()
-        .logging()
+    let logger = LoggerProvider::builder()
         .with_resource(Resource::new(resource))
-        .with_exporter(build_exporter_builder::<LogExporterBuilder>(
-            config.otlp_exporter_protocol,
-            config.otlp_exporter_endpoint.to_string(),
-            config.otlp_exporter_headers.clone(),
-        ))
-        .install_batch(runtime::Tokio)
-        .unwrap();
+        .with_batch_exporter(
+            build_log_exporter(
+                config.otlp_exporter_protocol,
+                config.otlp_exporter_endpoint.to_string(),
+                config.otlp_exporter_headers.clone(),
+            ),
+            runtime::Tokio,
+        )
+        .build();
 
     // The bridge currently has a bug as it does not add the span_id and trace_id to the log record
     // See https://github.com/open-telemetry/opentelemetry-rust/pull/1394
@@ -159,15 +158,13 @@ where
     tokio::spawn(f.instrument(current_span))
 }
 
-fn build_exporter_builder<B>(
+fn build_span_exporter(
     otlp_exporter_protocol: OtlpExporterProtocol,
     otlp_exporter_endpoint: String,
     otlp_exporter_headers: HashMap<String, String>,
-) -> B
-where
-    B: std::convert::From<opentelemetry_otlp::HttpExporterBuilder>
-        + std::convert::From<opentelemetry_otlp::TonicExporterBuilder>,
-{
+) -> SpanExporter {
+    let builder = SpanExporter::builder();
+
     if otlp_exporter_protocol == OtlpExporterProtocol::Http {
         let mut headers = HashMap::with_capacity(2);
         for (header_name, header_value) in &otlp_exporter_headers {
@@ -180,13 +177,14 @@ where
             }
         }
 
-        opentelemetry_otlp::new_exporter()
-            .http()
+        builder
+            .with_http()
             .with_http_client(reqwest::Client::new())
             .with_endpoint(otlp_exporter_endpoint)
             .with_timeout(Duration::from_secs(3))
             .with_headers(headers.clone())
-            .into()
+            .build()
+            .unwrap()
     } else {
         let mut headers = MetadataMap::with_capacity(otlp_exporter_headers.len());
         for (header_name, header_value) in &otlp_exporter_headers {
@@ -199,12 +197,65 @@ where
             }
         }
 
-        opentelemetry_otlp::new_exporter()
-            .tonic()
+        builder
+            .with_tonic()
             .with_endpoint(otlp_exporter_endpoint)
             .with_tls_config(ClientTlsConfig::new().with_native_roots())
             .with_timeout(Duration::from_secs(3))
             .with_metadata(headers.clone())
-            .into()
+            .build()
+            .unwrap()
+    }
+}
+
+fn build_log_exporter(
+    otlp_exporter_protocol: OtlpExporterProtocol,
+    otlp_exporter_endpoint: String,
+    otlp_exporter_headers: HashMap<String, String>,
+) -> LogExporter
+where
+{
+    let builder = LogExporter::builder();
+
+    if otlp_exporter_protocol == OtlpExporterProtocol::Http {
+        let mut headers = HashMap::with_capacity(2);
+        for (header_name, header_value) in &otlp_exporter_headers {
+            if !header_value.is_empty() {
+                headers.insert(
+                    // header names usually use dashes instead of underscores but env vars don't allow dashes
+                    header_name.replace('_', "-"),
+                    header_value.parse().unwrap(),
+                );
+            }
+        }
+
+        builder
+            .with_http()
+            .with_http_client(reqwest::Client::new())
+            .with_endpoint(otlp_exporter_endpoint)
+            .with_timeout(Duration::from_secs(3))
+            .with_headers(headers.clone())
+            .build()
+            .unwrap()
+    } else {
+        let mut headers = MetadataMap::with_capacity(otlp_exporter_headers.len());
+        for (header_name, header_value) in &otlp_exporter_headers {
+            if !header_value.is_empty() {
+                headers.insert(
+                    // header names usually use dashes instead of underscores but env vars don't allow dashes
+                    AsciiMetadataKey::from_str(header_name.replace('_', "-").as_str()).unwrap(),
+                    header_value.parse().unwrap(),
+                );
+            }
+        }
+
+        builder
+            .with_tonic()
+            .with_endpoint(otlp_exporter_endpoint)
+            .with_tls_config(ClientTlsConfig::new().with_native_roots())
+            .with_timeout(Duration::from_secs(3))
+            .with_metadata(headers.clone())
+            .build()
+            .unwrap()
     }
 }
