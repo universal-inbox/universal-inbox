@@ -406,7 +406,7 @@ impl SlackMessageDetails {
 
         truncate_with_ellipse(
             &self.message.render_content(self.references.clone(), false),
-            50,
+            120,
             "...",
             true,
         )
@@ -604,7 +604,7 @@ impl SlackThread {
 
         truncate_with_ellipse(
             &message.render_content(self.references.clone(), false),
-            50,
+            120,
             "...",
             true,
         )
