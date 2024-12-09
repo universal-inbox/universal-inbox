@@ -32,7 +32,6 @@ secrecy = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true, features = ["preserve_order"] }
 serde_repr = "0.1.0"
-serde_urlencoded = { workspace = true }
 serde_with = { workspace = true }
 slack-blocks-render = { workspace = true }
 slack-morphism = { workspace = true }
