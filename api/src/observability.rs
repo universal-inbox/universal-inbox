@@ -25,6 +25,8 @@ use tonic::transport::ClientTlsConfig;
 use tracing::{subscriber::set_global_default, Instrument, Span, Subscriber};
 use tracing_actix_web::{DefaultRootSpanBuilder, RootSpanBuilder};
 use tracing_log::LogTracer;
+use tracing_opentelemetry::OpenTelemetryLayer;
+use tracing_subscriber::layer::Layered;
 use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Registry};
 
 use universal_inbox::user::UserId;
@@ -34,13 +36,24 @@ use crate::{
     utils::jwt::Claims,
 };
 
+type SubscriberWithTelemetry = Layered<
+    OpenTelemetryTracingBridge<
+        opentelemetry_sdk::logs::LoggerProvider,
+        opentelemetry_sdk::logs::Logger,
+    >,
+    Layered<
+        OpenTelemetryLayer<Layered<EnvFilter, Registry>, opentelemetry_sdk::trace::Tracer>,
+        Layered<EnvFilter, Registry>,
+    >,
+>;
+
 pub fn get_subscriber_with_telemetry(
     environment: &str,
     env_filter_str: &str,
     config: &TracingSettings,
     service_name: &str,
     version: Option<String>,
-) -> impl Subscriber + Send + Sync {
+) -> SubscriberWithTelemetry {
     let env_filter =
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(env_filter_str));
 
@@ -86,13 +99,23 @@ pub fn get_subscriber_with_telemetry(
     // The bridge currently has a bug as it does not add the span_id and trace_id to the log record
     // See https://github.com/open-telemetry/opentelemetry-rust/pull/1394
     let logging = OpenTelemetryTracingBridge::new(&logger);
-    let fmt = tracing_subscriber::fmt::layer().pretty();
 
     Registry::default()
         .with(env_filter)
-        .with(fmt)
         .with(telemetry)
         .with(logging)
+}
+
+pub fn get_subscriber_with_telemetry_and_logging(
+    environment: &str,
+    env_filter_str: &str,
+    config: &TracingSettings,
+    service_name: &str,
+    version: Option<String>,
+) -> impl Subscriber + Send + Sync {
+    let fmt = tracing_subscriber::fmt::layer().pretty();
+    get_subscriber_with_telemetry(environment, env_filter_str, config, service_name, version)
+        .with(fmt)
 }
 
 pub fn get_subscriber(env_filter_str: &str) -> impl Subscriber + Send + Sync {
