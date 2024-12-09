@@ -115,7 +115,7 @@ fn SlackStarConfiguration(
             *default_priority.write() = Some(config.default_priority);
             default_due_at.write().clone_from(&config.default_due_at);
             *default_project.write() = config.target_project.map(|p| p.name.clone());
-            *task_config_enabled.write() = true;
+            *task_config_enabled.write() = ui_model.read().is_task_actions_enabled;
         } else {
             *task_config_enabled.write() = false;
         }
@@ -192,9 +192,15 @@ fn SlackStarConfiguration(
                         class: "label-text",
                         "Synchronize Slack \"saved for later\" items as tasks"
                     }
+                    if !ui_model.read().is_task_actions_enabled {
+                        span {
+                            class: "label-text text-error",
+                            "A task management service must be connected to enable this feature"
+                        }
+                    }
                     input {
                         r#type: "radio",
-                        disabled: !config().star_config.sync_enabled,
+                        disabled: !config().star_config.sync_enabled || !ui_model.read().is_task_actions_enabled,
                         name: "star-sync-type",
                         class: "radio radio-ghost",
                         oninput: move |_event| {
@@ -231,6 +237,7 @@ fn SlackStarConfiguration(
                             selected_project: selected_project,
                             ui_model: ui_model,
                             filter_out_inbox: false,
+                            disabled: !ui_model.read().is_task_actions_enabled,
                             on_select: move |project: ProjectSummary| {
                                 on_config_change.call(IntegrationConnectionConfig::Slack(SlackConfig {
                                     star_config: SlackStarConfig {
@@ -263,6 +270,7 @@ fn SlackStarConfiguration(
                             label: None,
                             class: "w-full max-w-xs bg-base-100 rounded",
                             name: "task-due-at-input".to_string(),
+                            disabled: !ui_model.read().is_task_actions_enabled,
                             on_select: move |default_due_at| {
                                 on_config_change.call(IntegrationConnectionConfig::Slack(SlackConfig {
                                     star_config: SlackStarConfig {
@@ -303,6 +311,7 @@ fn SlackStarConfiguration(
                             label: None,
                             class: "w-full max-w-xs bg-base-100 rounded",
                             name: "task-priority-input".to_string(),
+                            disabled: !ui_model.read().is_task_actions_enabled,
                             required: true,
                             on_select: move |priority: Option<TaskPriority>| {
                                 on_config_change.call(IntegrationConnectionConfig::Slack(SlackConfig {
@@ -354,7 +363,7 @@ fn SlackReactionConfiguration(
             *default_priority.write() = Some(config.default_priority);
             default_due_at.write().clone_from(&config.default_due_at);
             *default_project.write() = config.target_project.map(|p| p.name.clone());
-            *task_config_enabled.write() = true;
+            *task_config_enabled.write() = ui_model.read().is_task_actions_enabled;
         } else {
             *task_config_enabled.write() = false;
         }
@@ -464,9 +473,15 @@ fn SlackReactionConfiguration(
                         class: "label-text",
                         "Synchronize Slack reacted items as tasks"
                     }
+                    if !ui_model.read().is_task_actions_enabled {
+                        span {
+                            class: "label-text text-error",
+                            "A task management service must be connected to enable this feature"
+                        }
+                    }
                     input {
                         r#type: "radio",
-                        disabled: !config().reaction_config.sync_enabled,
+                        disabled: !config().reaction_config.sync_enabled || !ui_model.read().is_task_actions_enabled,
                         name: "reaction-sync-type",
                         class: "radio radio-ghost",
                         oninput: move |_event| {
@@ -501,6 +516,7 @@ fn SlackReactionConfiguration(
                             class: "w-full max-w-xs bg-base-100 rounded",
                             default_project_name: default_project().unwrap_or_default(),
                             selected_project: selected_project,
+                            disabled: !ui_model.read().is_task_actions_enabled,
                             ui_model: ui_model,
                             filter_out_inbox: false,
                             on_select: move |project: ProjectSummary| {
@@ -535,6 +551,7 @@ fn SlackReactionConfiguration(
                             label: None,
                             class: "w-full max-w-xs bg-base-100 rounded",
                             name: "task-due-at-input".to_string(),
+                            disabled: !ui_model.read().is_task_actions_enabled,
                             on_select: move |default_due_at| {
                                 on_config_change.call(IntegrationConnectionConfig::Slack(SlackConfig {
                                     reaction_config: SlackReactionConfig {
@@ -575,6 +592,7 @@ fn SlackReactionConfiguration(
                             label: None,
                             class: "w-full max-w-xs bg-base-100 rounded",
                             name: "task-priority-input".to_string(),
+                            disabled: !ui_model.read().is_task_actions_enabled,
                             required: true,
                             on_select: move |priority: Option<TaskPriority>| {
                                 on_config_change.call(IntegrationConnectionConfig::Slack(SlackConfig {

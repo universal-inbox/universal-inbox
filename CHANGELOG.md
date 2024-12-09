@@ -11,6 +11,7 @@
 - Fix Slack message retrieved in a thread
 - Fix Slack user group ID resolution
 - Increase Slack task title size limit
+- Disable Todoist task search when not connected
 
 ## 2024-10-21
 
