@@ -205,10 +205,13 @@ jobs:
           driver: cloud
           endpoint: "dax42/universal-inbox"
           install: true
+          platforms: linux/amd64,linux/arm64
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
           provenance: false
           context: .
-          tags: "dax42/universal-inbox:${{ github.sha }}"
+          tags: "dax42/universal-inbox:${{ github.sha }},dax42/universal-inbox:latest"
+          build-args: "VERSION=${{ github.sha }}"
+          labels: "version=${{ github.sha }}\nservice=universal-inbox"
           outputs: "type=registry,push=true"
