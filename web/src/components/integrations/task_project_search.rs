@@ -20,6 +20,7 @@ pub fn TaskProjectSearch(
     class: Option<String>,
     label: Option<String>,
     required: Option<bool>,
+    disabled: Option<bool>,
     default_project_name: ReadOnlySignal<Option<String>>,
     selected_project: Signal<Option<ProjectSummary>>,
     ui_model: Signal<UniversalInboxUIModel>,
@@ -43,8 +44,10 @@ pub fn TaskProjectSearch(
     });
 
     let _ = use_resource(move || async move {
-        let projects = search_projects(&search_expression(), ui_model, filter_out_inbox).await;
-        *search_results.write() = projects;
+        if ui_model.read().is_task_actions_enabled {
+            let projects = search_projects(&search_expression(), ui_model, filter_out_inbox).await;
+            *search_results.write() = projects;
+        }
     });
 
     rsx! {
@@ -53,6 +56,7 @@ pub fn TaskProjectSearch(
             class: "{class.unwrap_or_default()}",
             label: label,
             required: required.unwrap_or_default(),
+            disabled: disabled.unwrap_or_default(),
             value: selected_project,
             search_expression: search_expression,
             search_results: search_results,

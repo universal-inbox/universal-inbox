@@ -148,6 +148,8 @@ pub struct InputSelectProps<T: Clone + PartialEq + 'static> {
     autofocus: Option<bool>,
     #[props(default)]
     force_validation: Option<bool>,
+    #[props(default)]
+    disabled: Option<bool>,
     on_select: Option<EventHandler<Option<T>>>,
     children: Element,
     #[props(default)]
@@ -200,6 +202,7 @@ where
                 },
                 onfocusout: move |_| *validate.write() = true,
                 autofocus: props.autofocus.unwrap_or_default(),
+                disabled: props.disabled.unwrap_or_default(),
 
                 if !required {
                     option { "" }
@@ -242,6 +245,8 @@ where
     required: Option<bool>,
     #[props(default)]
     autofocus: Option<bool>,
+    #[props(default)]
+    disabled: Option<bool>,
     on_select: EventHandler<T>,
     #[props(default)]
     class: Option<String>,
@@ -366,6 +371,7 @@ where
                 button {
                     id: "selected-result",
                     name: "selected-result",
+                    disabled: props.disabled.unwrap_or_default(),
                     "type": "button",
                     class: "{border_style} {button_style} grow truncate block bg-transparent text-left border-0 border-b-2 focus:outline-none focus:ring-0 peer join-item px-3",
                     onclick: move |_| {
@@ -440,6 +446,7 @@ where
                             name: "{props.name}",
                             id: "{props.name}",
                             class: "input bg-transparent w-full pl-12 focus:ring-0 focus:outline-none h-10",
+                            disabled: props.disabled.unwrap_or_default(),
                             placeholder: " ",
                             value: "{props.search_expression}",
                             autocomplete: "off",

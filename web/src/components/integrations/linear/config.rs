@@ -35,7 +35,11 @@ pub fn LinearProviderConfiguration(
         default_due_at
             .write()
             .clone_from(&config().sync_task_config.default_due_at);
-        *task_config_enabled.write() = config().sync_task_config.enabled;
+        *task_config_enabled.write() = if !ui_model.read().is_task_actions_enabled {
+            false
+        } else {
+            config().sync_task_config.enabled
+        };
     });
     let collapse_style = use_memo(move || {
         if task_config_enabled() {
@@ -82,9 +86,16 @@ pub fn LinearProviderConfiguration(
                             class: "label-text",
                             "Synchronize Linear assigned issues as tasks"
                         }
+                        if !ui_model.read().is_task_actions_enabled {
+                            span {
+                                class: "label-text text-error",
+                                "A task management service must be connected to enable this feature"
+                            }
+                        }
                         input {
                             r#type: "checkbox",
                             class: "toggle toggle-ghost",
+                            disabled: !ui_model.read().is_task_actions_enabled,
                             oninput: move |event| {
                                 on_config_change.call(IntegrationConnectionConfig::Linear(LinearConfig {
                                     sync_task_config: LinearSyncTaskConfig {
@@ -116,6 +127,7 @@ pub fn LinearProviderConfiguration(
                                 selected_project: selected_project,
                                 ui_model: ui_model,
                                 filter_out_inbox: false,
+                                disabled: !ui_model.read().is_task_actions_enabled,
                                 on_select: move |project: ProjectSummary| {
                                     on_config_change.call(IntegrationConnectionConfig::Linear(LinearConfig {
                                         sync_task_config: LinearSyncTaskConfig {
@@ -142,6 +154,7 @@ pub fn LinearProviderConfiguration(
                                 label: None,
                                 class: "w-full max-w-xs bg-base-100 rounded",
                                 name: "task-due-at-input".to_string(),
+                                disabled: !ui_model.read().is_task_actions_enabled,
                                 on_select: move |default_due_at| {
                                     on_config_change.call(IntegrationConnectionConfig::Linear(LinearConfig {
                                         sync_task_config: LinearSyncTaskConfig {
