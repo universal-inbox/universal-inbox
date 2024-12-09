@@ -7805,7 +7805,6 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_repr",
- "serde_urlencoded",
  "serde_with",
  "slack-blocks-render",
  "slack-morphism",
