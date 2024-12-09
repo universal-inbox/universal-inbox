@@ -75,16 +75,6 @@ impl GithubNotification {
                 result.set_path(&format!("{}/actions", self.repository.html_url.path()));
                 result
             }
-            "Discussion" => {
-                let mut result = self.repository.html_url.clone();
-                result.set_path(&format!("{}/discussions", self.repository.html_url.path()));
-                result.set_query(
-                    serde_urlencoded::to_string([("discussions_q", self.subject.title.clone())])
-                        .ok()
-                        .as_deref(),
-                );
-                result
-            }
             _ => GithubNotification::get_html_url_from_api_url(&self.subject.url)
                 .unwrap_or_else(|| self.repository.html_url.clone()),
         }
