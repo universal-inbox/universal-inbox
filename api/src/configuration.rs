@@ -55,11 +55,17 @@ pub struct ObservabilitySettings {
     pub logging: LoggingSettings,
 }
 
+fn yes() -> bool {
+    true
+}
+
 #[derive(Deserialize, Clone, Debug)]
 pub struct TracingSettings {
     pub otlp_exporter_protocol: OtlpExporterProtocol,
     pub otlp_exporter_endpoint: Url,
     pub otlp_exporter_headers: HashMap<String, String>,
+    #[serde(default = "yes")]
+    pub is_stdout_logging_enabled: bool,
 }
 
 #[derive(Deserialize, Clone, Debug, PartialEq, Copy)]

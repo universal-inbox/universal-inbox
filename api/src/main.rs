@@ -26,7 +26,10 @@ use universal_inbox_api::{
         oauth2::NangoService, slack::SlackService, todoist::TodoistService,
     },
     mailer::SmtpMailer,
-    observability::{get_subscriber, get_subscriber_with_telemetry, init_subscriber},
+    observability::{
+        get_subscriber, get_subscriber_with_telemetry, get_subscriber_with_telemetry_and_logging,
+        init_subscriber,
+    },
     run_server, run_worker,
     utils::{cache::Cache, jwt::JWTBase64EncodedSigningKeys},
 };
@@ -164,14 +167,29 @@ async fn main() -> std::io::Result<()> {
             Commands::StartWorkers { .. } => "universal-inbox-workers",
             _ => "universal-inbox-api",
         };
-        let subscriber = get_subscriber_with_telemetry(
-            &settings.application.environment,
-            log_env_filter,
-            tracing_settings,
-            service_name,
-            settings.application.version.clone(),
-        );
-        init_subscriber(subscriber, dep_log_level_filter);
+        if tracing_settings.is_stdout_logging_enabled {
+            init_subscriber(
+                get_subscriber_with_telemetry_and_logging(
+                    &settings.application.environment,
+                    log_env_filter,
+                    tracing_settings,
+                    service_name,
+                    settings.application.version.clone(),
+                ),
+                dep_log_level_filter,
+            );
+        } else {
+            init_subscriber(
+                get_subscriber_with_telemetry(
+                    &settings.application.environment,
+                    log_env_filter,
+                    tracing_settings,
+                    service_name,
+                    settings.application.version.clone(),
+                ),
+                dep_log_level_filter,
+            );
+        }
     } else {
         let subscriber = get_subscriber(log_env_filter);
         init_subscriber(subscriber, dep_log_level_filter);

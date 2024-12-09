@@ -76,6 +76,7 @@ dependencies_log_level = "error"
 # [application.observability.tracing]
 # otlp_exporter_protocol = "Grpc" # or Http
 # otlp_exporter_endpoint = "https://otlp.host"
+# is_stdout_logging_enabled = true
 
 # Depending on the OTLP provider, the header may be different or may not be
 # required
