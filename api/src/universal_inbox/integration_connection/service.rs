@@ -1,3 +1,4 @@
+use core::fmt;
 use std::{collections::HashMap, sync::Arc};
 
 use anyhow::{anyhow, Context};
@@ -58,6 +59,15 @@ pub enum IntegrationConnectionSyncType {
     Tasks,
 }
 
+impl fmt::Display for IntegrationConnectionSyncType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            IntegrationConnectionSyncType::Notifications => write!(f, "Notifications"),
+            IntegrationConnectionSyncType::Tasks => write!(f, "Tasks"),
+        }
+    }
+}
+
 impl IntegrationConnectionService {
     pub fn new(
         repository: Arc<Repository>,
@@ -81,7 +91,6 @@ impl IntegrationConnectionService {
         self.repository.begin().await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
     pub async fn get_integration_connection<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -92,7 +101,6 @@ impl IntegrationConnectionService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
     pub async fn fetch_all_integration_connections<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -105,7 +113,12 @@ impl IntegrationConnectionService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor, job_storage))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = for_user_id.to_string()),
+        err
+    )]
     pub async fn trigger_sync_for_integration_connections<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -179,7 +192,15 @@ impl IntegrationConnectionService {
         Ok(())
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor, job_storage))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            notification_sync_source_kind = notification_sync_source_kind.map(|kind| kind.to_string()),
+            user.id = for_user_id.map(|id| id.to_string())
+        ),
+        err
+    )]
     pub async fn trigger_sync_notifications<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -215,7 +236,15 @@ impl IntegrationConnectionService {
         Ok(())
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor, job_storage))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            task_sync_source_kind = task_sync_source_kind.map(|kind| kind.to_string()),
+            user.id = for_user_id.map(|id| id.to_string())
+        ),
+        err
+    )]
     pub async fn trigger_sync_tasks<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -250,7 +279,16 @@ impl IntegrationConnectionService {
 
         Ok(())
     }
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            user.id = for_user_id.to_string(),
+            integration_provider_kind = integration_provider_kind.to_string()
+        ),
+        err
+    )]
     pub async fn create_integration_connection<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -267,7 +305,15 @@ impl IntegrationConnectionService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            integration_connection_id = integration_connection_id.to_string(),
+            user.id = for_user_id.to_string()
+        ),
+        err
+    )]
     pub async fn update_integration_connection_config<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -312,7 +358,15 @@ impl IntegrationConnectionService {
         Ok(updated_integration_connection_config)
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            integration_connection_id = integration_connection_id.to_string(),
+            user.id = for_user_id.to_string()
+        ),
+        err
+    )]
     pub async fn verify_integration_connection<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -392,7 +446,15 @@ impl IntegrationConnectionService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            integration_connection_id = integration_connection_id.to_string(),
+            user.id = for_user_id.to_string()
+        ),
+        err
+    )]
     pub async fn disconnect_integration_connection<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -439,7 +501,17 @@ impl IntegrationConnectionService {
         })
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            integration_provider_kind = integration_provider_kind.to_string(),
+            min_sync_interval_in_minutes,
+            sync_type = sync_type.to_string(),
+            user.id = for_user_id.to_string()
+        ),
+        err
+    )]
     pub async fn get_integration_connection_to_sync<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -478,7 +550,15 @@ impl IntegrationConnectionService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            integration_provider_kind = integration_provider_kind.to_string(),
+            user.id = for_user_id.to_string()
+        ),
+        err
+    )]
     pub async fn get_validated_integration_connection_per_kind<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -498,7 +578,7 @@ impl IntegrationConnectionService {
 
     /// This function randomly search for a validated Slack integration connection to access
     /// Slack API endpoint not related to a specific user.
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     pub async fn find_slack_access_token<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -517,7 +597,15 @@ impl IntegrationConnectionService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            integration_provider_kind = integration_provider_kind.to_string(),
+            user.id = for_user_id.to_string()
+        ),
+        err
+    )]
     pub async fn find_access_token<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -613,7 +701,15 @@ impl IntegrationConnectionService {
         )))
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            integration_connection_id = integration_connection_id.to_string(),
+            context
+        ),
+        err
+    )]
     pub async fn update_integration_connection_context<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -629,7 +725,15 @@ impl IntegrationConnectionService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            integration_provider_kind = integration_provider_kind.to_string(),
+            provider_user_id,
+        ),
+        err
+    )]
     pub async fn get_integration_connection_per_provider_user_id<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -645,7 +749,15 @@ impl IntegrationConnectionService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            integration_provider_kind = integration_provider_kind.map(|id| id.to_string()),
+            user.id = for_user_id.map(|id| id.to_string())
+        ),
+        err
+    )]
     pub async fn schedule_notifications_sync_status<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -662,7 +774,15 @@ impl IntegrationConnectionService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            integration_provider_kind = integration_provider_kind.to_string(),
+            user.id = for_user_id.to_string()
+        ),
+        err
+    )]
     pub async fn start_notifications_sync_status<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -679,7 +799,15 @@ impl IntegrationConnectionService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            integration_provider_kind = integration_provider_kind.to_string(),
+            user.id = for_user_id.to_string()
+        ),
+        err
+    )]
     pub async fn complete_notifications_sync_status<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -696,7 +824,15 @@ impl IntegrationConnectionService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            integration_provider_kind = integration_provider_kind.to_string(),
+            user.id = for_user_id.to_string()
+        ),
+        err
+    )]
     pub async fn error_notifications_sync_status<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -714,7 +850,15 @@ impl IntegrationConnectionService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            integration_provider_kind = integration_provider_kind.map(|kind| kind.to_string()),
+            user.id = for_user_id.map(|id| id.to_string())
+        ),
+        err
+    )]
     pub async fn schedule_tasks_sync_status<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -731,7 +875,15 @@ impl IntegrationConnectionService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            integration_provider_kind = integration_provider_kind.to_string(),
+            user.id = for_user_id.to_string()
+        ),
+        err
+    )]
     pub async fn start_tasks_sync_status<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -748,7 +900,15 @@ impl IntegrationConnectionService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            integration_provider_kind = integration_provider_kind.to_string(),
+            user.id = for_user_id.to_string()
+        ),
+        err
+    )]
     pub async fn complete_tasks_sync_status<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -765,7 +925,15 @@ impl IntegrationConnectionService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            integration_provider_kind = integration_provider_kind.to_string(),
+            failure_message,
+            user.id = for_user_id.to_string()
+        ),
+    )]
     pub async fn error_tasks_sync_status<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -783,7 +951,12 @@ impl IntegrationConnectionService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(provider_kind = provider_kind.map(|kind| kind.to_string())),
+        err
+    )]
     pub async fn sync_oauth_scopes_for_all_users<'a>(
         &self,
         provider_kind: Option<IntegrationProviderKind>,
@@ -804,7 +977,15 @@ impl IntegrationConnectionService {
         Ok(())
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            provider_kind = provider_kind.map(|kind| kind.to_string()),
+            user.id = user_id.to_string()
+        ),
+        err
+    )]
     pub async fn sync_oauth_scopes_for_user<'a>(
         &self,
         provider_kind: Option<IntegrationProviderKind>,
@@ -844,7 +1025,15 @@ impl IntegrationConnectionService {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            provider_kind = provider_kind.map(|kind| kind.to_string()),
+            user.id = user_id.to_string()
+        ),
+        err
+    )]
     async fn sync_oauth_scopes<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -905,7 +1094,16 @@ impl IntegrationConnectionService {
 
         Ok(())
     }
-    #[tracing::instrument(level = "debug", skip(self), ret)]
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            provider_kind = provider_kind.to_string(),
+            provider_user_id
+        ),
+        err
+    )]
     pub async fn get_integration_connection_config_for_provider_user_id<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,

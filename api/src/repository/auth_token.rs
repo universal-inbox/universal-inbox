@@ -31,7 +31,7 @@ pub trait AuthenticationTokenRepository {
 
 #[async_trait]
 impl AuthenticationTokenRepository for Repository {
-    #[tracing::instrument(level = "debug", skip(self, executor, auth_token))]
+    #[tracing::instrument(level = "debug", skip_all, err)]
     async fn create_auth_token<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -81,7 +81,12 @@ impl AuthenticationTokenRepository for Repository {
         Ok(auth_token)
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = user_id.to_string(), exclude_session_tokens),
+        err
+    )]
     async fn fetch_auth_tokens_for_user<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,

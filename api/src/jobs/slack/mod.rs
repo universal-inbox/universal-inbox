@@ -37,18 +37,6 @@ pub fn fail_if_needed<T>(
     }
 }
 
-#[tracing::instrument(
-    level = "debug",
-    skip(
-        job,
-        notification_service,
-        task_service,
-        integration_connection_service,
-        third_party_item_service,
-        slack_service
-    ),
-    err
-)]
 pub async fn handle_slack_push_event(
     job: SlackPushEventCallbackJob,
     notification_service: Data<Arc<RwLock<NotificationService>>>,

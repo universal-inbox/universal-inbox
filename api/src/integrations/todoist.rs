@@ -295,7 +295,6 @@ impl TodoistService {
             .build())
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn sync_resources(
         &self,
         resource_name: &str,
@@ -326,7 +325,6 @@ impl TodoistService {
             .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn sync_items(
         &self,
         access_token: &AccessToken,
@@ -335,7 +333,6 @@ impl TodoistService {
         self.sync_resources("items", access_token, sync_token).await
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn get_item(
         &self,
         id: &str,
@@ -368,7 +365,6 @@ impl TodoistService {
         Ok(Some(item_info.item))
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn send_sync_commands(
         &self,
         commands: Vec<TodoistSyncCommand>,
@@ -416,7 +412,6 @@ impl TodoistService {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn fetch_all_projects(
         &self,
         user_id: UserId,
@@ -427,7 +422,6 @@ impl TodoistService {
     }
 
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor))]
     async fn fetch_task<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -508,7 +502,12 @@ async fn cached_fetch_all_projects(
 #[async_trait]
 impl ThirdPartyItemSourceService<TodoistItem> for TodoistService {
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = user_id.to_string()),
+        err
+    )]
     async fn fetch_items<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -576,10 +575,11 @@ impl ThirdPartyTaskService<TodoistItem> for TodoistService {
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(
         level = "debug",
-        skip(self, executor, source, source_third_party_item, _task_creation),
+        skip_all,
         fields(
             third_party_item_id = source_third_party_item.id.to_string(),
-            third_party_item_source_id = source_third_party_item.source_id
+            third_party_item_source_id = source_third_party_item.source_id,
+            user.id = user_id.to_string()
         ),
         err
     )]
@@ -619,10 +619,11 @@ impl ThirdPartyTaskService<TodoistItem> for TodoistService {
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(
         level = "debug",
-        skip(self, executor, third_party_item),
+        skip_all,
         fields(
             third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id
+            third_party_item_source_id = third_party_item.source_id,
+            user.id = user_id.to_string()
         ),
         err
     )]
@@ -657,10 +658,11 @@ impl ThirdPartyTaskService<TodoistItem> for TodoistService {
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(
         level = "debug",
-        skip(self, executor, third_party_item),
+        skip_all,
         fields(
             third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id
+            third_party_item_source_id = third_party_item.source_id,
+            user.id = user_id.to_string()
         ),
         err
     )]
@@ -695,10 +697,11 @@ impl ThirdPartyTaskService<TodoistItem> for TodoistService {
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(
         level = "debug",
-        skip(self, executor, third_party_item),
+        skip_all,
         fields(
             third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id
+            third_party_item_source_id = third_party_item.source_id,
+            user.id = user_id.to_string()
         ),
         err
     )]
@@ -731,7 +734,15 @@ impl ThirdPartyTaskService<TodoistItem> for TodoistService {
     }
 
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            task_id = id,
+            user.id = user_id.to_string()
+        ),
+        err
+    )]
     async fn update_task<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -792,7 +803,12 @@ impl ThirdPartyTaskService<TodoistItem> for TodoistService {
 #[async_trait]
 impl ThirdPartyTaskSourceService<TodoistItem> for TodoistService {
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = user_id.to_string()),
+        err
+    )]
     async fn create_task<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -842,7 +858,12 @@ impl ThirdPartyTaskSourceService<TodoistItem> for TodoistService {
     }
 
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(matches, user.id = user_id.to_string()),
+        err
+    )]
     async fn search_projects<'a, 'b>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -879,7 +900,12 @@ impl ThirdPartyTaskSourceService<TodoistItem> for TodoistService {
     }
 
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(project_name, user.id = user_id.to_string()),
+        err
+    )]
     async fn get_or_create_project<'a, 'b>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -949,11 +975,13 @@ impl ThirdPartyTaskSourceService<TodoistItem> for TodoistService {
 impl ThirdPartyNotificationSourceService<TodoistItem> for TodoistService {
     #[tracing::instrument(
         level = "debug",
-        skip(self, source, source_third_party_item),
+        skip_all,
         fields(
             source_id = source_third_party_item.source_id,
-            third_party_item_id = source_third_party_item.id.to_string()
+            third_party_item_id = source_third_party_item.id.to_string(),
+            user.id = user_id.to_string()
         ),
+        err
     )]
     async fn third_party_item_into_notification(
         &self,
@@ -983,13 +1011,14 @@ impl ThirdPartyNotificationSourceService<TodoistItem> for TodoistService {
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(
         level = "debug",
-        skip(self, _executor, notification),
-        fields(notification_id = notification.id.0.to_string())
+        skip_all,
+        fields(notification_id = _notification.id.to_string(), user.id = _user_id.to_string()),,
+        err
     )]
     async fn delete_notification_from_source<'a>(
         &self,
         _executor: &mut Transaction<'a, Postgres>,
-        notification: &Notification,
+        _notification: &Notification,
         _user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
         unimplemented!("Todoist notifications cannot be deleted, only Todoist Task can");
@@ -998,13 +1027,14 @@ impl ThirdPartyNotificationSourceService<TodoistItem> for TodoistService {
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(
         level = "debug",
-        skip(self, _executor, notification),
-        fields(notification_id = notification.id.0.to_string())
+        skip_all,
+        fields(notification_id = _notification.id.to_string(), user.id = _user_id.to_string()),
+        err
     )]
     async fn unsubscribe_notification_from_source<'a>(
         &self,
         _executor: &mut Transaction<'a, Postgres>,
-        notification: &Notification,
+        _notification: &Notification,
         _user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
         unimplemented!("Todoist notifications cannot be unsubscribed, only Todoist Task can");

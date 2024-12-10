@@ -77,7 +77,12 @@ pub trait TaskRepository {
 
 #[async_trait]
 impl TaskRepository for Repository {
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        field(task_id = id.to_string()),
+        err
+    )]
     async fn get_one_task<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -135,7 +140,12 @@ impl TaskRepository for Repository {
         row.map(|task_row| task_row.try_into()).transpose()
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        field(task_id = id.to_string()),
+        err
+    )]
     async fn does_task_exist<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -159,7 +169,7 @@ impl TaskRepository for Repository {
         return Ok(false);
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(level = "debug", skip(self, executor), err)]
     async fn get_tasks<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -221,7 +231,16 @@ impl TaskRepository for Repository {
             .collect::<Result<Vec<Task>, UniversalInboxError>>()
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        field(
+            status = status.to_string(),
+            only_synced_tasks,
+            user.id = user_id.to_string()
+        ),
+        err
+    )]
     async fn fetch_all_tasks<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -333,7 +352,12 @@ impl TaskRepository for Repository {
         })
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        field(matches, user.id = user_id.to_string()),
+        err
+    )]
     async fn search_tasks<'a, 'b>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -389,7 +413,12 @@ impl TaskRepository for Repository {
             .collect::<Result<Vec<TaskSummary>, UniversalInboxError>>()
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor, task), fields(task_id = task.id.to_string()))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(task_id = task.id.to_string()),
+        err
+    )]
     async fn create_task<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -469,7 +498,16 @@ impl TaskRepository for Repository {
         Ok(task)
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            kind = kind.to_string(),
+            status = status.to_string(),
+            user.id = user_id.to_string()
+        ),
+        err
+    )]
     async fn update_stale_tasks_status_from_source_ids<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -572,13 +610,14 @@ impl TaskRepository for Repository {
 
     #[tracing::instrument(
         level = "debug",
-        skip(self, executor, task_request),
+        skip_all,
         fields(
             task_id = task_request.id.to_string(),
             task_kind = task_request.kind.to_string(),
             task_source_item_id = task_request.source_item.id.to_string(),
-            task_user_id = task_request.user_id.to_string()
-        )
+            user.id = task_request.user_id.to_string()
+        ),
+        err
     )]
     async fn create_or_update_task<'a>(
         &self,
@@ -855,7 +894,16 @@ impl TaskRepository for Repository {
         })))
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            task_id = task_id.to_string(),
+            patch,
+            user.id = for_user_id.to_string()
+        ),
+        err
+    )]
     async fn update_task<'a, 'b>(
         &self,
         executor: &mut Transaction<'a, Postgres>,

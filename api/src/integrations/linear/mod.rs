@@ -530,7 +530,12 @@ impl LinearService {
 
 #[async_trait]
 impl ThirdPartyItemSourceService<LinearNotification> for LinearService {
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = user_id.to_string()),
+        err
+    )]
     async fn fetch_items<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -568,11 +573,13 @@ impl ThirdPartyItemSourceService<LinearNotification> for LinearService {
 impl ThirdPartyNotificationSourceService<LinearNotification> for LinearService {
     #[tracing::instrument(
         level = "debug",
-        skip(self, source, source_third_party_item),
+        skip_all,
         fields(
             source_id = source_third_party_item.source_id,
-            third_party_item_id = source_third_party_item.id.to_string()
+            third_party_item_id = source_third_party_item.id.to_string(),
+            user.id = user_id.to_string(),
         ),
+        err
     )]
     async fn third_party_item_into_notification(
         &self,
@@ -631,8 +638,12 @@ impl ThirdPartyNotificationSourceService<LinearNotification> for LinearService {
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(
         level = "debug",
-        skip(self, executor, notification),
-        fields(notification_id = notification.id.0.to_string())
+        skip_all,
+        fields(
+            notification_id = notification.id.to_string(),
+            user.id = user_id.to_string()
+        ),
+        err
     )]
     async fn delete_notification_from_source<'a>(
         &self,
@@ -658,7 +669,12 @@ impl ThirdPartyNotificationSourceService<LinearNotification> for LinearService {
     }
 
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.0.to_string()))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(notification_id = notification.id.to_string(), user.id = user_id.to_string()),
+        err
+    )]
     async fn unsubscribe_notification_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -715,7 +731,12 @@ impl ThirdPartyNotificationSourceService<LinearNotification> for LinearService {
     }
 
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.0.to_string()))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(notification_id = notification.id.to_string(), user.id = user_id.to_string()),
+        err
+    )]
     async fn snooze_notification_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -765,7 +786,12 @@ impl TaskSource for LinearService {
 #[async_trait]
 impl ThirdPartyItemSourceService<LinearIssue> for LinearService {
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = user_id.to_string()),
+        err
+    )]
     async fn fetch_items<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -804,8 +830,8 @@ impl ThirdPartyTaskService<LinearIssue> for LinearService {
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(
         level = "debug",
-        skip(self, _executor, source, source_third_party_item),
-        fields(source_id = source.id.to_string()),
+        skip_all,
+        fields(source_id = source.id.to_string(), user.id = user_id.to_string()),
         err
     )]
     async fn third_party_item_into_task<'a>(
@@ -853,10 +879,11 @@ impl ThirdPartyTaskService<LinearIssue> for LinearService {
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(
         level = "debug",
-        skip(self, executor, third_party_item),
+        skip_all,
         fields(
             third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id
+            third_party_item_source_id = third_party_item.source_id,
+            user.id = user_id.to_string()
         ),
         err
     )]
@@ -899,10 +926,11 @@ impl ThirdPartyTaskService<LinearIssue> for LinearService {
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(
         level = "debug",
-        skip(self, executor, third_party_item),
+        skip_all,
         fields(
             third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id
+            third_party_item_source_id = third_party_item.source_id,
+            user.id = user_id.to_string()
         ),
         err
     )]
@@ -945,10 +973,11 @@ impl ThirdPartyTaskService<LinearIssue> for LinearService {
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(
         level = "debug",
-        skip(self, executor, third_party_item),
+        skip_all,
         fields(
             third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id
+            third_party_item_source_id = third_party_item.source_id,
+            user.id = user_id.to_string()
         ),
         err
     )]
@@ -989,7 +1018,12 @@ impl ThirdPartyTaskService<LinearIssue> for LinearService {
     }
 
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, _executor, _id, _patch, _user_id))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = _user_id.to_string()),
+        err
+    )]
     async fn update_task<'a>(
         &self,
         _executor: &mut Transaction<'a, Postgres>,

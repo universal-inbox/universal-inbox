@@ -83,10 +83,11 @@ impl ThirdPartyItemService {
 
     #[tracing::instrument(
         level = "debug",
-        skip(self, executor, third_party_item),
+        skip_all,
         fields(
             third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id
+            third_party_item_source_id = third_party_item.source_id,
+            user.id = user_id.to_string()
         ),
         err
     )]
@@ -172,7 +173,12 @@ impl ThirdPartyItemService {
         }))
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor, third_party_service), err)]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = user_id.to_string()),
+        err
+    )]
     pub async fn sync_items<'a, T, U>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -259,7 +265,7 @@ impl ThirdPartyItemService {
 
     #[tracing::instrument(
         level = "debug",
-        skip(self, executor, third_party_item),
+        skip_all,
         fields(
             third_party_item_id = third_party_item.id.to_string(),
             third_party_item_source_id = third_party_item.source_id
@@ -278,8 +284,11 @@ impl ThirdPartyItemService {
 
     #[tracing::instrument(
         level = "debug",
-        skip(self, executor, task),
-        fields(task_id = task.id.to_string()),
+        skip_all,
+        fields(
+            task_id = task.id.to_string(),
+            overwrite_existing_sink_item
+        ),
         err
     )]
     pub async fn create_sink_item_from_task<'a, 'b>(
@@ -357,7 +366,6 @@ impl ThirdPartyItemService {
         Ok(Box::new(*uptodate_sink_party_item))
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
     pub async fn has_third_party_item_for_source_id<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -370,7 +378,6 @@ impl ThirdPartyItemService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
     pub async fn find_third_party_items_for_source_id<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,

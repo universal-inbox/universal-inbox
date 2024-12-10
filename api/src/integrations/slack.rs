@@ -93,7 +93,6 @@ impl SlackService {
             .await;
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn get_chat_permalink(
         &self,
         channel: &SlackChannelId,
@@ -109,7 +108,6 @@ impl SlackService {
         Ok(result.value)
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn fetch_message(
         &self,
         channel: &SlackChannelId,
@@ -131,7 +129,6 @@ impl SlackService {
         Ok(result.value)
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn fetch_thread(
         &self,
         channel: &SlackChannelId,
@@ -159,7 +156,6 @@ impl SlackService {
         })
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn fetch_channel(
         &self,
         channel: &SlackChannelId,
@@ -172,7 +168,6 @@ impl SlackService {
         Ok(result.value)
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn fetch_user(
         &self,
         user: &SlackUserId,
@@ -187,7 +182,6 @@ impl SlackService {
         Ok(result.value)
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn fetch_user_profile(
         &self,
         user: &SlackUserId,
@@ -213,11 +207,10 @@ impl SlackService {
         }))
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn fetch_usergroup(
         &self,
         usergroup_id: &SlackUserGroupId,
-        user_id: UserId,
+        _user_id: UserId,
         slack_api_token: &SlackApiToken,
     ) -> Result<SlackUserGroup, UniversalInboxError> {
         let result = cached_list_usergroups(&self.slack_base_url, slack_api_token).await?;
@@ -237,7 +230,6 @@ impl SlackService {
             })
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn list_users_in_usergroup(
         &self,
         usergroup_id: &SlackUserGroupId,
@@ -252,7 +244,6 @@ impl SlackService {
         Ok(result.value)
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn fetch_bot(
         &self,
         bot: &SlackBotId,
@@ -265,7 +256,6 @@ impl SlackService {
         Ok(result.value)
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn fetch_team(
         &self,
         team: &SlackTeamId,
@@ -278,7 +268,6 @@ impl SlackService {
         Ok(result.value)
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn stars_add(
         &self,
         slack_api_token: &SlackApiToken,
@@ -327,7 +316,6 @@ impl SlackService {
         Ok(())
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn stars_remove(
         &self,
         slack_api_token: &SlackApiToken,
@@ -365,7 +353,6 @@ impl SlackService {
         Ok(())
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn reactions_add(
         &self,
         slack_api_token: &SlackApiToken,
@@ -401,7 +388,6 @@ impl SlackService {
         Ok(())
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn reactions_remove(
         &self,
         slack_api_token: &SlackApiToken,
@@ -429,7 +415,6 @@ impl SlackService {
     }
 
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor, slack_push_event_callback))]
     pub async fn fetch_item_from_event<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -509,11 +494,10 @@ impl SlackService {
                 .await
             }
             // Not yet implemented resource type
-            _ => return Ok(None),
+            _ => Ok(None),
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self, message_content, slack_api_token))]
     async fn find_and_resolve_slack_references_in_message(
         &self,
         message_content: &SlackMessageContent,
@@ -556,10 +540,6 @@ impl SlackService {
     }
 
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(
-        level = "debug",
-        skip(self, executor, slack_push_event_callback, slack_star_item)
-    )]
     pub async fn fetch_item_from_slack_star<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -732,10 +712,6 @@ impl SlackService {
     }
 
     #[allow(clippy::blocks_in_conditions, clippy::too_many_arguments)]
-    #[tracing::instrument(
-        level = "debug",
-        skip(self, executor, slack_push_event_callback, slack_reaction_item)
-    )]
     pub async fn fetch_item_from_slack_reaction<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -825,7 +801,6 @@ impl SlackService {
     }
 
     #[allow(clippy::blocks_in_conditions, clippy::too_many_arguments)]
-    #[tracing::instrument(level = "debug", skip(self, executor, slack_push_event_callback))]
     pub async fn fetch_item_from_slack_message<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -904,7 +879,6 @@ impl SlackService {
         ))
     }
 
-    #[tracing::instrument(level = "debug", skip(self, messages))]
     async fn fetch_sender_profiles_from_messages<'a>(
         &self,
         slack_api_token: &SlackApiToken,
@@ -981,7 +955,6 @@ impl SlackService {
         Ok(sender_profiles)
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor, slack_star_item), err)]
     async fn delete_slack_star<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -1023,7 +996,6 @@ impl SlackService {
         Ok(())
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor, slack_star_item), err)]
     async fn add_slack_star<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -1052,7 +1024,6 @@ impl SlackService {
         .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor, slack_reaction_item), err)]
     async fn delete_slack_reaction<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -1084,7 +1055,6 @@ impl SlackService {
         Ok(())
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor, slack_reaction_item), err)]
     async fn add_slack_reaction<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -1439,11 +1409,13 @@ impl NotificationSource for SlackService {
 impl ThirdPartyNotificationSourceService<SlackStar> for SlackService {
     #[tracing::instrument(
         level = "debug",
-        skip(self, source, source_third_party_item),
+        skip_all,
         fields(
             source_id = source_third_party_item.source_id,
-            third_party_item_id = source_third_party_item.id.to_string()
+            third_party_item_id = source_third_party_item.id.to_string(),
+            user.id = user_id.to_string()
         ),
+        err
     )]
     async fn third_party_item_into_notification(
         &self,
@@ -1474,8 +1446,11 @@ impl ThirdPartyNotificationSourceService<SlackStar> for SlackService {
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(
         level = "debug",
-        skip(self, executor, notification),
-        fields(notification_id = notification.id.0.to_string()),
+        skip_all,
+        fields(
+            notification_id = notification.id.to_string(),
+            user.id = user_id.to_string()
+        ),
         err
     )]
     async fn delete_notification_from_source<'a>(
@@ -1498,8 +1473,12 @@ impl ThirdPartyNotificationSourceService<SlackStar> for SlackService {
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(
         level = "debug",
-        skip(self, executor, notification),
-        fields(notification_id = notification.id.0.to_string())
+        skip_all,
+        fields(
+            notification_id = notification.id.to_string(),
+            user.id = user_id.to_string()
+        ),
+        err
     )]
     async fn unsubscribe_notification_from_source<'a>(
         &self,
@@ -1534,11 +1513,13 @@ impl ThirdPartyNotificationSourceService<SlackStar> for SlackService {
 impl ThirdPartyNotificationSourceService<SlackReaction> for SlackService {
     #[tracing::instrument(
         level = "debug",
-        skip(self, source, source_third_party_item),
+        skip_all,
         fields(
             source_id = source_third_party_item.source_id,
-            third_party_item_id = source_third_party_item.id.to_string()
+            third_party_item_id = source_third_party_item.id.to_string(),
+            user.id = user_id.to_string()
         ),
+        err
     )]
     async fn third_party_item_into_notification(
         &self,
@@ -1569,8 +1550,11 @@ impl ThirdPartyNotificationSourceService<SlackReaction> for SlackService {
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(
         level = "debug",
-        skip(self, executor, notification),
-        fields(notification_id = notification.id.0.to_string()),
+        skip_all,
+        fields(
+            notification_id = notification.id.to_string(),
+            user.id = user_id.to_string()
+        ),
         err
     )]
     async fn delete_notification_from_source<'a>(
@@ -1599,8 +1583,12 @@ impl ThirdPartyNotificationSourceService<SlackReaction> for SlackService {
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(
         level = "debug",
-        skip(self, executor, notification),
-        fields(notification_id = notification.id.0.to_string())
+        skip_all,
+        fields(
+            notification_id = notification.id.to_string(),
+            user.id = user_id.to_string()
+        ),
+        err
     )]
     async fn unsubscribe_notification_from_source<'a>(
         &self,
@@ -1641,11 +1629,13 @@ impl ThirdPartyNotificationSourceService<SlackReaction> for SlackService {
 impl ThirdPartyNotificationSourceService<SlackThread> for SlackService {
     #[tracing::instrument(
         level = "debug",
-        skip(self, source, source_third_party_item),
+        skip_all,
         fields(
             source_id = source_third_party_item.source_id,
-            third_party_item_id = source_third_party_item.id.to_string()
+            third_party_item_id = source_third_party_item.id.to_string(),
+            user.id = user_id.to_string()
         ),
+        err
     )]
     async fn third_party_item_into_notification(
         &self,
@@ -1681,8 +1671,11 @@ impl ThirdPartyNotificationSourceService<SlackThread> for SlackService {
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(
         level = "debug",
-        skip(self, _executor, notification),
-        fields(notification_id = notification.id.0.to_string()),
+        skip_all,
+        fields(
+            notification_id = notification.id.to_string(),
+            user.id = _user_id.to_string()
+        ),
         err
     )]
     async fn delete_notification_from_source<'a>(
@@ -1701,8 +1694,12 @@ impl ThirdPartyNotificationSourceService<SlackThread> for SlackService {
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(
         level = "debug",
-        skip(self, _executor, notification),
-        fields(notification_id = notification.id.0.to_string())
+        skip_all,
+        fields(
+            notification_id = notification.id.to_string(),
+            user.id = _user_id.to_string()
+        ),
+        err
     )]
     async fn unsubscribe_notification_from_source<'a>(
         &self,
@@ -1731,8 +1728,12 @@ impl ThirdPartyTaskService<SlackStar> for SlackService {
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(
         level = "debug",
-        skip(self, _executor, source, source_third_party_item),
-        fields(source_id = source.item.id()),
+        skip_all,
+        fields(
+            source_id = source.item.id(),
+            third_party_item_id = source_third_party_item.id.to_string(),
+            user.id = user_id.to_string()
+        ),
         err
     )]
     async fn third_party_item_into_task<'a>(
@@ -1790,10 +1791,11 @@ impl ThirdPartyTaskService<SlackStar> for SlackService {
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(
         level = "debug",
-        skip(self, executor, third_party_item),
+        skip_all,
         fields(
             third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id
+            third_party_item_source_id = third_party_item.source_id,
+            user.id = user_id.to_string()
         ),
         err
     )]
@@ -1815,10 +1817,11 @@ impl ThirdPartyTaskService<SlackStar> for SlackService {
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(
         level = "debug",
-        skip(self, executor, third_party_item),
+        skip_all,
         fields(
             third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id
+            third_party_item_source_id = third_party_item.source_id,
+            user.id = user_id.to_string()
         ),
         err
     )]
@@ -1842,10 +1845,11 @@ impl ThirdPartyTaskService<SlackStar> for SlackService {
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(
         level = "debug",
-        skip(self, executor, third_party_item),
+        skip_all,
         fields(
             third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id
+            third_party_item_source_id = third_party_item.source_id,
+            user.id = user_id.to_string()
         ),
         err
     )]
@@ -1866,7 +1870,7 @@ impl ThirdPartyTaskService<SlackStar> for SlackService {
     }
 
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, _executor, _id, _patch, _user_id))]
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn update_task<'a>(
         &self,
         _executor: &mut Transaction<'a, Postgres>,
@@ -1884,8 +1888,12 @@ impl ThirdPartyTaskService<SlackReaction> for SlackService {
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(
         level = "debug",
-        skip(self, _executor, source, source_third_party_item),
-        fields(source_id = source.item.id()),
+        skip_all,
+        fields(
+            source_id = source.item.id(),
+            third_party_item_id = source_third_party_item.id.to_string(),
+            user.id = user_id.to_string()
+        ),
         err
     )]
     async fn third_party_item_into_task<'a>(
@@ -1943,10 +1951,11 @@ impl ThirdPartyTaskService<SlackReaction> for SlackService {
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(
         level = "debug",
-        skip(self, executor, third_party_item),
+        skip_all,
         fields(
             third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id
+            third_party_item_source_id = third_party_item.source_id,
+            user.id = user_id.to_string()
         ),
         err
     )]
@@ -1968,10 +1977,11 @@ impl ThirdPartyTaskService<SlackReaction> for SlackService {
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(
         level = "debug",
-        skip(self, executor, third_party_item),
+        skip_all,
         fields(
             third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id
+            third_party_item_source_id = third_party_item.source_id,
+            user.id = user_id.to_string()
         ),
         err
     )]
@@ -2000,10 +2010,11 @@ impl ThirdPartyTaskService<SlackReaction> for SlackService {
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(
         level = "debug",
-        skip(self, executor, third_party_item),
+        skip_all,
         fields(
             third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id
+            third_party_item_source_id = third_party_item.source_id,
+            user.id = user_id.to_string()
         ),
         err
     )]
@@ -2030,7 +2041,7 @@ impl ThirdPartyTaskService<SlackReaction> for SlackService {
     }
 
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, _executor, _id, _patch, _user_id))]
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn update_task<'a>(
         &self,
         _executor: &mut Transaction<'a, Postgres>,
