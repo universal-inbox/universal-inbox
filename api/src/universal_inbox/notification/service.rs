@@ -96,8 +96,13 @@ impl NotificationService {
 
     #[tracing::instrument(
         level = "debug",
-        skip(self, executor, notification_source_service, notification),
-        fields(notification_id = notification.id.to_string())
+        skip_all,
+        fields(
+            notification_id = notification.id.to_string(),
+            patch,
+            user.id = user_id.to_string()
+        ),
+        err
     )]
     pub async fn apply_updated_notification_side_effect<'a, T, U>(
         &self,
@@ -142,8 +147,16 @@ impl NotificationService {
 
     #[tracing::instrument(
         level = "debug", 
-        skip(self, executor, job_storage),
-        fields(trigger_sync = job_storage.is_some())
+        skip_all,
+        fields(
+            trigger_sync = job_storage.is_some(),
+            status = status.iter().map(|s| s.to_string()).collect::<Vec<String>>().join(","),
+            include_snoozed_notifications,
+            task_id = task_id.map(|id| id.to_string()),
+            notification_kind = notification_kind.map(|k| k.to_string()),
+            user.id = user_id.to_string()
+        ),
+        err
     )]
     #[allow(clippy::too_many_arguments)]
     pub async fn list_notifications<'a>(
@@ -179,7 +192,15 @@ impl NotificationService {
         Ok(notifications_page)
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            notification_id = notification_id.to_string(),
+            user.id = for_user_id.to_string()
+        ),
+        err
+    )]
     pub async fn get_notification<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -202,7 +223,15 @@ impl NotificationService {
         Ok(notification)
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            source_id,
+            user.id = for_user_id.to_string()
+        ),
+        err
+    )]
     pub async fn get_notification_for_source_id<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -214,7 +243,15 @@ impl NotificationService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.to_string()))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            notification_id = notification.id.to_string(),
+            user.id = for_user_id.to_string()
+        ),
+        err
+    )]
     pub async fn create_notification<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -232,7 +269,16 @@ impl NotificationService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.to_string()))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            notification_id = notification.id.to_string(),
+            notification_source_kind = notification_source_kind.to_string(),
+            update_snoozed_until
+        ),
+        err
+    )]
     pub async fn create_or_update_notification<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -250,7 +296,15 @@ impl NotificationService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            notification_source_kind = notification_source_kind.to_string(),
+            user.id = user_id.to_string()
+        ),
+        err
+    )]
     pub async fn delete_stale_notifications_status_from_source_ids<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -276,7 +330,16 @@ impl NotificationService {
         Ok(deleted_notifications)
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            synced_source = source.to_string(),
+            user.id = user_id.to_string(),
+            force_sync
+        ),
+        err
+    )]
     pub async fn sync_notifications<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -316,7 +379,6 @@ impl NotificationService {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn sync_notifications_with_transaction<'a>(
         &self,
         source: NotificationSyncSourceKind,
@@ -355,7 +417,6 @@ impl NotificationService {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn sync_all_notifications<'a>(
         &self,
         user_id: UserId,
@@ -390,7 +451,6 @@ impl NotificationService {
             .collect())
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn sync_notifications_for_all_users<'a>(
         &self,
         source: Option<NotificationSyncSourceKind>,
@@ -411,7 +471,6 @@ impl NotificationService {
         Ok(())
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn sync_notifications_for_user<'a>(
         &self,
         source: Option<NotificationSyncSourceKind>,
@@ -437,7 +496,18 @@ impl NotificationService {
         Ok(())
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            notification_id = notification_id.to_string(),
+            patch,
+            apply_task_side_effects,
+            apply_notification_side_effects,
+            user.id = for_user_id.to_string()
+        ),
+        err
+    )]
     pub async fn patch_notification<'a, 'b>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -646,7 +716,16 @@ impl NotificationService {
         Ok(updated_notification)
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            task_id = task_id.to_string(),
+            notification_kind = notification_kind.map(|k| k.to_string()),
+            patch
+        ),
+        err
+    )]
     pub async fn patch_notifications_for_task<'a, 'b>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -659,7 +738,17 @@ impl NotificationService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            notification_id = notification_id.to_string(),
+            task_creation,
+            apply_notification_side_effects,
+            user.id = for_user_id.to_string()
+        ),
+        err
+    )]
     pub async fn create_task_from_notification<'a, 'b>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -712,11 +801,13 @@ impl NotificationService {
 
     #[tracing::instrument(
         level = "debug",
-        skip(self, executor, third_party_item, third_party_notification_service),
+        skip_all,
         fields(
             third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id
-        )
+            third_party_item_source_id = third_party_item.source_id,
+            user.id = user_id.to_string()
+        ),
+        err
     )]
     pub async fn create_notification_from_third_party_item<'a, T, U>(
         &self,
@@ -743,10 +834,6 @@ impl NotificationService {
         Ok(Some(*upsert_notification.value()))
     }
 
-    #[tracing::instrument(
-        level = "debug",
-        skip(self, executor, third_party_notification_service)
-    )]
     async fn sync_third_party_notifications<'a, T, U>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -878,11 +965,14 @@ impl NotificationService {
 
     #[tracing::instrument(
         level = "debug",
-        skip(self, executor, third_party_notification_service, third_party_item),
+        skip_all,
         fields(
             third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id
+            third_party_item_source_id = third_party_item.source_id,
+            task_id = task_id.map(|id| id.to_string()),
+            user.id = user_id.to_string()
         ),
+        err
     )]
     pub async fn save_third_party_item_as_notification<'a, T, U>(
         &self,
@@ -921,14 +1011,16 @@ impl NotificationService {
 
     #[tracing::instrument(
         level = "debug",
-        skip(
-            self,
-            executor,
-            third_party_task_service,
-            task,
-            integration_connection_provider
+        skip_all,
+        fields(
+            task_id = task.id.to_string(),
+            third_party_item_id = third_party_item.id.to_string(),
+            third_party_item_source_id = third_party_item.source_id,
+            integration_connection_provider = integration_connection_provider.kind().to_string(),
+            is_incremental_update = _is_incremental_update,
+            user.id = user_id.to_string()
         ),
-        fields(task_id = task.id.to_string()),
+        err
     )]
     #[allow(clippy::too_many_arguments)]
     pub async fn save_task_as_notification<'a, T, U>(
@@ -938,7 +1030,7 @@ impl NotificationService {
         task: &Task,
         third_party_item: &ThirdPartyItem,
         integration_connection_provider: &IntegrationProvider,
-        is_incremental_update: bool,
+        _is_incremental_update: bool,
         user_id: UserId,
     ) -> Result<Option<UpsertStatus<Box<Notification>>>, UniversalInboxError>
     where

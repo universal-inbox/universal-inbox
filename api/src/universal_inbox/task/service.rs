@@ -95,10 +95,12 @@ impl TaskService {
 
     #[tracing::instrument(
         level = "debug",
-        skip(self, executor, third_party_task_service, third_party_item),
+        skip_all,
         fields(
             third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id
+            third_party_item_source_id = third_party_item.source_id,
+            patch,
+            user.id = user_id.to_string()
         ),
         err
     )]
@@ -166,11 +168,12 @@ impl TaskService {
 
     #[tracing::instrument(
         level = "debug",
-        skip(self, executor, synced_third_party_item, upsert_task),
+        skip_all,
         fields(
             third_party_item_id = synced_third_party_item.id.to_string(),
             third_party_item_source_id = synced_third_party_item.source_id,
-            task_id = upsert_task.value_ref().id.to_string()
+            task_id = upsert_task.value_ref().id.to_string(),
+            user.id = user_id.to_string()
         ),
         err
     )]
@@ -299,7 +302,17 @@ impl TaskService {
         Ok(())
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor, job_storage))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            status = status.to_string(),
+            only_synced_tasks,
+            user.id = user_id.to_string(),
+            trigger_sync = job_storage.is_none()
+        ),
+        err
+    )]
     pub async fn list_tasks<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -324,7 +337,15 @@ impl TaskService {
         Ok(tasks_page)
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            matches,
+            user.id = user_id.to_string()
+        ),
+        err
+    )]
     pub async fn search_tasks<'a, 'b>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -336,7 +357,15 @@ impl TaskService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            task_id = task_id.to_string(),
+            user.id = for_user_id.to_string()
+        ),
+        err
+    )]
     pub async fn get_task<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -356,7 +385,12 @@ impl TaskService {
         Ok(task)
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(task_ids = task_ids.iter().map(|id| id.to_string()).collect::<Vec<String>>().join(", ")),
+        err
+    )]
     pub async fn get_tasks<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -365,7 +399,15 @@ impl TaskService {
         self.repository.get_tasks(executor, task_ids).await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor, task), fields(task_id = task.id.to_string()))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            task_id = task.id.to_string(),
+            user.id = for_user_id.to_string()
+        ),
+        err
+    )]
     pub async fn create_task<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -385,7 +427,12 @@ impl TaskService {
         }))
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.to_string()))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(notification_id = notification.id.to_string()),
+        err
+    )]
     pub async fn create_task_from_notification<'a, 'b>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -466,11 +513,13 @@ impl TaskService {
     /// the task and the notification if any
     #[tracing::instrument(
         level = "debug",
-        skip(self, executor, third_party_item, third_party_task_service),
+        skip_all,
         fields(
             third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id
-        )
+            third_party_item_source_id = third_party_item.source_id,
+            user.id = user_id.to_string()
+        ),
+        err
     )]
     pub async fn create_task_from_third_party_item<'a, T, U>(
         &self,
@@ -570,7 +619,6 @@ impl TaskService {
         }))
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor, third_party_task_service))]
     async fn sync_third_party_tasks<'a, T, U>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -691,11 +739,13 @@ impl TaskService {
     /// Save a third party item as a task and apply side effects
     #[tracing::instrument(
         level = "debug",
-        skip(self, executor, third_party_task_service, third_party_item),
+        skip_all,
         fields(
             third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id
+            third_party_item_source_id = third_party_item.source_id,
+            user.id = user_id.to_string()
         ),
+        err
     )]
     pub async fn sync_third_party_item_as_task<'a, T, U>(
         &self,
@@ -735,11 +785,13 @@ impl TaskService {
 
     #[tracing::instrument(
         level = "debug",
-        skip(self, executor, third_party_task_service, third_party_item),
+        skip_all,
         fields(
             third_party_item_id = third_party_item.id.to_string(),
-            third_party_item_source_id = third_party_item.source_id
+            third_party_item_source_id = third_party_item.source_id,
+            user.id = user_id.to_string()
         ),
+        err
     )]
     pub async fn save_third_party_item_as_task<'a, T, U>(
         &self,
@@ -770,7 +822,16 @@ impl TaskService {
             .await
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            source = source.to_string(),
+            user.id = user_id.to_string(),
+            force_sync
+        ),
+        err
+    )]
     pub async fn sync_tasks<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -800,7 +861,6 @@ impl TaskService {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn sync_tasks_with_transaction<'a>(
         &self,
         source: TaskSyncSourceKind,
@@ -839,7 +899,6 @@ impl TaskService {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn sync_all_tasks<'a>(
         &self,
         user_id: UserId,
@@ -857,7 +916,6 @@ impl TaskService {
             .collect())
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn sync_tasks_for_all_users<'a>(
         &self,
         source: Option<TaskSyncSourceKind>,
@@ -877,7 +935,6 @@ impl TaskService {
         Ok(())
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn sync_tasks_for_user<'a>(
         &self,
         source: Option<TaskSyncSourceKind>,
@@ -903,7 +960,16 @@ impl TaskService {
         Ok(())
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            task_id = task_id.to_string(),
+            patch,
+            user.id = for_user_id.to_string()
+        ),
+        err
+    )]
     pub async fn patch_task<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -981,7 +1047,16 @@ impl TaskService {
         Ok(updated_task)
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor, notification), fields(notification_id = notification.id.to_string()))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            notification_id = notification.id.to_string(),
+            task_id = task_id.to_string(),
+            user.id = for_user_id.to_string()
+        ),
+        err
+    )]
     pub async fn link_notification_with_task<'a, 'b>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -1026,7 +1101,15 @@ impl TaskService {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            matches,
+            user.id = user_id.to_string()
+        ),
+        err
+    )]
     pub async fn search_projects<'a, 'b>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -1051,8 +1134,13 @@ impl TaskService {
 
     #[tracing::instrument(
         level = "debug",
-        skip(self, executor, third_party_item),
-        fields(third_party_item_id = third_party_item.id.to_string())
+        skip_all,
+        fields(
+            third_party_item_id = third_party_item.id.to_string(),
+            patch,
+            user.id = for_user_id.to_string()
+        ),
+        err
     )]
     pub async fn apply_task_third_party_item_side_effect<'a, 'b>(
         &self,

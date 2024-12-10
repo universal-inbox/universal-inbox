@@ -56,14 +56,15 @@ pub trait ThirdPartyItemRepository {
 impl ThirdPartyItemRepository for Repository {
     #[tracing::instrument(
         level = "debug",
-        skip(self, executor, third_party_item),
+        skip_all,
         fields(
             third_party_item_id = third_party_item.id.to_string(),
             source_id = third_party_item.source_id.as_str(),
             kind = third_party_item.kind().to_string(),
-            user_id = third_party_item.user_id.to_string(),
+            user.id = third_party_item.user_id.to_string(),
             integration_connection_id = third_party_item.integration_connection_id.to_string()
-        )
+        ),
+        err
     )]
     async fn create_or_update_third_party_item<'a>(
         &self,
@@ -214,7 +215,15 @@ impl ThirdPartyItemRepository for Repository {
         })))
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            task_source_kind = task_source_kind.to_string(),
+            user.id = user_id.to_string()
+        ),
+        err
+    )]
     async fn get_stale_task_source_third_party_items<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -266,7 +275,16 @@ impl ThirdPartyItemRepository for Repository {
             .collect::<Result<Vec<ThirdPartyItem>, UniversalInboxError>>()
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            kind = kind.to_string(),
+            source_id = source_id,
+            excluding_slack_user_id = excluding_slack_user_id.as_ref().map(|id| id.to_string())
+        ),
+        err
+    )]
     async fn has_third_party_item_for_source_id<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -306,7 +324,16 @@ impl ThirdPartyItemRepository for Repository {
         return Ok(false);
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            kind = kind.to_string(),
+            source_id = source_id,
+            excluding_slack_user_id = excluding_slack_user_id.as_ref().map(|id| id.to_string())
+        ),
+        err
+    )]
     async fn find_third_party_items_for_source_id<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,

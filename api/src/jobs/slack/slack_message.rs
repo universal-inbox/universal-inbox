@@ -25,18 +25,6 @@ use crate::{
     },
 };
 
-#[tracing::instrument(
-    level = "debug",
-    skip(
-        executor,
-        event,
-        notification_service,
-        integration_connection_service,
-        third_party_item_service,
-        slack_service
-    ),
-    err
-)]
 pub async fn handle_slack_message_push_event<'a>(
     executor: &mut Transaction<'a, Postgres>,
     event: &SlackPushEventCallback,

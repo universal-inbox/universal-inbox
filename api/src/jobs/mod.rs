@@ -1,9 +1,11 @@
 use std::{fmt, str::FromStr, sync::Arc};
 
 use apalis::prelude::*;
+use opentelemetry::trace::Status;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use tracing::{error, info};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
 use crate::{
@@ -79,6 +81,16 @@ pub enum UniversalInboxJobPayload {
     SlackPushEventCallback(slack::SlackPushEventCallbackJob),
 }
 
+impl UniversalInboxJobPayload {
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::SyncNotifications(_) => "SyncNotifications",
+            Self::SyncTasks(_) => "SyncTasks",
+            Self::SlackPushEventCallback(_) => "SlackPushEventCallback",
+        }
+    }
+}
+
 impl Job for UniversalInboxJob {
     const NAME: &'static str = "universal-inbox:jobs:UniversalInboxJob";
 }
@@ -93,7 +105,10 @@ impl Job for UniversalInboxJob {
         third_party_item_service,
         slack_service
     ),
-    fields(job_id = %job.id),
+    fields(
+        job.id = %job.id,
+        job.name = %job.payload.name(),
+    ),
     err
 )]
 pub async fn handle_universal_inbox_job(
@@ -104,6 +119,8 @@ pub async fn handle_universal_inbox_job(
     third_party_item_service: Data<Arc<RwLock<ThirdPartyItemService>>>,
     slack_service: Data<Arc<SlackService>>,
 ) -> Result<(), UniversalInboxError> {
+    let current_span = tracing::Span::current();
+
     let result = match job.payload {
         UniversalInboxJobPayload::SyncNotifications(job) => {
             sync::handle_sync_notifications(job, notification_service).await
@@ -125,12 +142,15 @@ pub async fn handle_universal_inbox_job(
     };
 
     match result {
-        Ok(_) => info!("Successfully executed job"),
-        Err(err) => {
-            error!("Failed to execute job: {err:?}");
-            return Err(err);
+        Ok(_) => {
+            current_span.set_status(Status::Ok);
+            info!("Successfully executed job");
+            Ok(())
         }
-    };
-
-    Ok(())
+        Err(err) => {
+            current_span.set_status(Status::error(err.to_string()));
+            error!("Failed to execute job: {err:?}");
+            Err(err)
+        }
+    }
 }

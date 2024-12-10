@@ -18,17 +18,6 @@ use crate::universal_inbox::{
     UniversalInboxError,
 };
 
-#[tracing::instrument(
-    level = "debug",
-    skip(
-        executor,
-        event,
-        notification_service,
-        task_service,
-        integration_connection_service
-    ),
-    err
-)]
 pub async fn handle_slack_star_push_event<'a>(
     executor: &mut Transaction<'a, Postgres>,
     event: &SlackPushEventCallback,

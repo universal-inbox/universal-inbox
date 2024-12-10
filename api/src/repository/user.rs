@@ -96,7 +96,12 @@ pub trait UserRepository {
 
 #[async_trait]
 impl UserRepository for Repository {
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = id.to_string()),
+        err
+    )]
     async fn get_user<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -139,7 +144,7 @@ impl UserRepository for Repository {
         row.map(|user_row| user_row.try_into()).transpose()
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn fetch_all_users<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -179,7 +184,12 @@ impl UserRepository for Repository {
         rows.iter().map(|r| r.try_into()).collect()
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(auth_user_id = auth_user_id.to_string()),
+        err
+    )]
     async fn get_user_by_auth_id<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -224,7 +234,7 @@ impl UserRepository for Repository {
         row.map(|user_row| user_row.try_into()).transpose()
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(level = "debug", skip_all, err)]
     async fn get_user_by_email<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -267,7 +277,12 @@ impl UserRepository for Repository {
         row.map(|user_row| user_row.try_into()).transpose()
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = user.id.to_string()),
+        err
+    )]
     async fn create_user<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -367,7 +382,15 @@ impl UserRepository for Repository {
         })
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor, auth_id_token))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            auth_user_id = auth_user_id.to_string(),
+            auth_id_token = auth_id_token.to_string()
+        ),
+        err
+    )]
     async fn update_user_auth_id_token<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -439,7 +462,16 @@ impl UserRepository for Repository {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            user.id = user_id.to_string(),
+            email_validated_at = email_validated_at.map(|d| d.to_rfc3339()),
+            email_validation_sent_at = email_validation_sent_at.map(|d| d.to_rfc3339()),
+        ),
+        err
+    )]
     async fn update_email_validation_parameters<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -549,7 +581,12 @@ impl UserRepository for Repository {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = user_id.to_string()),
+        err
+    )]
     async fn get_user_email_validation_token<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -571,7 +608,15 @@ impl UserRepository for Repository {
         Ok(row.and_then(|row| row.map(|token| token.into())))
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            email_address = email_address.as_str(),
+            password_reset_sent_at = password_reset_sent_at.map(|d| d.to_rfc3339()),
+        ),
+        err
+    )]
     async fn update_password_reset_parameters<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -650,7 +695,12 @@ impl UserRepository for Repository {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor, password_hash))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = user_id.to_string()),
+        err
+    )]
     async fn update_password<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -738,7 +788,12 @@ impl UserRepository for Repository {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self, executor))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = user_id.to_string()),
+        err
+    )]
     async fn get_password_reset_token<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,

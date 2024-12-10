@@ -150,7 +150,6 @@ impl NangoService {
         })
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn get_connection(
         &self,
         connection_id: ConnectionId,
@@ -188,7 +187,6 @@ impl NangoService {
         Ok(Some(connection))
     }
 
-    #[tracing::instrument(level = "debug", skip(self))]
     pub async fn delete_connection(
         &self,
         connection_id: ConnectionId,

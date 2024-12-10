@@ -24,7 +24,14 @@ use crate::{
 #[async_trait]
 impl TaskEventService<SlackPushEventCallback> for TaskService {
     #[allow(clippy::blocks_in_conditions)]
-    #[tracing::instrument(level = "debug", skip(self, executor, event))]
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            user.id = user_id.to_string()
+        ),
+        err
+    )]
     async fn save_task_from_event<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
