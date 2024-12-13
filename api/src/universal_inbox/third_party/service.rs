@@ -4,6 +4,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Context};
+use slack_morphism::SlackUserId;
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
 use tracing::debug;
@@ -362,9 +363,10 @@ impl ThirdPartyItemService {
         executor: &mut Transaction<'a, Postgres>,
         kind: ThirdPartyItemKind,
         source_id: &str,
+        excluding_slack_user_id: Option<SlackUserId>,
     ) -> Result<bool, UniversalInboxError> {
         self.repository
-            .has_third_party_item_for_source_id(executor, kind, source_id)
+            .has_third_party_item_for_source_id(executor, kind, source_id, excluding_slack_user_id)
             .await
     }
 
@@ -374,9 +376,15 @@ impl ThirdPartyItemService {
         executor: &mut Transaction<'a, Postgres>,
         kind: ThirdPartyItemKind,
         source_id: &str,
+        excluding_slack_user_id: Option<SlackUserId>,
     ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError> {
         self.repository
-            .find_third_party_items_for_source_id(executor, kind, source_id)
+            .find_third_party_items_for_source_id(
+                executor,
+                kind,
+                source_id,
+                excluding_slack_user_id,
+            )
             .await
     }
 }

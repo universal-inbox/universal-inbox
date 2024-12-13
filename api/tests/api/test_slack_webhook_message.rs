@@ -2,26 +2,43 @@
 use anyhow::Context;
 use apalis::prelude::*;
 use rstest::*;
+use serde_json::json;
 use slack_morphism::prelude::*;
 
 use universal_inbox::{
     integration_connection::{
         config::IntegrationConnectionConfig, integrations::slack::SlackConfig,
+        integrations::slack::SlackContext, provider::IntegrationConnectionContext,
+        IntegrationConnectionStatus,
     },
-    third_party::integrations::slack::SlackThread,
+    notification::{NotificationSourceKind, NotificationStatus},
+    third_party::{integrations::slack::SlackThread, item::ThirdPartyItemData},
 };
 
-use universal_inbox_api::{configuration::Settings, integrations::oauth2::NangoConnection};
+use universal_inbox_api::{
+    configuration::Settings, integrations::oauth2::NangoConnection,
+    jobs::slack::slack_message::handle_slack_message_push_event,
+};
 
 use crate::helpers::{
     auth::{authenticated_app, AuthenticatedApp},
-    integration_connection::{create_and_mock_integration_connection, nango_slack_connection},
-    notification::slack::{
-        create_notification_from_slack_thread, slack_push_message_event,
-        slack_push_message_in_thread_event, slack_thread,
+    integration_connection::{
+        create_and_mock_integration_connection, create_integration_connection,
+        nango_slack_connection,
+    },
+    notification::{
+        list_notifications,
+        slack::{
+            create_notification_from_slack_thread, mock_slack_fetch_channel, mock_slack_fetch_team,
+            mock_slack_fetch_thread, mock_slack_fetch_user, mock_slack_get_chat_permalink,
+            mock_slack_list_users_in_usergroup, slack_push_message_event,
+            slack_push_message_in_thread_event, slack_thread,
+        },
     },
     rest::create_resource_response,
-    settings,
+    settings, tested_app_with_local_auth,
+    user::create_user_and_login,
+    TestedApp,
 };
 
 mod webhook {
@@ -45,7 +62,7 @@ mod webhook {
         .await;
 
         assert_eq!(response.status(), 200);
-        assert_message_ignored(&app).await;
+        assert_message_ignored(&app.app).await;
     }
 
     #[rstest]
@@ -69,7 +86,7 @@ mod webhook {
         .await;
 
         assert_eq!(response.status(), 200);
-        assert_message_processed(&app).await;
+        assert_message_processed(&app.app).await;
     }
 
     #[rstest]
@@ -89,7 +106,7 @@ mod webhook {
         .await;
 
         assert_eq!(response.status(), 200);
-        assert_message_ignored(&app).await;
+        assert_message_ignored(&app.app).await;
     }
 
     #[rstest]
@@ -147,21 +164,133 @@ mod webhook {
         // Message is processed even if thread is marked as unsubscribed as it may
         // have been marked as subscribed again from Slack. Universal Inbox must
         // update the thread to get the actual subscription status.
-        assert_message_processed(&app).await;
+        assert_message_processed(&app.app).await;
     }
 
-    async fn assert_message_ignored(app: &AuthenticatedApp) {
+    #[rstest]
+    #[case::single_subscribed_user(true)]
+    #[case::multiple_subscribed_users(false)]
+    #[tokio::test]
+    async fn test_receive_slack_message_in_known_thread_from_known_user(
+        settings: Settings,
+        #[future] tested_app_with_local_auth: TestedApp,
+        mut nango_slack_connection: Box<NangoConnection>,
+        mut slack_push_message_in_thread_event: Box<SlackPushEvent>,
+        mut slack_thread: Box<SlackThread>,
+        #[case] single_subscribed_user: bool,
+    ) {
+        let app = tested_app_with_local_auth.await;
+        // `slack_thread` contains 2 messages from 2 different users:
+        // - first (read) message from user U01
+        // - second (unread) message from user U02 (this message is also the one that is received in the event)
+        // When `single_subscribed_user` is true, U02 will be the only user subsribed
+        // to the thread and the message will be ignored as U02 is the sender of the unread message.
+        // When `single_subscribed_user` is false, both users will be subscribed to the thread
+        // and the message will be processed.
+        nango_slack_connection.credentials.raw = json !({
+            "authed_user": { "id": "U02", "access_token": "slack_test_user_access_token" },
+            "team": { "id": "T01" }
+        });
+        let (client, user) = create_user_and_login(
+            &app,
+            "John",
+            "Doe",
+            "john@doe.net".parse().unwrap(),
+            "password",
+        )
+        .await;
+
+        let slack_integration_connection = create_and_mock_integration_connection(
+            &app,
+            user.id,
+            &settings.oauth2.nango_secret_key,
+            IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
+            &settings,
+            nango_slack_connection.clone(),
+            None,
+            None,
+        )
+        .await;
+
+        let SlackPushEvent::EventCallback(SlackPushEventCallback {
+            event: SlackEventCallbackBody::Message(ref mut message),
+            ..
+        }) = *slack_push_message_in_thread_event
+        else {
+            unreachable!("Unexpected event type");
+        };
+        message.origin.thread_ts = Some(slack_thread.messages.first().origin.ts.clone());
+        slack_thread.subscribed = true;
+
+        create_notification_from_slack_thread(
+            &app,
+            &slack_thread,
+            user.id,
+            slack_integration_connection.id,
+        )
+        .await;
+
+        if !single_subscribed_user {
+            let (_, other_user) = create_user_and_login(
+                &app,
+                "Jane",
+                "Doe",
+                "jane@doe.net".parse().unwrap(),
+                "password",
+            )
+            .await;
+
+            nango_slack_connection.credentials.raw = json !({
+                "authed_user": { "id": "U01", "access_token": "slack_other_user_access_token" },
+                "team": { "id": "T01" }
+            });
+            let other_slack_integration_connection = create_and_mock_integration_connection(
+                &app,
+                other_user.id,
+                &settings.oauth2.nango_secret_key,
+                IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
+                &settings,
+                nango_slack_connection,
+                None,
+                None,
+            )
+            .await;
+
+            create_notification_from_slack_thread(
+                &app,
+                &slack_thread,
+                other_user.id,
+                other_slack_integration_connection.id,
+            )
+            .await;
+        }
+
+        let response = create_resource_response(
+            &client,
+            &app.api_address,
+            "hooks/slack/events",
+            slack_push_message_in_thread_event.clone(),
+        )
+        .await;
+
+        assert_eq!(response.status(), 200);
+        if single_subscribed_user {
+            assert_message_ignored(&app).await;
+        } else {
+            assert_message_processed(&app).await;
+        }
+    }
+
+    async fn assert_message_ignored(app: &TestedApp) {
         assert!(app
-            .app
             .redis_storage
             .is_empty()
             .await
             .expect("Failed to get jobs count"));
     }
 
-    async fn assert_message_processed(app: &AuthenticatedApp) {
+    async fn assert_message_processed(app: &TestedApp) {
         assert!(!app
-            .app
             .redis_storage
             .is_empty()
             .await
@@ -172,31 +301,6 @@ mod webhook {
 mod job {
     use super::*;
     use pretty_assertions::assert_eq;
-
-    use serde_json::json;
-
-    use universal_inbox::{
-        integration_connection::{
-            integrations::slack::SlackContext, provider::IntegrationConnectionContext,
-            IntegrationConnectionStatus,
-        },
-        notification::{NotificationSourceKind, NotificationStatus},
-        third_party::item::ThirdPartyItemData,
-    };
-
-    use universal_inbox_api::jobs::slack::slack_message::handle_slack_message_push_event;
-
-    use crate::helpers::{
-        integration_connection::create_integration_connection,
-        notification::{
-            list_notifications,
-            slack::{
-                mock_slack_fetch_channel, mock_slack_fetch_team, mock_slack_fetch_thread,
-                mock_slack_fetch_user, mock_slack_get_chat_permalink,
-                mock_slack_list_users_in_usergroup,
-            },
-        },
-    };
 
     #[fixture]
     fn message_event(slack_push_message_event: Box<SlackPushEvent>) -> Box<SlackPushEventCallback> {
@@ -356,6 +460,176 @@ mod job {
         )
         .await;
         assert!(notifications.is_empty());
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_handle_slack_message_in_channel_with_ping_to_known_user_from_known_user(
+        settings: Settings,
+        #[future] tested_app_with_local_auth: TestedApp,
+        mut nango_slack_connection: Box<NangoConnection>,
+        mut message_event: Box<SlackPushEventCallback>,
+    ) {
+        // Group `G01` contains user `U01` and user `U02`
+        // The message received is sent by `U02` thus a notification should be created
+        // only for `U01`
+        let app = tested_app_with_local_auth.await;
+        let service = app.notification_service.read().await;
+        let mut transaction = service.begin().await.unwrap();
+        add_usergroup_ref_in_message(&mut message_event, "G01");
+        let slack_list_users_in_usergroup_mock = mock_slack_list_users_in_usergroup(
+            &app.slack_mock_server,
+            "G01",
+            "slack_list_users_in_usergroup_response.json",
+        );
+
+        nango_slack_connection.credentials.raw = json!({
+            "authed_user": { "id": "U02", "access_token": "slack_other_user_access_token" },
+            "team": { "id": "T01" }
+        });
+        let (client, user) = create_user_and_login(
+            &app,
+            "John",
+            "Doe",
+            "john@doe.net".parse().unwrap(),
+            "password",
+        )
+        .await;
+        create_and_mock_integration_connection(
+            &app,
+            user.id,
+            &settings.oauth2.nango_secret_key,
+            IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
+            &settings,
+            nango_slack_connection.clone(),
+            None,
+            Some(IntegrationConnectionContext::Slack(SlackContext {
+                team_id: SlackTeamId("T01".to_string()),
+            })),
+        )
+        .await;
+
+        nango_slack_connection.credentials.raw = json!({
+            "authed_user": { "id": "U01", "access_token": "slack_test_user_access_token" },
+            "team": { "id": "T01" }
+        });
+        let (other_client, other_user) = create_user_and_login(
+            &app,
+            "Jane",
+            "Doe",
+            "jane@doe.net".parse().unwrap(),
+            "password",
+        )
+        .await;
+        create_and_mock_integration_connection(
+            &app,
+            other_user.id,
+            &settings.oauth2.nango_secret_key,
+            IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
+            &settings,
+            nango_slack_connection,
+            None,
+            Some(IntegrationConnectionContext::Slack(SlackContext {
+                team_id: SlackTeamId("T01".to_string()),
+            })),
+        )
+        .await;
+
+        let slack_message_id = "1732535291.911209";
+        let _slack_get_chat_permalink_mock = mock_slack_get_chat_permalink(
+            &app.slack_mock_server,
+            "C05XXX",
+            slack_message_id,
+            "slack_get_chat_permalink_response.json",
+        );
+        let slack_fetch_user_mock1 = mock_slack_fetch_user(
+            &app.slack_mock_server,
+            "U01",
+            "slack_fetch_user_response.json",
+        );
+        let slack_fetch_user_mock2 = mock_slack_fetch_user(
+            &app.slack_mock_server,
+            "U02",
+            "slack_fetch_user_response.json",
+        );
+
+        let slack_fetch_thread_mock = mock_slack_fetch_thread(
+            &app.slack_mock_server,
+            "C05XXX",
+            slack_message_id,
+            slack_message_id,
+            "slack_fetch_thread_response.json",
+            true,
+            None,
+        );
+        let slack_fetch_channel_mock = mock_slack_fetch_channel(
+            &app.slack_mock_server,
+            "C05XXX",
+            "slack_fetch_channel_response.json",
+        );
+        let slack_fetch_team_mock = mock_slack_fetch_team(
+            &app.slack_mock_server,
+            "T01",
+            "slack_fetch_team_response.json",
+        );
+
+        handle_slack_message_push_event(
+            &mut transaction,
+            &message_event,
+            app.notification_service.clone(),
+            app.integration_connection_service.clone(),
+            app.third_party_item_service.clone(),
+            app.slack_service.clone(),
+        )
+        .await
+        .unwrap();
+
+        transaction
+            .commit()
+            .await
+            .context("Failed to commit transaction")
+            .unwrap();
+
+        slack_fetch_user_mock1.assert();
+        slack_fetch_user_mock2.assert();
+        slack_fetch_thread_mock.assert();
+        slack_fetch_channel_mock.assert();
+        slack_fetch_team_mock.assert();
+        slack_list_users_in_usergroup_mock.assert();
+
+        let notifications =
+            list_notifications(&client, &app.api_address, vec![], false, None, None, false).await;
+        // the message does not create a notification for U02 (ie. the sender)
+        // but only for the other known user U01
+        assert_eq!(notifications.len(), 0);
+
+        let notifications = list_notifications(
+            &other_client,
+            &app.api_address,
+            vec![],
+            false,
+            None,
+            None,
+            false,
+        )
+        .await;
+
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(notifications[0].source_item.source_id, "1732535291.911209");
+        assert_eq!(notifications[0].title, "Hello");
+        assert_eq!(notifications[0].status, NotificationStatus::Unread);
+        assert_eq!(notifications[0].kind, NotificationSourceKind::Slack);
+        assert!(notifications[0].last_read_at.is_none());
+        assert!(notifications[0].task_id.is_none());
+        assert!(notifications[0].snoozed_until.is_none());
+        let ThirdPartyItemData::SlackThread(slack_thread) = &notifications[0].source_item.data
+        else {
+            unreachable!("Unexpected item data");
+        };
+        assert_eq!(&slack_thread.channel.id.to_string(), "C05XXX");
+        assert!(slack_thread.sender_profiles.contains_key("U01"));
+        assert!(slack_thread.sender_profiles.contains_key("U02"));
+        assert!(slack_thread.subscribed);
     }
 
     #[rstest]
@@ -735,6 +1009,184 @@ mod job {
                 subscribed
             }
         );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_handle_slack_message_in_known_thread_from_known_user(
+        settings: Settings,
+        #[future] tested_app_with_local_auth: TestedApp,
+        mut nango_slack_connection: Box<NangoConnection>,
+        mut message_in_thread_event: Box<SlackPushEventCallback>,
+        mut slack_thread: Box<SlackThread>,
+    ) {
+        let app = tested_app_with_local_auth.await;
+        // `slack_thread` contains 2 messages from 2 different users:
+        // - first (read) message from user U01
+        // - second (unread) message from user U02
+        // Both users have read the first message and when receiving the second message
+        // as an event, only U01 will get its notification updated: marked as unread
+        nango_slack_connection.credentials.raw = json !({
+            "authed_user": { "id": "U02", "access_token": "slack_other_user_access_token" },
+            "team": { "id": "T01" }
+        });
+        let (client, user) = create_user_and_login(
+            &app,
+            "John",
+            "Doe",
+            "john@doe.net".parse().unwrap(),
+            "password",
+        )
+        .await;
+
+        let slack_integration_connection = create_and_mock_integration_connection(
+            &app,
+            user.id,
+            &settings.oauth2.nango_secret_key,
+            IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
+            &settings,
+            nango_slack_connection.clone(),
+            None,
+            None,
+        )
+        .await;
+
+        let service = app.notification_service.read().await;
+        let mut transaction = service.begin().await.unwrap();
+
+        let SlackPushEventCallback {
+            event: SlackEventCallbackBody::Message(ref mut message),
+            ..
+        } = *message_in_thread_event
+        else {
+            unreachable!("Unexpected event type");
+        };
+        message.origin.thread_ts = Some(slack_thread.messages.first().origin.ts.clone());
+
+        let slack_root_message_id = slack_thread.messages.first().origin.ts.to_string();
+        let slack_message_id = message.origin.ts.to_string();
+        // Fetch all users replying in the thread
+        let slack_fetch_user_mock1 = mock_slack_fetch_user(
+            &app.slack_mock_server,
+            "U01",
+            "slack_fetch_user_response.json",
+        );
+        let slack_fetch_user_mock2 = mock_slack_fetch_user(
+            &app.slack_mock_server,
+            "U02",
+            "slack_fetch_user_response.json",
+        );
+        let slack_fetch_thread_mock = mock_slack_fetch_thread(
+            &app.slack_mock_server,
+            "C05XXX",
+            &slack_root_message_id,
+            &slack_message_id,
+            "slack_fetch_thread_response.json",
+            true,
+            Some(0), // 1 of 2 messages read
+        );
+        let slack_fetch_channel_mock = mock_slack_fetch_channel(
+            &app.slack_mock_server,
+            "C05XXX",
+            "slack_fetch_channel_response.json",
+        );
+        let slack_fetch_team_mock = mock_slack_fetch_team(
+            &app.slack_mock_server,
+            "T01",
+            "slack_fetch_team_response.json",
+        );
+
+        let slack_first_unread_message_id = slack_thread.messages.last().origin.ts.clone();
+        slack_thread.subscribed = true;
+        slack_thread.last_read = Some(slack_first_unread_message_id.clone());
+        let _slack_get_chat_permalink_mock = mock_slack_get_chat_permalink(
+            &app.slack_mock_server,
+            "C05XXX",
+            slack_first_unread_message_id.as_ref(),
+            "slack_get_chat_permalink_response.json",
+        );
+
+        let existing_notification = create_notification_from_slack_thread(
+            &app,
+            &slack_thread,
+            user.id,
+            slack_integration_connection.id,
+        )
+        .await;
+        assert_eq!(existing_notification.status, NotificationStatus::Read);
+
+        let (other_client, other_user) = create_user_and_login(
+            &app,
+            "Jane",
+            "Doe",
+            "jane@doe.net".parse().unwrap(),
+            "password",
+        )
+        .await;
+        nango_slack_connection.credentials.raw = json !({
+            "authed_user": { "id": "U01", "access_token": "slack_test_user_access_token" },
+            "team": { "id": "T01" }
+        });
+        let other_slack_integration_connection = create_and_mock_integration_connection(
+            &app,
+            other_user.id,
+            &settings.oauth2.nango_secret_key,
+            IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
+            &settings,
+            nango_slack_connection,
+            None,
+            None,
+        )
+        .await;
+        let other_existing_notification = create_notification_from_slack_thread(
+            &app,
+            &slack_thread,
+            other_user.id,
+            other_slack_integration_connection.id,
+        )
+        .await;
+        assert_eq!(other_existing_notification.status, NotificationStatus::Read);
+
+        handle_slack_message_push_event(
+            &mut transaction,
+            &message_in_thread_event,
+            app.notification_service.clone(),
+            app.integration_connection_service.clone(),
+            app.third_party_item_service.clone(),
+            app.slack_service.clone(),
+        )
+        .await
+        .unwrap();
+
+        transaction
+            .commit()
+            .await
+            .context("Failed to commit transaction")
+            .unwrap();
+
+        slack_fetch_user_mock1.assert();
+        slack_fetch_user_mock2.assert();
+        slack_fetch_thread_mock.assert();
+        slack_fetch_channel_mock.assert();
+        slack_fetch_team_mock.assert();
+
+        let notifications =
+            list_notifications(&client, &app.api_address, vec![], false, None, None, false).await;
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(notifications[0].status, NotificationStatus::Read);
+
+        let notifications = list_notifications(
+            &other_client,
+            &app.api_address,
+            vec![],
+            false,
+            None,
+            None,
+            false,
+        )
+        .await;
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(notifications[0].status, NotificationStatus::Unread);
     }
 }
 
