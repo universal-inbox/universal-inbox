@@ -142,9 +142,9 @@ pub fn SlackNotificationSubtitle(notification: ReadOnlySignal<NotificationWithTa
                 let first_message_text = slack_thread
                     .messages
                     .first()
-                    .render_content(slack_thread.references.clone(), false);
+                    .render_title(slack_thread.references.clone());
                 format!(
-                    "Reply to `{}` in {}",
+                    "Replied to `{}` in {}",
                     first_message_text,
                     channel_str(&slack_thread.channel)
                 )

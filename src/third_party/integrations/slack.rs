@@ -320,6 +320,7 @@ impl HasHtmlUrl for SlackMessageDetails {
 
 pub trait SlackMessageRender {
     fn render_content(&self, references: Option<SlackReferences>, as_markdown: bool) -> String;
+    fn render_title(&self, references: Option<SlackReferences>) -> String;
 }
 
 impl SlackMessageRender for SlackHistoryMessage {
@@ -382,6 +383,18 @@ impl SlackMessageRender for SlackHistoryMessage {
         };
 
         replace_emoji_code_in_string_with_emoji(&message)
+    }
+
+    fn render_title(&self, references: Option<SlackReferences>) -> String {
+        if let Some(attachments) = &self.content.attachments {
+            if let Some(first_attachment) = attachments.first() {
+                if let Some(title) = first_attachment.title.as_ref() {
+                    return title.clone();
+                }
+            }
+        }
+
+        truncate_with_ellipse(&self.render_content(references, false), 120, "...", true)
     }
 }
 
@@ -588,26 +601,14 @@ impl SlackThread {
             .get(message_index)
             .unwrap_or_else(|| messages.last())
     }
+
     pub fn first_unread_message(&self) -> &SlackHistoryMessage {
         SlackThread::first_unread_message_from_last_read(&self.last_read, &self.messages)
     }
 
     pub fn render_title(&self) -> String {
-        let message = self.first_unread_message();
-        if let Some(attachments) = &message.content.attachments {
-            if let Some(first_attachment) = attachments.first() {
-                if let Some(title) = first_attachment.title.as_ref() {
-                    return title.clone();
-                }
-            }
-        }
-
-        truncate_with_ellipse(
-            &message.render_content(self.references.clone(), false),
-            120,
-            "...",
-            true,
-        )
+        self.first_unread_message()
+            .render_title(self.references.clone())
     }
 }
 
