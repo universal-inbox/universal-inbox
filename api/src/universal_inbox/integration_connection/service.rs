@@ -9,7 +9,7 @@ use tokio_retry::{
     strategy::{jitter, ExponentialBackoff},
     Retry,
 };
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 
 use universal_inbox::{
     integration_connection::{
