@@ -45,13 +45,18 @@ pub async fn handle_slack_message_push_event<'a>(
     third_party_item_service: Arc<RwLock<ThirdPartyItemService>>,
     slack_service: Arc<SlackService>,
 ) -> Result<(), UniversalInboxError> {
-    let (provider_user_ids, thread_ts) = match event {
+    let (provider_user_ids, thread_ts, sender_user_id) = match event {
         SlackPushEventCallback {
             team_id,
             event:
                 SlackEventCallbackBody::Message(SlackMessageEvent {
                     origin: SlackMessageOrigin { ref thread_ts, .. },
                     content: Some(ref content),
+                    sender:
+                        SlackMessageSender {
+                            user: ref sender_user_id,
+                            ..
+                        },
                     ..
                 }),
             ..
@@ -86,7 +91,19 @@ pub async fn handle_slack_message_push_event<'a>(
                 }
             }
 
-            (user_ids, thread_ts.clone())
+            (
+                user_ids
+                    .into_iter()
+                    .filter(|user_id| {
+                        sender_user_id
+                            .as_ref()
+                            .map(|sender_user_id| *user_id != *sender_user_id.0)
+                            .unwrap_or(true)
+                    })
+                    .collect::<Vec<String>>(),
+                thread_ts.clone(),
+                sender_user_id.clone(),
+            )
         }
         _ => {
             warn!("Slack push event is not a message event");
@@ -130,6 +147,7 @@ pub async fn handle_slack_message_push_event<'a>(
             executor,
             ThirdPartyItemKind::SlackThread,
             thread_ts.as_ref(),
+            sender_user_id,
         )
         .await?;
 

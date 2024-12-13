@@ -1,6 +1,7 @@
 use anyhow::anyhow;
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
+use slack_morphism::SlackUserId;
 use sqlx::{postgres::PgRow, types::Json, Postgres, QueryBuilder, Row, Transaction};
 use tracing::debug;
 use uuid::Uuid;
@@ -39,6 +40,7 @@ pub trait ThirdPartyItemRepository {
         executor: &mut Transaction<'a, Postgres>,
         kind: ThirdPartyItemKind,
         source_id: &str,
+        excluding_slack_user_id: Option<SlackUserId>,
     ) -> Result<bool, UniversalInboxError>;
 
     async fn find_third_party_items_for_source_id<'a>(
@@ -46,6 +48,7 @@ pub trait ThirdPartyItemRepository {
         executor: &mut Transaction<'a, Postgres>,
         kind: ThirdPartyItemKind,
         source_id: &str,
+        excluding_slack_user_id: Option<SlackUserId>,
     ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError>;
 }
 
@@ -269,29 +272,33 @@ impl ThirdPartyItemRepository for Repository {
         executor: &mut Transaction<'a, Postgres>,
         kind: ThirdPartyItemKind,
         source_id: &str,
+        excluding_slack_user_id: Option<SlackUserId>,
     ) -> Result<bool, UniversalInboxError> {
-        let count: Option<i64> = sqlx::query_scalar!(
-            r#"
-              SELECT
-                count(*)
-              FROM third_party_item
-              WHERE
-                source_id = $1
-                AND kind::TEXT = $2
-            "#,
-            source_id,
-            kind.to_string(),
-        )
-        .fetch_one(&mut **executor)
-        .await
-        .map_err(|err| {
-            let message =
-                format!("Failed to find {kind} third party item from source_id {source_id} from storage: {err}");
-            UniversalInboxError::DatabaseError {
+        let mut query_builder = QueryBuilder::new("SELECT count(*) FROM third_party_item");
+        if excluding_slack_user_id.is_some() {
+            query_builder.push(" LEFT JOIN integration_connection ON third_party_item.integration_connection_id = integration_connection.id");
+        }
+        query_builder.push(" WHERE source_id = ");
+        query_builder.push_bind(source_id);
+        query_builder.push(" AND kind::TEXT = ");
+        query_builder.push_bind(kind.to_string());
+        if let Some(slack_user_id) = excluding_slack_user_id {
+            query_builder.push(" AND integration_connection.provider_user_id != ");
+            query_builder.push_bind(slack_user_id.to_string());
+        }
+
+        let count: Option<i64> = query_builder
+            .build_query_scalar()
+            .fetch_one(&mut **executor)
+            .await
+            .map_err(|err| {
+                let message =
+                    format!("Failed to find {kind} third party item from source_id {source_id} from storage: {err}");
+                UniversalInboxError::DatabaseError {
                 source: err,
-                message,
-            }
-        })?;
+                    message,
+                }
+            })?;
 
         if let Some(1) = count {
             return Ok(true);
@@ -305,35 +312,44 @@ impl ThirdPartyItemRepository for Repository {
         executor: &mut Transaction<'a, Postgres>,
         kind: ThirdPartyItemKind,
         source_id: &str,
+        excluding_slack_user_id: Option<SlackUserId>,
     ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError> {
-        let records = sqlx::query_as!(
-            ThirdPartyItemRow,
+        let mut query_builder = QueryBuilder::new(
             r#"
               SELECT
                 third_party_item.id,
                 third_party_item.source_id,
-                third_party_item.data as "data: Json<ThirdPartyItemData>",
+                third_party_item.data,
                 third_party_item.created_at,
                 third_party_item.updated_at,
                 third_party_item.user_id,
                 third_party_item.integration_connection_id
               FROM third_party_item
-              WHERE
-                source_id = $1
-                AND kind::TEXT = $2
             "#,
-            source_id,
-            kind.to_string(),
-        )
-        .fetch_all(&mut **executor)
-        .await
-        .map_err(|err| {
-            let message = format!("Failed to find {kind} third party item from source_id {source_id} from storage: {err}");
-            UniversalInboxError::DatabaseError {
-                source: err,
-                message,
-            }
-        })?;
+        );
+        if excluding_slack_user_id.is_some() {
+            query_builder.push(" LEFT JOIN integration_connection ON third_party_item.integration_connection_id = integration_connection.id");
+        }
+        query_builder.push(" WHERE source_id = ");
+        query_builder.push_bind(source_id);
+        query_builder.push(" AND kind::TEXT = ");
+        query_builder.push_bind(kind.to_string());
+        if let Some(slack_user_id) = excluding_slack_user_id {
+            query_builder.push(" AND integration_connection.provider_user_id != ");
+            query_builder.push_bind(slack_user_id.to_string());
+        }
+
+        let records = query_builder
+            .build_query_as::<ThirdPartyItemRow>()
+            .fetch_all(&mut **executor)
+            .await
+            .map_err(|err| {
+                let message = format!("Failed to find {kind} third party item from source_id {source_id} from storage: {err}");
+                UniversalInboxError::DatabaseError {
+                    source: err,
+                    message,
+                }
+            })?;
 
         records
             .iter()

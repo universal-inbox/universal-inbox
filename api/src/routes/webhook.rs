@@ -137,6 +137,7 @@ pub async fn push_slack_event(
                     SlackEventCallbackBody::Message(SlackMessageEvent {
                         origin: SlackMessageOrigin { ref thread_ts, .. },
                         content: Some(ref content),
+                        sender: SlackMessageSender { ref user, .. },
                         ..
                     }),
                 ..
@@ -160,6 +161,7 @@ pub async fn push_slack_event(
                         &mut transaction,
                         ThirdPartyItemKind::SlackThread,
                         &thread_ts.0,
+                        user.clone(),
                     )
                     .await?
                 {

@@ -286,7 +286,6 @@ pub fn mock_slack_list_users_in_usergroup<'a>(
     slack_mock_server.mock(|when, then| {
         when.method(GET)
             .path("/usergroups.users.list")
-            .header("authorization", "Bearer slack_test_user_access_token")
             .query_param("usergroup", usergroup_id);
         then.status(200)
             .header("content-type", "application/json")
