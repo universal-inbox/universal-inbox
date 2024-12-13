@@ -12,6 +12,7 @@
 - Fix Slack user group ID resolution
 - Increase Slack task title size limit
 - Disable Todoist task search when not connected
+- Fix Slack message format with missing new lines
 
 ## 2024-10-21
 

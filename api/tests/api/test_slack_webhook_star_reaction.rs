@@ -910,7 +910,7 @@ async fn test_receive_star_or_reaction_added_event_as_task(
         &todoist_item.id,
         "[🔴  Test title 🔴...](https://slack.com/archives/C05XXX/p1234567890)".to_string(),
         Some(
-            "🔴  *Test title* 🔴\n\n- list 1\n- list 2\n1. number 1\n1. number 2\n> quote\n```$ echo Hello world```\n_Some_ `formatted` ~text~.\n\nHere is a [link](https://www.universal-inbox.com)@john.doe@admins#test".to_string(),
+            "🔴  *Test title* 🔴\n\n\n- list 1\n- list 2\n\n\n1. number 1\n1. number 2\n\n\n> quote\n\n\n```$ echo Hello world```\n\n_Some_ `formatted` ~text~.\n\nHere is a [link](https://www.universal-inbox.com)@john.doe@admins#test".to_string(),
         ),
         "1111".to_string(), // ie. "Inbox"
         None,
@@ -1101,7 +1101,7 @@ async fn test_receive_star_or_reaction_removed_and_added_event_as_task(
         &todoist_item.id,
         "[🔴  Test title 🔴...](https://slack.com/archives/C05XXX/p1234567890)".to_string(),
         Some(
-            "🔴  *Test title* 🔴\n\n- list 1\n- list 2\n1. number 1\n1. number 2\n> quote\n```$ echo Hello world```\n_Some_ `formatted` ~text~.\n\nHere is a [link](https://www.universal-inbox.com)@john.doe@admins#test".to_string(),
+            "🔴  *Test title* 🔴\n\n\n- list 1\n- list 2\n\n\n1. number 1\n1. number 2\n\n\n> quote\n\n\n```$ echo Hello world```\n\n_Some_ `formatted` ~text~.\n\nHere is a [link](https://www.universal-inbox.com)@john.doe@admins#test".to_string(),
         ),
         "1111".to_string(), // ie. "Inbox"
         None,
