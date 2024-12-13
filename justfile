@@ -66,6 +66,9 @@ check-unused-dependencies:
 format:
     cargo fmt --all
 
+format-sql sql-files="api/migrations":
+    sqlfluff fix --disable-progress-bar --dialect postgres {{sql-files}}
+
 check-format:
     cargo fmt --all --check
 

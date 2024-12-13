@@ -36,7 +36,8 @@
     "cargo-binstall":   "latest",
     "openssl.dev":      "",
     "wasm-bindgen-cli": "0.2.93",
-    "cargo-machete":    "latest"
+    "cargo-machete":    "latest",
+    "sqlfluff":         "latest"
   },
   "shell": {
     "init_hook": [
