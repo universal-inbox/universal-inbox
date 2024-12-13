@@ -1162,6 +1162,70 @@
         }
       }
     },
+    "sqlfluff@latest": {
+      "last_modified": "2024-12-03T12:40:06Z",
+      "resolved": "github:NixOS/nixpkgs/566e53c2ad750c84f6d31f9ccb9d00f823165550#sqlfluff",
+      "source": "devbox-search",
+      "version": "3.2.5",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/9f1kiwla6vfbj7waph2qhc27rvk54ad4-sqlfluff-3.2.5",
+              "default": true
+            },
+            {
+              "name": "dist",
+              "path": "/nix/store/fzk3mcbfs3i129ss3m79758cq719m5c3-sqlfluff-3.2.5-dist"
+            }
+          ],
+          "store_path": "/nix/store/9f1kiwla6vfbj7waph2qhc27rvk54ad4-sqlfluff-3.2.5"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/d9zkixflh7jjmk04qa4kg12z91p23k48-sqlfluff-3.2.5",
+              "default": true
+            },
+            {
+              "name": "dist",
+              "path": "/nix/store/wlnbkaaalzqhkgh146a8a3rf7bhch8dw-sqlfluff-3.2.5-dist"
+            }
+          ],
+          "store_path": "/nix/store/d9zkixflh7jjmk04qa4kg12z91p23k48-sqlfluff-3.2.5"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/m6kk40n4mw5rp6b7gnfv8pl94d20is15-sqlfluff-3.2.5",
+              "default": true
+            },
+            {
+              "name": "dist",
+              "path": "/nix/store/hd4cwri2z5n86c0hg55z1fph3xqr9hqw-sqlfluff-3.2.5-dist"
+            }
+          ],
+          "store_path": "/nix/store/m6kk40n4mw5rp6b7gnfv8pl94d20is15-sqlfluff-3.2.5"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/8y6dcx9gjg0r47yqa8dp43x9apdnlxiq-sqlfluff-3.2.5",
+              "default": true
+            },
+            {
+              "name": "dist",
+              "path": "/nix/store/kyhcqhx8xi2bs192k89gsaavi1z36q49-sqlfluff-3.2.5-dist"
+            }
+          ],
+          "store_path": "/nix/store/8y6dcx9gjg0r47yqa8dp43x9apdnlxiq-sqlfluff-3.2.5"
+        }
+      }
+    },
     "sqlx-cli@0.8.2": {
       "last_modified": "2024-09-10T15:01:03Z",
       "resolved": "github:NixOS/nixpkgs/5ed627539ac84809c78b2dd6d26a5cebeb5ae269#sqlx-cli",
