@@ -742,7 +742,7 @@ mod test_message_details {
         fn test_render_starred_message_with_blocks(slack_starred_message: SlackStarItem) {
             assert_eq!(
                 slack_starred_message.render_content(),
-                "🔴  *Test title* 🔴\n\n- list 1\n- list 2\n1. number 1\n1. number 2\n> quote\n```$ echo Hello world```\n_Some_ `formatted` ~text~.\n\nHere is a [link](https://www.universal-inbox.com)"
+                "🔴  *Test title* 🔴\n\n\n- list 1\n- list 2\n\n\n1. number 1\n1. number 2\n\n\n> quote\n\n\n```$ echo Hello world```\n\n_Some_ `formatted` ~text~.\n\nHere is a [link](https://www.universal-inbox.com)"
             );
         }
 
@@ -769,7 +769,7 @@ mod test_message_details {
             message.message.content.blocks = Some(vec![]);
             assert_eq!(
                 slack_starred_message.render_content(),
-                "🔴  *Test title* 🔴\n\n- list 1\n- list 2\n1. number 1\n1. number 2\n> quote\n```$ echo Hello world```\n_Some_ `formatted` ~text~.\n\nHere is a [link](https://www.universal-inbox.com)"
+                "🔴  *Test title* 🔴\n\n\n- list 1\n- list 2\n\n\n1. number 1\n1. number 2\n\n\n> quote\n\n\n```$ echo Hello world```\n\n_Some_ `formatted` ~text~.\n\nHere is a [link](https://www.universal-inbox.com)"
             );
         }
 
@@ -984,7 +984,7 @@ mod test_message_details {
             });
             assert_eq!(
                 slack_starred_message.render_content(),
-                "@John Doe@user2@Admins@group2#general#C0011223"
+                "@John Doe\n@user2\n@Admins\n@group2\n#general\n#C0011223"
             );
         }
     }
