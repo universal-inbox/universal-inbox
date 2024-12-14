@@ -15,7 +15,7 @@ use gravatar::{Gravatar, Rating};
 
 use crate::{
     config::APP_CONFIG,
-    model::{DEFAULT_USER_AVATAR, NOT_CONNECTED_USER_NAME},
+    model::{DEFAULT_USER_AVATAR, NOT_CONNECTED_USER_NAME, UI_MODEL, VERSION},
     route::Route,
     services::{
         headway::init_headway,
@@ -100,6 +100,15 @@ pub fn NavBar() -> Element {
                     }
                     if SYNCED_TASKS_PAGE().total > 0 {
                       span { class: "indicator-item indicator-top badge badge-primary text-xs", "{SYNCED_TASKS_PAGE().total}" }
+                    }
+                }
+            }
+
+            if let Some(version) = VERSION {
+                if UI_MODEL.read().is_help_enabled {
+                    div {
+                        class: "navbar-center",
+                        span { class: "text-xs text-gray-300", "build: {version}" }
                     }
                 }
             }

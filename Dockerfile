@@ -39,10 +39,12 @@ RUN devbox run -- cargo chef cook --release -p universal-inbox-api --recipe-path
 RUN devbox run -- just api/build-release
 
 FROM dep-web-builder as release-web-builder
+ARG VERSION
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" Cargo.toml Cargo.lock ./
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/Cargo.toml web/Cargo.toml
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" src src
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web web
+ENV VERSION=${VERSION}
 RUN devbox run -- just web/build-release
 RUN sed -i 's#http://localhost:8000/api#/api#' web/dist/snippets/universal-inbox-web-*/js/api.js
 RUN sed -i 's#http://localhost:8000/api#/api#' web/dist/index.html
