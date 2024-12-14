@@ -30,19 +30,27 @@ pub mod user_profile_card;
 fn CollapseCardWithIcon(
     icon: Element,
     title: ReadOnlySignal<String>,
+    opened: Option<bool>,
     children: Element,
 ) -> Element {
     rsx! {
         CollapseCard {
             header: rsx! { { icon }, span { "{title}" } },
+            opened: opened.unwrap_or_default(),
             children
         }
     }
 }
 
 #[component]
-fn CollapseCard(header: Element, children: Element, class: Option<String>) -> Element {
+fn CollapseCard(
+    header: Element,
+    children: Element,
+    class: Option<String>,
+    opened: Option<bool>,
+) -> Element {
     let card_style = class.unwrap_or("bg-base-200 text-base-content".to_string());
+    let checked = opened.unwrap_or_default();
 
     rsx! {
         div {
@@ -52,7 +60,7 @@ fn CollapseCard(header: Element, children: Element, class: Option<String>) -> El
                 class: "card-body p-0",
                 div {
                     class: "collapse collapse-arrow",
-                    input { "class": "min-h-0 p-2", "type": "checkbox" },
+                    input { "class": "min-h-0 p-2", "type": "checkbox", checked },
                     div {
                         class: "collapse-title min-h-0 p-2",
                         div { class: "flex items-center gap-2", { header } }

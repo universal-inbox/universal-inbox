@@ -11,7 +11,7 @@ use crate::{
     keyboard_manager::{KeyboardHandler, KEYBOARD_MANAGER},
     model::UI_MODEL,
     services::task_service::{TaskCommand, SYNCED_TASKS_PAGE},
-    utils::open_link,
+    utils::{open_link, scroll_element, scroll_element_by_page},
 };
 
 static KEYBOARD_HANDLER: SyncTasksPageKeyboardHandler = SyncTasksPageKeyboardHandler {};
@@ -65,9 +65,14 @@ pub fn SyncedTasksPage() -> Element {
                 if let Some(task) = SYNCED_TASKS_PAGE().content
                     .get(UI_MODEL.read().selected_task_index) {
                     div {
+                        id: "task-preview",
                         class: "h-full basis-1/3 overflow-auto scroll-auto px-2 py-2 flex flex-row",
 
-                        TaskPreview { task: task.clone() }
+                        TaskPreview {
+                            task: task.clone(),
+                            expand_details: UI_MODEL.read().preview_cards_expanded,
+                            is_help_enabled: UI_MODEL.read().is_help_enabled,
+                        }
                     }
                 }
             }
@@ -99,6 +104,18 @@ impl KeyboardHandler for SyncTasksPageKeyboardHandler {
                 if let Some(task) = selected_task {
                     task_service.send(TaskCommand::Complete(task.id))
                 }
+            }
+            "j" => {
+                let _ = scroll_element("task-preview", 100.0);
+            }
+            "k" => {
+                let _ = scroll_element("task-preview", -100.0);
+            }
+            " " => {
+                let _ = scroll_element_by_page("task-preview");
+            }
+            "e" => {
+                UI_MODEL.write().toggle_preview_cards();
             }
             "Enter" => {
                 if let Some(task) = selected_task {

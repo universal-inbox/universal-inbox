@@ -24,18 +24,21 @@ impl From<LinearLabel> for Tag {
 #[component]
 pub fn LinearNotificationPreview(
     linear_notification: ReadOnlySignal<LinearNotification>,
+    expand_details: ReadOnlySignal<bool>,
 ) -> Element {
     match linear_notification() {
         LinearNotification::IssueNotification { issue, .. } => rsx! {
             LinearIssuePreview {
                 linear_issue: issue,
-                linear_notification: Some(linear_notification())
+                linear_notification: Some(linear_notification()),
+                expand_details
             }
         },
         LinearNotification::ProjectNotification { project, .. } => rsx! {
             LinearProjectPreview {
                 linear_project: project,
-                linear_notification: Some(linear_notification())
+                linear_notification: Some(linear_notification()),
+                expand_details,
             }
         },
     }

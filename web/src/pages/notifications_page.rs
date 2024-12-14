@@ -14,7 +14,7 @@ use crate::{
     keyboard_manager::{KeyboardHandler, KEYBOARD_MANAGER},
     model::{PreviewPane, UI_MODEL},
     services::notification_service::{NotificationCommand, NOTIFICATIONS_PAGE},
-    utils::open_link,
+    utils::{open_link, scroll_element, scroll_element_by_page},
 };
 
 static KEYBOARD_HANDLER: NotificationsPageKeyboardHandler = NotificationsPageKeyboardHandler {};
@@ -70,6 +70,7 @@ pub fn NotificationsPage() -> Element {
                 if let Some(notification) = NOTIFICATIONS_PAGE()
                     .content.get(UI_MODEL.read().selected_notification_index) {
                     div {
+                        id: "notification-preview",
                         class: "h-full basis-1/3 overflow-auto scroll-auto px-2 py-2 flex flex-row",
 
                         NotificationPreview {
@@ -158,6 +159,18 @@ impl KeyboardHandler for NotificationsPageKeyboardHandler {
             }
             "p" => UI_MODEL.write().task_planning_modal_opened = true,
             "l" => UI_MODEL.write().task_link_modal_opened = true,
+            "j" => {
+                let _ = scroll_element("notification-preview", 100.0);
+            }
+            "k" => {
+                let _ = scroll_element("notification-preview", -100.0);
+            }
+            " " => {
+                let _ = scroll_element_by_page("notification-preview");
+            }
+            "e" => {
+                UI_MODEL.write().toggle_preview_cards();
+            }
             "Enter" => {
                 if let Some(notification) = selected_notification {
                     let _ = open_link(notification.get_html_url().as_str());

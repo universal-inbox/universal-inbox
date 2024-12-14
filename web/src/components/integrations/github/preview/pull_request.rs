@@ -27,7 +27,10 @@ use crate::components::{
 };
 
 #[component]
-pub fn GithubPullRequestPreview(github_pull_request: ReadOnlySignal<GithubPullRequest>) -> Element {
+pub fn GithubPullRequestPreview(
+    github_pull_request: ReadOnlySignal<GithubPullRequest>,
+    expand_details: ReadOnlySignal<bool>,
+) -> Element {
     rsx! {
         div {
             class: "flex flex-col w-full gap-2",
@@ -69,7 +72,7 @@ pub fn GithubPullRequestPreview(github_pull_request: ReadOnlySignal<GithubPullRe
                 }
             }
 
-            GithubPullRequestDetails { github_pull_request: github_pull_request }
+            GithubPullRequestDetails { github_pull_request, expand_details }
         }
     }
 }
@@ -84,7 +87,10 @@ impl From<GithubLabel> for Tag {
 }
 
 #[component]
-fn GithubPullRequestDetails(github_pull_request: ReadOnlySignal<GithubPullRequest>) -> Element {
+fn GithubPullRequestDetails(
+    github_pull_request: ReadOnlySignal<GithubPullRequest>,
+    expand_details: ReadOnlySignal<bool>,
+) -> Element {
     let show_base_and_head_repositories = match (
         &github_pull_request().head_repository,
         &github_pull_request().base_repository,
@@ -223,9 +229,13 @@ fn GithubPullRequestDetails(github_pull_request: ReadOnlySignal<GithubPullReques
                 SmallCard { { mergeable_state_icon }, span { "{mergeable_state_label}" } }
             }
 
-            ChecksGithubPullRequest { latest_commit: github_pull_request().latest_commit, with_details: true }
+            ChecksGithubPullRequest {
+                latest_commit: github_pull_request().latest_commit,
+                with_details: true,
+                expand_details
+            }
 
-            ReviewsGithubPullRequest { github_pull_request: github_pull_request }
+            ReviewsGithubPullRequest { github_pull_request, expand_details }
 
             p {
                 class: "w-full prose prose-sm dark:prose-invert",
@@ -242,6 +252,7 @@ pub fn ChecksGithubPullRequest(
     latest_commit: ReadOnlySignal<GithubCommitChecks>,
     with_details: Option<bool>,
     icon_size: Option<String>,
+    expand_details: ReadOnlySignal<bool>,
 ) -> Element {
     let with_details = with_details.unwrap_or_default();
     let checks_progress =
@@ -285,6 +296,7 @@ pub fn ChecksGithubPullRequest(
                 CollapseCardWithIcon {
                     title: "{checks_state.0}",
                     icon: checks_state.1,
+                    opened: expand_details(),
                     ChecksGithubPullRequestDetails { latest_commit: latest_commit }
                 }
             };
@@ -466,7 +478,10 @@ fn compute_pull_request_checks_progress(
 }
 
 #[component]
-fn ReviewsGithubPullRequest(github_pull_request: ReadOnlySignal<GithubPullRequest>) -> Element {
+fn ReviewsGithubPullRequest(
+    github_pull_request: ReadOnlySignal<GithubPullRequest>,
+    expand_details: ReadOnlySignal<bool>,
+) -> Element {
     let reviews_state = github_pull_request()
         .review_decision
         .as_ref()
@@ -495,6 +510,7 @@ fn ReviewsGithubPullRequest(github_pull_request: ReadOnlySignal<GithubPullReques
         CollapseCardWithIcon {
             title: "{reviews_state.0}",
             icon: reviews_state.1,
+            opened: expand_details(),
             ReviewsGithubPullRequestDetails { github_pull_request: github_pull_request }
         }
     }

@@ -55,12 +55,17 @@ pub fn GithubNotificationDisplay(
 #[component]
 pub fn GithubPullRequestDetailsDisplay(
     github_pull_request: ReadOnlySignal<GithubPullRequest>,
+    expand_details: ReadOnlySignal<bool>,
 ) -> Element {
     rsx! {
         div {
             class: "flex items-center gap-2",
 
-            ChecksGithubPullRequest { latest_commit: github_pull_request().latest_commit, icon_size: "h-3 w-3" }
+            ChecksGithubPullRequest {
+                latest_commit: github_pull_request().latest_commit,
+                icon_size: "h-3 w-3",
+                expand_details
+            }
 
             if github_pull_request().comments_count > 0 {
                 div {

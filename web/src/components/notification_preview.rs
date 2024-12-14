@@ -41,6 +41,13 @@ pub fn NotificationPreview(
 ) -> Element {
     let has_notification_details_preview = !notification().is_built_from_task();
     let has_task_details_preview = notification().task.is_some();
+    let shortcut_visibility_style = use_memo(move || {
+        if ui_model.read().is_help_enabled {
+            "visible"
+        } else {
+            "invisible"
+        }
+    });
 
     let mut latest_shown_notification_id = use_signal(|| None::<NotificationId>);
     // reset selected_preview_pane when showing another notification
@@ -73,10 +80,20 @@ pub fn NotificationPreview(
                         class: "tab {notification_tab_style}",
                         role: "tab",
                         onclick: move |_| { ui_model.write().selected_preview_pane = PreviewPane::Notification },
+                        span {
+                            class: "{shortcut_visibility_style} indicator-item indicator-top indicator-start badge text-xs text-gray-400 z-50",
+                            "▼ j"
+                        }
+                        div { class: "grow" }
                         div {
                             class: "flex gap-2",
                             NotificationIcon { class: "h-5 w-5", kind: notification().kind }
                             "Notification"
+                        }
+                        div { class: "grow" }
+                        span {
+                            class: "{shortcut_visibility_style} indicator-item indicator-top indicator-start badge text-xs text-gray-400 z-50",
+                            "▲ k"
                         }
                     }
                 }
@@ -96,11 +113,31 @@ pub fn NotificationPreview(
                 }
             }
 
+            if shortcut_visibility_style == "visible" {
+                span {
+                    class: "{shortcut_visibility_style} indicator-item indicator-top indicator-start badge text-xs text-gray-400 z-50",
+                    "e: expand/collapse"
+                }
+                if has_task_details_preview {
+                    span {
+                        class: "{shortcut_visibility_style} indicator-item indicator-top indicator-start badge text-xs text-gray-400 z-50",
+                        "tab: switch between tabs"
+                    }
+                }
+            }
             match ui_model.read().selected_preview_pane {
-                PreviewPane::Notification => rsx! { NotificationDetailsPreview { notification } },
+                PreviewPane::Notification => rsx! {
+                    NotificationDetailsPreview {
+                        notification,
+                        expand_details: ui_model.read().preview_cards_expanded
+                    }
+                },
                 PreviewPane::Task => rsx! {
                     if let Some(task) = notification().task {
-                        TaskDetailsPreview { task }
+                        TaskDetailsPreview {
+                            task,
+                            expand_details: ui_model.read().preview_cards_expanded
+                        }
                     }
                 },
             }
@@ -109,15 +146,18 @@ pub fn NotificationPreview(
 }
 
 #[component]
-fn NotificationDetailsPreview(notification: ReadOnlySignal<NotificationWithTask>) -> Element {
+fn NotificationDetailsPreview(
+    notification: ReadOnlySignal<NotificationWithTask>,
+    expand_details: ReadOnlySignal<bool>,
+) -> Element {
     match notification().source_item.data {
         ThirdPartyItemData::GithubNotification(github_notification) => {
             match github_notification.item {
                 Some(GithubNotificationItem::GithubPullRequest(github_pull_request)) => rsx! {
-                    GithubPullRequestPreview { github_pull_request }
+                    GithubPullRequestPreview { github_pull_request, expand_details }
                 },
                 Some(GithubNotificationItem::GithubDiscussion(github_discussion)) => rsx! {
-                    GithubDiscussionPreview { github_discussion }
+                    GithubDiscussionPreview { github_discussion, expand_details }
                 },
                 _ => rsx! {
                     GithubNotificationDefaultPreview {
@@ -174,10 +214,17 @@ fn NotificationDetailsPreview(notification: ReadOnlySignal<NotificationWithTask>
             },
         },
         ThirdPartyItemData::SlackThread(slack_thread) => rsx! {
-            SlackThreadPreview { slack_thread: *slack_thread, title: notification().title }
+            SlackThreadPreview {
+                slack_thread: *slack_thread,
+                title: notification().title,
+                expand_details
+            }
         },
         ThirdPartyItemData::LinearNotification(linear_notification) => rsx! {
-            LinearNotificationPreview { linear_notification: *linear_notification }
+            LinearNotificationPreview {
+                linear_notification: *linear_notification,
+                expand_details
+            }
         },
         ThirdPartyItemData::GoogleMailThread(google_mail_thread) => rsx! {
             GoogleMailThreadPreview {

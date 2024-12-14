@@ -15,6 +15,7 @@ use crate::components::{
 pub fn SlackThreadPreview(
     slack_thread: ReadOnlySignal<SlackThread>,
     title: ReadOnlySignal<String>,
+    expand_details: ReadOnlySignal<bool>,
 ) -> Element {
     let channel_name = slack_thread()
         .channel
@@ -46,14 +47,20 @@ pub fn SlackThreadPreview(
                 }
             }
 
-            SlackThreadDisplay { slack_thread }
+            SlackThreadDisplay { slack_thread, expand_details }
         }
     }
 }
 
 #[component]
-fn SlackThreadDisplay(slack_thread: ReadOnlySignal<SlackThread>) -> Element {
+fn SlackThreadDisplay(
+    slack_thread: ReadOnlySignal<SlackThread>,
+    expand_details: ReadOnlySignal<bool>,
+) -> Element {
     let mut show_all = use_signal(|| false);
+    let _ = use_resource(move || async move {
+        *show_all.write() = expand_details();
+    });
     let messages = slack_thread().messages;
     let last_read_message_index = if let Some(last_read) = slack_thread().last_read {
         messages

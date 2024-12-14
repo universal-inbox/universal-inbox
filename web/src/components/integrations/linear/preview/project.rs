@@ -23,6 +23,7 @@ use crate::components::{
 pub fn LinearProjectPreview(
     linear_project: ReadOnlySignal<LinearProject>,
     linear_notification: ReadOnlySignal<Option<LinearNotification>>,
+    expand_details: ReadOnlySignal<bool>,
 ) -> Element {
     rsx! {
         div {
@@ -50,7 +51,7 @@ pub fn LinearProjectPreview(
                 }
             }
 
-            LinearProjectDetails { linear_project, linear_notification }
+            LinearProjectDetails { linear_project, linear_notification, expand_details }
         }
     }
 }
@@ -59,6 +60,7 @@ pub fn LinearProjectPreview(
 pub fn LinearProjectDetails(
     linear_project: ReadOnlySignal<LinearProject>,
     linear_notification: ReadOnlySignal<Option<LinearNotification>>,
+    expand_details: ReadOnlySignal<bool>,
     dark_bg: Option<bool>,
 ) -> Element {
     let (cards_style, proses_style) = if dark_bg.unwrap_or_default() {
@@ -74,6 +76,7 @@ pub fn LinearProjectDetails(
             CollapseCard {
                 class: "{cards_style}",
                 header: rsx! { span { class: "text-gray-400 ", "Description" } },
+                opened: expand_details(),
                 Markdown { class: "{proses_style}", text: linear_project().description.clone() }
             }
 
