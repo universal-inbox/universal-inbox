@@ -2,6 +2,7 @@
 
 use comrak::{markdown_to_html as md2html, Options};
 use dioxus::prelude::*;
+use regex::Regex;
 
 #[component]
 pub fn Markdown(text: String, class: Option<String>) -> Element {
@@ -20,5 +21,10 @@ pub fn markdown_to_html(text: &str) -> String {
     markdown_opts.extension.table = true;
     markdown_opts.extension.tasklist = true;
     markdown_opts.extension.shortcodes = true;
-    md2html(text, &markdown_opts)
+    markdown_opts.render.escape = true;
+
+    let html = md2html(text, &markdown_opts);
+    let re = Regex::new(r"@(@[^@]+)@").unwrap();
+    re.replace_all(&html, "<span class=\"text-primary\">$1</span>")
+        .to_string()
 }

@@ -2,8 +2,8 @@
 
 use dioxus::prelude::*;
 use dioxus_free_icons::{icons::bs_icons::BsArrowUpRightSquare, Icon};
-
 use slack_morphism::{SlackHistoryMessage, SlackMessageSender};
+
 use universal_inbox::third_party::integrations::slack::{SlackMessageRender, SlackThread};
 
 use crate::components::{

@@ -331,6 +331,7 @@ impl SlackMessageRender for SlackHistoryMessage {
                     render_blocks_as_markdown(
                         blocks.clone(),
                         references.clone().unwrap_or_default(),
+                        Some("@".to_string()),
                     )
                 } else {
                     render_blocks_as_text(blocks.clone(), references.clone().unwrap_or_default())
@@ -348,6 +349,7 @@ impl SlackMessageRender for SlackHistoryMessage {
                                 Some(render_blocks_as_markdown(
                                     blocks.clone(),
                                     references.clone().unwrap_or_default(),
+                                    Some("@".to_string()),
                                 ))
                             } else {
                                 Some(render_blocks_as_text(
@@ -984,7 +986,7 @@ mod test_message_details {
             });
             assert_eq!(
                 slack_starred_message.render_content(),
-                "@John Doe\n@user2\n@Admins\n@group2\n#general\n#C0011223"
+                "@@John Doe@\n@@user2@\n@@Admins@\n@@group2@\n#general\n#C0011223"
             );
         }
     }
