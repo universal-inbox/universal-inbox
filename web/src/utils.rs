@@ -3,7 +3,7 @@ use gloo_timers::future::TimeoutFuture;
 use gloo_utils::errors::JsError;
 use url::Url;
 use wasm_bindgen::JsCast;
-use web_sys::{Element, HtmlElement, HtmlInputElement, Window};
+use web_sys::{Element, HtmlElement, HtmlInputElement, ScrollBehavior, ScrollToOptions, Window};
 
 pub async fn focus_and_select_input_element(id: &str) -> Result<HtmlInputElement> {
     let elt = wait_for_element_by_id(id, 300)
@@ -129,4 +129,18 @@ pub async fn copy_to_clipboard(text: &str) -> Result<()> {
     .context("Unable to copy text into the clipboard")?;
 
     Ok(())
+}
+
+pub fn scroll_element(id: &str, by: f64) -> Result<()> {
+    let elt = get_element_by_id(id)?;
+    let scroll_options = ScrollToOptions::new();
+    scroll_options.set_behavior(ScrollBehavior::Smooth);
+    scroll_options.set_top(by);
+    elt.scroll_by_with_scroll_to_options(&scroll_options);
+    Ok(())
+}
+
+pub fn scroll_element_by_page(id: &str) -> Result<()> {
+    let elt = get_element_by_id(id)?;
+    scroll_element(id, elt.client_height().into())
 }

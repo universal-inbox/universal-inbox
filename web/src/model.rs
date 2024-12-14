@@ -19,11 +19,16 @@ pub struct UniversalInboxUIModel {
     pub confirmation_message: Option<String>,
     pub is_syncing_notifications: bool,
     pub is_syncing_tasks: bool,
+    pub preview_cards_expanded: bool,
 }
 
 impl UniversalInboxUIModel {
     pub fn toggle_help(&mut self) {
         self.is_help_enabled = !self.is_help_enabled;
+    }
+
+    pub fn toggle_preview_cards(&mut self) {
+        self.preview_cards_expanded = !self.preview_cards_expanded;
     }
 }
 

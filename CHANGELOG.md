@@ -5,6 +5,7 @@
 ### Added
 
 - Synchronize one way (Slack => Universal Inbox) Slack mentions as notifications
+- Add new keyboard shortcuts to control the preview pane
 
 ### Fixed
 

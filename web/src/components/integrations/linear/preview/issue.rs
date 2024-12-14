@@ -30,6 +30,7 @@ use crate::{
 pub fn LinearIssuePreview(
     linear_issue: ReadOnlySignal<LinearIssue>,
     linear_notification: ReadOnlySignal<Option<LinearNotification>>,
+    expand_details: ReadOnlySignal<bool>,
 ) -> Element {
     rsx! {
         div {
@@ -74,7 +75,7 @@ pub fn LinearIssuePreview(
                 }
             }
 
-            LinearIssueDetails { linear_issue, linear_notification }
+            LinearIssueDetails { linear_issue, linear_notification, expand_details }
         }
     }
 }
@@ -83,6 +84,7 @@ pub fn LinearIssuePreview(
 fn LinearIssueDetails(
     linear_issue: ReadOnlySignal<LinearIssue>,
     linear_notification: ReadOnlySignal<Option<LinearNotification>>,
+    expand_details: ReadOnlySignal<bool>,
 ) -> Element {
     let issue_priority_style = match linear_issue().priority {
         LinearIssuePriority::Low => PRIORITY_LOW_COLOR_CLASS,
@@ -106,6 +108,7 @@ fn LinearIssueDetails(
             if let Some(description) = linear_issue().description {
                 CollapseCard {
                     header: rsx! { span { class: "text-gray-400", "Description" } },
+                    opened: expand_details(),
                     Markdown { text: description.clone() }
                 }
             }
@@ -171,7 +174,7 @@ fn LinearIssueDetails(
             }
 
             if let Some(linear_project) = linear_issue().project {
-                LinearProjectCard { linear_project, linear_notification }
+                LinearProjectCard { linear_project, linear_notification, expand_details }
             }
 
             if let Some(project_milestone) = linear_issue().project_milestone {
@@ -199,6 +202,7 @@ fn LinearIssueDetails(
 pub fn LinearProjectCard(
     linear_project: ReadOnlySignal<LinearProject>,
     linear_notification: ReadOnlySignal<Option<LinearNotification>>,
+    expand_details: ReadOnlySignal<bool>,
 ) -> Element {
     rsx! {
         CollapseCard {
@@ -224,10 +228,12 @@ pub fn LinearProjectCard(
                     Icon { class: "h-5 w-5 text-gray-400 p-1", icon: BsArrowUpRightSquare }
                 }
             },
+            opened: expand_details(),
 
             LinearProjectDetails {
                 linear_project,
                 linear_notification,
+                expand_details,
                 dark_bg: true
             }
         }

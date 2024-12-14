@@ -11,7 +11,10 @@ use crate::components::{
 };
 
 #[component]
-pub fn GithubDiscussionPreview(github_discussion: ReadOnlySignal<GithubDiscussion>) -> Element {
+pub fn GithubDiscussionPreview(
+    github_discussion: ReadOnlySignal<GithubDiscussion>,
+    expand_details: ReadOnlySignal<bool>,
+) -> Element {
     rsx! {
         div {
             class: "flex flex-col w-full gap-2",
@@ -51,13 +54,16 @@ pub fn GithubDiscussionPreview(github_discussion: ReadOnlySignal<GithubDiscussio
                 }
             }
 
-            GithubDiscussionDetails { github_discussion: github_discussion }
+            GithubDiscussionDetails { github_discussion: github_discussion, expand_details }
         }
     }
 }
 
 #[component]
-fn GithubDiscussionDetails(github_discussion: ReadOnlySignal<GithubDiscussion>) -> Element {
+fn GithubDiscussionDetails(
+    github_discussion: ReadOnlySignal<GithubDiscussion>,
+    expand_details: ReadOnlySignal<bool>,
+) -> Element {
     rsx! {
         div {
             class: "flex flex-col gap-2 w-full",
@@ -91,6 +97,7 @@ fn GithubDiscussionDetails(github_discussion: ReadOnlySignal<GithubDiscussion>) 
                             span { class: "text-gray-400", "Answered by" }
                             GithubActorDisplay { actor: actor.clone(), display_name: true }
                         },
+                        opened: expand_details(),
 
                         p {
                             class: "w-full prose prose-sm dark:prose-invert",

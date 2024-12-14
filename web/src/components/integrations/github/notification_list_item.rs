@@ -141,7 +141,8 @@ pub fn GithubPullRequestNotificationListItem(
 
             ChecksGithubPullRequest {
                 icon_size: "h-3 w-3",
-                latest_commit: github_pull_request().latest_commit
+                latest_commit: github_pull_request().latest_commit,
+                expand_details: false,
             }
 
             if github_pull_request().comments_count > 0 {
