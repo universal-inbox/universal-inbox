@@ -108,7 +108,7 @@ fn LinearIssueDetails(
             if let Some(description) = linear_issue().description {
                 CollapseCard {
                     header: rsx! { span { class: "text-gray-400", "Description" } },
-                    opened: expand_details(),
+                    opened: true,
                     Markdown { text: description.clone() }
                 }
             }
