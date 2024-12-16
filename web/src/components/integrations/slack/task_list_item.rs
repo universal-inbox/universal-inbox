@@ -23,6 +23,7 @@ use crate::components::{
         },
     },
     list::{ListContext, ListItem},
+    notifications_list::TaskHint,
     tasks_list::get_task_list_item_action_buttons,
 };
 
@@ -45,7 +46,10 @@ pub fn SlackStarTaskListItem(
             key: "{task().id}",
             title: "{task().title}",
             subtitle: rsx! { SlackStarTaskSubtitle { slack_star } },
-            icon: rsx! { Icon { class: "h-5 w-5", icon: BsSlack } },
+            icon: rsx! {
+                Icon { class: "h-5 w-5", icon: BsSlack },
+                TaskHint { task: Some(task()) }
+            },
             subicon: rsx! { SlackNotificationIcon { class: "h-5 w-5 min-w-5" } },
             action_buttons: get_task_list_item_action_buttons(
                 task,
@@ -82,7 +86,10 @@ pub fn SlackReactionTaskListItem(
             key: "{task().id}",
             title: "{task().title}",
             subtitle: rsx! { SlackReactionTaskSubtitle { slack_reaction } },
-            icon: rsx! { Icon { class: "h-5 w-5", icon: BsSlack } },
+            icon: rsx! {
+                Icon { class: "h-5 w-5", icon: BsSlack }
+                TaskHint { task: Some(task()) }
+            },
             subicon: rsx! { span { class: "h-5 w-5 min-w-5", "{reaction_emoji}" } },
             action_buttons: get_task_list_item_action_buttons(
                 task,

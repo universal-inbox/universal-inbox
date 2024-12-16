@@ -170,6 +170,16 @@ pub enum DueDate {
     DateTimeWithTz(DateTime<Utc>),
 }
 
+impl DueDate {
+    pub fn display_date(&self) -> String {
+        match self {
+            DueDate::Date(date) => date.format("%Y-%m-%d").to_string(),
+            DueDate::DateTime(datetime) => datetime.format("%Y-%m-%d").to_string(),
+            DueDate::DateTimeWithTz(datetime) => datetime.format("%Y-%m-%d").to_string(),
+        }
+    }
+}
+
 impl FromStr for DueDate {
     type Err = ParseError;
 
@@ -336,6 +346,8 @@ pub struct TaskPlanning {
     TryFromPrimitive,
     IntoPrimitive,
     Default,
+    Ord,
+    PartialOrd,
 )]
 #[repr(u8)]
 pub enum TaskPriority {

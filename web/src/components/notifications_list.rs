@@ -13,7 +13,7 @@ use dioxus_free_icons::{
 
 use universal_inbox::{
     notification::NotificationWithTask,
-    task::{Task, TaskId, TaskPlanning},
+    task::{Task, TaskId, TaskPlanning, TaskPriority},
     third_party::item::ThirdPartyItemData,
     HasHtmlUrl,
 };
@@ -63,13 +63,15 @@ pub fn NotificationsList(notifications: ReadOnlySignal<Vec<NotificationWithTask>
             id: "notifications_list",
             show_shortcut: UI_MODEL.read().is_help_enabled,
 
-            for (i, notification) in notifications().into_iter().map(Signal::new).enumerate() {
-                NotificationListItem {
-                    notification,
-                    is_selected: i == UI_MODEL.read().selected_notification_index,
-                    on_select: move |_| {
-                        UI_MODEL.write().selected_notification_index = i;
-                    },
+            tbody {
+                for (i, notification) in notifications().into_iter().map(Signal::new).enumerate() {
+                    NotificationListItem {
+                        notification,
+                        is_selected: i == UI_MODEL.read().selected_notification_index,
+                        on_select: move |_| {
+                            UI_MODEL.write().selected_notification_index = i;
+                        },
+                    }
                 }
             }
         }
@@ -370,10 +372,29 @@ pub fn get_notification_list_item_action_buttons(
 #[component]
 pub fn TaskHint(task: ReadOnlySignal<Option<Task>>) -> Element {
     let html_url = task()?.get_html_url();
+    let style = match task() {
+        Some(Task {
+            priority: TaskPriority::P1,
+            ..
+        }) => "text-red-500",
+        Some(Task {
+            priority: TaskPriority::P2,
+            ..
+        }) => "text-orange-500",
+        Some(Task {
+            priority: TaskPriority::P3,
+            ..
+        }) => "text-yellow-500",
+        Some(Task {
+            priority: TaskPriority::P4,
+            ..
+        }) => "text-gray-500",
+        _ => "text-gray-500",
+    };
 
     rsx! {
         div {
-            class: "absolute top-0 right-0 tooltip tooltip-right text-xs text-gray-400",
+            class: "absolute top-0 right-0 tooltip tooltip-right text-xs {style}",
             "data-tip": "Linked to a {task()?.kind} task",
 
             a {

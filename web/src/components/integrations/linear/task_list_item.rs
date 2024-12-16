@@ -11,6 +11,7 @@ use crate::components::{
         list_item::LinearIssueListItemSubtitle,
     },
     list::{ListContext, ListItem},
+    notifications_list::TaskHint,
     tasks_list::get_task_list_item_action_buttons,
     UserWithAvatar,
 };
@@ -34,7 +35,10 @@ pub fn LinearTaskListItem(
             key: "{task().id}",
             title: "{linear_issue().title}",
             subtitle: rsx! { LinearIssueListItemSubtitle { linear_issue }},
-            icon: rsx! { Linear { class: "h-5 w-5" } },
+            icon: rsx! {
+                Linear { class: "h-5 w-5" }
+                TaskHint { task: Some(task()) }
+            },
             subicon: rsx! { LinearIssueIcon { class: "h-5 w-5 min-w-5", linear_issue } },
             action_buttons: get_task_list_item_action_buttons(
                 task,

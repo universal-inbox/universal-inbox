@@ -1,8 +1,10 @@
 #![allow(non_snake_case)]
 
-use dioxus::prelude::*;
+use sorted_groups::SortedGroups;
 
+use dioxus::prelude::*;
 use dioxus_free_icons::{icons::bs_icons::BsCheck2, Icon};
+
 use universal_inbox::{task::Task, third_party::item::ThirdPartyItemData};
 
 use crate::{
@@ -15,6 +17,7 @@ use crate::{
         list::{List, ListItemActionButton},
     },
     model::UI_MODEL,
+    pages::synced_tasks_page::TaskWithOrder,
     services::task_service::TaskCommand,
 };
 
@@ -25,26 +28,39 @@ pub struct TaskListContext {
 }
 
 #[component]
-pub fn TasksList(tasks: ReadOnlySignal<Vec<Task>>) -> Element {
+pub fn TasksList(tasks: ReadOnlySignal<SortedGroups<String, TaskWithOrder>>) -> Element {
     let task_service = use_coroutine_handle::<TaskCommand>();
     let context = use_memo(move || TaskListContext {
         is_task_actions_enabled: UI_MODEL.read().is_task_actions_enabled,
         task_service,
     });
     use_context_provider(move || context);
+    let mut current_group = None;
 
     rsx! {
         List {
             id: "tasks_list",
             show_shortcut: UI_MODEL.read().is_help_enabled,
 
-            for (i, task) in tasks().into_iter().map(Signal::new).enumerate() {
-                TaskListItem {
-                    task,
-                    is_selected: i == UI_MODEL.read().selected_task_index,
-                    on_select: move |_| {
-                        UI_MODEL.write().selected_task_index = i;
-                    },
+            for (i, (group, task)) in tasks.read().iter().enumerate() {
+                if current_group != Some(group) {
+                    thead {
+                        tr {
+                            th {
+                                class: "flex flex-col px-0 pb-1 text-gray-400 border-b snap-start",
+                                span { "{group}" }
+                            }
+                        }
+                    }
+                    { current_group = Some(group); }
+                }
+
+                tbody {
+                    TaskListItem {
+                        task: Signal::new(task.task.clone()),
+                        is_selected: i == UI_MODEL.read().selected_task_index,
+                        on_select: move |_| { UI_MODEL.write().selected_task_index = i; },
+                    }
                 }
             }
         }
