@@ -37,6 +37,7 @@ secrecy = { workspace = true }
 serde = { workspace = true }
 serde-wasm-bindgen = "0.6.0"
 slack-morphism = { workspace = true }
+sorted-groups = "0.2.0"
 universal-inbox = { path = ".." }
 url = { workspace = true }
 uuid = { workspace = true, features = ["js"] }

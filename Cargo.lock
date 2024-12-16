@@ -6659,6 +6659,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "sorted-groups"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "46d50064ff4c6cc5f65d8fa8781e02c8e3c86cbfa9f60d88b1c4001139267dd4"
+
+[[package]]
 name = "spin"
 version = "0.9.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7915,6 +7921,7 @@ dependencies = [
  "serde",
  "serde-wasm-bindgen 0.6.5",
  "slack-morphism",
+ "sorted-groups",
  "universal-inbox",
  "url 2.5.4",
  "uuid",

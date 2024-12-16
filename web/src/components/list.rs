@@ -18,9 +18,9 @@ pub fn List(id: String, show_shortcut: ReadOnlySignal<bool>, children: Element) 
 
     rsx! {
         table {
-            class: "table w-full h-max-full",
+            class: "table table-pin-rows w-full h-max-full",
 
-            tbody { { children } }
+            { children }
         }
     }
 }

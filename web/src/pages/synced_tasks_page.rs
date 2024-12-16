@@ -1,10 +1,13 @@
 #![allow(non_snake_case)]
 
+use std::cmp::Ordering;
+
 use dioxus::prelude::*;
 use log::debug;
+use sorted_groups::SortedGroups;
 use web_sys::KeyboardEvent;
 
-use universal_inbox::HasHtmlUrl;
+use universal_inbox::{task::Task, HasHtmlUrl};
 
 use crate::{
     components::{task_preview::TaskPreview, tasks_list::TasksList},
@@ -27,6 +30,25 @@ pub fn SyncedTasksPage() -> Element {
         }
     });
 
+    let tasks = use_memo(move || {
+        SortedGroups::new(
+            SYNCED_TASKS_PAGE()
+                .content
+                .into_iter()
+                .map(|task| TaskWithOrder {
+                    task,
+                    compare_by: CompareBy::DueAt,
+                }),
+            |task| {
+                task.task
+                    .due_at
+                    .as_ref()
+                    .map(|due_at| due_at.display_date())
+                    .unwrap_or_else(|| "No due date".to_string())
+            },
+        )
+    });
+
     use_drop(move || {
         KEYBOARD_MANAGER.write().active_keyboard_handler = None;
     });
@@ -39,7 +61,7 @@ pub fn SyncedTasksPage() -> Element {
                 KEYBOARD_MANAGER.write().active_keyboard_handler = Some(&KEYBOARD_HANDLER);
             },
 
-            if SYNCED_TASKS_PAGE.read().content.is_empty() {
+            if tasks().is_empty() {
                 div {
                     class: "relative w-full h-full flex justify-center items-center",
                     img {
@@ -57,19 +79,16 @@ pub fn SyncedTasksPage() -> Element {
                     id: "synced-tasks-list",
                     class: "h-full basis-2/3 overflow-auto scroll-auto px-2 snap-y snap-mandatory",
 
-                    TasksList {
-                        tasks: SYNCED_TASKS_PAGE.read().content.clone(),
-                    }
+                    TasksList { tasks }
                 }
 
-                if let Some(task) = SYNCED_TASKS_PAGE().content
-                    .get(UI_MODEL.read().selected_task_index) {
+                if let Some((_, task)) = tasks().get(UI_MODEL.read().selected_task_index) {
                     div {
                         id: "task-preview",
                         class: "h-full basis-1/3 overflow-auto scroll-auto px-2 py-2 flex flex-row",
 
                         TaskPreview {
-                            task: task.clone(),
+                            task: task.task.clone(),
                             expand_details: UI_MODEL.read().preview_cards_expanded,
                             is_help_enabled: UI_MODEL.read().is_help_enabled,
                         }
@@ -127,5 +146,58 @@ impl KeyboardHandler for SyncTasksPageKeyboardHandler {
         }
 
         handled
+    }
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub struct TaskWithOrder {
+    pub task: Task,
+    compare_by: CompareBy,
+}
+
+impl Eq for TaskWithOrder {}
+
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
+enum CompareBy {
+    #[allow(dead_code)]
+    Priority,
+    DueAt,
+}
+
+impl PartialOrd for TaskWithOrder {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for TaskWithOrder {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match self.compare_by {
+            CompareBy::Priority => {
+                let ordering = self.task.priority.cmp(&other.task.priority);
+                if ordering != Ordering::Equal {
+                    return ordering;
+                }
+            }
+            CompareBy::DueAt => {
+                let Some(due_at) = &self.task.due_at else {
+                    return Ordering::Less;
+                };
+                let Some(other_due_at) = &other.task.due_at else {
+                    return Ordering::Greater;
+                };
+
+                let ordering = due_at.display_date().cmp(&other_due_at.display_date());
+                if ordering != Ordering::Equal {
+                    return ordering;
+                }
+            }
+        }
+
+        if self.task.eq(&other.task) {
+            return Ordering::Equal;
+        }
+
+        Ordering::Less
     }
 }

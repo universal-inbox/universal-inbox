@@ -7,6 +7,10 @@
 - Synchronize one way (Slack => Universal Inbox) Slack mentions as notifications
 - Add new keyboard shortcuts to control the preview pane
 
+### Changed
+
+- Sort synced tasks list
+
 ### Fixed
 
 - Fix Slack message retrieved in a thread
