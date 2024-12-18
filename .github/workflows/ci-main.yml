@@ -22,7 +22,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
       - name: Install Devbox
-        uses: jetpack-io/devbox-install-action@v0.7.0
+        uses: jetpack-io/devbox-install-action@v0.11.0
         with:
           enable-cache: "true"
 
@@ -34,7 +34,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
       - name: Install Devbox
-        uses: jetpack-io/devbox-install-action@v0.7.0
+        uses: jetpack-io/devbox-install-action@v0.11.0
         with:
           enable-cache: "true"
       - name: Check formatting
@@ -48,7 +48,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
       - name: Install Devbox
-        uses: jetpack-io/devbox-install-action@v0.7.0
+        uses: jetpack-io/devbox-install-action@v0.11.0
         with:
           enable-cache: "true"
       - name: Check formatting
@@ -62,7 +62,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
       - name: Install Devbox
-        uses: jetpack-io/devbox-install-action@v0.7.0
+        uses: jetpack-io/devbox-install-action@v0.11.0
         with:
           enable-cache: "true"
       - uses: Swatinem/rust-cache@v2
@@ -79,7 +79,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
       - name: Install Devbox
-        uses: jetpack-io/devbox-install-action@v0.7.0
+        uses: jetpack-io/devbox-install-action@v0.11.0
         with:
           enable-cache: "true"
       - uses: Swatinem/rust-cache@v2
@@ -112,7 +112,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
       - name: Install Devbox
-        uses: jetpack-io/devbox-install-action@v0.7.0
+        uses: jetpack-io/devbox-install-action@v0.11.0
         with:
           enable-cache: "true"
       - uses: Swatinem/rust-cache@v2
@@ -162,7 +162,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
       - name: Install Devbox
-        uses: jetpack-io/devbox-install-action@v0.7.0
+        uses: jetpack-io/devbox-install-action@v0.11.0
         with:
           enable-cache: "true"
       - uses: Swatinem/rust-cache@v2
