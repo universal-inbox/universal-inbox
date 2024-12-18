@@ -5,7 +5,7 @@
     "@tailwindcss/typography": "^0.5",
     "daisyui": "^4.4",
     "tailwindcss": "^3.3",
-    "typescript": "5.3.3"
+    "typescript": "5.7.2"
   },
   "dependencies": {
     "@nangohq/frontend": "https://gitpkg.now.sh/dax/nango/packages/frontend?8cf26502",
