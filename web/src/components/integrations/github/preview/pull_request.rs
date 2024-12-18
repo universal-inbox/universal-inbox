@@ -229,13 +229,13 @@ fn GithubPullRequestDetails(
                 SmallCard { { mergeable_state_icon }, span { "{mergeable_state_label}" } }
             }
 
+            ReviewsGithubPullRequest { github_pull_request, expand_details }
+
             ChecksGithubPullRequest {
                 latest_commit: github_pull_request().latest_commit,
                 with_details: true,
                 expand_details
             }
-
-            ReviewsGithubPullRequest { github_pull_request, expand_details }
 
             p {
                 class: "w-full prose prose-sm dark:prose-invert",
@@ -511,7 +511,7 @@ fn ReviewsGithubPullRequest(
             title: "{reviews_state.0}",
             icon: reviews_state.1,
             opened: expand_details(),
-            ReviewsGithubPullRequestDetails { github_pull_request: github_pull_request }
+            ReviewsGithubPullRequestDetails { github_pull_request, expand_details }
         }
     }
 }
@@ -519,6 +519,7 @@ fn ReviewsGithubPullRequest(
 #[component]
 fn ReviewsGithubPullRequestDetails(
     github_pull_request: ReadOnlySignal<GithubPullRequest>,
+    expand_details: ReadOnlySignal<bool>,
 ) -> Element {
     let reviews = compute_pull_request_reviews(
         github_pull_request().reviews.as_ref(),
@@ -534,7 +535,7 @@ fn ReviewsGithubPullRequestDetails(
             class: "table table-auto table-xs w-full",
             tbody {
                 for review in reviews {
-                    GithubReviewLine { review: review }
+                    GithubReviewLine { review, expand_details }
                 }
             }
         }
@@ -542,7 +543,7 @@ fn ReviewsGithubPullRequestDetails(
 }
 
 #[component]
-fn GithubReviewLine(review: GithubReview) -> Element {
+fn GithubReviewLine(review: GithubReview, expand_details: ReadOnlySignal<bool>) -> Element {
     let (reviewer, review_body, review_status_icon) = match review {
         GithubReview::Requested { reviewer } => (
             reviewer,
@@ -591,13 +592,19 @@ fn GithubReviewLine(review: GithubReview) -> Element {
             login, avatar_url, ..
         }) => (login.clone(), Some(avatar_url.clone())),
     };
+    let collapse_style = if expand_details() {
+        "collapse-open"
+    } else {
+        "collapse-close"
+    };
 
     rsx! {
         tr {
             td {
                 if let Some(review_body) = review_body {
                     details {
-                        class: "collapse collapse-arrow",
+                        class: "collapse collapse-arrow {collapse_style}",
+                        open: expand_details(),
                         summary {
                             class: "collapse-title min-h-min py-2 px-0",
                             div {
