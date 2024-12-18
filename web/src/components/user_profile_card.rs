@@ -1,8 +1,7 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
-
-use gravatar::{Gravatar, Rating};
+use gravatar_rs::Generator;
 
 use universal_inbox::FrontAuthenticationConfig;
 
@@ -41,12 +40,11 @@ pub fn UserProfileCard() -> Element {
         };
     };
 
-    let user_avatar = Gravatar::new(user.email.as_str())
-        .set_size(Some(150))
-        .set_rating(Some(Rating::G))
-        .set_default(Some(gravatar::Default::MysteryMan))
-        .image_url()
-        .to_string();
+    let user_avatar = Generator::default()
+        .set_image_size(150)
+        .set_rating("g")
+        .set_default_image("mp")
+        .generate(user.email.as_str());
     let user_name = format!("{} {}", user.first_name, user.last_name);
 
     rsx! {

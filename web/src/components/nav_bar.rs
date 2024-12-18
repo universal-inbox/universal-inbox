@@ -11,7 +11,7 @@ use dioxus_free_icons::{
     },
     Icon,
 };
-use gravatar::{Gravatar, Rating};
+use gravatar_rs::Generator;
 
 use crate::{
     config::APP_CONFIG,
@@ -32,12 +32,11 @@ pub fn NavBar() -> Element {
     let user_avatar = connected_user
         .as_ref()
         .map(|user| {
-            Gravatar::new(user.email.as_str())
-                .set_size(Some(150))
-                .set_rating(Some(Rating::G))
-                .set_default(Some(gravatar::Default::MysteryMan))
-                .image_url()
-                .to_string()
+            Generator::default()
+                .set_image_size(150)
+                .set_rating("g")
+                .set_default_image("mp")
+                .generate(user.email.as_str())
         })
         .unwrap_or_else(|| DEFAULT_USER_AVATAR.to_string());
     let user_name = connected_user
