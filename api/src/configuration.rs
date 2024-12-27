@@ -281,16 +281,19 @@ impl Settings {
                 .add_source(File::with_name(&format!("{config_path}/local")).required(false));
             eprintln!("Loading {config_path}/local config file");
         }
-        config_builder
-            .add_source(
-                Environment::with_prefix("universal_inbox")
-                    .try_parsing(true)
-                    .separator("__")
-                    .list_separator(",")
-                    .with_list_parse_key("application.security.csp_extra_connect_src"),
-            )
-            .build()?
-            .try_deserialize()
+
+        serde_path_to_error::deserialize(
+            config_builder
+                .add_source(
+                    Environment::with_prefix("universal_inbox")
+                        .try_parsing(true)
+                        .separator("__")
+                        .list_separator(",")
+                        .with_list_parse_key("application.security.csp_extra_connect_src"),
+                )
+                .build()?,
+        )
+        .map_err(|e| ConfigError::Message(e.to_string()))
     }
 
     pub fn new() -> Result<Self, ConfigError> {
