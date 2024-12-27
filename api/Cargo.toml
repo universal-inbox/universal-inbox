@@ -138,6 +138,7 @@ validator = { workspace = true }
 tokio-retry = "0.3.0"
 vec1 = { workspace = true }
 wiremock = "0.6.0"
+serde_path_to_error = "0.1.16"
 
 [dev-dependencies]
 httpmock = { git = "https://github.com/dax/httpmock", rev = "334aa67d402a11054f7f942b9df5b2f53ff773d1" }
