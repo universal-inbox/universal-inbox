@@ -9,8 +9,6 @@ services:
       - nango-db:/var/lib/postgresql/data
     env_file:
       - nango-db.env
-    profiles:
-      - "database"
 
   nango-server:
     image: "nangohq/nango-server:hosted-02c1ee2bcbd92741057582169c95c4157ba98262"
@@ -23,6 +21,12 @@ services:
 
   universal-inbox-db:
     image: "postgres:15"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U universal-inbox -d universal-inbox"]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 10s
     networks:
       - universal-inbox
     volumes:
@@ -31,29 +35,23 @@ services:
       - universal-inbox-db.env
     ports:
       - "5432:5432"
-    profiles:
-      - "database"
 
   universal-inbox-redis:
     image: "redis:latest"
     networks:
       - universal-inbox
-    profiles:
-      - "database"
 
   universal-inbox:
     image: "dax42/universal-inbox:latest"
+    command: ["serve"]
+    depends_on:
+      universal-inbox-db:
+        condition: service_healthy
+        restart: true
+      universal-inbox-redis:
+        condition: service_started
     build:
       context: ..
-      cache_from:
-        - "type=local,src=cache"
-      cache_to:
-        - "type=local,mode=max,image-manifest=true,oci-mediatypes=true,dest=cache"
-      x-bake:
-        platforms: ["linux/amd64", "linux/arm64"]
-      platforms:
-        - "linux/amd64"
-        - "linux/arm64"
       tags:
         - dax42/universal-inbox:latest
       labels:
@@ -72,6 +70,12 @@ services:
   universal-inbox-worker:
     image: "dax42/universal-inbox:latest"
     command: ["start-workers"]
+    depends_on:
+      universal-inbox-db:
+        condition: service_healthy
+        restart: true
+      universal-inbox-redis:
+        condition: service_started
     networks:
       - universal-inbox
     env_file:
