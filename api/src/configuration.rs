@@ -177,6 +177,7 @@ pub struct IntegrationSettings {
     pub page_size: Option<usize>,
     pub doc: String,
     pub warning_message: Option<String>,
+    #[serde(default = "HashMap::new")]
     pub doc_for_actions: HashMap<String, String>,
 }
 
