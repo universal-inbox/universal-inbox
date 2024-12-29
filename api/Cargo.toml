@@ -38,7 +38,7 @@ chrono = { workspace = true, features = ["serde"] }
 clap = { workspace = true }
 color-backtrace = "0.6"
 # TODO: 0.15.3 is broken with: invalid type: unit value, expected map
-config = { version = "=0.15.2", default-features = false, features = [
+config = { version = "=0.15.4", default-features = false, features = [
   "toml",
   "convert-case",
   "async",
