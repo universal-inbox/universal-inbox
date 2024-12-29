@@ -37,8 +37,7 @@ cached = { version = "0.54.0", features = [
 chrono = { workspace = true, features = ["serde"] }
 clap = { workspace = true }
 color-backtrace = "0.6"
-# TODO: 0.15.3 is broken with: invalid type: unit value, expected map
-config = { version = "=0.15.2", default-features = false, features = [
+config = { version = "0.15.0", default-features = false, features = [
   "toml",
   "convert-case",
   "async",
@@ -56,6 +55,7 @@ futures = "0.3.0"
 graphql_client = "0.14.0"
 hostname = "0.4.0"
 http = { workspace = true }
+hyper-rustls = { version = "0.27.0", features = ["rustls-native-certs", "http2"] } # synced with slack-morphism
 itertools = { workspace = true }
 jsonwebtoken = "9"
 lettre = { version = "0.11.0", default-features = false, features = [

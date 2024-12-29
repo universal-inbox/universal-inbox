@@ -200,8 +200,6 @@ nango_key = "ticktick"
 required_oauth_scopes = ["tasks:read", "tasks:write"]
 doc = "This is still work in progress."
 
-[integrations.ticktick.doc_for_actions]
-
 [oauth2]
 nango_base_url = "http://localhost:3003"
 nango_public_key = "get it from Nango/project-settings page"

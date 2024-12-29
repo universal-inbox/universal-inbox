@@ -1,6 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use anyhow::{anyhow, Context};
+
 use async_trait::async_trait;
 use cached::{proc_macro::io_cached, Return};
 use chrono::{DateTime, Utc};
@@ -277,9 +278,15 @@ impl SlackService {
         file_comment: Option<SlackFileCommentId>,
     ) -> Result<(), UniversalInboxError> {
         let client = SlackClient::new(
-            SlackClientHyperHttpsConnector::new()
-                .context("Failed to initialize new Slack client")?
-                .with_slack_api_url(&self.slack_base_url),
+            SlackClientHyperConnector::with_connector(
+                hyper_rustls::HttpsConnectorBuilder::new()
+                    .with_native_roots()
+                    .context("Failed to initialize new Slack client")?
+                    .https_or_http()
+                    .enable_http2()
+                    .build(),
+            )
+            .with_slack_api_url(&self.slack_base_url),
         );
         let session = client.open_session(slack_api_token);
 
@@ -325,9 +332,15 @@ impl SlackService {
         file_comment: Option<SlackFileCommentId>,
     ) -> Result<(), UniversalInboxError> {
         let client = SlackClient::new(
-            SlackClientHyperHttpsConnector::new()
-                .context("Failed to initialize new Slack client")?
-                .with_slack_api_url(&self.slack_base_url),
+            SlackClientHyperConnector::with_connector(
+                hyper_rustls::HttpsConnectorBuilder::new()
+                    .with_native_roots()
+                    .context("Failed to initialize new Slack client")?
+                    .https_or_http()
+                    .enable_http2()
+                    .build(),
+            )
+            .with_slack_api_url(&self.slack_base_url),
         );
         let session = client.open_session(slack_api_token);
 
@@ -361,9 +374,15 @@ impl SlackService {
         message: SlackTs,
     ) -> Result<(), UniversalInboxError> {
         let client = SlackClient::new(
-            SlackClientHyperHttpsConnector::new()
-                .context("Failed to initialize new Slack client")?
-                .with_slack_api_url(&self.slack_base_url),
+            SlackClientHyperConnector::with_connector(
+                hyper_rustls::HttpsConnectorBuilder::new()
+                    .with_native_roots()
+                    .context("Failed to initialize new Slack client")?
+                    .https_or_http()
+                    .enable_http2()
+                    .build(),
+            )
+            .with_slack_api_url(&self.slack_base_url),
         );
         let session = client.open_session(slack_api_token);
 
@@ -396,10 +415,17 @@ impl SlackService {
         message: SlackTs,
     ) -> Result<(), UniversalInboxError> {
         let client = SlackClient::new(
-            SlackClientHyperHttpsConnector::new()
-                .context("Failed to initialize new Slack client")?
-                .with_slack_api_url(&self.slack_base_url),
+            SlackClientHyperConnector::with_connector(
+                hyper_rustls::HttpsConnectorBuilder::new()
+                    .with_native_roots()
+                    .context("Failed to initialize new Slack client")?
+                    .https_or_http()
+                    .enable_http2()
+                    .build(),
+            )
+            .with_slack_api_url(&self.slack_base_url),
         );
+
         let session = client.open_session(slack_api_token);
 
         let request = SlackApiReactionsRemoveRequest::new(reaction)
@@ -1104,10 +1130,17 @@ async fn cached_fetch_message(
     message: &SlackTs,
 ) -> Result<Return<SlackHistoryMessage>, UniversalInboxError> {
     let client = SlackClient::new(
-        SlackClientHyperHttpsConnector::new()
-            .context("Failed to initialize new Slack client")?
-            .with_slack_api_url(slack_base_url),
+        SlackClientHyperConnector::with_connector(
+            hyper_rustls::HttpsConnectorBuilder::new()
+                .with_native_roots()
+                .context("Failed to initialize new Slack client")?
+                .https_or_http()
+                .enable_http2()
+                .build(),
+        )
+        .with_slack_api_url(slack_base_url),
     );
+
     let session = client.open_session(slack_api_token);
 
     let messages = session
@@ -1155,10 +1188,17 @@ async fn cached_fetch_thread(
     current_message: &SlackTs,
 ) -> Result<Return<Vec<SlackHistoryMessage>>, UniversalInboxError> {
     let client = SlackClient::new(
-        SlackClientHyperHttpsConnector::new()
-            .context("Failed to initialize new Slack client")?
-            .with_slack_api_url(slack_base_url),
+        SlackClientHyperConnector::with_connector(
+            hyper_rustls::HttpsConnectorBuilder::new()
+                .with_native_roots()
+                .context("Failed to initialize new Slack client")?
+                .https_or_http()
+                .enable_http2()
+                .build(),
+        )
+        .with_slack_api_url(slack_base_url),
     );
+
     let session = client.open_session(slack_api_token);
 
     let messages = session
@@ -1192,10 +1232,17 @@ async fn cached_fetch_channel(
     channel: &SlackChannelId,
 ) -> Result<Return<SlackChannelInfo>, UniversalInboxError> {
     let client = SlackClient::new(
-        SlackClientHyperHttpsConnector::new()
-            .context("Failed to initialize new Slack client")?
-            .with_slack_api_url(slack_base_url),
+        SlackClientHyperConnector::with_connector(
+            hyper_rustls::HttpsConnectorBuilder::new()
+                .with_native_roots()
+                .context("Failed to initialize new Slack client")?
+                .https_or_http()
+                .enable_http2()
+                .build(),
+        )
+        .with_slack_api_url(slack_base_url),
     );
+
     let session = client.open_session(slack_api_token);
 
     let response = session
@@ -1222,10 +1269,17 @@ async fn cached_fetch_user(
     user: &SlackUserId,
 ) -> Result<Return<SlackUser>, UniversalInboxError> {
     let client = SlackClient::new(
-        SlackClientHyperHttpsConnector::new()
-            .context("Failed to initialize new Slack client")?
-            .with_slack_api_url(slack_base_url),
+        SlackClientHyperConnector::with_connector(
+            hyper_rustls::HttpsConnectorBuilder::new()
+                .with_native_roots()
+                .context("Failed to initialize new Slack client")?
+                .https_or_http()
+                .enable_http2()
+                .build(),
+        )
+        .with_slack_api_url(slack_base_url),
     );
+
     let session = client.open_session(slack_api_token);
 
     let response = session
@@ -1249,10 +1303,17 @@ async fn cached_list_usergroups(
     slack_api_token: &SlackApiToken,
 ) -> Result<Return<Vec<SlackUserGroup>>, UniversalInboxError> {
     let client = SlackClient::new(
-        SlackClientHyperHttpsConnector::new()
-            .context("Failed to initialize new Slack client")?
-            .with_slack_api_url(slack_base_url),
+        SlackClientHyperConnector::with_connector(
+            hyper_rustls::HttpsConnectorBuilder::new()
+                .with_native_roots()
+                .context("Failed to initialize new Slack client")?
+                .https_or_http()
+                .enable_http2()
+                .build(),
+        )
+        .with_slack_api_url(slack_base_url),
     );
+
     let session = client.open_session(slack_api_token);
 
     let response = session
@@ -1277,10 +1338,17 @@ async fn cached_list_users_in_usergroup(
     slack_api_token: &SlackApiToken,
 ) -> Result<Return<Vec<SlackUserId>>, UniversalInboxError> {
     let client = SlackClient::new(
-        SlackClientHyperHttpsConnector::new()
-            .context("Failed to initialize new Slack client")?
-            .with_slack_api_url(slack_base_url),
+        SlackClientHyperConnector::with_connector(
+            hyper_rustls::HttpsConnectorBuilder::new()
+                .with_native_roots()
+                .context("Failed to initialize new Slack client")?
+                .https_or_http()
+                .enable_http2()
+                .build(),
+        )
+        .with_slack_api_url(slack_base_url),
     );
+
     let session = client.open_session(slack_api_token);
 
     let response = session
@@ -1307,10 +1375,17 @@ async fn cached_fetch_bot(
     bot: &SlackBotId,
 ) -> Result<Return<SlackBotInfo>, UniversalInboxError> {
     let client = SlackClient::new(
-        SlackClientHyperHttpsConnector::new()
-            .context("Failed to initialize new Slack client")?
-            .with_slack_api_url(slack_base_url),
+        SlackClientHyperConnector::with_connector(
+            hyper_rustls::HttpsConnectorBuilder::new()
+                .with_native_roots()
+                .context("Failed to initialize new Slack client")?
+                .https_or_http()
+                .enable_http2()
+                .build(),
+        )
+        .with_slack_api_url(slack_base_url),
     );
+
     let session = client.open_session(slack_api_token);
 
     let response = session
@@ -1335,10 +1410,17 @@ async fn cached_fetch_team(
     team: &SlackTeamId,
 ) -> Result<Return<SlackTeamInfo>, UniversalInboxError> {
     let client = SlackClient::new(
-        SlackClientHyperHttpsConnector::new()
-            .context("Failed to initialize new Slack client")?
-            .with_slack_api_url(slack_base_url),
+        SlackClientHyperConnector::with_connector(
+            hyper_rustls::HttpsConnectorBuilder::new()
+                .with_native_roots()
+                .context("Failed to initialize new Slack client")?
+                .https_or_http()
+                .enable_http2()
+                .build(),
+        )
+        .with_slack_api_url(slack_base_url),
     );
+
     let session = client.open_session(slack_api_token);
 
     let response = session
@@ -1364,10 +1446,17 @@ async fn cached_get_chat_permalink(
     message: &SlackTs,
 ) -> Result<Return<Url>, UniversalInboxError> {
     let client = SlackClient::new(
-        SlackClientHyperHttpsConnector::new()
-            .context("Failed to initialize new Slack client")?
-            .with_slack_api_url(slack_base_url),
+        SlackClientHyperConnector::with_connector(
+            hyper_rustls::HttpsConnectorBuilder::new()
+                .with_native_roots()
+                .context("Failed to initialize new Slack client")?
+                .https_or_http()
+                .enable_http2()
+                .build(),
+        )
+        .with_slack_api_url(slack_base_url),
     );
+
     let session = client.open_session(slack_api_token);
 
     let response = session
