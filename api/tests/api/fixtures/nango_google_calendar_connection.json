@@ -1,0 +1,24 @@
+{
+  "id": 123,
+  "created_at": "2023-01-01T01:01:01.000Z",
+  "updated_at": "2023-01-01T01:01:01.000Z",
+  "deleted": false,
+  "environment_id": 1,
+  "provider_config_key": "google-calendar",
+  "connection_id": "AC7218C6-A1DD-4A50-9A87-C7C768CAF90E",
+  "credentials": {
+    "type": "OAUTH2",
+    "access_token": "google_calendar_test_access_token",
+    "refresh_token": "google_calendar_test_refresh_token",
+    "expires_at": "2024-01-01T01:01:01.000Z",
+    "raw": {
+      "access_token": "google_calendar_test_access_token",
+      "token_type": "bearer",
+      "scope": "public_repo,user"
+    }
+  },
+  "connection_config": {},
+  "metadata": {},
+  "credentials_iv": {},
+  "credentials_tag": {}
+}

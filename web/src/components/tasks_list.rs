@@ -3,7 +3,7 @@
 use sorted_groups::SortedGroups;
 
 use dioxus::prelude::*;
-use dioxus_free_icons::{icons::bs_icons::BsCheck2, Icon};
+use dioxus_free_icons::{icons::md_action_icons::MdCheckCircleOutline, Icon};
 
 use universal_inbox::{task::Task, third_party::item::ThirdPartyItemData};
 
@@ -127,7 +127,7 @@ pub fn get_task_list_item_action_buttons(
                 context().task_service
                     .send(TaskCommand::Complete(task().id));
             },
-            Icon { class: "w-5 h-5", icon: BsCheck2 }
+            Icon { class: "w-5 h-5", icon: MdCheckCircleOutline }
         }
     }]
 }

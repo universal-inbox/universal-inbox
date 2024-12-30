@@ -640,7 +640,7 @@ impl ThirdPartyNotificationSourceService<LinearNotification> for LinearService {
         level = "debug",
         skip_all,
         fields(
-            notification_id = notification.id.to_string(),
+            third_party_item_id = source_item.id.to_string(),
             user.id = user_id.to_string()
         ),
         err
@@ -648,7 +648,7 @@ impl ThirdPartyNotificationSourceService<LinearNotification> for LinearService {
     async fn delete_notification_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        notification: &Notification,
+        source_item: &ThirdPartyItem,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
         let (access_token, _) = self
@@ -659,11 +659,8 @@ impl ThirdPartyNotificationSourceService<LinearNotification> for LinearService {
             .await?
             .ok_or_else(|| anyhow!("Cannot delete Linear notification without an access token"))?;
 
-        self.archive_notification(
-            &access_token,
-            notification.source_item.source_id.to_string(),
-        )
-        .await?;
+        self.archive_notification(&access_token, source_item.source_id.to_string())
+            .await?;
 
         Ok(())
     }
@@ -672,13 +669,13 @@ impl ThirdPartyNotificationSourceService<LinearNotification> for LinearService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(notification_id = notification.id.to_string(), user.id = user_id.to_string()),
+        fields(third_party_item_id = source_item.id.to_string(), user.id = user_id.to_string()),
         err
     )]
     async fn unsubscribe_notification_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        notification: &Notification,
+        source_item: &ThirdPartyItem,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
         let (access_token, _) = self
@@ -692,10 +689,7 @@ impl ThirdPartyNotificationSourceService<LinearNotification> for LinearService {
             })?;
 
         let subscribers_response = self
-            .query_notification_subscribers(
-                &access_token,
-                notification.source_item.source_id.to_string(),
-            )
+            .query_notification_subscribers(&access_token, source_item.source_id.to_string())
             .await?;
 
         // Only Issue notification have subscribers and can be unsubscribed
@@ -721,12 +715,12 @@ impl ThirdPartyNotificationSourceService<LinearNotification> for LinearService {
                 ).collect();
             if initial_subscribers_count > subscriber_ids.len() {
                 self
-                    .update_issue_subscribers(&access_token, notification.source_item.source_id.to_string(), subscriber_ids)
+                    .update_issue_subscribers(&access_token, source_item.source_id.to_string(), subscriber_ids)
                     .await?;
             }
         }
 
-        self.delete_notification_from_source(executor, notification, user_id)
+        self.delete_notification_from_source(executor, source_item, user_id)
             .await
     }
 
@@ -734,13 +728,13 @@ impl ThirdPartyNotificationSourceService<LinearNotification> for LinearService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(notification_id = notification.id.to_string(), user.id = user_id.to_string()),
+        fields(third_party_item_id = source_item.id.to_string(), user.id = user_id.to_string()),
         err
     )]
     async fn snooze_notification_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        notification: &Notification,
+        source_item: &ThirdPartyItem,
         snoozed_until_at: DateTime<Utc>,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
@@ -754,7 +748,7 @@ impl ThirdPartyNotificationSourceService<LinearNotification> for LinearService {
 
         self.update_notification_snoozed_until_at(
             &access_token,
-            notification.source_item.source_id.to_string(),
+            source_item.source_id.to_string(),
             snoozed_until_at,
         )
         .await

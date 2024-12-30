@@ -149,6 +149,7 @@ impl ThirdPartyItemFromSource for LinearNotification {
                 updated_at: Utc::now().with_nanosecond(0).unwrap(),
                 user_id,
                 integration_connection_id,
+                source_item: None,
             },
         }
     }
@@ -470,6 +471,7 @@ impl ThirdPartyItemFromSource for LinearIssue {
             updated_at: Utc::now().with_nanosecond(0).unwrap(),
             user_id,
             integration_connection_id,
+            source_item: None,
         }
     }
 }

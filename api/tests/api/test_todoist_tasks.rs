@@ -104,6 +104,7 @@ mod patch_task {
                     ..*todoist_item.clone()
                 })),
                 integration_connection_id: integration_connection.id,
+                source_item: None,
             }),
         )
         .await;
@@ -191,6 +192,7 @@ mod patch_task {
                     ..*todoist_item.clone()
                 })),
                 integration_connection_id: integration_connection.id,
+                source_item: None,
             }),
         )
         .await;
@@ -280,6 +282,7 @@ mod patch_task {
                     ..*todoist_item.clone()
                 })),
                 integration_connection_id: integration_connection.id,
+                source_item: None,
             }),
         )
         .await;
@@ -530,6 +533,7 @@ mod patch_task {
                             user_id: app.user.id,
                             data: ThirdPartyItemData::TodoistItem(todoist_item.clone()),
                             integration_connection_id: todoist_integration_connection.id,
+                            source_item: None,
                         },
                         app.user.id
                     )
@@ -619,6 +623,7 @@ mod patch_notification {
                     ..*todoist_item.clone()
                 })),
                 integration_connection_id: todoist_integration_connection.id,
+                source_item: None,
             }),
         )
         .await;

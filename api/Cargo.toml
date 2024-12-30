@@ -28,7 +28,7 @@ apalis = { git = "https://github.com/dax/apalis", rev = "84ffdb8563068ae2055e5ad
 apalis-redis = { git = "https://github.com/dax/apalis", rev = "84ffdb8563068ae2055e5ad6d7ce7074c4c0a500" }
 argon2 = { version = "0.5", features = ["std"] }
 async-trait = "0.1.0"
-base64 = "0.22"
+base64 = { workspace = true }
 cached = { version = "0.54.0", features = [
   "async_tokio_rt_multi_thread",
   "redis_tokio",
@@ -56,6 +56,7 @@ graphql_client = "0.14.0"
 hostname = "0.4.0"
 http = { workspace = true }
 hyper-rustls = { version = "0.27.0", features = ["rustls-native-certs", "http2"] } # synced with slack-morphism
+ical = "0.11.0"
 itertools = { workspace = true }
 jsonwebtoken = "9"
 lettre = { version = "0.11.0", default-features = false, features = [
@@ -104,6 +105,7 @@ rustls = { version = "0.23.0" } # Used to initialize lettre
 secrecy = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true, features = ["unbounded_depth"] }
+serde_path_to_error = "0.1.16"
 serde_with = { workspace = true }
 slack-blocks-render = { workspace = true }
 slack-morphism = { workspace = true, features = ["hyper"] }
@@ -139,7 +141,6 @@ validator = { workspace = true }
 tokio-retry = "0.3.0"
 vec1 = { workspace = true }
 wiremock = "0.6.0"
-serde_path_to_error = "0.1.16"
 
 [dev-dependencies]
 httpmock = { git = "https://github.com/dax/httpmock", rev = "334aa67d402a11054f7f942b9df5b2f53ff773d1" }

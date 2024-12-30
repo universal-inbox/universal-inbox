@@ -81,7 +81,7 @@ pub fn TaskLinkModal(
                             class: "flex flex-none items-center",
                             div {
                                 class: "block py-2 px-4 bg-transparent",
-                                NotificationIcon { class: "h-5 w-5", kind: notification_to_link().kind }
+                                NotificationIcon { kind: notification_to_link().kind }
                             }
                             div {
                                 id: "notification-to-link",

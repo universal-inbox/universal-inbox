@@ -121,11 +121,25 @@ pub fn IntegrationConnectionsStatus(
             .to_string()
             .cmp(&b.provider.kind().to_string())
     });
+
     let mut sorted_task_connections = integration_connections
         .iter()
         .filter(|c| c.provider.kind().is_task_service())
         .collect::<Vec<&IntegrationConnection>>();
     sorted_task_connections.sort_by(|a, b| {
+        a.provider
+            .kind()
+            .to_string()
+            .cmp(&b.provider.kind().to_string())
+    });
+
+    let mut sorted_utils_connections = integration_connections
+        .iter()
+        .filter(|c| {
+            !c.provider.kind().is_notification_service() && !c.provider.kind().is_task_service()
+        })
+        .collect::<Vec<&IntegrationConnection>>();
+    sorted_utils_connections.sort_by(|a, b| {
         a.provider
             .kind()
             .to_string()
@@ -147,9 +161,11 @@ pub fn IntegrationConnectionsStatus(
 
         for integration_connection in sorted_notification_connections {
             if let Some(provider_config) = integration_providers.get(&integration_connection.provider.kind()) {
-                IntegrationConnectionStatus {
-                    connection: integration_connection.clone(),
-                    config: provider_config.clone(),
+                if provider_config.is_enabled {
+                    IntegrationConnectionStatus {
+                        connection: integration_connection.clone(),
+                        config: provider_config.clone(),
+                    }
                 }
             }
         }
@@ -158,9 +174,25 @@ pub fn IntegrationConnectionsStatus(
 
         for integration_connection in sorted_task_connections {
             if let Some(provider_config) = integration_providers.get(&integration_connection.provider.kind()) {
-                IntegrationConnectionStatus {
-                    connection: integration_connection.clone(),
-                    config: provider_config.clone(),
+                if provider_config.is_enabled {
+                    IntegrationConnectionStatus {
+                        connection: integration_connection.clone(),
+                        config: provider_config.clone(),
+                    }
+                }
+            }
+        }
+
+        div { class: "divider divider-horizontal" }
+
+        for integration_connection in sorted_utils_connections {
+            if let Some(provider_config) = integration_providers.get(&integration_connection.provider.kind()) {
+                if provider_config.is_enabled {
+                    IntegrationConnectionStatus {
+                        connection: integration_connection.clone(),
+                        config: provider_config.clone(),
+                        icon_class: "w-6 h-6",
+                    }
                 }
             }
         }
@@ -171,7 +203,9 @@ pub fn IntegrationConnectionsStatus(
 pub fn IntegrationConnectionStatus(
     connection: IntegrationConnection,
     config: IntegrationProviderStaticConfig,
+    icon_class: Option<&'static str>,
 ) -> Element {
+    let icon_style = icon_class.unwrap_or("w-4 h-4");
     let provider_kind = connection.provider.kind();
     let connection_is_syncing = connection.is_syncing();
     let (connection_style, tooltip) = use_memo(move || match &connection {
@@ -253,7 +287,7 @@ pub fn IntegrationConnectionStatus(
                 }
                 Link {
                     to: Route::SettingsPage {},
-                    IntegrationProviderIcon { class: "w-4 h-4 rounded-full {connection_style}", provider_kind: provider_kind },
+                    IntegrationProviderIcon { class: "{icon_style} rounded-full {connection_style}", provider_kind: provider_kind },
                 }
             }
         }

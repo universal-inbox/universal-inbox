@@ -485,7 +485,7 @@ impl TaskService {
             .context("Unable to access third_party_item_service from task_service")?
             .read()
             .await
-            .create_or_update_third_party_item(executor, third_party_item)
+            .create_or_update_third_party_item(executor, Box::new(third_party_item))
             .await?;
 
         let updated_third_party_item = upsert_item.value();

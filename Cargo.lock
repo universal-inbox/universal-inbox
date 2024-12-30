@@ -3554,6 +3554,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ical"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9b7cab7543a8b7729a19e2c04309f902861293dcdae6558dfbeb634454d279f6"
+dependencies = [
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "icu_collections"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7464,6 +7473,7 @@ name = "universal-inbox"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "chrono",
  "clap",
  "email_address",
@@ -7523,6 +7533,7 @@ dependencies = [
  "http 1.2.0",
  "httpmock",
  "hyper-rustls 0.27.5",
+ "ical",
  "itertools 0.13.0",
  "jsonwebtoken",
  "lettre",

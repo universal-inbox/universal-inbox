@@ -12,7 +12,7 @@ use universal_inbox::{
     integration_connection::IntegrationConnectionId,
     notification::{Notification, NotificationSourceKind, NotificationStatus},
     third_party::{
-        integrations::google_mail::{EmailAddress, GoogleMailThread},
+        integrations::google_mail::{EmailAddress, GoogleMailMessageBody, GoogleMailThread},
         item::ThirdPartyItemData,
     },
     user::UserId,
@@ -135,11 +135,7 @@ pub fn mock_google_mail_thread_get_service<'a>(
             .path(format!("/users/me/threads/{thread_id}"))
             .header("authorization", "Bearer google_mail_test_access_token")
             .query_param("prettyPrint", "false")
-            .query_param("format", "metadata")
-            .query_param("metadataHeaders", "To")
-            .query_param("metadataHeaders", "Date")
-            .query_param("metadataHeaders", "Subject")
-            .query_param("metadataHeaders", "From");
+            .query_param("format", "full");
         then.status(200)
             .header("content-type", "application/json")
             .json_body_obj(result);
@@ -165,6 +161,29 @@ pub fn mock_google_mail_thread_modify_service<'a>(
             .header("authorization", "Bearer google_mail_test_access_token");
         then.status(200).header("content-type", "application/json");
     })
+}
+
+pub fn mock_google_mail_get_attachment_service<'a>(
+    google_mail_mock_server: &'a MockServer,
+    message_id: &'a str,
+    attachment_id: &'a str,
+    result: &'a GoogleMailMessageBody,
+) -> Mock<'a> {
+    google_mail_mock_server.mock(|when, then| {
+        when.method(GET)
+            .path(format!(
+                "/users/me/messages/{message_id}/attachments/{attachment_id}"
+            ))
+            .header("authorization", "Bearer google_mail_test_access_token");
+        then.status(200)
+            .header("content-type", "application/json")
+            .json_body_obj(result);
+    })
+}
+
+#[fixture]
+pub fn google_mail_invitation_attachment() -> GoogleMailMessageBody {
+    load_json_fixture_file("google_mail_invitation_attachment.json")
 }
 
 #[fixture]
@@ -203,6 +222,20 @@ pub fn google_mail_thread_get_456(
 ) -> GoogleMailThread {
     let user_email_address: EmailAddress = google_mail_user_profile.email_address.into();
     raw_google_mail_thread_get_456.into_google_mail_thread(user_email_address)
+}
+
+#[fixture]
+pub fn raw_google_mail_thread_with_invitation() -> RawGoogleMailThread {
+    load_json_fixture_file("google_mail_thread_with_invitation.json")
+}
+
+#[fixture]
+pub fn google_mail_thread_with_invitation(
+    raw_google_mail_thread_with_invitation: RawGoogleMailThread,
+    google_mail_user_profile: GoogleMailUserProfile,
+) -> GoogleMailThread {
+    let user_email_address: EmailAddress = google_mail_user_profile.email_address.into();
+    raw_google_mail_thread_with_invitation.into_google_mail_thread(user_email_address)
 }
 
 pub fn assert_sync_notifications(

@@ -1,0 +1,107 @@
+{
+  "id": "789",
+  "historyId": "111",
+  "messages": [
+    {
+      "id": "789",
+      "threadId": "789",
+      "labelIds": [
+        "STARRED",
+        "INBOX",
+        "UNREAD"
+      ],
+      "snippet": "test",
+      "payload": {
+        "mimeType": "multipart/mixed",
+        "headers": [
+          {
+            "name": "Date",
+            "value": "Sat, 16 Sep 2023 21:11:28 GMT"
+          },
+          {
+            "name": "Subject",
+            "value": "your are invited"
+          },
+          {
+            "name": "From",
+            "value": "from@example.com"
+          },
+          {
+            "name": "To",
+            "value": "test@example.com"
+          }
+        ],
+        "body": {
+          "size": 0
+        },
+        "parts": [
+          {
+            "partId": "0",
+            "mimeType": "multipart/alternative",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "multipart/alternative"
+              }
+            ],
+            "body": {
+              "size": 0
+            },
+            "parts": [
+              {
+                "partId": "0.0",
+                "mimeType": "text/plain",
+                "headers": [
+                  {
+                    "name": "Content-Type",
+                    "value": "text/plain; charset=utf-8"
+                  }
+                ],
+                "body": {
+                  "size": 10,
+                  "data": "eW91IGFyZSBpbnZpdGVkCg=="
+                }
+              },
+              {
+                "partId": "0.1",
+                "mimeType": "text/html",
+                "headers": [
+                  {
+                    "name": "Content-Type",
+                    "value": "text/html; charset=utf-8"
+                  }
+                ],
+                "body": {
+                  "size": 20,
+                  "data": "PGh0bWw+eW91IGFyZSBpbnZpdGVkPC9odG1sPgo="
+                }
+              },
+              {
+                "partId": "0.2",
+                "mimeType": "text/calendar",
+                "filename": "invite.ics",
+                "headers": [
+                  {
+                    "name": "Content-Type",
+                    "value": "text/calendar; charset=utf-8; method=REQUEST"
+                  },
+                  {
+                    "name": "Content-Transfer-Encoding",
+                    "value": "quoted-printable"
+                  }
+                ],
+                "body": {
+                  "attachmentId": "attachmentid1",
+                  "size": 20
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "sizeEstimate": 2222,
+      "historyId": "111",
+      "internalDate": "1694898688000"
+    }
+  ]
+}

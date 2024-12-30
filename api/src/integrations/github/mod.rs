@@ -539,13 +539,13 @@ impl ThirdPartyNotificationSourceService<GithubNotification> for GithubService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(notification_id = notification.id.to_string(), user.id = user_id.to_string()),
+        fields(third_party_item_id = source_item.id.to_string(), user.id = user_id.to_string()),
         err
     )]
     async fn delete_notification_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        notification: &Notification,
+        source_item: &ThirdPartyItem,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
         let (access_token, _) = self
@@ -556,7 +556,7 @@ impl ThirdPartyNotificationSourceService<GithubNotification> for GithubService {
             .await?
             .ok_or_else(|| anyhow!("Cannot delete Github notification without an access token"))?;
 
-        self.mark_thread_as_read(&notification.source_item.source_id, &access_token)
+        self.mark_thread_as_read(&source_item.source_id, &access_token)
             .await
     }
 
@@ -564,13 +564,13 @@ impl ThirdPartyNotificationSourceService<GithubNotification> for GithubService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(notification_id = notification.id.to_string(), user.id = user_id.to_string()),
+        fields(third_party_item_id = source_item.id.to_string(), user.id = user_id.to_string()),
         err
     )]
     async fn unsubscribe_notification_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        notification: &Notification,
+        source_item: &ThirdPartyItem,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
         let (access_token, _) = self
@@ -583,16 +583,16 @@ impl ThirdPartyNotificationSourceService<GithubNotification> for GithubService {
                 anyhow!("Cannot unsubscribe from Github notifications without an access token")
             })?;
 
-        self.mark_thread_as_read(&notification.source_item.source_id, &access_token)
+        self.mark_thread_as_read(&source_item.source_id, &access_token)
             .await?;
-        self.unsubscribe_from_thread(&notification.source_item.source_id, &access_token)
+        self.unsubscribe_from_thread(&source_item.source_id, &access_token)
             .await
     }
 
     async fn snooze_notification_from_source<'a>(
         &self,
         _executor: &mut Transaction<'a, Postgres>,
-        _notification: &Notification,
+        _source_item: &ThirdPartyItem,
         _snoozed_until_at: DateTime<Utc>,
         _user_id: UserId,
     ) -> Result<(), UniversalInboxError> {

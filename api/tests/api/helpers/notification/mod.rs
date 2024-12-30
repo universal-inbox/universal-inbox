@@ -25,6 +25,7 @@ use universal_inbox_api::{
 use crate::helpers::{auth::AuthenticatedApp, TestedApp};
 
 pub mod github;
+pub mod google_calendar;
 pub mod google_mail;
 pub mod linear;
 pub mod slack;

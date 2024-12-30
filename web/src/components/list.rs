@@ -75,7 +75,7 @@ pub fn ListItem(
 
                 if let Some(icon) = icon {
                     div {
-                        class: "flex justify-center",
+                        class: "flex justify-center items-center h-8 w-8",
                         { icon }
                     }
                 } else {
@@ -91,7 +91,7 @@ pub fn ListItem(
 
                     if let Some(subicon) = subicon {
                         div {
-                            class: "flex justify-center",
+                            class: "flex justify-center items-center h-8 w-8",
                             { subicon }
                         }
                     } else {
@@ -176,7 +176,7 @@ pub fn ListItemActionButton(props: ListItemActionButtonProps) -> Element {
                 }
 
                 button {
-                    class: "btn btn-ghost btn-square",
+                    class: "btn btn-ghost btn-square btn-sm",
                     title: "{props.title}",
                     onclick: move |evt| {
                         if let Some(handler) = &props.onclick {

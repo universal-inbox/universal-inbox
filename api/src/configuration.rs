@@ -179,6 +179,8 @@ pub struct IntegrationSettings {
     pub warning_message: Option<String>,
     #[serde(default = "HashMap::new")]
     pub doc_for_actions: HashMap<String, String>,
+    #[serde(default = "yes")]
+    pub is_enabled: bool,
 }
 
 #[derive(Deserialize, Clone, Debug)]

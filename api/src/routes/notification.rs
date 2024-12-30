@@ -12,7 +12,7 @@ use tokio::sync::RwLock;
 
 use universal_inbox::{
     notification::{
-        service::{NotificationPatch, SyncNotificationsParameters},
+        service::{InvitationPatch, NotificationPatch, SyncNotificationsParameters},
         NotificationId, NotificationSourceKind, NotificationStatus, NotificationWithTask,
     },
     task::{TaskCreation, TaskId},
@@ -45,6 +45,10 @@ pub fn scope() -> Scope {
         .service(
             web::resource("/{notification_id}/task")
                 .route(web::post().to(create_task_from_notification)),
+        )
+        .service(
+            web::resource("/{notification_id}/invitation")
+                .route(web::patch().to(update_invitation_from_notification)),
         )
 }
 
@@ -292,4 +296,61 @@ pub async fn create_task_from_notification(
     Ok(HttpResponse::Ok().content_type("application/json").body(
         serde_json::to_string(&notification_with_task).context("Cannot serialize created task")?,
     ))
+}
+
+pub async fn update_invitation_from_notification(
+    path: web::Path<NotificationId>,
+    patch: web::Json<InvitationPatch>,
+    notification_service: web::Data<Arc<RwLock<NotificationService>>>,
+    authenticated: Authenticated<Claims>,
+) -> Result<HttpResponse, UniversalInboxError> {
+    let user_id = authenticated
+        .claims
+        .sub
+        .parse::<UserId>()
+        .context("Wrong user ID format")?;
+    let notification_id = path.into_inner();
+    let invitation_patch = patch.into_inner();
+    let service = notification_service.read().await;
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while updating invitation")?;
+
+    let updated_notification = service
+        .update_invitation_from_notification(
+            &mut transaction,
+            notification_id,
+            &invitation_patch,
+            user_id,
+        )
+        .await?;
+
+    transaction.commit().await.context(format!(
+        "Failed to commit while patching notification {notification_id}"
+    ))?;
+
+    match updated_notification {
+        UpdateStatus {
+            updated: true,
+            result: Some(notification),
+        } => Ok(HttpResponse::Ok()
+            .content_type("application/json")
+            .body(serde_json::to_string(&notification).context("Cannot serialize notification")?)),
+        UpdateStatus {
+            updated: false,
+            result: Some(_),
+        } => Ok(HttpResponse::NotModified().finish()),
+        UpdateStatus {
+            updated: _,
+            result: None,
+        } => Ok(HttpResponse::NotFound()
+            .content_type("application/json")
+            .body(BoxBody::new(
+                json!({
+                    "message": format!("Cannot update unknown notification {notification_id}")
+                })
+                .to_string(),
+            ))),
+    }
 }

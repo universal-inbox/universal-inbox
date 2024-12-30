@@ -7,6 +7,7 @@ use crate::{
         config::IntegrationConnectionConfig,
         integrations::{
             github::GithubConfig,
+            google_calendar::GoogleCalendarConfig,
             google_mail::{GoogleMailConfig, GoogleMailContext},
             linear::LinearConfig,
             slack::{
@@ -31,12 +32,15 @@ pub enum IntegrationProvider {
     Linear {
         config: LinearConfig,
     },
+    GoogleCalendar {
+        config: GoogleCalendarConfig,
+    },
+    GoogleDocs,
     GoogleMail {
         context: Option<GoogleMailContext>,
         config: GoogleMailConfig,
     },
     Notion,
-    GoogleDocs,
     Slack {
         context: Option<SlackContext>,
         config: SlackConfig,
@@ -56,6 +60,10 @@ impl IntegrationProvider {
         match config {
             IntegrationConnectionConfig::Github(config) => Ok(Self::Github { config }),
             IntegrationConnectionConfig::Linear(config) => Ok(Self::Linear { config }),
+            IntegrationConnectionConfig::GoogleCalendar(config) => {
+                Ok(Self::GoogleCalendar { config })
+            }
+            IntegrationConnectionConfig::GoogleDocs => Ok(Self::GoogleDocs),
             IntegrationConnectionConfig::GoogleMail(config) => Ok(Self::GoogleMail {
                 context: context
                     .map(|c| {
@@ -69,7 +77,6 @@ impl IntegrationProvider {
                 config,
             }),
             IntegrationConnectionConfig::Notion => Ok(Self::Notion),
-            IntegrationConnectionConfig::GoogleDocs => Ok(Self::GoogleDocs),
             IntegrationConnectionConfig::Slack(config) => Ok(Self::Slack {
                 context: context
                     .map(|c| {
@@ -102,9 +109,10 @@ impl IntegrationProvider {
         match self {
             IntegrationProvider::Github { .. } => false,
             IntegrationProvider::Linear { .. } => false,
+            IntegrationProvider::GoogleCalendar { .. } => false,
+            IntegrationProvider::GoogleDocs => false,
             IntegrationProvider::GoogleMail { context, .. } => context.is_none(),
             IntegrationProvider::Notion => false,
-            IntegrationProvider::GoogleDocs => false,
             IntegrationProvider::Slack { context, .. } => context.is_none(),
             IntegrationProvider::Todoist { context, .. } => context.is_none(),
             IntegrationProvider::TickTick => false,
@@ -123,9 +131,10 @@ impl IntegrationProvider {
         match self {
             IntegrationProvider::Github { .. } => IntegrationProviderKind::Github,
             IntegrationProvider::Linear { .. } => IntegrationProviderKind::Linear,
+            IntegrationProvider::GoogleCalendar { .. } => IntegrationProviderKind::GoogleCalendar,
+            IntegrationProvider::GoogleDocs => IntegrationProviderKind::GoogleDocs,
             IntegrationProvider::GoogleMail { .. } => IntegrationProviderKind::GoogleMail,
             IntegrationProvider::Notion => IntegrationProviderKind::Notion,
-            IntegrationProvider::GoogleDocs => IntegrationProviderKind::GoogleDocs,
             IntegrationProvider::Slack { .. } => IntegrationProviderKind::Slack,
             IntegrationProvider::Todoist { .. } => IntegrationProviderKind::Todoist,
             IntegrationProvider::TickTick => IntegrationProviderKind::TickTick,
@@ -140,6 +149,10 @@ impl IntegrationProvider {
             IntegrationProvider::Linear { config } => {
                 IntegrationConnectionConfig::Linear(config.clone())
             }
+            IntegrationProvider::GoogleCalendar { config } => {
+                IntegrationConnectionConfig::GoogleCalendar(config.clone())
+            }
+            IntegrationProvider::GoogleDocs => IntegrationConnectionConfig::GoogleDocs,
             IntegrationProvider::GoogleMail { config, .. } => {
                 IntegrationConnectionConfig::GoogleMail(config.clone())
             }
@@ -147,7 +160,6 @@ impl IntegrationProvider {
                 IntegrationConnectionConfig::Todoist(config.clone())
             }
             IntegrationProvider::Notion => IntegrationConnectionConfig::Notion,
-            IntegrationProvider::GoogleDocs => IntegrationConnectionConfig::GoogleDocs,
             IntegrationProvider::Slack { config, .. } => {
                 IntegrationConnectionConfig::Slack(config.clone())
             }
@@ -280,9 +292,10 @@ macro_attr! {
     pub enum IntegrationProviderKind {
         Github,
         Linear,
+        GoogleCalendar,
+        GoogleDocs,
         GoogleMail,
         Notion,
-        GoogleDocs,
         Slack,
         Todoist,
         TickTick
@@ -312,11 +325,14 @@ impl IntegrationProviderKind {
             IntegrationProviderKind::Linear => {
                 IntegrationConnectionConfig::Linear(Default::default())
             }
+            IntegrationProviderKind::GoogleCalendar => {
+                IntegrationConnectionConfig::GoogleCalendar(Default::default())
+            }
+            IntegrationProviderKind::GoogleDocs => IntegrationConnectionConfig::GoogleDocs,
             IntegrationProviderKind::GoogleMail => {
                 IntegrationConnectionConfig::GoogleMail(Default::default())
             }
             IntegrationProviderKind::Notion => IntegrationConnectionConfig::Notion,
-            IntegrationProviderKind::GoogleDocs => IntegrationConnectionConfig::GoogleDocs,
             IntegrationProviderKind::Slack => {
                 IntegrationConnectionConfig::Slack(Default::default())
             }

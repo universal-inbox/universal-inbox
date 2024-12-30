@@ -124,10 +124,19 @@ impl NotificationRepository for Repository {
                   source_item.created_at as notification__source_item__created_at,
                   source_item.updated_at as notification__source_item__updated_at,
                   source_item.user_id as notification__source_item__user_id,
-                  source_item.integration_connection_id as notification__source_item__integration_connection_id
+                  source_item.integration_connection_id as notification__source_item__integration_connection_id,
+                  nested_source_item.id as notification__source_item__si__id,
+                  nested_source_item.source_id as notification__source_item__si__source_id,
+                  nested_source_item.data as notification__source_item__si__data,
+                  nested_source_item.created_at as notification__source_item__si__created_at,
+                  nested_source_item.updated_at as notification__source_item__si__updated_at,
+                  nested_source_item.user_id as notification__source_item__si__user_id,
+                  nested_source_item.integration_connection_id as notification__source_item__si__integration_connection_id
                 FROM notification
                 INNER JOIN third_party_item AS source_item
                   ON notification.source_item_id = source_item.id
+                LEFT JOIN third_party_item AS nested_source_item
+                  ON source_item.source_item_id = nested_source_item.id
                 WHERE notification.id =
             "#,
         )
@@ -175,10 +184,19 @@ impl NotificationRepository for Repository {
                   source_item.created_at as notification__source_item__created_at,
                   source_item.updated_at as notification__source_item__updated_at,
                   source_item.user_id as notification__source_item__user_id,
-                  source_item.integration_connection_id as notification__source_item__integration_connection_id
+                  source_item.integration_connection_id as notification__source_item__integration_connection_id,
+                  nested_source_item.id as notification__source_item__si__id,
+                  nested_source_item.source_id as notification__source_item__si__source_id,
+                  nested_source_item.data as notification__source_item__si__data,
+                  nested_source_item.created_at as notification__source_item__si__created_at,
+                  nested_source_item.updated_at as notification__source_item__si__updated_at,
+                  nested_source_item.user_id as notification__source_item__si__user_id,
+                  nested_source_item.integration_connection_id as notification__source_item__si__integration_connection_id
                 FROM notification
                 INNER JOIN third_party_item AS source_item
                   ON notification.source_item_id = source_item.id
+                LEFT JOIN third_party_item AS nested_source_item
+                  ON source_item.source_item_id = nested_source_item.id
                 WHERE source_item.source_id =
             "#
         )
@@ -335,6 +353,13 @@ impl NotificationRepository for Repository {
                   source_item.updated_at as notification__source_item__updated_at,
                   source_item.user_id as notification__source_item__user_id,
                   source_item.integration_connection_id as notification__source_item__integration_connection_id,
+                  nested_source_item.id as notification__source_item__si__id,
+                  nested_source_item.source_id as notification__source_item__si__source_id,
+                  nested_source_item.data as notification__source_item__si__data,
+                  nested_source_item.created_at as notification__source_item__si__created_at,
+                  nested_source_item.updated_at as notification__source_item__si__updated_at,
+                  nested_source_item.user_id as notification__source_item__si__user_id,
+                  nested_source_item.integration_connection_id as notification__source_item__si__integration_connection_id,
                   task.id as notification__task__id,
                   task.title as notification__task__title,
                   task.body as notification__task__body,
@@ -368,6 +393,8 @@ impl NotificationRepository for Repository {
                   notification
                 INNER JOIN third_party_item AS source_item
                   ON notification.source_item_id = source_item.id
+                LEFT JOIN third_party_item AS nested_source_item
+                  ON source_item.source_item_id = nested_source_item.id
                 LEFT JOIN task ON task.id = notification.task_id
                 LEFT JOIN third_party_item AS task_source_item
                   ON task.source_item_id = task_source_item.id
@@ -506,6 +533,8 @@ impl NotificationRepository for Repository {
                   notification as n
                 INNER JOIN third_party_item as source_item
                   ON n.source_item_id = source_item.id
+                LEFT JOIN third_party_item AS nested_source_item
+                  ON source_item.source_item_id = nested_source_item.id
                 WHERE
                 "#,
         );
@@ -548,7 +577,14 @@ impl NotificationRepository for Repository {
                   source_item.created_at as notification__source_item__created_at,
                   source_item.updated_at as notification__source_item__updated_at,
                   source_item.user_id as notification__source_item__user_id,
-                  source_item.integration_connection_id as notification__source_item__integration_connection_id
+                  source_item.integration_connection_id as notification__source_item__integration_connection_id,
+                  nested_source_item.id as notification__source_item__si__id,
+                  nested_source_item.source_id as notification__source_item__si__source_id,
+                  nested_source_item.data as notification__source_item__si__data,
+                  nested_source_item.created_at as notification__source_item__si__created_at,
+                  nested_source_item.updated_at as notification__source_item__si__updated_at,
+                  nested_source_item.user_id as notification__source_item__si__user_id,
+                  nested_source_item.integration_connection_id as notification__source_item__si__integration_connection_id
             "#,
         );
 
@@ -606,10 +642,19 @@ impl NotificationRepository for Repository {
                   source_item.created_at as notification__source_item__created_at,
                   source_item.updated_at as notification__source_item__updated_at,
                   source_item.user_id as notification__source_item__user_id,
-                  source_item.integration_connection_id as notification__source_item__integration_connection_id
+                  source_item.integration_connection_id as notification__source_item__integration_connection_id,
+                  nested_source_item.id as notification__source_item__si__id,
+                  nested_source_item.source_id as notification__source_item__si__source_id,
+                  nested_source_item.data as notification__source_item__si__data,
+                  nested_source_item.created_at as notification__source_item__si__created_at,
+                  nested_source_item.updated_at as notification__source_item__si__updated_at,
+                  nested_source_item.user_id as notification__source_item__si__user_id,
+                  nested_source_item.integration_connection_id as notification__source_item__si__integration_connection_id
                 FROM notification
                 INNER JOIN third_party_item AS source_item
                   ON notification.source_item_id = source_item.id
+                LEFT JOIN third_party_item AS nested_source_item
+                  ON source_item.source_item_id = nested_source_item.id
                 WHERE
             "#,
         );
@@ -833,6 +878,8 @@ impl NotificationRepository for Repository {
                   notification as n
                 INNER JOIN third_party_item AS source_item
                   ON n.source_item_id = source_item.id
+                LEFT JOIN third_party_item AS nested_source_item
+                  ON source_item.source_item_id = nested_source_item.id
                 WHERE
               "#,
             )
@@ -864,6 +911,13 @@ impl NotificationRepository for Repository {
                   source_item.updated_at as notification__source_item__updated_at,
                   source_item.user_id as notification__source_item__user_id,
                   source_item.integration_connection_id as notification__source_item__integration_connection_id,
+                  nested_source_item.id as notification__source_item__si__id,
+                  nested_source_item.source_id as notification__source_item__si__source_id,
+                  nested_source_item.data as notification__source_item__si__data,
+                  nested_source_item.created_at as notification__source_item__si__created_at,
+                  nested_source_item.updated_at as notification__source_item__si__updated_at,
+                  nested_source_item.user_id as notification__source_item__si__user_id,
+                  nested_source_item.integration_connection_id as notification__source_item__si__integration_connection_id,
                   (SELECT"#,
         );
 
@@ -968,6 +1022,8 @@ impl NotificationRepository for Repository {
                   notification as n
                 INNER JOIN third_party_item AS source_item
                   ON n.source_item_id = source_item.id
+                LEFT JOIN third_party_item AS nested_source_item
+                  ON source_item.source_item_id = nested_source_item.id
                 WHERE
               "#,
         );
@@ -1004,6 +1060,13 @@ impl NotificationRepository for Repository {
                   source_item.updated_at as notification__source_item__updated_at,
                   source_item.user_id as notification__source_item__user_id,
                   source_item.integration_connection_id as notification__source_item__integration_connection_id,
+                  nested_source_item.id as notification__source_item__si__id,
+                  nested_source_item.source_id as notification__source_item__si__source_id,
+                  nested_source_item.data as notification__source_item__si__data,
+                  nested_source_item.created_at as notification__source_item__si__created_at,
+                  nested_source_item.updated_at as notification__source_item__si__updated_at,
+                  nested_source_item.user_id as notification__source_item__si__user_id,
+                  nested_source_item.integration_connection_id as notification__source_item__si__integration_connection_id,
                   (SELECT"#,
         );
 
@@ -1127,6 +1190,7 @@ enum PgNotificationSourceKind {
     Todoist,
     Linear,
     GoogleMail,
+    GoogleCalendar,
     Slack,
 }
 

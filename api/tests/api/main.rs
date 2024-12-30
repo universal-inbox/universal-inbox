@@ -2,6 +2,7 @@
 mod helpers;
 mod test_auth;
 mod test_github_notifications;
+mod test_google_calendar_notifications;
 mod test_google_mail_notifications;
 mod test_health_check;
 mod test_integration_connections;

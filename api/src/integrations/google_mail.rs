@@ -1,9 +1,13 @@
-use std::sync::Weak;
+use std::{
+    io::BufReader,
+    sync::{Arc, Weak},
+};
 
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use http::{HeaderMap, HeaderValue};
+use ical::IcalParser;
 use itertools::Itertools;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, Extension};
 use reqwest_tracing::{
@@ -14,6 +18,13 @@ use serde_json::json;
 use serde_with::serde_as;
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
+use tracing::{debug, warn};
+use url::Url;
+use uuid::Uuid;
+use wiremock::{
+    matchers::{method, path, path_regex},
+    Mock, MockServer, ResponseTemplate,
+};
 
 use universal_inbox::{
     integration_connection::{
@@ -22,29 +33,24 @@ use universal_inbox::{
             IntegrationConnectionContext, IntegrationProvider, IntegrationProviderKind,
             IntegrationProviderSource,
         },
-        IntegrationConnection,
+        IntegrationConnection, IntegrationConnectionId,
     },
     notification::{Notification, NotificationSource, NotificationSourceKind, NotificationStatus},
     third_party::{
         integrations::google_mail::{
-            EmailAddress, GoogleMailLabel, GoogleMailMessage, GoogleMailThread, MessageSelection,
-            GOOGLE_MAIL_INBOX_LABEL, GOOGLE_MAIL_UNREAD_LABEL,
+            EmailAddress, GoogleMailLabel, GoogleMailMessage, GoogleMailMessageBody,
+            GoogleMailThread, MessageSelection, GOOGLE_MAIL_INBOX_LABEL, GOOGLE_MAIL_UNREAD_LABEL,
         },
         item::{ThirdPartyItem, ThirdPartyItemFromSource, ThirdPartyItemSourceKind},
     },
     user::UserId,
-};
-use url::Url;
-use uuid::Uuid;
-use wiremock::{
-    matchers::{method, path, path_regex},
-    Mock, MockServer, ResponseTemplate,
+    utils::base64::decode_base64,
 };
 
 use crate::{
     integrations::{
-        notification::ThirdPartyNotificationSourceService, oauth2::AccessToken,
-        third_party::ThirdPartyItemSourceService, APP_USER_AGENT,
+        google_calendar::GoogleCalendarService, notification::ThirdPartyNotificationSourceService,
+        oauth2::AccessToken, third_party::ThirdPartyItemSourceService, APP_USER_AGENT,
     },
     universal_inbox::{
         integration_connection::service::IntegrationConnectionService,
@@ -59,6 +65,7 @@ pub struct GoogleMailService {
     page_size: usize,
     integration_connection_service: Weak<RwLock<IntegrationConnectionService>>,
     notification_service: Weak<RwLock<NotificationService>>,
+    google_calendar_service: Arc<GoogleCalendarService>,
 }
 
 static DEFAULT_SUBJECT: &str = "No subject";
@@ -94,7 +101,7 @@ pub struct GoogleMailUserProfile {
 }
 
 #[serde_as]
-#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+#[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
 pub struct RawGoogleMailThread {
     pub id: String,
     #[serde(rename = "historyId")]
@@ -180,6 +187,7 @@ impl GoogleMailService {
         page_size: usize,
         integration_connection_service: Weak<RwLock<IntegrationConnectionService>>,
         notification_service: Weak<RwLock<NotificationService>>,
+        google_calendar_service: Arc<GoogleCalendarService>,
     ) -> Result<GoogleMailService, UniversalInboxError> {
         let google_mail_base_url =
             google_mail_base_url.unwrap_or_else(|| GOOGLE_MAIL_BASE_URL.to_string());
@@ -197,6 +205,7 @@ impl GoogleMailService {
             page_size,
             integration_connection_service,
             notification_service,
+            google_calendar_service,
         })
     }
 
@@ -261,6 +270,20 @@ impl GoogleMailService {
             )
             .mount(mock_server)
             .await;
+
+        Mock::given(method("GET"))
+            .and(path("/users/me/messages/[^/]*/attachments/[^/]*"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "application/json")
+                    .set_body_json(&GoogleMailMessageBody {
+                        size: 20,
+                        data: None,
+                        attachment_id: None,
+                    }),
+            )
+            .mount(mock_server)
+            .await;
     }
 
     pub fn set_notification_service(
@@ -301,6 +324,10 @@ impl GoogleMailService {
                     ),
                     format!("{}/users/me/threads*", self.google_mail_base_path),
                     format!("{}/users/me/labels", self.google_mail_base_path),
+                    format!(
+                        "{}/users/me/messages/{{message_id}}/attachments/{{attachment_id}}",
+                        self.google_mail_base_path
+                    ),
                 ])
                 .context("Cannot build Otel path names")?,
             ))
@@ -337,12 +364,8 @@ impl GoogleMailService {
         access_token: &AccessToken,
     ) -> Result<RawGoogleMailThread, UniversalInboxError> {
         let url = format!(
-            "{}/users/me/threads/{thread_id}?prettyPrint=false&format=metadata{}",
+            "{}/users/me/threads/{thread_id}?prettyPrint=false&format=full",
             self.google_mail_base_url,
-            ["To", "Date", "Subject", "From", "Cc"]
-                .iter()
-                .map(|header| format!("&metadataHeaders={header}"))
-                .join(""),
         );
 
         let response = self
@@ -398,6 +421,33 @@ impl GoogleMailService {
             .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
 
         Ok(thread_list)
+    }
+
+    async fn get_attachment(
+        &self,
+        message_id: &str,
+        attachment_id: &str,
+        access_token: &AccessToken,
+    ) -> Result<GoogleMailMessageBody, UniversalInboxError> {
+        let url = format!(
+            "{}/users/me/messages/{message_id}/attachments/{attachment_id}",
+            self.google_mail_base_url,
+        );
+
+        let response = self
+            .build_google_mail_client(access_token)?
+            .get(&url)
+            .send()
+            .await
+            .context("Cannot fetch attachment from GoogleMail API")?
+            .text()
+            .await
+            .context("Failed to fetch attachment response from GoogleMail API")?;
+
+        let attachment: GoogleMailMessageBody = serde_json::from_str(&response)
+            .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
+
+        Ok(attachment)
     }
 
     async fn modify_thread(
@@ -487,6 +537,134 @@ impl GoogleMailService {
         };
 
         Ok(config.clone())
+    }
+
+    /// Derive a ThirdPartyItem from a GoogleMailThread and cannot fail as it is a best-effort operation
+    /// In case of failure, None is returned and the thread will be used as source
+    async fn derive_third_party_item_from_google_mail_thread<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        google_mail_thread: &GoogleMailThread,
+        user_id: UserId,
+        integration_connection_id: IntegrationConnectionId,
+        access_token: &AccessToken,
+    ) -> Option<ThirdPartyItem> {
+        if let Some(message) = google_mail_thread.messages.first() {
+            if let Some(ref attachment_id) = message
+                .payload
+                .find_attachment_id_for_mime_type("text/calendar")
+            {
+                let mut derived_third_party_item = self
+                    .derive_third_party_item_from_google_mail_invitation(
+                        executor,
+                        &message.id,
+                        attachment_id,
+                        user_id,
+                        access_token,
+                    )
+                    .await
+                    .inspect_err(|err| {
+                        warn!(
+                            "Failed to derive Google Mail invitation from thread `{}`: {err:?}",
+                            google_mail_thread.id
+                        );
+                    })
+                    .ok()??;
+                derived_third_party_item.source_item = Some(Box::new(
+                    google_mail_thread
+                        .clone()
+                        .into_third_party_item(user_id, integration_connection_id),
+                ));
+                return Some(derived_third_party_item);
+            }
+        }
+
+        None
+    }
+
+    async fn derive_third_party_item_from_google_mail_invitation<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        message_id: &str,
+        attachment_id: &str,
+        user_id: UserId,
+        gmail_access_token: &AccessToken,
+    ) -> Result<Option<ThirdPartyItem>, UniversalInboxError> {
+        let (gcal_access_token, gcal_integration_connection) = self
+            .integration_connection_service
+            .upgrade()
+            .context("Unable to access integration_connection_service from google_mail_service")?
+            .read()
+            .await
+            .find_access_token(executor, IntegrationProviderKind::GoogleCalendar, user_id)
+            .await?
+            .ok_or_else(|| {
+                anyhow!("Cannot find Google Calendar access token for user `{user_id}`")
+            })?;
+
+        let IntegrationProvider::GoogleCalendar { config } = gcal_integration_connection.provider
+        else {
+            return Err(UniversalInboxError::Unexpected(anyhow!(
+                "Integration connection `{}` provider is not a Google Calendar integration connection",
+                gcal_integration_connection.id
+            )));
+        };
+
+        if !config.sync_event_details_enabled {
+            debug!(
+                "Google Calendar integration connection `{}` does not have event details sync enabled",
+                gcal_integration_connection.id
+            );
+            return Ok(None);
+        }
+
+        debug!(
+            "Fetching Google Mail calendar attachment for message `{message_id}`: {attachment_id}"
+        );
+        let attachment = self
+            .get_attachment(message_id, attachment_id, gmail_access_token)
+            .await
+            .with_context(|| {
+                format!(
+                    "Failed to fetch Google Mail calendar attachment for message `{message_id}`"
+                )
+            })?;
+        let data = attachment.data.with_context(|| {
+            format!("No `body` found in Google Mail attachement for message `{message_id}`")
+        })?;
+        let raw_vcal_event = decode_base64(&data).with_context(|| {
+            format!("Failed to decode Google Mail calendar attachment for message `{message_id}`")
+        })?;
+        let mut vcal_events = IcalParser::new(BufReader::new(raw_vcal_event.as_bytes()));
+        let vcal_uid = vcal_events
+            .next()
+            .ok_or_else(|| anyhow!("Failed to parse VCal events"))?
+            .context("Failed to parse VCal events")?
+            .events
+            .first()
+            .ok_or_else(|| anyhow!("Failed to parse VCal events"))?
+            .properties
+            .iter()
+            .find_map(|p| {
+                if p.name == "UID" {
+                    p.value.clone()
+                } else {
+                    None
+                }
+            })
+            .ok_or_else(|| anyhow!("Failed to parse VCal events"))?;
+        let event = self
+            .google_calendar_service
+            .get_event("primary", &vcal_uid, &gcal_access_token)
+            .await
+            .with_context(|| {
+                format!("Failed to fetch Google Calendar event with iCalUID `{vcal_uid}`")
+            })?;
+
+        Ok(Some(event.into_third_party_item(
+            user_id,
+            gcal_integration_connection.id,
+        )))
     }
 }
 
@@ -579,11 +757,10 @@ impl ThirdPartyItemSourceService<GoogleMailThread> for GoogleMailService {
             // Tips: The batch API can be used for better performance
             // https://developers.google.com/gmail/api/guides/batch
             for thread in &google_mail_thread_list.threads.unwrap_or_default() {
-                let google_mail_thread = self
-                    .get_thread(&thread.id, &access_token)
-                    .await?
-                    .into_google_mail_thread(user_email_address.clone());
-                google_mail_threads.push(google_mail_thread);
+                let raw_google_mail_thread = self.get_thread(&thread.id, &access_token).await?;
+                google_mail_threads.push(
+                    raw_google_mail_thread.into_google_mail_thread(user_email_address.clone()),
+                );
             }
 
             if let Some(next_page_token) = google_mail_thread_list.next_page_token {
@@ -645,8 +822,18 @@ impl ThirdPartyItemSourceService<GoogleMailThread> for GoogleMailService {
                 }
             }
 
-            let third_party_item =
-                google_mail_thread.into_third_party_item(user_id, integration_connection.id);
+            let third_party_item = self
+                .derive_third_party_item_from_google_mail_thread(
+                    executor,
+                    &google_mail_thread,
+                    user_id,
+                    integration_connection.id,
+                    &access_token,
+                )
+                .await
+                .unwrap_or_else(|| {
+                    google_mail_thread.into_third_party_item(user_id, integration_connection.id)
+                });
 
             third_party_items.push(third_party_item);
         }
@@ -724,13 +911,13 @@ impl ThirdPartyNotificationSourceService<GoogleMailThread> for GoogleMailService
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(notification_id = notification.id.0.to_string(), user.id = user_id.to_string()),
+        fields(third_party_item_id = source_item.id.to_string(), user.id = user_id.to_string()),
         err
     )]
     async fn delete_notification_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        notification: &Notification,
+        source_item: &ThirdPartyItem,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
         let (access_token, integration_connection) = self
@@ -747,7 +934,7 @@ impl ThirdPartyNotificationSourceService<GoogleMailThread> for GoogleMailService
         let config = GoogleMailService::get_config(&integration_connection)?;
 
         self.archive_thread(
-            &notification.source_item.source_id,
+            &source_item.source_id,
             &config.synced_label.id,
             &access_token,
         )
@@ -758,13 +945,13 @@ impl ThirdPartyNotificationSourceService<GoogleMailThread> for GoogleMailService
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(notification_id = notification.id.0.to_string(), user.id = user_id.to_string()),
+        fields(third_party_item_id = source_item.id.to_string(), user.id = user_id.to_string()),
         err
     )]
     async fn unsubscribe_notification_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        notification: &Notification,
+        source_item: &ThirdPartyItem,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
         let (access_token, integration_connection) = self
@@ -781,7 +968,7 @@ impl ThirdPartyNotificationSourceService<GoogleMailThread> for GoogleMailService
         let config = GoogleMailService::get_config(&integration_connection)?;
 
         self.archive_thread(
-            &notification.source_item.source_id,
+            &source_item.source_id,
             &config.synced_label.id,
             &access_token,
         )
@@ -791,7 +978,7 @@ impl ThirdPartyNotificationSourceService<GoogleMailThread> for GoogleMailService
     async fn snooze_notification_from_source<'a>(
         &self,
         _executor: &mut Transaction<'a, Postgres>,
-        _notification: &Notification,
+        _source_item: &ThirdPartyItem,
         _snoozed_until_at: DateTime<Utc>,
         _user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
@@ -840,6 +1027,13 @@ mod tests {
                 10,
                 Weak::new(),
                 Weak::new(),
+                Arc::new(
+                    GoogleCalendarService::new(
+                        Some("https://calendar.googleapis.com/calendar/v3".to_string()),
+                        Weak::new(),
+                    )
+                    .unwrap(),
+                ),
             )
             .unwrap()
         }
@@ -872,6 +1066,7 @@ mod tests {
                                     value: "dest@example.com".to_string(),
                                 },
                             ],
+                            ..Default::default()
                         },
                     },
                     GoogleMailMessage {
@@ -888,6 +1083,7 @@ mod tests {
                                 name: "Subject".to_string(),
                                 value: "test subject".to_string(),
                             }],
+                            ..Default::default()
                         },
                     },
                 ],
@@ -948,6 +1144,7 @@ mod tests {
                         payload: GoogleMailMessagePayload {
                             mime_type: "multipart/mixed".to_string(),
                             headers: vec![],
+                            ..Default::default()
                         },
                     },
                     GoogleMailMessage {
@@ -964,6 +1161,7 @@ mod tests {
                         payload: GoogleMailMessagePayload {
                             mime_type: "multipart/mixed".to_string(),
                             headers: vec![],
+                            ..Default::default()
                         },
                     },
                 ],
@@ -1014,6 +1212,7 @@ mod tests {
                         payload: GoogleMailMessagePayload {
                             mime_type: "multipart/mixed".to_string(),
                             headers: vec![],
+                            ..Default::default()
                         },
                     },
                     GoogleMailMessage {
@@ -1027,6 +1226,7 @@ mod tests {
                         payload: GoogleMailMessagePayload {
                             mime_type: "multipart/mixed".to_string(),
                             headers: vec![],
+                            ..Default::default()
                         },
                     },
                 ],
@@ -1073,6 +1273,7 @@ mod tests {
                         payload: GoogleMailMessagePayload {
                             mime_type: "multipart/mixed".to_string(),
                             headers: vec![],
+                            ..Default::default()
                         },
                     },
                     GoogleMailMessage {
@@ -1086,6 +1287,7 @@ mod tests {
                         payload: GoogleMailMessagePayload {
                             mime_type: "multipart/mixed".to_string(),
                             headers: vec![],
+                            ..Default::default()
                         },
                     },
                 ],
@@ -1135,6 +1337,7 @@ mod tests {
                         payload: GoogleMailMessagePayload {
                             mime_type: "multipart/mixed".to_string(),
                             headers: vec![],
+                            ..Default::default()
                         },
                     },
                     GoogleMailMessage {
@@ -1151,6 +1354,7 @@ mod tests {
                         payload: GoogleMailMessagePayload {
                             mime_type: "multipart/mixed".to_string(),
                             headers: vec![],
+                            ..Default::default()
                         },
                     },
                 ],
@@ -1200,6 +1404,7 @@ mod tests {
                         payload: GoogleMailMessagePayload {
                             mime_type: "multipart/mixed".to_string(),
                             headers: vec![],
+                            ..Default::default()
                         },
                     },
                     GoogleMailMessage {
@@ -1220,6 +1425,7 @@ mod tests {
                                 name: "To".to_string(),
                                 value: "test@example.com".to_string(),
                             }],
+                            ..Default::default()
                         },
                     },
                 ],

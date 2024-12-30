@@ -16,6 +16,7 @@ use crate::{
     task::Task,
     third_party::integrations::{
         github::GithubNotification,
+        google_calendar::GoogleCalendarEvent,
         google_mail::GoogleMailThread,
         linear::{LinearIssue, LinearNotification, LinearWorkflowState, LinearWorkflowStateType},
         slack::{SlackReaction, SlackReactionState, SlackStar, SlackStarState, SlackThread},
@@ -35,6 +36,7 @@ pub struct ThirdPartyItem {
     pub updated_at: DateTime<Utc>,
     pub user_id: UserId,
     pub integration_connection_id: IntegrationConnectionId,
+    pub source_item: Option<Box<ThirdPartyItem>>,
 }
 
 impl PartialEq for ThirdPartyItem {
@@ -57,6 +59,7 @@ impl HasHtmlUrl for ThirdPartyItem {
             ThirdPartyItemData::LinearNotification(ref notification) => notification.get_html_url(),
             ThirdPartyItemData::GithubNotification(ref notification) => notification.get_html_url(),
             ThirdPartyItemData::GoogleMailThread(ref thread) => thread.get_html_url(),
+            ThirdPartyItemData::GoogleCalendarEvent(ref event) => event.get_html_url(),
         }
     }
 }
@@ -74,6 +77,7 @@ pub enum ThirdPartyItemData {
     LinearNotification(Box<LinearNotification>),
     GithubNotification(Box<GithubNotification>),
     GoogleMailThread(Box<GoogleMailThread>),
+    GoogleCalendarEvent(Box<GoogleCalendarEvent>),
 }
 
 macro_attr! {
@@ -87,6 +91,7 @@ macro_attr! {
         LinearNotification,
         GithubNotification,
         GoogleMailThread,
+        GoogleCalendarEvent,
     }
 }
 
@@ -106,6 +111,7 @@ impl IntegrationProviderSource for ThirdPartyItem {
             }
             ThirdPartyItemData::GithubNotification(_) => IntegrationProviderKind::Github,
             ThirdPartyItemData::GoogleMailThread(_) => IntegrationProviderKind::GoogleMail,
+            ThirdPartyItemData::GoogleCalendarEvent(_) => IntegrationProviderKind::GoogleCalendar,
         }
     }
 }
@@ -125,6 +131,9 @@ impl ThirdPartyItemSource for ThirdPartyItem {
                 ThirdPartyItemSourceKind::GithubNotification
             }
             ThirdPartyItemData::GoogleMailThread(_) => ThirdPartyItemSourceKind::GoogleMailThread,
+            ThirdPartyItemData::GoogleCalendarEvent(_) => {
+                ThirdPartyItemSourceKind::GoogleCalendarEvent
+            }
         }
     }
 }
@@ -144,6 +153,7 @@ impl ThirdPartyItem {
             updated_at: Utc::now().with_nanosecond(0).unwrap(),
             user_id,
             integration_connection_id,
+            source_item: None,
         }
     }
 
@@ -157,6 +167,7 @@ impl ThirdPartyItem {
             ThirdPartyItemData::LinearNotification(_) => ThirdPartyItemKind::LinearNotification,
             ThirdPartyItemData::GithubNotification(_) => ThirdPartyItemKind::GithubNotification,
             ThirdPartyItemData::GoogleMailThread(_) => ThirdPartyItemKind::GoogleMailThread,
+            ThirdPartyItemData::GoogleCalendarEvent(_) => ThirdPartyItemKind::GoogleCalendarEvent,
         }
     }
 
@@ -243,6 +254,7 @@ macro_attr! {
         LinearNotification,
         GithubNotification,
         GoogleMailThread,
+        GoogleCalendarEvent,
     }
 }
 

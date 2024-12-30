@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     notification::{NotificationStatus, NotificationSyncSourceKind},
     task::TaskId,
+    third_party::integrations::google_calendar::GoogleCalendarEventAttendeeResponseStatus,
 };
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -17,4 +18,9 @@ pub struct NotificationPatch {
     pub status: Option<NotificationStatus>,
     pub snoozed_until: Option<DateTime<Utc>>,
     pub task_id: Option<TaskId>,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+pub struct InvitationPatch {
+    pub response_status: GoogleCalendarEventAttendeeResponseStatus,
 }

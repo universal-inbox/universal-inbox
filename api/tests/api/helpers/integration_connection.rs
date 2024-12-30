@@ -266,6 +266,11 @@ pub fn nango_linear_connection() -> Box<NangoConnection> {
 }
 
 #[fixture]
+pub fn nango_google_calendar_connection() -> Box<NangoConnection> {
+    load_json_fixture_file("nango_google_calendar_connection.json")
+}
+
+#[fixture]
 pub fn nango_google_mail_connection() -> Box<NangoConnection> {
     load_json_fixture_file("nango_google_mail_connection.json")
 }

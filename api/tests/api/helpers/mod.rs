@@ -52,6 +52,7 @@ pub struct TestedApp {
     pub slack_service: Arc<SlackService>,
     pub github_mock_server: MockServer,
     pub linear_mock_server: MockServer,
+    pub google_calendar_mock_server: MockServer,
     pub google_mail_mock_server: MockServer,
     pub slack_mock_server: MockServer,
     pub todoist_mock_server: MockServer,
@@ -166,6 +167,8 @@ pub async fn tested_app(
     let github_mock_server_url = &github_mock_server.base_url();
     let linear_mock_server = MockServer::start();
     let linear_mock_server_url = &linear_mock_server.base_url();
+    let google_calendar_mock_server = MockServer::start();
+    let google_calendar_mock_server_url = &google_calendar_mock_server.base_url();
     let google_mail_mock_server = MockServer::start();
     let google_mail_mock_server_url = &google_mail_mock_server.base_url();
     let slack_mock_server = MockServer::start();
@@ -219,6 +222,7 @@ pub async fn tested_app(
         Some(github_mock_server_url.to_string()),
         Some(linear_mock_server_url.to_string()),
         Some(google_mail_mock_server_url.to_string()),
+        Some(google_calendar_mock_server_url.to_string()),
         Some(slack_mock_server_url.to_string()),
         Some(todoist_mock_server_url.to_string()),
         nango_service,
@@ -273,6 +277,7 @@ pub async fn tested_app(
         slack_service,
         github_mock_server,
         linear_mock_server,
+        google_calendar_mock_server,
         google_mail_mock_server,
         slack_mock_server,
         todoist_mock_server,
@@ -311,6 +316,8 @@ pub async fn tested_app_with_local_auth(
     let linear_mock_server_url = &linear_mock_server.base_url();
     let google_mail_mock_server = MockServer::start();
     let google_mail_mock_server_url = &google_mail_mock_server.base_url();
+    let google_calendar_mock_server = MockServer::start();
+    let google_calendar_mock_server_url = &google_calendar_mock_server.base_url();
     let slack_mock_server = MockServer::start();
     let slack_mock_server_url = &slack_mock_server.base_url();
     let todoist_mock_server = MockServer::start();
@@ -351,6 +358,7 @@ pub async fn tested_app_with_local_auth(
         Some(github_mock_server_url.to_string()),
         Some(linear_mock_server_url.to_string()),
         Some(google_mail_mock_server_url.to_string()),
+        Some(google_calendar_mock_server_url.to_string()),
         Some(slack_mock_server_url.to_string()),
         Some(todoist_mock_server_url.to_string()),
         nango_service,
@@ -405,6 +413,7 @@ pub async fn tested_app_with_local_auth(
         slack_service,
         github_mock_server,
         linear_mock_server,
+        google_calendar_mock_server,
         google_mail_mock_server,
         slack_mock_server,
         todoist_mock_server,

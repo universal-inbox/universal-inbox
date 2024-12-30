@@ -41,7 +41,8 @@
                 "Todoist",
                 "Linear",
                 "GoogleMail",
-                "Slack"
+                "Slack",
+                "GoogleCalendar"
               ]
             }
           }

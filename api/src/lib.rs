@@ -35,7 +35,7 @@ use apalis::{
 use configuration::AuthenticationSettings;
 use csp::{Directive, Source, Sources, CSP};
 use futures::channel::mpsc;
-use integrations::slack::SlackService;
+use integrations::{google_calendar::GoogleCalendarService, slack::SlackService};
 use jobs::UniversalInboxJob;
 use jsonwebtoken::{Algorithm, Validation};
 use mailer::Mailer;
@@ -325,6 +325,7 @@ pub async fn build_services(
     github_address: Option<String>,
     linear_graphql_url: Option<String>,
     google_mail_base_url: Option<String>,
+    google_calendar_base_url: Option<String>,
     slack_base_url: Option<String>,
     todoist_address: Option<String>,
     nango_service: NangoService,
@@ -384,6 +385,14 @@ pub async fn build_services(
             .expect("Failed to create new LinearService"),
     );
 
+    let google_calendar_service = Arc::new(
+        GoogleCalendarService::new(
+            google_calendar_base_url,
+            Arc::downgrade(&integration_connection_service),
+        )
+        .expect("Failed to create new GoogleCalendarService"),
+    );
+
     let google_mail_settings = settings
         .integrations
         .get("google_mail")
@@ -394,6 +403,7 @@ pub async fn build_services(
             google_mail_settings.page_size.unwrap_or(100),
             Arc::downgrade(&integration_connection_service),
             Weak::new(),
+            google_calendar_service.clone(),
         )
         .expect("Failed to create new GoogleMailService"),
     ));
@@ -417,6 +427,7 @@ pub async fn build_services(
         repository.clone(),
         github_service.clone(),
         linear_service.clone(),
+        google_calendar_service.clone(),
         google_mail_service.clone(),
         slack_service.clone(),
         Weak::new(),

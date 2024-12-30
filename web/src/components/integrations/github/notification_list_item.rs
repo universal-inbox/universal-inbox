@@ -8,13 +8,13 @@ use universal_inbox::{
     notification::NotificationWithTask,
     third_party::integrations::github::{
         GithubDiscussion, GithubNotification, GithubNotificationItem, GithubPullRequest,
+        GithubPullRequestReviewDecision,
     },
 };
 
 use crate::components::{
     integrations::github::{
         icons::{Github, GithubNotificationIcon},
-        notification::GithubReviewStatus,
         preview::pull_request::ChecksGithubPullRequest,
         GithubActorDisplay,
     },
@@ -140,15 +140,15 @@ pub fn GithubPullRequestNotificationListItem(
             on_select,
 
             ChecksGithubPullRequest {
-                icon_size: "h-3 w-3",
+                icon_size: "h-5 w-5",
                 latest_commit: github_pull_request().latest_commit,
                 expand_details: false,
             }
 
             if github_pull_request().comments_count > 0 {
                 div {
-                    class: "flex gap-1",
-                    Icon { class: "h-3 w-3 text-info", icon: BsChatTextFill }
+                    class: "flex gap-1 items-center",
+                    Icon { class: "h-5 w-5 text-info", icon: BsChatTextFill }
                     span { class: "text-xs text-gray-400", "{github_pull_request().comments_count}" }
                 }
             }
@@ -201,8 +201,8 @@ pub fn GithubDiscussionNotificationListItem(
 
             if github_discussion().comments_count > 0 {
                 div {
-                    class: "flex gap-1",
-                    Icon { class: "h-3 w-3 text-info", icon: BsChatTextFill }
+                    class: "flex gap-1 items-center",
+                    Icon { class: "h-5 w-5 text-info", icon: BsChatTextFill }
                     span { class: "text-xs text-gray-400", "{github_discussion().comments_count}" }
                 }
             }
@@ -228,4 +228,23 @@ fn GithubNotificationSubtitle(github_notification: ReadOnlySignal<GithubNotifica
             }
         }
     }
+}
+
+#[component]
+pub fn GithubReviewStatus(github_pull_request: ReadOnlySignal<GithubPullRequest>) -> Element {
+    github_pull_request()
+        .review_decision
+        .as_ref()
+        .map(|review_decision| match review_decision {
+            GithubPullRequestReviewDecision::Approved => {
+                rsx! { div { class: "badge p-1 whitespace-nowrap bg-success text-xs text-white", "Approved" } }
+            }
+            GithubPullRequestReviewDecision::ChangesRequested => {
+                rsx! { div { class: "badge p-1 whitespace-nowrap bg-error text-xs text-white", "Changes requested" } }
+            }
+            GithubPullRequestReviewDecision::ReviewRequired => {
+                rsx! { div { class: "badge p-1 whitespace-nowrap bg-info text-xs text-white", "Review required" } }
+            }
+        })
+        .unwrap_or_else(|| rsx! {})
 }

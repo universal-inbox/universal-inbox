@@ -1537,7 +1537,7 @@ impl ThirdPartyNotificationSourceService<SlackStar> for SlackService {
         level = "debug",
         skip_all,
         fields(
-            notification_id = notification.id.to_string(),
+            third_party_item_id = source_item.id.to_string(),
             user.id = user_id.to_string()
         ),
         err
@@ -1545,13 +1545,13 @@ impl ThirdPartyNotificationSourceService<SlackStar> for SlackService {
     async fn delete_notification_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        notification: &Notification,
+        source_item: &ThirdPartyItem,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
-        let ThirdPartyItemData::SlackStar(slack_star) = &notification.source_item.data else {
+        let ThirdPartyItemData::SlackStar(slack_star) = &source_item.data else {
             return Err(UniversalInboxError::Unexpected(anyhow!(
                 "Expected Slack third party item but was {}",
-                notification.source_item.kind()
+                source_item.kind()
             )));
         };
 
@@ -1564,7 +1564,7 @@ impl ThirdPartyNotificationSourceService<SlackStar> for SlackService {
         level = "debug",
         skip_all,
         fields(
-            notification_id = notification.id.to_string(),
+            third_party_item_id = source_item.id.to_string(),
             user.id = user_id.to_string()
         ),
         err
@@ -1572,13 +1572,13 @@ impl ThirdPartyNotificationSourceService<SlackStar> for SlackService {
     async fn unsubscribe_notification_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        notification: &Notification,
+        source_item: &ThirdPartyItem,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
-        let ThirdPartyItemData::SlackStar(slack_star) = &notification.source_item.data else {
+        let ThirdPartyItemData::SlackStar(slack_star) = &source_item.data else {
             return Err(UniversalInboxError::Unexpected(anyhow!(
                 "Expected Slack third party item but was {}",
-                notification.source_item.kind()
+                source_item.kind()
             )));
         };
 
@@ -1589,7 +1589,7 @@ impl ThirdPartyNotificationSourceService<SlackStar> for SlackService {
     async fn snooze_notification_from_source<'a>(
         &self,
         _executor: &mut Transaction<'a, Postgres>,
-        _notification: &Notification,
+        _source_item: &ThirdPartyItem,
         _snoozed_until_at: DateTime<Utc>,
         _user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
@@ -1641,7 +1641,7 @@ impl ThirdPartyNotificationSourceService<SlackReaction> for SlackService {
         level = "debug",
         skip_all,
         fields(
-            notification_id = notification.id.to_string(),
+            third_party_item_id = source_item.id.to_string(),
             user.id = user_id.to_string()
         ),
         err
@@ -1649,14 +1649,13 @@ impl ThirdPartyNotificationSourceService<SlackReaction> for SlackService {
     async fn delete_notification_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        notification: &Notification,
+        source_item: &ThirdPartyItem,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
-        let ThirdPartyItemData::SlackReaction(slack_reaction) = &notification.source_item.data
-        else {
+        let ThirdPartyItemData::SlackReaction(slack_reaction) = &source_item.data else {
             return Err(UniversalInboxError::Unexpected(anyhow!(
                 "Expected Slack third party item but was {}",
-                notification.source_item.kind()
+                source_item.kind()
             )));
         };
 
@@ -1674,7 +1673,7 @@ impl ThirdPartyNotificationSourceService<SlackReaction> for SlackService {
         level = "debug",
         skip_all,
         fields(
-            notification_id = notification.id.to_string(),
+            third_party_item_id = source_item.id.to_string(),
             user.id = user_id.to_string()
         ),
         err
@@ -1682,14 +1681,13 @@ impl ThirdPartyNotificationSourceService<SlackReaction> for SlackService {
     async fn unsubscribe_notification_from_source<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
-        notification: &Notification,
+        source_item: &ThirdPartyItem,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
-        let ThirdPartyItemData::SlackReaction(slack_reaction) = &notification.source_item.data
-        else {
+        let ThirdPartyItemData::SlackReaction(slack_reaction) = &source_item.data else {
             return Err(UniversalInboxError::Unexpected(anyhow!(
                 "Expected Slack third party item but was {}",
-                notification.source_item.kind()
+                source_item.kind()
             )));
         };
 
@@ -1705,7 +1703,7 @@ impl ThirdPartyNotificationSourceService<SlackReaction> for SlackService {
     async fn snooze_notification_from_source<'a>(
         &self,
         _executor: &mut Transaction<'a, Postgres>,
-        _notification: &Notification,
+        _source_item: &ThirdPartyItem,
         _snoozed_until_at: DateTime<Utc>,
         _user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
@@ -1762,7 +1760,7 @@ impl ThirdPartyNotificationSourceService<SlackThread> for SlackService {
         level = "debug",
         skip_all,
         fields(
-            notification_id = notification.id.to_string(),
+            third_party_item_id = source_item.id.to_string(),
             user.id = _user_id.to_string()
         ),
         err
@@ -1770,7 +1768,7 @@ impl ThirdPartyNotificationSourceService<SlackThread> for SlackService {
     async fn delete_notification_from_source<'a>(
         &self,
         _executor: &mut Transaction<'a, Postgres>,
-        notification: &Notification,
+        source_item: &ThirdPartyItem,
         _user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
         // There is no way to mark a Slack thread as read with public API
@@ -1785,7 +1783,7 @@ impl ThirdPartyNotificationSourceService<SlackThread> for SlackService {
         level = "debug",
         skip_all,
         fields(
-            notification_id = notification.id.to_string(),
+            third_party_item_id = source_item.id.to_string(),
             user.id = _user_id.to_string()
         ),
         err
@@ -1793,7 +1791,7 @@ impl ThirdPartyNotificationSourceService<SlackThread> for SlackService {
     async fn unsubscribe_notification_from_source<'a>(
         &self,
         _executor: &mut Transaction<'a, Postgres>,
-        notification: &Notification,
+        source_item: &ThirdPartyItem,
         _user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
         // The is no way to unsubscribe from a Slack thread with the public API
@@ -1803,7 +1801,7 @@ impl ThirdPartyNotificationSourceService<SlackThread> for SlackService {
     async fn snooze_notification_from_source<'a>(
         &self,
         _executor: &mut Transaction<'a, Postgres>,
-        _notification: &Notification,
+        _source_item: &ThirdPartyItem,
         _snoozed_until_at: DateTime<Utc>,
         _user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
