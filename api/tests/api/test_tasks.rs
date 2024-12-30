@@ -99,6 +99,7 @@ mod get_task {
                     ..*todoist_item.clone()
                 })),
                 integration_connection_id: integration_connection.id,
+                source_item: None,
             }),
         )
         .await;
@@ -179,6 +180,7 @@ mod list_tasks {
                     ..*todoist_item.clone()
                 })),
                 integration_connection_id: integration_connection.id,
+                source_item: None,
             }),
         )
         .await;
@@ -206,6 +208,7 @@ mod list_tasks {
                     ..*todoist_item_done.clone()
                 })),
                 integration_connection_id: integration_connection.id,
+                source_item: None,
             }),
         )
         .await;
@@ -280,6 +283,7 @@ mod patch_task {
                     ..*todoist_item.clone()
                 })),
                 integration_connection_id: integration_connection.id,
+                source_item: None,
             }),
         )
         .await;
@@ -344,6 +348,7 @@ mod patch_task {
                     ..*todoist_item.clone()
                 })),
                 integration_connection_id: integration_connection.id,
+                source_item: None,
             }),
         )
         .await;
@@ -411,6 +416,7 @@ mod patch_task {
                     ..*todoist_item.clone()
                 })),
                 integration_connection_id: integration_connection.id,
+                source_item: None,
             }),
         )
         .await;
@@ -529,6 +535,7 @@ mod search_tasks {
                     ..*todoist_item.clone()
                 })),
                 integration_connection_id: integration_connection.id,
+                source_item: None,
             }),
         )
         .await;
@@ -556,6 +563,7 @@ mod search_tasks {
                     ..*other_todoist_item.clone()
                 })),
                 integration_connection_id: integration_connection.id,
+                source_item: None,
             }),
         )
         .await;

@@ -9,8 +9,8 @@ use universal_inbox::{
 };
 
 use crate::components::integrations::{
-    github::icons::Github, google_mail::icons::GoogleMail, linear::icons::Linear,
-    todoist::icons::Todoist,
+    github::icons::Github, google_calendar::icons::GoogleCalendar, google_mail::icons::GoogleMail,
+    linear::icons::Linear, todoist::icons::Todoist,
 };
 
 const NOTION_LOGO: Asset = asset!("/images/notion-logo.svg");
@@ -78,9 +78,10 @@ pub fn IntegrationProviderIcon(class: String, provider_kind: IntegrationProvider
     match provider_kind {
         IntegrationProviderKind::Github => rsx! { Github { class: class } },
         IntegrationProviderKind::Linear => rsx! { Linear { class: class } },
+        IntegrationProviderKind::GoogleCalendar => rsx! { GoogleCalendar { class: class } },
+        IntegrationProviderKind::GoogleDocs => rsx! { GoogleDocs { class: class } },
         IntegrationProviderKind::GoogleMail => rsx! { GoogleMail { class: class } },
         IntegrationProviderKind::Notion => rsx! { Notion { class: class } },
-        IntegrationProviderKind::GoogleDocs => rsx! { GoogleDocs { class: class } },
         IntegrationProviderKind::Slack => rsx! { Icon { class: class, icon: BsSlack } },
         IntegrationProviderKind::Todoist => rsx! { Todoist { class: class } },
         IntegrationProviderKind::TickTick => rsx! { TickTick { class: class } },
@@ -88,14 +89,15 @@ pub fn IntegrationProviderIcon(class: String, provider_kind: IntegrationProvider
 }
 
 #[component]
-pub fn NotificationIcon(class: String, kind: NotificationSourceKind) -> Element {
+pub fn NotificationIcon(kind: NotificationSourceKind) -> Element {
     // tag: New notification integration
     match kind {
-        NotificationSourceKind::Github => rsx! { Github { class: class } },
-        NotificationSourceKind::Linear => rsx! { Linear { class: class } },
-        NotificationSourceKind::GoogleMail => rsx! { GoogleMail { class: class } },
-        NotificationSourceKind::Todoist => rsx! { Todoist { class: class } },
-        NotificationSourceKind::Slack => rsx! { Icon { class: class, icon: BsSlack } },
+        NotificationSourceKind::Github => rsx! { Github { class: "h-5 w-5" } },
+        NotificationSourceKind::Linear => rsx! { Linear { class: "h-5 w-5" } },
+        NotificationSourceKind::GoogleCalendar => rsx! { GoogleCalendar { class: "h-8 w-8" } },
+        NotificationSourceKind::GoogleMail => rsx! { GoogleMail { class: "h-5 w-5" } },
+        NotificationSourceKind::Todoist => rsx! { Todoist { class: "h-5 w-5" } },
+        NotificationSourceKind::Slack => rsx! { Icon { class: "h-5 w-5", icon: BsSlack } },
     }
 }
 

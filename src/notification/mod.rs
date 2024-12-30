@@ -189,6 +189,7 @@ macro_attr! {
         Todoist,
         Linear,
         GoogleMail,
+        GoogleCalendar,
         Slack
     }
 }

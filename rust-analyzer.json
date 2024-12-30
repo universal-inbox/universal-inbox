@@ -3,6 +3,7 @@
     "cargo": {
       "allTargets": false
     },
+    "checkOnSave": false,
     "check": {
       "extraArgs": [
         "--profile",

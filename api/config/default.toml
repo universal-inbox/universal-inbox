@@ -145,6 +145,13 @@ delete = "The Google Mail thread will be archived."
 unsubscribe = "The Google Mail thread will be archived. New messages in the thread will be ignored and automatically archived unless one unread message is directly addressed to your email address."
 snooze = "Snoozing a notification will only be reflected in Universal Inbox. ⚠️ Google Mail has no public API to snooze a thread."
 
+[integrations.google_calendar]
+name = "Google Calendar"
+kind = "GoogleCalendar"
+nango_key = "google-calendar"
+required_oauth_scopes = ["https://www.googleapis.com/auth/calendar"]
+doc = "Google Calendar integration allow Universal Inbox to display an enhanced preview of Calendar invitations and to answer directly from Universal Inbox."
+
 [integrations.todoist]
 name = "Todoist"
 kind = "Todoist"
@@ -199,6 +206,7 @@ kind = "TickTick"
 nango_key = "ticktick"
 required_oauth_scopes = ["tasks:read", "tasks:write"]
 doc = "This is still work in progress."
+is_enabled = false
 
 [oauth2]
 nango_base_url = "http://localhost:3003"

@@ -396,6 +396,7 @@ async fn test_patch_slack_task_status_as_done(
                 item: *slack_starred_message,
             })),
             integration_connection_id: integration_connection.id,
+            source_item: None,
         }),
     )
     .await;

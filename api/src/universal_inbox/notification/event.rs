@@ -76,7 +76,7 @@ impl NotificationEventService<SlackPushEventCallback> for NotificationService {
             .context("Unable to access third_party_item_service from notification_service")?
             .read()
             .await
-            .create_or_update_third_party_item(executor, third_party_item.clone())
+            .create_or_update_third_party_item(executor, Box::new(third_party_item.clone()))
             .await?;
 
         let third_party_item_id = upsert_item.value_ref().id;

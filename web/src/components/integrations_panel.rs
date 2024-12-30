@@ -5,8 +5,11 @@ use std::collections::HashMap;
 use chrono::{Local, SecondsFormat};
 use dioxus::prelude::*;
 use dioxus_free_icons::{
-    icons::bs_icons::{
-        BsBellSlash, BsCheck2, BsClockHistory, BsExclamationTriangle, BsInfoCircle, BsPlug, BsTrash,
+    icons::{
+        bs_icons::{
+            BsBellSlash, BsClockHistory, BsExclamationTriangle, BsInfoCircle, BsPlug, BsTrash,
+        },
+        md_action_icons::MdCheckCircleOutline,
     },
     Icon,
 };
@@ -26,6 +29,7 @@ use crate::{
     components::{
         integrations::{
             github::config::GithubProviderConfiguration,
+            google_calendar::config::GoogleCalendarProviderConfiguration,
             google_mail::config::GoogleMailProviderConfiguration, icons::IntegrationProviderIcon,
             linear::config::LinearProviderConfiguration, slack::config::SlackProviderConfiguration,
             todoist::config::TodoistProviderConfiguration,
@@ -84,22 +88,7 @@ pub fn IntegrationsPanel(
             }
 
             for (kind, config) in (sorted_integration_providers.clone()) {
-                if kind.is_notification_service() && config.is_implemented {
-                    IntegrationSettings {
-                        ui_model: ui_model,
-                        kind: kind,
-                        config: config,
-                        connection: integration_connections.iter().find(move |c| c.provider.kind() == kind).cloned(),
-                        on_connect: move |c| on_connect.call((kind, c)),
-                        on_disconnect: move |c| on_disconnect.call(c),
-                        on_reconnect: move |c| on_reconnect.call(c),
-                        on_config_change: move |(ic, c)| on_config_change.call((ic, c)),
-                    }
-                }
-            }
-
-            for (kind, config) in (sorted_integration_providers.clone()) {
-                if kind.is_notification_service() && !config.is_implemented {
+                if kind.is_notification_service() && config.is_enabled {
                     IntegrationSettings {
                         ui_model: ui_model,
                         kind: kind,
@@ -124,7 +113,7 @@ pub fn IntegrationsPanel(
             }
 
             for (kind, config) in (sorted_integration_providers.clone()) {
-                if kind.is_task_service() && config.is_implemented {
+                if kind.is_task_service() && config.is_enabled {
                     IntegrationSettings {
                         ui_model: ui_model,
                         kind: kind,
@@ -138,20 +127,32 @@ pub fn IntegrationsPanel(
                 }
             }
 
+            div {
+                class: "flex gap-4 w-full",
+                div {
+                    class: "leading-none relative",
+                    span { class: "w-0 h-12 inline-block align-middle" }
+                    span { class: "relative text-2xl", "Utility services" }
+                }
+                div { class: "divider grow" }
+            }
+
             for (kind, config) in (sorted_integration_providers.clone()) {
-                if kind.is_task_service() && !config.is_implemented {
+                if !kind.is_notification_service() && !kind.is_task_service() {
                     IntegrationSettings {
                         ui_model: ui_model,
                         kind: kind,
                         config: config,
                         connection: integration_connections.iter().find(move |c| c.provider.kind() == kind).cloned(),
-                        on_connect:move |c| on_connect.call((kind, c)),
-                        on_disconnect:move |c| on_disconnect.call(c),
-                        on_reconnect:move |c| on_reconnect.call(c),
-                        on_config_change:move |(ic, c)| on_config_change.call((ic, c)),
+                        on_connect: move |c| on_connect.call((kind, c)),
+                        on_disconnect: move |c| on_disconnect.call(c),
+                        on_reconnect: move |c| on_reconnect.call(c),
+                        on_config_change: move |(ic, c)| on_config_change.call((ic, c)),
+                        icon_class: Some("w-10 h-10"),
                     }
                 }
             }
+
         }
     }
 }
@@ -166,7 +167,9 @@ pub fn IntegrationSettings(
     on_disconnect: EventHandler<IntegrationConnection>,
     on_reconnect: EventHandler<IntegrationConnection>,
     on_config_change: EventHandler<(IntegrationConnection, IntegrationConnectionConfig)>,
+    icon_class: Option<&'static str>,
 ) -> Element {
+    let icon_style = icon_class.unwrap_or("w-8 h-8");
     let provider = use_memo(move || {
         if let Some(Some(ic)) = connection() {
             Some(ic.provider.clone())
@@ -194,7 +197,7 @@ pub fn IntegrationSettings(
                 ..
             })) => ("Reconnect", "btn-error", true),
             _ => {
-                if config().is_implemented {
+                if config().is_enabled {
                     ("Connect", "btn-primary", false)
                 } else {
                     ("Not yet implemented", "btn-disabled btn-ghost", false)
@@ -324,7 +327,7 @@ pub fn IntegrationSettings(
 
                     div {
                         class: "card-title",
-                        figure { class: "p-2", IntegrationProviderIcon { class: "w-8 h-8", provider_kind: kind } }
+                        figure { class: "p-2", IntegrationProviderIcon { class: icon_style, provider_kind: kind } }
                         "{config().name}"
                     }
                     div {
@@ -449,8 +452,8 @@ pub fn Documentation(config: ReadOnlySignal<IntegrationProviderStaticConfig>) ->
 
                     Markdown { class: "!prose-invert", text: config().doc.clone() }
 
-                    div { class: "text-base", "Actions on notifications" }
                     if !doc_for_actions.is_empty() {
+                        div { class: "text-base", "Actions on notifications" }
                         table {
                             class: "table-auto",
 
@@ -477,7 +480,7 @@ pub fn IconForAction(action: String) -> Element {
         "delete" => rsx! { Icon { class: "w-5 h-5", icon: BsTrash } },
         "unsubscribe" => rsx! { Icon { class: "w-5 h-5", icon: BsBellSlash } },
         "snooze" => rsx! { Icon { class: "w-5 h-5", icon: BsClockHistory } },
-        "complete" => rsx! { Icon { class: "w-5 h-5", icon: BsCheck2 } },
+        "complete" => rsx! { Icon { class: "w-5 h-5", icon: MdCheckCircleOutline  } },
         _ => rsx! { div { class: "w-5 h-5" } },
     };
 
@@ -496,6 +499,12 @@ pub fn IntegrationConnectionProviderConfiguration(
     on_config_change: EventHandler<IntegrationConnectionConfig>,
 ) -> Element {
     match provider {
+        IntegrationProvider::GoogleCalendar { config } => rsx! {
+            GoogleCalendarProviderConfiguration {
+                on_config_change: move |c| on_config_change.call(c),
+                config: config.clone(),
+            }
+        },
         IntegrationProvider::GoogleMail { config, context } => rsx! {
             GoogleMailProviderConfiguration {
                 on_config_change: move |c| on_config_change.call(c),

@@ -1012,13 +1012,13 @@ impl ThirdPartyNotificationSourceService<TodoistItem> for TodoistService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(notification_id = _notification.id.to_string(), user.id = _user_id.to_string()),,
+        fields(third_party_item_id = _source_item.id.to_string(), user.id = _user_id.to_string()),,
         err
     )]
     async fn delete_notification_from_source<'a>(
         &self,
         _executor: &mut Transaction<'a, Postgres>,
-        _notification: &Notification,
+        _source_item: &ThirdPartyItem,
         _user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
         unimplemented!("Todoist notifications cannot be deleted, only Todoist Task can");
@@ -1028,13 +1028,13 @@ impl ThirdPartyNotificationSourceService<TodoistItem> for TodoistService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(notification_id = _notification.id.to_string(), user.id = _user_id.to_string()),
+        fields(third_party_item_id = _source_item.id.to_string(), user.id = _user_id.to_string()),
         err
     )]
     async fn unsubscribe_notification_from_source<'a>(
         &self,
         _executor: &mut Transaction<'a, Postgres>,
-        _notification: &Notification,
+        _source_item: &ThirdPartyItem,
         _user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
         unimplemented!("Todoist notifications cannot be unsubscribed, only Todoist Task can");
@@ -1043,7 +1043,7 @@ impl ThirdPartyNotificationSourceService<TodoistItem> for TodoistService {
     async fn snooze_notification_from_source<'a>(
         &self,
         _executor: &mut Transaction<'a, Postgres>,
-        _notification: &Notification,
+        _source_item: &ThirdPartyItem,
         _snoozed_until_at: DateTime<Utc>,
         _user_id: UserId,
     ) -> Result<(), UniversalInboxError> {

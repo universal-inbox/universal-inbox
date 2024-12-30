@@ -548,13 +548,15 @@ impl TaskRepository for Repository {
         separated.push(" task.id = t.id ");
         separated
             .push(" NOT source_item.source_id = ANY(")
-            .push_bind(&active_source_task_ids[..])
-            .push(")");
+            .push_bind_unseparated(&active_source_task_ids[..])
+            .push_unseparated(")");
         separated
             .push(" task.kind::TEXT = ")
             .push_bind_unseparated(kind.to_string());
         separated.push(" task.status = 'Active'");
-        separated.push(" task.user_id = ").push_bind(user_id.0);
+        separated
+            .push(" task.user_id = ")
+            .push_bind_unseparated(user_id.0);
 
         query_builder.push(
             r#"

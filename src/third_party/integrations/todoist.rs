@@ -133,6 +133,7 @@ impl ThirdPartyItemFromSource for TodoistItem {
             updated_at: Utc::now().with_nanosecond(0).unwrap(),
             user_id,
             integration_connection_id,
+            source_item: None,
         }
     }
 }

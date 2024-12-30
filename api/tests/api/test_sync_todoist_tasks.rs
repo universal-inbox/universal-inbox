@@ -104,6 +104,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
                     ..todoist_items[1].clone()
                 })),
                 integration_connection_id: integration_connection.id,
+                source_item: None,
             }),
         )
         .await;
@@ -549,6 +550,7 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
                         ..todoist_item.clone()
                     })),
                     integration_connection_id: integration_connection.id,
+                    source_item: None,
                 }),
             )
             .await;
@@ -665,6 +667,7 @@ async fn test_sync_tasks_should_not_update_tasks_and_notifications_with_empty_in
                         ..todoist_item.clone()
                     })),
                     integration_connection_id: integration_connection.id,
+                    source_item: None,
                 }),
             )
             .await;
@@ -865,6 +868,7 @@ async fn test_sync_all_tasks_asynchronously(
                     ..todoist_items[1].clone()
                 })),
                 integration_connection_id: integration_connection.id,
+                source_item: None,
             }),
         )
         .await;

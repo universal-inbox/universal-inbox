@@ -98,7 +98,7 @@ impl ThirdPartyItemService {
         user_id: UserId,
     ) -> Result<Option<ThirdPartyItemCreationResult>, UniversalInboxError> {
         let upserted_third_party_item = self
-            .create_or_update_third_party_item(executor, third_party_item)
+            .create_or_update_third_party_item(executor, Box::new(third_party_item))
             .await?;
         let third_party_item = upserted_third_party_item.value();
         let task_creation = match third_party_item.get_third_party_item_source_kind() {
@@ -197,7 +197,7 @@ impl ThirdPartyItemService {
         debug!("Syncing {kind} third party items for user {user_id}");
         for item in items.into_iter() {
             let upsert_result = self
-                .create_or_update_third_party_item(executor, item)
+                .create_or_update_third_party_item(executor, Box::new(item))
                 .await?;
 
             upserted_third_party_items.push(*upsert_result.value());
@@ -229,7 +229,10 @@ impl ThirdPartyItemService {
 
                 for item in third_party_items_to_mark_as_done.into_iter() {
                     let upsert_result = self
-                        .create_or_update_third_party_item(executor, item.marked_as_done())
+                        .create_or_update_third_party_item(
+                            executor,
+                            Box::new(item.marked_as_done()),
+                        )
                         .await?;
 
                     if let Some(upserted_third_party_item) = upsert_result.modified_value() {
@@ -275,10 +278,16 @@ impl ThirdPartyItemService {
     pub async fn create_or_update_third_party_item(
         &self,
         executor: &mut Transaction<'_, Postgres>,
-        third_party_item: ThirdPartyItem,
+        third_party_item: Box<ThirdPartyItem>,
     ) -> Result<UpsertStatus<Box<ThirdPartyItem>>, UniversalInboxError> {
+        if let Some(ref source_third_party_item) = third_party_item.source_item {
+            Box::pin(
+                self.create_or_update_third_party_item(executor, source_third_party_item.clone()),
+            )
+            .await?;
+        }
         self.repository
-            .create_or_update_third_party_item(executor, Box::new(third_party_item))
+            .create_or_update_third_party_item(executor, third_party_item)
             .await
     }
 
@@ -338,7 +347,7 @@ impl ThirdPartyItemService {
         let sink_third_party_item =
             third_party_task.into_third_party_item(user_id, integration_connection.id);
         let upsert_item = self
-            .create_or_update_third_party_item(executor, sink_third_party_item)
+            .create_or_update_third_party_item(executor, Box::new(sink_third_party_item))
             .await?;
         let uptodate_sink_party_item = upsert_item.value();
         debug!(

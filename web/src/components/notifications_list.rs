@@ -1,12 +1,13 @@
 #![allow(non_snake_case)]
 
-use chrono::{DateTime, Local};
 use dioxus::prelude::*;
 
 use dioxus_free_icons::{
-    icons::bs_icons::{
-        BsBellSlash, BsBookmarkCheck, BsCalendar2Check, BsCheck2, BsClockHistory, BsLink45deg,
-        BsTrash,
+    icons::{
+        bs_icons::{
+            BsBellSlash, BsBookmarkCheck, BsCalendar2Check, BsClockHistory, BsLink45deg, BsTrash,
+        },
+        md_action_icons::{MdAddTask, MdCheckCircleOutline},
     },
     Icon,
 };
@@ -22,6 +23,7 @@ use crate::{
     components::{
         integrations::{
             github::notification_list_item::GithubNotificationListItem,
+            google_calendar::notification_list_item::GoogleCalendarEventListItem,
             google_mail::notification_list_item::GoogleMailThreadListItem,
             linear::notification_list_item::LinearNotificationListItem,
             slack::notification_list_item::{
@@ -30,7 +32,7 @@ use crate::{
             },
             todoist::notification_list_item::TodoistNotificationListItem,
         },
-        list::{List, ListContext, ListItem, ListItemActionButton},
+        list::{List, ListItemActionButton},
         task_link_modal::TaskLinkModal,
         task_planning_modal::TaskPlanningModal,
     },
@@ -149,6 +151,14 @@ fn NotificationListItem(
                 on_select,
             }
         },
+        ThirdPartyItemData::GoogleCalendarEvent(google_calendar_event) => rsx! {
+            GoogleCalendarEventListItem {
+                notification,
+                google_calendar_event: *google_calendar_event,
+                is_selected,
+                on_select,
+            }
+        },
         ThirdPartyItemData::GoogleMailThread(google_mail_thread) => rsx! {
             GoogleMailThreadListItem {
                 notification,
@@ -179,43 +189,7 @@ fn NotificationListItem(
                 on_select,
             }
         },
-        _ => rsx! {
-            DefaultNotificationListItem {
-                notification,
-                is_selected,
-                on_select,
-            }
-        },
-    }
-}
-
-#[component]
-fn DefaultNotificationListItem(
-    notification: ReadOnlySignal<NotificationWithTask>,
-    is_selected: ReadOnlySignal<bool>,
-    on_select: EventHandler<()>,
-) -> Element {
-    let notification_updated_at = use_memo(move || {
-        Into::<DateTime<Local>>::into(notification().updated_at)
-            .format("%Y-%m-%d %H:%M")
-            .to_string()
-    });
-    let list_context = use_context::<Memo<ListContext>>();
-
-    rsx! {
-        ListItem {
-            key: "{notification().id}",
-            title: "{notification().title}",
-            subtitle: rsx! {  },
-            action_buttons: get_notification_list_item_action_buttons(
-                notification,
-                list_context().show_shortcut
-            ),
-            is_selected,
-            on_select,
-
-            span { class: "text-gray-400 whitespace-nowrap text-xs font-mono", "{notification_updated_at}" }
-        }
+        ThirdPartyItemData::LinearIssue(_) => rsx! {},
     }
 }
 
@@ -251,7 +225,7 @@ pub fn get_notification_list_item_action_buttons(
                         context().notification_service
                             .send(NotificationCommand::CompleteTaskFromNotification(notification()));
                     },
-                    Icon { class: "w-5 h-5", icon: BsCheck2 }
+                    Icon { class: "w-5 h-5", icon: MdCheckCircleOutline }
                 }
             });
         }
@@ -291,7 +265,7 @@ pub fn get_notification_list_item_action_buttons(
                     onclick: move |_| {
                         UI_MODEL.write().task_planning_modal_opened = true;
                     },
-                    Icon { class: "w-5 h-5", icon: BsCalendar2Check }
+                    Icon { class: "w-5 h-5", icon: MdAddTask }
                 }
             });
 
@@ -338,7 +312,7 @@ pub fn get_notification_list_item_action_buttons(
                         context().notification_service
                             .send(NotificationCommand::CompleteTaskFromNotification(notification()));
                     },
-                    Icon { class: "w-5 h-5", icon: BsCheck2 }
+                    Icon { class: "w-5 h-5", icon: MdCheckCircleOutline }
                 }
             },
             rsx! {

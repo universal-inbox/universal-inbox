@@ -19,7 +19,12 @@ comrak = { version = "0.32.0", default-features = false, features = ["shortcodes
 console_error_panic_hook = "0.1"
 console_log = { version = "1.0", features = ["color"], optional = true }
 dioxus = { version = "0.6", features = ["document", "web", "router"] }
-dioxus-free-icons = { version = "0.9", features = ["bootstrap", "ionicons", "octicons"] }
+dioxus-free-icons = { version = "0.9", features = [
+  "bootstrap",
+  "material-design-icons-action",
+  "material-design-icons-communication",
+  "octicons"
+] }
 email_address = { workspace = true }
 futures-util = "0.3"
 gloo-timers = { version = "0.3.0", features = ["futures"] }

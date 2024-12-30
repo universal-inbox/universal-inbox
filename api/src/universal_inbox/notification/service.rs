@@ -12,14 +12,14 @@ use tracing::{debug, error, info};
 use universal_inbox::{
     integration_connection::provider::IntegrationProvider,
     notification::{
-        service::NotificationPatch, Notification, NotificationId, NotificationSource,
-        NotificationSourceKind, NotificationStatus, NotificationSyncSourceKind,
-        NotificationWithTask,
+        service::{InvitationPatch, NotificationPatch},
+        Notification, NotificationId, NotificationSource, NotificationSourceKind,
+        NotificationStatus, NotificationSyncSourceKind, NotificationWithTask,
     },
     task::{service::TaskPatch, Task, TaskCreation, TaskId, TaskStatus},
     third_party::{
         integrations::slack::{SlackReaction, SlackStar, SlackThread},
-        item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemId},
+        item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemId, ThirdPartyItemKind},
     },
     user::UserId,
     Page,
@@ -27,7 +27,8 @@ use universal_inbox::{
 
 use crate::{
     integrations::{
-        github::GithubService, google_mail::GoogleMailService, linear::LinearService,
+        github::GithubService, google_calendar::GoogleCalendarService,
+        google_mail::GoogleMailService, linear::LinearService,
         notification::ThirdPartyNotificationSourceService, slack::SlackService,
         third_party::ThirdPartyItemSourceService,
     },
@@ -49,6 +50,7 @@ pub struct NotificationService {
     pub(super) repository: Arc<Repository>,
     pub github_service: Arc<GithubService>,
     pub linear_service: Arc<LinearService>,
+    pub google_calendar_service: Arc<GoogleCalendarService>,
     pub google_mail_service: Arc<RwLock<GoogleMailService>>,
     pub slack_service: Arc<SlackService>,
     pub(super) task_service: Weak<RwLock<TaskService>>,
@@ -64,6 +66,7 @@ impl NotificationService {
         repository: Arc<Repository>,
         github_service: Arc<GithubService>,
         linear_service: Arc<LinearService>,
+        google_calendar_service: Arc<GoogleCalendarService>,
         google_mail_service: Arc<RwLock<GoogleMailService>>,
         slack_service: Arc<SlackService>,
         task_service: Weak<RwLock<TaskService>>,
@@ -76,6 +79,7 @@ impl NotificationService {
             repository,
             github_service,
             linear_service,
+            google_calendar_service,
             google_mail_service,
             slack_service,
             task_service,
@@ -98,7 +102,7 @@ impl NotificationService {
         level = "debug",
         skip_all,
         fields(
-            notification_id = notification.id.to_string(),
+            third_party_item_id = source_item.id.to_string(),
             patch,
             user.id = user_id.to_string()
         ),
@@ -109,7 +113,7 @@ impl NotificationService {
         executor: &mut Transaction<'a, Postgres>,
         notification_source_service: Arc<U>,
         patch: &NotificationPatch,
-        notification: Box<Notification>,
+        source_item: &mut ThirdPartyItem,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError>
     where
@@ -117,15 +121,64 @@ impl NotificationService {
         U: ThirdPartyNotificationSourceService<T> + NotificationSource + Send + Sync,
         <T as TryFrom<ThirdPartyItem>>::Error: Send + Sync,
     {
+        debug!(
+            "Applying {} side effects for updated notification from third party item {}",
+            notification_source_service.get_notification_source_kind(),
+            source_item.id
+        );
         match patch.status {
             Some(NotificationStatus::Deleted) => {
+                if source_item.kind() == ThirdPartyItemKind::SlackThread {
+                    let ThirdPartyItemData::SlackThread(ref mut slack_thread) = source_item.data
+                    else {
+                        return Err(UniversalInboxError::Unexpected(anyhow!(
+                            "Unexpected third party item data type {} for {}, expected SlackThread",
+                            source_item.kind(),
+                            source_item.id
+                        )));
+                    };
+                    slack_thread.last_read = Some(slack_thread.messages.last().origin.ts.clone());
+
+                    self.third_party_item_service
+                        .upgrade()
+                        .context(
+                            "Unable to access third_party_item_service from notification_service",
+                        )?
+                        .read()
+                        .await
+                        .create_or_update_third_party_item(executor, Box::new(source_item.clone()))
+                        .await?;
+                }
+
                 notification_source_service
-                    .delete_notification_from_source(executor, &notification, user_id)
+                    .delete_notification_from_source(executor, source_item, user_id)
                     .await
             }
             Some(NotificationStatus::Unsubscribed) => {
+                if source_item.kind() == ThirdPartyItemKind::SlackThread {
+                    let ThirdPartyItemData::SlackThread(ref mut slack_thread) = source_item.data
+                    else {
+                        return Err(UniversalInboxError::Unexpected(anyhow!(
+                            "Unexpected third party item data type {} for {}, expected SlackThread",
+                            source_item.kind(),
+                            source_item.id
+                        )));
+                    };
+                    slack_thread.subscribed = false;
+
+                    self.third_party_item_service
+                        .upgrade()
+                        .context(
+                            "Unable to access third_party_item_service from notification_service",
+                        )?
+                        .read()
+                        .await
+                        .create_or_update_third_party_item(executor, Box::new(source_item.clone()))
+                        .await?;
+                }
+
                 notification_source_service
-                    .unsubscribe_notification_from_source(executor, &notification, user_id)
+                    .unsubscribe_notification_from_source(executor, source_item, user_id)
                     .await
             }
             _ => {
@@ -133,7 +186,7 @@ impl NotificationService {
                     notification_source_service
                         .snooze_notification_from_source(
                             executor,
-                            &notification,
+                            source_item,
                             snoozed_until,
                             user_id,
                         )
@@ -538,7 +591,7 @@ impl NotificationService {
                             executor,
                             self.github_service.clone(),
                             patch,
-                            notification.clone(),
+                            &mut notification.source_item,
                             for_user_id,
                         )
                         .await?;
@@ -548,7 +601,31 @@ impl NotificationService {
                             executor,
                             self.linear_service.clone(),
                             patch,
-                            notification.clone(),
+                            &mut notification.source_item,
+                            for_user_id,
+                        )
+                        .await?
+                    }
+                    NotificationSourceKind::GoogleCalendar => {
+                        // Google Calendar events are derived from Google Mail threads
+                        if let Some(ref mut source_item) = notification.source_item.source_item {
+                            if source_item.kind() == ThirdPartyItemKind::GoogleMailThread {
+                                self.apply_updated_notification_side_effect(
+                                    executor,
+                                    (*self.google_mail_service.read().await).clone().into(),
+                                    patch,
+                                    source_item,
+                                    for_user_id,
+                                )
+                                .await?
+                            }
+                        }
+
+                        self.apply_updated_notification_side_effect(
+                            executor,
+                            self.google_calendar_service.clone(),
+                            patch,
+                            &mut notification.source_item,
                             for_user_id,
                         )
                         .await?
@@ -558,7 +635,7 @@ impl NotificationService {
                             executor,
                             (*self.google_mail_service.read().await).clone().into(),
                             patch,
-                            notification.clone(),
+                            &mut notification.source_item,
                             for_user_id,
                         )
                         .await?
@@ -569,7 +646,7 @@ impl NotificationService {
                                 executor,
                                 self.slack_service.clone(),
                                 patch,
-                                notification.clone(),
+                                &mut notification.source_item,
                                 for_user_id,
                             )
                             .await?,
@@ -578,64 +655,20 @@ impl NotificationService {
                                 executor,
                                 self.slack_service.clone(),
                                 patch,
-                                notification.clone(),
+                                &mut notification.source_item,
                                 for_user_id,
                             )
                             .await?
                         }
-                        ThirdPartyItemData::SlackThread(_) => {
-                            match patch.status {
-                                Some(NotificationStatus::Deleted) => {
-                                    let ThirdPartyItemData::SlackThread(ref mut slack_thread) =
-                                        notification.source_item.data
-                                    else {
-                                        return Err(UniversalInboxError::Unexpected(anyhow!(
-                                            "Unexpected third party item data type {} for {}, expected SlackThread",
-                                            notification.source_item.kind() ,  notification.source_item.id
-                                        )));
-                                    };
-                                    slack_thread.last_read =
-                                        Some(slack_thread.messages.last().origin.ts.clone());
-
-                                    self.third_party_item_service
-                                        .upgrade()
-                                        .context("Unable to access third_party_item_service from notification_service")?
-                                        .read()
-                                        .await
-                                        .create_or_update_third_party_item(executor, notification.source_item.clone())
-                                        .await?;
-                                }
-                                Some(NotificationStatus::Unsubscribed) => {
-                                    let ThirdPartyItemData::SlackThread(ref mut slack_thread) =
-                                        notification.source_item.data
-                                    else {
-                                        return Err(UniversalInboxError::Unexpected(anyhow!(
-                                            "Unexpected third party item data type {} for {}, expected SlackThread",
-                                            notification.source_item.kind() ,  notification.source_item.id
-                                        )));
-                                    };
-                                    slack_thread.subscribed = false;
-
-                                    self.third_party_item_service
-                                        .upgrade()
-                                        .context("Unable to access third_party_item_service from notification_service")?
-                                        .read()
-                                        .await
-                                        .create_or_update_third_party_item(executor, notification.source_item.clone())
-                                        .await?;
-                                }
-                                _ => {}
-                            };
-                            self
+                        ThirdPartyItemData::SlackThread(_) => self
                             .apply_updated_notification_side_effect::<SlackThread, SlackService>(
                                 executor,
                                 self.slack_service.clone(),
                                 patch,
-                                notification.clone(),
+                                &mut notification.source_item,
                                 for_user_id,
                             )
-                            .await?
-                        }
+                            .await?,
                         _ => {
                             return Err(UniversalInboxError::Unexpected(anyhow!(
                                 "Unsupported Slack notification data type for third party item {}",
@@ -876,15 +909,31 @@ impl NotificationService {
 
             let mut notification_creation_results = vec![];
             for third_party_item in third_party_items {
-                if let Some(notification_creation_result) = notification_service
-                    .create_notification_from_third_party_item(
-                        executor,
-                        third_party_item,
-                        third_party_notification_service.clone(),
-                        user_id,
-                    )
-                    .await?
-                {
+                // tag: New notification integration
+                if let Some(notification_creation_result) = match third_party_item.kind() {
+                    // For now, only Google Calendar events are derived from another third party item
+                    // and thus need an updated third party notification service
+                    ThirdPartyItemKind::GoogleCalendarEvent => {
+                        notification_service
+                            .create_notification_from_third_party_item(
+                                executor,
+                                third_party_item,
+                                notification_service.google_calendar_service.clone(),
+                                user_id,
+                            )
+                            .await?
+                    }
+                    _ => {
+                        notification_service
+                            .create_notification_from_third_party_item(
+                                executor,
+                                third_party_item,
+                                third_party_notification_service.clone(),
+                                user_id,
+                            )
+                            .await?
+                    }
+                } {
                     notification_creation_results.push(notification_creation_result);
                 }
             }
@@ -1116,5 +1165,79 @@ impl NotificationService {
                 })
             })
             .transpose()
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            notification_id = notification_id.to_string(),
+            patch,
+            apply_task_side_effects,
+            apply_notification_side_effects,
+            user.id = for_user_id.to_string()
+        ),
+        err
+    )]
+    pub async fn update_invitation_from_notification<'a, 'b>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        notification_id: NotificationId,
+        patch: &'b InvitationPatch,
+        for_user_id: UserId,
+    ) -> Result<UpdateStatus<Box<Notification>>, UniversalInboxError> {
+        let Some(notification) = self
+            .get_notification(executor, notification_id, for_user_id)
+            .await?
+        else {
+            return Ok(UpdateStatus {
+                updated: false,
+                result: None,
+            });
+        };
+
+        if notification.kind != NotificationSourceKind::GoogleCalendar {
+            return Err(UniversalInboxError::UnsupportedAction(format!(
+                "Cannot update invitation from notification {notification_id}, expected GoogleCalendar notification"
+            )));
+        }
+
+        let updated_event = self
+            .google_calendar_service
+            .answer_invitation(
+                executor,
+                &notification.source_item,
+                patch.response_status,
+                for_user_id,
+            )
+            .await?;
+
+        // Update the third party item with the updated event data
+        let mut updated_third_party_item = notification.source_item.clone();
+        updated_third_party_item.data =
+            ThirdPartyItemData::GoogleCalendarEvent(Box::new(updated_event));
+        self.third_party_item_service
+            .upgrade()
+            .context("Unable to access third_party_item_service from notification_service")?
+            .read()
+            .await
+            .create_or_update_third_party_item(executor, Box::new(updated_third_party_item))
+            .await?;
+
+        let updated_notification = self
+            .patch_notification(
+                executor,
+                notification_id,
+                &NotificationPatch {
+                    status: Some(NotificationStatus::Deleted),
+                    ..Default::default()
+                },
+                true,
+                true,
+                for_user_id,
+            )
+            .await?;
+
+        Ok(updated_notification)
     }
 }

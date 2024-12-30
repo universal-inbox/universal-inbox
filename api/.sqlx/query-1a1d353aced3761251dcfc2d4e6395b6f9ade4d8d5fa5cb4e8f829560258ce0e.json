@@ -18,7 +18,8 @@
                 "Linear",
                 "GoogleMail",
                 "Slack",
-                "TickTick"
+                "TickTick",
+                "GoogleCalendar"
               ]
             }
           }

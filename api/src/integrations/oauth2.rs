@@ -86,6 +86,13 @@ impl NangoConnection {
                 .collect()),
             // Todoist scopes are not stored in the connection raw credentials
             "todoist" => Ok(vec![]),
+            "google-calendar" => {
+                if let Some(scope) = self.credentials.raw["scope"].as_str() {
+                    Ok(vec![scope.to_string()])
+                } else {
+                    Ok(vec![])
+                }
+            }
             "google-mail" => {
                 if let Some(scope) = self.credentials.raw["scope"].as_str() {
                     Ok(vec![scope.to_string()])

@@ -36,7 +36,7 @@ pub struct IntegrationProviderStaticConfig {
     pub doc: String,
     pub warning_message: Option<String>,
     pub doc_for_actions: HashMap<String, String>,
-    pub is_implemented: bool,
+    pub is_enabled: bool,
     pub oauth_user_scopes: Vec<String>,
     pub required_oauth_scopes: Vec<String>,
 }

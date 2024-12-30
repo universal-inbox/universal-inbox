@@ -110,6 +110,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
                 ..*todoist_item.clone()
             })),
             integration_connection_id: integration_connection.id,
+            source_item: None,
         }),
     )
     .await;

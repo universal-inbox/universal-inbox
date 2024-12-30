@@ -2,7 +2,7 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use slack_morphism::SlackUserId;
-use sqlx::{postgres::PgRow, types::Json, Postgres, QueryBuilder, Row, Transaction};
+use sqlx::{postgres::PgRow, types::Json, FromRow, Postgres, QueryBuilder, Row, Transaction};
 use tracing::debug;
 use uuid::Uuid;
 
@@ -74,43 +74,55 @@ impl ThirdPartyItemRepository for Repository {
         let data = Json(third_party_item.data.clone());
         let kind = third_party_item.kind();
 
-        let existing_third_party_item: Option<ThirdPartyItem> = sqlx::query_as!(
-            ThirdPartyItemRow,
+        let mut query_builder = QueryBuilder::new(
             r#"
               SELECT
-                id,
-                source_id,
-                data as "data: Json<ThirdPartyItemData>",
-                created_at,
-                updated_at,
-                user_id,
-                integration_connection_id
+                third_party_item.id as third_party_item__id,
+                third_party_item.source_id as third_party_item__source_id,
+                third_party_item.data as third_party_item__data,
+                third_party_item.created_at as third_party_item__created_at,
+                third_party_item.updated_at as third_party_item__updated_at,
+                third_party_item.user_id as third_party_item__user_id,
+                third_party_item.integration_connection_id as third_party_item__integration_connection_id,
+                source_item.id as third_party_item__si__id,
+                source_item.source_id as third_party_item__si__source_id,
+                source_item.data as third_party_item__si__data,
+                source_item.created_at as third_party_item__si__created_at,
+                source_item.updated_at as third_party_item__si__updated_at,
+                source_item.user_id as third_party_item__si__user_id,
+                source_item.integration_connection_id as third_party_item__si__integration_connection_id
               FROM third_party_item
+              LEFT JOIN third_party_item as source_item ON third_party_item.source_item_id = source_item.id
               WHERE
-                source_id = $1
-                AND kind::TEXT = $2
-                AND user_id = $3
-                AND integration_connection_id = $4
             "#,
-            third_party_item.source_id,
-            kind.to_string(),
-            third_party_item.user_id.0,
-            third_party_item.integration_connection_id.0
-        )
-        .fetch_optional(&mut **executor)
-        .await
-        .map_err(|err| {
-            let message = format!(
-                "Failed to search for third_party_item with source ID {} from storage: {err}",
-                third_party_item.source_id
-            );
-            UniversalInboxError::DatabaseError {
-                source: err,
-                message,
-            }
-        })?
-        .map(TryInto::try_into)
-        .transpose()?;
+        );
+        let mut separated = query_builder.separated(" AND ");
+        separated
+            .push("third_party_item.source_id = ")
+            .push_bind_unseparated(&third_party_item.source_id)
+            .push("third_party_item.kind::TEXT = ")
+            .push_bind_unseparated(kind.to_string())
+            .push("third_party_item.user_id = ")
+            .push_bind_unseparated(third_party_item.user_id.0)
+            .push("third_party_item.integration_connection_id = ")
+            .push_bind_unseparated(third_party_item.integration_connection_id.0);
+
+        let existing_third_party_item: Option<ThirdPartyItem> = query_builder
+            .build_query_as::<ThirdPartyItemRow>()
+            .fetch_optional(&mut **executor)
+            .await
+            .map_err(|err| {
+                let message = format!(
+                    "Failed to search for third_party_item with source ID {} from storage: {err}",
+                    third_party_item.source_id
+                );
+                UniversalInboxError::DatabaseError {
+                    source: err,
+                    message,
+                }
+            })?
+            .map(TryInto::try_into)
+            .transpose()?;
 
         if let Some(existing_third_party_item) = existing_third_party_item {
             if existing_third_party_item == *third_party_item {
@@ -183,10 +195,11 @@ impl ThirdPartyItemRepository for Repository {
                     created_at,
                     updated_at,
                     user_id,
-                    integration_connection_id
+                    integration_connection_id,
+                    source_item_id
                   )
                 VALUES
-                  ($1, $2, $3, $4, $5, $6, $7)
+                  ($1, $2, $3, $4, $5, $6, $7, $8)
                 RETURNING
                   id
                 "#,
@@ -196,7 +209,8 @@ impl ThirdPartyItemRepository for Repository {
             third_party_item.created_at.naive_utc(),
             third_party_item.updated_at.naive_utc(),
             third_party_item.user_id.0,
-            third_party_item.integration_connection_id.0
+            third_party_item.integration_connection_id.0,
+            third_party_item.source_item.as_ref().map(|item| item.id.0)
         );
 
         let third_party_item_id = query
@@ -236,41 +250,56 @@ impl ThirdPartyItemRepository for Repository {
             .map(|id| id.0)
             .collect::<Vec<Uuid>>();
 
-        let records = sqlx::query_as!(
-            ThirdPartyItemRow,
+        let mut query_builder = QueryBuilder::new(
             r#"
               SELECT
-                third_party_item.id,
-                third_party_item.source_id,
-                third_party_item.data as "data: Json<ThirdPartyItemData>",
-                third_party_item.created_at,
-                third_party_item.updated_at,
-                third_party_item.user_id,
-                third_party_item.integration_connection_id
+                third_party_item.id as third_party_item__id,
+                third_party_item.source_id as third_party_item__source_id,
+                third_party_item.data as third_party_item__data,
+                third_party_item.created_at as third_party_item__created_at,
+                third_party_item.updated_at as third_party_item__updated_at,
+                third_party_item.user_id as third_party_item__user_id,
+                third_party_item.integration_connection_id as third_party_item__integration_connection_id,
+                source_item.id as third_party_item__si__id,
+                source_item.source_id as third_party_item__si__source_id,
+                source_item.data as third_party_item__si__data,
+                source_item.created_at as third_party_item__si__created_at,
+                source_item.updated_at as third_party_item__si__updated_at,
+                source_item.user_id as third_party_item__si__user_id,
+                source_item.integration_connection_id as third_party_item__si__integration_connection_id
               FROM third_party_item
               LEFT JOIN task ON task.source_item_id = third_party_item.id
+              LEFT JOIN third_party_item as source_item ON third_party_item.source_item_id = source_item.id
               WHERE
-                NOT third_party_item.id = ANY($1)
-                AND task.kind::TEXT = $2
-                AND third_party_item.user_id = $3
-                AND task.status::TEXT = 'Active'
             "#,
-            &third_party_item_ids_to_exclude[..],
-            task_source_kind.to_string(),
-            user_id.0,
-        )
-        .fetch_all(&mut **executor)
-        .await
-        .map_err(|err| {
-            let message = format!("Failed to get stale third party items from storage: {err}");
-            UniversalInboxError::DatabaseError {
-                source: err,
-                message,
-            }
-        })?;
+        );
 
-        records
-            .iter()
+        let mut separated = query_builder.separated(" AND ");
+        separated
+            .push("NOT third_party_item.id = ANY(")
+            .push_bind_unseparated(&third_party_item_ids_to_exclude[..])
+            .push_unseparated(")");
+        separated
+            .push("task.kind::TEXT = ")
+            .push_bind_unseparated(task_source_kind.to_string());
+        separated.push("task.status = 'Active'");
+        separated
+            .push("third_party_item.user_id = ")
+            .push_bind_unseparated(user_id.0);
+
+        let rows = query_builder
+            .build_query_as::<ThirdPartyItemRow>()
+            .fetch_all(&mut **executor)
+            .await
+            .map_err(|err| {
+                let message = format!("Failed to get stale third party items from storage: {err}");
+                UniversalInboxError::DatabaseError {
+                    source: err,
+                    message,
+                }
+            })?;
+
+        rows.iter()
             .map(|r| r.try_into())
             .collect::<Result<Vec<ThirdPartyItem>, UniversalInboxError>>()
     }
@@ -344,22 +373,30 @@ impl ThirdPartyItemRepository for Repository {
         let mut query_builder = QueryBuilder::new(
             r#"
               SELECT
-                third_party_item.id,
-                third_party_item.source_id,
-                third_party_item.data,
-                third_party_item.created_at,
-                third_party_item.updated_at,
-                third_party_item.user_id,
-                third_party_item.integration_connection_id
+                third_party_item.id as third_party_item__id,
+                third_party_item.source_id as third_party_item__source_id,
+                third_party_item.data as third_party_item__data,
+                third_party_item.created_at as third_party_item__created_at,
+                third_party_item.updated_at as third_party_item__updated_at,
+                third_party_item.user_id as third_party_item__user_id,
+                third_party_item.integration_connection_id as third_party_item__integration_connection_id,
+                source_item.id as third_party_item__si__id,
+                source_item.source_id as third_party_item__si__source_id,
+                source_item.data as third_party_item__si__data,
+                source_item.created_at as third_party_item__si__created_at,
+                source_item.updated_at as third_party_item__si__updated_at,
+                source_item.user_id as third_party_item__si__user_id,
+                source_item.integration_connection_id as third_party_item__si__integration_connection_id
               FROM third_party_item
+              LEFT JOIN third_party_item as source_item ON third_party_item.source_item_id = source_item.id
             "#,
         );
         if excluding_slack_user_id.is_some() {
             query_builder.push(" LEFT JOIN integration_connection ON third_party_item.integration_connection_id = integration_connection.id");
         }
-        query_builder.push(" WHERE source_id = ");
+        query_builder.push(" WHERE third_party_item.source_id = ");
         query_builder.push_bind(source_id);
-        query_builder.push(" AND kind::TEXT = ");
+        query_builder.push(" AND third_party_item.kind::TEXT = ");
         query_builder.push_bind(kind.to_string());
         if let Some(slack_user_id) = excluding_slack_user_id {
             query_builder.push(" AND integration_connection.provider_user_id != ");
@@ -385,7 +422,7 @@ impl ThirdPartyItemRepository for Repository {
     }
 }
 
-#[derive(Debug, sqlx::FromRow, Clone)]
+#[derive(Debug, Clone)]
 pub struct ThirdPartyItemRow {
     pub id: Uuid,
     pub source_id: String,
@@ -394,6 +431,7 @@ pub struct ThirdPartyItemRow {
     pub updated_at: NaiveDateTime,
     pub user_id: Uuid,
     pub integration_connection_id: Uuid,
+    pub source_item: Option<Box<ThirdPartyItemRow>>,
 }
 
 impl TryFrom<ThirdPartyItemRow> for ThirdPartyItem {
@@ -401,6 +439,12 @@ impl TryFrom<ThirdPartyItemRow> for ThirdPartyItem {
 
     fn try_from(row: ThirdPartyItemRow) -> Result<Self, Self::Error> {
         (&row).try_into()
+    }
+}
+
+impl FromRow<'_, PgRow> for ThirdPartyItemRow {
+    fn from_row(row: &PgRow) -> sqlx::Result<Self> {
+        ThirdPartyItemRow::from_row_with_prefix(row, "third_party_item__")
     }
 }
 
@@ -415,6 +459,18 @@ impl FromRowWithPrefix<'_, PgRow> for ThirdPartyItemRow {
             user_id: row.try_get(format!("{prefix}user_id").as_str())?,
             integration_connection_id: row
                 .try_get(format!("{prefix}integration_connection_id").as_str())?,
+            source_item: row
+                .try_get::<Option<Uuid>, &str>(format!("{prefix}si__id").as_str())
+                .or_else(|err| match err {
+                    // Stop the recursion if the column is not found
+                    sqlx::Error::ColumnNotFound(_) => Ok(None),
+                    _ => Err(err),
+                })?
+                .map(|_source_item_id| {
+                    ThirdPartyItemRow::from_row_with_prefix(row, format!("{prefix}si__").as_str())
+                })
+                .transpose()?
+                .map(Box::new),
         })
     }
 }
@@ -431,6 +487,12 @@ impl TryFrom<&ThirdPartyItemRow> for ThirdPartyItem {
             updated_at: DateTime::from_naive_utc_and_offset(row.updated_at, Utc),
             user_id: row.user_id.into(),
             integration_connection_id: row.integration_connection_id.into(),
+            source_item: row
+                .source_item
+                .as_ref()
+                .map(|r| (&**r).try_into())
+                .transpose()?
+                .map(Box::new),
         })
     }
 }

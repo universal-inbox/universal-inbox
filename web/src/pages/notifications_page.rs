@@ -158,6 +158,25 @@ impl KeyboardHandler for NotificationsPageKeyboardHandler {
                     notification_service.send(NotificationCommand::Snooze(notification.id))
                 }
             }
+            "y" => {
+                if let Some(notification) = selected_notification {
+                    notification_service
+                        .send(NotificationCommand::AcceptInvitation(notification.id))
+                }
+            }
+            "n" => {
+                if let Some(notification) = selected_notification {
+                    notification_service
+                        .send(NotificationCommand::DeclineInvitation(notification.id))
+                }
+            }
+            "m" => {
+                if let Some(notification) = selected_notification {
+                    notification_service.send(NotificationCommand::TentativelyAcceptInvitation(
+                        notification.id,
+                    ))
+                }
+            }
             "p" => UI_MODEL.write().task_planning_modal_opened = true,
             "l" => UI_MODEL.write().task_link_modal_opened = true,
             "j" => {

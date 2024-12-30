@@ -64,7 +64,7 @@ pub async fn front_config(
                 doc: config.doc.clone(),
                 warning_message: config.warning_message.clone(),
                 doc_for_actions: config.doc_for_actions.clone(),
-                is_implemented: true,
+                is_enabled: config.is_enabled,
             },
         )
     }));

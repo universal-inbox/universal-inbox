@@ -8,11 +8,12 @@ use url::Url;
 
 use universal_inbox::{
     notification::{
-        service::{NotificationPatch, SyncNotificationsParameters},
-        Notification, NotificationId, NotificationStatus, NotificationSyncSourceKind,
-        NotificationWithTask,
+        service::{InvitationPatch, NotificationPatch, SyncNotificationsParameters},
+        Notification, NotificationId, NotificationSourceKind, NotificationStatus,
+        NotificationSyncSourceKind, NotificationWithTask,
     },
     task::{TaskCreation, TaskId, TaskPlanning},
+    third_party::integrations::google_calendar::GoogleCalendarEventAttendeeResponseStatus,
     Page,
 };
 
@@ -36,6 +37,9 @@ pub enum NotificationCommand {
     PlanTask(NotificationWithTask, TaskId, TaskPlanning),
     CreateTaskFromNotification(NotificationWithTask, TaskCreation),
     LinkNotificationWithTask(NotificationId, TaskId),
+    AcceptInvitation(NotificationId),
+    DeclineInvitation(NotificationId),
+    TentativelyAcceptInvitation(NotificationId),
 }
 
 pub static NOTIFICATIONS_PAGE: GlobalSignal<Page<NotificationWithTask>> = Signal::global(|| Page {
@@ -202,6 +206,39 @@ pub async fn notification_service(
                 )
                 .await;
             }
+            Some(NotificationCommand::AcceptInvitation(notification_id)) => {
+                patch_invitation(
+                    notifications_page,
+                    notification_id,
+                    &api_base_url,
+                    GoogleCalendarEventAttendeeResponseStatus::Accepted,
+                    ui_model,
+                    toast_service,
+                )
+                .await;
+            }
+            Some(NotificationCommand::DeclineInvitation(notification_id)) => {
+                patch_invitation(
+                    notifications_page,
+                    notification_id,
+                    &api_base_url,
+                    GoogleCalendarEventAttendeeResponseStatus::Declined,
+                    ui_model,
+                    toast_service,
+                )
+                .await;
+            }
+            Some(NotificationCommand::TentativelyAcceptInvitation(notification_id)) => {
+                patch_invitation(
+                    notifications_page,
+                    notification_id,
+                    &api_base_url,
+                    GoogleCalendarEventAttendeeResponseStatus::Tentative,
+                    ui_model,
+                    toast_service,
+                )
+                .await;
+            }
             None => {}
         }
     }
@@ -290,6 +327,33 @@ where
         .with_nanosecond(0)
         .unwrap()
         .into()
+}
+
+async fn patch_invitation(
+    mut notifications_page: Signal<Page<NotificationWithTask>>,
+    notification_id: NotificationId,
+    api_base_url: &Url,
+    response_status: GoogleCalendarEventAttendeeResponseStatus,
+    ui_model: Signal<UniversalInboxUIModel>,
+    toast_service: Coroutine<ToastCommand>,
+) {
+    let mut page = notifications_page.write();
+    if page.content.iter().any(|notif| {
+        notif.id == notification_id && notif.kind == NotificationSourceKind::GoogleCalendar
+    }) {
+        page.remove_element(|notif| notif.id != notification_id);
+        let _result: Result<Notification> = call_api_and_notify(
+            Method::PATCH,
+            api_base_url,
+            &format!("notifications/{notification_id}/invitation"),
+            Some(InvitationPatch { response_status }),
+            Some(ui_model),
+            &toast_service,
+            "Accepting invitation...",
+            "Invitation successfully accepted",
+        )
+        .await;
+    }
 }
 
 #[cfg(test)]

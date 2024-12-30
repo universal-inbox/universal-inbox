@@ -20,6 +20,7 @@ use crate::{
                 discussion::GithubDiscussionPreview, pull_request::GithubPullRequestPreview,
                 GithubNotificationDefaultPreview,
             },
+            google_calendar::preview::GoogleCalendarEventPreview,
             google_mail::preview::GoogleMailThreadPreview,
             icons::{NotificationIcon, TaskIcon},
             linear::preview::LinearNotificationPreview,
@@ -89,8 +90,8 @@ pub fn NotificationPreview(
                         }
                         div { class: "grow" }
                         div {
-                            class: "flex gap-2",
-                            NotificationIcon { class: "h-5 w-5", kind: notification().kind }
+                            class: "flex gap-2 items-center",
+                            NotificationIcon { kind: notification().kind }
                             "Notification"
                         }
                         div { class: "grow" }
@@ -128,6 +129,7 @@ pub fn NotificationPreview(
                     }
                 }
             }
+
             match ui_model.read().selected_preview_pane {
                 PreviewPane::Notification => rsx! {
                     NotificationDetailsPreview {
@@ -235,6 +237,13 @@ fn NotificationDetailsPreview(
                 google_mail_thread: *google_mail_thread
             }
         },
-        _ => rsx! {},
+        ThirdPartyItemData::GoogleCalendarEvent(google_calendar_event) => rsx! {
+            GoogleCalendarEventPreview {
+                notification,
+                google_calendar_event: *google_calendar_event,
+                expand_details
+            }
+        },
+        ThirdPartyItemData::LinearIssue(_) | ThirdPartyItemData::TodoistItem(_) => rsx! {},
     }
 }

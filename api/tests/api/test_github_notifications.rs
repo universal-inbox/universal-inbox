@@ -109,6 +109,7 @@ mod patch_resource {
                     ..*todoist_item.clone()
                 })),
                 integration_connection_id: integration_connection.id,
+                source_item: None,
             }),
         )
         .await;

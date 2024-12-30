@@ -15,6 +15,7 @@ static APP_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_P
 
 // tag: New notification integration
 pub mod github;
+pub mod google_calendar;
 pub mod google_mail;
 pub mod linear;
 pub mod oauth2;
@@ -52,19 +53,19 @@ pub mod notification {
         async fn delete_notification_from_source<'a>(
             &self,
             executor: &mut Transaction<'a, Postgres>,
-            notification: &Notification,
+            source_item: &ThirdPartyItem,
             user_id: UserId,
         ) -> Result<(), UniversalInboxError>;
         async fn unsubscribe_notification_from_source<'a>(
             &self,
             executor: &mut Transaction<'a, Postgres>,
-            notification: &Notification,
+            source_item: &ThirdPartyItem,
             user_id: UserId,
         ) -> Result<(), UniversalInboxError>;
         async fn snooze_notification_from_source<'a>(
             &self,
             executor: &mut Transaction<'a, Postgres>,
-            notification: &Notification,
+            source_item: &ThirdPartyItem,
             snoozed_until_at: DateTime<Utc>,
             user_id: UserId,
         ) -> Result<(), UniversalInboxError>;
