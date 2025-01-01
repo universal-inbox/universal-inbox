@@ -52,7 +52,7 @@ clap = { version = "4.1.0", features = ["derive"] }
 email_address = { version = "0.2" }
 enum_derive = { version = "0.1.0" }
 http = { version = "1.1.0" }
-itertools = { version = "0.13.0" }
+itertools = { version = "0.14.0" }
 lazy_static = { version = "1.4.0" }
 log = { version = "0.4.0" }
 macro-attr = { version = "0.2.0" }
