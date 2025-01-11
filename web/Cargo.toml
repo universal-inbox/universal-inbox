@@ -80,3 +80,4 @@ wasm-bindgen-test = "0.3.0"
 [features]
 default = ["web", "console_log"]
 web = ["dioxus/web"]
+trunk = []

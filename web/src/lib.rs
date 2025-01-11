@@ -3,8 +3,8 @@
 #[macro_use]
 extern crate lazy_static;
 
+use cfg_if::cfg_if;
 use dioxus::prelude::*;
-
 use gloo_utils::errors::JsError;
 use keyboard_manager::{KeyboardHandler, KeyboardManager};
 use log::debug;
@@ -135,9 +135,19 @@ pub fn App() -> Element {
     // end workaround
 
     debug!("Rendering app");
+    cfg_if! {
+        if #[cfg(feature = "trunk")] {
+            let head = rsx! {};
+        } else {
+            let head = rsx! {
+                document::Stylesheet { href: asset!("./dist/css/universal-inbox.min.css") }
+                document::Link { rel: "icon", href: asset!("./images/favicon.ico") }
+            };
+        }
+    }
+
     rsx! {
-        document::Stylesheet { href: asset!("./dist/css/universal-inbox.min.css") }
-        document::Link { rel: "icon", href: asset!("./images/favicon.ico") }
+        { head }
 
         Router::<Route> {
             config: move || {

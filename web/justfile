@@ -7,8 +7,8 @@ default:
 build: bundle-js build-tailwind
     dx build --verbose
 
-build-release: bundle-js build-tailwind
-    dx build --verbose --release
+build-release:
+    trunk build --release --features trunk
 
 build-tailwind:
     npx tailwindcss -i css/universal-inbox.css -o dist/css/universal-inbox.min.css --minify
@@ -39,3 +39,6 @@ run-tailwind:
 
 run-bundle-js:
     npx rspack build --watch
+
+run-trunk:
+    trunk serve --features trunk
