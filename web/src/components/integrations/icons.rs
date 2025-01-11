@@ -1,5 +1,6 @@
 #![allow(non_snake_case)]
 
+use cfg_if::cfg_if;
 use dioxus::prelude::*;
 use dioxus_free_icons::{icons::bs_icons::BsSlack, Icon};
 
@@ -13,7 +14,13 @@ use crate::components::integrations::{
     linear::icons::Linear, todoist::icons::Todoist,
 };
 
-const NOTION_LOGO: Asset = asset!("/images/notion-logo.svg");
+cfg_if! {
+    if #[cfg(feature = "trunk")] {
+        const NOTION_LOGO: &'static str = "/images/notion-logo.svg";
+    } else {
+        const NOTION_LOGO: Asset = asset!("/images/notion-logo.svg");
+    }
+}
 
 #[component]
 pub fn Notion(class: Option<String>) -> Element {

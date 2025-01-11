@@ -1,0 +1,19 @@
+[[hooks]]
+stage = "pre_build"
+command = "sh"
+command_arguments = [
+  "-c",
+  "npx rspack",
+]
+
+[[hooks]]
+stage = "post_build"
+command = "sh"
+command_arguments = [
+  "-c",
+  "mv -v dist/js/index.js* $TRUNK_STAGING_DIR/snippets/$(ls $TRUNK_STAGING_DIR/snippets | grep ^universal-inbox-web | head -n 1)/js/",
+]
+
+[build]
+target = "index-trunk.html"
+minify = "always"
