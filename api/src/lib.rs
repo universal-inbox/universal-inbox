@@ -520,6 +520,7 @@ fn build_csp_header(settings: &Settings) -> String {
         .push(Directive::ImgSrc(
             Sources::new_with(Source::Self_)
                 .push(Source::Host("https://secure.gravatar.com"))
+                .push(Source::Host("https://www.gravatar.com"))
                 .push(Source::Host("https://avatars.githubusercontent.com"))
                 .push(Source::Host(
                     "https://private-user-images.githubusercontent.com",
