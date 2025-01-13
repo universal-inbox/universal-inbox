@@ -48,7 +48,13 @@ pub trait ThirdPartyItemRepository {
         executor: &mut Transaction<'a, Postgres>,
         kind: ThirdPartyItemKind,
         source_id: &str,
-        excluding_slack_user_id: Option<SlackUserId>,
+    ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError>;
+
+    async fn find_third_party_items_for_user_id<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        kind: ThirdPartyItemKind,
+        user_id: UserId,
     ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError>;
 }
 
@@ -359,7 +365,6 @@ impl ThirdPartyItemRepository for Repository {
         fields(
             kind = kind.to_string(),
             source_id = source_id,
-            excluding_slack_user_id = excluding_slack_user_id.as_ref().map(|id| id.to_string())
         ),
         err
     )]
@@ -368,7 +373,6 @@ impl ThirdPartyItemRepository for Repository {
         executor: &mut Transaction<'a, Postgres>,
         kind: ThirdPartyItemKind,
         source_id: &str,
-        excluding_slack_user_id: Option<SlackUserId>,
     ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError> {
         let mut query_builder = QueryBuilder::new(
             r#"
@@ -391,17 +395,10 @@ impl ThirdPartyItemRepository for Repository {
               LEFT JOIN third_party_item as source_item ON third_party_item.source_item_id = source_item.id
             "#,
         );
-        if excluding_slack_user_id.is_some() {
-            query_builder.push(" LEFT JOIN integration_connection ON third_party_item.integration_connection_id = integration_connection.id");
-        }
         query_builder.push(" WHERE third_party_item.source_id = ");
         query_builder.push_bind(source_id);
         query_builder.push(" AND third_party_item.kind::TEXT = ");
         query_builder.push_bind(kind.to_string());
-        if let Some(slack_user_id) = excluding_slack_user_id {
-            query_builder.push(" AND integration_connection.provider_user_id != ");
-            query_builder.push_bind(slack_user_id.to_string());
-        }
 
         let records = query_builder
             .build_query_as::<ThirdPartyItemRow>()
@@ -409,6 +406,65 @@ impl ThirdPartyItemRepository for Repository {
             .await
             .map_err(|err| {
                 let message = format!("Failed to find {kind} third party item from source_id {source_id} from storage: {err}");
+                UniversalInboxError::DatabaseError {
+                    source: err,
+                    message,
+                }
+            })?;
+
+        records
+            .iter()
+            .map(|r| r.try_into())
+            .collect::<Result<Vec<ThirdPartyItem>, UniversalInboxError>>()
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            kind = kind.to_string(),
+            user_id = user_id.to_string(),
+        ),
+        err
+    )]
+    async fn find_third_party_items_for_user_id<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        kind: ThirdPartyItemKind,
+        user_id: UserId,
+    ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError> {
+        let mut query_builder = QueryBuilder::new(
+            r#"
+              SELECT
+                third_party_item.id as third_party_item__id,
+                third_party_item.source_id as third_party_item__source_id,
+                third_party_item.data as third_party_item__data,
+                third_party_item.created_at as third_party_item__created_at,
+                third_party_item.updated_at as third_party_item__updated_at,
+                third_party_item.user_id as third_party_item__user_id,
+                third_party_item.integration_connection_id as third_party_item__integration_connection_id,
+                source_item.id as third_party_item__si__id,
+                source_item.source_id as third_party_item__si__source_id,
+                source_item.data as third_party_item__si__data,
+                source_item.created_at as third_party_item__si__created_at,
+                source_item.updated_at as third_party_item__si__updated_at,
+                source_item.user_id as third_party_item__si__user_id,
+                source_item.integration_connection_id as third_party_item__si__integration_connection_id
+              FROM third_party_item
+              LEFT JOIN third_party_item as source_item ON third_party_item.source_item_id = source_item.id
+            "#,
+        );
+        query_builder.push(" WHERE third_party_item.user_id = ");
+        query_builder.push_bind(user_id.0);
+        query_builder.push(" AND third_party_item.kind::TEXT = ");
+        query_builder.push_bind(kind.to_string());
+
+        let records = query_builder
+            .build_query_as::<ThirdPartyItemRow>()
+            .fetch_all(&mut **executor)
+            .await
+            .map_err(|err| {
+                let message = format!("Failed to find {kind} third party item for user_id {user_id} from storage: {err}");
                 UniversalInboxError::DatabaseError {
                     source: err,
                     message,

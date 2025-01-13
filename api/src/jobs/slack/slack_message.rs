@@ -33,18 +33,13 @@ pub async fn handle_slack_message_push_event<'a>(
     third_party_item_service: Arc<RwLock<ThirdPartyItemService>>,
     slack_service: Arc<SlackService>,
 ) -> Result<(), UniversalInboxError> {
-    let (provider_user_ids, thread_ts, sender_user_id) = match event {
+    let (provider_user_ids, thread_ts) = match event {
         SlackPushEventCallback {
             team_id,
             event:
                 SlackEventCallbackBody::Message(SlackMessageEvent {
                     origin: SlackMessageOrigin { ref thread_ts, .. },
                     content: Some(ref content),
-                    sender:
-                        SlackMessageSender {
-                            user: ref sender_user_id,
-                            ..
-                        },
                     ..
                 }),
             ..
@@ -79,19 +74,7 @@ pub async fn handle_slack_message_push_event<'a>(
                 }
             }
 
-            (
-                user_ids
-                    .into_iter()
-                    .filter(|user_id| {
-                        sender_user_id
-                            .as_ref()
-                            .map(|sender_user_id| *user_id != *sender_user_id.0)
-                            .unwrap_or(true)
-                    })
-                    .collect::<Vec<String>>(),
-                thread_ts.clone(),
-                sender_user_id.clone(),
-            )
+            (user_ids, thread_ts.clone())
         }
         _ => {
             warn!("Slack push event is not a message event");
@@ -114,15 +97,15 @@ pub async fn handle_slack_message_push_event<'a>(
             return Ok(());
         };
 
+        handled_integration_connection_ids.push(integration_connection.id);
         handle_slack_message_push_event_if_enabled(
             executor,
             event,
-            &integration_connection,
+            integration_connection,
             None,
             notification_service.clone(),
         )
         .await?;
-        handled_integration_connection_ids.push(integration_connection.id);
     }
 
     let Some(thread_ts) = thread_ts else {
@@ -135,7 +118,6 @@ pub async fn handle_slack_message_push_event<'a>(
             executor,
             ThirdPartyItemKind::SlackThread,
             thread_ts.as_ref(),
-            sender_user_id,
         )
         .await?;
 
@@ -154,7 +136,7 @@ pub async fn handle_slack_message_push_event<'a>(
             handle_slack_message_push_event_if_enabled(
                 executor,
                 event,
-                &integration_connection,
+                integration_connection,
                 Some(third_party_item),
                 notification_service.clone(),
             )
@@ -168,7 +150,7 @@ pub async fn handle_slack_message_push_event<'a>(
 async fn handle_slack_message_push_event_if_enabled<'a>(
     executor: &mut Transaction<'a, Postgres>,
     event: &SlackPushEventCallback,
-    integration_connection: &IntegrationConnection,
+    integration_connection: IntegrationConnection,
     existing_third_party_item: Option<&ThirdPartyItem>,
     notification_service: Arc<RwLock<NotificationService>>,
 ) -> Result<(), UniversalInboxError> {
@@ -192,19 +174,20 @@ async fn handle_slack_message_push_event_if_enabled<'a>(
         ..
     } = slack_config
     {
+        let user_id = integration_connection.user_id;
         notification_service
             .read()
             .await
             .save_notification_from_event(
                 executor,
                 event,
-                // In 2way sync scenario, we ignore existing third_party_item
                 if *is_2way_sync {
                     None
                 } else {
                     existing_third_party_item
                 },
-                integration_connection.user_id,
+                integration_connection,
+                user_id,
             )
             .await?;
     }

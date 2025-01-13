@@ -153,7 +153,6 @@ pub fn mock_slack_fetch_user<'a>(
     slack_mock_server.mock(|when, then| {
         when.method(GET)
             .path("/users.info")
-            .header("authorization", "Bearer slack_test_user_access_token")
             .query_param("user", user_id);
         then.status(200)
             .header("content-type", "application/json")
@@ -169,7 +168,6 @@ pub fn mock_slack_fetch_bot<'a>(
     slack_mock_server.mock(|when, then| {
         when.method(GET)
             .path("/bots.info")
-            .header("authorization", "Bearer slack_test_user_access_token")
             .query_param("bot", bot_id);
         then.status(200)
             .header("content-type", "application/json")
@@ -186,7 +184,6 @@ pub fn mock_slack_fetch_reply<'a>(
     slack_mock_server.mock(|when, then| {
         when.method(GET)
             .path("/conversations.replies")
-            .header("authorization", "Bearer slack_test_user_access_token")
             .query_param("channel", channel_id)
             .query_param("ts", message_id)
             .query_param("latest", message_id)
@@ -222,7 +219,6 @@ pub fn mock_slack_fetch_thread<'a>(
     slack_mock_server.mock(|when, then| {
         when.method(GET)
             .path("/conversations.replies")
-            .header("authorization", "Bearer slack_test_user_access_token")
             .query_param("channel", channel_id)
             .query_param("ts", first_message_id)
             .query_param("latest", message_id)
@@ -240,7 +236,6 @@ pub fn mock_slack_fetch_channel<'a>(
     slack_mock_server.mock(|when, then| {
         when.method(GET)
             .path("/conversations.info")
-            .header("authorization", "Bearer slack_test_user_access_token")
             .query_param("channel", channel_id);
         then.status(200)
             .header("content-type", "application/json")
@@ -256,7 +251,6 @@ pub fn mock_slack_fetch_team<'a>(
     slack_mock_server.mock(|when, then| {
         when.method(GET)
             .path("/team.info")
-            .header("authorization", "Bearer slack_test_user_access_token")
             .query_param("team", team_id);
         then.status(200)
             .header("content-type", "application/json")
@@ -269,9 +263,7 @@ pub fn mock_slack_list_usergroups<'a>(
     fixture_response_file: &'a str,
 ) -> Mock<'a> {
     slack_mock_server.mock(|when, then| {
-        when.method(GET)
-            .path("/usergroups.list")
-            .header("authorization", "Bearer slack_test_user_access_token");
+        when.method(GET).path("/usergroups.list");
         then.status(200)
             .header("content-type", "application/json")
             .body_from_file(fixture_path(fixture_response_file));
@@ -334,7 +326,6 @@ pub fn mock_slack_get_chat_permalink<'a>(
     slack_mock_server.mock(|when, then| {
         when.method(GET)
             .path("/chat.getPermalink")
-            .header("authorization", "Bearer slack_test_user_access_token")
             .query_param("channel", channel_id)
             .query_param("message_ts", message_id);
         then.status(200)

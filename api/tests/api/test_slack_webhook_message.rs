@@ -299,8 +299,11 @@ mod webhook {
 }
 
 mod job {
+    use crate::helpers::third_party::find_third_party_items_for_user_id;
+
     use super::*;
     use pretty_assertions::assert_eq;
+    use universal_inbox::third_party::item::ThirdPartyItemKind;
 
     #[fixture]
     fn message_event(slack_push_message_event: Box<SlackPushEvent>) -> Box<SlackPushEventCallback> {
@@ -472,7 +475,8 @@ mod job {
     ) {
         // Group `G01` contains user `U01` and user `U02`
         // The message received is sent by `U02` thus a notification should be created
-        // only for `U01`
+        // only for `U01`.
+        // Nonetheless, a ThirdPartyItem is still created for `U02` as it is the sender.
         let app = tested_app_with_local_auth.await;
         let service = app.notification_service.read().await;
         let mut transaction = service.begin().await.unwrap();
@@ -487,7 +491,7 @@ mod job {
             "authed_user": { "id": "U02", "access_token": "slack_other_user_access_token" },
             "team": { "id": "T01" }
         });
-        let (client, user) = create_user_and_login(
+        let (client_u02, user_u02) = create_user_and_login(
             &app,
             "John",
             "Doe",
@@ -497,7 +501,7 @@ mod job {
         .await;
         create_and_mock_integration_connection(
             &app,
-            user.id,
+            user_u02.id,
             &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
             &settings,
@@ -513,7 +517,7 @@ mod job {
             "authed_user": { "id": "U01", "access_token": "slack_test_user_access_token" },
             "team": { "id": "T01" }
         });
-        let (other_client, other_user) = create_user_and_login(
+        let (client_u01, user_u01) = create_user_and_login(
             &app,
             "Jane",
             "Doe",
@@ -523,7 +527,7 @@ mod job {
         .await;
         create_and_mock_integration_connection(
             &app,
-            other_user.id,
+            user_u01.id,
             &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
             &settings,
@@ -590,21 +594,34 @@ mod job {
             .context("Failed to commit transaction")
             .unwrap();
 
-        slack_fetch_user_mock1.assert();
-        slack_fetch_user_mock2.assert();
-        slack_fetch_thread_mock.assert();
-        slack_fetch_channel_mock.assert();
-        slack_fetch_team_mock.assert();
-        slack_list_users_in_usergroup_mock.assert();
+        slack_fetch_user_mock1.assert_hits(2);
+        slack_fetch_user_mock2.assert_hits(2);
+        slack_fetch_thread_mock.assert_hits(2);
+        slack_fetch_channel_mock.assert_hits(1);
+        slack_fetch_team_mock.assert_hits(1);
+        slack_list_users_in_usergroup_mock.assert_hits(1);
 
-        let notifications =
-            list_notifications(&client, &app.api_address, vec![], false, None, None, false).await;
+        let notifications_u02 = list_notifications(
+            &client_u02,
+            &app.api_address,
+            vec![],
+            false,
+            None,
+            None,
+            false,
+        )
+        .await;
         // the message does not create a notification for U02 (ie. the sender)
         // but only for the other known user U01
-        assert_eq!(notifications.len(), 0);
+        assert_eq!(notifications_u02.len(), 0);
+        // but a ThirdPartyItem is still created for U02
+        let third_party_items_u02 =
+            find_third_party_items_for_user_id(&app, ThirdPartyItemKind::SlackThread, user_u02.id)
+                .await;
+        assert_eq!(third_party_items_u02.len(), 1);
 
-        let notifications = list_notifications(
-            &other_client,
+        let notifications_u01 = list_notifications(
+            &client_u01,
             &app.api_address,
             vec![],
             false,
@@ -614,15 +631,18 @@ mod job {
         )
         .await;
 
-        assert_eq!(notifications.len(), 1);
-        assert_eq!(notifications[0].source_item.source_id, "1732535291.911209");
-        assert_eq!(notifications[0].title, "Hello");
-        assert_eq!(notifications[0].status, NotificationStatus::Unread);
-        assert_eq!(notifications[0].kind, NotificationSourceKind::Slack);
-        assert!(notifications[0].last_read_at.is_none());
-        assert!(notifications[0].task_id.is_none());
-        assert!(notifications[0].snoozed_until.is_none());
-        let ThirdPartyItemData::SlackThread(slack_thread) = &notifications[0].source_item.data
+        assert_eq!(notifications_u01.len(), 1);
+        assert_eq!(
+            notifications_u01[0].source_item.source_id,
+            "1732535291.911209"
+        );
+        assert_eq!(notifications_u01[0].title, "Hello");
+        assert_eq!(notifications_u01[0].status, NotificationStatus::Unread);
+        assert_eq!(notifications_u01[0].kind, NotificationSourceKind::Slack);
+        assert!(notifications_u01[0].last_read_at.is_none());
+        assert!(notifications_u01[0].task_id.is_none());
+        assert!(notifications_u01[0].snoozed_until.is_none());
+        let ThirdPartyItemData::SlackThread(slack_thread) = &notifications_u01[0].source_item.data
         else {
             unreachable!("Unexpected item data");
         };
@@ -1026,11 +1046,12 @@ mod job {
         // - second (unread) message from user U02
         // Both users have read the first message and when receiving the second message
         // as an event, only U01 will get its notification updated: marked as unread
+        // Creating user U02 and its Slack connection
         nango_slack_connection.credentials.raw = json !({
             "authed_user": { "id": "U02", "access_token": "slack_other_user_access_token" },
             "team": { "id": "T01" }
         });
-        let (client, user) = create_user_and_login(
+        let (client_u02, user_u02) = create_user_and_login(
             &app,
             "John",
             "Doe",
@@ -1039,9 +1060,9 @@ mod job {
         )
         .await;
 
-        let slack_integration_connection = create_and_mock_integration_connection(
+        let slack_integration_connection_u02 = create_and_mock_integration_connection(
             &app,
-            user.id,
+            user_u02.id,
             &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
             &settings,
@@ -1106,16 +1127,17 @@ mod job {
             "slack_get_chat_permalink_response.json",
         );
 
-        let existing_notification = create_notification_from_slack_thread(
+        let existing_notification_u02 = create_notification_from_slack_thread(
             &app,
             &slack_thread,
-            user.id,
-            slack_integration_connection.id,
+            user_u02.id,
+            slack_integration_connection_u02.id,
         )
         .await;
-        assert_eq!(existing_notification.status, NotificationStatus::Read);
+        assert_eq!(existing_notification_u02.status, NotificationStatus::Read);
 
-        let (other_client, other_user) = create_user_and_login(
+        // Creating user U01 and its Slack connection
+        let (client_u01, user_u01) = create_user_and_login(
             &app,
             "Jane",
             "Doe",
@@ -1127,9 +1149,9 @@ mod job {
             "authed_user": { "id": "U01", "access_token": "slack_test_user_access_token" },
             "team": { "id": "T01" }
         });
-        let other_slack_integration_connection = create_and_mock_integration_connection(
+        let slack_integration_connection_u01 = create_and_mock_integration_connection(
             &app,
-            other_user.id,
+            user_u01.id,
             &settings.oauth2.nango_secret_key,
             IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
             &settings,
@@ -1138,14 +1160,14 @@ mod job {
             None,
         )
         .await;
-        let other_existing_notification = create_notification_from_slack_thread(
+        let existing_notification_u01 = create_notification_from_slack_thread(
             &app,
             &slack_thread,
-            other_user.id,
-            other_slack_integration_connection.id,
+            user_u01.id,
+            slack_integration_connection_u01.id,
         )
         .await;
-        assert_eq!(other_existing_notification.status, NotificationStatus::Read);
+        assert_eq!(existing_notification_u01.status, NotificationStatus::Read);
 
         handle_slack_message_push_event(
             &mut transaction,
@@ -1164,19 +1186,14 @@ mod job {
             .context("Failed to commit transaction")
             .unwrap();
 
-        slack_fetch_user_mock1.assert();
-        slack_fetch_user_mock2.assert();
-        slack_fetch_thread_mock.assert();
-        slack_fetch_channel_mock.assert();
-        slack_fetch_team_mock.assert();
+        slack_fetch_user_mock1.assert_hits(2);
+        slack_fetch_user_mock2.assert_hits(2);
+        slack_fetch_thread_mock.assert_hits(2);
+        slack_fetch_channel_mock.assert_hits(1);
+        slack_fetch_team_mock.assert_hits(1);
 
-        let notifications =
-            list_notifications(&client, &app.api_address, vec![], false, None, None, false).await;
-        assert_eq!(notifications.len(), 1);
-        assert_eq!(notifications[0].status, NotificationStatus::Read);
-
-        let notifications = list_notifications(
-            &other_client,
+        let notifications_u02 = list_notifications(
+            &client_u02,
             &app.api_address,
             vec![],
             false,
@@ -1185,8 +1202,30 @@ mod job {
             false,
         )
         .await;
-        assert_eq!(notifications.len(), 1);
-        assert_eq!(notifications[0].status, NotificationStatus::Unread);
+        assert_eq!(notifications_u02.len(), 1);
+        // U02 is the sender of the message and should not have its notification updated
+        assert_eq!(
+            notifications_u02[0].updated_at,
+            existing_notification_u02.updated_at
+        );
+        assert_eq!(notifications_u02[0].status, NotificationStatus::Read);
+
+        let notifications_u01 = list_notifications(
+            &client_u01,
+            &app.api_address,
+            vec![],
+            false,
+            None,
+            None,
+            false,
+        )
+        .await;
+        assert_eq!(notifications_u01.len(), 1);
+        assert_ne!(
+            notifications_u01[0].updated_at,
+            existing_notification_u01.updated_at
+        );
+        assert_eq!(notifications_u01[0].status, NotificationStatus::Unread);
     }
 }
 

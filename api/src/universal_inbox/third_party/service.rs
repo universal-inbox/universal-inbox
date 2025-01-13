@@ -392,15 +392,9 @@ impl ThirdPartyItemService {
         executor: &mut Transaction<'a, Postgres>,
         kind: ThirdPartyItemKind,
         source_id: &str,
-        excluding_slack_user_id: Option<SlackUserId>,
     ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError> {
         self.repository
-            .find_third_party_items_for_source_id(
-                executor,
-                kind,
-                source_id,
-                excluding_slack_user_id,
-            )
+            .find_third_party_items_for_source_id(executor, kind, source_id)
             .await
     }
 }
