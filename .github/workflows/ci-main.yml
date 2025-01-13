@@ -121,7 +121,7 @@ jobs:
       - name: Collect web coverage data
         env:
           RUST_MIN_STACK: 104857600
-        run: devbox run -- just web/test
+        run: devbox run -- just web/test-ci
 
   test-ui-api:
     needs: build

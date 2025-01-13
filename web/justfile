@@ -17,21 +17,21 @@ bundle-js:
     npx rspack build
 
 ## Dev recipes
-check:
+check: install bundle-js build-tailwind
     cargo clippy --tests -- -D warnings
 
 install:
     npm install --dev
 
 ## Test recipes
-test test-filter="" $RUST_LOG="info":
+test test-filter="" $RUST_LOG="info": bundle-js build-tailwind
     cargo test {{test-filter}}
 
-test-ci:
+test-ci: install bundle-js build-tailwind
     cargo test
 
 ## Run recipes
-run:
+run: bundle-js build-tailwind
     dx serve --verbose
 
 run-tailwind:
