@@ -51,6 +51,8 @@ pub async fn handle_slack_star_push_event<'a>(
         )));
     };
 
+    let user_id = integration_connection.user_id;
+    let integration_connection_id = integration_connection.id;
     match slack_config {
         SlackConfig {
             star_config:
@@ -62,7 +64,7 @@ pub async fn handle_slack_star_push_event<'a>(
         } => task_service
             .read()
             .await
-            .save_task_from_event(executor, event, integration_connection.user_id)
+            .save_task_from_event(executor, event, user_id)
             .await
             .map(|_| ()),
 
@@ -76,14 +78,13 @@ pub async fn handle_slack_star_push_event<'a>(
         } => notification_service
             .read()
             .await
-            .save_notification_from_event(executor, event, None, integration_connection.user_id)
+            .save_notification_from_event(executor, event, None, integration_connection, user_id)
             .await
             .map(|_| ()),
 
         _ => {
             warn!(
-                "Slack star sync was not enabled for integration connection {}",
-                integration_connection.id
+                "Slack star sync was not enabled for integration connection {integration_connection_id}"
             );
             Ok(())
         }
