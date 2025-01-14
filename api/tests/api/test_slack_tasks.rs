@@ -38,9 +38,9 @@ use crate::helpers::{
         list_notifications_with_tasks,
         slack::{
             mock_slack_fetch_channel, mock_slack_fetch_reply, mock_slack_fetch_team,
-            mock_slack_fetch_user, mock_slack_get_chat_permalink, mock_slack_list_usergroups,
-            mock_slack_stars_add, mock_slack_stars_remove, slack_push_star_added_event,
-            slack_push_star_removed_event, slack_starred_message,
+            mock_slack_fetch_user, mock_slack_get_chat_permalink, mock_slack_list_emojis,
+            mock_slack_list_usergroups, mock_slack_stars_add, mock_slack_stars_remove,
+            slack_push_star_added_event, slack_push_star_removed_event, slack_starred_message,
         },
     },
     rest::{create_resource, create_resource_response, get_resource, patch_resource},
@@ -104,6 +104,7 @@ async fn test_sync_todoist_slack_task(
         "1707686216.825719",
         "slack_get_chat_permalink_response.json",
     );
+    mock_slack_list_emojis(&app.app.slack_mock_server, "slack_emoji_list_response.json");
     let slack_fetch_user_mock = mock_slack_fetch_user(
         &app.app.slack_mock_server,
         "U05YYY", // The message's creator, not the user who starred the message
@@ -152,7 +153,27 @@ async fn test_sync_todoist_slack_task(
         &todoist_item.id,
         "[🔴  Test title 🔴...](https://slack.com/archives/C05XXX/p1234567890)".to_string(),
         Some(
-            "🔴  *Test title* 🔴\n\n\n- list 1\n- list 2\n\n\n1. number 1\n1. number 2\n\n\n> quote\n\n\n```$ echo Hello world```\n\n_Some_ `formatted` ~text~.\n\nHere is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#test".to_string(),
+            r#"🔴  *Test title* 🔴
+
+
+- list 1
+- list 2
+
+
+1. number 1
+1. number 2
+
+
+> quote
+
+
+```$ echo Hello world```
+
+_Some_ `formatted` ~text~.
+
+Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#test
+👋![:unknown2:](https://emoji.com/unknown2.png)"#
+                .to_string(),
         ),
         todoist_item.project_id.clone(),
         None,
@@ -347,7 +368,27 @@ async fn test_patch_slack_task_status_as_done(
         &todoist_item.id,
         "[🔴  Test title 🔴...](https://example.com/)".to_string(),
         Some(
-            "🔴  *Test title* 🔴\n\n\n- list 1\n- list 2\n\n\n1. number 1\n1. number 2\n\n\n> quote\n\n\n```$ echo Hello world```\n\n_Some_ `formatted` ~text~.\n\nHere is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#test".to_string(),
+            r#"🔴  *Test title* 🔴
+
+
+- list 1
+- list 2
+
+
+1. number 1
+1. number 2
+
+
+> quote
+
+
+```$ echo Hello world```
+
+_Some_ `formatted` ~text~.
+
+Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#test
+👋![:unknown2:](https://emoji.com/unknown2.png)"#
+                .to_string(),
         ),
         todoist_item.project_id.clone(),
         None,

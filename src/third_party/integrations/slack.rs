@@ -971,6 +971,24 @@ mod test_message_details {
                             }
                         ]
                     },
+                    {
+                        "type": "rich_text_section",
+                        "elements": [
+                            {
+                                "type": "emoji",
+                                "name": "unknown1"
+                            }
+                        ]
+                    },
+                    {
+                        "type": "rich_text_section",
+                        "elements": [
+                            {
+                                "type": "emoji",
+                                "name": "unknown2"
+                            }
+                        ]
+                    }
                 ]
             }))]);
             message.references = Some(SlackReferences {
@@ -986,10 +1004,17 @@ mod test_message_details {
                     SlackUserGroupId("group1".to_string()),
                     Some("Admins".to_string()),
                 )]),
+                emojis: HashMap::from([
+                    ("unknown1".to_string(), Some("alias:wave".to_string())),
+                    (
+                        "unknown2".to_string(),
+                        Some("https://emoji.com/unknown2.png".to_string()),
+                    ),
+                ]),
             });
             assert_eq!(
                 slack_starred_message.render_content(),
-                "@@John Doe@\n@@user2@\n@@Admins@\n@@group2@\n#general\n#C0011223"
+                "@@John Doe@\n@@user2@\n@@Admins@\n@@group2@\n#general\n#C0011223\n👋\n![:unknown2:](https://emoji.com/unknown2.png)"
             );
         }
     }

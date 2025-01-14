@@ -334,6 +334,18 @@ pub fn mock_slack_get_chat_permalink<'a>(
     })
 }
 
+pub fn mock_slack_list_emojis<'a>(
+    slack_mock_server: &'a MockServer,
+    fixture_response_file: &'a str,
+) -> Mock<'a> {
+    slack_mock_server.mock(|when, then| {
+        when.method(GET).path("/emoji.list");
+        then.status(200)
+            .header("content-type", "application/json")
+            .body_from_file(fixture_path(fixture_response_file));
+    })
+}
+
 #[fixture]
 pub fn slack_starred_message() -> Box<SlackStarItem> {
     let message_response: SlackApiConversationsHistoryResponse =
@@ -365,6 +377,13 @@ pub fn slack_starred_message() -> Box<SlackStarItem> {
                 SlackUserGroupId("S05ZZZ".to_string()),
                 Some("admins".to_string()),
             )]),
+            emojis: HashMap::from([
+                ("unknown1".to_string(), Some("alias:wave".to_string())),
+                (
+                    "unknown2".to_string(),
+                    Some("https://emoji.com/unknown2.png".to_string()),
+                ),
+            ]),
         }),
     })))
 }

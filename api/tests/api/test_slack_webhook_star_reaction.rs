@@ -44,7 +44,7 @@ use crate::helpers::{
         slack::{
             mock_slack_fetch_bot, mock_slack_fetch_channel, mock_slack_fetch_reply,
             mock_slack_fetch_team, mock_slack_fetch_user, mock_slack_get_chat_permalink,
-            mock_slack_list_usergroups, slack_push_bot_star_added_event,
+            mock_slack_list_emojis, mock_slack_list_usergroups, slack_push_bot_star_added_event,
             slack_push_reaction_added_event, slack_push_reaction_removed_event,
             slack_push_star_added_event, slack_push_star_removed_event,
         },
@@ -258,6 +258,7 @@ async fn test_receive_star_or_reaction_added_event_as_notification(
         "1707686216.825719",
         "slack_get_chat_permalink_response.json",
     );
+    mock_slack_list_emojis(&app.app.slack_mock_server, "slack_emoji_list_response.json");
     let slack_fetch_user_mock = mock_slack_fetch_user(
         &app.app.slack_mock_server,
         "U05YYY", // The message's creator, not the user who starred the message
@@ -362,6 +363,13 @@ async fn test_receive_star_or_reaction_added_event_as_notification(
                     SlackUserGroupId("S05ZZZ".to_string()),
                     Some("admins".to_string()),
                 )]),
+                emojis: HashMap::from([
+                    ("unknown1".to_string(), Some("alias:wave".to_string())),
+                    (
+                        "unknown2".to_string(),
+                        Some("https://emoji.com/unknown2.png".to_string())
+                    )
+                ]),
             })
         );
         match &message.sender {
@@ -404,6 +412,13 @@ async fn test_receive_star_or_reaction_added_event_as_notification(
                     SlackUserGroupId("S05ZZZ".to_string()),
                     Some("admins".to_string()),
                 )]),
+                emojis: HashMap::from([
+                    ("unknown1".to_string(), Some("alias:wave".to_string())),
+                    (
+                        "unknown2".to_string(),
+                        Some("https://emoji.com/unknown2.png".to_string())
+                    )
+                ]),
             })
         );
         match &message.sender {
@@ -485,6 +500,7 @@ async fn test_receive_bot_star_added_event_as_notification(
         "1707686216.825719",
         "slack_get_chat_permalink_response.json",
     );
+    mock_slack_list_emojis(&app.app.slack_mock_server, "slack_emoji_list_response.json");
     let slack_fetch_bot_mock = mock_slack_fetch_bot(
         &app.app.slack_mock_server,
         "B05YYY", // The message's creator, not the user who starred the message
@@ -590,6 +606,13 @@ async fn test_receive_bot_star_added_event_as_notification(
                 SlackUserGroupId("S05ZZZ".to_string()),
                 Some("admins".to_string()),
             )]),
+            emojis: HashMap::from([
+                ("unknown1".to_string(), Some("alias:wave".to_string())),
+                (
+                    "unknown2".to_string(),
+                    Some("https://emoji.com/unknown2.png".to_string())
+                )
+            ]),
         })
     );
     match &message.sender {
@@ -872,6 +895,7 @@ async fn test_receive_star_or_reaction_added_event_as_task(
         "1707686216.825719",
         "slack_get_chat_permalink_response.json",
     );
+    mock_slack_list_emojis(&app.app.slack_mock_server, "slack_emoji_list_response.json");
     let slack_fetch_user_mock = mock_slack_fetch_user(
         &app.app.slack_mock_server,
         "U05YYY", // The message's creator, not the user who starred the message
@@ -910,7 +934,27 @@ async fn test_receive_star_or_reaction_added_event_as_task(
         &todoist_item.id,
         "[🔴  Test title 🔴...](https://slack.com/archives/C05XXX/p1234567890)".to_string(),
         Some(
-            "🔴  *Test title* 🔴\n\n\n- list 1\n- list 2\n\n\n1. number 1\n1. number 2\n\n\n> quote\n\n\n```$ echo Hello world```\n\n_Some_ `formatted` ~text~.\n\nHere is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#test".to_string(),
+            r#"🔴  *Test title* 🔴
+
+
+- list 1
+- list 2
+
+
+1. number 1
+1. number 2
+
+
+> quote
+
+
+```$ echo Hello world```
+
+_Some_ `formatted` ~text~.
+
+Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#test
+👋![:unknown2:](https://emoji.com/unknown2.png)"#
+                .to_string(),
         ),
         "1111".to_string(), // ie. "Inbox"
         None,
@@ -1063,6 +1107,7 @@ async fn test_receive_star_or_reaction_removed_and_added_event_as_task(
         "1707686216.825719",
         "slack_get_chat_permalink_response.json",
     );
+    mock_slack_list_emojis(&app.app.slack_mock_server, "slack_emoji_list_response.json");
     let slack_fetch_user_mock = mock_slack_fetch_user(
         &app.app.slack_mock_server,
         "U05YYY", // The message's creator, not the user who starred the message
@@ -1101,7 +1146,27 @@ async fn test_receive_star_or_reaction_removed_and_added_event_as_task(
         &todoist_item.id,
         "[🔴  Test title 🔴...](https://slack.com/archives/C05XXX/p1234567890)".to_string(),
         Some(
-            "🔴  *Test title* 🔴\n\n\n- list 1\n- list 2\n\n\n1. number 1\n1. number 2\n\n\n> quote\n\n\n```$ echo Hello world```\n\n_Some_ `formatted` ~text~.\n\nHere is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#test".to_string(),
+            r#"🔴  *Test title* 🔴
+
+
+- list 1
+- list 2
+
+
+1. number 1
+1. number 2
+
+
+> quote
+
+
+```$ echo Hello world```
+
+_Some_ `formatted` ~text~.
+
+Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#test
+👋![:unknown2:](https://emoji.com/unknown2.png)"#
+                .to_string(),
         ),
         "1111".to_string(), // ie. "Inbox"
         None,
