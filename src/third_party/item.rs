@@ -219,7 +219,7 @@ impl ThirdPartyItem {
 
         ThirdPartyItem {
             data: new_data,
-            updated_at: Utc::now(),
+            updated_at: Utc::now().with_nanosecond(0).unwrap(),
             ..self.clone()
         }
     }
