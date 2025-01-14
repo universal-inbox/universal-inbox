@@ -4,7 +4,7 @@ use anyhow::{anyhow, Context};
 
 use async_trait::async_trait;
 use cached::{proc_macro::io_cached, Return};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Timelike, Utc};
 use serde_json::json;
 use slack_blocks_render::{find_slack_references_in_blocks, SlackReferences};
 use slack_morphism::{
@@ -1574,8 +1574,8 @@ impl ThirdPartyNotificationSourceService<SlackStar> for SlackService {
             id: Uuid::new_v4().into(),
             title: source.item.render_title(),
             status,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
+            created_at: Utc::now().with_nanosecond(0).unwrap(),
+            updated_at: Utc::now().with_nanosecond(0).unwrap(),
             last_read_at: None,
             snoozed_until: None,
             user_id,
@@ -1678,8 +1678,8 @@ impl ThirdPartyNotificationSourceService<SlackReaction> for SlackService {
             id: Uuid::new_v4().into(),
             title: source.item.render_title(),
             status,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
+            created_at: Utc::now().with_nanosecond(0).unwrap(),
+            updated_at: Utc::now().with_nanosecond(0).unwrap(),
             last_read_at: None,
             snoozed_until: None,
             user_id,
@@ -1797,8 +1797,8 @@ impl ThirdPartyNotificationSourceService<SlackThread> for SlackService {
             id: Uuid::new_v4().into(),
             title: source.render_title(),
             status,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
+            created_at: Utc::now().with_nanosecond(0).unwrap(),
+            updated_at: Utc::now().with_nanosecond(0).unwrap(),
             last_read_at: None,
             snoozed_until: None,
             user_id,

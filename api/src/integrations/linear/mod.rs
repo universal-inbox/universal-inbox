@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Timelike, Utc};
 use graphql::{
     issue_update_state::IssueUpdateStateIssueUpdate,
     issue_update_subscribers::IssueUpdateSubscribersIssueUpdate,
@@ -601,8 +601,8 @@ impl ThirdPartyNotificationSourceService<LinearNotification> for LinearService {
                 } else {
                     NotificationStatus::Unread
                 },
-                created_at: Utc::now(),
-                updated_at: Utc::now(),
+                created_at: Utc::now().with_nanosecond(0).unwrap(),
+                updated_at: Utc::now().with_nanosecond(0).unwrap(),
                 last_read_at: *read_at,
                 snoozed_until: *snoozed_until_at,
                 user_id,
@@ -623,8 +623,8 @@ impl ThirdPartyNotificationSourceService<LinearNotification> for LinearService {
                 } else {
                     NotificationStatus::Unread
                 },
-                created_at: Utc::now(),
-                updated_at: Utc::now(),
+                created_at: Utc::now().with_nanosecond(0).unwrap(),
+                updated_at: Utc::now().with_nanosecond(0).unwrap(),
                 last_read_at: *read_at,
                 snoozed_until: *snoozed_until_at,
                 user_id,

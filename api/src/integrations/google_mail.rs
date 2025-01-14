@@ -5,7 +5,7 @@ use std::{
 
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Timelike, Utc};
 use http::{HeaderMap, HeaderValue};
 use ical::IcalParser;
 use itertools::Itertools;
@@ -896,8 +896,8 @@ impl ThirdPartyNotificationSourceService<GoogleMailThread> for GoogleMailService
             id: Uuid::new_v4().into(),
             title,
             status,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
+            created_at: Utc::now().with_nanosecond(0).unwrap(),
+            updated_at: Utc::now().with_nanosecond(0).unwrap(),
             last_read_at,
             snoozed_until: None,
             user_id,

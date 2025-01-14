@@ -9,7 +9,7 @@ use std::{
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use cached::proc_macro::cached;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Timelike, Utc};
 use http::{HeaderMap, HeaderValue, StatusCode};
 use regex::RegexBuilder;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, Extension};
@@ -997,8 +997,8 @@ impl ThirdPartyNotificationSourceService<TodoistItem> for TodoistService {
             } else {
                 NotificationStatus::Unread
             },
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
+            created_at: Utc::now().with_nanosecond(0).unwrap(),
+            updated_at: Utc::now().with_nanosecond(0).unwrap(),
             last_read_at: None,
             snoozed_until: None,
             user_id,
