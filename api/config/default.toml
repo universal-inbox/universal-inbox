@@ -171,6 +171,7 @@ nango_key = "slack"
 required_oauth_scopes = [
   "channels:history",
   "channels:read",
+  "emoji:read",
   "groups:history",
   "groups:read",
   "im:history",

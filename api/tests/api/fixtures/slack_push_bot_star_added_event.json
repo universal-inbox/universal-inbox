@@ -194,6 +194,19 @@
                     "type": "link"
                   }
                 ]
+              },
+              {
+                "type": "rich_text_section",
+                "elements": [
+                  {
+                    "name": "unknown1",
+                    "type": "emoji"
+                  },
+                  {
+                    "name": "unknown2",
+                    "type": "emoji"
+                  }
+                ]
               }
             ]
           }

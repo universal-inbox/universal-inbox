@@ -269,6 +269,17 @@ impl SlackService {
         Ok(result.value)
     }
 
+    pub async fn list_emojis(
+        &self,
+        slack_api_token: &SlackApiToken,
+    ) -> Result<HashMap<String, String>, UniversalInboxError> {
+        let result = cached_list_emojis(&self.slack_base_url, slack_api_token).await?;
+        if result.was_cached {
+            debug!("`list_emojis` cache hit");
+        }
+        Ok(result.value)
+    }
+
     pub async fn stars_add(
         &self,
         slack_api_token: &SlackApiToken,
@@ -560,6 +571,14 @@ impl SlackService {
                 .fetch_channel(&slack_channel_id, slack_api_token)
                 .await?;
             references.channels.insert(slack_channel_id, channel.name);
+        }
+
+        let emojis = references.emojis.keys().cloned().collect::<Vec<_>>();
+        for emoji in emojis {
+            let emojis = self.list_emojis(slack_api_token).await?;
+            references
+                .emojis
+                .insert(emoji.clone(), emojis.get(&emoji).cloned());
         }
 
         Ok(Some(references))
@@ -1429,6 +1448,40 @@ async fn cached_fetch_team(
         .with_context(|| format!("Failed to fetch Slack team {team}"))?;
 
     Ok(Return::new(response.team))
+}
+
+#[io_cached(
+    key = "String",
+    convert = r#"{ format!("{}", slack_base_url) }"#,
+    ty = "cached::AsyncRedisCache<String, HashMap<String, String>>",
+    map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `list_emojis`: {:?}", e))"##,
+    create = r##" { build_redis_cache("slack:list_emojis", 24 * 60 * 60, true).await }"##,
+    with_cached_flag = true
+)]
+async fn cached_list_emojis(
+    slack_base_url: &str,
+    slack_api_token: &SlackApiToken,
+) -> Result<Return<HashMap<String, String>>, UniversalInboxError> {
+    let client = SlackClient::new(
+        SlackClientHyperConnector::with_connector(
+            hyper_rustls::HttpsConnectorBuilder::new()
+                .with_native_roots()
+                .context("Failed to initialize new Slack client")?
+                .https_or_http()
+                .enable_http2()
+                .build(),
+        )
+        .with_slack_api_url(slack_base_url),
+    );
+
+    let session = client.open_session(slack_api_token);
+
+    let response = session
+        .emoji_list()
+        .await
+        .context("Failed to fetch Slack emojis")?;
+
+    Ok(Return::new(response.emoji))
 }
 
 #[io_cached(
