@@ -167,7 +167,10 @@ async fn test_sync_todoist_slack_task(
 > quote
 
 
-```$ echo Hello world```
+
+```
+$ echo Hello world
+```
 
 _Some_ `formatted` ~text~.
 
@@ -382,7 +385,10 @@ async fn test_patch_slack_task_status_as_done(
 > quote
 
 
-```$ echo Hello world```
+
+```
+$ echo Hello world
+```
 
 _Some_ `formatted` ~text~.
 

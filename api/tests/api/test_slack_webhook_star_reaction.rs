@@ -948,7 +948,10 @@ async fn test_receive_star_or_reaction_added_event_as_task(
 > quote
 
 
-```$ echo Hello world```
+
+```
+$ echo Hello world
+```
 
 _Some_ `formatted` ~text~.
 
@@ -1160,7 +1163,10 @@ async fn test_receive_star_or_reaction_removed_and_added_event_as_task(
 > quote
 
 
-```$ echo Hello world```
+
+```
+$ echo Hello world
+```
 
 _Some_ `formatted` ~text~.
 
