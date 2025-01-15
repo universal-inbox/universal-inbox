@@ -1019,7 +1019,7 @@ mod test_message_details {
         }
     }
 
-    mod test_thread_title {
+    mod test_thread {
         use super::*;
 
         #[fixture]
@@ -1043,28 +1043,74 @@ mod test_message_details {
             })
         }
 
-        #[rstest]
-        fn test_render_thread_with_only_unread_message(mut slack_thread: Box<SlackThread>) {
-            slack_thread.last_read = None;
-            assert_eq!(slack_thread.render_title(), "Hello"); // ie. first message
+        mod render_title {
+            use super::*;
+
+            #[rstest]
+            fn test_render_thread_with_only_unread_message(mut slack_thread: Box<SlackThread>) {
+                slack_thread.last_read = None;
+                assert_eq!(slack_thread.render_title(), "Hello"); // ie. first message
+            }
+
+            #[rstest]
+            fn test_render_thread_with_first_message_read(mut slack_thread: Box<SlackThread>) {
+                slack_thread.last_read = Some(slack_thread.messages.first().origin.ts.clone());
+                assert_eq!(slack_thread.render_title(), "World"); // ie. second message
+            }
+
+            #[rstest]
+            fn test_render_thread_with_all_messages_read(mut slack_thread: Box<SlackThread>) {
+                slack_thread.last_read = Some(slack_thread.messages.last().origin.ts.clone());
+                assert_eq!(slack_thread.render_title(), "World"); // ie. second and last message
+            }
+
+            #[rstest]
+            fn test_render_thread_with_unknown_message_read(mut slack_thread: Box<SlackThread>) {
+                slack_thread.last_read = Some(SlackTs("unknown".to_string()));
+                assert_eq!(slack_thread.render_title(), "Hello"); // ie. first message
+            }
         }
 
-        #[rstest]
-        fn test_render_thread_with_first_message_read(mut slack_thread: Box<SlackThread>) {
-            slack_thread.last_read = Some(slack_thread.messages.first().origin.ts.clone());
-            assert_eq!(slack_thread.render_title(), "World"); // ie. second message
-        }
+        mod render_content {
+            use super::*;
 
-        #[rstest]
-        fn test_render_thread_with_all_messages_read(mut slack_thread: Box<SlackThread>) {
-            slack_thread.last_read = Some(slack_thread.messages.last().origin.ts.clone());
-            assert_eq!(slack_thread.render_title(), "World"); // ie. second and last message
-        }
+            #[rstest]
+            fn test_render_thread_with_reference_custom_emoji(mut slack_thread: Box<SlackThread>) {
+                let first_message = slack_thread.messages.first_mut();
+                first_message.content.blocks =
+                    Some(vec![SlackBlock::RichText(serde_json::json!({
+                        "type": "rich_text",
+                        "elements": [
+                            {
+                                "type": "rich_text_section",
+                                "elements": [
+                                    {
+                                        "text": "Hello ",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "type": "emoji",
+                                        "name": "custom_emoji"
+                                    }
+                                ]
+                            }
+                        ]
+                    }))]);
+                let slack_references = SlackReferences {
+                    users: Default::default(),
+                    channels: Default::default(),
+                    usergroups: Default::default(),
+                    emojis: HashMap::from([(
+                        "custom_emoji".to_string(),
+                        Some("https://emoji.com/custom_emoji.png".to_string()),
+                    )]),
+                };
 
-        #[rstest]
-        fn test_render_thread_with_unknown_message_read(mut slack_thread: Box<SlackThread>) {
-            slack_thread.last_read = Some(SlackTs("unknown".to_string()));
-            assert_eq!(slack_thread.render_title(), "Hello"); // ie. first message
+                assert_eq!(
+                    first_message.render_content(Some(slack_references), true),
+                    "Hello ![:custom_emoji:](https://emoji.com/custom_emoji.png)"
+                );
+            }
         }
     }
 }

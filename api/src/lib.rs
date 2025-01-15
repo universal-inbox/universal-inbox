@@ -518,16 +518,9 @@ fn build_csp_header(settings: &Settings) -> String {
         .push(Directive::ObjectSrc(Sources::new()))
         .push(Directive::ConnectSrc(connect_srcs))
         .push(Directive::ImgSrc(
-            Sources::new_with(Source::Self_)
-                .push(Source::Host("https://secure.gravatar.com"))
-                .push(Source::Host("https://www.gravatar.com"))
-                .push(Source::Host("https://avatars.githubusercontent.com"))
-                .push(Source::Host(
-                    "https://private-user-images.githubusercontent.com",
-                ))
-                .push(Source::Host("https://public.linear.app"))
-                .push(Source::Host("https://avatars.slack-edge.com"))
-                .push(Source::Scheme("data")), // Allow loading of inlined svg
+            Sources::new_with(Source::Host("*"))
+                .push(Source::Self_)
+                .push(Source::Scheme("data")),
         ))
         .push(Directive::WorkerSrc(Sources::new()))
         .push(Directive::FrameSrc(
