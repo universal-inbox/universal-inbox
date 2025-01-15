@@ -154,26 +154,21 @@ async fn test_sync_todoist_slack_task(
         "[🔴  Test title 🔴...](https://slack.com/archives/C05XXX/p1234567890)".to_string(),
         Some(
             r#"🔴  *Test title* 🔴
-
-
 - list 1
 - list 2
-
 
 1. number 1
 1. number 2
 
-
 > quote
-
 
 
 ```
 $ echo Hello world
 ```
-
-_Some_ `formatted` ~text~.
-
+\
+_Some_ `formatted` ~text~.\
+\
 Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#test
 👋![:unknown2:](https://emoji.com/unknown2.png)"#
                 .to_string(),
@@ -372,26 +367,21 @@ async fn test_patch_slack_task_status_as_done(
         "[🔴  Test title 🔴...](https://example.com/)".to_string(),
         Some(
             r#"🔴  *Test title* 🔴
-
-
 - list 1
 - list 2
-
 
 1. number 1
 1. number 2
 
-
 > quote
-
 
 
 ```
 $ echo Hello world
 ```
-
-_Some_ `formatted` ~text~.
-
+\
+_Some_ `formatted` ~text~.\
+\
 Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#test
 👋![:unknown2:](https://emoji.com/unknown2.png)"#
                 .to_string(),

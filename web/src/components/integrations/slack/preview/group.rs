@@ -5,7 +5,7 @@ use dioxus_free_icons::{icons::bs_icons::BsArrowUpRightSquare, Icon};
 
 use universal_inbox::{third_party::integrations::slack::SlackGroupDetails, HasHtmlUrl};
 
-use crate::components::{integrations::slack::SlackTeamDisplay, markdown::Markdown};
+use crate::components::{integrations::slack::SlackTeamDisplay, markdown::SlackMarkdown};
 
 #[component]
 pub fn SlackGroupPreview(
@@ -43,7 +43,7 @@ pub fn SlackGroupPreview(
                     href: "{slack_group().get_html_url()}",
                     target: "_blank",
 
-                    Markdown { text: "{title}" }
+                    SlackMarkdown { text: "{title}" }
                 }
                 a {
                     class: "flex-none",

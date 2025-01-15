@@ -8,7 +8,7 @@ use universal_inbox::third_party::integrations::slack::{SlackMessageRender, Slac
 
 use crate::components::{
     integrations::slack::{SlackMessageActorDisplay, SlackTeamDisplay},
-    markdown::Markdown,
+    markdown::SlackMarkdown,
 };
 
 #[component]
@@ -175,7 +175,7 @@ fn SlackThreadMessageDisplay(
                 }
             }
 
-            Markdown { text }
+            SlackMarkdown { text }
         }
     }
 }
