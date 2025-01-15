@@ -23,9 +23,32 @@ pub fn markdown_to_html(text: &str) -> String {
     markdown_opts.extension.shortcodes = true;
     markdown_opts.render.escape = true;
 
-    let html = md2html(text, &markdown_opts);
-    let re = Regex::new(r"@(@[^@]+)@").unwrap();
-    re.replace_all(&html, "<span class=\"text-primary\">$1</span>")
+    md2html(text, &markdown_opts)
+}
+
+#[component]
+pub fn SlackMarkdown(text: String, class: Option<String>) -> Element {
+    let class = class.unwrap_or("dark:prose-invert".to_string());
+    rsx! {
+        p {
+            class: "w-full max-w-full prose prose-sm {class}",
+            dangerous_inner_html: "{markdown_to_html_with_slack_references(&text)}"
+        }
+    }
+}
+
+pub fn markdown_to_html_with_slack_references(text: &str) -> String {
+    let html = markdown_to_html(text);
+    let slack_reference_re = Regex::new(r"@(@[^@]+)@").unwrap();
+    let html = slack_reference_re
+        .replace_all(&html, "<span class=\"text-primary\">$1</span>")
+        .to_string();
+    let slack_emoji_re = Regex::new(r#"<img src="https://emoji.slack-edge.com([^>]*)>"#).unwrap();
+    slack_emoji_re
+        .replace_all(
+            &html,
+            r#"<img class="slack-emoji" src="https://emoji.slack-edge.com$1>"#,
+        )
         .to_string()
 }
 
@@ -33,6 +56,19 @@ pub fn markdown_to_html(text: &str) -> String {
 mod markdown_to_html_tests {
     use super::*;
     use wasm_bindgen_test::*;
+
+    mod text {
+        use super::*;
+        use pretty_assertions::assert_eq;
+
+        #[wasm_bindgen_test]
+        fn test_markdown_to_html_text_with_newline() {
+            assert_eq!(
+                markdown_to_html("Test1\\\nTest2"),
+                "<p>Test1<br />\nTest2</p>\n".to_string()
+            );
+        }
+    }
 
     mod quoted_text {
         use super::*;
@@ -90,5 +126,34 @@ mod markdown_to_html_tests {
                 "<pre><code>Test1\nTest2\n</code></pre>\n".to_string()
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod markdown_to_html_with_slack_references_tests {
+    use super::*;
+    use pretty_assertions::assert_eq;
+    use wasm_bindgen_test::*;
+
+    #[wasm_bindgen_test]
+    fn test_markdown_to_html_with_user_slack_reference() {
+        assert_eq!(
+            markdown_to_html_with_slack_references("@@user@"),
+            r#"<p><span class="text-primary">@user</span></p>
+"#
+            .to_string()
+        );
+    }
+
+    #[wasm_bindgen_test]
+    fn test_markdown_to_html_with_emoji_slack_reference() {
+        assert_eq!(
+            markdown_to_html_with_slack_references(
+                "![:custom_emoji:](https://emoji.slack-edge.com/custom_emoji.png)"
+            ),
+            r#"<p><img class="slack-emoji" src="https://emoji.slack-edge.com/custom_emoji.png" alt=":custom_emoji:" /></p>
+"#
+                .to_string()
+        );
     }
 }

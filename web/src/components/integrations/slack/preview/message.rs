@@ -7,7 +7,7 @@ use universal_inbox::third_party::integrations::slack::SlackMessageDetails;
 
 use crate::components::{
     integrations::slack::{SlackMessageActorDisplay, SlackTeamDisplay},
-    markdown::Markdown,
+    markdown::SlackMarkdown,
     CardWithHeaders,
 };
 
@@ -47,7 +47,7 @@ pub fn SlackMessagePreview(
                     href: "{slack_message().url}",
                     target: "_blank",
 
-                    Markdown { text: "{title}" }
+                    SlackMarkdown { text: "{title}" }
                 }
                 a {
                     class: "flex-none",
@@ -81,7 +81,7 @@ fn SlackMessageDisplay(slack_message: ReadOnlySignal<SlackMessageDetails>) -> El
                 }
             ],
 
-            Markdown { text }
+            SlackMarkdown { text }
         }
     }
 }
