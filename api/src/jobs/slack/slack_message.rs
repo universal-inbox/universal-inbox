@@ -186,7 +186,6 @@ async fn handle_slack_message_push_event_if_enabled<'a>(
                 } else {
                     existing_third_party_item
                 },
-                integration_connection,
                 user_id,
             )
             .await?;

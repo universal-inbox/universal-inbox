@@ -168,8 +168,6 @@ mod webhook {
     }
 
     #[rstest]
-    #[case::single_subscribed_user(true)]
-    #[case::multiple_subscribed_users(false)]
     #[tokio::test]
     async fn test_receive_slack_message_in_known_thread_from_known_user(
         settings: Settings,
@@ -177,16 +175,11 @@ mod webhook {
         mut nango_slack_connection: Box<NangoConnection>,
         mut slack_push_message_in_thread_event: Box<SlackPushEvent>,
         mut slack_thread: Box<SlackThread>,
-        #[case] single_subscribed_user: bool,
     ) {
         let app = tested_app_with_local_auth.await;
         // `slack_thread` contains 2 messages from 2 different users:
         // - first (read) message from user U01
         // - second (unread) message from user U02 (this message is also the one that is received in the event)
-        // When `single_subscribed_user` is true, U02 will be the only user subsribed
-        // to the thread and the message will be ignored as U02 is the sender of the unread message.
-        // When `single_subscribed_user` is false, both users will be subscribed to the thread
-        // and the message will be processed.
         nango_slack_connection.credentials.raw = json !({
             "authed_user": { "id": "U02", "access_token": "slack_test_user_access_token" },
             "team": { "id": "T01" }
@@ -230,41 +223,6 @@ mod webhook {
         )
         .await;
 
-        if !single_subscribed_user {
-            let (_, other_user) = create_user_and_login(
-                &app,
-                "Jane",
-                "Doe",
-                "jane@doe.net".parse().unwrap(),
-                "password",
-            )
-            .await;
-
-            nango_slack_connection.credentials.raw = json !({
-                "authed_user": { "id": "U01", "access_token": "slack_other_user_access_token" },
-                "team": { "id": "T01" }
-            });
-            let other_slack_integration_connection = create_and_mock_integration_connection(
-                &app,
-                other_user.id,
-                &settings.oauth2.nango_secret_key,
-                IntegrationConnectionConfig::Slack(SlackConfig::enabled_as_notifications()),
-                &settings,
-                nango_slack_connection,
-                None,
-                None,
-            )
-            .await;
-
-            create_notification_from_slack_thread(
-                &app,
-                &slack_thread,
-                other_user.id,
-                other_slack_integration_connection.id,
-            )
-            .await;
-        }
-
         let response = create_resource_response(
             &client,
             &app.api_address,
@@ -274,11 +232,7 @@ mod webhook {
         .await;
 
         assert_eq!(response.status(), 200);
-        if single_subscribed_user {
-            assert_message_ignored(&app).await;
-        } else {
-            assert_message_processed(&app).await;
-        }
+        assert_message_processed(&app).await;
     }
 
     async fn assert_message_ignored(app: &TestedApp) {
@@ -299,11 +253,8 @@ mod webhook {
 }
 
 mod job {
-    use crate::helpers::third_party::find_third_party_items_for_user_id;
-
     use super::*;
     use pretty_assertions::assert_eq;
-    use universal_inbox::third_party::item::ThirdPartyItemKind;
 
     #[fixture]
     fn message_event(slack_push_message_event: Box<SlackPushEvent>) -> Box<SlackPushEventCallback> {
@@ -539,13 +490,6 @@ mod job {
         )
         .await;
 
-        let slack_message_id = "1732535291.911209";
-        let _slack_get_chat_permalink_mock = mock_slack_get_chat_permalink(
-            &app.slack_mock_server,
-            "C05XXX",
-            slack_message_id,
-            "slack_get_chat_permalink_response.json",
-        );
         let slack_fetch_user_mock1 = mock_slack_fetch_user(
             &app.slack_mock_server,
             "U01",
@@ -557,7 +501,8 @@ mod job {
             "slack_fetch_user_response.json",
         );
 
-        let slack_fetch_thread_mock = mock_slack_fetch_thread(
+        let slack_message_id = "1732535291.911209"; // First message
+        let slack_fetch_thread_mock_u01 = mock_slack_fetch_thread(
             &app.slack_mock_server,
             "C05XXX",
             slack_message_id,
@@ -565,7 +510,32 @@ mod job {
             "slack_fetch_thread_response.json",
             true,
             None,
+            "slack_test_user_access_token",
         );
+        mock_slack_get_chat_permalink(
+            &app.slack_mock_server,
+            "C05XXX",
+            slack_message_id,
+            "slack_get_chat_permalink_response.json",
+        );
+
+        let slack_fetch_thread_mock_u02 = mock_slack_fetch_thread(
+            &app.slack_mock_server,
+            "C05XXX",
+            slack_message_id,
+            slack_message_id,
+            "slack_fetch_thread_response.json",
+            true,
+            Some(1),
+            "slack_other_user_access_token",
+        );
+        mock_slack_get_chat_permalink(
+            &app.slack_mock_server,
+            "C05XXX",
+            "1729779674.478289",
+            "slack_get_chat_permalink_response.json",
+        );
+
         let slack_fetch_channel_mock = mock_slack_fetch_channel(
             &app.slack_mock_server,
             "C05XXX",
@@ -596,7 +566,8 @@ mod job {
 
         slack_fetch_user_mock1.assert_hits(2);
         slack_fetch_user_mock2.assert_hits(2);
-        slack_fetch_thread_mock.assert_hits(2);
+        slack_fetch_thread_mock_u01.assert_hits(1);
+        slack_fetch_thread_mock_u02.assert_hits(1);
         slack_fetch_channel_mock.assert_hits(1);
         slack_fetch_team_mock.assert_hits(1);
         slack_list_users_in_usergroup_mock.assert_hits(1);
@@ -611,14 +582,8 @@ mod job {
             false,
         )
         .await;
-        // the message does not create a notification for U02 (ie. the sender)
-        // but only for the other known user U01
-        assert_eq!(notifications_u02.len(), 0);
-        // but a ThirdPartyItem is still created for U02
-        let third_party_items_u02 =
-            find_third_party_items_for_user_id(&app, ThirdPartyItemKind::SlackThread, user_u02.id)
-                .await;
-        assert_eq!(third_party_items_u02.len(), 1);
+        assert_eq!(notifications_u02.len(), 1);
+        assert_eq!(notifications_u02[0].status, NotificationStatus::Deleted);
 
         let notifications_u01 = list_notifications(
             &client_u01,
@@ -697,7 +662,7 @@ mod job {
         .await;
 
         let slack_message_id = "1732535291.911209";
-        let _slack_get_chat_permalink_mock = mock_slack_get_chat_permalink(
+        mock_slack_get_chat_permalink(
             &app.app.slack_mock_server,
             "C05XXX",
             slack_message_id,
@@ -730,6 +695,7 @@ mod job {
             },
             true,
             None,
+            "slack_test_user_access_token",
         );
         let slack_fetch_channel_mock = mock_slack_fetch_channel(
             &app.app.slack_mock_server,
@@ -924,7 +890,8 @@ mod job {
             &slack_message_id,
             "slack_fetch_thread_response.json",
             subscribed,
-            Some(0), // 1 of 2 messages read
+            Some(0),
+            "slack_test_user_access_token",
         );
         let slack_fetch_channel_mock = mock_slack_fetch_channel(
             &app.app.slack_mock_server,
@@ -956,7 +923,7 @@ mod job {
         assert_eq!(
             existing_notification.status,
             if was_subscribed {
-                NotificationStatus::Read
+                NotificationStatus::Deleted
             } else {
                 NotificationStatus::Unsubscribed
             }
@@ -1044,9 +1011,11 @@ mod job {
         // `slack_thread` contains 2 messages from 2 different users:
         // - first (read) message from user U01
         // - second (unread) message from user U02
-        // Both users have read the first message and when receiving the second message
-        // as an event, only U01 will get its notification updated: marked as unread
-        // Creating user U02 and its Slack connection
+        //
+        // U01 has already read the first message and when receiving the second message,
+        // the notification will be marked as unread.
+        // U02 has not read the first message and when receiving the second message,
+        // as they are the sender, the notification will be marked as read.
         nango_slack_connection.credentials.raw = json !({
             "authed_user": { "id": "U02", "access_token": "slack_other_user_access_token" },
             "team": { "id": "T01" }
@@ -1097,14 +1066,15 @@ mod job {
             "U02",
             "slack_fetch_user_response.json",
         );
-        let slack_fetch_thread_mock = mock_slack_fetch_thread(
+        let slack_fetch_thread_mock_u02 = mock_slack_fetch_thread(
             &app.slack_mock_server,
             "C05XXX",
             &slack_root_message_id,
             &slack_message_id,
             "slack_fetch_thread_response.json",
             true,
-            Some(0), // 1 of 2 messages read
+            Some(1),
+            "slack_other_user_access_token",
         );
         let slack_fetch_channel_mock = mock_slack_fetch_channel(
             &app.slack_mock_server,
@@ -1116,25 +1086,13 @@ mod job {
             "T01",
             "slack_fetch_team_response.json",
         );
-
-        let slack_first_unread_message_id = slack_thread.messages.last().origin.ts.clone();
-        slack_thread.subscribed = true;
-        slack_thread.last_read = Some(slack_first_unread_message_id.clone());
-        let _slack_get_chat_permalink_mock = mock_slack_get_chat_permalink(
+        let slack_first_unread_message_id_u02 = slack_thread.messages.first().origin.ts.clone();
+        mock_slack_get_chat_permalink(
             &app.slack_mock_server,
             "C05XXX",
-            slack_first_unread_message_id.as_ref(),
+            slack_first_unread_message_id_u02.as_ref(),
             "slack_get_chat_permalink_response.json",
         );
-
-        let existing_notification_u02 = create_notification_from_slack_thread(
-            &app,
-            &slack_thread,
-            user_u02.id,
-            slack_integration_connection_u02.id,
-        )
-        .await;
-        assert_eq!(existing_notification_u02.status, NotificationStatus::Read);
 
         // Creating user U01 and its Slack connection
         let (client_u01, user_u01) = create_user_and_login(
@@ -1160,6 +1118,26 @@ mod job {
             None,
         )
         .await;
+        let slack_first_unread_message_id_u01 = slack_thread.messages.last().origin.ts.clone();
+        mock_slack_get_chat_permalink(
+            &app.slack_mock_server,
+            "C05XXX",
+            slack_first_unread_message_id_u01.as_ref(),
+            "slack_get_chat_permalink_response.json",
+        );
+        let slack_fetch_thread_mock_u01 = mock_slack_fetch_thread(
+            &app.slack_mock_server,
+            "C05XXX",
+            &slack_root_message_id,
+            &slack_message_id,
+            "slack_fetch_thread_response.json",
+            true,
+            None,
+            "slack_test_user_access_token",
+        );
+
+        slack_thread.subscribed = true;
+        slack_thread.last_read = Some(slack_first_unread_message_id_u01.clone());
         let existing_notification_u01 = create_notification_from_slack_thread(
             &app,
             &slack_thread,
@@ -1167,7 +1145,21 @@ mod job {
             slack_integration_connection_u01.id,
         )
         .await;
-        assert_eq!(existing_notification_u01.status, NotificationStatus::Read);
+        assert_eq!(
+            existing_notification_u01.status,
+            NotificationStatus::Deleted
+        );
+
+        slack_thread.subscribed = true;
+        slack_thread.last_read = None;
+        let existing_notification_u02 = create_notification_from_slack_thread(
+            &app,
+            &slack_thread,
+            user_u02.id,
+            slack_integration_connection_u02.id,
+        )
+        .await;
+        assert_eq!(existing_notification_u02.status, NotificationStatus::Unread);
 
         handle_slack_message_push_event(
             &mut transaction,
@@ -1188,7 +1180,8 @@ mod job {
 
         slack_fetch_user_mock1.assert_hits(2);
         slack_fetch_user_mock2.assert_hits(2);
-        slack_fetch_thread_mock.assert_hits(2);
+        slack_fetch_thread_mock_u01.assert_hits(1);
+        slack_fetch_thread_mock_u02.assert_hits(1);
         slack_fetch_channel_mock.assert_hits(1);
         slack_fetch_team_mock.assert_hits(1);
 
@@ -1203,12 +1196,7 @@ mod job {
         )
         .await;
         assert_eq!(notifications_u02.len(), 1);
-        // U02 is the sender of the message and should not have its notification updated
-        assert_eq!(
-            notifications_u02[0].updated_at,
-            existing_notification_u02.updated_at
-        );
-        assert_eq!(notifications_u02[0].status, NotificationStatus::Read);
+        assert_eq!(notifications_u02[0].status, NotificationStatus::Deleted);
 
         let notifications_u01 = list_notifications(
             &client_u01,
@@ -1221,10 +1209,6 @@ mod job {
         )
         .await;
         assert_eq!(notifications_u01.len(), 1);
-        assert_ne!(
-            notifications_u01[0].updated_at,
-            existing_notification_u01.updated_at
-        );
         assert_eq!(notifications_u01[0].status, NotificationStatus::Unread);
     }
 }

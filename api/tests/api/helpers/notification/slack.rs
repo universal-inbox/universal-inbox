@@ -195,6 +195,7 @@ pub fn mock_slack_fetch_reply<'a>(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn mock_slack_fetch_thread<'a>(
     slack_mock_server: &'a MockServer,
     channel_id: &'a str,
@@ -203,6 +204,7 @@ pub fn mock_slack_fetch_thread<'a>(
     fixture_response_file: &'a str,
     subscribed: bool,
     last_read_message_index: Option<usize>,
+    access_token: &'a str,
 ) -> Mock<'a> {
     let mut json_body: Value = load_json_fixture_file(fixture_response_file);
     json_body["messages"][0]["subscribed"] = Value::Bool(subscribed);
@@ -218,6 +220,7 @@ pub fn mock_slack_fetch_thread<'a>(
 
     slack_mock_server.mock(|when, then| {
         when.method(GET)
+            .header("authorization", format!("Bearer {access_token}"))
             .path("/conversations.replies")
             .query_param("channel", channel_id)
             .query_param("ts", first_message_id)
