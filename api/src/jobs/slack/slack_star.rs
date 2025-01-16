@@ -78,7 +78,7 @@ pub async fn handle_slack_star_push_event<'a>(
         } => notification_service
             .read()
             .await
-            .save_notification_from_event(executor, event, None, integration_connection, user_id)
+            .save_notification_from_event(executor, event, None, user_id)
             .await
             .map(|_| ()),
 

@@ -1788,7 +1788,9 @@ impl ThirdPartyNotificationSourceService<SlackThread> for SlackService {
             NotificationStatus::Unsubscribed
         } else {
             match &source.last_read {
-                Some(last_read) if *last_read == last_message.origin.ts => NotificationStatus::Read,
+                Some(last_read) if *last_read == last_message.origin.ts => {
+                    NotificationStatus::Deleted
+                }
                 _ => NotificationStatus::Unread,
             }
         };

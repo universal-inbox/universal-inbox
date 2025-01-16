@@ -37,7 +37,6 @@ pub mod mailer;
 pub mod notification;
 pub mod rest;
 pub mod task;
-pub mod third_party;
 pub mod user;
 
 pub struct TestedApp {

@@ -1,7 +1,6 @@
 use anyhow::anyhow;
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
-use slack_morphism::SlackUserId;
 use sqlx::{postgres::PgRow, types::Json, FromRow, Postgres, QueryBuilder, Row, Transaction};
 use tracing::debug;
 use uuid::Uuid;
@@ -40,7 +39,6 @@ pub trait ThirdPartyItemRepository {
         executor: &mut Transaction<'a, Postgres>,
         kind: ThirdPartyItemKind,
         source_id: &str,
-        excluding_slack_user_id: Option<SlackUserId>,
     ) -> Result<bool, UniversalInboxError>;
 
     async fn find_third_party_items_for_source_id<'a>(
@@ -316,7 +314,6 @@ impl ThirdPartyItemRepository for Repository {
         fields(
             kind = kind.to_string(),
             source_id = source_id,
-            excluding_slack_user_id = excluding_slack_user_id.as_ref().map(|id| id.to_string())
         ),
         err
     )]
@@ -325,20 +322,12 @@ impl ThirdPartyItemRepository for Repository {
         executor: &mut Transaction<'a, Postgres>,
         kind: ThirdPartyItemKind,
         source_id: &str,
-        excluding_slack_user_id: Option<SlackUserId>,
     ) -> Result<bool, UniversalInboxError> {
         let mut query_builder = QueryBuilder::new("SELECT count(*) FROM third_party_item");
-        if excluding_slack_user_id.is_some() {
-            query_builder.push(" LEFT JOIN integration_connection ON third_party_item.integration_connection_id = integration_connection.id");
-        }
         query_builder.push(" WHERE source_id = ");
         query_builder.push_bind(source_id);
         query_builder.push(" AND kind::TEXT = ");
         query_builder.push_bind(kind.to_string());
-        if let Some(slack_user_id) = excluding_slack_user_id {
-            query_builder.push(" AND integration_connection.provider_user_id != ");
-            query_builder.push_bind(slack_user_id.to_string());
-        }
 
         let count: Option<i64> = query_builder
             .build_query_scalar()
