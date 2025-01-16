@@ -8,7 +8,7 @@ use futures::future;
 use opentelemetry::global;
 use sqlx::{
     postgres::{PgConnectOptions, PgPoolOptions},
-    ConnectOptions,
+    ConnectOptions, Executor,
 };
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
@@ -210,6 +210,13 @@ async fn main() -> std::io::Result<()> {
     let pool = Arc::new(
         PgPoolOptions::new()
             .max_connections(settings.database.max_connections)
+            .after_connect(|conn, _meta| {
+                Box::pin(async move {
+                    conn.execute("SET default_transaction_isolation TO 'repeatable read'")
+                        .await?;
+                    Ok(())
+                })
+            })
             .connect_with(options)
             .await
             .expect("Failed to connect to Postgresql"),
