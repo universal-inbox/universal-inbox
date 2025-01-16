@@ -66,7 +66,7 @@ fn get_user_name_and_avatar(user: &SlackUserProfile) -> (String, Option<Url>) {
         SlackUserProfile {
             display_name: Some(name),
             ..
-        } => name.clone(),
+        } if !name.is_empty() => name.clone(),
         SlackUserProfile {
             real_name: Some(name),
             ..

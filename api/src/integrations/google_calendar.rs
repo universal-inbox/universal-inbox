@@ -73,7 +73,7 @@ impl GoogleCalendarService {
 
     pub async fn mock_all(mock_server: &MockServer) {
         Mock::given(method("GET"))
-            .and(path("/calendars/[^/]*/events?iCalUID=[^/]*"))
+            .and(path("/calendars/[^/]*/events[^/]*"))
             .respond_with(ResponseTemplate::new(404))
             .mount(mock_server)
             .await;
