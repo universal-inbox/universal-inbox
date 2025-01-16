@@ -2,7 +2,7 @@
 
 use dioxus::prelude::*;
 use dioxus_free_icons::{icons::bs_icons::BsArrowUpRightSquare, Icon};
-use slack_morphism::{SlackHistoryMessage, SlackMessageSender};
+use slack_morphism::SlackHistoryMessage;
 
 use universal_inbox::third_party::integrations::slack::{SlackMessageRender, SlackThread};
 
@@ -148,18 +148,7 @@ fn SlackThreadMessageDisplay(
     slack_thread: ReadOnlySignal<SlackThread>,
 ) -> Element {
     let posted_at = message().origin.ts.to_date_time_opt();
-    let sender_id = match message().sender {
-        SlackMessageSender {
-            user: Some(ref user_id),
-            ..
-        } => Some(user_id.to_string()),
-        SlackMessageSender {
-            bot_id: Some(ref bot_id),
-            ..
-        } => Some(bot_id.to_string()),
-        _ => None,
-    };
-    let sender = sender_id.and_then(|id| slack_thread().sender_profiles.get(&id).cloned());
+    let sender = message().get_sender(&slack_thread().sender_profiles);
     let text = message().render_content(slack_thread().references.clone(), true);
 
     rsx! {

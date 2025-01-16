@@ -6,7 +6,7 @@ use dioxus_free_icons::{
     icons::bs_icons::{BsChatText, BsSlack},
     Icon,
 };
-use slack_morphism::{SlackChannelInfo, SlackMessageSender};
+use slack_morphism::SlackChannelInfo;
 
 use universal_inbox::{
     notification::NotificationWithTask,
@@ -205,18 +205,7 @@ fn SlackNotificationListItemDetails(notification: ReadOnlySignal<NotificationWit
 pub fn SlackThreadListItemDetails(slack_thread: ReadOnlySignal<SlackThread>) -> Element {
     let slack_thread = slack_thread();
     let first_unread_message = slack_thread.first_unread_message();
-    let sender_id = match &first_unread_message.sender {
-        SlackMessageSender {
-            user: Some(ref user_id),
-            ..
-        } => Some(user_id.to_string()),
-        SlackMessageSender {
-            bot_id: Some(ref bot_id),
-            ..
-        } => Some(bot_id.to_string()),
-        _ => None,
-    };
-    let sender = sender_id.and_then(|id| slack_thread.sender_profiles.get(&id).cloned());
+    let sender = first_unread_message.get_sender(&slack_thread.sender_profiles);
 
     rsx! {
         SlackTeamDisplay { team: slack_thread.team }

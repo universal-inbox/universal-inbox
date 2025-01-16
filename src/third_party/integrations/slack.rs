@@ -323,6 +323,10 @@ impl HasHtmlUrl for SlackMessageDetails {
 pub trait SlackMessageRender {
     fn render_content(&self, references: Option<SlackReferences>, as_markdown: bool) -> String;
     fn render_title(&self, references: Option<SlackReferences>) -> String;
+    fn get_sender(
+        &self,
+        sender_profiles: &HashMap<String, SlackMessageSenderDetails>,
+    ) -> Option<SlackMessageSenderDetails>;
 }
 
 impl SlackMessageRender for SlackHistoryMessage {
@@ -399,6 +403,34 @@ impl SlackMessageRender for SlackHistoryMessage {
         }
 
         truncate_with_ellipse(&self.render_content(references, false), 120, "...", true)
+    }
+
+    fn get_sender(
+        &self,
+        sender_profiles: &HashMap<String, SlackMessageSenderDetails>,
+    ) -> Option<SlackMessageSenderDetails> {
+        if let Some(user_profile) = self.sender.user_profile.as_ref() {
+            return Some(SlackMessageSenderDetails::User(Box::new(
+                user_profile.clone(),
+            )));
+        }
+        if let Some(bot_profile) = self.sender.bot_profile.as_ref() {
+            return Some(SlackMessageSenderDetails::Bot(Box::new(
+                bot_profile.clone(),
+            )));
+        }
+        let sender_id = match self.sender {
+            SlackMessageSender {
+                user: Some(ref user_id),
+                ..
+            } => Some(user_id.to_string()),
+            SlackMessageSender {
+                bot_id: Some(ref bot_id),
+                ..
+            } => Some(bot_id.to_string()),
+            _ => None,
+        };
+        sender_id.and_then(|id| sender_profiles.get(&id).cloned())
     }
 }
 
