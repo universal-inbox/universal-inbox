@@ -70,6 +70,56 @@ mod markdown_to_html_tests {
         }
     }
 
+    mod ordered_list {
+        use super::*;
+        use pretty_assertions::assert_eq;
+
+        #[wasm_bindgen_test]
+        fn test_markdown_to_html_nested_list() {
+            assert_eq!(
+                markdown_to_html("1. Test1\n   1. Test1.1\n      1. Test1.1.1"),
+                r#"<ol>
+<li>Test1
+<ol>
+<li>Test1.1
+<ol>
+<li>Test1.1.1</li>
+</ol>
+</li>
+</ol>
+</li>
+</ol>
+"#
+                .to_string()
+            );
+        }
+    }
+
+    mod bullet_list {
+        use super::*;
+        use pretty_assertions::assert_eq;
+
+        #[wasm_bindgen_test]
+        fn test_markdown_to_html_nested_list() {
+            assert_eq!(
+                markdown_to_html("- Test1\n  - Test1.1\n    - Test1.1.1"),
+                r#"<ul>
+<li>Test1
+<ul>
+<li>Test1.1
+<ul>
+<li>Test1.1.1</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+"#
+                .to_string()
+            );
+        }
+    }
+
     mod quoted_text {
         use super::*;
         use pretty_assertions::assert_eq;

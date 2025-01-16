@@ -18,6 +18,8 @@
     top: 1.2rem;
 }
 
+ol > li::marker { content: counters(list-item, '.') '. '; }
+
 #HW_badge_cont {
   position: absolute !important;
   width: 48px !important;
