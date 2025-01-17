@@ -212,7 +212,7 @@ async fn main() -> std::io::Result<()> {
             .max_connections(settings.database.max_connections)
             .after_connect(|conn, _meta| {
                 Box::pin(async move {
-                    conn.execute("SET default_transaction_isolation TO 'repeatable read'")
+                    conn.execute("SET default_transaction_isolation TO 'read committed'")
                         .await?;
                     Ok(())
                 })
