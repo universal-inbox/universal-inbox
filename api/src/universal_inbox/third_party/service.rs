@@ -280,14 +280,25 @@ impl ThirdPartyItemService {
         third_party_item: Box<ThirdPartyItem>,
     ) -> Result<UpsertStatus<Box<ThirdPartyItem>>, UniversalInboxError> {
         if let Some(ref source_third_party_item) = third_party_item.source_item {
-            Box::pin(
+            let upsert_status = Box::pin(
                 self.create_or_update_third_party_item(executor, source_third_party_item.clone()),
             )
             .await?;
+            let source_third_party_item = upsert_status.value();
+            self.repository
+                .create_or_update_third_party_item(
+                    executor,
+                    Box::new(ThirdPartyItem {
+                        source_item: Some(source_third_party_item),
+                        ..*third_party_item
+                    }),
+                )
+                .await
+        } else {
+            self.repository
+                .create_or_update_third_party_item(executor, third_party_item)
+                .await
         }
-        self.repository
-            .create_or_update_third_party_item(executor, third_party_item)
-            .await
     }
 
     #[tracing::instrument(
