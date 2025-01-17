@@ -753,6 +753,30 @@ impl IntegrationConnectionService {
         level = "debug",
         skip_all,
         fields(
+            integration_provider_kind = integration_provider_kind.to_string(),
+            provider_user_ids,
+        ),
+        err
+    )]
+    pub async fn find_integration_connection_per_provider_user_ids<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        integration_provider_kind: IntegrationProviderKind,
+        provider_user_ids: Vec<String>,
+    ) -> Result<Vec<IntegrationConnection>, UniversalInboxError> {
+        self.repository
+            .find_integration_connection_per_provider_user_ids(
+                executor,
+                integration_provider_kind,
+                provider_user_ids,
+            )
+            .await
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
             integration_provider_kind = integration_provider_kind.map(|id| id.to_string()),
             user.id = for_user_id.map(|id| id.to_string())
         ),

@@ -82,22 +82,20 @@ pub async fn handle_slack_message_push_event<'a>(
         }
     };
 
-    let mut handled_integration_connection_ids = vec![];
-    for provider_user_id in provider_user_ids {
-        let Some(integration_connection) = integration_connection_service
-            .read()
-            .await
-            .get_integration_connection_per_provider_user_id(
-                executor,
-                IntegrationProviderKind::Slack,
-                provider_user_id.clone(),
-            )
-            .await?
-        else {
-            return Ok(());
-        };
-
-        handled_integration_connection_ids.push(integration_connection.id);
+    let integration_connections = integration_connection_service
+        .read()
+        .await
+        .find_integration_connection_per_provider_user_ids(
+            executor,
+            IntegrationProviderKind::Slack,
+            provider_user_ids,
+        )
+        .await?;
+    let handled_integration_connection_ids = integration_connections
+        .iter()
+        .map(|integration_connection| integration_connection.id)
+        .collect::<Vec<_>>();
+    for integration_connection in integration_connections {
         handle_slack_message_push_event_if_enabled(
             executor,
             event,
@@ -124,23 +122,21 @@ pub async fn handle_slack_message_push_event<'a>(
     for third_party_item in third_party_items.iter() {
         if !handled_integration_connection_ids.contains(&third_party_item.integration_connection_id)
         {
-            let Some(integration_connection) = integration_connection_service
+            if let Some(integration_connection) = integration_connection_service
                 .read()
                 .await
                 .get_integration_connection(executor, third_party_item.integration_connection_id)
                 .await?
-            else {
-                return Ok(());
-            };
-
-            handle_slack_message_push_event_if_enabled(
-                executor,
-                event,
-                integration_connection,
-                Some(third_party_item),
-                notification_service.clone(),
-            )
-            .await?;
+            {
+                handle_slack_message_push_event_if_enabled(
+                    executor,
+                    event,
+                    integration_connection,
+                    Some(third_party_item),
+                    notification_service.clone(),
+                )
+                .await?;
+            }
         }
     }
 

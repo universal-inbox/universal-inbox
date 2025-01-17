@@ -60,6 +60,13 @@ pub trait IntegrationConnectionRepository {
         provider_user_id: String,
     ) -> Result<Option<IntegrationConnection>, UniversalInboxError>;
 
+    async fn find_integration_connection_per_provider_user_ids<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        integration_provider_kind: IntegrationProviderKind,
+        provider_user_ids: Vec<String>,
+    ) -> Result<Vec<IntegrationConnection>, UniversalInboxError>;
+
     async fn get_integration_connection_per_context<'a>(
         &self,
         executor: &mut Transaction<'a, Postgres>,
@@ -342,6 +349,71 @@ impl IntegrationConnectionRepository for Repository {
             })?;
 
         row.map(|r| r.try_into()).transpose()
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            integration_provider_kind = integration_provider_kind.to_string(),
+            provider_user_ids
+        ),
+        err
+    )]
+    async fn find_integration_connection_per_provider_user_ids<'a>(
+        &self,
+        executor: &mut Transaction<'a, Postgres>,
+        integration_provider_kind: IntegrationProviderKind,
+        provider_user_ids: Vec<String>,
+    ) -> Result<Vec<IntegrationConnection>, UniversalInboxError> {
+        let rows = sqlx::query_as!(
+            IntegrationConnectionRow,
+            r#"
+                SELECT
+                  integration_connection.id,
+                  integration_connection.user_id,
+                  integration_connection.provider_user_id,
+                  integration_connection.connection_id,
+                  integration_connection.status as "status: _",
+                  integration_connection.failure_message,
+                  integration_connection.created_at,
+                  integration_connection.updated_at,
+                  integration_connection.last_notifications_sync_scheduled_at,
+                  integration_connection.last_notifications_sync_started_at,
+                  integration_connection.last_notifications_sync_completed_at,
+                  integration_connection.last_notifications_sync_failure_message,
+                  integration_connection.notifications_sync_failures,
+                  integration_connection.last_tasks_sync_scheduled_at,
+                  integration_connection.last_tasks_sync_started_at,
+                  integration_connection.last_tasks_sync_completed_at,
+                  integration_connection.last_tasks_sync_failure_message,
+                  integration_connection.tasks_sync_failures,
+                  integration_connection_config.config as "config: Json<IntegrationConnectionConfig>",
+                  integration_connection.context as "context: Json<IntegrationConnectionContext>",
+                  integration_connection.registered_oauth_scopes as "registered_oauth_scopes: Json<Vec<String>>"
+                FROM integration_connection
+                INNER JOIN integration_connection_config
+                  ON integration_connection.id = integration_connection_config.integration_connection_id
+                WHERE
+                    integration_connection.provider_user_id = ANY($1)
+                    AND integration_connection.provider_kind::TEXT = $2
+                    AND integration_connection.status::TEXT = 'Validated'
+            "#,
+            &provider_user_ids[..],
+            integration_provider_kind.to_string()
+        )
+            .fetch_all(&mut **executor)
+            .await
+            .map_err(|err| {
+                let message = format!(
+                    "Failed to fetch integration connection for {integration_provider_kind} from storage: {err}"
+                );
+                UniversalInboxError::DatabaseError { source: err, message }
+            })?;
+
+        rows.iter()
+            .map(|r| r.try_into())
+            .collect::<Result<Vec<IntegrationConnection>, UniversalInboxError>>()
     }
 
     #[tracing::instrument(level = "debug", skip_all, fields(context), err)]
@@ -1210,16 +1282,24 @@ impl TryFrom<&PgIntegrationConnectionStatus> for IntegrationConnectionStatus {
 
 impl TryFrom<IntegrationConnectionRow> for IntegrationConnection {
     type Error = UniversalInboxError;
+
     fn try_from(row: IntegrationConnectionRow) -> Result<Self, Self::Error> {
+        (&row).try_into()
+    }
+}
+
+impl TryFrom<&IntegrationConnectionRow> for IntegrationConnection {
+    type Error = UniversalInboxError;
+    fn try_from(row: &IntegrationConnectionRow) -> Result<Self, Self::Error> {
         let status = (&row.status).try_into()?;
 
         Ok(IntegrationConnection {
             id: row.id.into(),
             user_id: row.user_id.into(),
-            provider_user_id: row.provider_user_id,
+            provider_user_id: row.provider_user_id.clone(),
             connection_id: row.connection_id.into(),
             status,
-            failure_message: row.failure_message,
+            failure_message: row.failure_message.clone(),
             created_at: DateTime::from_naive_utc_and_offset(row.created_at, Utc),
             updated_at: DateTime::from_naive_utc_and_offset(row.updated_at, Utc),
             last_notifications_sync_scheduled_at: row
@@ -1231,7 +1311,9 @@ impl TryFrom<IntegrationConnectionRow> for IntegrationConnection {
             last_notifications_sync_completed_at: row
                 .last_notifications_sync_completed_at
                 .map(|completed_at| DateTime::from_naive_utc_and_offset(completed_at, Utc)),
-            last_notifications_sync_failure_message: row.last_notifications_sync_failure_message,
+            last_notifications_sync_failure_message: row
+                .last_notifications_sync_failure_message
+                .clone(),
             notifications_sync_failures: row.notifications_sync_failures as u32,
             last_tasks_sync_scheduled_at: row
                 .last_tasks_sync_scheduled_at
@@ -1242,13 +1324,13 @@ impl TryFrom<IntegrationConnectionRow> for IntegrationConnection {
             last_tasks_sync_completed_at: row
                 .last_tasks_sync_completed_at
                 .map(|completed_at| DateTime::from_naive_utc_and_offset(completed_at, Utc)),
-            last_tasks_sync_failure_message: row.last_tasks_sync_failure_message,
+            last_tasks_sync_failure_message: row.last_tasks_sync_failure_message.clone(),
             tasks_sync_failures: row.tasks_sync_failures as u32,
             provider: IntegrationProvider::new(
                 row.config.0.clone(),
-                row.context.map(|context| context.0),
+                row.context.as_ref().map(|context| context.0.clone()),
             )?,
-            registered_oauth_scopes: row.registered_oauth_scopes.0,
+            registered_oauth_scopes: row.registered_oauth_scopes.0.clone(),
         })
     }
 }
