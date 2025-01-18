@@ -101,12 +101,13 @@ fn GoogleMailThreadMessage(message: ReadOnlySignal<GoogleMailMessage>) -> Elemen
     if let Some(date) = message().get_header("Date") {
         headers.push(rsx! { span { class: "text-gray-400", "Date:" }, span { "{date}" } });
     }
+    let message_body = use_memo(move || ammonia::clean(&message().render_content_as_html()));
 
     rsx! {
         CardWithHeaders {
             headers: headers,
 
-            span { dangerous_inner_html: "{message().snippet} &hellip;" }
+            span { dangerous_inner_html: "{message_body()}" }
         }
     }
 }

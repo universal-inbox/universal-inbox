@@ -257,19 +257,34 @@ impl GoogleMailMessage {
             .unwrap_or_default()
     }
 
-    pub fn render_content(&self) -> String {
+    pub fn render_content_as_html(&self) -> String {
         self.payload
-            .render_content()
+            .render_content_as_html(Some("text/html"))
+            .or_else(|| self.payload.render_content_as_html(Some("text/plain")))
             .unwrap_or_else(|| format!("{} &hellip;", self.snippet))
     }
 }
 
 impl GoogleMailMessagePayload {
-    pub fn render_content(&self) -> Option<String> {
+    pub fn render_content_as_html(&self, filter_mime_type: Option<&str>) -> Option<String> {
         match self.mime_type.as_str() {
-            "text/plain" => self.render_text_body_as_html(),
-            "text/html" => self.render_html_body(),
-            "multipart/mixed" | "multipart/alternative" => self.render_multipart_body(),
+            "text/plain" => {
+                if filter_mime_type.unwrap_or("text/plain") == "text/plain" {
+                    self.render_text_body_as_html()
+                } else {
+                    None
+                }
+            }
+            "text/html" => {
+                if filter_mime_type.unwrap_or("text/html") == "text/html" {
+                    self.render_html_body()
+                } else {
+                    None
+                }
+            }
+            "multipart/mixed" | "multipart/alternative" => {
+                self.render_multipart_body_as_html(filter_mime_type)
+            }
             _ => None,
         }
     }
@@ -287,10 +302,12 @@ impl GoogleMailMessagePayload {
         self.decode_body_data()
     }
 
-    fn render_multipart_body(&self) -> Option<String> {
-        self.parts
-            .as_ref()
-            .and_then(|parts| parts.iter().find_map(|part| part.render_content()))
+    fn render_multipart_body_as_html(&self, filter_mime_type: Option<&str>) -> Option<String> {
+        self.parts.as_ref().and_then(|parts| {
+            parts
+                .iter()
+                .find_map(|part| part.render_content_as_html(filter_mime_type))
+        })
     }
 
     pub fn find_attachment_id_for_mime_type(
@@ -471,7 +488,7 @@ mod tests {
                     snippet: "message snippet".to_string(),
                     ..google_mail_message
                 }
-                .render_content();
+                .render_content_as_html();
 
                 assert_eq!(content, "message snippet &hellip;");
             }
@@ -494,7 +511,7 @@ mod tests {
                     },
                     ..google_mail_message
                 }
-                .render_content();
+                .render_content_as_html();
 
                 assert_eq!(content, "test message body<br>");
             }
@@ -525,7 +542,47 @@ mod tests {
                     },
                     ..google_mail_message
                 }
-                .render_content();
+                .render_content_as_html();
+
+                assert_eq!(content, "<p>test message body</p>\n");
+            }
+
+            #[rstest]
+            fn test_render_google_mail_message_with_text_plain_and_html_body(
+                google_mail_message: GoogleMailMessage,
+            ) {
+                let content = GoogleMailMessage {
+                    snippet: "message snippet".to_string(),
+                    payload: GoogleMailMessagePayload {
+                        mime_type: "multipart/alternative".to_string(),
+                        body: Some(GoogleMailMessageBody::default()),
+                        parts: Some(vec![
+                            GoogleMailMessagePayload {
+                                mime_type: "text/plain".to_string(),
+                                body: Some(GoogleMailMessageBody {
+                                    size: 20,
+                                    // "test message body\n" base64 encoded
+                                    data: Some("dGVzdCBtZXNzYWdlIGJvZHkK".to_string()),
+                                    ..GoogleMailMessageBody::default()
+                                }),
+                                ..GoogleMailMessagePayload::default()
+                            },
+                            GoogleMailMessagePayload {
+                                mime_type: "text/html".to_string(),
+                                body: Some(GoogleMailMessageBody {
+                                    size: 20,
+                                    // "<p>test message body<p>\n" base64 encoded
+                                    data: Some("PHA+dGVzdCBtZXNzYWdlIGJvZHk8L3A+Cg==".to_string()),
+                                    ..GoogleMailMessageBody::default()
+                                }),
+                                ..GoogleMailMessagePayload::default()
+                            },
+                        ]),
+                        ..GoogleMailMessagePayload::default()
+                    },
+                    ..google_mail_message
+                }
+                .render_content_as_html();
 
                 assert_eq!(content, "<p>test message body</p>\n");
             }
@@ -559,7 +616,7 @@ mod tests {
                     },
                     ..google_mail_message
                 }
-                .render_content();
+                .render_content_as_html();
 
                 assert_eq!(content, "test message body<br>");
             }
@@ -632,167 +689,10 @@ mod tests {
                     },
                     ..google_mail_message
                 }
-                .render_content();
+                .render_content_as_html();
 
-                assert_eq!(content, "this is an invitation<br>");
+                assert_eq!(content, "<p>this is an invitation</p>\n");
             }
         }
-
-        // mod kind {
-        //     use super::*;
-        //     use pretty_assertions::assert_eq;
-
-        //     #[fixture]
-        //     fn google_mail_message() -> GoogleMailMessage {
-        //         GoogleMailMessage {
-        //             id: "18a909f8178".to_string(),
-        //             thread_id: "18a909f8178".to_string(),
-        //             label_ids: Some(vec![GOOGLE_MAIL_UNREAD_LABEL.to_string()]),
-        //             snippet: "default".to_string(),
-        //             size_estimate: 1,
-        //             history_id: "5678".to_string(),
-        //             internal_date: Utc.with_ymd_and_hms(2023, 9, 13, 20, 19, 32).unwrap(),
-        //             payload: GoogleMailMessagePayload::default(),
-        //         }
-        //     }
-
-        //     #[rstest]
-        //     fn test_compute_google_mail_message_kind(google_mail_message: GoogleMailMessage) {
-        //         assert_eq!(google_mail_message.kind(), MessageKind::Default);
-        //     }
-
-        //     #[rstest]
-        //     #[case::without_attachment(false)]
-        //     #[case::with_attachment(true)]
-        //     fn test_compute_google_mail_calendar_invitation_kind(
-        //         google_mail_message: GoogleMailMessage,
-        //         #[case] has_attachment: bool,
-        //     ) {
-        //         let attachments = if has_attachment {
-        //             HashMap::from_iter(vec![(
-        //                 "attachment_id1".to_string().into(),
-        //                 GoogleMailMessageBody::default(),
-        //             )])
-        //         } else {
-        //             HashMap::new()
-        //         };
-
-        //         let computed_kind = GoogleMailMessage {
-        //             snippet: "message snippet".to_string(),
-        //             payload: GoogleMailMessagePayload {
-        //                 mime_type: "multipart/mixed".to_string(),
-        //                 body: Some(GoogleMailMessageBody::default()),
-        //                 parts: Some(vec![
-        //                     GoogleMailMessagePayload {
-        //                         mime_type: "multipart/alternative".to_string(),
-        //                         body: Some(GoogleMailMessageBody::default()),
-        //                         parts: Some(vec![GoogleMailMessagePayload {
-        //                             mime_type: "text/calendar".to_string(),
-        //                             body: Some(GoogleMailMessageBody {
-        //                                 size: 20,
-        //                                 attachment_id: Some("attachment_id1".to_string().into()),
-        //                                 ..GoogleMailMessageBody::default()
-        //                             }),
-        //                             ..GoogleMailMessagePayload::default()
-        //                         }]),
-        //                         ..GoogleMailMessagePayload::default()
-        //                     },
-        //                     // Google includes 2 attachments for calendar invitations but they mean the same
-        //                     GoogleMailMessagePayload {
-        //                         mime_type: "text/calendar".to_string(),
-        //                         body: Some(GoogleMailMessageBody {
-        //                             size: 20,
-        //                             attachment_id: Some("attachment_id2".to_string().into()),
-        //                             ..GoogleMailMessageBody::default()
-        //                         }),
-        //                         ..GoogleMailMessagePayload::default()
-        //                     },
-        //                 ]),
-        //                 ..GoogleMailMessagePayload::default()
-        //             },
-        //             attachments,
-        //             ..google_mail_message
-        //         }
-        //         .kind();
-
-        //         assert_eq!(
-        //             computed_kind,
-        //             if has_attachment {
-        //                 MessageKind::CalendarInvitation
-        //             } else {
-        //                 MessageKind::Default
-        //             }
-        //         );
-        //     }
-
-        //     #[rstest]
-        //     #[case::without_attachment(false)]
-        //     #[case::with_attachment(true)]
-        //     fn test_find_google_mail_calendar_invitation(
-        //         google_mail_message: GoogleMailMessage,
-        //         #[case] has_attachment: bool,
-        //     ) {
-        //         let attachments = if has_attachment {
-        //             HashMap::from_iter(vec![(
-        //                 "attachment_id1".to_string().into(),
-        //                 GoogleMailMessageBody {
-        //                     size: 20,
-        //                     // "fake ics" base64 encoded
-        //                     data: Some("ZmFrZSBpY3M=".to_string()),
-        //                     ..GoogleMailMessageBody::default()
-        //                 },
-        //             )])
-        //         } else {
-        //             HashMap::new()
-        //         };
-
-        //         let message = GoogleMailMessage {
-        //             snippet: "message snippet".to_string(),
-        //             payload: GoogleMailMessagePayload {
-        //                 mime_type: "multipart/mixed".to_string(),
-        //                 body: Some(GoogleMailMessageBody::default()),
-        //                 parts: Some(vec![
-        //                     GoogleMailMessagePayload {
-        //                         mime_type: "multipart/alternative".to_string(),
-        //                         body: Some(GoogleMailMessageBody::default()),
-        //                         parts: Some(vec![GoogleMailMessagePayload {
-        //                             mime_type: "text/calendar".to_string(),
-        //                             body: Some(GoogleMailMessageBody {
-        //                                 size: 20,
-        //                                 attachment_id: Some("attachment_id1".to_string().into()),
-        //                                 ..GoogleMailMessageBody::default()
-        //                             }),
-        //                             ..GoogleMailMessagePayload::default()
-        //                         }]),
-        //                         ..GoogleMailMessagePayload::default()
-        //                     },
-        //                     // Google includes 2 attachments for calendar invitations but they mean the same
-        //                     GoogleMailMessagePayload {
-        //                         mime_type: "text/calendar".to_string(),
-        //                         body: Some(GoogleMailMessageBody {
-        //                             size: 20,
-        //                             attachment_id: Some("attachment_id2".to_string().into()),
-        //                             ..GoogleMailMessageBody::default()
-        //                         }),
-        //                         ..GoogleMailMessagePayload::default()
-        //                     },
-        //                 ]),
-        //                 ..GoogleMailMessagePayload::default()
-        //             },
-        //             attachments,
-        //             ..google_mail_message
-        //         };
-        //         let attachment = message.find_and_decode_attachment_for_mime_type("text/calendar");
-
-        //         assert_eq!(
-        //             attachment,
-        //             if has_attachment {
-        //                 Some("fake ics".to_string())
-        //             } else {
-        //                 None
-        //             }
-        //         );
-        //     }
-        // }
     }
 }
