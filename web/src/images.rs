@@ -2,8 +2,8 @@ use cfg_if::cfg_if;
 
 cfg_if! {
     if #[cfg(feature = "trunk")] {
-        pub const UI_LOGO_SYMBOL_TRANSPARENT: &'static str = "/images/ui-logo-symbol-transparent.svg";
-        pub const UI_LOGO_TRANSPARENT: &'static str = "/images/ui-logo-transparent.png";
+        pub const UI_LOGO_SYMBOL_TRANSPARENT: &str = "/images/ui-logo-symbol-transparent.svg";
+        pub const UI_LOGO_TRANSPARENT: &str = "/images/ui-logo-transparent.png";
     } else {
         use dioxus::prelude::*;
 

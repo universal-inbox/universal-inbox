@@ -22,7 +22,7 @@ base64 = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
 clap = { workspace = true }
 email_address = { workspace = true }
-emojis = "0.6.0"
+emojis = { workspace = true }
 enum_derive = { workspace = true }
 git-url-parse = "0.4.0"
 macro-attr = { workspace = true }
@@ -52,6 +52,7 @@ chrono = { version = "0.4.0", default-features = false, features = [
 ] }
 clap = { version = "4.1.0", features = ["derive"] }
 email_address = { version = "0.2" }
+emojis = { version = "0.6.0" }
 enum_derive = { version = "0.1.0" }
 http = { version = "1.1.0" }
 itertools = { version = "0.13.0" }
