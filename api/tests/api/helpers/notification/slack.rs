@@ -381,10 +381,15 @@ pub fn slack_starred_message() -> Box<SlackStarItem> {
                 Some("admins".to_string()),
             )]),
             emojis: HashMap::from([
-                ("unknown1".to_string(), Some("alias:wave".to_string())),
                 (
-                    "unknown2".to_string(),
-                    Some("https://emoji.com/unknown2.png".to_string()),
+                    SlackEmojiName("unknown1".to_string()),
+                    Some(SlackEmojiRef::Alias(SlackEmojiName("wave".to_string()))),
+                ),
+                (
+                    SlackEmojiName("unknown2".to_string()),
+                    Some(SlackEmojiRef::Url(
+                        "https://emoji.com/unknown2.png".parse().unwrap(),
+                    )),
                 ),
             ]),
         }),

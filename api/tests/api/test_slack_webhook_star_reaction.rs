@@ -364,10 +364,15 @@ async fn test_receive_star_or_reaction_added_event_as_notification(
                     Some("admins".to_string()),
                 )]),
                 emojis: HashMap::from([
-                    ("unknown1".to_string(), Some("alias:wave".to_string())),
                     (
-                        "unknown2".to_string(),
-                        Some("https://emoji.com/unknown2.png".to_string())
+                        SlackEmojiName("unknown1".to_string()),
+                        Some(SlackEmojiRef::Alias(SlackEmojiName("wave".to_string())))
+                    ),
+                    (
+                        SlackEmojiName("unknown2".to_string()),
+                        Some(SlackEmojiRef::Url(
+                            "https://emoji.com/unknown2.png".parse().unwrap()
+                        ))
                     )
                 ]),
             })
@@ -413,10 +418,15 @@ async fn test_receive_star_or_reaction_added_event_as_notification(
                     Some("admins".to_string()),
                 )]),
                 emojis: HashMap::from([
-                    ("unknown1".to_string(), Some("alias:wave".to_string())),
                     (
-                        "unknown2".to_string(),
-                        Some("https://emoji.com/unknown2.png".to_string())
+                        SlackEmojiName("unknown1".to_string()),
+                        Some(SlackEmojiRef::Alias(SlackEmojiName("wave".to_string())))
+                    ),
+                    (
+                        SlackEmojiName("unknown2".to_string()),
+                        Some(SlackEmojiRef::Url(
+                            "https://emoji.com/unknown2.png".parse().unwrap()
+                        ))
                     )
                 ]),
             })
@@ -607,10 +617,15 @@ async fn test_receive_bot_star_added_event_as_notification(
                 Some("admins".to_string()),
             )]),
             emojis: HashMap::from([
-                ("unknown1".to_string(), Some("alias:wave".to_string())),
                 (
-                    "unknown2".to_string(),
-                    Some("https://emoji.com/unknown2.png".to_string())
+                    SlackEmojiName("unknown1".to_string()),
+                    Some(SlackEmojiRef::Alias(SlackEmojiName("wave".to_string())))
+                ),
+                (
+                    SlackEmojiName("unknown2".to_string()),
+                    Some(SlackEmojiRef::Url(
+                        "https://emoji.com/unknown2.png".parse().unwrap()
+                    ))
                 )
             ]),
         })

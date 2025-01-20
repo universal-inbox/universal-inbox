@@ -1069,10 +1069,15 @@ Here is a [link](https://www.universal-inbox.com)"#
                     Some("Admins".to_string()),
                 )]),
                 emojis: HashMap::from([
-                    ("unknown1".to_string(), Some("alias:wave".to_string())),
                     (
-                        "unknown2".to_string(),
-                        Some("https://emoji.com/unknown2.png".to_string()),
+                        SlackEmojiName("unknown1".to_string()),
+                        Some(SlackEmojiRef::Alias(SlackEmojiName("wave".to_string()))),
+                    ),
+                    (
+                        SlackEmojiName("unknown2".to_string()),
+                        Some(SlackEmojiRef::Url(
+                            "https://emoji.com/unknown2.png".parse().unwrap(),
+                        )),
                     ),
                 ]),
             });
@@ -1165,8 +1170,10 @@ Here is a [link](https://www.universal-inbox.com)"#
                     channels: Default::default(),
                     usergroups: Default::default(),
                     emojis: HashMap::from([(
-                        "custom_emoji".to_string(),
-                        Some("https://emoji.com/custom_emoji.png".to_string()),
+                        SlackEmojiName("custom_emoji".to_string()),
+                        Some(SlackEmojiRef::Url(
+                            "https://emoji.com/custom_emoji.png".parse().unwrap(),
+                        )),
                     )]),
                 };
 
