@@ -26,6 +26,7 @@ dioxus-free-icons = { version = "0.9", features = [
   "octicons"
 ] }
 email_address = { workspace = true }
+emojis = { workspace = true }
 futures-util = "0.3"
 gloo-timers = { version = "0.3.0", features = ["futures"] }
 gloo-utils = "0.2.0"
@@ -41,6 +42,7 @@ reqwest = { workspace = true }
 secrecy = { workspace = true }
 serde = { workspace = true }
 serde-wasm-bindgen = "0.6.0"
+slack-blocks-render = { workspace = true }
 slack-morphism = { workspace = true }
 sorted-groups = "0.2.0"
 universal-inbox = { path = ".." }

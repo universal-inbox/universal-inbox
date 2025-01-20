@@ -6,7 +6,9 @@ use dioxus_free_icons::{icons::bs_icons::BsArrowUpRightSquare, Icon};
 use universal_inbox::third_party::integrations::slack::SlackMessageDetails;
 
 use crate::components::{
-    integrations::slack::{SlackMessageActorDisplay, SlackTeamDisplay},
+    integrations::slack::{
+        preview::reactions::SlackReactions, SlackMessageActorDisplay, SlackTeamDisplay,
+    },
     markdown::SlackMarkdown,
     CardWithHeaders,
 };
@@ -81,7 +83,17 @@ fn SlackMessageDisplay(slack_message: ReadOnlySignal<SlackMessageDetails>) -> El
                 }
             ],
 
-            SlackMarkdown { text }
+            div {
+                class: "flex flex-col",
+                SlackMarkdown { text }
+
+                if let Some(reactions) = slack_message().message.content.reactions {
+                    SlackReactions {
+                        reactions,
+                        slack_references: slack_message().references.unwrap_or_default(),
+                    }
+                }
+            }
         }
     }
 }

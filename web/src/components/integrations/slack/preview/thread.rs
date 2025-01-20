@@ -7,7 +7,9 @@ use slack_morphism::SlackHistoryMessage;
 use universal_inbox::third_party::integrations::slack::{SlackMessageRender, SlackThread};
 
 use crate::components::{
-    integrations::slack::{SlackMessageActorDisplay, SlackTeamDisplay},
+    integrations::slack::{
+        preview::reactions::SlackReactions, SlackMessageActorDisplay, SlackTeamDisplay,
+    },
     markdown::SlackMarkdown,
 };
 
@@ -164,7 +166,17 @@ fn SlackThreadMessageDisplay(
                 }
             }
 
-            SlackMarkdown { text }
+            div {
+                class: "flex flex-col",
+                SlackMarkdown { text }
+
+                if let Some(reactions) = message().content.reactions {
+                    SlackReactions {
+                        reactions,
+                        slack_references: slack_thread().references.unwrap_or_default(),
+                    }
+                }
+            }
         }
     }
 }

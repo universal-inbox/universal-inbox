@@ -16,7 +16,7 @@ use crate::components::integrations::{
 
 cfg_if! {
     if #[cfg(feature = "trunk")] {
-        const NOTION_LOGO: &'static str = "/images/notion-logo.svg";
+        const NOTION_LOGO: &str = "/images/notion-logo.svg";
     } else {
         const NOTION_LOGO: Asset = asset!("/images/notion-logo.svg");
     }
