@@ -272,7 +272,7 @@ impl SlackService {
     pub async fn list_emojis(
         &self,
         slack_api_token: &SlackApiToken,
-    ) -> Result<HashMap<String, String>, UniversalInboxError> {
+    ) -> Result<HashMap<SlackEmojiName, SlackEmojiRef>, UniversalInboxError> {
         let result = cached_list_emojis(&self.slack_base_url, slack_api_token).await?;
         if result.was_cached {
             debug!("`list_emojis` cache hit");
@@ -1453,7 +1453,7 @@ async fn cached_fetch_team(
 #[io_cached(
     key = "String",
     convert = r#"{ format!("{}", slack_base_url) }"#,
-    ty = "cached::AsyncRedisCache<String, HashMap<String, String>>",
+    ty = "cached::AsyncRedisCache<String, HashMap<SlackEmojiName, SlackEmojiRef>>",
     map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `list_emojis`: {:?}", e))"##,
     create = r##" { build_redis_cache("slack:list_emojis", 24 * 60 * 60, true).await }"##,
     with_cached_flag = true
@@ -1461,7 +1461,7 @@ async fn cached_fetch_team(
 async fn cached_list_emojis(
     slack_base_url: &str,
     slack_api_token: &SlackApiToken,
-) -> Result<Return<HashMap<String, String>>, UniversalInboxError> {
+) -> Result<Return<HashMap<SlackEmojiName, SlackEmojiRef>>, UniversalInboxError> {
     let client = SlackClient::new(
         SlackClientHyperConnector::with_connector(
             hyper_rustls::HttpsConnectorBuilder::new()
