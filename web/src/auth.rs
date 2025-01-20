@@ -86,7 +86,7 @@ pub fn Authenticated(
         to_owned![api_base_url];
 
         async move {
-            let authentication_state = UI_MODEL.peek().authentication_state;
+            let authentication_state = UI_MODEL.read().authentication_state;
             if authentication_state == AuthenticationState::Unknown {
                 user_service.send(UserCommand::GetUser);
                 debug!("auth: Unknown authentication state, triggering API call");
