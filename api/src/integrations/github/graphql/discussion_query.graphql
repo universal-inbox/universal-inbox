@@ -1,0 +1,66 @@
+query DiscussionQuery($owner: String!, $repository: String!, $discussion_number: Int!) {
+  repository(owner: $owner, name: $repository) {
+    discussion(number: $discussion_number) {
+      id
+      title
+      bodyHTML
+      number
+      url
+
+      stateReason
+      closedAt
+      createdAt
+      updatedAt
+      answerChosenAt
+      answerChosenBy {
+        __typename
+        avatarUrl
+        login
+        ... on User {
+          name
+        }
+      }
+
+      repository {
+        nameWithOwner
+        url
+      }
+
+      comments {
+        totalCount
+      }
+
+      labels(first: 10) {
+        nodes {
+          color
+          description
+          name
+        }
+      }
+
+      author {
+        __typename
+        avatarUrl
+        login
+        ... on User {
+          name
+        }
+      }
+
+      answer {
+        bodyHTML
+        url
+        createdAt
+
+        author {
+          __typename
+          avatarUrl
+          login
+          ... on User {
+            name
+          }
+        }
+      }
+    }
+  }
+}

@@ -5,7 +5,7 @@ use graphql_client::GraphQLQuery;
 
 use universal_inbox::third_party::integrations::github::GitObjectId;
 
-pub mod discussions_search;
+pub mod discussion;
 pub mod pull_request;
 
 // Define some GraphQL types used in the Github API
@@ -26,8 +26,8 @@ pub struct PullRequestQuery;
 #[derive(GraphQLQuery)]
 #[graphql(
     schema_path = "src/integrations/github/graphql/schema.graphql",
-    query_path = "src/integrations/github/graphql/discussions_search_query.graphql",
+    query_path = "src/integrations/github/graphql/discussion_query.graphql",
     response_derives = "Debug,Clone,Serialize",
     variables_derives = "Deserialize"
 )]
-pub struct DiscussionsSearchQuery;
+pub struct DiscussionQuery;

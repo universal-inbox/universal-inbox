@@ -20,7 +20,7 @@ use universal_inbox::{
 };
 
 use universal_inbox_api::integrations::github::graphql::{
-    discussions_search_query, pull_request_query, DiscussionsSearchQuery, PullRequestQuery,
+    discussion_query, pull_request_query, DiscussionQuery, PullRequestQuery,
 };
 
 use crate::helpers::{
@@ -86,15 +86,18 @@ pub fn mock_github_pull_request_query<'a>(
     })
 }
 
-pub fn mock_github_discussions_search_query<'a>(
+pub fn mock_github_discussion_query<'a>(
     github_mock_server: &'a MockServer,
-    search_query: &str,
-    result: &'a Response<discussions_search_query::ResponseData>,
+    owner: String,
+    repository: String,
+    discussion_number: i64,
+    result: &'a Response<discussion_query::ResponseData>,
 ) -> Mock<'a> {
-    let expected_request_body =
-        DiscussionsSearchQuery::build_query(discussions_search_query::Variables {
-            search_query: search_query.to_string(),
-        });
+    let expected_request_body = DiscussionQuery::build_query(discussion_query::Variables {
+        owner,
+        repository,
+        discussion_number,
+    });
     github_mock_server.mock(|when, then| {
         when.method(POST)
             .path("/graphql")
@@ -118,7 +121,7 @@ pub fn github_pull_request_123_response() -> Response<pull_request_query::Respon
 }
 
 #[fixture]
-pub fn github_discussion_123_response() -> Response<discussions_search_query::ResponseData> {
+pub fn github_discussion_123_response() -> Response<discussion_query::ResponseData> {
     load_json_fixture_file("github_discussion_123_response.json")
 }
 

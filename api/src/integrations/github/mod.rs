@@ -34,10 +34,11 @@ use universal_inbox::{
 use crate::{
     integrations::{
         github::graphql::{
-            discussions_search_query, pull_request_query, DiscussionsSearchQuery, PullRequestQuery,
+            discussion_query, pull_request_query, DiscussionQuery, PullRequestQuery,
         },
         notification::ThirdPartyNotificationSourceService,
         oauth2::AccessToken,
+        third_party::ThirdPartyItemSourceService,
         APP_USER_AGENT,
     },
     universal_inbox::{
@@ -45,8 +46,6 @@ use crate::{
     },
     utils::graphql::assert_no_error_in_graphql_response,
 };
-
-use super::third_party::ThirdPartyItemSourceService;
 
 pub mod graphql;
 pub mod notification;
@@ -118,12 +117,12 @@ impl GithubService {
 
         Mock::given(method("POST"))
             .and(body_partial_json(
-                json!({ "operationName": "DiscussionsSearchQuery" }),
+                json!({ "operationName": "DiscussionQuery" }),
             ))
             .respond_with(
                 ResponseTemplate::new(200)
                     .insert_header("content-type", "application/json")
-                    .set_body_json(&Response::<discussions_search_query::ResponseData> {
+                    .set_body_json(&Response::<discussion_query::ResponseData> {
                         data: None,
                         errors: None,
                         extensions: None,
@@ -328,17 +327,18 @@ impl GithubService {
             .ok_or_else(|| anyhow!("Failed to parse `data` from Github graphql response"))?)
     }
 
-    pub async fn search_discussion(
+    pub async fn query_discussion(
         &self,
-        repository: &str,
-        title: &str,
+        owner: String,
+        repository: String,
+        discussion_number: i64,
         access_token: &AccessToken,
-    ) -> Result<discussions_search_query::ResponseData, UniversalInboxError> {
-        let search_query = format!("repo:{repository} \"{title}\"");
-        let request_body =
-            DiscussionsSearchQuery::build_query(discussions_search_query::Variables {
-                search_query,
-            });
+    ) -> Result<discussion_query::ResponseData, UniversalInboxError> {
+        let request_body = DiscussionQuery::build_query(discussion_query::Variables {
+            owner,
+            repository,
+            discussion_number,
+        });
 
         let response = self
             .build_github_graphql_client(access_token)?
@@ -349,16 +349,15 @@ impl GithubService {
             .context("Cannot fetch discussion from Github graphql API")?
             .text()
             .await
-            .context("Failed to fetch dicussion response from Github graphql API")?;
+            .context("Failed to fetch discussion response from Github graphql API")?;
 
-        let discussions_search_response: graphql_client::Response<
-            discussions_search_query::ResponseData,
-        > = serde_json::from_str(&response)
-            .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
+        let discussion_response: graphql_client::Response<discussion_query::ResponseData> =
+            serde_json::from_str(&response)
+                .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
 
-        assert_no_error_in_graphql_response(&discussions_search_response, GITHUB_GRAPHQL_API_NAME)?;
+        assert_no_error_in_graphql_response(&discussion_response, GITHUB_GRAPHQL_API_NAME)?;
 
-        Ok(discussions_search_response
+        Ok(discussion_response
             .data
             .ok_or_else(|| anyhow!("Failed to parse `data` from Github graphql response"))?)
     }
@@ -400,22 +399,20 @@ impl GithubService {
                             .await?
                             .try_into()?,
                     )),
+                    Ok(GithubUrl::Discussion {
+                        owner,
+                        repository,
+                        number,
+                    }) => Some(GithubNotificationItem::GithubDiscussion(
+                        self.query_discussion(owner, repository, number, &access_token)
+                            .await?
+                            .try_into()?,
+                    )),
                     // Not yet implemented resource type
                     Err(_) => None,
                 }
             } else {
-                match raw_github_notification.subject.r#type.as_str() {
-                    "Discussion" => Some(GithubNotificationItem::GithubDiscussion(
-                        self.search_discussion(
-                            &raw_github_notification.repository.full_name,
-                            &raw_github_notification.subject.title,
-                            &access_token,
-                        )
-                        .await?
-                        .try_into()?,
-                    )),
-                    _ => None,
-                }
+                None
             };
 
         Ok(github_notification_item)

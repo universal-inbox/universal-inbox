@@ -797,6 +797,11 @@ pub enum GithubUrl {
         repository: String,
         number: i64,
     },
+    Discussion {
+        owner: String,
+        repository: String,
+        number: i64,
+    },
 }
 
 impl GithubUrl {
@@ -809,12 +814,8 @@ impl GithubUrl {
             );
         }
 
-        if let &["", "repos", owner, repository, "pulls", number] = resource_url
-            .path()
-            .split('/')
-            .collect::<Vec<&str>>()
-            .as_slice()
-        {
+        let splitted_url = resource_url.path().split('/').collect::<Vec<&str>>();
+        if let &["", "repos", owner, repository, "pulls", number] = splitted_url.as_slice() {
             return Ok(GithubUrl::PullRequest {
                 owner: owner.to_string(),
                 repository: repository.to_string(),
@@ -822,6 +823,18 @@ impl GithubUrl {
                     .with_context(|| {
                         format!(
                             "Failed to parse Github API resource URL: Pull request number must be an integer: {}", number)
+                    })?
+            });
+        }
+
+        if let &["", "repos", owner, repository, "discussions", number] = splitted_url.as_slice() {
+            return Ok(GithubUrl::Discussion {
+                owner: owner.to_string(),
+                repository: repository.to_string(),
+                number: number.parse()
+                    .with_context(|| {
+                        format!(
+                            "Failed to parse Github API resource URL: Discussion number must be an integer: {}", number)
                     })?
             });
         }
@@ -949,6 +962,14 @@ mod tests {
         #[case::pull_request(
             "https://api.github.com/repos/octokit/octokit.rb/pulls/123",
             GithubUrl::PullRequest {
+                owner: "octokit".to_string(),
+                repository: "octokit.rb".to_string(),
+                number: 123
+            }
+        )]
+        #[case::discussion(
+            "https://api.github.com/repos/octokit/octokit.rb/discussions/123",
+            GithubUrl::Discussion {
                 owner: "octokit".to_string(),
                 repository: "octokit.rb".to_string(),
                 number: 123
