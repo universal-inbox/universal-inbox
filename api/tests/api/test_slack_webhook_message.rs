@@ -253,6 +253,8 @@ mod webhook {
 }
 
 mod job {
+    use crate::helpers::notification::slack::mock_slack_list_emojis;
+
     use super::*;
     use pretty_assertions::assert_eq;
 
@@ -518,6 +520,7 @@ mod job {
             slack_message_id,
             "slack_get_chat_permalink_response.json",
         );
+        mock_slack_list_emojis(&app.slack_mock_server, "slack_emoji_list_response.json");
 
         let slack_fetch_thread_mock_u02 = mock_slack_fetch_thread(
             &app.slack_mock_server,
@@ -615,6 +618,17 @@ mod job {
         assert!(slack_thread.sender_profiles.contains_key("U01"));
         assert!(slack_thread.sender_profiles.contains_key("U02"));
         assert!(slack_thread.subscribed);
+        assert_eq!(
+            slack_thread
+                .references
+                .as_ref()
+                .unwrap()
+                .emojis
+                .get(&SlackEmojiName("unknown1".to_string())),
+            Some(&Some(SlackEmojiRef::Alias(SlackEmojiName(
+                "wave".to_string()
+            ))))
+        );
     }
 
     #[rstest]

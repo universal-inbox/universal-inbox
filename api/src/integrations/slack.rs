@@ -542,6 +542,17 @@ impl SlackService {
         slack_api_token: &SlackApiToken,
     ) -> Result<Option<SlackReferences>, UniversalInboxError> {
         let mut references = find_slack_references_in_message(message_content);
+
+        if let Some(ref reactions) = message_content.reactions {
+            let emojis_map = self.list_emojis(slack_api_token).await?;
+            let reaction_emojis = reactions.iter().map(|r| SlackEmojiName(r.name.to_string()));
+            for emoji in reaction_emojis {
+                references
+                    .emojis
+                    .insert(emoji.clone(), emojis_map.get(&emoji).cloned());
+            }
+        }
+
         if references.is_empty() {
             return Ok(None);
         }
@@ -573,12 +584,12 @@ impl SlackService {
             references.channels.insert(slack_channel_id, channel.name);
         }
 
+        let emojis_map = self.list_emojis(slack_api_token).await?;
         let emojis = references.emojis.keys().cloned().collect::<Vec<_>>();
         for emoji in emojis {
-            let emojis = self.list_emojis(slack_api_token).await?;
             references
                 .emojis
-                .insert(emoji.clone(), emojis.get(&emoji).cloned());
+                .insert(emoji.clone(), emojis_map.get(&emoji).cloned());
         }
 
         Ok(Some(references))
