@@ -28,7 +28,7 @@ use universal_inbox::{
 use universal_inbox_api::{
     configuration::Settings,
     integrations::{
-        github::graphql::{discussions_search_query, pull_request_query},
+        github::graphql::{discussion_query, pull_request_query},
         oauth2::NangoConnection,
         todoist::TodoistSyncResponse,
     },
@@ -47,7 +47,7 @@ use crate::helpers::{
         github::{
             assert_sync_notifications, create_notification_from_github_notification,
             github_discussion_123_response, github_notification, github_pull_request_123_response,
-            mock_github_discussions_search_query, mock_github_notifications_service,
+            mock_github_discussion_query, mock_github_notifications_service,
             mock_github_pull_request_query, sync_github_notifications,
         },
         list_notifications, sync_notifications, sync_notifications_response, update_notification,
@@ -717,12 +717,16 @@ async fn test_sync_discussion_notification_with_details(
     settings: Settings,
     #[future] authenticated_app: AuthenticatedApp,
     mut github_notification: Box<GithubNotification>,
-    github_discussion_123_response: Response<discussions_search_query::ResponseData>,
+    github_discussion_123_response: Response<discussion_query::ResponseData>,
     nango_github_connection: Box<NangoConnection>,
 ) {
     github_notification.subject = GithubNotificationSubject {
         title: "test discussion".to_string(),
-        url: None,
+        url: Some(
+            "https://api.github.com/repos/octokit/octokit.rb/discussions/123"
+                .parse()
+                .unwrap(),
+        ),
         latest_comment_url: None,
         r#type: "Discussion".to_string(),
     };
@@ -747,9 +751,11 @@ async fn test_sync_discussion_notification_with_details(
         &github_notifications_response,
     );
 
-    let github_discussions_search_query_mock = mock_github_discussions_search_query(
+    let github_discussion_query_mock = mock_github_discussion_query(
         &app.app.github_mock_server,
-        "repo:octocat/Hello-World \"test discussion\"",
+        "octokit".to_string(),
+        "octokit.rb".to_string(),
+        123,
         &github_discussion_123_response,
     );
 
@@ -762,7 +768,7 @@ async fn test_sync_discussion_notification_with_details(
     .await;
 
     assert_eq!(notifications.len(), 1);
-    github_discussions_search_query_mock.assert();
+    github_discussion_query_mock.assert();
     github_notifications_mock.assert();
 
     let notifications = list_notifications(
@@ -807,7 +813,11 @@ async fn test_sync_discussion_notification_with_error(
 ) {
     github_notification.subject = GithubNotificationSubject {
         title: "test discussion".to_string(),
-        url: None,
+        url: Some(
+            "https://api.github.com/repos/octokit/octokit.rb/discussions/123"
+                .parse()
+                .unwrap(),
+        ),
         latest_comment_url: None,
         r#type: "Discussion".to_string(),
     };
@@ -842,9 +852,11 @@ async fn test_sync_discussion_notification_with_error(
         }]),
         extensions: None,
     };
-    let github_discussions_search_query_mock = mock_github_discussions_search_query(
+    let github_discussion_query_mock = mock_github_discussion_query(
         &app.app.github_mock_server,
-        "repo:octocat/Hello-World \"test discussion\"",
+        "octokit".to_string(),
+        "octokit.rb".to_string(),
+        123,
         &error_response,
     );
 
@@ -857,7 +869,7 @@ async fn test_sync_discussion_notification_with_error(
     .await;
 
     assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
-    github_discussions_search_query_mock.assert();
+    github_discussion_query_mock.assert();
     github_notifications_mock.assert();
 
     let notifications = list_notifications(
