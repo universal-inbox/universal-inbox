@@ -1015,7 +1015,7 @@ dependencies = [
  "bitflags 2.6.0",
  "cexpr",
  "clang-sys",
- "itertools 0.10.5",
+ "itertools 0.11.0",
  "lazy_static",
  "lazycell",
  "log",
@@ -1390,7 +1390,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "117725a109d387c937a1533ce01b450cbde6b88abceea8473c4d7a85853cda3c"
 dependencies = [
  "lazy_static",
- "windows-sys 0.48.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -1722,7 +1722,7 @@ dependencies = [
  "cssparser-macros",
  "dtoa-short",
  "itoa",
- "phf 0.10.1",
+ "phf 0.11.2",
  "smallvec",
 ]
 
@@ -3963,7 +3963,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc2f4eb4bc735547cfed7c0a4922cbd04a4655978c09b54f1f7b228750664c34"
 dependencies = [
  "cfg-if",
- "windows-targets 0.48.5",
+ "windows-targets 0.52.6",
 ]
 
 [[package]]
@@ -4246,9 +4246,9 @@ dependencies = [
 
 [[package]]
 name = "mutually_exclusive_features"
-version = "0.0.3"
+version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d02c0b00610773bb7fc61d85e13d86c7858cbdf00e1a120bfc41bc055dbaa0e"
+checksum = "e94e1e6445d314f972ff7395df2de295fe51b71821694f0b0e1e79c4f12c8577"
 
 [[package]]
 name = "native-tls"
@@ -4533,47 +4533,45 @@ dependencies = [
 [[package]]
 name = "opentelemetry"
 version = "0.27.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab70038c28ed37b97d8ed414b6429d343a8bbf44c9f79ec854f3a643029ba6d7"
+source = "git+https://github.com/dylanahsmith/opentelemetry-rust.git?branch=appender-tracing-fix-trace-context#50b549a08443656d81fa0f441f89b2930be9f458"
 dependencies = [
  "futures-core",
  "futures-sink",
  "js-sys",
  "pin-project-lite",
- "thiserror 1.0.69",
+ "thiserror 2.0.9",
  "tracing",
 ]
 
 [[package]]
 name = "opentelemetry-appender-tracing"
 version = "0.27.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab5feffc321035ad94088a7e5333abb4d84a8726e54a802e736ce9dd7237e85b"
+source = "git+https://github.com/dylanahsmith/opentelemetry-rust.git?branch=appender-tracing-fix-trace-context#50b549a08443656d81fa0f441f89b2930be9f458"
 dependencies = [
  "opentelemetry 0.27.1",
  "tracing",
  "tracing-core",
+ "tracing-opentelemetry 0.28.0",
  "tracing-subscriber",
 ]
 
 [[package]]
 name = "opentelemetry-http"
 version = "0.27.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "10a8a7f5f6ba7c1b286c2fbca0454eaba116f63bbe69ed250b642d36fbb04d80"
+source = "git+https://github.com/dylanahsmith/opentelemetry-rust.git?branch=appender-tracing-fix-trace-context#50b549a08443656d81fa0f441f89b2930be9f458"
 dependencies = [
  "async-trait",
  "bytes",
  "http 1.2.0",
  "opentelemetry 0.27.1",
  "reqwest 0.12.11",
+ "tracing",
 ]
 
 [[package]]
 name = "opentelemetry-otlp"
 version = "0.27.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91cf61a1868dacc576bf2b2a1c3e9ab150af7272909e80085c3173384fe11f76"
+source = "git+https://github.com/dylanahsmith/opentelemetry-rust.git?branch=appender-tracing-fix-trace-context#50b549a08443656d81fa0f441f89b2930be9f458"
 dependencies = [
  "async-trait",
  "futures-core",
@@ -4584,7 +4582,7 @@ dependencies = [
  "opentelemetry_sdk 0.27.1",
  "prost",
  "reqwest 0.12.11",
- "thiserror 1.0.69",
+ "thiserror 2.0.9",
  "tokio",
  "tonic",
  "tracing",
@@ -4593,8 +4591,7 @@ dependencies = [
 [[package]]
 name = "opentelemetry-proto"
 version = "0.27.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a6e05acbfada5ec79023c85368af14abd0b307c015e9064d249b2a950ef459a6"
+source = "git+https://github.com/dylanahsmith/opentelemetry-rust.git?branch=appender-tracing-fix-trace-context#50b549a08443656d81fa0f441f89b2930be9f458"
 dependencies = [
  "opentelemetry 0.27.1",
  "opentelemetry_sdk 0.27.1",
@@ -4623,8 +4620,7 @@ dependencies = [
 [[package]]
 name = "opentelemetry_sdk"
 version = "0.27.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "231e9d6ceef9b0b2546ddf52335785ce41252bc7474ee8ba05bfad277be13ab8"
+source = "git+https://github.com/dylanahsmith/opentelemetry-rust.git?branch=appender-tracing-fix-trace-context#50b549a08443656d81fa0f441f89b2930be9f458"
 dependencies = [
  "async-trait",
  "futures-channel",
@@ -4635,7 +4631,7 @@ dependencies = [
  "percent-encoding",
  "rand",
  "serde_json",
- "thiserror 1.0.69",
+ "thiserror 2.0.9",
  "tokio",
  "tokio-stream",
  "tracing",
@@ -4773,9 +4769,7 @@ version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fabbf1ead8a5bcbc20f5f8b939ee3f5b0f6f281b6ad3468b84656b658b455259"
 dependencies = [
- "phf_macros",
  "phf_shared 0.10.0",
- "proc-macro-hack",
 ]
 
 [[package]]
@@ -4784,6 +4778,7 @@ version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ade2d8b8f33c7333b51bcf0428d37e217e9f32192ae4772156f65063b8ce03dc"
 dependencies = [
+ "phf_macros",
  "phf_shared 0.11.2",
 ]
 
@@ -4829,16 +4824,15 @@ dependencies = [
 
 [[package]]
 name = "phf_macros"
-version = "0.10.0"
+version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "58fdf3184dd560f160dd73922bea2d5cd6e8f064bf4b13110abd81b03697b4e0"
+checksum = "f84ac04429c13a7ff43785d75ad27569f2951ce0ffd30a3321230db2fc727216"
 dependencies = [
- "phf_generator 0.10.0",
- "phf_shared 0.10.0",
- "proc-macro-hack",
+ "phf_generator 0.11.2",
+ "phf_shared 0.11.2",
  "proc-macro2",
  "quote",
- "syn 1.0.109",
+ "syn 2.0.93",
 ]
 
 [[package]]
@@ -5066,12 +5060,6 @@ dependencies = [
  "quote",
  "syn 2.0.93",
 ]
-
-[[package]]
-name = "proc-macro-hack"
-version = "0.5.20+deprecated"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc375e1527247fe1a97d8b7156678dfe7c1af2fc075c9a4db3690ecd2a148068"
 
 [[package]]
 name = "proc-macro2"
@@ -7209,15 +7197,16 @@ dependencies = [
 
 [[package]]
 name = "tracing-actix-web"
-version = "0.7.11"
-source = "git+https://github.com/omid/tracing-actix-web?rev=00e9e15ed96d661e5bada371290031814c004522#00e9e15ed96d661e5bada371290031814c004522"
+version = "0.7.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "54a9f5c1aca50ebebf074ee665b9f99f2e84906dcf6b993a0d0090edb835166d"
 dependencies = [
  "actix-web",
  "mutually_exclusive_features",
- "opentelemetry 0.24.0",
+ "opentelemetry 0.27.1",
  "pin-project",
  "tracing",
- "tracing-opentelemetry 0.25.0",
+ "tracing-opentelemetry 0.28.0",
  "uuid",
 ]
 
@@ -7545,7 +7534,6 @@ dependencies = [
  "format_serde_error",
  "futures",
  "graphql_client",
- "hostname",
  "http 1.2.0",
  "httpmock",
  "hyper-rustls 0.27.5",
@@ -8006,7 +7994,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

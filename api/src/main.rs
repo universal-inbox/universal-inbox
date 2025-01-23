@@ -5,7 +5,6 @@ use apalis::redis::RedisStorage;
 use clap::{Parser, Subcommand};
 use email_address::EmailAddress;
 use futures::future;
-use opentelemetry::global;
 use sqlx::{
     postgres::{PgConnectOptions, PgPoolOptions},
     ConnectOptions, Executor,
@@ -429,7 +428,6 @@ async fn main() -> std::io::Result<()> {
             }
         },
     };
-    global::shutdown_tracer_provider();
 
     match result {
         Err(err) => {
