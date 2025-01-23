@@ -155,6 +155,9 @@ impl ThirdPartyItemRepository for Repository {
             separated
                 .push("updated_at = ")
                 .push_bind_unseparated(third_party_item.updated_at.naive_utc());
+            separated
+                .push("source_item_id = ")
+                .push_bind_unseparated(third_party_item.source_item.as_ref().map(|item| item.id.0));
             query_builder
                 .push(" WHERE id = ")
                 .push_bind(existing_third_party_item.id.0);
