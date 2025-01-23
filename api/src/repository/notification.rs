@@ -702,7 +702,7 @@ impl NotificationRepository for Repository {
                     notification.user_id,
                     notification.updated_at
                 );
-                return Ok(UpsertStatus::Untouched(notification));
+                return Ok(UpsertStatus::Untouched(Box::new(existing_notification)));
             }
 
             debug!(

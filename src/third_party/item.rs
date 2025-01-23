@@ -45,6 +45,7 @@ impl PartialEq for ThirdPartyItem {
             && self.data == other.data
             && self.user_id == other.user_id
             && self.integration_connection_id == other.integration_connection_id
+            && self.source_item == other.source_item
     }
 }
 
