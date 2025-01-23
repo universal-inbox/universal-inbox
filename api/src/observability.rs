@@ -7,15 +7,13 @@ use actix_web::{
     dev::{ServiceRequest, ServiceResponse},
     HttpMessage,
 };
-use opentelemetry::trace::TracerProvider as _;
-use opentelemetry::KeyValue;
+use opentelemetry::{trace::TracerProvider as _, KeyValue};
 use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
 use opentelemetry_otlp::{
     LogExporter, SpanExporter, WithExportConfig, WithHttpConfig, WithTonicConfig,
 };
 use opentelemetry_sdk::{
     logs::LoggerProvider,
-    runtime,
     trace::{RandomIdGenerator, Sampler, TracerProvider},
     Resource,
 };
@@ -26,8 +24,10 @@ use tracing::{subscriber::set_global_default, Instrument, Span, Subscriber};
 use tracing_actix_web::{DefaultRootSpanBuilder, RootSpanBuilder};
 use tracing_log::LogTracer;
 use tracing_opentelemetry::OpenTelemetryLayer;
-use tracing_subscriber::layer::Layered;
-use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Registry};
+use tracing_subscriber::{
+    layer::{Layered, SubscriberExt},
+    EnvFilter, Registry,
+};
 
 use universal_inbox::user::UserId;
 
@@ -57,43 +57,29 @@ pub fn get_subscriber_with_telemetry(
     let env_filter =
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(env_filter_str));
 
-    let hostname = hostname::get().unwrap().into_string().unwrap();
-    let mut resource = vec![
-        KeyValue::new("service.name", service_name.to_string()),
-        KeyValue::new("host.name", hostname.clone()),
-        KeyValue::new("deployment.environment", environment.to_string()),
-    ];
-    if let Some(ref version) = version {
-        resource.push(KeyValue::new("service.version", version.to_string()));
-    }
+    let resource = build_resource(environment, service_name, version);
     let tracer_provider = TracerProvider::builder()
         .with_sampler(Sampler::AlwaysOn)
         .with_id_generator(RandomIdGenerator::default())
         .with_max_events_per_span(256)
         .with_max_attributes_per_span(64)
-        .with_resource(Resource::new(resource.clone()))
-        .with_batch_exporter(
-            build_span_exporter(
-                config.otlp_exporter_protocol,
-                config.otlp_exporter_endpoint.to_string(),
-                config.otlp_exporter_headers.clone(),
-            ),
-            runtime::Tokio,
-        )
+        .with_resource(resource.clone())
+        .with_batch_exporter(build_span_exporter(
+            config.otlp_exporter_protocol,
+            config.otlp_exporter_endpoint.to_string(),
+            config.otlp_exporter_headers.clone(),
+        ))
         .build();
     let tracer = tracer_provider.tracer("universal-inbox");
     let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
 
     let logger = LoggerProvider::builder()
-        .with_resource(Resource::new(resource))
-        .with_batch_exporter(
-            build_log_exporter(
-                config.otlp_exporter_protocol,
-                config.otlp_exporter_endpoint.to_string(),
-                config.otlp_exporter_headers.clone(),
-            ),
-            runtime::Tokio,
-        )
+        .with_resource(resource)
+        .with_batch_exporter(build_log_exporter(
+            config.otlp_exporter_protocol,
+            config.otlp_exporter_endpoint.to_string(),
+            config.otlp_exporter_headers.clone(),
+        ))
         .build();
 
     // The bridge currently has a bug as it does not add the span_id and trace_id to the log record
@@ -281,4 +267,19 @@ where
             .build()
             .unwrap()
     }
+}
+
+fn build_resource(environment: &str, service_name: &str, version: Option<String>) -> Resource {
+    let mut resource = vec![
+        KeyValue::new("service.name", service_name.to_string()),
+        KeyValue::new("deployment.environment", environment.to_string()),
+    ];
+    if let Some(ref version) = version {
+        resource.push(KeyValue::new("service.version", version.to_string()));
+    }
+
+    Resource::builder()
+        .with_service_name(service_name.to_string())
+        .with_attributes(resource)
+        .build()
 }

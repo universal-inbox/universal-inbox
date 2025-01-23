@@ -85,6 +85,11 @@ rstest = { workspace = true }
 [patch.crates-io]
 slack-blocks-render = { git = "https://github.com/dax/slack-blocks-render", branch = "render-custom-emojis" }
 slack-morphism = { git = "https://github.com/dax/slack-morphism-rust", branch = "add-emoji-list-api-call" }
+opentelemetry = { package = "opentelemetry",git = "https://github.com/dylanahsmith/opentelemetry-rust.git", branch = "appender-tracing-fix-trace-context"  }
+opentelemetry-appender-tracing = { package = "opentelemetry-appender-tracing", git = "https://github.com/dylanahsmith/opentelemetry-rust.git", branch = "appender-tracing-fix-trace-context" }
+opentelemetry-http = { package = "opentelemetry-http", git = "https://github.com/dylanahsmith/opentelemetry-rust.git", branch = "appender-tracing-fix-trace-context"  }
+opentelemetry-otlp = { package = "opentelemetry-otlp", git = "https://github.com/dylanahsmith/opentelemetry-rust.git", branch = "appender-tracing-fix-trace-context"  }
+opentelemetry_sdk = { package = "opentelemetry_sdk", git = "https://github.com/dylanahsmith/opentelemetry-rust.git", branch = "appender-tracing-fix-trace-context"  }
 
 [profile]
 
