@@ -27,9 +27,9 @@ pub mod third_party {
 
     #[async_trait]
     pub trait ThirdPartyItemSourceService<T> {
-        async fn fetch_items<'a>(
+        async fn fetch_items(
             &self,
-            executor: &mut Transaction<'a, Postgres>,
+            executor: &mut Transaction<'_, Postgres>,
             user_id: UserId,
         ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError>;
 
@@ -50,21 +50,21 @@ pub mod notification {
             source_third_party_item: &ThirdPartyItem,
             user_id: UserId,
         ) -> Result<Box<Notification>, UniversalInboxError>;
-        async fn delete_notification_from_source<'a>(
+        async fn delete_notification_from_source(
             &self,
-            executor: &mut Transaction<'a, Postgres>,
+            executor: &mut Transaction<'_, Postgres>,
             source_item: &ThirdPartyItem,
             user_id: UserId,
         ) -> Result<(), UniversalInboxError>;
-        async fn unsubscribe_notification_from_source<'a>(
+        async fn unsubscribe_notification_from_source(
             &self,
-            executor: &mut Transaction<'a, Postgres>,
+            executor: &mut Transaction<'_, Postgres>,
             source_item: &ThirdPartyItem,
             user_id: UserId,
         ) -> Result<(), UniversalInboxError>;
-        async fn snooze_notification_from_source<'a>(
+        async fn snooze_notification_from_source(
             &self,
-            executor: &mut Transaction<'a, Postgres>,
+            executor: &mut Transaction<'_, Postgres>,
             source_item: &ThirdPartyItem,
             snoozed_until_at: DateTime<Utc>,
             user_id: UserId,
@@ -77,35 +77,35 @@ pub mod task {
 
     #[async_trait]
     pub trait ThirdPartyTaskService<T> {
-        async fn third_party_item_into_task<'a>(
+        async fn third_party_item_into_task(
             &self,
-            executor: &mut Transaction<'a, Postgres>,
+            executor: &mut Transaction<'_, Postgres>,
             source: &T,
             source_third_party_item: &ThirdPartyItem,
             task_creation: Option<TaskCreation>,
             user_id: UserId,
         ) -> Result<Box<CreateOrUpdateTaskRequest>, UniversalInboxError>;
-        async fn delete_task<'a>(
+        async fn delete_task(
             &self,
-            executor: &mut Transaction<'a, Postgres>,
+            executor: &mut Transaction<'_, Postgres>,
             third_party_item: &ThirdPartyItem,
             user_id: UserId,
         ) -> Result<(), UniversalInboxError>;
-        async fn complete_task<'a>(
+        async fn complete_task(
             &self,
-            executor: &mut Transaction<'a, Postgres>,
+            executor: &mut Transaction<'_, Postgres>,
             third_party_item: &ThirdPartyItem,
             user_id: UserId,
         ) -> Result<(), UniversalInboxError>;
-        async fn uncomplete_task<'a>(
+        async fn uncomplete_task(
             &self,
-            executor: &mut Transaction<'a, Postgres>,
+            executor: &mut Transaction<'_, Postgres>,
             third_party_item: &ThirdPartyItem,
             user_id: UserId,
         ) -> Result<(), UniversalInboxError>;
-        async fn update_task<'a>(
+        async fn update_task(
             &self,
-            executor: &mut Transaction<'a, Postgres>,
+            executor: &mut Transaction<'_, Postgres>,
             id: &str,
             patch: &TaskPatch,
             user_id: UserId,
@@ -114,24 +114,24 @@ pub mod task {
 
     #[async_trait]
     pub trait ThirdPartyTaskSourceService<T> {
-        async fn create_task<'a>(
+        async fn create_task(
             &self,
-            executor: &mut Transaction<'a, Postgres>,
+            executor: &mut Transaction<'_, Postgres>,
             task: &TaskCreation,
             user_id: UserId,
         ) -> Result<T, UniversalInboxError>;
-        async fn search_projects<'a, 'b>(
+        async fn search_projects(
             &self,
-            executor: &mut Transaction<'a, Postgres>,
-            matches: &'b str,
+            executor: &mut Transaction<'_, Postgres>,
+            matches: &str,
             user_id: UserId,
         ) -> Result<Vec<ProjectSummary>, UniversalInboxError>;
-        async fn get_or_create_project<'a, 'b>(
+        async fn get_or_create_project(
             &self,
-            executor: &mut Transaction<'a, Postgres>,
-            project_name: &'b str,
+            executor: &mut Transaction<'_, Postgres>,
+            project_name: &str,
             user_id: UserId,
-            access_token: Option<&'b AccessToken>,
+            access_token: Option<&AccessToken>,
         ) -> Result<ProjectSummary, UniversalInboxError>;
     }
 }

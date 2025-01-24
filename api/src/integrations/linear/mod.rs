@@ -536,9 +536,9 @@ impl ThirdPartyItemSourceService<LinearNotification> for LinearService {
         fields(user.id = user_id.to_string()),
         err
     )]
-    async fn fetch_items<'a>(
+    async fn fetch_items(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
     ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError> {
         let (access_token, integration_connection) = self
@@ -645,9 +645,9 @@ impl ThirdPartyNotificationSourceService<LinearNotification> for LinearService {
         ),
         err
     )]
-    async fn delete_notification_from_source<'a>(
+    async fn delete_notification_from_source(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         source_item: &ThirdPartyItem,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
@@ -672,9 +672,9 @@ impl ThirdPartyNotificationSourceService<LinearNotification> for LinearService {
         fields(third_party_item_id = source_item.id.to_string(), user.id = user_id.to_string()),
         err
     )]
-    async fn unsubscribe_notification_from_source<'a>(
+    async fn unsubscribe_notification_from_source(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         source_item: &ThirdPartyItem,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
@@ -731,9 +731,9 @@ impl ThirdPartyNotificationSourceService<LinearNotification> for LinearService {
         fields(third_party_item_id = source_item.id.to_string(), user.id = user_id.to_string()),
         err
     )]
-    async fn snooze_notification_from_source<'a>(
+    async fn snooze_notification_from_source(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         source_item: &ThirdPartyItem,
         snoozed_until_at: DateTime<Utc>,
         user_id: UserId,
@@ -786,9 +786,9 @@ impl ThirdPartyItemSourceService<LinearIssue> for LinearService {
         fields(user.id = user_id.to_string()),
         err
     )]
-    async fn fetch_items<'a>(
+    async fn fetch_items(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
     ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError> {
         let (access_token, integration_connection) = self
@@ -828,9 +828,9 @@ impl ThirdPartyTaskService<LinearIssue> for LinearService {
         fields(source_id = source.id.to_string(), user.id = user_id.to_string()),
         err
     )]
-    async fn third_party_item_into_task<'a>(
+    async fn third_party_item_into_task(
         &self,
-        _executor: &mut Transaction<'a, Postgres>,
+        _executor: &mut Transaction<'_, Postgres>,
         source: &LinearIssue,
         source_third_party_item: &ThirdPartyItem,
         task_creation: Option<TaskCreation>,
@@ -881,9 +881,9 @@ impl ThirdPartyTaskService<LinearIssue> for LinearService {
         ),
         err
     )]
-    async fn delete_task<'a>(
+    async fn delete_task(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         third_party_item: &ThirdPartyItem,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
@@ -928,9 +928,9 @@ impl ThirdPartyTaskService<LinearIssue> for LinearService {
         ),
         err
     )]
-    async fn complete_task<'a>(
+    async fn complete_task(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         third_party_item: &ThirdPartyItem,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
@@ -975,9 +975,9 @@ impl ThirdPartyTaskService<LinearIssue> for LinearService {
         ),
         err
     )]
-    async fn uncomplete_task<'a>(
+    async fn uncomplete_task(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         third_party_item: &ThirdPartyItem,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
@@ -1018,9 +1018,9 @@ impl ThirdPartyTaskService<LinearIssue> for LinearService {
         fields(user.id = _user_id.to_string()),
         err
     )]
-    async fn update_task<'a>(
+    async fn update_task(
         &self,
-        _executor: &mut Transaction<'a, Postgres>,
+        _executor: &mut Transaction<'_, Postgres>,
         _id: &str,
         _patch: &TaskPatch,
         _user_id: UserId,

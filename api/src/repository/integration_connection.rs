@@ -38,44 +38,44 @@ pub enum IntegrationConnectionSyncedBeforeFilter {
 
 #[async_trait]
 pub trait IntegrationConnectionRepository {
-    async fn get_integration_connection<'a>(
+    async fn get_integration_connection(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         integration_connection_id: IntegrationConnectionId,
     ) -> Result<Option<IntegrationConnection>, UniversalInboxError>;
 
-    async fn get_integration_connection_per_provider<'a>(
+    async fn get_integration_connection_per_provider(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         for_user_id: UserId,
         integration_provider_kind: IntegrationProviderKind,
         synced_before_filter: Option<IntegrationConnectionSyncedBeforeFilter>,
         with_status: Option<IntegrationConnectionStatus>,
     ) -> Result<Option<IntegrationConnection>, UniversalInboxError>;
 
-    async fn get_integration_connection_per_provider_user_id<'a>(
+    async fn get_integration_connection_per_provider_user_id(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         integration_provider_kind: IntegrationProviderKind,
         provider_user_id: String,
     ) -> Result<Option<IntegrationConnection>, UniversalInboxError>;
 
-    async fn find_integration_connection_per_provider_user_ids<'a>(
+    async fn find_integration_connection_per_provider_user_ids(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         integration_provider_kind: IntegrationProviderKind,
         provider_user_ids: Vec<String>,
     ) -> Result<Vec<IntegrationConnection>, UniversalInboxError>;
 
-    async fn get_integration_connection_per_context<'a>(
+    async fn get_integration_connection_per_context(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         context: IntegrationConnectionContext,
     ) -> Result<Option<IntegrationConnection>, UniversalInboxError>;
 
-    async fn update_integration_connection_status<'a>(
+    async fn update_integration_connection_status(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         integration_connection_id: IntegrationConnectionId,
         new_status: IntegrationConnectionStatus,
         failure_message: Option<String>,
@@ -83,52 +83,52 @@ pub trait IntegrationConnectionRepository {
         for_user_id: UserId,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError>;
 
-    async fn update_integration_connection_sync_status<'a>(
+    async fn update_integration_connection_sync_status(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         user_id: Option<UserId>,
         integration_provider_kind: Option<IntegrationProviderKind>,
         sync_update: IntegrationConnectionSyncStatusUpdate,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError>;
 
-    async fn fetch_all_integration_connections<'a>(
+    async fn fetch_all_integration_connections(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         for_user_id: UserId,
         status: Option<IntegrationConnectionStatus>,
         lock_rows: bool,
     ) -> Result<Vec<IntegrationConnection>, UniversalInboxError>;
 
-    async fn create_integration_connection<'a>(
+    async fn create_integration_connection(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         integration_connection: Box<IntegrationConnection>,
     ) -> Result<Box<IntegrationConnection>, UniversalInboxError>;
 
-    async fn update_integration_connection_context<'a>(
+    async fn update_integration_connection_context(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         integration_connection_id: IntegrationConnectionId,
         context: Option<IntegrationConnectionContext>,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError>;
 
-    async fn does_integration_connection_exist<'a>(
+    async fn does_integration_connection_exist(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         id: IntegrationConnectionId,
     ) -> Result<bool, UniversalInboxError>;
 
-    async fn update_integration_connection_config<'a>(
+    async fn update_integration_connection_config(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         integration_connection_id: IntegrationConnectionId,
         config: IntegrationConnectionConfig,
         for_user_id: UserId,
     ) -> Result<UpdateStatus<Box<IntegrationConnectionConfig>>, UniversalInboxError>;
 
-    async fn update_integration_connection_provider_user_id<'a>(
+    async fn update_integration_connection_provider_user_id(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         integration_connection_id: IntegrationConnectionId,
         provider_user_id: Option<String>,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError>;
@@ -145,9 +145,9 @@ impl IntegrationConnectionRepository for Repository {
         fields(integration_connection_id = integration_connection_id.to_string().to_string()),
         err
     )]
-    async fn get_integration_connection<'a>(
+    async fn get_integration_connection(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         integration_connection_id: IntegrationConnectionId,
     ) -> Result<Option<IntegrationConnection>, UniversalInboxError> {
         let row = sqlx::query_as!(
@@ -205,9 +205,9 @@ impl IntegrationConnectionRepository for Repository {
         ),
         err
     )]
-    async fn get_integration_connection_per_provider<'a>(
+    async fn get_integration_connection_per_provider(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
         integration_provider_kind: IntegrationProviderKind,
         synced_before_filter: Option<IntegrationConnectionSyncedBeforeFilter>,
@@ -297,9 +297,9 @@ impl IntegrationConnectionRepository for Repository {
         ),
         err
     )]
-    async fn get_integration_connection_per_provider_user_id<'a>(
+    async fn get_integration_connection_per_provider_user_id(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         integration_provider_kind: IntegrationProviderKind,
         provider_user_id: String,
     ) -> Result<Option<IntegrationConnection>, UniversalInboxError> {
@@ -360,9 +360,9 @@ impl IntegrationConnectionRepository for Repository {
         ),
         err
     )]
-    async fn find_integration_connection_per_provider_user_ids<'a>(
+    async fn find_integration_connection_per_provider_user_ids(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         integration_provider_kind: IntegrationProviderKind,
         provider_user_ids: Vec<String>,
     ) -> Result<Vec<IntegrationConnection>, UniversalInboxError> {
@@ -417,9 +417,9 @@ impl IntegrationConnectionRepository for Repository {
     }
 
     #[tracing::instrument(level = "debug", skip_all, fields(context), err)]
-    async fn get_integration_connection_per_context<'a>(
+    async fn get_integration_connection_per_context(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         context: IntegrationConnectionContext,
     ) -> Result<Option<IntegrationConnection>, UniversalInboxError> {
         let IntegrationConnectionContext::Slack(ref slack_context) = context else {
@@ -488,9 +488,9 @@ impl IntegrationConnectionRepository for Repository {
         ),
         err
     )]
-    async fn update_integration_connection_status<'a>(
+    async fn update_integration_connection_status(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         integration_connection_id: IntegrationConnectionId,
         new_status: IntegrationConnectionStatus,
         failure_message: Option<String>,
@@ -614,9 +614,9 @@ impl IntegrationConnectionRepository for Repository {
         ),
         err
     )]
-    async fn update_integration_connection_sync_status<'a>(
+    async fn update_integration_connection_sync_status(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         user_id: Option<UserId>,
         integration_provider_kind: Option<IntegrationProviderKind>,
         sync_update: IntegrationConnectionSyncStatusUpdate,
@@ -770,9 +770,9 @@ impl IntegrationConnectionRepository for Repository {
         ),
         err
     )]
-    async fn update_integration_connection_context<'a>(
+    async fn update_integration_connection_context(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         integration_connection_id: IntegrationConnectionId,
         context: Option<IntegrationConnectionContext>,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
@@ -853,9 +853,9 @@ impl IntegrationConnectionRepository for Repository {
         ),
         err
     )]
-    async fn fetch_all_integration_connections<'a>(
+    async fn fetch_all_integration_connections(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         for_user_id: UserId,
         status: Option<IntegrationConnectionStatus>,
         lock_rows: bool,
@@ -925,9 +925,9 @@ impl IntegrationConnectionRepository for Repository {
         fields(integration_connection_id = integration_connection.id.to_string()),
         err
     )]
-    async fn create_integration_connection<'a>(
+    async fn create_integration_connection(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         integration_connection: Box<IntegrationConnection>,
     ) -> Result<Box<IntegrationConnection>, UniversalInboxError> {
         sqlx::query!(
@@ -1036,9 +1036,9 @@ impl IntegrationConnectionRepository for Repository {
         fields(integration_connection_id = id.to_string()),
         err
     )]
-    async fn does_integration_connection_exist<'a>(
+    async fn does_integration_connection_exist(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         id: IntegrationConnectionId,
     ) -> Result<bool, UniversalInboxError> {
         let count: Option<i64> = sqlx::query_scalar!(
@@ -1071,9 +1071,9 @@ impl IntegrationConnectionRepository for Repository {
         ),
         err
     )]
-    async fn update_integration_connection_config<'a>(
+    async fn update_integration_connection_config(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         integration_connection_id: IntegrationConnectionId,
         config: IntegrationConnectionConfig,
         for_user_id: UserId,
@@ -1151,9 +1151,9 @@ impl IntegrationConnectionRepository for Repository {
             provider_user_id
         )
     )]
-    async fn update_integration_connection_provider_user_id<'a>(
+    async fn update_integration_connection_provider_user_id(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         integration_connection_id: IntegrationConnectionId,
         provider_user_id: Option<String>,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {

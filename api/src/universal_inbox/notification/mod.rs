@@ -12,9 +12,9 @@ pub mod service;
 
 #[async_trait]
 pub trait NotificationEventService<T> {
-    async fn save_notification_from_event<'a>(
+    async fn save_notification_from_event(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         event: &T,
         existing_third_party_item: Option<&ThirdPartyItem>,
         user_id: UserId,

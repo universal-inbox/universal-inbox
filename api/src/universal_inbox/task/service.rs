@@ -89,7 +89,7 @@ impl TaskService {
         }
     }
 
-    pub async fn begin(&self) -> Result<Transaction<Postgres>, UniversalInboxError> {
+    pub async fn begin(&self) -> Result<Transaction<'_, Postgres>, UniversalInboxError> {
         self.repository.begin().await
     }
 
@@ -104,9 +104,9 @@ impl TaskService {
         ),
         err
     )]
-    pub async fn apply_updated_task_side_effect<'a, T, U>(
+    pub async fn apply_updated_task_side_effect<T, U>(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         third_party_task_service: Arc<U>,
         patch: &TaskPatch,
         third_party_item: &ThirdPartyItem,
@@ -177,9 +177,9 @@ impl TaskService {
         ),
         err
     )]
-    pub async fn apply_synced_task_side_effect<'a>(
+    pub async fn apply_synced_task_side_effect(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         synced_third_party_item: &ThirdPartyItem,
         upsert_task: &mut UpsertStatus<Box<Task>>,
         user_id: UserId,
@@ -313,9 +313,9 @@ impl TaskService {
         ),
         err
     )]
-    pub async fn list_tasks<'a>(
+    pub async fn list_tasks(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         status: TaskStatus,
         only_synced_tasks: bool,
         user_id: UserId,
@@ -346,10 +346,10 @@ impl TaskService {
         ),
         err
     )]
-    pub async fn search_tasks<'a, 'b>(
+    pub async fn search_tasks(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
-        matches: &'b str,
+        executor: &mut Transaction<'_, Postgres>,
+        matches: &str,
         user_id: UserId,
     ) -> Result<Vec<TaskSummary>, UniversalInboxError> {
         self.repository
@@ -366,9 +366,9 @@ impl TaskService {
         ),
         err
     )]
-    pub async fn get_task<'a>(
+    pub async fn get_task(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         task_id: TaskId,
         for_user_id: UserId,
     ) -> Result<Option<Task>, UniversalInboxError> {
@@ -391,9 +391,9 @@ impl TaskService {
         fields(task_ids = task_ids.iter().map(|id| id.to_string()).collect::<Vec<String>>().join(", ")),
         err
     )]
-    pub async fn get_tasks<'a>(
+    pub async fn get_tasks(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         task_ids: Vec<TaskId>,
     ) -> Result<Vec<Task>, UniversalInboxError> {
         self.repository.get_tasks(executor, task_ids).await
@@ -408,9 +408,9 @@ impl TaskService {
         ),
         err
     )]
-    pub async fn create_task<'a>(
+    pub async fn create_task(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         task: Box<Task>,
         for_user_id: UserId,
     ) -> Result<Box<TaskCreationResult>, UniversalInboxError> {
@@ -433,11 +433,11 @@ impl TaskService {
         fields(notification_id = notification.id.to_string()),
         err
     )]
-    pub async fn create_task_from_notification<'a, 'b>(
+    pub async fn create_task_from_notification(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
-        task_creation: &'b TaskCreation,
-        notification: &'b Notification,
+        executor: &mut Transaction<'_, Postgres>,
+        task_creation: &TaskCreation,
+        notification: &Notification,
     ) -> Result<Box<Task>, UniversalInboxError> {
         let user_id = notification.user_id;
         let third_party_task_service = self.todoist_service.clone();
@@ -521,9 +521,9 @@ impl TaskService {
         ),
         err
     )]
-    pub async fn create_task_from_third_party_item<'a, T, U>(
+    pub async fn create_task_from_third_party_item<T, U>(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         third_party_item: ThirdPartyItem,
         third_party_task_service: Arc<U>,
         user_id: UserId,
@@ -619,9 +619,9 @@ impl TaskService {
         }))
     }
 
-    async fn sync_third_party_tasks<'a, T, U>(
+    async fn sync_third_party_tasks<T, U>(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         third_party_task_service: Arc<U>,
         user_id: UserId,
         force_sync: bool,
@@ -636,9 +636,9 @@ impl TaskService {
             + Sync,
         <T as TryFrom<ThirdPartyItem>>::Error: Send + Sync,
     {
-        async fn sync_third_party_tasks<'a, T, U>(
+        async fn sync_third_party_tasks<T, U>(
             task_service: &TaskService,
-            executor: &mut Transaction<'a, Postgres>,
+            executor: &mut Transaction<'_, Postgres>,
             third_party_task_service: Arc<U>,
             user_id: UserId,
         ) -> Result<Vec<TaskCreationResult>, UniversalInboxError>
@@ -747,9 +747,9 @@ impl TaskService {
         ),
         err
     )]
-    pub async fn sync_third_party_item_as_task<'a, T, U>(
+    pub async fn sync_third_party_item_as_task<T, U>(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         third_party_task_service: Arc<U>,
         third_party_item: &ThirdPartyItem,
         task_creation: Option<TaskCreation>,
@@ -793,9 +793,9 @@ impl TaskService {
         ),
         err
     )]
-    pub async fn save_third_party_item_as_task<'a, T, U>(
+    pub async fn save_third_party_item_as_task<T, U>(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         third_party_task_service: Arc<U>,
         third_party_item: &ThirdPartyItem,
         task_creation: Option<TaskCreation>,
@@ -832,9 +832,9 @@ impl TaskService {
         ),
         err
     )]
-    pub async fn sync_tasks<'a>(
+    pub async fn sync_tasks(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         source: TaskSyncSourceKind,
         user_id: UserId,
         force_sync: bool,
@@ -861,7 +861,7 @@ impl TaskService {
         }
     }
 
-    pub async fn sync_tasks_with_transaction<'a>(
+    pub async fn sync_tasks_with_transaction(
         &self,
         source: TaskSyncSourceKind,
         user_id: UserId,
@@ -899,7 +899,7 @@ impl TaskService {
         }
     }
 
-    pub async fn sync_all_tasks<'a>(
+    pub async fn sync_all_tasks(
         &self,
         user_id: UserId,
         force_sync: bool,
@@ -916,7 +916,7 @@ impl TaskService {
             .collect())
     }
 
-    pub async fn sync_tasks_for_all_users<'a>(
+    pub async fn sync_tasks_for_all_users(
         &self,
         source: Option<TaskSyncSourceKind>,
         force_sync: bool,
@@ -935,7 +935,7 @@ impl TaskService {
         Ok(())
     }
 
-    pub async fn sync_tasks_for_user<'a>(
+    pub async fn sync_tasks_for_user(
         &self,
         source: Option<TaskSyncSourceKind>,
         user_id: UserId,
@@ -970,9 +970,9 @@ impl TaskService {
         ),
         err
     )]
-    pub async fn patch_task<'a>(
+    pub async fn patch_task(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         task_id: TaskId,
         patch: &TaskPatch,
         for_user_id: UserId,
@@ -1057,10 +1057,10 @@ impl TaskService {
         ),
         err
     )]
-    pub async fn link_notification_with_task<'a, 'b>(
+    pub async fn link_notification_with_task(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
-        notification: &'b Notification,
+        executor: &mut Transaction<'_, Postgres>,
+        notification: &Notification,
         task_id: TaskId,
         for_user_id: UserId,
     ) -> Result<Box<Task>, UniversalInboxError> {
@@ -1110,10 +1110,10 @@ impl TaskService {
         ),
         err
     )]
-    pub async fn search_projects<'a, 'b>(
+    pub async fn search_projects(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
-        matches: &'b str,
+        executor: &mut Transaction<'_, Postgres>,
+        matches: &str,
         user_id: UserId,
     ) -> Result<Vec<ProjectSummary>, UniversalInboxError> {
         self.todoist_service
@@ -1121,10 +1121,10 @@ impl TaskService {
             .await
     }
 
-    pub async fn get_or_create_project<'a, 'b>(
+    pub async fn get_or_create_project(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
-        project_name: &'b str,
+        executor: &mut Transaction<'_, Postgres>,
+        project_name: &str,
         user_id: UserId,
     ) -> Result<ProjectSummary, UniversalInboxError> {
         self.todoist_service
@@ -1142,9 +1142,9 @@ impl TaskService {
         ),
         err
     )]
-    pub async fn apply_task_third_party_item_side_effect<'a, 'b>(
+    pub async fn apply_task_third_party_item_side_effect(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         patch: &TaskPatch,
         third_party_item: &ThirdPartyItem,
         for_user_id: UserId,

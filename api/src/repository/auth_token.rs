@@ -15,15 +15,15 @@ use super::Repository;
 
 #[async_trait]
 pub trait AuthenticationTokenRepository {
-    async fn create_auth_token<'a>(
+    async fn create_auth_token(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         auth_token: AuthenticationToken,
     ) -> Result<AuthenticationToken, UniversalInboxError>;
 
-    async fn fetch_auth_tokens_for_user<'a>(
+    async fn fetch_auth_tokens_for_user(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
         exclude_session_tokens: bool,
     ) -> Result<Vec<AuthenticationToken>, UniversalInboxError>;
@@ -32,9 +32,9 @@ pub trait AuthenticationTokenRepository {
 #[async_trait]
 impl AuthenticationTokenRepository for Repository {
     #[tracing::instrument(level = "debug", skip_all, err)]
-    async fn create_auth_token<'a>(
+    async fn create_auth_token(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         auth_token: AuthenticationToken,
     ) -> Result<AuthenticationToken, UniversalInboxError> {
         sqlx::query!(
@@ -87,9 +87,9 @@ impl AuthenticationTokenRepository for Repository {
         fields(user.id = user_id.to_string(), exclude_session_tokens),
         err
     )]
-    async fn fetch_auth_tokens_for_user<'a>(
+    async fn fetch_auth_tokens_for_user(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
         exclude_session_tokens: bool,
     ) -> Result<Vec<AuthenticationToken>, UniversalInboxError> {

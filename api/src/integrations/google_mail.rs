@@ -541,9 +541,9 @@ impl GoogleMailService {
 
     /// Derive a ThirdPartyItem from a GoogleMailThread and cannot fail as it is a best-effort operation
     /// In case of failure, None is returned and the thread will be used as source
-    async fn derive_third_party_item_from_google_mail_thread<'a>(
+    async fn derive_third_party_item_from_google_mail_thread(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         google_mail_thread: &GoogleMailThread,
         user_id: UserId,
         integration_connection_id: IntegrationConnectionId,
@@ -582,9 +582,9 @@ impl GoogleMailService {
         None
     }
 
-    async fn derive_third_party_item_from_google_mail_invitation<'a>(
+    async fn derive_third_party_item_from_google_mail_invitation(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         message_id: &str,
         attachment_id: &str,
         user_id: UserId,
@@ -677,9 +677,9 @@ impl ThirdPartyItemSourceService<GoogleMailThread> for GoogleMailService {
         fields(user.id = user_id.to_string()),
         err
     )]
-    async fn fetch_items<'a>(
+    async fn fetch_items(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
     ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError> {
         let (access_token, integration_connection) = self
@@ -914,9 +914,9 @@ impl ThirdPartyNotificationSourceService<GoogleMailThread> for GoogleMailService
         fields(third_party_item_id = source_item.id.to_string(), user.id = user_id.to_string()),
         err
     )]
-    async fn delete_notification_from_source<'a>(
+    async fn delete_notification_from_source(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         source_item: &ThirdPartyItem,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
@@ -948,9 +948,9 @@ impl ThirdPartyNotificationSourceService<GoogleMailThread> for GoogleMailService
         fields(third_party_item_id = source_item.id.to_string(), user.id = user_id.to_string()),
         err
     )]
-    async fn unsubscribe_notification_from_source<'a>(
+    async fn unsubscribe_notification_from_source(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         source_item: &ThirdPartyItem,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
@@ -975,9 +975,9 @@ impl ThirdPartyNotificationSourceService<GoogleMailThread> for GoogleMailService
         .await
     }
 
-    async fn snooze_notification_from_source<'a>(
+    async fn snooze_notification_from_source(
         &self,
-        _executor: &mut Transaction<'a, Postgres>,
+        _executor: &mut Transaction<'_, Postgres>,
         _source_item: &ThirdPartyItem,
         _snoozed_until_at: DateTime<Utc>,
         _user_id: UserId,

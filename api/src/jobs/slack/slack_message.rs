@@ -25,8 +25,8 @@ use crate::{
     },
 };
 
-pub async fn handle_slack_message_push_event<'a>(
-    executor: &mut Transaction<'a, Postgres>,
+pub async fn handle_slack_message_push_event(
+    executor: &mut Transaction<'_, Postgres>,
     event: &SlackPushEventCallback,
     notification_service: Arc<RwLock<NotificationService>>,
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
@@ -143,8 +143,8 @@ pub async fn handle_slack_message_push_event<'a>(
     Ok(())
 }
 
-async fn handle_slack_message_push_event_if_enabled<'a>(
-    executor: &mut Transaction<'a, Postgres>,
+async fn handle_slack_message_push_event_if_enabled(
+    executor: &mut Transaction<'_, Postgres>,
     event: &SlackPushEventCallback,
     integration_connection: IntegrationConnection,
     existing_third_party_item: Option<&ThirdPartyItem>,

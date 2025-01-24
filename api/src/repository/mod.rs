@@ -30,7 +30,7 @@ impl Repository {
             .context("Failed to connection to the database")?)
     }
 
-    pub async fn begin(&self) -> Result<Transaction<Postgres>, UniversalInboxError> {
+    pub async fn begin(&self) -> Result<Transaction<'_, Postgres>, UniversalInboxError> {
         Ok(self
             .pool
             .begin()

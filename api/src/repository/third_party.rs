@@ -20,37 +20,37 @@ use super::FromRowWithPrefix;
 
 #[async_trait]
 pub trait ThirdPartyItemRepository {
-    async fn create_or_update_third_party_item<'a>(
+    async fn create_or_update_third_party_item(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         third_party_item: Box<ThirdPartyItem>,
     ) -> Result<UpsertStatus<Box<ThirdPartyItem>>, UniversalInboxError>;
 
-    async fn get_stale_task_source_third_party_items<'a>(
+    async fn get_stale_task_source_third_party_items(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         active_task_source_third_party_item_ids: Vec<ThirdPartyItemId>,
         task_source_kind: TaskSourceKind,
         user_id: UserId,
     ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError>;
 
-    async fn has_third_party_item_for_source_id<'a>(
+    async fn has_third_party_item_for_source_id(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         kind: ThirdPartyItemKind,
         source_id: &str,
     ) -> Result<bool, UniversalInboxError>;
 
-    async fn find_third_party_items_for_source_id<'a>(
+    async fn find_third_party_items_for_source_id(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         kind: ThirdPartyItemKind,
         source_id: &str,
     ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError>;
 
-    async fn find_third_party_items_for_user_id<'a>(
+    async fn find_third_party_items_for_user_id(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         kind: ThirdPartyItemKind,
         user_id: UserId,
     ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError>;
@@ -70,9 +70,9 @@ impl ThirdPartyItemRepository for Repository {
         ),
         err
     )]
-    async fn create_or_update_third_party_item<'a>(
+    async fn create_or_update_third_party_item(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         third_party_item: Box<ThirdPartyItem>,
     ) -> Result<UpsertStatus<Box<ThirdPartyItem>>, UniversalInboxError> {
         let data = Json(third_party_item.data.clone());
@@ -245,9 +245,9 @@ impl ThirdPartyItemRepository for Repository {
         ),
         err
     )]
-    async fn get_stale_task_source_third_party_items<'a>(
+    async fn get_stale_task_source_third_party_items(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         active_task_source_third_party_item_ids: Vec<ThirdPartyItemId>,
         task_source_kind: TaskSourceKind,
         user_id: UserId,
@@ -320,9 +320,9 @@ impl ThirdPartyItemRepository for Repository {
         ),
         err
     )]
-    async fn has_third_party_item_for_source_id<'a>(
+    async fn has_third_party_item_for_source_id(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         kind: ThirdPartyItemKind,
         source_id: &str,
     ) -> Result<bool, UniversalInboxError> {
@@ -360,9 +360,9 @@ impl ThirdPartyItemRepository for Repository {
         ),
         err
     )]
-    async fn find_third_party_items_for_source_id<'a>(
+    async fn find_third_party_items_for_source_id(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         kind: ThirdPartyItemKind,
         source_id: &str,
     ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError> {
@@ -419,9 +419,9 @@ impl ThirdPartyItemRepository for Repository {
         ),
         err
     )]
-    async fn find_third_party_items_for_user_id<'a>(
+    async fn find_third_party_items_for_user_id(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         kind: ThirdPartyItemKind,
         user_id: UserId,
     ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError> {

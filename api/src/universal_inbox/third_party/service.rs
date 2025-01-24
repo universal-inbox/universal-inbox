@@ -4,9 +4,9 @@ use std::{
 };
 
 use anyhow::{anyhow, Context};
+use log::debug;
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
-use tracing::debug;
 
 use universal_inbox::{
     integration_connection::provider::IntegrationProviderSource,
@@ -76,7 +76,7 @@ impl ThirdPartyItemService {
         self.notification_service = notification_service;
     }
 
-    pub async fn begin(&self) -> Result<Transaction<Postgres>, UniversalInboxError> {
+    pub async fn begin(&self) -> Result<Transaction<'_, Postgres>, UniversalInboxError> {
         self.repository.begin().await
     }
 
@@ -90,9 +90,9 @@ impl ThirdPartyItemService {
         ),
         err
     )]
-    pub async fn create_task_item<'a>(
+    pub async fn create_task_item(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         third_party_item: ThirdPartyItem,
         user_id: UserId,
     ) -> Result<Option<ThirdPartyItemCreationResult>, UniversalInboxError> {
@@ -178,9 +178,9 @@ impl ThirdPartyItemService {
         fields(user.id = user_id.to_string()),
         err
     )]
-    pub async fn sync_items<'a, T, U>(
+    pub async fn sync_items<T, U>(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         third_party_service: Arc<U>,
         user_id: UserId,
     ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError>
@@ -310,10 +310,10 @@ impl ThirdPartyItemService {
         ),
         err
     )]
-    pub async fn create_sink_item_from_task<'a, 'b>(
+    pub async fn create_sink_item_from_task(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
-        task: &'b mut Task,
+        executor: &mut Transaction<'_, Postgres>,
+        task: &mut Task,
         overwrite_existing_sink_item: bool,
     ) -> Result<Box<ThirdPartyItem>, UniversalInboxError> {
         let user_id = task.user_id;
@@ -385,9 +385,9 @@ impl ThirdPartyItemService {
         Ok(Box::new(*uptodate_sink_party_item))
     }
 
-    pub async fn has_third_party_item_for_source_id<'a>(
+    pub async fn has_third_party_item_for_source_id(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         kind: ThirdPartyItemKind,
         source_id: &str,
     ) -> Result<bool, UniversalInboxError> {
@@ -396,9 +396,9 @@ impl ThirdPartyItemService {
             .await
     }
 
-    pub async fn find_third_party_items_for_source_id<'a>(
+    pub async fn find_third_party_items_for_source_id(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         kind: ThirdPartyItemKind,
         source_id: &str,
     ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError> {

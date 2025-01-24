@@ -36,9 +36,9 @@ impl NotificationEventService<SlackPushEventCallback> for NotificationService {
         ),
         err
     )]
-    async fn save_notification_from_event<'a>(
+    async fn save_notification_from_event(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         event: &SlackPushEventCallback,
         existing_third_party_item: Option<&ThirdPartyItem>,
         user_id: UserId,

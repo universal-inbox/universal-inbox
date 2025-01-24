@@ -20,76 +20,76 @@ use super::Repository;
 
 #[async_trait]
 pub trait UserRepository {
-    async fn get_user<'a>(
+    async fn get_user(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         id: UserId,
     ) -> Result<Option<User>, UniversalInboxError>;
 
-    async fn fetch_all_users<'a>(
+    async fn fetch_all_users(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
     ) -> Result<Vec<User>, UniversalInboxError>;
 
-    async fn get_user_by_auth_id<'a>(
+    async fn get_user_by_auth_id(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         auth_user_id: AuthUserId,
     ) -> Result<Option<User>, UniversalInboxError>;
 
-    async fn get_user_by_email<'a>(
+    async fn get_user_by_email(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         email: &EmailAddress,
     ) -> Result<Option<User>, UniversalInboxError>;
 
-    async fn create_user<'a>(
+    async fn create_user(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         user: User,
     ) -> Result<User, UniversalInboxError>;
 
-    async fn update_user_auth_id_token<'a>(
+    async fn update_user_auth_id_token(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         auth_user_id: &AuthUserId,
         auth_id_token: &AuthIdToken,
     ) -> Result<UpdateStatus<User>, UniversalInboxError>;
 
-    async fn update_email_validation_parameters<'a>(
+    async fn update_email_validation_parameters(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
         email_validated_at: Option<DateTime<Utc>>,
         email_validation_sent_at: Option<DateTime<Utc>>,
         email_validation_token: Option<EmailValidationToken>,
     ) -> Result<UpdateStatus<User>, UniversalInboxError>;
 
-    async fn get_user_email_validation_token<'a>(
+    async fn get_user_email_validation_token(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
     ) -> Result<Option<EmailValidationToken>, UniversalInboxError>;
 
-    async fn update_password_reset_parameters<'a>(
+    async fn update_password_reset_parameters(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         email_address: EmailAddress,
         password_reset_sent_at: Option<DateTime<Utc>>,
         password_reset_token: Option<PasswordResetToken>,
     ) -> Result<UpdateStatus<User>, UniversalInboxError>;
 
-    async fn update_password<'a>(
+    async fn update_password(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
         password_hash: Secret<PasswordHash>,
         password_reset_token: Option<PasswordResetToken>,
     ) -> Result<UpdateStatus<User>, UniversalInboxError>;
 
-    async fn get_password_reset_token<'a>(
+    async fn get_password_reset_token(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
     ) -> Result<Option<PasswordResetToken>, UniversalInboxError>;
 }
@@ -102,9 +102,9 @@ impl UserRepository for Repository {
         fields(user.id = id.to_string()),
         err
     )]
-    async fn get_user<'a>(
+    async fn get_user(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         id: UserId,
     ) -> Result<Option<User>, UniversalInboxError> {
         let row = sqlx::query_as!(
@@ -145,9 +145,9 @@ impl UserRepository for Repository {
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
-    async fn fetch_all_users<'a>(
+    async fn fetch_all_users(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
     ) -> Result<Vec<User>, UniversalInboxError> {
         let rows = sqlx::query_as!(
             UserRow,
@@ -190,9 +190,9 @@ impl UserRepository for Repository {
         fields(auth_user_id = auth_user_id.to_string()),
         err
     )]
-    async fn get_user_by_auth_id<'a>(
+    async fn get_user_by_auth_id(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         auth_user_id: AuthUserId,
     ) -> Result<Option<User>, UniversalInboxError> {
         let row = sqlx::query_as!(
@@ -235,9 +235,9 @@ impl UserRepository for Repository {
     }
 
     #[tracing::instrument(level = "debug", skip_all, err)]
-    async fn get_user_by_email<'a>(
+    async fn get_user_by_email(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         email: &EmailAddress,
     ) -> Result<Option<User>, UniversalInboxError> {
         let row = sqlx::query_as!(
@@ -283,9 +283,9 @@ impl UserRepository for Repository {
         fields(user.id = user.id.to_string()),
         err
     )]
-    async fn create_user<'a>(
+    async fn create_user(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         user: User,
     ) -> Result<User, UniversalInboxError> {
         let user_id = UserId(
@@ -391,9 +391,9 @@ impl UserRepository for Repository {
         ),
         err
     )]
-    async fn update_user_auth_id_token<'a>(
+    async fn update_user_auth_id_token(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         auth_user_id: &AuthUserId,
         auth_id_token: &AuthIdToken,
     ) -> Result<UpdateStatus<User>, UniversalInboxError> {
@@ -472,9 +472,9 @@ impl UserRepository for Repository {
         ),
         err
     )]
-    async fn update_email_validation_parameters<'a>(
+    async fn update_email_validation_parameters(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
         email_validated_at: Option<DateTime<Utc>>,
         email_validation_sent_at: Option<DateTime<Utc>>,
@@ -587,9 +587,9 @@ impl UserRepository for Repository {
         fields(user.id = user_id.to_string()),
         err
     )]
-    async fn get_user_email_validation_token<'a>(
+    async fn get_user_email_validation_token(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
     ) -> Result<Option<EmailValidationToken>, UniversalInboxError> {
         let row: Option<Option<Uuid>> = sqlx::query_scalar!(
@@ -617,9 +617,9 @@ impl UserRepository for Repository {
         ),
         err
     )]
-    async fn update_password_reset_parameters<'a>(
+    async fn update_password_reset_parameters(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         email_address: EmailAddress,
         password_reset_sent_at: Option<DateTime<Utc>>,
         password_reset_token: Option<PasswordResetToken>,
@@ -701,9 +701,9 @@ impl UserRepository for Repository {
         fields(user.id = user_id.to_string()),
         err
     )]
-    async fn update_password<'a>(
+    async fn update_password(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
         password_hash: Secret<PasswordHash>,
         password_reset_token: Option<PasswordResetToken>,
@@ -794,9 +794,9 @@ impl UserRepository for Repository {
         fields(user.id = user_id.to_string()),
         err
     )]
-    async fn get_password_reset_token<'a>(
+    async fn get_password_reset_token(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
     ) -> Result<Option<PasswordResetToken>, UniversalInboxError> {
         let row: Option<Option<Uuid>> = sqlx::query_scalar!(

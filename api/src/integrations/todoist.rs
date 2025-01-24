@@ -422,9 +422,9 @@ impl TodoistService {
     }
 
     #[allow(clippy::blocks_in_conditions)]
-    async fn fetch_task<'a>(
+    async fn fetch_task(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         source_id: &str,
         user_id: UserId,
     ) -> Result<Option<TodoistItem>, UniversalInboxError> {
@@ -508,9 +508,9 @@ impl ThirdPartyItemSourceService<TodoistItem> for TodoistService {
         fields(user.id = user_id.to_string()),
         err
     )]
-    async fn fetch_items<'a>(
+    async fn fetch_items(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
     ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError> {
         let (access_token, integration_connection) = self
@@ -583,9 +583,9 @@ impl ThirdPartyTaskService<TodoistItem> for TodoistService {
         ),
         err
     )]
-    async fn third_party_item_into_task<'a>(
+    async fn third_party_item_into_task(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         source: &TodoistItem,
         source_third_party_item: &ThirdPartyItem,
         _task_creation: Option<TaskCreation>,
@@ -627,9 +627,9 @@ impl ThirdPartyTaskService<TodoistItem> for TodoistService {
         ),
         err
     )]
-    async fn delete_task<'a>(
+    async fn delete_task(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         third_party_item: &ThirdPartyItem,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
@@ -666,9 +666,9 @@ impl ThirdPartyTaskService<TodoistItem> for TodoistService {
         ),
         err
     )]
-    async fn complete_task<'a>(
+    async fn complete_task(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         third_party_item: &ThirdPartyItem,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
@@ -705,9 +705,9 @@ impl ThirdPartyTaskService<TodoistItem> for TodoistService {
         ),
         err
     )]
-    async fn uncomplete_task<'a>(
+    async fn uncomplete_task(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         third_party_item: &ThirdPartyItem,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
@@ -743,9 +743,9 @@ impl ThirdPartyTaskService<TodoistItem> for TodoistService {
         ),
         err
     )]
-    async fn update_task<'a>(
+    async fn update_task(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         id: &str,
         patch: &TaskPatch,
         user_id: UserId,
@@ -809,9 +809,9 @@ impl ThirdPartyTaskSourceService<TodoistItem> for TodoistService {
         fields(user.id = user_id.to_string()),
         err
     )]
-    async fn create_task<'a>(
+    async fn create_task(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         task: &TaskCreation,
         user_id: UserId,
     ) -> Result<TodoistItem, UniversalInboxError> {
@@ -864,10 +864,10 @@ impl ThirdPartyTaskSourceService<TodoistItem> for TodoistService {
         fields(matches, user.id = user_id.to_string()),
         err
     )]
-    async fn search_projects<'a, 'b>(
+    async fn search_projects(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
-        matches: &'b str,
+        executor: &mut Transaction<'_, Postgres>,
+        matches: &str,
         user_id: UserId,
     ) -> Result<Vec<ProjectSummary>, UniversalInboxError> {
         let (access_token, _) = self
@@ -906,12 +906,12 @@ impl ThirdPartyTaskSourceService<TodoistItem> for TodoistService {
         fields(project_name, user.id = user_id.to_string()),
         err
     )]
-    async fn get_or_create_project<'a, 'b>(
+    async fn get_or_create_project(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
-        project_name: &'b str,
+        executor: &mut Transaction<'_, Postgres>,
+        project_name: &str,
         user_id: UserId,
-        access_token: Option<&'b AccessToken>,
+        access_token: Option<&AccessToken>,
     ) -> Result<ProjectSummary, UniversalInboxError> {
         let access_token = match access_token {
             Some(access_token) => access_token.clone(),
@@ -1015,9 +1015,9 @@ impl ThirdPartyNotificationSourceService<TodoistItem> for TodoistService {
         fields(third_party_item_id = _source_item.id.to_string(), user.id = _user_id.to_string()),,
         err
     )]
-    async fn delete_notification_from_source<'a>(
+    async fn delete_notification_from_source(
         &self,
-        _executor: &mut Transaction<'a, Postgres>,
+        _executor: &mut Transaction<'_, Postgres>,
         _source_item: &ThirdPartyItem,
         _user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
@@ -1031,18 +1031,18 @@ impl ThirdPartyNotificationSourceService<TodoistItem> for TodoistService {
         fields(third_party_item_id = _source_item.id.to_string(), user.id = _user_id.to_string()),
         err
     )]
-    async fn unsubscribe_notification_from_source<'a>(
+    async fn unsubscribe_notification_from_source(
         &self,
-        _executor: &mut Transaction<'a, Postgres>,
+        _executor: &mut Transaction<'_, Postgres>,
         _source_item: &ThirdPartyItem,
         _user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
         unimplemented!("Todoist notifications cannot be unsubscribed, only Todoist Task can");
     }
 
-    async fn snooze_notification_from_source<'a>(
+    async fn snooze_notification_from_source(
         &self,
-        _executor: &mut Transaction<'a, Postgres>,
+        _executor: &mut Transaction<'_, Postgres>,
         _source_item: &ThirdPartyItem,
         _snoozed_until_at: DateTime<Utc>,
         _user_id: UserId,
