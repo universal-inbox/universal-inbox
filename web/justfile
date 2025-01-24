@@ -5,7 +5,7 @@ default:
 
 ## Build recipes
 build: bundle-js build-tailwind
-    dx build --verbose
+    trunk build
 
 build-release:
     trunk build --release --features trunk
