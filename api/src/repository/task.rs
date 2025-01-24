@@ -20,57 +20,57 @@ use super::{third_party::ThirdPartyItemRow, FromRowWithPrefix, Repository};
 
 #[async_trait]
 pub trait TaskRepository {
-    async fn get_one_task<'a>(
+    async fn get_one_task(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         id: TaskId,
     ) -> Result<Option<Task>, UniversalInboxError>;
-    async fn does_task_exist<'a>(
+    async fn does_task_exist(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         id: TaskId,
     ) -> Result<bool, UniversalInboxError>;
-    async fn get_tasks<'a>(
+    async fn get_tasks(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         ids: Vec<TaskId>,
     ) -> Result<Vec<Task>, UniversalInboxError>;
-    async fn fetch_all_tasks<'a>(
+    async fn fetch_all_tasks(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         status: TaskStatus,
         only_synced_tasks: bool,
         user_id: UserId,
     ) -> Result<Page<Task>, UniversalInboxError>;
-    async fn search_tasks<'a, 'b>(
+    async fn search_tasks(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
-        matches: &'b str,
+        executor: &mut Transaction<'_, Postgres>,
+        matches: &str,
         user_id: UserId,
     ) -> Result<Vec<TaskSummary>, UniversalInboxError>;
-    async fn create_task<'a>(
+    async fn create_task(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         task: Box<Task>,
     ) -> Result<Box<Task>, UniversalInboxError>;
-    async fn update_stale_tasks_status_from_source_ids<'a>(
+    async fn update_stale_tasks_status_from_source_ids(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         active_source_task_ids: Vec<String>,
         kind: TaskSourceKind,
         status: TaskStatus,
         user_id: UserId,
     ) -> Result<Vec<Task>, UniversalInboxError>;
-    async fn create_or_update_task<'a>(
+    async fn create_or_update_task(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         task: Box<CreateOrUpdateTaskRequest>,
     ) -> Result<UpsertStatus<Box<Task>>, UniversalInboxError>;
-    async fn update_task<'a, 'b>(
+    async fn update_task(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         task_id: TaskId,
-        patch: &'b TaskPatch,
+        patch: &TaskPatch,
         for_user_id: UserId,
     ) -> Result<UpdateStatus<Box<Task>>, UniversalInboxError>;
 }
@@ -83,9 +83,9 @@ impl TaskRepository for Repository {
         field(task_id = id.to_string()),
         err
     )]
-    async fn get_one_task<'a>(
+    async fn get_one_task(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         id: TaskId,
     ) -> Result<Option<Task>, UniversalInboxError> {
         let row = QueryBuilder::new(
@@ -146,9 +146,9 @@ impl TaskRepository for Repository {
         field(task_id = id.to_string()),
         err
     )]
-    async fn does_task_exist<'a>(
+    async fn does_task_exist(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         id: TaskId,
     ) -> Result<bool, UniversalInboxError> {
         let count: Option<i64> =
@@ -170,9 +170,9 @@ impl TaskRepository for Repository {
     }
 
     #[tracing::instrument(level = "debug", skip(self, executor), err)]
-    async fn get_tasks<'a>(
+    async fn get_tasks(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         ids: Vec<TaskId>,
     ) -> Result<Vec<Task>, UniversalInboxError> {
         let uuids: Vec<Uuid> = ids.into_iter().map(|id| id.0).collect();
@@ -241,9 +241,9 @@ impl TaskRepository for Repository {
         ),
         err
     )]
-    async fn fetch_all_tasks<'a>(
+    async fn fetch_all_tasks(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         status: TaskStatus,
         only_synced_tasks: bool,
         user_id: UserId,
@@ -358,10 +358,10 @@ impl TaskRepository for Repository {
         field(matches, user.id = user_id.to_string()),
         err
     )]
-    async fn search_tasks<'a, 'b>(
+    async fn search_tasks(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
-        matches: &'b str,
+        executor: &mut Transaction<'_, Postgres>,
+        matches: &str,
         user_id: UserId,
     ) -> Result<Vec<TaskSummary>, UniversalInboxError> {
         // TODO: cleanup, only keep [a-zA-Z0-9]
@@ -419,9 +419,9 @@ impl TaskRepository for Repository {
         fields(task_id = task.id.to_string()),
         err
     )]
-    async fn create_task<'a>(
+    async fn create_task(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         task: Box<Task>,
     ) -> Result<Box<Task>, UniversalInboxError> {
         let priority: u8 = task.priority.into();
@@ -508,9 +508,9 @@ impl TaskRepository for Repository {
         ),
         err
     )]
-    async fn update_stale_tasks_status_from_source_ids<'a>(
+    async fn update_stale_tasks_status_from_source_ids(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         active_source_task_ids: Vec<String>,
         kind: TaskSourceKind,
         status: TaskStatus,
@@ -621,9 +621,9 @@ impl TaskRepository for Repository {
         ),
         err
     )]
-    async fn create_or_update_task<'a>(
+    async fn create_or_update_task(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         task_request: Box<CreateOrUpdateTaskRequest>,
     ) -> Result<UpsertStatus<Box<Task>>, UniversalInboxError> {
         let priority: u8 = task_request.priority.into();
@@ -906,11 +906,11 @@ impl TaskRepository for Repository {
         ),
         err
     )]
-    async fn update_task<'a, 'b>(
+    async fn update_task(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         task_id: TaskId,
-        patch: &'b TaskPatch,
+        patch: &TaskPatch,
         for_user_id: UserId,
     ) -> Result<UpdateStatus<Box<Task>>, UniversalInboxError> {
         if *patch == Default::default() {

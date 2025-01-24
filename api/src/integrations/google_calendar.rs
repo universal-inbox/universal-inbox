@@ -178,9 +178,9 @@ impl GoogleCalendarService {
         ),
         err
     )]
-    pub async fn answer_invitation<'a>(
+    pub async fn answer_invitation(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         source_item: &ThirdPartyItem,
         response_status: GoogleCalendarEventAttendeeResponseStatus,
         user_id: UserId,
@@ -352,9 +352,9 @@ impl ThirdPartyNotificationSourceService<GoogleCalendarEvent> for GoogleCalendar
     }
 
     /// Nothing is done when deleting a Google Calendar event notification
-    async fn delete_notification_from_source<'a>(
+    async fn delete_notification_from_source(
         &self,
-        _executor: &mut Transaction<'a, Postgres>,
+        _executor: &mut Transaction<'_, Postgres>,
         _source_item: &ThirdPartyItem,
         _user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
@@ -369,9 +369,9 @@ impl ThirdPartyNotificationSourceService<GoogleCalendarEvent> for GoogleCalendar
         fields(third_party_item_id = source_item.id.to_string(), user.id = user_id.to_string()),
         err
     )]
-    async fn unsubscribe_notification_from_source<'a>(
+    async fn unsubscribe_notification_from_source(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         source_item: &ThirdPartyItem,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
@@ -395,9 +395,9 @@ impl ThirdPartyNotificationSourceService<GoogleCalendarEvent> for GoogleCalendar
             .await
     }
 
-    async fn snooze_notification_from_source<'a>(
+    async fn snooze_notification_from_source(
         &self,
-        _executor: &mut Transaction<'a, Postgres>,
+        _executor: &mut Transaction<'_, Postgres>,
         _source_item: &ThirdPartyItem,
         _snoozed_until_at: DateTime<Utc>,
         _user_id: UserId,

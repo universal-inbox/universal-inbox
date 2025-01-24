@@ -40,7 +40,7 @@ impl AuthenticationTokenService {
         }
     }
 
-    pub async fn begin(&self) -> Result<Transaction<Postgres>, UniversalInboxError> {
+    pub async fn begin(&self) -> Result<Transaction<'_, Postgres>, UniversalInboxError> {
         self.repository.begin().await
     }
 
@@ -50,9 +50,9 @@ impl AuthenticationTokenService {
         fields(is_session_token, user.id = user_id.to_string()),
         err
     )]
-    pub async fn create_auth_token<'a>(
+    pub async fn create_auth_token(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         is_session_token: bool,
         user_id: UserId,
         expire_at: Option<DateTime<Utc>>,
@@ -98,9 +98,9 @@ impl AuthenticationTokenService {
         fields(user.id = user_id.to_string()),
         err
     )]
-    pub async fn fetch_auth_tokens_for_user<'a>(
+    pub async fn fetch_auth_tokens_for_user(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
     ) -> Result<Vec<TruncatedAuthenticationToken>, UniversalInboxError> {
         let authentication_tokens = self

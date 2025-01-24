@@ -18,8 +18,8 @@ use crate::universal_inbox::{
     UniversalInboxError,
 };
 
-pub async fn handle_slack_star_push_event<'a>(
-    executor: &mut Transaction<'a, Postgres>,
+pub async fn handle_slack_star_push_event(
+    executor: &mut Transaction<'_, Postgres>,
     event: &SlackPushEventCallback,
     provider_user_id: String,
     notification_service: Arc<RwLock<NotificationService>>,

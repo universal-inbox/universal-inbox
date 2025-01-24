@@ -60,29 +60,29 @@ impl UserService {
         }
     }
 
-    pub async fn begin(&self) -> Result<Transaction<Postgres>, UniversalInboxError> {
+    pub async fn begin(&self) -> Result<Transaction<'_, Postgres>, UniversalInboxError> {
         self.repository.begin().await
     }
 
-    pub async fn get_user<'a>(
+    pub async fn get_user(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         id: UserId,
     ) -> Result<Option<User>, UniversalInboxError> {
         self.repository.get_user(executor, id).await
     }
 
-    pub async fn get_user_by_email<'a>(
+    pub async fn get_user_by_email(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         email: &EmailAddress,
     ) -> Result<Option<User>, UniversalInboxError> {
         self.repository.get_user_by_email(executor, email).await
     }
 
-    pub async fn fetch_all_users<'a>(
+    pub async fn fetch_all_users(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
     ) -> Result<Vec<User>, UniversalInboxError> {
         self.repository.fetch_all_users(executor).await
     }
@@ -90,9 +90,9 @@ impl UserService {
     /// In an OpenID Connect Authorization code flow, the API has fetched the access token and
     /// thus does not need to validate it.
     #[tracing::instrument(level = "debug", skip_all, err)]
-    pub async fn authenticate_for_auth_code_flow<'a>(
+    pub async fn authenticate_for_auth_code_flow(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         openid_connect_settings: &OpenIDConnectSettings,
         code: AuthorizationCode,
         nonce: Nonce,
@@ -158,9 +158,9 @@ impl UserService {
     /// In an OpenIDConnect flow, the access token is fetched by the front-end and sent to the API
     /// This function validates the access token and creates the user if it does not exist.
     #[tracing::instrument(level = "debug", skip_all, err)]
-    pub async fn authenticate_for_auth_code_pkce_flow<'a>(
+    pub async fn authenticate_for_auth_code_pkce_flow(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         openid_connect_settings: &OpenIDConnectSettings,
         pkce_flow_settings: &OIDCAuthorizationCodePKCEFlowSettings,
         access_token: AccessToken,
@@ -191,9 +191,9 @@ impl UserService {
     /// In an OpenIDConnect flow, this function update the ID token associated with the given auth_user_id
     /// If there no user associated with the given auth_user_id, it creates a new user.
     #[tracing::instrument(level = "debug", skip_all, err)]
-    async fn authenticate_and_create_user_if_not_exists<'a>(
+    async fn authenticate_and_create_user_if_not_exists(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         oidc_provider: OpenidConnectProvider,
         // the access token must have been validated before calling this function
         access_token: AccessToken,
@@ -268,9 +268,9 @@ impl UserService {
     }
 
     #[tracing::instrument(level = "debug", skip_all, fields(user.id = user_id.to_string()), err)]
-    pub async fn close_session<'a>(
+    pub async fn close_session(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
     ) -> Result<Url, UniversalInboxError> {
         match &self.application_settings.security.authentication {
@@ -329,7 +329,7 @@ impl UserService {
         }
     }
 
-    pub async fn build_auth_url<'a>(
+    pub async fn build_auth_url(
         &self,
         openid_connect_settings: &OpenIDConnectSettings,
     ) -> Result<(Url, CsrfToken, Nonce), UniversalInboxError> {
@@ -341,7 +341,7 @@ impl UserService {
 
     #[allow(clippy::type_complexity)]
     #[tracing::instrument(level = "debug", skip_all, err)]
-    pub async fn fetch_access_token<'a>(
+    pub async fn fetch_access_token(
         &self,
         openid_connect_settings: &OpenIDConnectSettings,
         auth_code: AuthorizationCode,
@@ -392,9 +392,9 @@ impl UserService {
         fields(user.id = user.id.to_string()),
         err
     )]
-    pub async fn register_user<'a>(
+    pub async fn register_user(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         user: User,
     ) -> Result<User, UniversalInboxError> {
         let new_user = self.repository.create_user(executor, user).await?;
@@ -404,9 +404,9 @@ impl UserService {
     }
 
     #[tracing::instrument(level = "debug", skip_all, err)]
-    pub async fn validate_credentials<'a>(
+    pub async fn validate_credentials(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         credentials: Credentials,
     ) -> Result<User, UniversalInboxError> {
         // Use a default password hash to prevent timing attacks
@@ -497,9 +497,9 @@ impl UserService {
         fields(user.id = user_id.to_string()),
         err
     )]
-    pub async fn send_verification_email<'a>(
+    pub async fn send_verification_email(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
         dry_run: bool,
     ) -> Result<(), UniversalInboxError> {
@@ -547,9 +547,9 @@ impl UserService {
         fields(user.id = user_id.to_string()),
         err
     )]
-    pub async fn verify_email<'a>(
+    pub async fn verify_email(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
         email_validation_token: EmailValidationToken,
     ) -> Result<(), UniversalInboxError> {
@@ -579,9 +579,9 @@ impl UserService {
     }
 
     #[tracing::instrument(level = "debug", skip_all, fields(email_address), err)]
-    pub async fn send_password_reset_email<'a>(
+    pub async fn send_password_reset_email(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         email_address: EmailAddress,
         dry_run: bool,
     ) -> Result<(), UniversalInboxError> {
@@ -638,9 +638,9 @@ impl UserService {
         fields(user.id = user_id.to_string()),
         err
     )]
-    pub async fn reset_password<'a>(
+    pub async fn reset_password(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
         password_reset_token: PasswordResetToken,
         new_password: Secret<Password>,

@@ -1162,51 +1162,51 @@
       }
     },
     "rustup@latest": {
-      "last_modified": "2024-03-08T13:51:52Z",
+      "last_modified": "2024-12-23T21:10:33Z",
       "plugin_version": "0.0.1",
-      "resolved": "github:NixOS/nixpkgs/a343533bccc62400e8a9560423486a3b6c11a23b#rustup",
+      "resolved": "github:NixOS/nixpkgs/de1864217bfa9b5845f465e771e0ecb48b30e02d#rustup",
       "source": "devbox-search",
-      "version": "1.26.0",
+      "version": "1.27.1",
       "systems": {
         "aarch64-darwin": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/hgzyfdwvy68mp3xpbniwavizcpd67s2y-rustup-1.26.0",
+              "path": "/nix/store/f577am7fddddky4gfsfbzvy22n5qqanh-rustup-1.27.1",
               "default": true
             }
           ],
-          "store_path": "/nix/store/hgzyfdwvy68mp3xpbniwavizcpd67s2y-rustup-1.26.0"
+          "store_path": "/nix/store/f577am7fddddky4gfsfbzvy22n5qqanh-rustup-1.27.1"
         },
         "aarch64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/2pn6r28vj0lf62shzwj3i8r3mg2njdvh-rustup-1.26.0",
+              "path": "/nix/store/88ngn7j1pgljmi74ldlbnk4mm8mfw3a5-rustup-1.27.1",
               "default": true
             }
           ],
-          "store_path": "/nix/store/2pn6r28vj0lf62shzwj3i8r3mg2njdvh-rustup-1.26.0"
+          "store_path": "/nix/store/88ngn7j1pgljmi74ldlbnk4mm8mfw3a5-rustup-1.27.1"
         },
         "x86_64-darwin": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/xwf6zn2y28655864c3m5453m02ig9id4-rustup-1.26.0",
+              "path": "/nix/store/94viny8yipljwgxvyz1xljcg3mpgnyfp-rustup-1.27.1",
               "default": true
             }
           ],
-          "store_path": "/nix/store/xwf6zn2y28655864c3m5453m02ig9id4-rustup-1.26.0"
+          "store_path": "/nix/store/94viny8yipljwgxvyz1xljcg3mpgnyfp-rustup-1.27.1"
         },
         "x86_64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/49kaqs594l0i29b0dgzm3mvjz9blsdlj-rustup-1.26.0",
+              "path": "/nix/store/61mams7q42fvaxh33s5vmnb8mljhasw2-rustup-1.27.1",
               "default": true
             }
           ],
-          "store_path": "/nix/store/49kaqs594l0i29b0dgzm3mvjz9blsdlj-rustup-1.26.0"
+          "store_path": "/nix/store/61mams7q42fvaxh33s5vmnb8mljhasw2-rustup-1.27.1"
         }
       }
     },
@@ -1275,8 +1275,8 @@
       }
     },
     "sqlx-cli@0.8.2": {
-      "last_modified": "2024-09-10T15:01:03Z",
-      "resolved": "github:NixOS/nixpkgs/5ed627539ac84809c78b2dd6d26a5cebeb5ae269#sqlx-cli",
+      "last_modified": "2024-12-23T21:10:33Z",
+      "resolved": "github:NixOS/nixpkgs/de1864217bfa9b5845f465e771e0ecb48b30e02d#sqlx-cli",
       "source": "devbox-search",
       "version": "0.8.2",
       "systems": {
@@ -1284,41 +1284,41 @@
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/dhp3bzp9w27wdvi3nrc277h1craphdwj-sqlx-cli-0.8.2",
+              "path": "/nix/store/jd692icqz5yb054gw745x02xwiqw2q5x-sqlx-cli-0.8.2",
               "default": true
             }
           ],
-          "store_path": "/nix/store/dhp3bzp9w27wdvi3nrc277h1craphdwj-sqlx-cli-0.8.2"
+          "store_path": "/nix/store/jd692icqz5yb054gw745x02xwiqw2q5x-sqlx-cli-0.8.2"
         },
         "aarch64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/aaxvsdnwipv7wr0v2gkzi5l3yc4icpx6-sqlx-cli-0.8.2",
+              "path": "/nix/store/c3q21w86fj6p06ysk5fm0spgwxxrbwsn-sqlx-cli-0.8.2",
               "default": true
             }
           ],
-          "store_path": "/nix/store/aaxvsdnwipv7wr0v2gkzi5l3yc4icpx6-sqlx-cli-0.8.2"
+          "store_path": "/nix/store/c3q21w86fj6p06ysk5fm0spgwxxrbwsn-sqlx-cli-0.8.2"
         },
         "x86_64-darwin": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/k2mzc7rb2gv01nk6qpjywqpj9dv0p9a1-sqlx-cli-0.8.2",
+              "path": "/nix/store/g44a4xmxqwaalb9zlry3ac962zlph3kq-sqlx-cli-0.8.2",
               "default": true
             }
           ],
-          "store_path": "/nix/store/k2mzc7rb2gv01nk6qpjywqpj9dv0p9a1-sqlx-cli-0.8.2"
+          "store_path": "/nix/store/g44a4xmxqwaalb9zlry3ac962zlph3kq-sqlx-cli-0.8.2"
         },
         "x86_64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/7q01pna4l674kaf87wzd3yy5zf19pxqh-sqlx-cli-0.8.2",
+              "path": "/nix/store/va92bdcmzdgxd1jbgrblr7is1iq1918y-sqlx-cli-0.8.2",
               "default": true
             }
           ],
-          "store_path": "/nix/store/7q01pna4l674kaf87wzd3yy5zf19pxqh-sqlx-cli-0.8.2"
+          "store_path": "/nix/store/va92bdcmzdgxd1jbgrblr7is1iq1918y-sqlx-cli-0.8.2"
         }
       }
     },

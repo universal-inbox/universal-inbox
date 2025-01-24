@@ -25,68 +25,68 @@ use super::{third_party::ThirdPartyItemRow, FromRowWithPrefix};
 
 #[async_trait]
 pub trait NotificationRepository {
-    async fn get_one_notification<'a>(
+    async fn get_one_notification(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         id: NotificationId,
     ) -> Result<Option<Notification>, UniversalInboxError>;
-    async fn get_notification_for_source_id<'a>(
+    async fn get_notification_for_source_id(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         source_id: &str,
         user_id: UserId,
     ) -> Result<Option<Notification>, UniversalInboxError>;
-    async fn does_notification_exist<'a>(
+    async fn does_notification_exist(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         id: NotificationId,
     ) -> Result<bool, UniversalInboxError>;
-    async fn fetch_all_notifications<'a>(
+    async fn fetch_all_notifications(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         status: Vec<NotificationStatus>,
         include_snoozed_notifications: bool,
         task_id: Option<TaskId>,
         notification_kind: Option<NotificationSourceKind>,
         user_id: UserId,
     ) -> Result<Page<NotificationWithTask>, UniversalInboxError>;
-    async fn create_notification<'a>(
+    async fn create_notification(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         notification: Box<Notification>,
     ) -> Result<Box<Notification>, UniversalInboxError>;
-    async fn update_stale_notifications_status_from_source_ids<'a>(
+    async fn update_stale_notifications_status_from_source_ids(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         active_source_third_party_item_ids: Vec<ThirdPartyItemId>,
         kind: NotificationSourceKind,
         status: NotificationStatus,
         user_id: UserId,
     ) -> Result<Vec<Notification>, UniversalInboxError>;
-    async fn create_or_update_notification<'a>(
+    async fn create_or_update_notification(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         notification: Box<Notification>,
         kind: NotificationSourceKind,
         update_snoozed_until: bool,
     ) -> Result<UpsertStatus<Box<Notification>>, UniversalInboxError>;
-    async fn update_notification<'a>(
+    async fn update_notification(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         notification_id: NotificationId,
         patch: &NotificationPatch,
         for_user_id: UserId,
     ) -> Result<UpdateStatus<Box<Notification>>, UniversalInboxError>;
-    async fn update_notifications_for_task<'a, 'b>(
+    async fn update_notifications_for_task(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         task_id: TaskId,
         notification_kind: Option<NotificationSourceKind>,
-        patch: &'b NotificationPatch,
+        patch: &NotificationPatch,
     ) -> Result<Vec<UpdateStatus<Notification>>, UniversalInboxError>;
-    async fn delete_notifications<'a>(
+    async fn delete_notifications(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         kind: NotificationSourceKind,
         user_id: UserId,
     ) -> Result<u64, UniversalInboxError>;
@@ -100,9 +100,9 @@ impl NotificationRepository for Repository {
         fields(notification_id = id.to_string()),
         err
     )]
-    async fn get_one_notification<'a>(
+    async fn get_one_notification(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         id: NotificationId,
     ) -> Result<Option<Notification>, UniversalInboxError> {
         let row = QueryBuilder::new(
@@ -159,9 +159,9 @@ impl NotificationRepository for Repository {
         fields(source_id = source_id.to_string(), user.id = user_id.to_string()),
         err
     )]
-    async fn get_notification_for_source_id<'a>(
+    async fn get_notification_for_source_id(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         source_id: &str,
         user_id: UserId,
     ) -> Result<Option<Notification>, UniversalInboxError> {
@@ -221,9 +221,9 @@ impl NotificationRepository for Repository {
         fields(notification_id = id.to_string()),
         err
     )]
-    async fn does_notification_exist<'a>(
+    async fn does_notification_exist(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         id: NotificationId,
     ) -> Result<bool, UniversalInboxError> {
         let count: Option<i64> =
@@ -256,9 +256,9 @@ impl NotificationRepository for Repository {
         ),
         err
     )]
-    async fn fetch_all_notifications<'a>(
+    async fn fetch_all_notifications(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         status: Vec<NotificationStatus>,
         include_snoozed_notifications: bool,
         task_id: Option<TaskId>,
@@ -444,9 +444,9 @@ impl NotificationRepository for Repository {
         fields(notification_id = notification.id.to_string()),
         err
     )]
-    async fn create_notification<'a>(
+    async fn create_notification(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         notification: Box<Notification>,
     ) -> Result<Box<Notification>, UniversalInboxError> {
         sqlx::query!(
@@ -514,9 +514,9 @@ impl NotificationRepository for Repository {
         ),
         err
     )]
-    async fn update_stale_notifications_status_from_source_ids<'a>(
+    async fn update_stale_notifications_status_from_source_ids(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         active_source_third_party_item_ids: Vec<ThirdPartyItemId>,
         kind: NotificationSourceKind,
         status: NotificationStatus,
@@ -616,9 +616,9 @@ impl NotificationRepository for Repository {
         ),
         err
     )]
-    async fn create_or_update_notification<'a>(
+    async fn create_or_update_notification(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         notification: Box<Notification>,
         kind: NotificationSourceKind,
         update_snoozed_until: bool,
@@ -836,9 +836,9 @@ impl NotificationRepository for Repository {
         ),
         err
     )]
-    async fn update_notification<'a>(
+    async fn update_notification(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         notification_id: NotificationId,
         patch: &NotificationPatch,
         for_user_id: UserId,
@@ -986,12 +986,12 @@ impl NotificationRepository for Repository {
         ),
         err
     )]
-    async fn update_notifications_for_task<'a, 'b>(
+    async fn update_notifications_for_task(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         task_id: TaskId,
         notification_kind: Option<NotificationSourceKind>,
-        patch: &'b NotificationPatch,
+        patch: &NotificationPatch,
     ) -> Result<Vec<UpdateStatus<Notification>>, UniversalInboxError> {
         if *patch == Default::default() {
             return Err(UniversalInboxError::InvalidInputData {
@@ -1131,9 +1131,9 @@ impl NotificationRepository for Repository {
         ),
         err
     )]
-    async fn delete_notifications<'a>(
+    async fn delete_notifications(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         kind: NotificationSourceKind,
         user_id: UserId,
     ) -> Result<u64, UniversalInboxError> {

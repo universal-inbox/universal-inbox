@@ -46,17 +46,17 @@ pub fn GoogleCalendarEventPreview(
     });
     let self_attendee = use_memo(move || google_calendar_event().get_self_attendee());
     let is_accepted = use_memo(move || {
-        self_attendee().map_or(false, |attendee| {
+        self_attendee().is_some_and(|attendee| {
             attendee.response_status == GoogleCalendarEventAttendeeResponseStatus::Accepted
         })
     });
     let is_declined = use_memo(move || {
-        self_attendee().map_or(false, |attendee| {
+        self_attendee().is_some_and(|attendee| {
             attendee.response_status == GoogleCalendarEventAttendeeResponseStatus::Declined
         })
     });
     let is_tentative = use_memo(move || {
-        self_attendee().map_or(false, |attendee| {
+        self_attendee().is_some_and(|attendee| {
             attendee.response_status == GoogleCalendarEventAttendeeResponseStatus::Tentative
         })
     });

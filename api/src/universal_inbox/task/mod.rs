@@ -10,9 +10,9 @@ pub mod service;
 
 #[async_trait]
 pub trait TaskEventService<T> {
-    async fn save_task_from_event<'a>(
+    async fn save_task_from_event(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         event: &T,
         user_id: UserId,
     ) -> Result<Option<Task>, UniversalInboxError>;

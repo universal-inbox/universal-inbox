@@ -452,9 +452,9 @@ impl SlackService {
     }
 
     #[allow(clippy::blocks_in_conditions)]
-    pub async fn fetch_item_from_event<'a>(
+    pub async fn fetch_item_from_event(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         slack_push_event_callback: &SlackPushEventCallback,
         user_id: UserId,
     ) -> Result<Option<ThirdPartyItem>, UniversalInboxError> {
@@ -596,9 +596,9 @@ impl SlackService {
     }
 
     #[allow(clippy::blocks_in_conditions)]
-    pub async fn fetch_item_from_slack_star<'a>(
+    pub async fn fetch_item_from_slack_star(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         slack_push_event_callback: &SlackPushEventCallback,
         slack_star_state: SlackStarState,
         slack_star_created_at: DateTime<Utc>,
@@ -768,9 +768,9 @@ impl SlackService {
     }
 
     #[allow(clippy::blocks_in_conditions, clippy::too_many_arguments)]
-    pub async fn fetch_item_from_slack_reaction<'a>(
+    pub async fn fetch_item_from_slack_reaction(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         slack_push_event_callback: &SlackPushEventCallback,
         slack_reaction_state: SlackReactionState,
         slack_reaction_created_at: DateTime<Utc>,
@@ -857,9 +857,9 @@ impl SlackService {
     }
 
     #[allow(clippy::blocks_in_conditions, clippy::too_many_arguments)]
-    pub async fn fetch_item_from_slack_message<'a>(
+    pub async fn fetch_item_from_slack_message(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         slack_push_event_callback: &SlackPushEventCallback,
         origin: &SlackMessageOrigin,
         user_id: UserId,
@@ -935,7 +935,7 @@ impl SlackService {
         ))
     }
 
-    async fn fetch_sender_profiles_from_messages<'a>(
+    async fn fetch_sender_profiles_from_messages(
         &self,
         slack_api_token: &SlackApiToken,
         messages: &[SlackHistoryMessage],
@@ -1011,9 +1011,9 @@ impl SlackService {
         Ok(sender_profiles)
     }
 
-    async fn delete_slack_star<'a>(
+    async fn delete_slack_star(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         slack_star_item: &SlackStarItem,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
@@ -1052,9 +1052,9 @@ impl SlackService {
         Ok(())
     }
 
-    async fn add_slack_star<'a>(
+    async fn add_slack_star(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         slack_star_item: &SlackStarItem,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
@@ -1080,9 +1080,9 @@ impl SlackService {
         .await
     }
 
-    async fn delete_slack_reaction<'a>(
+    async fn delete_slack_reaction(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         slack_reaction_item: &SlackReactionItem,
         reaction_name: &SlackReactionName,
         user_id: UserId,
@@ -1111,9 +1111,9 @@ impl SlackService {
         Ok(())
     }
 
-    async fn add_slack_reaction<'a>(
+    async fn add_slack_reaction(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         slack_reaction_item: &SlackReactionItem,
         reaction_name: &SlackReactionName,
         user_id: UserId,
@@ -1606,9 +1606,9 @@ impl ThirdPartyNotificationSourceService<SlackStar> for SlackService {
         ),
         err
     )]
-    async fn delete_notification_from_source<'a>(
+    async fn delete_notification_from_source(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         source_item: &ThirdPartyItem,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
@@ -1633,9 +1633,9 @@ impl ThirdPartyNotificationSourceService<SlackStar> for SlackService {
         ),
         err
     )]
-    async fn unsubscribe_notification_from_source<'a>(
+    async fn unsubscribe_notification_from_source(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         source_item: &ThirdPartyItem,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
@@ -1650,9 +1650,9 @@ impl ThirdPartyNotificationSourceService<SlackStar> for SlackService {
             .await
     }
 
-    async fn snooze_notification_from_source<'a>(
+    async fn snooze_notification_from_source(
         &self,
-        _executor: &mut Transaction<'a, Postgres>,
+        _executor: &mut Transaction<'_, Postgres>,
         _source_item: &ThirdPartyItem,
         _snoozed_until_at: DateTime<Utc>,
         _user_id: UserId,
@@ -1710,9 +1710,9 @@ impl ThirdPartyNotificationSourceService<SlackReaction> for SlackService {
         ),
         err
     )]
-    async fn delete_notification_from_source<'a>(
+    async fn delete_notification_from_source(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         source_item: &ThirdPartyItem,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
@@ -1742,9 +1742,9 @@ impl ThirdPartyNotificationSourceService<SlackReaction> for SlackService {
         ),
         err
     )]
-    async fn unsubscribe_notification_from_source<'a>(
+    async fn unsubscribe_notification_from_source(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         source_item: &ThirdPartyItem,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
@@ -1764,9 +1764,9 @@ impl ThirdPartyNotificationSourceService<SlackReaction> for SlackService {
         .await
     }
 
-    async fn snooze_notification_from_source<'a>(
+    async fn snooze_notification_from_source(
         &self,
-        _executor: &mut Transaction<'a, Postgres>,
+        _executor: &mut Transaction<'_, Postgres>,
         _source_item: &ThirdPartyItem,
         _snoozed_until_at: DateTime<Utc>,
         _user_id: UserId,
@@ -1831,9 +1831,9 @@ impl ThirdPartyNotificationSourceService<SlackThread> for SlackService {
         ),
         err
     )]
-    async fn delete_notification_from_source<'a>(
+    async fn delete_notification_from_source(
         &self,
-        _executor: &mut Transaction<'a, Postgres>,
+        _executor: &mut Transaction<'_, Postgres>,
         source_item: &ThirdPartyItem,
         _user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
@@ -1854,9 +1854,9 @@ impl ThirdPartyNotificationSourceService<SlackThread> for SlackService {
         ),
         err
     )]
-    async fn unsubscribe_notification_from_source<'a>(
+    async fn unsubscribe_notification_from_source(
         &self,
-        _executor: &mut Transaction<'a, Postgres>,
+        _executor: &mut Transaction<'_, Postgres>,
         source_item: &ThirdPartyItem,
         _user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
@@ -1864,9 +1864,9 @@ impl ThirdPartyNotificationSourceService<SlackThread> for SlackService {
         Ok(())
     }
 
-    async fn snooze_notification_from_source<'a>(
+    async fn snooze_notification_from_source(
         &self,
-        _executor: &mut Transaction<'a, Postgres>,
+        _executor: &mut Transaction<'_, Postgres>,
         _source_item: &ThirdPartyItem,
         _snoozed_until_at: DateTime<Utc>,
         _user_id: UserId,
@@ -1889,9 +1889,9 @@ impl ThirdPartyTaskService<SlackStar> for SlackService {
         ),
         err
     )]
-    async fn third_party_item_into_task<'a>(
+    async fn third_party_item_into_task(
         &self,
-        _executor: &mut Transaction<'a, Postgres>,
+        _executor: &mut Transaction<'_, Postgres>,
         source: &SlackStar,
         source_third_party_item: &ThirdPartyItem,
         task_creation: Option<TaskCreation>,
@@ -1952,9 +1952,9 @@ impl ThirdPartyTaskService<SlackStar> for SlackService {
         ),
         err
     )]
-    async fn delete_task<'a>(
+    async fn delete_task(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         third_party_item: &ThirdPartyItem,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
@@ -1978,9 +1978,9 @@ impl ThirdPartyTaskService<SlackStar> for SlackService {
         ),
         err
     )]
-    async fn complete_task<'a>(
+    async fn complete_task(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         third_party_item: &ThirdPartyItem,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
@@ -2006,9 +2006,9 @@ impl ThirdPartyTaskService<SlackStar> for SlackService {
         ),
         err
     )]
-    async fn uncomplete_task<'a>(
+    async fn uncomplete_task(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         third_party_item: &ThirdPartyItem,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
@@ -2024,9 +2024,9 @@ impl ThirdPartyTaskService<SlackStar> for SlackService {
 
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(level = "debug", skip_all)]
-    async fn update_task<'a>(
+    async fn update_task(
         &self,
-        _executor: &mut Transaction<'a, Postgres>,
+        _executor: &mut Transaction<'_, Postgres>,
         _id: &str,
         _patch: &TaskPatch,
         _user_id: UserId,
@@ -2049,9 +2049,9 @@ impl ThirdPartyTaskService<SlackReaction> for SlackService {
         ),
         err
     )]
-    async fn third_party_item_into_task<'a>(
+    async fn third_party_item_into_task(
         &self,
-        _executor: &mut Transaction<'a, Postgres>,
+        _executor: &mut Transaction<'_, Postgres>,
         source: &SlackReaction,
         source_third_party_item: &ThirdPartyItem,
         task_creation: Option<TaskCreation>,
@@ -2112,9 +2112,9 @@ impl ThirdPartyTaskService<SlackReaction> for SlackService {
         ),
         err
     )]
-    async fn delete_task<'a>(
+    async fn delete_task(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         third_party_item: &ThirdPartyItem,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
@@ -2138,9 +2138,9 @@ impl ThirdPartyTaskService<SlackReaction> for SlackService {
         ),
         err
     )]
-    async fn complete_task<'a>(
+    async fn complete_task(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         third_party_item: &ThirdPartyItem,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
@@ -2171,9 +2171,9 @@ impl ThirdPartyTaskService<SlackReaction> for SlackService {
         ),
         err
     )]
-    async fn uncomplete_task<'a>(
+    async fn uncomplete_task(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         third_party_item: &ThirdPartyItem,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
@@ -2195,9 +2195,9 @@ impl ThirdPartyTaskService<SlackReaction> for SlackService {
 
     #[allow(clippy::blocks_in_conditions)]
     #[tracing::instrument(level = "debug", skip_all)]
-    async fn update_task<'a>(
+    async fn update_task(
         &self,
-        _executor: &mut Transaction<'a, Postgres>,
+        _executor: &mut Transaction<'_, Postgres>,
         _id: &str,
         _patch: &TaskPatch,
         _user_id: UserId,

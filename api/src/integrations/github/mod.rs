@@ -371,9 +371,9 @@ impl GithubService {
         ),
         err
     )]
-    pub async fn fetch_github_notification_item<'a>(
+    pub async fn fetch_github_notification_item(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         raw_github_notification: &RawGithubNotification,
         user_id: UserId,
     ) -> Result<Option<GithubNotificationItem>, UniversalInboxError> {
@@ -428,9 +428,9 @@ impl ThirdPartyItemSourceService<GithubNotification> for GithubService {
         fields(user.id = user_id.to_string()),
         err
     )]
-    async fn fetch_items<'a>(
+    async fn fetch_items(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
     ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError> {
         let (access_token, integration_connection) = self
@@ -539,9 +539,9 @@ impl ThirdPartyNotificationSourceService<GithubNotification> for GithubService {
         fields(third_party_item_id = source_item.id.to_string(), user.id = user_id.to_string()),
         err
     )]
-    async fn delete_notification_from_source<'a>(
+    async fn delete_notification_from_source(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         source_item: &ThirdPartyItem,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
@@ -564,9 +564,9 @@ impl ThirdPartyNotificationSourceService<GithubNotification> for GithubService {
         fields(third_party_item_id = source_item.id.to_string(), user.id = user_id.to_string()),
         err
     )]
-    async fn unsubscribe_notification_from_source<'a>(
+    async fn unsubscribe_notification_from_source(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         source_item: &ThirdPartyItem,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
@@ -586,9 +586,9 @@ impl ThirdPartyNotificationSourceService<GithubNotification> for GithubService {
             .await
     }
 
-    async fn snooze_notification_from_source<'a>(
+    async fn snooze_notification_from_source(
         &self,
-        _executor: &mut Transaction<'a, Postgres>,
+        _executor: &mut Transaction<'_, Postgres>,
         _source_item: &ThirdPartyItem,
         _snoozed_until_at: DateTime<Utc>,
         _user_id: UserId,

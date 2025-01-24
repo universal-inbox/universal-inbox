@@ -94,7 +94,7 @@ impl NotificationService {
         self.task_service = task_service;
     }
 
-    pub async fn begin(&self) -> Result<Transaction<Postgres>, UniversalInboxError> {
+    pub async fn begin(&self) -> Result<Transaction<'_, Postgres>, UniversalInboxError> {
         self.repository.begin().await
     }
 
@@ -108,9 +108,9 @@ impl NotificationService {
         ),
         err
     )]
-    pub async fn apply_updated_notification_side_effect<'a, T, U>(
+    pub async fn apply_updated_notification_side_effect<T, U>(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         notification_source_service: Arc<U>,
         patch: &NotificationPatch,
         source_item: &mut ThirdPartyItem,
@@ -212,9 +212,9 @@ impl NotificationService {
         err
     )]
     #[allow(clippy::too_many_arguments)]
-    pub async fn list_notifications<'a>(
+    pub async fn list_notifications(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         status: Vec<NotificationStatus>,
         include_snoozed_notifications: bool,
         task_id: Option<TaskId>,
@@ -254,9 +254,9 @@ impl NotificationService {
         ),
         err
     )]
-    pub async fn get_notification<'a>(
+    pub async fn get_notification(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         notification_id: NotificationId,
         for_user_id: UserId,
     ) -> Result<Option<Notification>, UniversalInboxError> {
@@ -285,9 +285,9 @@ impl NotificationService {
         ),
         err
     )]
-    pub async fn get_notification_for_source_id<'a>(
+    pub async fn get_notification_for_source_id(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         source_id: &str,
         for_user_id: UserId,
     ) -> Result<Option<Notification>, UniversalInboxError> {
@@ -305,9 +305,9 @@ impl NotificationService {
         ),
         err
     )]
-    pub async fn create_notification<'a>(
+    pub async fn create_notification(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         notification: Box<Notification>,
         for_user_id: UserId,
     ) -> Result<Box<Notification>, UniversalInboxError> {
@@ -332,9 +332,9 @@ impl NotificationService {
         ),
         err
     )]
-    pub async fn create_or_update_notification<'a>(
+    pub async fn create_or_update_notification(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         notification: Box<Notification>,
         notification_source_kind: NotificationSourceKind,
         update_snoozed_until: bool,
@@ -358,9 +358,9 @@ impl NotificationService {
         ),
         err
     )]
-    pub async fn delete_stale_notifications_status_from_source_ids<'a>(
+    pub async fn delete_stale_notifications_status_from_source_ids(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         active_source_third_party_item_ids: Vec<ThirdPartyItemId>,
         notification_source_kind: NotificationSourceKind,
         user_id: UserId,
@@ -393,9 +393,9 @@ impl NotificationService {
         ),
         err
     )]
-    pub async fn sync_notifications<'a>(
+    pub async fn sync_notifications(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         source: NotificationSyncSourceKind,
         user_id: UserId,
         force_sync: bool,
@@ -432,7 +432,7 @@ impl NotificationService {
         }
     }
 
-    pub async fn sync_notifications_with_transaction<'a>(
+    pub async fn sync_notifications_with_transaction(
         &self,
         source: NotificationSyncSourceKind,
         user_id: UserId,
@@ -470,7 +470,7 @@ impl NotificationService {
         }
     }
 
-    pub async fn sync_all_notifications<'a>(
+    pub async fn sync_all_notifications(
         &self,
         user_id: UserId,
         force_sync: bool,
@@ -504,7 +504,7 @@ impl NotificationService {
             .collect())
     }
 
-    pub async fn sync_notifications_for_all_users<'a>(
+    pub async fn sync_notifications_for_all_users(
         &self,
         source: Option<NotificationSyncSourceKind>,
         force_sync: bool,
@@ -524,7 +524,7 @@ impl NotificationService {
         Ok(())
     }
 
-    pub async fn sync_notifications_for_user<'a>(
+    pub async fn sync_notifications_for_user(
         &self,
         source: Option<NotificationSyncSourceKind>,
         user_id: UserId,
@@ -561,11 +561,11 @@ impl NotificationService {
         ),
         err
     )]
-    pub async fn patch_notification<'a, 'b>(
+    pub async fn patch_notification(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         notification_id: NotificationId,
-        patch: &'b NotificationPatch,
+        patch: &NotificationPatch,
         apply_task_side_effects: bool,
         apply_notification_side_effects: bool,
         for_user_id: UserId,
@@ -759,12 +759,12 @@ impl NotificationService {
         ),
         err
     )]
-    pub async fn patch_notifications_for_task<'a, 'b>(
+    pub async fn patch_notifications_for_task(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         task_id: TaskId,
         notification_kind: Option<NotificationSourceKind>,
-        patch: &'b NotificationPatch,
+        patch: &NotificationPatch,
     ) -> Result<Vec<UpdateStatus<Notification>>, UniversalInboxError> {
         self.repository
             .update_notifications_for_task(executor, task_id, notification_kind, patch)
@@ -782,11 +782,11 @@ impl NotificationService {
         ),
         err
     )]
-    pub async fn create_task_from_notification<'a, 'b>(
+    pub async fn create_task_from_notification(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         notification_id: NotificationId,
-        task_creation: &'b TaskCreation,
+        task_creation: &TaskCreation,
         apply_notification_side_effects: bool,
         for_user_id: UserId,
     ) -> Result<Option<NotificationWithTask>, UniversalInboxError> {
@@ -842,9 +842,9 @@ impl NotificationService {
         ),
         err
     )]
-    pub async fn create_notification_from_third_party_item<'a, T, U>(
+    pub async fn create_notification_from_third_party_item<T, U>(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         third_party_item: ThirdPartyItem,
         third_party_notification_service: Arc<U>,
         user_id: UserId,
@@ -867,9 +867,9 @@ impl NotificationService {
         Ok(Some(*upsert_notification.value()))
     }
 
-    async fn sync_third_party_notifications<'a, T, U>(
+    async fn sync_third_party_notifications<T, U>(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         third_party_notification_service: Arc<U>,
         user_id: UserId,
         force_sync: bool,
@@ -883,9 +883,9 @@ impl NotificationService {
             + Sync,
         <T as TryFrom<ThirdPartyItem>>::Error: Send + Sync,
     {
-        async fn sync_third_party_notifications<'a, T, U>(
+        async fn sync_third_party_notifications<T, U>(
             notification_service: &NotificationService,
-            executor: &mut Transaction<'a, Postgres>,
+            executor: &mut Transaction<'_, Postgres>,
             third_party_notification_service: Arc<U>,
             user_id: UserId,
         ) -> Result<Vec<Notification>, UniversalInboxError>
@@ -1023,9 +1023,9 @@ impl NotificationService {
         ),
         err
     )]
-    pub async fn save_third_party_item_as_notification<'a, T, U>(
+    pub async fn save_third_party_item_as_notification<T, U>(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         third_party_item: &ThirdPartyItem,
         third_party_notification_service: Arc<U>,
         task_id: Option<TaskId>,
@@ -1072,9 +1072,9 @@ impl NotificationService {
         err
     )]
     #[allow(clippy::too_many_arguments)]
-    pub async fn save_task_as_notification<'a, T, U>(
+    pub async fn save_task_as_notification<T, U>(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         third_party_task_service: Arc<U>,
         task: &Task,
         third_party_item: &ThirdPartyItem,
@@ -1179,11 +1179,11 @@ impl NotificationService {
         ),
         err
     )]
-    pub async fn update_invitation_from_notification<'a, 'b>(
+    pub async fn update_invitation_from_notification(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         notification_id: NotificationId,
-        patch: &'b InvitationPatch,
+        patch: &InvitationPatch,
         for_user_id: UserId,
     ) -> Result<UpdateStatus<Box<Notification>>, UniversalInboxError> {
         let Some(notification) = self

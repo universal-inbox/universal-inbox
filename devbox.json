@@ -48,6 +48,6 @@
   },
   "env": {
     "TARGET_CC":              "cc",
-    "RUST_TOOLCHAIN_VERSION": "1.82"
+    "RUST_TOOLCHAIN_VERSION": "1.84"
   }
 }

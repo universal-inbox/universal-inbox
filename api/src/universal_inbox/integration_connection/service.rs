@@ -87,13 +87,13 @@ impl IntegrationConnectionService {
         }
     }
 
-    pub async fn begin(&self) -> Result<Transaction<Postgres>, UniversalInboxError> {
+    pub async fn begin(&self) -> Result<Transaction<'_, Postgres>, UniversalInboxError> {
         self.repository.begin().await
     }
 
-    pub async fn get_integration_connection<'a>(
+    pub async fn get_integration_connection(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         integration_connection_id: IntegrationConnectionId,
     ) -> Result<Option<IntegrationConnection>, UniversalInboxError> {
         self.repository
@@ -101,9 +101,9 @@ impl IntegrationConnectionService {
             .await
     }
 
-    pub async fn fetch_all_integration_connections<'a>(
+    pub async fn fetch_all_integration_connections(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         for_user_id: UserId,
         status: Option<IntegrationConnectionStatus>,
         lock_rows: bool,
@@ -119,9 +119,9 @@ impl IntegrationConnectionService {
         fields(user.id = for_user_id.to_string()),
         err
     )]
-    pub async fn trigger_sync_for_integration_connections<'a>(
+    pub async fn trigger_sync_for_integration_connections(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         for_user_id: UserId,
         mut job_storage: RedisStorage<UniversalInboxJob>,
     ) -> Result<(), UniversalInboxError> {
@@ -201,9 +201,9 @@ impl IntegrationConnectionService {
         ),
         err
     )]
-    pub async fn trigger_sync_notifications<'a>(
+    pub async fn trigger_sync_notifications(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         notification_sync_source_kind: Option<NotificationSyncSourceKind>,
         for_user_id: Option<UserId>,
         job_storage: &mut RedisStorage<UniversalInboxJob>,
@@ -245,9 +245,9 @@ impl IntegrationConnectionService {
         ),
         err
     )]
-    pub async fn trigger_sync_tasks<'a>(
+    pub async fn trigger_sync_tasks(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         task_sync_source_kind: Option<TaskSyncSourceKind>,
         for_user_id: Option<UserId>,
         job_storage: &mut RedisStorage<UniversalInboxJob>,
@@ -289,9 +289,9 @@ impl IntegrationConnectionService {
         ),
         err
     )]
-    pub async fn create_integration_connection<'a>(
+    pub async fn create_integration_connection(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         integration_provider_kind: IntegrationProviderKind,
         for_user_id: UserId,
     ) -> Result<Box<IntegrationConnection>, UniversalInboxError> {
@@ -314,9 +314,9 @@ impl IntegrationConnectionService {
         ),
         err
     )]
-    pub async fn update_integration_connection_config<'a>(
+    pub async fn update_integration_connection_config(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         integration_connection_id: IntegrationConnectionId,
         integration_connection_config: IntegrationConnectionConfig,
         for_user_id: UserId,
@@ -367,9 +367,9 @@ impl IntegrationConnectionService {
         ),
         err
     )]
-    pub async fn verify_integration_connection<'a>(
+    pub async fn verify_integration_connection(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         integration_connection_id: IntegrationConnectionId,
         for_user_id: UserId,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
@@ -455,9 +455,9 @@ impl IntegrationConnectionService {
         ),
         err
     )]
-    pub async fn disconnect_integration_connection<'a>(
+    pub async fn disconnect_integration_connection(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         integration_connection_id: IntegrationConnectionId,
         for_user_id: UserId,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
@@ -512,9 +512,9 @@ impl IntegrationConnectionService {
         ),
         err
     )]
-    pub async fn get_integration_connection_to_sync<'a>(
+    pub async fn get_integration_connection_to_sync(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         integration_provider_kind: IntegrationProviderKind,
         min_sync_interval_in_minutes: i64,
         sync_type: IntegrationConnectionSyncType,
@@ -559,9 +559,9 @@ impl IntegrationConnectionService {
         ),
         err
     )]
-    pub async fn get_validated_integration_connection_per_kind<'a>(
+    pub async fn get_validated_integration_connection_per_kind(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         integration_provider_kind: IntegrationProviderKind,
         for_user_id: UserId,
     ) -> Result<Option<IntegrationConnection>, UniversalInboxError> {
@@ -579,9 +579,9 @@ impl IntegrationConnectionService {
     /// This function randomly search for a validated Slack integration connection to access
     /// Slack API endpoint not related to a specific user.
     #[tracing::instrument(level = "debug", skip(self, executor), err)]
-    pub async fn find_slack_access_token<'a>(
+    pub async fn find_slack_access_token(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         context: IntegrationConnectionContext,
     ) -> Result<Option<(AccessToken, IntegrationConnection)>, UniversalInboxError> {
         let integration_connection = self
@@ -606,9 +606,9 @@ impl IntegrationConnectionService {
         ),
         err
     )]
-    pub async fn find_access_token<'a>(
+    pub async fn find_access_token(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         integration_provider_kind: IntegrationProviderKind,
         for_user_id: UserId,
     ) -> Result<Option<(AccessToken, IntegrationConnection)>, UniversalInboxError> {
@@ -631,9 +631,9 @@ impl IntegrationConnectionService {
             .await
     }
 
-    async fn fetch_access_token_from_nango<'a>(
+    async fn fetch_access_token_from_nango(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         integration_connection: IntegrationConnection,
         for_user_id: Option<UserId>,
     ) -> Result<Option<(AccessToken, IntegrationConnection)>, UniversalInboxError> {
@@ -710,9 +710,9 @@ impl IntegrationConnectionService {
         ),
         err
     )]
-    pub async fn update_integration_connection_context<'a>(
+    pub async fn update_integration_connection_context(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         integration_connection_id: IntegrationConnectionId,
         context: IntegrationConnectionContext,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
@@ -734,9 +734,9 @@ impl IntegrationConnectionService {
         ),
         err
     )]
-    pub async fn get_integration_connection_per_provider_user_id<'a>(
+    pub async fn get_integration_connection_per_provider_user_id(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         integration_provider_kind: IntegrationProviderKind,
         provider_user_id: String,
     ) -> Result<Option<IntegrationConnection>, UniversalInboxError> {
@@ -758,9 +758,9 @@ impl IntegrationConnectionService {
         ),
         err
     )]
-    pub async fn find_integration_connection_per_provider_user_ids<'a>(
+    pub async fn find_integration_connection_per_provider_user_ids(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         integration_provider_kind: IntegrationProviderKind,
         provider_user_ids: Vec<String>,
     ) -> Result<Vec<IntegrationConnection>, UniversalInboxError> {
@@ -782,9 +782,9 @@ impl IntegrationConnectionService {
         ),
         err
     )]
-    pub async fn schedule_notifications_sync_status<'a>(
+    pub async fn schedule_notifications_sync_status(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         integration_provider_kind: Option<IntegrationProviderKind>,
         for_user_id: Option<UserId>,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
@@ -807,9 +807,9 @@ impl IntegrationConnectionService {
         ),
         err
     )]
-    pub async fn start_notifications_sync_status<'a>(
+    pub async fn start_notifications_sync_status(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         integration_provider_kind: IntegrationProviderKind,
         for_user_id: UserId,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
@@ -832,9 +832,9 @@ impl IntegrationConnectionService {
         ),
         err
     )]
-    pub async fn complete_notifications_sync_status<'a>(
+    pub async fn complete_notifications_sync_status(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         integration_provider_kind: IntegrationProviderKind,
         for_user_id: UserId,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
@@ -857,9 +857,9 @@ impl IntegrationConnectionService {
         ),
         err
     )]
-    pub async fn error_notifications_sync_status<'a>(
+    pub async fn error_notifications_sync_status(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         integration_provider_kind: IntegrationProviderKind,
         failure_message: String,
         for_user_id: UserId,
@@ -883,9 +883,9 @@ impl IntegrationConnectionService {
         ),
         err
     )]
-    pub async fn schedule_tasks_sync_status<'a>(
+    pub async fn schedule_tasks_sync_status(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         integration_provider_kind: Option<IntegrationProviderKind>,
         for_user_id: Option<UserId>,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
@@ -908,9 +908,9 @@ impl IntegrationConnectionService {
         ),
         err
     )]
-    pub async fn start_tasks_sync_status<'a>(
+    pub async fn start_tasks_sync_status(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         integration_provider_kind: IntegrationProviderKind,
         for_user_id: UserId,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
@@ -933,9 +933,9 @@ impl IntegrationConnectionService {
         ),
         err
     )]
-    pub async fn complete_tasks_sync_status<'a>(
+    pub async fn complete_tasks_sync_status(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         integration_provider_kind: IntegrationProviderKind,
         for_user_id: UserId,
     ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
@@ -958,9 +958,9 @@ impl IntegrationConnectionService {
             user.id = for_user_id.to_string()
         ),
     )]
-    pub async fn error_tasks_sync_status<'a>(
+    pub async fn error_tasks_sync_status(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         integration_provider_kind: IntegrationProviderKind,
         failure_message: String,
         for_user_id: UserId,
@@ -981,7 +981,7 @@ impl IntegrationConnectionService {
         fields(provider_kind = provider_kind.map(|kind| kind.to_string())),
         err
     )]
-    pub async fn sync_oauth_scopes_for_all_users<'a>(
+    pub async fn sync_oauth_scopes_for_all_users(
         &self,
         provider_kind: Option<IntegrationProviderKind>,
     ) -> Result<(), UniversalInboxError> {
@@ -1010,7 +1010,7 @@ impl IntegrationConnectionService {
         ),
         err
     )]
-    pub async fn sync_oauth_scopes_for_user<'a>(
+    pub async fn sync_oauth_scopes_for_user(
         &self,
         provider_kind: Option<IntegrationProviderKind>,
         user_id: UserId,
@@ -1058,9 +1058,9 @@ impl IntegrationConnectionService {
         ),
         err
     )]
-    async fn sync_oauth_scopes<'a>(
+    async fn sync_oauth_scopes(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         provider_kind: Option<IntegrationProviderKind>,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
@@ -1128,9 +1128,9 @@ impl IntegrationConnectionService {
         ),
         err
     )]
-    pub async fn get_integration_connection_config_for_provider_user_id<'a>(
+    pub async fn get_integration_connection_config_for_provider_user_id(
         &self,
-        executor: &mut Transaction<'a, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         provider_kind: IntegrationProviderKind,
         provider_user_id: String,
     ) -> Result<Option<IntegrationConnectionConfig>, UniversalInboxError> {

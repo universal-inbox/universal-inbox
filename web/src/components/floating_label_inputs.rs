@@ -465,10 +465,12 @@ where
 
                     {
                         (props.search_results)().into_iter().enumerate().map(|(i, result)| {
+                            let _row_key = result.get_id();
+                            let title = result.get_title();
                             rsx! {
                                 SearchResultRow {
-                                    key: "{result.get_id()}",
-                                    title: "{result.get_title()}",
+                                    key: _row_key,
+                                    title,
                                     selected: i == selected_index(),
                                     on_select: move |_| {
                                         *error_message.write() = None;
