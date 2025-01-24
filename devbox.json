@@ -1,11 +1,10 @@
 {
   "packages": {
-    "sqlx-cli":       "0.8.2",
+    "sqlx-cli":       "0.8.3",
     "trunk":          "latest",
     "pre-commit":     "latest",
     "rustup":         "latest",
     "cargo-audit":    "latest",
-    "cargo-expand":   "latest",
     "cargo-nextest":  "latest",
     "cargo-outdated": "latest",
     "just":           "latest",
@@ -13,7 +12,7 @@
     "postgresql_15":  "latest",
     "redis":          "latest",
     "iconv":          "latest",
-    "nodejs":         "latest",
+    "nodejs_22":      "latest",
     "pkg-config":     "latest",
     "taplo":          "latest",
     "darwin.apple_sdk.frameworks.Foundation": {
@@ -32,7 +31,7 @@
     "fzf":             "latest",
     "process-compose": "latest",
     "binaryen":        "latest",
-    "cargo-chef":      "latest",
+    "cargo-chef":      "0.1.68",
     "cargo-binstall":  "latest",
     "openssl.dev":     "",
     "cargo-machete":   "latest",
