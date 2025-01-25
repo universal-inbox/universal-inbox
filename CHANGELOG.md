@@ -7,6 +7,7 @@
 - Synchronize one way (Slack => Universal Inbox) Slack mentions as notifications
 - Add new keyboard shortcuts to control the preview pane
 - Add Google Calendar Event invitations from Google Mail as a notification
+- Support multiple authentication mechanisms (ie. local + Google)
 
 ### Changed
 

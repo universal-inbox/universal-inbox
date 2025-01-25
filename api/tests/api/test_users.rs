@@ -38,15 +38,11 @@ mod register_user {
 
         let (_client, user) = register_user(
             &app,
-            "John",
-            "Doe",
             "john@doe.name".parse().unwrap(),
             "Very-harD-pasSword-5",
         )
         .await;
 
-        assert_eq!(user.first_name, "John");
-        assert_eq!(user.last_name, "Doe");
         assert_eq!(user.email, "john@doe.name".parse().unwrap());
         assert!(user.email_validated_at.is_none());
         assert!(!user.is_email_validated());
@@ -69,7 +65,7 @@ mod register_user {
         assert_eq!(
             emails_sent[0].1,
             EmailTemplate::EmailVerification {
-                first_name: "John".to_string(),
+                first_name: None,
                 email_verification_url: format!(
                     "{}users/{}/email-verification/{}",
                     settings.application.front_base_url,
@@ -89,8 +85,6 @@ mod register_user {
 
         let (client, _user) = register_user(
             &app,
-            "John",
-            "Doe",
             "john@doe.name".parse().unwrap(),
             "Very-harD-pasSword-5",
         )
@@ -99,8 +93,6 @@ mod register_user {
         let response = register_user_response(
             &client,
             &app,
-            "John",
-            "Doe",
             "john@doe.name".parse().unwrap(),
             "Very-harD-pasSword-5",
         )
@@ -128,8 +120,6 @@ mod login_user {
 
         let (_client, user) = register_user(
             &app,
-            "John",
-            "Doe",
             "john@doe.name".parse().unwrap(),
             "Very-harD-pasSword-5",
         )
@@ -179,8 +169,6 @@ mod login_user {
 
         let user = get_current_user(&client, &app).await;
 
-        assert_eq!(user.first_name, "John");
-        assert_eq!(user.last_name, "Doe");
         assert_eq!(user.email, "john@doe.name".parse().unwrap());
         assert!(user.email_validated_at.is_none());
         assert!(user.email_validation_sent_at.is_some());
@@ -193,8 +181,6 @@ mod login_user {
 
         let (_client, _user) = register_user(
             &app,
-            "John",
-            "Doe",
             "john@doe.name".parse().unwrap(),
             "Very-harD-pasSword-5",
         )
@@ -245,8 +231,6 @@ mod login_user {
 
         let (client, _user) = register_user(
             &app,
-            "John",
-            "Doe",
             "john@doe.name".parse().unwrap(),
             "Very-harD-pasSword-5",
         )
@@ -287,8 +271,6 @@ mod email_verification {
 
         let (client, user) = register_user(
             &app,
-            "John",
-            "Doe",
             "john@doe.name".parse().unwrap(),
             "Very-harD-pasSword-5",
         )
@@ -321,7 +303,7 @@ mod email_verification {
         assert_eq!(
             emails_sent[1].1,
             EmailTemplate::EmailVerification {
-                first_name: "John".to_string(),
+                first_name: None,
                 email_verification_url: format!(
                     "{}users/{}/email-verification/{email_validation_token}",
                     settings.application.front_base_url, user.id
@@ -339,8 +321,6 @@ mod email_verification {
 
         let (client, user) = register_user(
             &app,
-            "John",
-            "Doe",
             "john@doe.name".parse().unwrap(),
             "Very-harD-pasSword-5",
         )
@@ -380,8 +360,6 @@ mod email_verification {
 
         let (_, user) = register_user(
             &app,
-            "John",
-            "Doe",
             "john@doe.name".parse().unwrap(),
             "Very-harD-pasSword-5",
         )
@@ -423,8 +401,6 @@ mod email_verification {
 
         let (_, user) = register_user(
             &app,
-            "John",
-            "Doe",
             "john@doe.name".parse().unwrap(),
             "Very-harD-pasSword-5",
         )
@@ -473,8 +449,7 @@ mod password_reset {
         let app = tested_app_with_local_auth.await;
         let email: EmailAddress = "john@doe.name".parse().unwrap();
 
-        let (_client, user) =
-            register_user(&app, "John", "Doe", email.clone(), "Very-harD-pasSword-5").await;
+        let (_client, user) = register_user(&app, email.clone(), "Very-harD-pasSword-5").await;
 
         let anonymous_client = reqwest::Client::builder()
             .cookie_store(true)
@@ -498,7 +473,7 @@ mod password_reset {
         assert_eq!(
             emails_sent[1].1,
             EmailTemplate::PasswordReset {
-                first_name: "John".to_string(),
+                first_name: None,
                 password_reset_url: format!(
                     "{}users/{}/password-reset/{password_reset_token}",
                     settings.application.front_base_url, user.id
@@ -515,8 +490,7 @@ mod password_reset {
         let app = tested_app_with_local_auth.await;
         let email: EmailAddress = "john@doe.name".parse().unwrap();
 
-        let (_client, user) =
-            register_user(&app, "John", "Doe", email.clone(), "Very-harD-pasSword-5").await;
+        let (_client, user) = register_user(&app, email.clone(), "Very-harD-pasSword-5").await;
 
         let new_client = reqwest::Client::builder()
             .cookie_store(true)
@@ -576,8 +550,7 @@ mod password_reset {
         let app = tested_app_with_local_auth.await;
         let email: EmailAddress = "john@doe.name".parse().unwrap();
 
-        let (_, user) =
-            register_user(&app, "John", "Doe", email.clone(), "Very-harD-pasSword-5").await;
+        let (_, user) = register_user(&app, email.clone(), "Very-harD-pasSword-5").await;
 
         let anonymous_client = reqwest::Client::builder()
             .cookie_store(true)
@@ -621,8 +594,7 @@ mod password_reset {
         let app = tested_app_with_local_auth.await;
         let email: EmailAddress = "john@doe.name".parse().unwrap();
 
-        let (_, user) =
-            register_user(&app, "John", "Doe", email.clone(), "Very-harD-pasSword-5").await;
+        let (_, user) = register_user(&app, email.clone(), "Very-harD-pasSword-5").await;
 
         let anonymous_client = reqwest::Client::builder()
             .cookie_store(true)

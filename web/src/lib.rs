@@ -39,6 +39,7 @@ mod auth;
 mod components;
 mod config;
 mod form;
+mod icons;
 mod images;
 mod keyboard_manager;
 mod layouts;

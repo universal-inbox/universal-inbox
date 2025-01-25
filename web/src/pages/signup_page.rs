@@ -2,24 +2,26 @@
 
 use dioxus::prelude::*;
 use email_address::EmailAddress;
-
 use log::error;
 
-use universal_inbox::user::Password;
+use universal_inbox::{user::Password, FrontAuthenticationConfig};
 
 use crate::{
+    auth::authenticate_authorization_code_flow,
     components::{
-        floating_label_inputs::FloatingLabelInputText, universal_inbox_title::UniversalInboxTitle,
+        floating_label_inputs::FloatingLabelInputText, loading::Loading,
+        universal_inbox_title::UniversalInboxTitle,
     },
+    config::{get_api_base_url, APP_CONFIG},
     form::FormValues,
+    icons::GOOGLE_LOGO,
     route::Route,
     services::user_service::{UserCommand, CONNECTED_USER},
 };
 
 pub fn SignupPage() -> Element {
+    let api_base_url = use_memo(move || get_api_base_url().unwrap());
     let user_service = use_coroutine_handle::<UserCommand>();
-    let first_name = use_signal(|| "".to_string());
-    let last_name = use_signal(|| "".to_string());
     let email = use_signal(|| "".to_string());
     let password = use_signal(|| "".to_string());
     let mut force_validation = use_signal(|| false);
@@ -30,6 +32,22 @@ pub fn SignupPage() -> Element {
         needs_update();
         return rsx! {};
     };
+
+    let app_config = APP_CONFIG.read();
+    let Some(app_config) = app_config.as_ref() else {
+        return rsx! { Loading { label: "Loading Universal Inbox settings..." } };
+    };
+    let is_local_auth_enabled = app_config
+        .authentication_configs
+        .iter()
+        .any(|auth_config| matches!(auth_config, FrontAuthenticationConfig::Local));
+    let is_google_auth_enabled = app_config.authentication_configs.iter().any(|auth_config| {
+        matches!(
+            auth_config,
+            FrontAuthenticationConfig::OIDCGoogleAuthorizationCodeFlow(_)
+        )
+    });
+    let form_style = if is_google_auth_enabled { "" } else { "pb-8" };
 
     rsx! {
         div {
@@ -42,71 +60,82 @@ pub fn SignupPage() -> Element {
             }
         }
 
-        form {
-            class: "flex flex-col justify-center gap-4 px-10 pb-8",
-            onsubmit: move |evt| {
-                match FormValues(evt.values()).try_into() {
-                    Ok(params) => {
-                        user_service.send(UserCommand::RegisterUser(params));
-                    },
-                    Err(err) => {
-                        *force_validation.write() = true;
-                        error!("Failed to parse form values as RegisterUserParameters: {err}");
+        if is_local_auth_enabled {
+            form {
+                class: "flex flex-col justify-center gap-4 px-10 {form_style}",
+                onsubmit: move |evt| {
+                    match FormValues(evt.values()).try_into() {
+                        Ok(params) => {
+                            user_service.send(UserCommand::RegisterUser(params));
+                        },
+                        Err(err) => {
+                            *force_validation.write() = true;
+                            error!("Failed to parse form values as RegisterUserParameters: {err}");
+                        }
+                    }
+                },
+
+                FloatingLabelInputText::<EmailAddress> {
+                    name: "email".to_string(),
+                    label: Some("Email".to_string()),
+                    required: true,
+                    value: email,
+                    force_validation: force_validation(),
+                    r#type: "email".to_string()
+                }
+
+                FloatingLabelInputText::<Password> {
+                    name: "password".to_string(),
+                    label: Some("Password".to_string()),
+                    required: true,
+                    value: password,
+                    force_validation: force_validation(),
+                    r#type: "password".to_string()
+                }
+
+                button {
+                    class: "btn btn-primary mt-2",
+                    r#type: "submit",
+                    "Sign up"
+                }
+            }
+
+            if is_google_auth_enabled {
+                div {
+                    class: "flex flex-col px-10 pb-8",
+
+                    div { class: "divider", "Or" }
+
+                    button {
+                        class: "btn btn-primary w-full relative",
+                        onclick: move |_| {
+                            spawn({
+                                async move {
+                                    if let Err(auth_error) =
+                                        authenticate_authorization_code_flow(&api_base_url()).await
+                                    {
+                                        error!("An error occured while authenticating: {:?}", auth_error);
+                                    }
+                                }
+                            });
+                        },
+
+                        img {
+                            class: "h-8 w-8 bg-white rounded-md absolute left-2",
+                            src: "{GOOGLE_LOGO}",
+                        }
+                        "Sign up with Google"
                     }
                 }
-            },
-
-            div {
-                class: "flex flex-row justify-between gap-4",
-
-                FloatingLabelInputText::<String> {
-                    name: "first_name".to_string(),
-                    label: Some("First name".to_string()),
-                    required: true,
-                    value: first_name,
-                    autofocus: true,
-                    force_validation: force_validation(),
-                }
-
-                FloatingLabelInputText::<String> {
-                    name: "last_name".to_string(),
-                    label: Some("Last name".to_string()),
-                    required: true,
-                    value: last_name,
-                    force_validation: force_validation(),
-                }
-            }
-
-            FloatingLabelInputText::<EmailAddress> {
-                name: "email".to_string(),
-                label: Some("Email".to_string()),
-                required: true,
-                value: email,
-                force_validation: force_validation(),
-                r#type: "email".to_string()
-            }
-
-            FloatingLabelInputText::<Password> {
-                name: "password".to_string(),
-                label: Some("Password".to_string()),
-                required: true,
-                value: password,
-                force_validation: force_validation(),
-                r#type: "password".to_string()
-            }
-
-            button {
-                class: "btn btn-primary mt-2",
-                r#type: "submit",
-                "Signup"
             }
 
             div {
-                class: "label justify-end",
+                class: "text-base px-10",
+                span { "Already have an account? " }
                 Link {
-                    class: "link-hover link label-text-alt",
+                    class: "link-hover link link-primary font-bold",
                     to: Route::LoginPage {},
-                    "Login to existing account"
+                    "Log in"
                 }
             }
         }

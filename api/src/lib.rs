@@ -494,10 +494,20 @@ fn build_csp_header(settings: &Settings) -> String {
     let mut connect_srcs = Sources::new_with(Source::Self_)
         .push(Source::Host(nango_ws_base_url.as_str()))
         .push(Source::Host(&nango_base_url));
-    if let AuthenticationSettings::OpenIDConnect(oidc_settings) =
-        &settings.application.security.authentication
+    for oidc_issuer_url in settings
+        .application
+        .security
+        .authentication
+        .iter()
+        .filter_map(|auth| {
+            if let AuthenticationSettings::OpenIDConnect(oidc_settings) = auth {
+                Some(oidc_settings.oidc_issuer_url.as_str())
+            } else {
+                None
+            }
+        })
     {
-        connect_srcs.push_borrowed(Source::Host(oidc_settings.oidc_issuer_url.as_str()));
+        connect_srcs.push_borrowed(Source::Host(oidc_issuer_url));
     }
     for url in settings.application.security.csp_extra_connect_src.iter() {
         connect_srcs.push_borrowed(Source::Host(url));

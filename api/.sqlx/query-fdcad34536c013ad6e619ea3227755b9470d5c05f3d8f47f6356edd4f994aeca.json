@@ -12,7 +12,7 @@
             "name": "user_auth_kind",
             "kind": {
               "Enum": [
-                "OpenIdConnect",
+                "OIDCGoogleAuthorizationCode",
                 "Local"
               ]
             }

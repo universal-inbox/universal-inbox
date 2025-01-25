@@ -6,7 +6,10 @@ use actix_web::{
 };
 use anyhow::Context;
 
-use universal_inbox::{FrontAuthenticationConfig, FrontConfig, IntegrationProviderStaticConfig};
+use universal_inbox::{
+    FrontAuthenticationConfig, FrontConfig, FrontOIDCAuthorizationCodePKCEFlowConfig,
+    FrontOIDCGoogleAuthorizationCodeFlowConfig, IntegrationProviderStaticConfig,
+};
 
 use crate::{
     configuration::{
@@ -19,35 +22,48 @@ use crate::{
 pub async fn front_config(
     settings: web::Data<Settings>,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    let authentication_config = match &settings.application.security.authentication {
-        AuthenticationSettings::OpenIDConnect(oidc_settings) => match **oidc_settings {
-            OpenIDConnectSettings {
-                ref oidc_issuer_url,
-                ref user_profile_url,
-                oidc_flow_settings:
-                    OIDCFlowSettings::AuthorizationCodePKCEFlow(OIDCAuthorizationCodePKCEFlowSettings {
-                        ref front_client_id,
-                        ..
-                    }),
-                ..
-            } => FrontAuthenticationConfig::OIDCAuthorizationCodePKCEFlow {
-                oidc_issuer_url: oidc_issuer_url.url().clone(),
-                oidc_client_id: front_client_id.to_string(),
-                oidc_redirect_url: settings
-                    .application
-                    .get_oidc_auth_code_pkce_flow_redirect_url()?,
-                user_profile_url: user_profile_url.clone(),
+    let oidc_redirect_url = settings
+        .application
+        .get_oidc_auth_code_pkce_flow_redirect_url()?;
+    let authentication_configs = settings
+        .application
+        .security
+        .authentication
+        .iter()
+        .map(|auth| match auth {
+            AuthenticationSettings::OpenIDConnect(oidc_settings) => match **oidc_settings {
+                OpenIDConnectSettings {
+                    ref oidc_issuer_url,
+                    ref user_profile_url,
+                    oidc_flow_settings:
+                        OIDCFlowSettings::AuthorizationCodePKCEFlow(
+                            OIDCAuthorizationCodePKCEFlowSettings {
+                                ref front_client_id,
+                                ..
+                            },
+                        ),
+                    ..
+                } => FrontAuthenticationConfig::OIDCAuthorizationCodePKCEFlow(
+                    FrontOIDCAuthorizationCodePKCEFlowConfig {
+                        oidc_issuer_url: oidc_issuer_url.url().clone(),
+                        oidc_client_id: front_client_id.to_string(),
+                        oidc_redirect_url: oidc_redirect_url.clone(),
+                        user_profile_url: user_profile_url.clone(),
+                    },
+                ),
+                OpenIDConnectSettings {
+                    ref user_profile_url,
+                    oidc_flow_settings: OIDCFlowSettings::GoogleAuthorizationCodeFlow,
+                    ..
+                } => FrontAuthenticationConfig::OIDCGoogleAuthorizationCodeFlow(
+                    FrontOIDCGoogleAuthorizationCodeFlowConfig {
+                        user_profile_url: user_profile_url.clone(),
+                    },
+                ),
             },
-            OpenIDConnectSettings {
-                ref user_profile_url,
-                oidc_flow_settings: OIDCFlowSettings::GoogleAuthorizationCodeFlow,
-                ..
-            } => FrontAuthenticationConfig::OIDCGoogleAuthorizationCodeFlow {
-                user_profile_url: user_profile_url.clone(),
-            },
-        },
-        AuthenticationSettings::Local(_) => FrontAuthenticationConfig::Local,
-    };
+            AuthenticationSettings::Local(_) => FrontAuthenticationConfig::Local,
+        })
+        .collect();
 
     let integration_providers = HashMap::from_iter(settings.integrations.values().map(|config| {
         (
@@ -69,7 +85,7 @@ pub async fn front_config(
         )
     }));
     let config = FrontConfig {
-        authentication_config,
+        authentication_configs,
         nango_base_url: settings.oauth2.nango_base_url.clone(),
         nango_public_key: settings.oauth2.nango_public_key.clone(),
         integration_providers,

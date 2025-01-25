@@ -15,7 +15,7 @@ use crate::{services::api::call_api, utils::current_origin};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct AppConfig {
-    pub authentication_config: FrontAuthenticationConfig,
+    pub authentication_configs: Vec<FrontAuthenticationConfig>,
     pub api_base_url: Url,
     pub nango_base_url: Url,
     pub nango_public_key: NangoPublicKey,
@@ -54,7 +54,7 @@ pub async fn get_app_config() -> Result<AppConfig> {
 
     let app_config = AppConfig {
         api_base_url,
-        authentication_config: front_config.authentication_config,
+        authentication_configs: front_config.authentication_configs,
         nango_base_url: front_config.nango_base_url,
         nango_public_key: front_config.nango_public_key,
         integration_providers: front_config.integration_providers,

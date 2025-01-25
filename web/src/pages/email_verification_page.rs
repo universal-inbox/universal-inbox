@@ -6,7 +6,7 @@ use dioxus_router::prelude::use_navigator;
 use universal_inbox::user::{EmailValidationToken, UserId};
 
 use crate::{
-    components::spinner::Spinner,
+    components::loading::Loading,
     model::{AuthenticationState, UI_MODEL},
     route::Route,
     services::user_service::{UserCommand, CONNECTED_USER},
@@ -44,13 +44,6 @@ pub fn EmailVerificationPage(
         needs_update();
         rsx! {}
     } else {
-        rsx! {
-            div {
-                class: "h-full flex justify-center items-center",
-
-                Spinner {}
-                "Validating email verification..."
-            }
-        }
+        rsx! { Loading { label: "Validating email verification..." } }
     }
 }

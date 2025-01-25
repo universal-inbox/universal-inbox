@@ -43,27 +43,7 @@ impl TryFrom<FormValues> for RegisterUserParameters {
     type Error = anyhow::Error;
 
     fn try_from(form_values: FormValues) -> Result<Self, Self::Error> {
-        let first_name = form_values
-            .0
-            .get("first_name")
-            .ok_or_else(|| anyhow!("first_name is required"))?
-            .clone()
-            .to_vec()
-            .first()
-            .ok_or_else(|| anyhow!("first_name is required"))?
-            .to_string();
-
-        let last_name = form_values
-            .0
-            .get("last_name")
-            .ok_or_else(|| anyhow!("last_name is required"))?
-            .clone()
-            .to_vec()
-            .first()
-            .ok_or_else(|| anyhow!("last_name is required"))?
-            .to_string();
-
-        Self::try_new(first_name, last_name, form_values.try_into()?)
+        Self::try_new(form_values.try_into()?)
     }
 }
 

@@ -33,11 +33,11 @@ pub trait Mailer {
 #[serde(untagged)]
 pub enum EmailTemplate {
     EmailVerification {
-        first_name: String,
+        first_name: Option<String>,
         email_verification_url: Url,
     },
     PasswordReset {
-        first_name: String,
+        first_name: Option<String>,
         password_reset_url: Url,
     },
 }
@@ -55,32 +55,44 @@ impl EmailTemplate {
             EmailTemplate::EmailVerification {
                 first_name,
                 email_verification_url,
-            } => EmailBuilder::new()
-                .greeting(Greeting::Name(first_name))
-                .intro("Please verify your email address to start using Universal Inbox")
-                .action(Action {
-                    text: "Verify your email",
-                    link: email_verification_url.as_str(),
-                    color: Some(("#388FEF", "white")),
-                    ..Default::default()
-                })
-                .outro("Welcome to Universal Inbox")
-                .signature("Best")
-                .build(),
+            } => {
+                let mut builder = EmailBuilder::new();
+                if let Some(first_name) = first_name {
+                    builder = builder.greeting(Greeting::Name(first_name));
+                }
+
+                builder
+                    .intro("Please verify your email address to start using Universal Inbox")
+                    .action(Action {
+                        text: "Verify your email",
+                        link: email_verification_url.as_str(),
+                        color: Some(("#388FEF", "white")),
+                        ..Default::default()
+                    })
+                    .outro("Welcome to Universal Inbox")
+                    .signature("Best")
+                    .build()
+            }
             EmailTemplate::PasswordReset {
                 first_name,
                 password_reset_url,
-            } => EmailBuilder::new()
-                .greeting(Greeting::Name(first_name))
-                .intro("Reset your Universal Inbox password")
-                .action(Action {
-                    text: "Reset your password",
-                    link: password_reset_url.as_str(),
-                    color: Some(("#388FEF", "white")),
-                    ..Default::default()
-                })
-                .signature("Best")
-                .build(),
+            } => {
+                let mut builder = EmailBuilder::new();
+                if let Some(first_name) = first_name {
+                    builder = builder.greeting(Greeting::Name(first_name));
+                }
+
+                builder
+                    .intro("Reset your Universal Inbox password")
+                    .action(Action {
+                        text: "Reset your password",
+                        link: password_reset_url.as_str(),
+                        color: Some(("#388FEF", "white")),
+                        ..Default::default()
+                    })
+                    .signature("Best")
+                    .build()
+            }
         }
     }
 }
@@ -145,15 +157,28 @@ impl SmtpMailer {
         let email_html_body = mailgen
             .render_html(&email_body)
             .context("Failed to render email as HTML")?;
+        let to = if let Some(first_name) = user.first_name {
+            if let Some(last_name) = user.last_name {
+                format!("{} {} <{}>", first_name, last_name, user.email)
+                    .parse()
+                    .context("Failed to parse user email `to` header")?
+            } else {
+                user.email
+                    .to_string()
+                    .parse()
+                    .context("Failed to parse user email `to` header")?
+            }
+        } else {
+            user.email
+                .to_string()
+                .parse()
+                .context("Failed to parse user email `to` header")?
+        };
 
         Ok(Message::builder()
             .from(self.from_header.clone())
             .reply_to(self.reply_to_header.clone())
-            .to(
-                format!("{} {} <{}>", user.first_name, user.last_name, user.email)
-                    .parse()
-                    .context("Failed to parse user email `to` header")?,
-            )
+            .to(to)
             .subject(template.subject())
             .multipart(MultiPart::alternative_plain_html(
                 email_txt_body,
