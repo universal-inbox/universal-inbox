@@ -16,7 +16,7 @@ use url::Url;
 
 use universal_inbox::{
     auth::{AuthorizeSessionResponse, CloseSessionResponse, SessionAuthValidationParameters},
-    user::UserId,
+    user::{UserAuthKind, UserId},
 };
 
 use crate::{
@@ -64,8 +64,12 @@ pub async fn authenticate_session(
         .await
         .context("Failed to create new transaction while authenticating user")?;
 
-    let AuthenticationSettings::OpenIDConnect(openid_connect_settings) =
-        &settings.application.security.authentication
+    let Some(AuthenticationSettings::OpenIDConnect(openid_connect_settings)) = &settings
+        .application
+        .security
+        .authentication
+        .iter()
+        .find(|auth| matches!(auth, AuthenticationSettings::OpenIDConnect(_)))
     else {
         return Err(UniversalInboxError::Unexpected(anyhow!(
             "This service can only be called when OpenID Connect authentication is configured"
@@ -105,6 +109,12 @@ pub async fn authenticate_session(
             auth_token.jwt_token.expose_secret().0.clone(),
         )
         .context("Failed to insert JWT token into the session")?;
+    session
+        .insert(
+            USER_AUTH_KIND_SESSION_KEY,
+            UserAuthKind::OIDCAuthorizationCodePKCE,
+        )
+        .context("Failed to insert authentication type into the session")?;
 
     transaction
         .commit()
@@ -114,6 +124,7 @@ pub async fn authenticate_session(
     Ok(HttpResponse::Ok().finish())
 }
 
+pub const USER_AUTH_KIND_SESSION_KEY: &str = "user_auth_kind";
 const OIDC_CSRF_TOKEN_SESSION_KEY: &str = "oidc_csrf_token";
 const OIDC_NONCE_SESSION_KEY: &str = "oidc_nonce";
 const OIDC_AUTHORIZATION_URL_SESSION_KEY: &str = "authorization_url";
@@ -137,8 +148,12 @@ pub async fn authorize_session(
     }
 
     let service = user_service.clone();
-    let AuthenticationSettings::OpenIDConnect(openid_connect_settings) =
-        &settings.application.security.authentication
+    let Some(AuthenticationSettings::OpenIDConnect(openid_connect_settings)) = &settings
+        .application
+        .security
+        .authentication
+        .iter()
+        .find(|auth| matches!(auth, AuthenticationSettings::OpenIDConnect(_)))
     else {
         return Err(UniversalInboxError::Unexpected(anyhow!(
             "This service can only be called when OpenID Connect authentication is configured"
@@ -223,8 +238,12 @@ pub async fn authenticated_session(
         .await
         .context("Failed to create new transaction while authenticating user")?;
 
-    let AuthenticationSettings::OpenIDConnect(openid_connect_settings) =
-        &settings.application.security.authentication
+    let Some(AuthenticationSettings::OpenIDConnect(openid_connect_settings)) = &settings
+        .application
+        .security
+        .authentication
+        .iter()
+        .find(|auth| matches!(auth, AuthenticationSettings::OpenIDConnect(_)))
     else {
         return Err(UniversalInboxError::Unexpected(anyhow!(
             "This service can only be called when OpenID Connect authentication is configured"
@@ -252,6 +271,12 @@ pub async fn authenticated_session(
             auth_token.jwt_token.expose_secret().0.clone(),
         )
         .context("Failed to insert JWT token into the session")?;
+    session
+        .insert(
+            USER_AUTH_KIND_SESSION_KEY,
+            UserAuthKind::OIDCGoogleAuthorizationCode,
+        )
+        .context("Failed to insert authentication type into the session")?;
 
     transaction
         .commit()
@@ -274,13 +299,19 @@ pub async fn close_session(
         .parse::<UserId>()
         .context("Wrong user ID format")?;
 
+    let user_auth_kind = session
+        .get::<UserAuthKind>(USER_AUTH_KIND_SESSION_KEY)
+        .context("Failed to extract UserAuthKind from the session")?;
+
     let service = user_service.clone();
     let mut transaction = service
         .begin()
         .await
         .context("Failed to create new transaction while closing user session")?;
 
-    let logout_url = service.close_session(&mut transaction, user_id).await?;
+    let logout_url = service
+        .close_session(&mut transaction, user_id, user_auth_kind)
+        .await?;
 
     transaction
         .commit()

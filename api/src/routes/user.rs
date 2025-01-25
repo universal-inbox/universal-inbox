@@ -16,12 +16,13 @@ use universal_inbox::{
     auth::auth_token::{AuthenticationToken, TruncatedAuthenticationToken},
     user::{
         Credentials, EmailValidationToken, LocalUserAuth, Password, PasswordResetToken,
-        RegisterUserParameters, User, UserAuth, UserId,
+        RegisterUserParameters, User, UserAuth, UserAuthKind, UserId,
     },
     SuccessResponse,
 };
 
 use crate::{
+    routes::auth::USER_AUTH_KIND_SESSION_KEY,
     universal_inbox::{
         auth_token::service::AuthenticationTokenService, user::service::UserService,
         UniversalInboxError,
@@ -111,8 +112,8 @@ pub async fn register_user(
         .register_user(
             &mut transaction,
             User::new(
-                register_user_parameters.first_name.clone(),
-                register_user_parameters.last_name.clone(),
+                None,
+                None,
                 register_user_parameters.credentials.email.clone(),
                 UserAuth::Local(LocalUserAuth {
                     password_hash: user_service.get_new_password_hash(
@@ -145,6 +146,9 @@ pub async fn register_user(
             auth_token.jwt_token.expose_secret().0.clone(),
         )
         .context("Failed to insert JWT token into the session")?;
+    session
+        .insert(USER_AUTH_KIND_SESSION_KEY, UserAuthKind::Local)
+        .context("Failed to insert authentication type into the session")?;
 
     transaction
         .commit()
@@ -190,6 +194,9 @@ pub async fn login_user(
             auth_token.jwt_token.expose_secret().0.clone(),
         )
         .context("Failed to insert JWT token into the session")?;
+    session
+        .insert(USER_AUTH_KIND_SESSION_KEY, UserAuthKind::Local)
+        .context("Failed to insert authentication type into the session")?;
 
     transaction
         .commit()

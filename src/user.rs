@@ -15,8 +15,8 @@ use crate::auth::AuthIdToken;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct User {
     pub id: UserId,
-    pub first_name: String,
-    pub last_name: String,
+    pub first_name: Option<String>,
+    pub last_name: Option<String>,
     pub email: EmailAddress,
     pub email_validated_at: Option<DateTime<Utc>>,
     pub email_validation_sent_at: Option<DateTime<Utc>>,
@@ -26,7 +26,12 @@ pub struct User {
 }
 
 impl User {
-    pub fn new(first_name: String, last_name: String, email: EmailAddress, auth: UserAuth) -> Self {
+    pub fn new(
+        first_name: Option<String>,
+        last_name: Option<String>,
+        email: EmailAddress,
+        auth: UserAuth,
+    ) -> Self {
         Self {
             id: Uuid::new_v4().into(),
             first_name,
@@ -43,7 +48,8 @@ impl User {
     pub fn is_email_validated(&self) -> bool {
         match self.auth {
             UserAuth::Local(_) => self.email_validated_at.is_some(),
-            UserAuth::OpenIdConnect(_) => true,
+            UserAuth::OIDCGoogleAuthorizationCode(_) => true,
+            UserAuth::OIDCAuthorizationCodePKCE(_) => true,
         }
     }
 }
@@ -52,7 +58,8 @@ impl User {
 #[serde(tag = "type", content = "content")]
 pub enum UserAuth {
     Local(LocalUserAuth),
-    OpenIdConnect(OpenIdConnectUserAuth),
+    OIDCGoogleAuthorizationCode(OpenIdConnectUserAuth),
+    OIDCAuthorizationCodePKCE(OpenIdConnectUserAuth),
 }
 
 impl fmt::Display for UserAuth {
@@ -62,9 +69,19 @@ impl fmt::Display for UserAuth {
             "{}",
             match self {
                 UserAuth::Local(_) => "Local",
-                UserAuth::OpenIdConnect(_) => "OpenIdConnect",
+                UserAuth::OIDCGoogleAuthorizationCode(_) => "OIDCGoogleAuthorizationCode",
+                UserAuth::OIDCAuthorizationCodePKCE(_) => "OIDCAuthorizationCodePKCE",
             }
         )
+    }
+}
+
+macro_attr! {
+    #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, EnumFromStr!, EnumDisplay!)]
+    pub enum UserAuthKind {
+        Local,
+        OIDCGoogleAuthorizationCode,
+        OIDCAuthorizationCodePKCE,
     }
 }
 
@@ -90,24 +107,12 @@ impl SerializableSecret for PasswordHash {}
 
 #[derive(Deserialize, Serialize, Validate)]
 pub struct RegisterUserParameters {
-    #[validate(length(min = 1))]
-    pub first_name: String,
-    #[validate(length(min = 1))]
-    pub last_name: String,
     pub credentials: Credentials,
 }
 
 impl RegisterUserParameters {
-    pub fn try_new(
-        first_name: String,
-        last_name: String,
-        credentials: Credentials,
-    ) -> Result<Self, anyhow::Error> {
-        let params = Self {
-            first_name,
-            last_name,
-            credentials,
-        };
+    pub fn try_new(credentials: Credentials) -> Result<Self, anyhow::Error> {
+        let params = Self { credentials };
 
         params.validate()?;
 

@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 use integration_connection::{provider::IntegrationProviderKind, NangoProviderKey, NangoPublicKey};
+use user::UserAuth;
 
 #[macro_use]
 extern crate macro_attr;
@@ -21,7 +22,7 @@ pub mod utils;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
 pub struct FrontConfig {
-    pub authentication_config: FrontAuthenticationConfig,
+    pub authentication_configs: Vec<FrontAuthenticationConfig>,
     pub nango_base_url: Url,
     pub nango_public_key: NangoPublicKey,
     pub integration_providers: HashMap<IntegrationProviderKind, IntegrationProviderStaticConfig>,
@@ -44,16 +45,36 @@ pub struct IntegrationProviderStaticConfig {
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]
 #[serde(tag = "type")]
 pub enum FrontAuthenticationConfig {
-    OIDCAuthorizationCodePKCEFlow {
-        oidc_issuer_url: Url,
-        oidc_client_id: String,
-        oidc_redirect_url: Url,
-        user_profile_url: Url,
-    },
-    OIDCGoogleAuthorizationCodeFlow {
-        user_profile_url: Url,
-    },
+    OIDCAuthorizationCodePKCEFlow(FrontOIDCAuthorizationCodePKCEFlowConfig),
+    OIDCGoogleAuthorizationCodeFlow(FrontOIDCGoogleAuthorizationCodeFlowConfig),
     Local,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
+pub struct FrontOIDCAuthorizationCodePKCEFlowConfig {
+    pub oidc_issuer_url: Url,
+    pub oidc_client_id: String,
+    pub oidc_redirect_url: Url,
+    pub user_profile_url: Url,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
+pub struct FrontOIDCGoogleAuthorizationCodeFlowConfig {
+    pub user_profile_url: Url,
+}
+
+impl FrontAuthenticationConfig {
+    pub fn match_user_auth(&self, user_auth: &UserAuth) -> bool {
+        match self {
+            Self::OIDCAuthorizationCodePKCEFlow(_) => {
+                matches!(user_auth, UserAuth::OIDCAuthorizationCodePKCE(_))
+            }
+            Self::OIDCGoogleAuthorizationCodeFlow(_) => {
+                matches!(user_auth, UserAuth::OIDCGoogleAuthorizationCode(_))
+            }
+            Self::Local => matches!(user_auth, UserAuth::Local(_)),
+        }
+    }
 }
 
 pub trait HasHtmlUrl {

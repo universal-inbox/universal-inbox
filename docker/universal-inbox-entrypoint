@@ -2,6 +2,38 @@
 
 set -Eeo pipefail
 
+if [ "${AUTHENTICATION__LOCAL__ENABLED:-}" = "true" ]; then
+
+  cat <<EOF >> /app/config/prod.toml
+[[application.security.authentication]]
+type = "Local"
+argon2_algorithm = "argon2id"
+argon2_version = 19
+argon2_memory_size = 20000
+argon2_iterations = 2
+argon2_parallelism = 1
+EOF
+
+fi
+
+if [ -n "$AUTH__GOOGLE__OIDC_API_CLIENT_ID" ] && \
+  [ -n "$AUTH__GOOGLE__OIDC_API_CLIENT_SECRET" ] && \
+  [ -n "$AUTH__GOOGLE__OIDC_FLOW_SETTINGS__TYPE" ] && \
+  [ -n "$AUTH__GOOGLE__OIDC_ISSUER_URL" ] && \
+  [ -n "$AUTH__GOOGLE__USER_PROFILE_URL" ]; then
+
+  cat <<EOF >> /app/config/prod.toml
+[[application.security.authentication]]
+type = "OpenIDConnect"
+oidc_issuer_url = "$AUTH__GOOGLE__OIDC_ISSUER_URL"
+oidc_api_client_id = "$AUTH__GOOGLE__OIDC_API_CLIENT_ID"
+oidc_api_client_secret = "$AUTH__GOOGLE__OIDC_API_CLIENT_SECRET"
+user_profile_url = "$AUTH__GOOGLE__USER_PROFILE_URL"
+oidc_flow_settings.type = "GoogleAuthorizationCodeFlow"
+EOF
+
+fi
+
 export DATABASE_URL="postgresql://$UNIVERSAL_INBOX__DATABASE__USERNAME:$UNIVERSAL_INBOX__DATABASE__PASSWORD@$UNIVERSAL_INBOX__DATABASE__HOST:$UNIVERSAL_INBOX__DATABASE__PORT/$UNIVERSAL_INBOX__DATABASE__DATABASE_NAME"
 
 echo "Migrating Database schema"

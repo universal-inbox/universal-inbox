@@ -184,14 +184,8 @@ mod webhook {
             "authed_user": { "id": "U02", "access_token": "slack_test_user_access_token" },
             "team": { "id": "T01" }
         });
-        let (client, user) = create_user_and_login(
-            &app,
-            "John",
-            "Doe",
-            "john@doe.net".parse().unwrap(),
-            "password",
-        )
-        .await;
+        let (client, user) =
+            create_user_and_login(&app, "john@doe.net".parse().unwrap(), "password").await;
 
         let slack_integration_connection = create_and_mock_integration_connection(
             &app,
@@ -444,14 +438,8 @@ mod job {
             "authed_user": { "id": "U02", "access_token": "slack_other_user_access_token" },
             "team": { "id": "T01" }
         });
-        let (client_u02, user_u02) = create_user_and_login(
-            &app,
-            "John",
-            "Doe",
-            "john@doe.net".parse().unwrap(),
-            "password",
-        )
-        .await;
+        let (client_u02, user_u02) =
+            create_user_and_login(&app, "john@doe.net".parse().unwrap(), "password").await;
         create_and_mock_integration_connection(
             &app,
             user_u02.id,
@@ -470,14 +458,8 @@ mod job {
             "authed_user": { "id": "U01", "access_token": "slack_test_user_access_token" },
             "team": { "id": "T01" }
         });
-        let (client_u01, user_u01) = create_user_and_login(
-            &app,
-            "Jane",
-            "Doe",
-            "jane@doe.net".parse().unwrap(),
-            "password",
-        )
-        .await;
+        let (client_u01, user_u01) =
+            create_user_and_login(&app, "jane@doe.net".parse().unwrap(), "password").await;
         create_and_mock_integration_connection(
             &app,
             user_u01.id,
@@ -1034,14 +1016,8 @@ mod job {
             "authed_user": { "id": "U02", "access_token": "slack_other_user_access_token" },
             "team": { "id": "T01" }
         });
-        let (client_u02, user_u02) = create_user_and_login(
-            &app,
-            "John",
-            "Doe",
-            "john@doe.net".parse().unwrap(),
-            "password",
-        )
-        .await;
+        let (client_u02, user_u02) =
+            create_user_and_login(&app, "john@doe.net".parse().unwrap(), "password").await;
 
         let slack_integration_connection_u02 = create_and_mock_integration_connection(
             &app,
@@ -1109,14 +1085,8 @@ mod job {
         );
 
         // Creating user U01 and its Slack connection
-        let (client_u01, user_u01) = create_user_and_login(
-            &app,
-            "Jane",
-            "Doe",
-            "jane@doe.net".parse().unwrap(),
-            "password",
-        )
-        .await;
+        let (client_u01, user_u01) =
+            create_user_and_login(&app, "jane@doe.net".parse().unwrap(), "password").await;
         nango_slack_connection.credentials.raw = json !({
             "authed_user": { "id": "U01", "access_token": "slack_test_user_access_token" },
             "team": { "id": "T01" }

@@ -328,7 +328,11 @@ impl UserRepository for Repository {
         );
 
         let (auth_user_id, auth_id_token, password_hash) = match user.auth {
-            UserAuth::OpenIdConnect(OpenIdConnectUserAuth {
+            UserAuth::OIDCAuthorizationCodePKCE(OpenIdConnectUserAuth {
+                ref auth_user_id,
+                ref auth_id_token,
+            })
+            | UserAuth::OIDCGoogleAuthorizationCode(OpenIdConnectUserAuth {
                 ref auth_user_id,
                 ref auth_id_token,
             }) => (Some(auth_user_id), Some(auth_id_token), None),
@@ -822,15 +826,16 @@ impl UserRepository for Repository {
 #[derive(sqlx::Type, Debug)]
 #[sqlx(type_name = "user_auth_kind")]
 enum PgUserAuthKind {
-    OpenIdConnect,
+    OIDCAuthorizationCodePKCE,
+    OIDCGoogleAuthorizationCode,
     Local,
 }
 
 #[derive(Debug, sqlx::FromRow)]
 pub struct UserRow {
     id: Uuid,
-    first_name: String,
-    last_name: String,
+    first_name: Option<String>,
+    last_name: Option<String>,
     email: String,
     email_validated_at: Option<NaiveDateTime>,
     email_validation_sent_at: Option<NaiveDateTime>,
@@ -875,12 +880,20 @@ impl TryFrom<&UserRow> for User {
                     .password_reset_sent_at
                     .map(|naive| DateTime::from_naive_utc_and_offset(naive, Utc)),
             }),
-            PgUserAuthKind::OpenIdConnect => UserAuth::OpenIdConnect(OpenIdConnectUserAuth {
+            PgUserAuthKind::OIDCAuthorizationCodePKCE => UserAuth::OIDCAuthorizationCodePKCE(OpenIdConnectUserAuth {
                 auth_user_id: AuthUserId(row.auth_user_id.clone().context(
-                    "Expected to find OIDC user ID in storage with OIDC authentication",
+                    "Expected to find OIDC user ID in storage with OIDCAuthorizationCodePKCE authentication",
                 )?),
                 auth_id_token: AuthIdToken(row.auth_id_token.clone().context(
-                    "Expected to find OIDC ID token in storage with OIDC authentication",
+                    "Expected to find OIDC ID token in storage with OIDCAuthorizationCodePKCE authentication",
+                )?),
+            }),
+            PgUserAuthKind::OIDCGoogleAuthorizationCode => UserAuth::OIDCGoogleAuthorizationCode(OpenIdConnectUserAuth {
+                auth_user_id: AuthUserId(row.auth_user_id.clone().context(
+                    "Expected to find OIDC user ID in storage with OIDCGoogleAuthorizationCode authentication",
+                )?),
+                auth_id_token: AuthIdToken(row.auth_id_token.clone().context(
+                    "Expected to find OIDC ID token in storage with OIDCGoogleAuthorizationCode authentication",
                 )?),
             }),
         };

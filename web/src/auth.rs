@@ -4,7 +4,6 @@ use log::{debug, error};
 
 use anyhow::{Context, Result};
 use dioxus::prelude::*;
-
 use gloo_utils::errors::JsError;
 use openidconnect::{
     AccessToken, AuthorizationCode, ClientId, IssuerUrl, Nonce, PkceCodeChallenge,
@@ -22,7 +21,7 @@ use universal_inbox::{
 };
 
 use crate::{
-    components::spinner::Spinner,
+    components::loading::Loading,
     model::{AuthenticationState, UI_MODEL},
     route::Route,
     services::{api::call_api, user_service::UserCommand},
@@ -32,19 +31,12 @@ use crate::{
 #[component]
 #[allow(unused_variables)]
 pub fn AuthPage(query: String) -> Element {
-    rsx! {
-        div {
-            class: "h-full flex justify-center items-center overflow-hidden",
-
-            Spinner {}
-            "Authenticating..."
-        }
-    }
+    rsx! { Loading { label: "Authenticating..." } }
 }
 
 #[component]
 pub fn Authenticated(
-    authentication_config: FrontAuthenticationConfig,
+    authentication_configs: Vec<FrontAuthenticationConfig>,
     api_base_url: Url,
     children: Element,
 ) -> Element {
@@ -54,12 +46,17 @@ pub fn Authenticated(
     let nav = use_navigator();
     // Workaround for Dioxus 0.4.1 bug: https://github.com/DioxusLabs/dioxus/issues/1511
     let local_storage = get_local_storage().unwrap();
-    let auth_code = if let FrontAuthenticationConfig::OIDCAuthorizationCodePKCEFlow {
-        oidc_redirect_url,
-        ..
-    } = &authentication_config
-    {
-        if current_url.path() == oidc_redirect_url.path() {
+    let oidc_auth_code_pkce_flow_config =
+        authentication_configs
+            .iter()
+            .find_map(|auth_config| match auth_config {
+                FrontAuthenticationConfig::OIDCAuthorizationCodePKCEFlow(config) => {
+                    Some(config.clone())
+                }
+                _ => None,
+            });
+    let auth_code = oidc_auth_code_pkce_flow_config.as_ref().and_then(|config| {
+        if current_url.path() == config.oidc_redirect_url.path() {
             local_storage
                 .get_item("auth-oidc-callback-code")
                 .unwrap()
@@ -67,9 +64,7 @@ pub fn Authenticated(
         } else {
             None
         }
-    } else {
-        None
-    };
+    });
     // end workaround
 
     // If we are on the authentication redirection URL with an authentication code,
@@ -79,11 +74,15 @@ pub fn Authenticated(
     }
     let authentication_state = UI_MODEL.read().authentication_state;
 
-    let auth_config = authentication_config.clone();
+    let auth_configs = authentication_configs.clone();
+    let oidc_redirect_url = oidc_auth_code_pkce_flow_config
+        .as_ref()
+        .map(|config| config.oidc_redirect_url.clone());
     let _ = use_resource(move || {
         to_owned![auth_code];
-        to_owned![auth_config];
+        to_owned![auth_configs];
         to_owned![api_base_url];
+        to_owned![oidc_auth_code_pkce_flow_config];
 
         async move {
             let authentication_state = UI_MODEL.read().authentication_state;
@@ -99,33 +98,52 @@ pub fn Authenticated(
                 return;
             }
 
-            match auth_config {
-                FrontAuthenticationConfig::OIDCAuthorizationCodePKCEFlow {
-                    oidc_issuer_url,
-                    oidc_client_id,
-                    oidc_redirect_url,
-                    ..
-                } => {
-                    if let Err(auth_error) = authenticate_pkce_flow(
-                        &api_base_url,
-                        auth_code,
-                        &oidc_issuer_url,
-                        &oidc_client_id,
-                        &oidc_redirect_url,
-                    )
-                    .await
-                    {
-                        *error.write() = Some(auth_error);
+            if auth_configs.len() == 1 {
+                if let Some(auth_config) = auth_configs.first() {
+                    match auth_config {
+                        FrontAuthenticationConfig::OIDCAuthorizationCodePKCEFlow(config) => {
+                            if let Err(auth_error) = authenticate_pkce_flow(
+                                &api_base_url,
+                                auth_code,
+                                &config.oidc_issuer_url,
+                                &config.oidc_client_id,
+                                &config.oidc_redirect_url,
+                            )
+                            .await
+                            {
+                                *error.write() = Some(auth_error);
+                            }
+                        }
+                        FrontAuthenticationConfig::OIDCGoogleAuthorizationCodeFlow(_) => {
+                            if let Err(auth_error) =
+                                authenticate_authorization_code_flow(&api_base_url).await
+                            {
+                                *error.write() = Some(auth_error);
+                            }
+                        }
+                        FrontAuthenticationConfig::Local => {}
                     }
                 }
-                FrontAuthenticationConfig::OIDCGoogleAuthorizationCodeFlow { .. } => {
-                    if let Err(auth_error) =
-                        authenticate_authorization_code_flow(&api_base_url).await
-                    {
-                        *error.write() = Some(auth_error);
+            } else {
+                // If OpenIDConnect authorization code PKCE flow is enabled and we have an auth_code
+                // we must continue the flow to exchange the auth_code against an access token
+                // Not starting the flow here (ie. `auth_code.is_none()`) because it should have been
+                // started from the login page
+                if let Some(oidc_auth_code_pkce_flow_config) = oidc_auth_code_pkce_flow_config {
+                    if auth_code.is_some() {
+                        if let Err(auth_error) = authenticate_pkce_flow(
+                            &api_base_url,
+                            auth_code,
+                            &oidc_auth_code_pkce_flow_config.oidc_issuer_url,
+                            &oidc_auth_code_pkce_flow_config.oidc_client_id,
+                            &oidc_auth_code_pkce_flow_config.oidc_redirect_url,
+                        )
+                        .await
+                        {
+                            *error.write() = Some(auth_error);
+                        }
                     }
                 }
-                FrontAuthenticationConfig::Local => {}
             }
         }
     });
@@ -140,11 +158,7 @@ pub fn Authenticated(
     debug!("auth: Authentication state: {authentication_state:?}");
     match authentication_state {
         AuthenticationState::Authenticated => {
-            if let FrontAuthenticationConfig::OIDCAuthorizationCodePKCEFlow {
-                oidc_redirect_url,
-                ..
-            } = &authentication_config
-            {
+            if let Some(oidc_redirect_url) = oidc_redirect_url {
                 if current_url.path() == oidc_redirect_url.path() {
                     debug!("auth: Authenticated, redirecting to /");
                     needs_update();
@@ -155,7 +169,10 @@ pub fn Authenticated(
             rsx! { { children } }
         }
         value => {
-            if authentication_config == FrontAuthenticationConfig::Local {
+            if (authentication_configs.len() == 1
+                && authentication_configs.as_slice() == [FrontAuthenticationConfig::Local])
+                || authentication_configs.len() > 1
+            {
                 if history().current_route() != *"/login"
                     && history().current_route() != *"/signup"
                     && history().current_route() != *"/password-reset"
@@ -167,20 +184,13 @@ pub fn Authenticated(
                     rsx! { Outlet::<Route> {} }
                 }
             } else {
-                rsx! {
-                    div {
-                        class: "h-full flex justify-center items-center overflow-hidden",
-
-                        Spinner {}
-                        "{value.label()}"
-                    }
-                }
+                rsx! { Loading { label: "{value.label()}" } }
             }
         }
     }
 }
 
-async fn authenticate_authorization_code_flow(api_base_url: &Url) -> Result<()> {
+pub async fn authenticate_authorization_code_flow(api_base_url: &Url) -> Result<()> {
     debug!("auth: Authenticating with Authorization code flow (server flow)");
     debug!("auth: Not authenticated, redirecting to login");
     let auth_url = get_authorization_code_flow_auth_url(api_base_url)

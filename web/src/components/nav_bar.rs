@@ -16,7 +16,7 @@ use gravatar_rs::Generator;
 use crate::{
     config::APP_CONFIG,
     images::UI_LOGO_TRANSPARENT,
-    model::{DEFAULT_USER_AVATAR, NOT_CONNECTED_USER_NAME, UI_MODEL, VERSION},
+    model::{DEFAULT_USER_AVATAR, UI_MODEL, VERSION},
     route::Route,
     services::{
         headway::init_headway,
@@ -40,11 +40,6 @@ pub fn NavBar() -> Element {
                 .generate(user.email.as_str())
         })
         .unwrap_or_else(|| DEFAULT_USER_AVATAR.to_string());
-    let user_name = connected_user
-        .as_ref()
-        .map(|user| user.first_name.clone())
-        .unwrap_or_else(|| NOT_CONNECTED_USER_NAME.to_string());
-
     let support_href = APP_CONFIG
         .read()
         .as_ref()
@@ -171,12 +166,10 @@ pub fn NavBar() -> Element {
 
                         div {
                             class: "rounded-full w-8 h-8",
-                            title: "{user_name}",
 
                             img {
                                 class: "",
                                 src: "{user_avatar}",
-                                alt: "{user_name}",
                             }
                         }
                     }

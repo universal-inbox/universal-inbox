@@ -7,7 +7,7 @@ use log::debug;
 
 use crate::{
     auth::Authenticated,
-    components::spinner::Spinner,
+    components::loading::Loading,
     config::{get_api_base_url, APP_CONFIG},
     model::{AuthenticationState, UI_MODEL},
     route::Route,
@@ -25,7 +25,7 @@ pub fn AuthenticatedLayout() -> Element {
     if let Some(app_config) = APP_CONFIG.read().as_ref() {
         return rsx! {
             Authenticated {
-                authentication_config: app_config.authentication_config.clone(),
+                authentication_configs: app_config.authentication_configs.clone(),
                 api_base_url: api_base_url(),
 
                 AuthenticatedApp {}
@@ -33,14 +33,7 @@ pub fn AuthenticatedLayout() -> Element {
         };
     }
 
-    rsx! {
-        div {
-            class: "h-full flex justify-center items-center",
-
-            Spinner {}
-            "Loading Universal Inbox..."
-        }
-    }
+    rsx! { Loading { label: "Loading Universal Inbox..." } }
 }
 
 #[component]
@@ -84,13 +77,6 @@ pub fn AuthenticatedApp() -> Element {
             rsx! { Outlet::<Route> {} }
         }
     } else {
-        rsx! {
-            div {
-                class: "h-full flex justify-center items-center",
-
-                Spinner {}
-                "Loading Universal Inbox..."
-            }
-        }
+        rsx! { Loading { label: "Loading Universal Inbox..." } }
     }
 }

@@ -9,7 +9,7 @@ use universal_inbox::integration_connection::{
 };
 
 use crate::{
-    components::{integrations_panel::IntegrationsPanel, spinner::Spinner},
+    components::{integrations_panel::IntegrationsPanel, loading::Loading},
     config::APP_CONFIG,
     model::UI_MODEL,
     services::integration_connection_service::{
@@ -76,12 +76,5 @@ pub fn SettingsPage() -> Element {
         }
     }
 
-    rsx! {
-        div {
-            class: "h-full flex justify-center items-center",
-
-            Spinner {}
-            "Loading Universal Inbox settings..."
-        }
-    }
+    rsx! { Loading { label: "Loading Universal Inbox settings..." } }
 }

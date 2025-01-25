@@ -14,16 +14,12 @@ use crate::helpers::TestedApp;
 pub async fn register_user_response(
     client: &Client,
     app: &TestedApp,
-    first_name: &str,
-    last_name: &str,
     email: EmailAddress,
     password: &str,
 ) -> reqwest::Response {
     client
         .post(format!("{}users", app.api_address))
         .json(&RegisterUserParameters {
-            first_name: first_name.to_string(),
-            last_name: last_name.to_string(),
             credentials: Credentials {
                 email,
                 password: Secret::new(Password(password.to_string())),
@@ -34,20 +30,13 @@ pub async fn register_user_response(
         .unwrap()
 }
 
-pub async fn register_user(
-    app: &TestedApp,
-    first_name: &str,
-    last_name: &str,
-    email: EmailAddress,
-    password: &str,
-) -> (Client, User) {
+pub async fn register_user(app: &TestedApp, email: EmailAddress, password: &str) -> (Client, User) {
     let client = reqwest::Client::builder()
         .cookie_store(true)
         .build()
         .unwrap();
 
-    let response =
-        register_user_response(&client, app, first_name, last_name, email, password).await;
+    let response = register_user_response(&client, app, email, password).await;
 
     assert_eq!(response.status(), 200);
 
@@ -129,13 +118,7 @@ pub async fn get_password_reset_token(
     token
 }
 
-pub async fn create_user(
-    app: &TestedApp,
-    first_name: &str,
-    last_name: &str,
-    email: EmailAddress,
-    password: &str,
-) -> User {
+pub async fn create_user(app: &TestedApp, email: EmailAddress, password: &str) -> User {
     let service = app.user_service.clone();
     let mut transaction = app.repository.begin().await.unwrap();
     let new_user = app
@@ -143,8 +126,8 @@ pub async fn create_user(
         .create_user(
             &mut transaction,
             User::new(
-                first_name.to_string(),
-                last_name.to_string(),
+                None,
+                None,
                 email,
                 UserAuth::Local(LocalUserAuth {
                     password_hash: service
@@ -163,12 +146,10 @@ pub async fn create_user(
 
 pub async fn create_user_and_login(
     app: &TestedApp,
-    first_name: &str,
-    last_name: &str,
     email: EmailAddress,
     password: &str,
 ) -> (Client, User) {
-    let user = create_user(app, first_name, last_name, email.clone(), password).await;
+    let user = create_user(app, email.clone(), password).await;
     let client = Client::builder().cookie_store(true).build().unwrap();
     let login_response = login_user_response(&client, app, email, password).await;
     assert_eq!(login_response.status(), http::StatusCode::OK);

@@ -16,7 +16,7 @@ use secrecy::ExposeSecret;
 use universal_inbox::auth::auth_token::AuthenticationTokenId;
 
 use crate::{
-    components::spinner::Spinner,
+    components::{loading::Loading, spinner::Spinner},
     model::LoadState,
     services::authentication_token_service::{
         AuthenticationTokenCommand, AUTHENTICATION_TOKENS, CREATED_AUTHENTICATION_TOKEN,
@@ -40,11 +40,7 @@ pub fn AuthenticationTokensCard() -> Element {
         return rsx! {
             div {
                 class: "card w-full bg-base-200 text-base-content",
-                div {
-                    class: "h-full flex justify-center items-center",
-                    Spinner {}
-                    "Loading API keys..."
-                }
+                Loading { label: "Loading API keys..." }
             }
         };
     };

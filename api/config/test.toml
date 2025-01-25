@@ -16,17 +16,15 @@ secret_key = "1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF"
 jwt_secret_key = "MFECAQEwBQYDK2VwBCIEIJre1+y6O3ENLgP53GgxG5OYptX2FsnxnKTfepdW2U9JgSEAX3oq4VhLrIerpUyWqHG8GjBqUTB5RC07Pf0XaacoEAA="
 jwt_public_key = "X3oq4VhLrIerpUyWqHG8GjBqUTB5RC07Pf0XaacoEAA="
 
-[application.security.authentication]
+[[application.security.authentication]]
 type = "OpenIDConnect"
 oidc_issuer_url = "https://oidcprovider.com"
 oidc_api_client_id = "67890"
 oidc_api_client_secret = "azerty"
 user_profile_url = "https://oidcprovider.com/users/me"
-
-[application.security.authentication.oidc_flow_settings]
-type = "AuthorizationCodePKCEFlow"
-introspection_url = "https://oidcprovider.com/oauth/v2/introspect"
-front_client_id = "12345"
+oidc_flow_settings.type = "AuthorizationCodePKCEFlow"
+oidc_flow_settings.introspection_url = "https://oidcprovider.com/oauth/v2/introspect"
+oidc_flow_settings.front_client_id = "12345"
 
 [integrations.github]
 page_size = 2

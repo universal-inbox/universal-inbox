@@ -25,33 +25,29 @@ reply_to_header = "support <support@example.com>"
 [application.security]
 csp_extra_connect_src = []
 
-# [application.security.authentication]
+# [[application.security.authentication]]
 # type = "OpenIDConnect"
 # oidc_issuer_url = "https://oidc.provider"
 # oidc_api_client_id = "5678@universal_inbox"
 # oidc_api_client_secret = "secret"
 # user_profile_url = "https://oidc.provider/user"
-#
-# [application.security.authentication.oidc_flow_settings]
-# type = "AuthorizationCodePKCEFlow"
-# introspection_url = "" # TODO Is it required?
-# front_client_id = "1234@universal_inbox"
+# oidc_flow_settings.type = "AuthorizationCodePKCEFlow"
+# oidc_flow_settings.introspection_url = ""
+# oidc_flow_settings.front_client_id = "1234@universal_inbox"
 #
 # OR
 #
-# [application.security.authentication]
+# [[application.security.authentication]]
 # type = "OpenIDConnect"
 # oidc_issuer_url = "https://oidc.provider"
 # oidc_api_client_id = "5678@universal_inbox"
 # oidc_api_client_secret = "secret"
 # user_profile_url = "https://oidc.provider/user"
-#
-# [application.security.authentication.oidc_flow_settings]
-# type = "OIDCGoogleAuthorizationCodeFlow"
+# oidc_flow_settings.type = "OIDCGoogleAuthorizationCodeFlow"
 #
 # OR
 #
-[application.security.authentication]
+[[application.security.authentication]]
 type = "Local"
 # See OWASP recommendations https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html
 argon2_algorithm = "argon2id"

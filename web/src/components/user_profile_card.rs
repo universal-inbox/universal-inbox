@@ -6,46 +6,46 @@ use gravatar_rs::Generator;
 use universal_inbox::FrontAuthenticationConfig;
 
 use crate::{
-    components::spinner::Spinner, config::APP_CONFIG, services::user_service::CONNECTED_USER,
+    components::loading::Loading, config::APP_CONFIG, services::user_service::CONNECTED_USER,
 };
 
 #[component]
 pub fn UserProfileCard() -> Element {
-    // Howto use use_memo with an Option?
-    let user_profile_url =
-        APP_CONFIG
-            .read()
-            .as_ref()
-            .and_then(|config| match &config.authentication_config {
-                FrontAuthenticationConfig::OIDCAuthorizationCodePKCEFlow {
-                    user_profile_url,
-                    ..
-                } => Some(user_profile_url.clone()),
-                FrontAuthenticationConfig::OIDCGoogleAuthorizationCodeFlow { user_profile_url } => {
-                    Some(user_profile_url.clone())
-                }
-                FrontAuthenticationConfig::Local => None,
-            });
-
     let Some(user) = CONNECTED_USER.read().clone() else {
         return rsx! {
             div {
                 class: "card w-full bg-base-200 text-base-content",
-                div {
-                    class: "h-full flex justify-center items-center",
-                    Spinner {}
-                    "Loading user profile..."
-                }
+                Loading { label: "Loading user profile..." }
             }
         };
     };
+
+    let user_profile_url = APP_CONFIG.read().as_ref().and_then(|config| {
+        match config
+            .authentication_configs
+            .iter()
+            .find(|auth_config| auth_config.match_user_auth(&user.auth))
+        {
+            Some(FrontAuthenticationConfig::OIDCAuthorizationCodePKCEFlow(config)) => {
+                Some(config.user_profile_url.clone())
+            }
+            Some(FrontAuthenticationConfig::OIDCGoogleAuthorizationCodeFlow(config)) => {
+                Some(config.user_profile_url.clone())
+            }
+            _ => None,
+        }
+    });
 
     let user_avatar = Generator::default()
         .set_image_size(150)
         .set_rating("g")
         .set_default_image("mp")
         .generate(user.email.as_str());
-    let user_name = format!("{} {}", user.first_name, user.last_name);
+    let user_name = format!(
+        "{} {}",
+        user.first_name.unwrap_or_default(),
+        user.last_name.unwrap_or_default()
+    );
 
     rsx! {
         div {

@@ -25,7 +25,7 @@ use universal_inbox::{
     auth::openidconnect::OpenidConnectProvider,
     user::{
         AuthUserId, Credentials, EmailValidationToken, LocalUserAuth, OpenIdConnectUserAuth,
-        Password, PasswordHash, PasswordResetToken, User, UserAuth, UserId,
+        Password, PasswordHash, PasswordResetToken, User, UserAuth, UserAuthKind, UserId,
     },
 };
 
@@ -114,8 +114,10 @@ impl UserService {
             executor,
             oidc_provider,
             access_token,
-            id_token,
-            auth_user_id,
+            UserAuth::OIDCGoogleAuthorizationCode(OpenIdConnectUserAuth {
+                auth_user_id,
+                auth_id_token: id_token.to_string().into(),
+            }),
         )
         .await
     }
@@ -182,8 +184,10 @@ impl UserService {
             executor,
             oidc_provider,
             access_token,
-            id_token,
-            auth_user_id,
+            UserAuth::OIDCAuthorizationCodePKCE(OpenIdConnectUserAuth {
+                auth_user_id,
+                auth_id_token: id_token.to_string().into(),
+            }),
         )
         .await
     }
@@ -197,18 +201,26 @@ impl UserService {
         oidc_provider: OpenidConnectProvider,
         // the access token must have been validated before calling this function
         access_token: AccessToken,
-        id_token: IdToken<
-            EmptyAdditionalClaims,
-            CoreGenderClaim,
-            CoreJweContentEncryptionAlgorithm,
-            CoreJwsSigningAlgorithm,
-            CoreJsonWebKeyType,
-        >,
-        auth_user_id: AuthUserId,
+        user_auth: UserAuth,
     ) -> Result<User, UniversalInboxError> {
+        let oidc_user_auth = match &user_auth {
+            UserAuth::OIDCAuthorizationCodePKCE(oidc_user_auth) => oidc_user_auth,
+            UserAuth::OIDCGoogleAuthorizationCode(oidc_user_auth) => oidc_user_auth,
+            _ => {
+                return Err(anyhow!(
+                    "Expected OpenIDConnect UserAuth, got {:?}",
+                    user_auth
+                ))?
+            }
+        };
+
         match self
             .repository
-            .update_user_auth_id_token(executor, &auth_user_id, &id_token.to_string().into())
+            .update_user_auth_id_token(
+                executor,
+                &oidc_user_auth.auth_user_id,
+                &oidc_user_auth.auth_id_token.to_string().into(),
+            )
             .await?
         {
             UpdateStatus {
@@ -219,12 +231,17 @@ impl UserService {
                 updated: _,
                 result: None,
             } => {
-                info!("User with auth provider user ID {auth_user_id} does not exists, creating a new one");
+                info!(
+                    "User with auth provider user ID {} does not exists, creating a new one",
+                    oidc_user_auth.auth_user_id
+                );
                 let user_infos: CoreUserInfoClaims = oidc_provider
                     .client
                     .user_info(
                         access_token,
-                        Some(SubjectIdentifier::new(auth_user_id.to_string())),
+                        Some(SubjectIdentifier::new(
+                            oidc_user_auth.auth_user_id.to_string(),
+                        )),
                     )
                     .context("UserInfo configuration error")?
                     .request_async(async_http_client)
@@ -233,16 +250,12 @@ impl UserService {
 
                 let first_name = user_infos
                     .given_name()
-                    .context("No given name found in user info")?
-                    .get(None)
-                    .context("No given name found in user info")?
-                    .to_string();
+                    .and_then(|name| name.get(None))
+                    .map(|name| name.to_string());
                 let last_name = user_infos
                     .family_name()
-                    .context("No family name found in user info")?
-                    .get(None)
-                    .context("No family name found in user info")?
-                    .to_string();
+                    .and_then(|name| name.get(None))
+                    .map(|name| name.to_string());
                 let email = user_infos
                     .email()
                     .context("No email found in user info")?
@@ -250,18 +263,7 @@ impl UserService {
                     .context("Invalid email address")?;
 
                 self.repository
-                    .create_user(
-                        executor,
-                        User::new(
-                            first_name,
-                            last_name,
-                            email,
-                            UserAuth::OpenIdConnect(OpenIdConnectUserAuth {
-                                auth_user_id,
-                                auth_id_token: id_token.to_string().into(),
-                            }),
-                        ),
-                    )
+                    .create_user(executor, User::new(first_name, last_name, email, user_auth))
                     .await
             }
         }
@@ -272,8 +274,23 @@ impl UserService {
         &self,
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
+        user_auth_kind: Option<UserAuthKind>,
     ) -> Result<Url, UniversalInboxError> {
-        match &self.application_settings.security.authentication {
+        let Some(user_auth_kind) = user_auth_kind else {
+            return Ok(self.application_settings.front_base_url.clone());
+        };
+        let auth_settings = self
+            .application_settings
+            .security
+            .get_authentication_settings(user_auth_kind)
+            .ok_or_else(|| {
+                anyhow!(
+                    "Unable to find configuration for {} authentication settings",
+                    user_auth_kind
+                )
+            })?;
+
+        match &auth_settings {
             AuthenticationSettings::OpenIDConnect(oidc_settings) => {
                 match &oidc_settings.oidc_flow_settings {
                     OIDCFlowSettings::AuthorizationCodePKCEFlow { .. } => {
@@ -298,9 +315,9 @@ impl UserService {
                             .get_user(executor, user_id)
                             .await?
                             .ok_or_else(|| anyhow!("User with ID {user_id} not found"))?;
-                        let UserAuth::OpenIdConnect(user_auth) = &user.auth else {
+                        let UserAuth::OIDCAuthorizationCodePKCE(user_auth) = &user.auth else {
                             return Err(anyhow!(
-                                "User with ID {user_id} does not have OpenIDConnect auth parameters"
+                                "User with ID {user_id} does not have OIDCAuthorizationCodePKCE auth parameters"
                             ))?;
                         };
                         let id_token = CoreIdToken::from_str(&user_auth.auth_id_token.to_string())
@@ -315,12 +332,9 @@ impl UserService {
                             ))
                             .http_get_url())
                     }
-                    OIDCFlowSettings::GoogleAuthorizationCodeFlow => Ok(format!(
-                        "https://accounts.google.com/logout?continue={}",
-                        self.application_settings.front_base_url.clone()
-                    )
-                    .parse::<Url>()
-                    .unwrap()),
+                    OIDCFlowSettings::GoogleAuthorizationCodeFlow => {
+                        Ok(self.application_settings.front_base_url.clone())
+                    }
                 }
             }
             AuthenticationSettings::Local(_) => {
@@ -445,8 +459,12 @@ impl UserService {
         password: Secret<Password>,
     ) -> Result<Secret<PasswordHash>, UniversalInboxError> {
         let salt = SaltString::generate(&mut rand::thread_rng());
-        let AuthenticationSettings::Local(local_auth_settings) =
-            &self.application_settings.security.authentication
+        let Some(AuthenticationSettings::Local(local_auth_settings)) = &self
+            .application_settings
+            .security
+            .authentication
+            .iter()
+            .find(|auth_settings| matches!(auth_settings, AuthenticationSettings::Local(_)))
         else {
             return Err(anyhow!(
                 "Cannot hash password without local authentication settings"

@@ -13,6 +13,7 @@ pub mod footer;
 pub mod integrations;
 pub mod integrations_panel;
 pub mod list;
+pub mod loading;
 pub mod markdown;
 pub mod nav_bar;
 pub mod notification_preview;

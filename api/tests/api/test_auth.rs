@@ -63,10 +63,10 @@ mod authenticate_session {
             .await
             .unwrap();
 
-        assert_eq!(user.first_name, "John");
-        assert_eq!(user.last_name, "Doe");
-        let UserAuth::OpenIdConnect(user_auth) = &user.auth else {
-            panic!("User auth is not OpenIdConnect");
+        assert_eq!(user.first_name, Some("John".to_string()));
+        assert_eq!(user.last_name, Some("Doe".to_string()));
+        let UserAuth::OIDCAuthorizationCodePKCE(user_auth) = &user.auth else {
+            panic!("User auth is not OIDCAuthorizationCodePKCE");
         };
         assert_eq!(user_auth.auth_id_token, ID_TOKEN.to_string().into());
 
@@ -99,8 +99,8 @@ mod authenticate_session {
             .await
             .unwrap();
 
-        let UserAuth::OpenIdConnect(user_auth) = &user.auth else {
-            panic!("User auth is not OpenIdConnect");
+        let UserAuth::OIDCAuthorizationCodePKCE(user_auth) = &user.auth else {
+            panic!("User auth is not OIDCAuthorizationCodePKCE");
         };
         assert_eq!(user_auth.auth_id_token, OTHER_ID_TOKEN.to_string().into());
     }
@@ -151,8 +151,8 @@ mod close_session {
 
         let close_session_response: CloseSessionResponse = response.json().await.unwrap();
 
-        let UserAuth::OpenIdConnect(user_auth) = &app.user.auth else {
-            panic!("User auth is not OpenIdConnect");
+        let UserAuth::OIDCAuthorizationCodePKCE(user_auth) = &app.user.auth else {
+            panic!("User auth is not OIDCAuthorizationCodePKCE");
         };
         assert_eq!(
             close_session_response.logout_url.to_string(),

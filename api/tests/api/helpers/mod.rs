@@ -181,14 +181,10 @@ pub async fn tested_app(
     let nango_mock_server_url = &nango_mock_server.base_url();
 
     if let AuthenticationSettings::OpenIDConnect(ref mut oidc_settings) =
-        &mut settings.application.security.authentication
+        &mut settings.application.security.authentication[0]
     {
         oidc_settings.oidc_issuer_url =
             IssuerUrl::new(oidc_issuer_mock_server_url.to_string()).unwrap();
-    }
-    if let AuthenticationSettings::OpenIDConnect(ref mut oidc_settings) =
-        &mut settings.application.security.authentication
-    {
         if let OIDCFlowSettings::AuthorizationCodePKCEFlow(ref mut flow_settings) =
             oidc_settings.oidc_flow_settings
         {
@@ -326,13 +322,13 @@ pub async fn tested_app_with_local_auth(
     let nango_mock_server_url = &nango_mock_server.base_url();
 
     settings.application.security.authentication =
-        AuthenticationSettings::Local(LocalAuthenticationSettings {
+        vec![AuthenticationSettings::Local(LocalAuthenticationSettings {
             argon2_algorithm: argon2::Algorithm::Argon2id,
             argon2_version: argon2::Version::V0x13,
             argon2_memory_size: 20000,
             argon2_iterations: 2,
             argon2_parallelism: 1,
-        });
+        })];
 
     let pool: Arc<PgPool> = db_connection.await;
 

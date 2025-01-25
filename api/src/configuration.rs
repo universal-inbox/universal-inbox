@@ -6,8 +6,9 @@ use openidconnect::{ClientId, ClientSecret, IntrospectionUrl, IssuerUrl};
 use secrecy::{ExposeSecret, Secret};
 use serde::{Deserialize, Deserializer};
 use serde_with::{serde_as, DisplayFromStr};
-use universal_inbox::integration_connection::{
-    provider::IntegrationProviderKind, NangoProviderKey, NangoPublicKey,
+use universal_inbox::{
+    integration_connection::{provider::IntegrationProviderKind, NangoProviderKey, NangoPublicKey},
+    user::UserAuthKind,
 };
 use url::Url;
 
@@ -46,7 +47,7 @@ pub struct ApplicationSettings {
 #[derive(Deserialize, Clone, Debug)]
 pub struct SecuritySettings {
     pub csp_extra_connect_src: Vec<String>,
-    pub authentication: AuthenticationSettings,
+    pub authentication: Vec<AuthenticationSettings>,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -329,5 +330,164 @@ impl ApplicationSettings {
             .context("Failed to parse OIDC redirect URL")?
             .join("auth/session/authenticated")
             .context("Failed to parse OIDC redirect URL")?)
+    }
+}
+
+impl SecuritySettings {
+    pub fn get_authentication_settings(
+        &self,
+        user_auth_kind: UserAuthKind,
+    ) -> Option<AuthenticationSettings> {
+        self.authentication
+            .iter()
+            .find(|auth_settings| match (auth_settings, user_auth_kind) {
+                (AuthenticationSettings::Local(_), UserAuthKind::Local) => true,
+                (
+                    AuthenticationSettings::OpenIDConnect(oidc_settings),
+                    UserAuthKind::OIDCAuthorizationCodePKCE,
+                ) => {
+                    matches!(
+                        oidc_settings.oidc_flow_settings,
+                        OIDCFlowSettings::AuthorizationCodePKCEFlow(_)
+                    )
+                }
+                (
+                    AuthenticationSettings::OpenIDConnect(oidc_settings),
+                    UserAuthKind::OIDCGoogleAuthorizationCode,
+                ) => {
+                    matches!(
+                        oidc_settings.oidc_flow_settings,
+                        OIDCFlowSettings::GoogleAuthorizationCodeFlow
+                    )
+                }
+                _ => false,
+            })
+            .cloned()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(unused_variables)]
+    use super::*;
+    use openidconnect::{IntrospectionUrl, IssuerUrl};
+    use url::Url;
+
+    #[test]
+    fn test_get_authentication_settings_local() {
+        let local_auth_settings = AuthenticationSettings::Local(LocalAuthenticationSettings {
+            argon2_algorithm: argon2::Algorithm::Argon2id,
+            argon2_version: argon2::Version::V0x13,
+            argon2_memory_size: 19456,
+            argon2_iterations: 2,
+            argon2_parallelism: 1,
+        });
+        let security_settings = SecuritySettings {
+            csp_extra_connect_src: vec![],
+            authentication: vec![local_auth_settings],
+        };
+
+        let result = security_settings.get_authentication_settings(UserAuthKind::Local);
+        assert!(matches!(result, Some(local_auth_settings)));
+
+        // Should not match other auth kinds
+        let result =
+            security_settings.get_authentication_settings(UserAuthKind::OIDCAuthorizationCodePKCE);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_get_authentication_settings_oidc_pkce() {
+        let oidc_auth_settings =
+            AuthenticationSettings::OpenIDConnect(Box::new(OpenIDConnectSettings {
+                oidc_issuer_url: IssuerUrl::new("https://example.com".to_string()).unwrap(),
+                oidc_api_client_id: ClientId::new("client_id".to_string()),
+                oidc_api_client_secret: ClientSecret::new("secret".to_string()),
+                user_profile_url: Url::parse("https://example.com/profile").unwrap(),
+                oidc_flow_settings: OIDCFlowSettings::AuthorizationCodePKCEFlow(
+                    OIDCAuthorizationCodePKCEFlowSettings {
+                        introspection_url: IntrospectionUrl::new(
+                            "https://example.com/introspect".to_string(),
+                        )
+                        .unwrap(),
+                        front_client_id: ClientId::new("front_client_id".to_string()),
+                    },
+                ),
+            }));
+        let security_settings = SecuritySettings {
+            csp_extra_connect_src: vec![],
+            authentication: vec![oidc_auth_settings],
+        };
+
+        let result =
+            security_settings.get_authentication_settings(UserAuthKind::OIDCAuthorizationCodePKCE);
+        assert!(matches!(result, Some(oidc_auth_settings)));
+
+        // Should not match other auth kinds
+        let result = security_settings.get_authentication_settings(UserAuthKind::Local);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_get_authentication_settings_oidc_google() {
+        let oidc_auth_settings =
+            AuthenticationSettings::OpenIDConnect(Box::new(OpenIDConnectSettings {
+                oidc_issuer_url: IssuerUrl::new("https://example.com".to_string()).unwrap(),
+                oidc_api_client_id: ClientId::new("client_id".to_string()),
+                oidc_api_client_secret: ClientSecret::new("secret".to_string()),
+                user_profile_url: Url::parse("https://example.com/profile").unwrap(),
+                oidc_flow_settings: OIDCFlowSettings::GoogleAuthorizationCodeFlow,
+            }));
+        let security_settings = SecuritySettings {
+            csp_extra_connect_src: vec![],
+            authentication: vec![oidc_auth_settings],
+        };
+
+        let result = security_settings
+            .get_authentication_settings(UserAuthKind::OIDCGoogleAuthorizationCode);
+        assert!(matches!(result, Some(oidc_auth_settings)));
+
+        // Should not match other auth kinds
+        let result =
+            security_settings.get_authentication_settings(UserAuthKind::OIDCAuthorizationCodePKCE);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_get_authentication_settings_multiple_configs() {
+        let local_auth_settings = AuthenticationSettings::Local(LocalAuthenticationSettings {
+            argon2_algorithm: argon2::Algorithm::Argon2id,
+            argon2_version: argon2::Version::V0x13,
+            argon2_memory_size: 19456,
+            argon2_iterations: 2,
+            argon2_parallelism: 1,
+        });
+        let oidc_auth_settings =
+            AuthenticationSettings::OpenIDConnect(Box::new(OpenIDConnectSettings {
+                oidc_issuer_url: IssuerUrl::new("https://example.com".to_string()).unwrap(),
+                oidc_api_client_id: ClientId::new("client_id".to_string()),
+                oidc_api_client_secret: ClientSecret::new("secret".to_string()),
+                user_profile_url: Url::parse("https://example.com/profile").unwrap(),
+                oidc_flow_settings: OIDCFlowSettings::AuthorizationCodePKCEFlow(
+                    OIDCAuthorizationCodePKCEFlowSettings {
+                        introspection_url: IntrospectionUrl::new(
+                            "https://example.com/introspect".to_string(),
+                        )
+                        .unwrap(),
+                        front_client_id: ClientId::new("front_client_id".to_string()),
+                    },
+                ),
+            }));
+        let security_settings = SecuritySettings {
+            csp_extra_connect_src: vec![],
+            authentication: vec![local_auth_settings, oidc_auth_settings],
+        };
+
+        let result = security_settings.get_authentication_settings(UserAuthKind::Local);
+        assert!(matches!(result, Some(local_auth_settings)));
+
+        let result =
+            security_settings.get_authentication_settings(UserAuthKind::OIDCAuthorizationCodePKCE);
+        assert!(matches!(result, Some(oidc_auth_settings)));
     }
 }

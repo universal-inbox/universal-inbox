@@ -51,7 +51,7 @@
             "name": "user_auth_kind",
             "kind": {
               "Enum": [
-                "OpenIdConnect",
+                "OIDCGoogleAuthorizationCode",
                 "Local"
               ]
             }
@@ -91,8 +91,8 @@
     },
     "nullable": [
       false,
-      false,
-      false,
+      true,
+      true,
       false,
       true,
       true,
