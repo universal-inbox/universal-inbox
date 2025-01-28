@@ -34,6 +34,15 @@ EOF
 
 fi
 
+if [ "${AUTHENTICATION__PASSKEY__ENABLED:-}" = "true" ]; then
+
+  cat <<EOF >> /app/config/prod.toml
+[[application.security.authentication]]
+type = "Passkey"
+EOF
+
+fi
+
 export DATABASE_URL="postgresql://$UNIVERSAL_INBOX__DATABASE__USERNAME:$UNIVERSAL_INBOX__DATABASE__PASSWORD@$UNIVERSAL_INBOX__DATABASE__HOST:$UNIVERSAL_INBOX__DATABASE__PORT/$UNIVERSAL_INBOX__DATABASE__DATABASE_NAME"
 
 echo "Migrating Database schema"

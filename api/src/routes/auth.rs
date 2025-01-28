@@ -16,13 +16,14 @@ use url::Url;
 
 use universal_inbox::{
     auth::{AuthorizeSessionResponse, CloseSessionResponse, SessionAuthValidationParameters},
-    user::{UserAuthKind, UserId},
+    user::UserId,
 };
 
 use crate::{
     configuration::{AuthenticationSettings, OIDCFlowSettings, Settings},
     universal_inbox::{
-        auth_token::service::AuthenticationTokenService, user::service::UserService,
+        auth_token::service::AuthenticationTokenService,
+        user::{model::UserAuthKind, service::UserService},
         UniversalInboxError,
     },
     utils::jwt::JWT_SESSION_KEY,
@@ -101,7 +102,7 @@ pub async fn authenticate_session(
     let auth_token_service = auth_token_service.read().await;
 
     let auth_token = auth_token_service
-        .create_auth_token(&mut transaction, true, user.id, None)
+        .create_auth_token(&mut transaction, true, user.id, None, false)
         .await?;
     session
         .insert(
@@ -263,7 +264,7 @@ pub async fn authenticated_session(
     let auth_token_service = auth_token_service.read().await;
 
     let auth_token = auth_token_service
-        .create_auth_token(&mut transaction, true, user.id, None)
+        .create_auth_token(&mut transaction, true, user.id, None, false)
         .await?;
     session
         .insert(

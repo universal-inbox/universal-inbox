@@ -4,7 +4,8 @@ use anyhow::anyhow;
 use dioxus::prelude::FormValue;
 use email_address::EmailAddress;
 use secrecy::Secret;
-use universal_inbox::user::{Credentials, Password, RegisterUserParameters};
+
+use universal_inbox::user::{Credentials, Password, RegisterUserParameters, Username};
 
 pub struct FormValues(pub HashMap<String, FormValue>);
 
@@ -80,5 +81,23 @@ impl TryFrom<FormValues> for Secret<Password> {
             .parse()?;
 
         Ok(Secret::new(password))
+    }
+}
+
+impl TryFrom<FormValues> for Username {
+    type Error = anyhow::Error;
+
+    fn try_from(form_values: FormValues) -> Result<Self, Self::Error> {
+        let username = form_values
+            .0
+            .get("username")
+            .ok_or_else(|| anyhow!("username is required"))?
+            .clone()
+            .to_vec()
+            .first()
+            .ok_or_else(|| anyhow!("username is required"))?
+            .to_owned();
+
+        Ok(Username(username))
     }
 }

@@ -6,13 +6,13 @@ use openidconnect::{ClientId, ClientSecret, IntrospectionUrl, IssuerUrl};
 use secrecy::{ExposeSecret, Secret};
 use serde::{Deserialize, Deserializer};
 use serde_with::{serde_as, DisplayFromStr};
-use universal_inbox::{
-    integration_connection::{provider::IntegrationProviderKind, NangoProviderKey, NangoPublicKey},
-    user::UserAuthKind,
-};
 use url::Url;
 
-use crate::universal_inbox::UniversalInboxError;
+use universal_inbox::integration_connection::{
+    provider::IntegrationProviderKind, NangoProviderKey, NangoPublicKey,
+};
+
+use crate::universal_inbox::{user::model::UserAuthKind, UniversalInboxError};
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct Settings {
@@ -86,6 +86,7 @@ pub struct LoggingSettings {
 pub enum AuthenticationSettings {
     OpenIDConnect(Box<OpenIDConnectSettings>),
     Local(LocalAuthenticationSettings),
+    Passkey,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -342,6 +343,7 @@ impl SecuritySettings {
             .iter()
             .find(|auth_settings| match (auth_settings, user_auth_kind) {
                 (AuthenticationSettings::Local(_), UserAuthKind::Local) => true,
+                (AuthenticationSettings::Passkey, UserAuthKind::Passkey) => true,
                 (
                     AuthenticationSettings::OpenIDConnect(oidc_settings),
                     UserAuthKind::OIDCAuthorizationCodePKCE,

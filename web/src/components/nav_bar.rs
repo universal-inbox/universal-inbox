@@ -33,11 +33,15 @@ pub fn NavBar() -> Element {
     let user_avatar = connected_user
         .as_ref()
         .map(|user| {
-            Generator::default()
-                .set_image_size(150)
-                .set_rating("g")
-                .set_default_image("mp")
-                .generate(user.email.as_str())
+            if let Some(ref email) = user.email {
+                Generator::default()
+                    .set_image_size(150)
+                    .set_rating("g")
+                    .set_default_image("mp")
+                    .generate(email.as_str())
+            } else {
+                DEFAULT_USER_AVATAR.to_string()
+            }
         })
         .unwrap_or_else(|| DEFAULT_USER_AVATAR.to_string());
     let support_href = APP_CONFIG

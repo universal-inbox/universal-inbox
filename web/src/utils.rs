@@ -144,3 +144,39 @@ pub fn scroll_element_by_page(id: &str) -> Result<()> {
     let elt = get_element_by_id(id)?;
     scroll_element(id, elt.client_height().into())
 }
+
+pub async fn create_navigator_credentials(
+    options: web_sys::CredentialCreationOptions,
+) -> Result<web_sys::PublicKeyCredential> {
+    wasm_bindgen_futures::JsFuture::from(
+        web_sys::window()
+            .context("Unable to get the window object")?
+            .navigator()
+            .credentials()
+            .create_with_options(&options)
+            .map_err(|err| JsError::try_from(err).unwrap())
+            .context("Unable to create credentials")?,
+    )
+    .await
+    .map(web_sys::PublicKeyCredential::from)
+    .map_err(|err| JsError::try_from(err).unwrap())
+    .context("Failed to create public key for Passkey authentication")
+}
+
+pub async fn get_navigator_credentials(
+    options: web_sys::CredentialRequestOptions,
+) -> Result<web_sys::PublicKeyCredential> {
+    wasm_bindgen_futures::JsFuture::from(
+        web_sys::window()
+            .context("Unable to get the window object")?
+            .navigator()
+            .credentials()
+            .get_with_options(&options)
+            .map_err(|err| JsError::try_from(err).unwrap())
+            .context("Unable to get credentials")?,
+    )
+    .await
+    .map(web_sys::PublicKeyCredential::from)
+    .map_err(|err| JsError::try_from(err).unwrap())
+    .context("Failed to get public key for Passkey authentication")
+}

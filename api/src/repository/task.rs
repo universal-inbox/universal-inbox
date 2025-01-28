@@ -481,7 +481,7 @@ impl TaskRepository for Repository {
             match error_code {
                 // PG `unique_violation` error
                 Some(x) if x == *"23505" => UniversalInboxError::AlreadyExists {
-                    source: e,
+                    source: Some(e),
                     id: task.id.0,
                 },
                 // PG `check_violation` error

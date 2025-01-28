@@ -14,7 +14,10 @@ use universal_inbox::{
     user::{User, UserId},
 };
 
-use universal_inbox_api::repository::auth_token::AuthenticationTokenRepository;
+use universal_inbox_api::{
+    repository::{auth_token::AuthenticationTokenRepository, user::UserRepository},
+    universal_inbox::user::model::UserAuth,
+};
 
 use super::{tested_app, TestedApp};
 
@@ -219,4 +222,16 @@ pub async fn fetch_auth_tokens_for_user(
         .unwrap();
     transaction.commit().await.unwrap();
     auth_tokens
+}
+
+pub async fn get_user_auth(app: &TestedApp, user_id: UserId) -> UserAuth {
+    let mut transaction = app.repository.begin().await.unwrap();
+    let user_auth = app
+        .repository
+        .get_user_auth(&mut transaction, user_id)
+        .await
+        .unwrap()
+        .unwrap();
+    transaction.commit().await.unwrap();
+    user_auth
 }

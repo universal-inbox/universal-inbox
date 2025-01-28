@@ -9,87 +9,49 @@ use serde_with::serde_as;
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::auth::AuthIdToken;
-
 #[serde_as]
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct User {
     pub id: UserId,
     pub first_name: Option<String>,
     pub last_name: Option<String>,
-    pub email: EmailAddress,
+    pub email: Option<EmailAddress>,
     pub email_validated_at: Option<DateTime<Utc>>,
     pub email_validation_sent_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-    pub auth: UserAuth,
 }
 
 impl User {
-    pub fn new(
-        first_name: Option<String>,
-        last_name: Option<String>,
-        email: EmailAddress,
-        auth: UserAuth,
-    ) -> Self {
+    pub fn new(first_name: Option<String>, last_name: Option<String>, email: EmailAddress) -> Self {
         Self {
             id: Uuid::new_v4().into(),
             first_name,
             last_name,
-            email,
+            email: Some(email),
             email_validated_at: None,
             email_validation_sent_at: None,
             created_at: Utc::now().with_nanosecond(0).unwrap(),
             updated_at: Utc::now().with_nanosecond(0).unwrap(),
-            auth,
+        }
+    }
+
+    pub fn new_with_passkey(user_id: UserId) -> Self {
+        Self {
+            id: user_id,
+            first_name: None,
+            last_name: None,
+            email: None,
+            email_validated_at: None,
+            email_validation_sent_at: None,
+            created_at: Utc::now().with_nanosecond(0).unwrap(),
+            updated_at: Utc::now().with_nanosecond(0).unwrap(),
         }
     }
 
     pub fn is_email_validated(&self) -> bool {
-        match self.auth {
-            UserAuth::Local(_) => self.email_validated_at.is_some(),
-            UserAuth::OIDCGoogleAuthorizationCode(_) => true,
-            UserAuth::OIDCAuthorizationCodePKCE(_) => true,
-        }
+        self.email_validation_sent_at.is_none() || self.email_validated_at.is_some()
     }
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(tag = "type", content = "content")]
-pub enum UserAuth {
-    Local(LocalUserAuth),
-    OIDCGoogleAuthorizationCode(OpenIdConnectUserAuth),
-    OIDCAuthorizationCodePKCE(OpenIdConnectUserAuth),
-}
-
-impl fmt::Display for UserAuth {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                UserAuth::Local(_) => "Local",
-                UserAuth::OIDCGoogleAuthorizationCode(_) => "OIDCGoogleAuthorizationCode",
-                UserAuth::OIDCAuthorizationCodePKCE(_) => "OIDCAuthorizationCodePKCE",
-            }
-        )
-    }
-}
-
-macro_attr! {
-    #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, EnumFromStr!, EnumDisplay!)]
-    pub enum UserAuthKind {
-        Local,
-        OIDCGoogleAuthorizationCode,
-        OIDCAuthorizationCodePKCE,
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct LocalUserAuth {
-    pub password_hash: Secret<PasswordHash>,
-    pub password_reset_at: Option<DateTime<Utc>>,
-    pub password_reset_sent_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -103,7 +65,6 @@ impl Zeroize for PasswordHash {
 }
 impl CloneableSecret for PasswordHash {}
 impl DebugSecret for PasswordHash {}
-impl SerializableSecret for PasswordHash {}
 
 #[derive(Deserialize, Serialize, Validate)]
 pub struct RegisterUserParameters {
@@ -151,31 +112,25 @@ impl FromStr for Password {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
-pub struct OpenIdConnectUserAuth {
-    pub auth_user_id: AuthUserId,
-    pub auth_id_token: AuthIdToken,
-}
-
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Hash)]
 #[serde(transparent)]
-pub struct AuthUserId(pub String);
+pub struct Username(pub String);
 
-impl fmt::Display for AuthUserId {
+impl fmt::Display for Username {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.0)
     }
 }
 
-impl From<String> for AuthUserId {
+impl From<String> for Username {
     fn from(string: String) -> Self {
         Self(string)
     }
 }
 
-impl From<AuthUserId> for String {
-    fn from(auth_user_id: AuthUserId) -> Self {
-        auth_user_id.0
+impl From<Username> for String {
+    fn from(username: Username) -> Self {
+        username.0
     }
 }
 

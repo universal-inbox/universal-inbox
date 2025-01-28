@@ -62,6 +62,7 @@ pub async fn front_config(
                 ),
             },
             AuthenticationSettings::Local(_) => FrontAuthenticationConfig::Local,
+            AuthenticationSettings::Passkey => FrontAuthenticationConfig::Passkey,
         })
         .collect();
 

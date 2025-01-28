@@ -492,7 +492,7 @@ impl NotificationRepository for Repository {
                 .and_then(|db_error| db_error.code().map(|code| code.to_string()))
             {
                 Some(x) if x == *"23505" => UniversalInboxError::AlreadyExists {
-                    source: e,
+                    source: Some(e),
                     id: notification.id.0,
                 },
                 _ => UniversalInboxError::Unexpected(anyhow!(

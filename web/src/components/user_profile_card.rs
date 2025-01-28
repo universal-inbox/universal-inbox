@@ -3,10 +3,9 @@
 use dioxus::prelude::*;
 use gravatar_rs::Generator;
 
-use universal_inbox::FrontAuthenticationConfig;
-
 use crate::{
-    components::loading::Loading, config::APP_CONFIG, services::user_service::CONNECTED_USER,
+    components::loading::Loading, model::DEFAULT_USER_AVATAR,
+    services::user_service::CONNECTED_USER,
 };
 
 #[component]
@@ -20,27 +19,15 @@ pub fn UserProfileCard() -> Element {
         };
     };
 
-    let user_profile_url = APP_CONFIG.read().as_ref().and_then(|config| {
-        match config
-            .authentication_configs
-            .iter()
-            .find(|auth_config| auth_config.match_user_auth(&user.auth))
-        {
-            Some(FrontAuthenticationConfig::OIDCAuthorizationCodePKCEFlow(config)) => {
-                Some(config.user_profile_url.clone())
-            }
-            Some(FrontAuthenticationConfig::OIDCGoogleAuthorizationCodeFlow(config)) => {
-                Some(config.user_profile_url.clone())
-            }
-            _ => None,
-        }
-    });
-
-    let user_avatar = Generator::default()
-        .set_image_size(150)
-        .set_rating("g")
-        .set_default_image("mp")
-        .generate(user.email.as_str());
+    let user_avatar = if let Some(ref email) = user.email {
+        Generator::default()
+            .set_image_size(150)
+            .set_rating("g")
+            .set_default_image("mp")
+            .generate(email.as_str())
+    } else {
+        DEFAULT_USER_AVATAR.to_string()
+    };
     let user_name = format!(
         "{} {}",
         user.first_name.unwrap_or_default(),
@@ -73,19 +60,11 @@ pub fn UserProfileCard() -> Element {
                             "{user_name}"
                         }
 
-                        div {
-                            class: "text-xl font-semibold",
-                            "{user.email}"
-                        }
-                    }
-
-                    if let Some(user_profile_url) = user_profile_url.as_ref() {
-                        a {
-                            class: "btn btn-primary",
-                            href: "{user_profile_url}",
-                            target: "_blank",
-                            rel: "noopener noreferrer",
-                            "View detailed profile"
+                        if let Some(ref email) = user.email {
+                            div {
+                                class: "text-xl font-semibold",
+                                "{email}"
+                            }
                         }
                     }
                 }

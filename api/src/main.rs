@@ -31,7 +31,7 @@ use universal_inbox_api::{
         init_subscriber,
     },
     run_server, run_worker,
-    utils::{cache::Cache, jwt::JWTBase64EncodedSigningKeys},
+    utils::{cache::Cache, jwt::JWTBase64EncodedSigningKeys, passkey::build_webauthn},
 };
 use wiremock::MockServer;
 
@@ -253,6 +253,10 @@ async fn main() -> std::io::Result<()> {
         )
         .expect("Failed to build an SmtpMailer"),
     ));
+    let webauthn = Arc::new(
+        build_webauthn(&settings.application.front_base_url)
+            .expect("Failed to build a Webauthn context"),
+    );
 
     if settings.application.dry_run {
         warn!("⚠️ Starting server in DRY RUN mode, write calls to integrations will be mocked ⚠️");
@@ -283,6 +287,7 @@ async fn main() -> std::io::Result<()> {
         todoist_mock_server.map(|mock| mock.uri()),
         nango_service,
         mailer,
+        webauthn,
     )
     .await;
 

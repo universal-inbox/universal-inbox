@@ -1,0 +1,82 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                SELECT\n                    kind as \"kind: _\",\n                    password_hash,\n                    password_reset_at,\n                    password_reset_sent_at,\n                    auth_user_id,\n                    auth_id_token,\n                    username,\n                    passkey as \"passkey: Json<Passkey>\",\n                    user_id\n                FROM user_auth\n                WHERE username = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind: _",
+        "type_info": {
+          "Custom": {
+            "name": "user_auth_kind",
+            "kind": {
+              "Enum": [
+                "Passkey",
+                "OIDCAuthorizationCodePKCE",
+                "OIDCGoogleAuthorizationCode",
+                "Local"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "password_hash",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "password_reset_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 3,
+        "name": "password_reset_sent_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 4,
+        "name": "auth_user_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "auth_id_token",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "username",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "passkey: Json<Passkey>",
+        "type_info": "Json"
+      },
+      {
+        "ordinal": 8,
+        "name": "user_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "afaef146accc6d4582f352167a7c5c059eebc4252308d578e1932c55f238fa69"
+}

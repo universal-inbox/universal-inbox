@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 use integration_connection::{provider::IntegrationProviderKind, NangoProviderKey, NangoPublicKey};
-use user::UserAuth;
 
 #[macro_use]
 extern crate macro_attr;
@@ -48,6 +47,7 @@ pub enum FrontAuthenticationConfig {
     OIDCAuthorizationCodePKCEFlow(FrontOIDCAuthorizationCodePKCEFlowConfig),
     OIDCGoogleAuthorizationCodeFlow(FrontOIDCGoogleAuthorizationCodeFlowConfig),
     Local,
+    Passkey,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
@@ -61,20 +61,6 @@ pub struct FrontOIDCAuthorizationCodePKCEFlowConfig {
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
 pub struct FrontOIDCGoogleAuthorizationCodeFlowConfig {
     pub user_profile_url: Url,
-}
-
-impl FrontAuthenticationConfig {
-    pub fn match_user_auth(&self, user_auth: &UserAuth) -> bool {
-        match self {
-            Self::OIDCAuthorizationCodePKCEFlow(_) => {
-                matches!(user_auth, UserAuth::OIDCAuthorizationCodePKCE(_))
-            }
-            Self::OIDCGoogleAuthorizationCodeFlow(_) => {
-                matches!(user_auth, UserAuth::OIDCGoogleAuthorizationCode(_))
-            }
-            Self::Local => matches!(user_auth, UserAuth::Local(_)),
-        }
-    }
 }
 
 pub trait HasHtmlUrl {
