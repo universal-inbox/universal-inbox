@@ -28,15 +28,16 @@
         "aarch64-darwin"
       ]
     },
-    "fzf":             "latest",
-    "process-compose": "latest",
-    "binaryen":        "latest",
-    "cargo-chef":      "0.1.68",
-    "cargo-binstall":  "latest",
-    "openssl.dev":     "",
-    "cargo-machete":   "latest",
-    "sqlfluff":        "latest",
-    "docker-compose":  "latest"
+    "fzf":              "latest",
+    "process-compose":  "latest",
+    "binaryen":         "latest",
+    "cargo-chef":       "0.1.68",
+    "cargo-binstall":   "latest",
+    "openssl.dev":      "",
+    "cargo-machete":    "latest",
+    "sqlfluff":         "latest",
+    "docker-compose":   "latest",
+    "wasm-bindgen-cli": "0.2.100"
   },
   "shell": {
     "init_hook": [

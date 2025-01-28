@@ -28,7 +28,6 @@ install-rust-tools:
     cargo binstall -y cargo-llvm-cov --version 0.6.16
     cargo binstall -y dioxus-cli --version 0.6.2
   fi
-  cargo binstall -y wasm-bindgen-cli --version 0.2.100
 
 ## Build recipes
 clean:

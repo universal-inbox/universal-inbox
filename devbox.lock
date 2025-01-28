@@ -1414,6 +1414,54 @@
         }
       }
     },
+    "wasm-bindgen-cli@0.2.100": {
+      "last_modified": "2025-01-25T23:17:58Z",
+      "resolved": "github:NixOS/nixpkgs/b582bb5b0d7af253b05d58314b85ab8ec46b8d19#wasm-bindgen-cli",
+      "source": "devbox-search",
+      "version": "0.2.100",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/rdiwxzp0b0iisdr60d44zi31lip5k5qr-wasm-bindgen-cli-0.2.100",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/rdiwxzp0b0iisdr60d44zi31lip5k5qr-wasm-bindgen-cli-0.2.100"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/vd9dswj4jhgaxaimif66klszwx28i69g-wasm-bindgen-cli-0.2.100",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/vd9dswj4jhgaxaimif66klszwx28i69g-wasm-bindgen-cli-0.2.100"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/l77mpcd8wrlhfnv0n8z1cpxqcfvd56d3-wasm-bindgen-cli-0.2.100",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/l77mpcd8wrlhfnv0n8z1cpxqcfvd56d3-wasm-bindgen-cli-0.2.100"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/4nll8fdpzziq7glr6swbix4w32pkdxiq-wasm-bindgen-cli-0.2.100",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/4nll8fdpzziq7glr6swbix4w32pkdxiq-wasm-bindgen-cli-0.2.100"
+        }
+      }
+    },
     "watchexec@latest": {
       "last_modified": "2024-12-23T21:10:33Z",
       "resolved": "github:NixOS/nixpkgs/de1864217bfa9b5845f465e771e0ecb48b30e02d#watchexec",
