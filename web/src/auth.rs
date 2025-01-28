@@ -121,7 +121,7 @@ pub fn Authenticated(
                                 *error.write() = Some(auth_error);
                             }
                         }
-                        FrontAuthenticationConfig::Local => {}
+                        _ => {}
                     }
                 }
             } else {
@@ -175,6 +175,8 @@ pub fn Authenticated(
             {
                 if history().current_route() != *"/login"
                     && history().current_route() != *"/signup"
+                    && history().current_route() != *"/passkey-login"
+                    && history().current_route() != *"/passkey-signup"
                     && history().current_route() != *"/password-reset"
                 {
                     nav.replace(Route::LoginPage {});

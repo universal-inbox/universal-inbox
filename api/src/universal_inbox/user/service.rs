@@ -20,12 +20,13 @@ use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 use url::Url;
 use uuid::Uuid;
+use webauthn_rs::prelude::*;
 
 use universal_inbox::{
     auth::openidconnect::OpenidConnectProvider,
     user::{
-        AuthUserId, Credentials, EmailValidationToken, LocalUserAuth, OpenIdConnectUserAuth,
-        Password, PasswordHash, PasswordResetToken, User, UserAuth, UserAuthKind, UserId,
+        Credentials, EmailValidationToken, Password, PasswordHash, PasswordResetToken, User,
+        UserId, Username,
     },
 };
 
@@ -38,13 +39,17 @@ use crate::{
     observability::spawn_blocking_with_tracing,
     repository::user::UserRepository,
     repository::Repository,
-    universal_inbox::{UniversalInboxError, UpdateStatus},
+    universal_inbox::{
+        user::model::{AuthUserId, OpenIdConnectUserAuth, PasskeyUserAuth, UserAuth, UserAuthKind},
+        UniversalInboxError, UpdateStatus,
+    },
 };
 
 pub struct UserService {
     repository: Arc<Repository>,
     application_settings: ApplicationSettings,
     mailer: Arc<RwLock<dyn Mailer + Send + Sync>>,
+    webauthn: Arc<Webauthn>,
 }
 
 impl UserService {
@@ -52,11 +57,13 @@ impl UserService {
         repository: Arc<Repository>,
         application_settings: ApplicationSettings,
         mailer: Arc<RwLock<dyn Mailer + Send + Sync>>,
+        webauthn: Arc<Webauthn>,
     ) -> UserService {
         UserService {
             repository,
             application_settings,
             mailer,
+            webauthn,
         }
     }
 
@@ -114,10 +121,10 @@ impl UserService {
             executor,
             oidc_provider,
             access_token,
-            UserAuth::OIDCGoogleAuthorizationCode(OpenIdConnectUserAuth {
+            UserAuth::OIDCGoogleAuthorizationCode(Box::new(OpenIdConnectUserAuth {
                 auth_user_id,
                 auth_id_token: id_token.to_string().into(),
-            }),
+            })),
         )
         .await
     }
@@ -184,10 +191,10 @@ impl UserService {
             executor,
             oidc_provider,
             access_token,
-            UserAuth::OIDCAuthorizationCodePKCE(OpenIdConnectUserAuth {
+            UserAuth::OIDCAuthorizationCodePKCE(Box::new(OpenIdConnectUserAuth {
                 auth_user_id,
                 auth_id_token: id_token.to_string().into(),
-            }),
+            })),
         )
         .await
     }
@@ -263,7 +270,7 @@ impl UserService {
                     .context("Invalid email address")?;
 
                 self.repository
-                    .create_user(executor, User::new(first_name, last_name, email, user_auth))
+                    .create_user(executor, User::new(first_name, last_name, email), user_auth)
                     .await
             }
         }
@@ -310,12 +317,12 @@ impl UserService {
                             .clone();
                         let logout_request: LogoutRequest = end_session_url.into();
 
-                        let user = self
+                        let user_auth = self
                             .repository
-                            .get_user(executor, user_id)
+                            .get_user_auth(executor, user_id)
                             .await?
                             .ok_or_else(|| anyhow!("User with ID {user_id} not found"))?;
-                        let UserAuth::OIDCAuthorizationCodePKCE(user_auth) = &user.auth else {
+                        let UserAuth::OIDCAuthorizationCodePKCE(user_auth) = &user_auth else {
                             return Err(anyhow!(
                                 "User with ID {user_id} does not have OIDCAuthorizationCodePKCE auth parameters"
                             ))?;
@@ -337,7 +344,7 @@ impl UserService {
                     }
                 }
             }
-            AuthenticationSettings::Local(_) => {
+            AuthenticationSettings::Local(_) | AuthenticationSettings::Passkey => {
                 Ok(self.application_settings.front_base_url.clone())
             }
         }
@@ -410,8 +417,12 @@ impl UserService {
         &self,
         executor: &mut Transaction<'_, Postgres>,
         user: User,
+        user_auth: UserAuth,
     ) -> Result<User, UniversalInboxError> {
-        let new_user = self.repository.create_user(executor, user).await?;
+        let new_user = self
+            .repository
+            .create_user(executor, user, user_auth)
+            .await?;
         self.send_verification_email(executor, new_user.id, false)
             .await?;
         Ok(new_user)
@@ -430,20 +441,15 @@ impl UserService {
                  CWOrkoo7oJBQ/iyh7uJ0LO2aLEfrHwTWllSAxT0zRno"
                 .to_string(),
         ));
+        let mut result_user_id = None;
 
-        let user = self
+        if let Some((UserAuth::Local(local_user_auth), user_id)) = self
             .repository
-            .get_user_by_email(executor, &credentials.email)
-            .await?;
-        if let Some(User {
-            auth:
-                UserAuth::Local(LocalUserAuth {
-                    ref password_hash, ..
-                }),
-            ..
-        }) = user
+            .get_user_auth_by_email(executor, &credentials.email)
+            .await?
         {
-            expected_password_hash = password_hash.clone();
+            expected_password_hash = local_user_auth.password_hash;
+            result_user_id = Some(user_id);
         }
         spawn_blocking_with_tracing(move || {
             UserService::verify_password_hash(expected_password_hash, credentials.password)
@@ -451,7 +457,12 @@ impl UserService {
         .await
         .context("Failed to spawn blocking task.")??;
 
-        user.ok_or_else(|| UniversalInboxError::Unauthorized(anyhow!("Unknown user")))
+        let user_id = result_user_id
+            .ok_or_else(|| UniversalInboxError::Unauthorized(anyhow!("Unknown user")))?;
+        self.repository
+            .get_user(executor, user_id)
+            .await?
+            .ok_or_else(|| UniversalInboxError::Unauthorized(anyhow!("Unknown user")))
     }
 
     pub fn get_new_password_hash(
@@ -683,5 +694,156 @@ impl UserService {
                 user_error: format!("Invalid password reset token for user {user_id}"),
             }),
         }
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(username = username.to_string()),
+        err
+    )]
+    pub async fn start_passkey_registration(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        username: &Username,
+    ) -> Result<(UserId, CreationChallengeResponse, PasskeyRegistration), UniversalInboxError> {
+        if let Some((_, user_id)) = self
+            .repository
+            .get_user_auth_by_username(executor, username)
+            .await?
+        {
+            return Err(UniversalInboxError::AlreadyExists {
+                source: None,
+                id: user_id.0,
+            });
+        }
+        let user_id: UserId = Uuid::new_v4().into();
+        let (creation_challenge_response, passkey_registration) = self
+            .webauthn
+            .start_passkey_registration(user_id.0, username.0.as_str(), username.0.as_str(), None)
+            .with_context(|| format!("Failed to start Passkey registration for {username}"))?;
+        Ok((user_id, creation_challenge_response, passkey_registration))
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            username = username.to_string(),
+            user.id = user_id.to_string(),
+        ),
+        err
+    )]
+    pub async fn finish_passkey_registration(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        username: &Username,
+        user_id: UserId,
+        register_credentials: RegisterPublicKeyCredential,
+        passkey_registration: PasskeyRegistration,
+    ) -> Result<User, UniversalInboxError> {
+        let passkey = self
+            .webauthn
+            .finish_passkey_registration(&register_credentials, &passkey_registration)
+            .with_context(|| format!("Failed to finish Passkey registration for {username}"))?;
+
+        let user = User::new_with_passkey(user_id);
+        let user_auth = UserAuth::Passkey(Box::new(PasskeyUserAuth {
+            username: username.clone(),
+            passkey: passkey.clone(),
+        }));
+
+        let new_user = self
+            .repository
+            .create_user(executor, user, user_auth)
+            .await?;
+
+        Ok(new_user)
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(username = username.to_string()),
+        err
+    )]
+    pub async fn start_passkey_authentication(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        username: &Username,
+    ) -> Result<(UserId, RequestChallengeResponse, PasskeyAuthentication), UniversalInboxError>
+    {
+        let Some((user_auth, user_id)) = self
+            .repository
+            .get_user_auth_by_username(executor, username)
+            .await?
+        else {
+            return Err(UniversalInboxError::ItemNotFound(format!(
+                "No user found for username {username}"
+            )));
+        };
+        let UserAuth::Passkey(passkey_user_auth) = user_auth else {
+            return Err(UniversalInboxError::Unexpected(anyhow!(
+                "No passkey found for user with username {username}"
+            )));
+        };
+
+        let (request_challenge_response, passkey_authentication) = self
+            .webauthn
+            .start_passkey_authentication(&[passkey_user_auth.passkey])
+            .with_context(|| {
+                format!("Failed to start Passkey authentication for user with username {username}")
+            })?;
+
+        Ok((user_id, request_challenge_response, passkey_authentication))
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = user_id.to_string()),
+        err
+    )]
+    pub async fn finish_passkey_authentication(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        credentials: PublicKeyCredential,
+        passkey_authentication: PasskeyAuthentication,
+    ) -> Result<User, UniversalInboxError> {
+        let auth_result = self
+            .webauthn
+            .finish_passkey_authentication(&credentials, &passkey_authentication)
+            .with_context(|| {
+                format!("Failed to finish Passkey authentication for user {user_id}")
+            })?;
+
+        let Some(user_auth) = self.repository.get_user_auth(executor, user_id).await? else {
+            return Err(UniversalInboxError::ItemNotFound(format!(
+                "No user {user_id} found"
+            )));
+        };
+        let UserAuth::Passkey(mut passkey_user_auth) = user_auth else {
+            return Err(UniversalInboxError::Unexpected(anyhow!(
+                "No passkey found for user {user_id}"
+            )));
+        };
+        let Some(user) = self.repository.get_user(executor, user_id).await? else {
+            return Err(UniversalInboxError::ItemNotFound(format!(
+                "No user {user_id} found"
+            )));
+        };
+
+        if passkey_user_auth
+            .passkey
+            .update_credential(&auth_result)
+            .unwrap_or_default()
+        {
+            self.repository
+                .update_passkey(executor, &user_id, &passkey_user_auth.passkey)
+                .await?;
+        }
+
+        Ok(user)
     }
 }

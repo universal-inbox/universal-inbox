@@ -56,6 +56,7 @@ impl AuthenticationTokenService {
         is_session_token: bool,
         user_id: UserId,
         expire_at: Option<DateTime<Utc>>,
+        store: bool,
     ) -> Result<AuthenticationToken, UniversalInboxError> {
         let expire_at = expire_at.unwrap_or_else(|| {
             Utc::now()
@@ -82,14 +83,15 @@ impl AuthenticationTokenService {
             )
             .context("Failed to encode JSON web token")?,
         ));
-        let auth_token = self
-            .repository
-            .create_auth_token(
-                executor,
-                AuthenticationToken::new(user_id, jwt_token, Some(expire_at), is_session_token),
-            )
-            .await?;
-        Ok(auth_token)
+        let auth_token =
+            AuthenticationToken::new(user_id, jwt_token, Some(expire_at), is_session_token);
+        if store {
+            self.repository
+                .create_auth_token(executor, auth_token)
+                .await
+        } else {
+            Ok(auth_token)
+        }
     }
 
     #[tracing::instrument(

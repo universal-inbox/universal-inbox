@@ -142,6 +142,7 @@ pub async fn generate_jwt_token(
             false,
             user.id,
             Some(Utc::now() + TimeDelta::try_days(30 * 6).unwrap()),
+            true,
         )
         .await?;
 

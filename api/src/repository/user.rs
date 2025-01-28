@@ -3,20 +3,24 @@ use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use email_address::EmailAddress;
 use secrecy::{ExposeSecret, Secret};
-use sqlx::{Postgres, QueryBuilder, Transaction};
+use sqlx::{types::Json, Postgres, QueryBuilder, Transaction};
 use uuid::Uuid;
+use webauthn_rs::prelude::*;
 
 use universal_inbox::{
     auth::AuthIdToken,
-    user::{
-        AuthUserId, EmailValidationToken, LocalUserAuth, OpenIdConnectUserAuth, PasswordHash,
-        PasswordResetToken, User, UserAuth, UserId,
-    },
+    user::{EmailValidationToken, PasswordHash, PasswordResetToken, User, UserId, Username},
 };
 
-use crate::universal_inbox::{UniversalInboxError, UpdateStatus};
-
-use super::Repository;
+use crate::{
+    repository::Repository,
+    universal_inbox::{
+        user::model::{
+            AuthUserId, LocalUserAuth, OpenIdConnectUserAuth, PasskeyUserAuth, UserAuth,
+        },
+        UniversalInboxError, UpdateStatus,
+    },
+};
 
 #[async_trait]
 pub trait UserRepository {
@@ -47,6 +51,7 @@ pub trait UserRepository {
         &self,
         executor: &mut Transaction<'_, Postgres>,
         user: User,
+        user_auth: UserAuth,
     ) -> Result<User, UniversalInboxError>;
 
     async fn update_user_auth_id_token(
@@ -92,6 +97,31 @@ pub trait UserRepository {
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
     ) -> Result<Option<PasswordResetToken>, UniversalInboxError>;
+
+    async fn get_user_auth_by_email(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_email: &EmailAddress,
+    ) -> Result<Option<(UserAuth, UserId)>, UniversalInboxError>;
+
+    async fn get_user_auth(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+    ) -> Result<Option<UserAuth>, UniversalInboxError>;
+
+    async fn get_user_auth_by_username(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        username: &Username,
+    ) -> Result<Option<(UserAuth, UserId)>, UniversalInboxError>;
+
+    async fn update_passkey(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: &UserId,
+        passkey: &Passkey,
+    ) -> Result<UpdateStatus<User>, UniversalInboxError>;
 }
 
 #[async_trait]
@@ -118,15 +148,8 @@ impl UserRepository for Repository {
                   "user".email_validated_at,
                   "user".email_validation_sent_at,
                   "user".created_at,
-                  "user".updated_at,
-                  user_auth.kind as "user_auth_kind: _",
-                  user_auth.auth_user_id,
-                  user_auth.auth_id_token,
-                  user_auth.password_hash,
-                  user_auth.password_reset_at,
-                  user_auth.password_reset_sent_at
+                  "user".updated_at
                 FROM "user"
-                INNER JOIN user_auth ON user_auth.user_id = "user".id
                 WHERE "user".id = $1
             "#,
             id.0
@@ -160,15 +183,8 @@ impl UserRepository for Repository {
                   "user".email_validated_at,
                   "user".email_validation_sent_at,
                   "user".created_at,
-                  "user".updated_at,
-                  user_auth.kind as "user_auth_kind: _",
-                  user_auth.auth_user_id,
-                  user_auth.auth_id_token,
-                  user_auth.password_hash,
-                  user_auth.password_reset_at,
-                  user_auth.password_reset_sent_at
+                  "user".updated_at
                 FROM "user"
-                INNER JOIN user_auth ON user_auth.user_id = "user".id
             "#
         )
         .fetch_all(&mut **executor)
@@ -206,13 +222,7 @@ impl UserRepository for Repository {
                   "user".email_validated_at,
                   "user".email_validation_sent_at,
                   "user".created_at,
-                  "user".updated_at,
-                  user_auth.kind as "user_auth_kind: _",
-                  user_auth.auth_user_id,
-                  user_auth.auth_id_token,
-                  user_auth.password_hash,
-                  user_auth.password_reset_at,
-                  user_auth.password_reset_sent_at
+                  "user".updated_at
                 FROM "user"
                 INNER JOIN user_auth ON user_auth.user_id = "user".id
                 WHERE user_auth.auth_user_id = $1
@@ -251,15 +261,8 @@ impl UserRepository for Repository {
                   "user".email_validated_at,
                   "user".email_validation_sent_at,
                   "user".created_at,
-                  "user".updated_at,
-                  user_auth.kind as "user_auth_kind: _",
-                  user_auth.auth_user_id,
-                  user_auth.auth_id_token,
-                  user_auth.password_hash,
-                  user_auth.password_reset_at,
-                  user_auth.password_reset_sent_at
+                  "user".updated_at
                 FROM "user"
-                INNER JOIN user_auth ON user_auth.user_id = "user".id
                 WHERE "user".email = $1
             "#,
             email.to_string()
@@ -287,6 +290,7 @@ impl UserRepository for Repository {
         &self,
         executor: &mut Transaction<'_, Postgres>,
         user: User,
+        user_auth: UserAuth,
     ) -> Result<User, UniversalInboxError> {
         let user_id = UserId(
             sqlx::query_scalar!(
@@ -307,7 +311,7 @@ impl UserRepository for Repository {
                 user.id.0,
                 user.first_name,
                 user.last_name,
-                user.email.to_string(),
+                user.email.as_ref().map(|email| email.to_string()),
                 user.created_at.naive_utc(),
                 user.updated_at.naive_utc()
             )
@@ -319,7 +323,7 @@ impl UserRepository for Repository {
                     .and_then(|db_error| db_error.code().map(|code| code.to_string()))
                 {
                     Some(x) if x == *"23505" => UniversalInboxError::AlreadyExists {
-                        source: e,
+                        source: Some(e),
                         id: user.id.0,
                     },
                     _ => UniversalInboxError::Unexpected(anyhow!("Failed to create new user: {e}")),
@@ -327,18 +331,29 @@ impl UserRepository for Repository {
             })?,
         );
 
-        let (auth_user_id, auth_id_token, password_hash) = match user.auth {
-            UserAuth::OIDCAuthorizationCodePKCE(OpenIdConnectUserAuth {
-                ref auth_user_id,
-                ref auth_id_token,
-            })
-            | UserAuth::OIDCGoogleAuthorizationCode(OpenIdConnectUserAuth {
-                ref auth_user_id,
-                ref auth_id_token,
-            }) => (Some(auth_user_id), Some(auth_id_token), None),
-            UserAuth::Local(LocalUserAuth {
-                ref password_hash, ..
-            }) => (None, None, Some(password_hash)),
+        let (auth_user_id, auth_id_token, password_hash, username, passkey) = match user_auth {
+            UserAuth::OIDCAuthorizationCodePKCE(ref oidc_user_auth)
+            | UserAuth::OIDCGoogleAuthorizationCode(ref oidc_user_auth) => (
+                Some(oidc_user_auth.auth_user_id.clone()),
+                Some(oidc_user_auth.auth_id_token.clone()),
+                None,
+                None,
+                None,
+            ),
+            UserAuth::Local(ref local_user_auth) => (
+                None,
+                None,
+                Some(local_user_auth.password_hash.clone()),
+                None,
+                None,
+            ),
+            UserAuth::Passkey(ref passkey_user_auth) => (
+                None,
+                None,
+                None,
+                Some(passkey_user_auth.username.clone()),
+                Some(passkey_user_auth.passkey.clone()),
+            ),
         };
 
         let new_id = Uuid::new_v4();
@@ -351,7 +366,9 @@ impl UserRepository for Repository {
                     kind,
                     auth_user_id,
                     auth_id_token,
-                    password_hash
+                    password_hash,
+                    username,
+                    passkey
                   )
                 VALUES
                   (
@@ -360,15 +377,19 @@ impl UserRepository for Repository {
                     $3::user_auth_kind,
                     $4,
                     $5,
-                    $6
+                    $6,
+                    $7,
+                    $8
                   )
             "#,
             new_id,
             user_id.0,
-            user.auth.to_string() as _,
+            user_auth.to_string() as _,
             auth_user_id.map(|id| id.to_string()),
             auth_id_token.map(|token| token.to_string()),
             password_hash.map(|hash| hash.expose_secret().0.to_string()),
+            username.map(|username| username.to_string()),
+            passkey.map(|passkey| Json(passkey.clone())) as Option<Json<Passkey>>,
         )
         .execute(&mut **executor)
         .await
@@ -425,12 +446,6 @@ impl UserRepository for Repository {
                   "user".email_validation_sent_at,
                   "user".created_at,
                   "user".updated_at,
-                  user_auth.kind as user_auth_kind,
-                  user_auth.auth_user_id,
-                  user_auth.auth_id_token,
-                  user_auth.password_hash,
-                  user_auth.password_reset_at,
-                  user_auth.password_reset_sent_at,
                   (SELECT"#,
             )
             .push(" auth_id_token != ")
@@ -529,12 +544,6 @@ impl UserRepository for Repository {
                   "user".email_validation_sent_at,
                   "user".created_at,
                   "user".updated_at,
-                  user_auth.kind as user_auth_kind,
-                  user_auth.auth_user_id,
-                  user_auth.auth_id_token,
-                  user_auth.password_hash,
-                  user_auth.password_reset_at,
-                  user_auth.password_reset_sent_at,
                   (SELECT"#,
         );
         let mut separated = query_builder.separated(" OR ");
@@ -665,12 +674,6 @@ impl UserRepository for Repository {
                   "user".email_validation_sent_at,
                   "user".created_at,
                   "user".updated_at,
-                  user_auth.kind as user_auth_kind,
-                  user_auth.auth_user_id,
-                  user_auth.auth_id_token,
-                  user_auth.password_hash,
-                  user_auth.password_reset_at,
-                  user_auth.password_reset_sent_at,
                   (SELECT true) as is_updated
             "#,
         );
@@ -746,12 +749,6 @@ impl UserRepository for Repository {
                   "user".email_validation_sent_at,
                   "user".created_at,
                   "user".updated_at,
-                  user_auth.kind as user_auth_kind,
-                  user_auth.auth_user_id,
-                  user_auth.auth_id_token,
-                  user_auth.password_hash,
-                  user_auth.password_reset_at,
-                  user_auth.password_reset_sent_at,
                   (SELECT "#,
         );
         let mut separated = query_builder.separated(" OR ");
@@ -821,14 +818,216 @@ impl UserRepository for Repository {
 
         Ok(row.and_then(|row| row.map(|token| token.into())))
     }
-}
 
-#[derive(sqlx::Type, Debug)]
-#[sqlx(type_name = "user_auth_kind")]
-enum PgUserAuthKind {
-    OIDCAuthorizationCodePKCE,
-    OIDCGoogleAuthorizationCode,
-    Local,
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.email = user_email.to_string()),
+        err
+    )]
+    async fn get_user_auth_by_email(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_email: &EmailAddress,
+    ) -> Result<Option<(UserAuth, UserId)>, UniversalInboxError> {
+        let row: Option<UserAuthRow> = sqlx::query_as!(
+            UserAuthRow,
+            r#"
+                SELECT
+                    kind as "kind: _",
+                    password_hash,
+                    password_reset_at,
+                    password_reset_sent_at,
+                    auth_user_id,
+                    auth_id_token,
+                    username,
+                    passkey as "passkey: Json<Passkey>",
+                    user_id
+                FROM user_auth
+                JOIN "user" ON user_auth.user_id = "user".id
+                WHERE "user".email = $1
+            "#,
+            user_email.to_string()
+        )
+        .fetch_optional(&mut **executor)
+        .await
+        .map_err(|err| {
+            let message = format!(
+                "Failed to fetch password hash for user with email {user_email} from storage: {err}"
+            );
+            UniversalInboxError::DatabaseError {
+                source: err,
+                message,
+            }
+        })?;
+
+        let Some(user_auth) = row else {
+            return Ok(None);
+        };
+        let user_id = user_auth.user_id.into();
+        Ok(Some((user_auth.try_into()?, user_id)))
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = user_id.to_string()),
+        err
+    )]
+    async fn get_user_auth(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+    ) -> Result<Option<UserAuth>, UniversalInboxError> {
+        let row = sqlx::query_as!(
+            UserAuthRow,
+            r#"
+                SELECT
+                    kind as "kind: _",
+                    password_hash,
+                    password_reset_at,
+                    password_reset_sent_at,
+                    auth_user_id,
+                    auth_id_token,
+                    username,
+                    passkey as "passkey: Json<Passkey>",
+                    user_id
+                FROM user_auth
+                WHERE user_id = $1
+            "#,
+            user_id.0
+        )
+        .fetch_optional(&mut **executor)
+        .await
+        .map_err(|err| {
+            let message =
+                format!("Failed to fetch user auth for user {user_id} from storage: {err}");
+            UniversalInboxError::DatabaseError {
+                source: err,
+                message,
+            }
+        })?;
+
+        row.map(|user_auth| user_auth.try_into()).transpose()
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(username = username.to_string()),
+        err
+    )]
+    async fn get_user_auth_by_username(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        username: &Username,
+    ) -> Result<Option<(UserAuth, UserId)>, UniversalInboxError> {
+        let row = sqlx::query_as!(
+            UserAuthRow,
+            r#"
+                SELECT
+                    kind as "kind: _",
+                    password_hash,
+                    password_reset_at,
+                    password_reset_sent_at,
+                    auth_user_id,
+                    auth_id_token,
+                    username,
+                    passkey as "passkey: Json<Passkey>",
+                    user_id
+                FROM user_auth
+                WHERE username = $1
+            "#,
+            username.0
+        )
+        .fetch_optional(&mut **executor)
+        .await
+        .map_err(|err| {
+            let message =
+                format!("Failed to fetch user auth for username {username} from storage: {err}");
+            UniversalInboxError::DatabaseError {
+                source: err,
+                message,
+            }
+        })?;
+
+        let Some(user_auth) = row else {
+            return Ok(None);
+        };
+        let user_id = user_auth.user_id.into();
+        Ok(Some((user_auth.try_into()?, user_id)))
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = user_id.to_string()),
+        err
+    )]
+    async fn update_passkey(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: &UserId,
+        passkey: &Passkey,
+    ) -> Result<UpdateStatus<User>, UniversalInboxError> {
+        let mut query_builder = QueryBuilder::new("UPDATE user_auth SET");
+        query_builder
+            .push(" passkey = ")
+            .push_bind(Json(passkey))
+            .push(
+                r#"
+                FROM "user"
+                WHERE
+                    user_auth.user_id = "user".id
+                    AND user_auth.user_id = "#,
+            )
+            .push_bind(user_id.0);
+
+        query_builder
+            .push(
+                r#"
+                RETURNING
+                  "user".id,
+                  "user".first_name,
+                  "user".last_name,
+                  "user".email,
+                  "user".email_validated_at,
+                  "user".email_validation_sent_at,
+                  "user".created_at,
+                  "user".updated_at,
+                  (SELECT"#,
+            )
+            .push(" passkey != ")
+            .push_bind(Json(passkey))
+            .push(" FROM user_auth WHERE user_id = ")
+            .push_bind(user_id.0)
+            .push(r#") as "is_updated""#);
+
+        let record: Option<UpdatedUserRow> = query_builder
+            .build_query_as::<UpdatedUserRow>()
+            .fetch_optional(&mut **executor)
+            .await
+            .map_err(|err| {
+                let message =
+                    format!("Failed to update user {user_id}'s passkey from storage: {err}");
+                UniversalInboxError::DatabaseError {
+                    source: err,
+                    message,
+                }
+            })?;
+
+        if let Some(updated_user_row) = record {
+            Ok(UpdateStatus {
+                updated: updated_user_row.is_updated,
+                result: Some(updated_user_row.user_row.try_into().unwrap()),
+            })
+        } else {
+            Ok(UpdateStatus {
+                updated: false,
+                result: None,
+            })
+        }
+    }
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -836,17 +1035,11 @@ pub struct UserRow {
     id: Uuid,
     first_name: Option<String>,
     last_name: Option<String>,
-    email: String,
+    email: Option<String>,
     email_validated_at: Option<NaiveDateTime>,
     email_validation_sent_at: Option<NaiveDateTime>,
     created_at: NaiveDateTime,
     updated_at: NaiveDateTime,
-    user_auth_kind: PgUserAuthKind,
-    auth_user_id: Option<String>,
-    auth_id_token: Option<String>,
-    password_hash: Option<String>,
-    password_reset_at: Option<NaiveDateTime>,
-    password_reset_sent_at: Option<NaiveDateTime>,
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -868,8 +1061,64 @@ impl TryFrom<&UserRow> for User {
     type Error = UniversalInboxError;
 
     fn try_from(row: &UserRow) -> Result<Self, Self::Error> {
-        let auth = match row.user_auth_kind {
-            PgUserAuthKind::Local => UserAuth::Local(LocalUserAuth {
+        Ok(User {
+            id: row.id.into(),
+            first_name: row.first_name.clone(),
+            last_name: row.last_name.clone(),
+            email: row
+                .email
+                .as_ref()
+                .map(|email| email.parse())
+                .transpose()
+                .context("Unable to parse stored email address")?,
+            email_validated_at: row
+                .email_validated_at
+                .map(|naive| DateTime::from_naive_utc_and_offset(naive, Utc)),
+            email_validation_sent_at: row
+                .email_validation_sent_at
+                .map(|naive| DateTime::from_naive_utc_and_offset(naive, Utc)),
+            created_at: DateTime::from_naive_utc_and_offset(row.created_at, Utc),
+            updated_at: DateTime::from_naive_utc_and_offset(row.updated_at, Utc),
+        })
+    }
+}
+
+#[derive(sqlx::Type, Debug)]
+#[sqlx(type_name = "user_auth_kind")]
+enum PgUserAuthKind {
+    OIDCAuthorizationCodePKCE,
+    OIDCGoogleAuthorizationCode,
+    Local,
+    Passkey,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+pub struct UserAuthRow {
+    user_id: Uuid,
+    kind: PgUserAuthKind,
+    password_hash: Option<String>,
+    password_reset_at: Option<NaiveDateTime>,
+    password_reset_sent_at: Option<NaiveDateTime>,
+    auth_user_id: Option<String>,
+    auth_id_token: Option<String>,
+    username: Option<String>,
+    passkey: Option<Json<Passkey>>,
+}
+
+impl TryFrom<UserAuthRow> for UserAuth {
+    type Error = UniversalInboxError;
+
+    fn try_from(row: UserAuthRow) -> Result<Self, Self::Error> {
+        (&row).try_into()
+    }
+}
+
+impl TryFrom<&UserAuthRow> for UserAuth {
+    type Error = UniversalInboxError;
+
+    fn try_from(row: &UserAuthRow) -> Result<Self, Self::Error> {
+        let auth = match row.kind {
+            PgUserAuthKind::Local => UserAuth::Local(Box::new(LocalUserAuth {
                 password_hash: Secret::new(PasswordHash(row.password_hash.clone().context(
                     "Expected to find password hash in storage with local authentication",
                 )?)),
@@ -879,42 +1128,33 @@ impl TryFrom<&UserRow> for User {
                 password_reset_sent_at: row
                     .password_reset_sent_at
                     .map(|naive| DateTime::from_naive_utc_and_offset(naive, Utc)),
-            }),
-            PgUserAuthKind::OIDCAuthorizationCodePKCE => UserAuth::OIDCAuthorizationCodePKCE(OpenIdConnectUserAuth {
+            })),
+            PgUserAuthKind::OIDCAuthorizationCodePKCE => UserAuth::OIDCAuthorizationCodePKCE(Box::new(OpenIdConnectUserAuth {
                 auth_user_id: AuthUserId(row.auth_user_id.clone().context(
                     "Expected to find OIDC user ID in storage with OIDCAuthorizationCodePKCE authentication",
                 )?),
                 auth_id_token: AuthIdToken(row.auth_id_token.clone().context(
                     "Expected to find OIDC ID token in storage with OIDCAuthorizationCodePKCE authentication",
                 )?),
-            }),
-            PgUserAuthKind::OIDCGoogleAuthorizationCode => UserAuth::OIDCGoogleAuthorizationCode(OpenIdConnectUserAuth {
+            })),
+            PgUserAuthKind::OIDCGoogleAuthorizationCode => UserAuth::OIDCGoogleAuthorizationCode(Box::new(OpenIdConnectUserAuth {
                 auth_user_id: AuthUserId(row.auth_user_id.clone().context(
                     "Expected to find OIDC user ID in storage with OIDCGoogleAuthorizationCode authentication",
                 )?),
                 auth_id_token: AuthIdToken(row.auth_id_token.clone().context(
                     "Expected to find OIDC ID token in storage with OIDCGoogleAuthorizationCode authentication",
                 )?),
-            }),
+            })),
+            PgUserAuthKind::Passkey => UserAuth::Passkey(Box::new(PasskeyUserAuth  {
+                username: Username (row.username.clone().context(
+                    "Expected to find username in storage with Passkey authentication",
+                )?),
+                passkey: row.passkey.as_ref().map(|passkey| passkey.0.clone()).context(
+                    "Expected to find passkey in storage with Passkey authentication",
+                )?,
+            })),
         };
 
-        Ok(User {
-            id: row.id.into(),
-            first_name: row.first_name.clone(),
-            last_name: row.last_name.clone(),
-            email: row
-                .email
-                .parse()
-                .context("Unable to parse stored email address")?,
-            email_validated_at: row
-                .email_validated_at
-                .map(|naive| DateTime::from_naive_utc_and_offset(naive, Utc)),
-            email_validation_sent_at: row
-                .email_validation_sent_at
-                .map(|naive| DateTime::from_naive_utc_and_offset(naive, Utc)),
-            auth,
-            created_at: DateTime::from_naive_utc_and_offset(row.created_at, Utc),
-            updated_at: DateTime::from_naive_utc_and_offset(row.updated_at, Utc),
-        })
+        Ok(auth)
     }
 }

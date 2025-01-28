@@ -11,6 +11,7 @@ use crate::{
     pages::{
         email_verification_page::EmailVerificationPage, login_page::LoginPage,
         notifications_page::NotificationsPage, page_not_found::PageNotFound,
+        passkey_login_page::PasskeyLoginPage, passkey_signup_page::PasskeySignupPage,
         password_reset_page::PasswordResetPage, password_update_page::PasswordUpdatePage,
         settings_page::SettingsPage, signup_page::SignupPage, synced_tasks_page::SyncedTasksPage,
         user_profile_page::UserProfilePage,
@@ -34,6 +35,10 @@ pub enum Route {
         SignupPage {},
         #[route("/password-reset")]
         PasswordResetPage {},
+        #[route("/passkey-login")]
+        PasskeyLoginPage {},
+        #[route("/passkey-signup")]
+        PasskeySignupPage {},
       #[end_layout]
       #[route("/auth-oidc-callback?:query")]
       AuthPage { query: String },

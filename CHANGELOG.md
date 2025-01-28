@@ -8,6 +8,7 @@
 - Add new keyboard shortcuts to control the preview pane
 - Add Google Calendar Event invitations from Google Mail as a notification
 - Support multiple authentication mechanisms (ie. local + Google)
+- Support Passkey authentication
 
 ### Changed
 

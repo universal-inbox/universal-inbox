@@ -3,11 +3,14 @@ use reqwest::Client;
 use secrecy::Secret;
 
 use universal_inbox::user::{
-    Credentials, EmailValidationToken, LocalUserAuth, Password, PasswordResetToken,
-    RegisterUserParameters, User, UserAuth, UserId,
+    Credentials, EmailValidationToken, Password, PasswordResetToken, RegisterUserParameters, User,
+    UserId,
 };
 
-use universal_inbox_api::repository::user::UserRepository;
+use universal_inbox_api::{
+    repository::user::UserRepository,
+    universal_inbox::user::model::{LocalUserAuth, UserAuth},
+};
 
 use crate::helpers::TestedApp;
 
@@ -125,18 +128,14 @@ pub async fn create_user(app: &TestedApp, email: EmailAddress, password: &str) -
         .repository
         .create_user(
             &mut transaction,
-            User::new(
-                None,
-                None,
-                email,
-                UserAuth::Local(LocalUserAuth {
-                    password_hash: service
-                        .get_new_password_hash(Secret::new(password.parse().unwrap()))
-                        .unwrap(),
-                    password_reset_at: None,
-                    password_reset_sent_at: None,
-                }),
-            ),
+            User::new(None, None, email),
+            UserAuth::Local(Box::new(LocalUserAuth {
+                password_hash: service
+                    .get_new_password_hash(Secret::new(password.parse().unwrap()))
+                    .unwrap(),
+                password_reset_at: None,
+                password_reset_sent_at: None,
+            })),
         )
         .await
         .unwrap();

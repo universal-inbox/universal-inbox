@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use enum_display::EnumDisplay;
 use lettre::{
@@ -141,6 +141,12 @@ impl SmtpMailer {
         user: User,
         template: EmailTemplate,
     ) -> Result<Message, UniversalInboxError> {
+        let email = user.email.ok_or_else(|| {
+            anyhow!(
+                "Failed to build email for user {} without an email address",
+                user.id
+            )
+        })?;
         let theme = DefaultTheme::new().context("Failed to create default theme")?;
         let branding = Branding {
             logo: Some(
@@ -159,17 +165,17 @@ impl SmtpMailer {
             .context("Failed to render email as HTML")?;
         let to = if let Some(first_name) = user.first_name {
             if let Some(last_name) = user.last_name {
-                format!("{} {} <{}>", first_name, last_name, user.email)
+                format!("{} {} <{}>", first_name, last_name, email)
                     .parse()
                     .context("Failed to parse user email `to` header")?
             } else {
-                user.email
+                email
                     .to_string()
                     .parse()
                     .context("Failed to parse user email `to` header")?
             }
         } else {
-            user.email
+            email
                 .to_string()
                 .parse()
                 .context("Failed to parse user email `to` header")?

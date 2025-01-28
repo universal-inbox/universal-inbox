@@ -1,5 +1,11 @@
 #![recursion_limit = "256"]
 
+#[macro_use]
+extern crate macro_attr;
+
+#[macro_use]
+extern crate enum_derive;
+
 use std::{
     net::TcpListener, num::NonZeroUsize, sync::Arc, sync::Weak, thread,
     time::Duration as StdDuration,
@@ -43,6 +49,8 @@ use sqlx::PgPool;
 use tokio::sync::RwLock;
 use tracing::{error, event, info, Level, Span};
 use tracing_actix_web::TracingLogger;
+use utils::cache::Cache;
+use webauthn_rs::prelude::*;
 
 use crate::{
     configuration::Settings,
@@ -120,7 +128,11 @@ pub async fn run_server(
     };
 
     let storage_data = web::Data::new(redis_storage.clone());
-
+    let cache_data = web::Data::new(
+        Cache::new(settings.redis.connection_string())
+            .await
+            .expect("Failed to create cache"),
+    );
     let settings_web_data = web::Data::new(settings);
 
     info!("Listening on {}", listen_address);
@@ -226,7 +238,8 @@ pub async fn run_server(
             )
             .service(api_scope)
             .app_data(settings_web_data.clone())
-            .app_data(storage_data.clone());
+            .app_data(storage_data.clone())
+            .app_data(cache_data.clone());
 
         if let Some(path) = &static_path {
             info!(
@@ -330,6 +343,7 @@ pub async fn build_services(
     todoist_address: Option<String>,
     nango_service: NangoService,
     mailer: Arc<RwLock<dyn Mailer + Send + Sync>>,
+    webauthn: Arc<Webauthn>,
 ) -> (
     Arc<RwLock<NotificationService>>,
     Arc<RwLock<TaskService>>,
@@ -350,6 +364,7 @@ pub async fn build_services(
         repository.clone(),
         settings.application.clone(),
         mailer.clone(),
+        webauthn.clone(),
     ));
 
     let integration_connection_service = Arc::new(RwLock::new(IntegrationConnectionService::new(

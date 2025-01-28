@@ -6,15 +6,15 @@ use uuid::Uuid;
 
 use universal_inbox::{
     auth::auth_token::AuthenticationToken,
-    user::{
-        EmailValidationToken, LocalUserAuth, Password, PasswordResetToken, User, UserAuth, UserId,
-    },
+    user::{EmailValidationToken, Password, PasswordResetToken, User, UserId},
 };
 
-use universal_inbox_api::{configuration::Settings, mailer::EmailTemplate};
+use universal_inbox_api::{
+    configuration::Settings, mailer::EmailTemplate, universal_inbox::user::model::UserAuth,
+};
 
 use crate::helpers::{
-    auth::{authenticated_app, fetch_auth_tokens_for_user, AuthenticatedApp},
+    auth::{authenticated_app, fetch_auth_tokens_for_user, get_user_auth, AuthenticatedApp},
     settings, tested_app_with_local_auth,
     user::{
         get_current_user, get_current_user_response, get_password_reset_token,
@@ -43,17 +43,13 @@ mod register_user {
         )
         .await;
 
-        assert_eq!(user.email, "john@doe.name".parse().unwrap());
+        assert_eq!(user.email, Some("john@doe.name".parse().unwrap()));
         assert!(user.email_validated_at.is_none());
         assert!(!user.is_email_validated());
         assert!(user.email_validation_sent_at.is_some());
 
         let auth_tokens = fetch_auth_tokens_for_user(&app, user.id).await;
-        assert_eq!(auth_tokens.len(), 1);
-        assert_eq!(auth_tokens[0].user_id, user.id);
-        assert!(auth_tokens[0].is_session_token);
-        assert!(!auth_tokens[0].is_revoked);
-        assert!(!auth_tokens[0].is_expired());
+        assert_eq!(auth_tokens.len(), 0);
 
         let email_validation_token = get_user_email_validation_token(&app, user.id).await;
 
@@ -126,11 +122,7 @@ mod login_user {
         .await;
 
         let auth_tokens = fetch_auth_tokens_for_user(&app, user.id).await;
-        assert_eq!(auth_tokens.len(), 1);
-        assert_eq!(auth_tokens[0].user_id, user.id);
-        assert!(auth_tokens[0].is_session_token);
-        assert!(!auth_tokens[0].is_revoked);
-        assert!(!auth_tokens[0].is_expired());
+        assert_eq!(auth_tokens.len(), 0);
 
         // Create a new client to avoid using the same session
         let client = reqwest::Client::builder()
@@ -157,19 +149,15 @@ mod login_user {
         .await;
 
         assert_eq!(login_response.status(), http::StatusCode::OK);
+        let logged_user: User = login_response.json().await.unwrap();
+        assert_eq!(logged_user.id, user.id);
 
-        let auth_tokens = fetch_auth_tokens_for_user(&app, user.id).await;
-        assert_eq!(auth_tokens.len(), 2);
-        for auth_token in auth_tokens {
-            assert_eq!(auth_token.user_id, user.id);
-            assert!(auth_token.is_session_token);
-            assert!(!auth_token.is_revoked);
-            assert!(!auth_token.is_expired());
-        }
+        let auth_tokens = fetch_auth_tokens_for_user(&app, logged_user.id).await;
+        assert_eq!(auth_tokens.len(), 0);
 
         let user = get_current_user(&client, &app).await;
 
-        assert_eq!(user.email, "john@doe.name".parse().unwrap());
+        assert_eq!(user.email, Some("john@doe.name".parse().unwrap()));
         assert!(user.email_validated_at.is_none());
         assert!(user.email_validation_sent_at.is_some());
     }
@@ -527,18 +515,10 @@ mod password_reset {
         assert_eq!(login_response.status(), http::StatusCode::OK);
 
         let user = get_current_user(&new_client, &app).await;
-        if let User {
-            auth:
-                UserAuth::Local(LocalUserAuth {
-                    ref password_reset_at,
-                    ref password_reset_sent_at,
-                    ..
-                }),
-            ..
-        } = user
-        {
-            assert!(password_reset_at.is_some());
-            assert!(password_reset_sent_at.is_some());
+        let user_auth = get_user_auth(&app, user.id).await;
+        if let UserAuth::Local(local_user_auth) = user_auth {
+            assert!(local_user_auth.password_reset_at.is_some());
+            assert!(local_user_auth.password_reset_sent_at.is_some());
         } else {
             panic!("User should have local auth");
         }
@@ -663,7 +643,7 @@ mod create_authentication_token {
         assert!(!auth_token.is_expired());
 
         let auth_tokens = fetch_auth_tokens_for_user(&app.app, app.user.id).await;
-        assert_eq!(auth_tokens.len(), 2);
+        assert_eq!(auth_tokens.len(), 1);
         assert_eq!(auth_tokens[0].id, auth_token.id);
     }
 }

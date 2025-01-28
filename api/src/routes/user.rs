@@ -7,16 +7,18 @@ use actix_web::{web, HttpResponse, Scope};
 use anyhow::{anyhow, Context};
 use chrono::{TimeDelta, Utc};
 use email_address::EmailAddress;
+use redis::AsyncCommands;
 use secrecy::{ExposeSecret, Secret};
 use serde_json::json;
 use tokio::sync::RwLock;
 use validator::Validate;
+use webauthn_rs::prelude::*;
 
 use universal_inbox::{
     auth::auth_token::{AuthenticationToken, TruncatedAuthenticationToken},
     user::{
-        Credentials, EmailValidationToken, LocalUserAuth, Password, PasswordResetToken,
-        RegisterUserParameters, User, UserAuth, UserAuthKind, UserId,
+        Credentials, EmailValidationToken, Password, PasswordResetToken, RegisterUserParameters,
+        User, UserId, Username,
     },
     SuccessResponse,
 };
@@ -24,11 +26,21 @@ use universal_inbox::{
 use crate::{
     routes::auth::USER_AUTH_KIND_SESSION_KEY,
     universal_inbox::{
-        auth_token::service::AuthenticationTokenService, user::service::UserService,
+        auth_token::service::AuthenticationTokenService,
+        user::{
+            model::{LocalUserAuth, UserAuth, UserAuthKind},
+            service::UserService,
+        },
         UniversalInboxError,
     },
-    utils::jwt::{Claims, JWT_SESSION_KEY},
+    utils::{
+        cache::Cache,
+        jwt::{Claims, JWT_SESSION_KEY},
+    },
 };
+
+const PASSKEY_REGISTRATION_STATE_SESSION_KEY: &str = "passkey-registration-state";
+const PASSKEY_AUTHENTICATION_STATE_SESSION_KEY: &str = "passkey-authentication-state";
 
 pub fn scope() -> Scope {
     web::scope("/users")
@@ -62,6 +74,31 @@ pub fn scope() -> Scope {
         .service(
             web::resource("/{user_id}/password-reset/{password_reset_token}")
                 .route(web::post().to(reset_password)),
+        )
+        .service(
+            web::scope("/passkeys")
+                .service(
+                    web::scope("/registration")
+                        .service(
+                            web::resource("/start")
+                                .route(web::post().to(start_passkey_registration)),
+                        )
+                        .service(
+                            web::resource("/finish")
+                                .route(web::post().to(finish_passkey_registration)),
+                        ),
+                )
+                .service(
+                    web::scope("/authentication")
+                        .service(
+                            web::resource("/start")
+                                .route(web::post().to(start_passkey_authentication)),
+                        )
+                        .service(
+                            web::resource("/finish")
+                                .route(web::post().to(finish_passkey_authentication)),
+                        ),
+                ),
         )
 }
 
@@ -115,14 +152,13 @@ pub async fn register_user(
                 None,
                 None,
                 register_user_parameters.credentials.email.clone(),
-                UserAuth::Local(LocalUserAuth {
-                    password_hash: user_service.get_new_password_hash(
-                        register_user_parameters.credentials.password.clone(),
-                    )?,
-                    password_reset_at: None,
-                    password_reset_sent_at: None,
-                }),
             ),
+            UserAuth::Local(Box::new(LocalUserAuth {
+                password_hash: user_service
+                    .get_new_password_hash(register_user_parameters.credentials.password.clone())?,
+                password_reset_at: None,
+                password_reset_sent_at: None,
+            })),
         )
         .await
         .map_err(|err| {
@@ -138,7 +174,7 @@ pub async fn register_user(
     let auth_token_service = auth_token_service.read().await;
 
     let auth_token = auth_token_service
-        .create_auth_token(&mut transaction, true, user.id, None)
+        .create_auth_token(&mut transaction, true, user.id, None, false)
         .await?;
     session
         .insert(
@@ -165,7 +201,7 @@ pub async fn login_user(
     auth_token_service: web::Data<Arc<RwLock<AuthenticationTokenService>>>,
     credentials: web::Json<Credentials>,
     session: Session,
-) -> Result<HttpResponse, UniversalInboxError> {
+) -> Result<web::Json<User>, UniversalInboxError> {
     let service = user_service.clone();
     let mut transaction = service
         .begin()
@@ -186,7 +222,7 @@ pub async fn login_user(
     let auth_token_service = auth_token_service.read().await;
 
     let auth_token = auth_token_service
-        .create_auth_token(&mut transaction, true, user.id, None)
+        .create_auth_token(&mut transaction, true, user.id, None, false)
         .await?;
     session
         .insert(
@@ -203,9 +239,7 @@ pub async fn login_user(
         .await
         .context("Failed to commit while logging in user")?;
 
-    Ok(HttpResponse::Ok()
-        .content_type("application/json")
-        .body(serde_json::to_string(&user).context("Cannot serialize user")?))
+    Ok(web::Json(user))
 }
 
 pub async fn send_verification_email(
@@ -375,6 +409,7 @@ pub async fn create_authentication_token(
             false,
             user_id,
             Some(Utc::now() + TimeDelta::try_days(30 * 6).unwrap()),
+            true,
         )
         .await?;
 
@@ -386,4 +421,228 @@ pub async fn create_authentication_token(
     Ok(HttpResponse::Ok().content_type("application/json").body(
         serde_json::to_string(&result).context("Cannot serialize created authentication token")?,
     ))
+}
+
+#[allow(dependency_on_unit_never_type_fallback)]
+pub async fn start_passkey_registration(
+    user_service: web::Data<Arc<UserService>>,
+    session: Session,
+    cache: web::Data<Cache>,
+    username: web::Json<Username>,
+) -> Result<web::Json<CreationChallengeResponse>, UniversalInboxError> {
+    let service = user_service.clone();
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while starting Passkey registration")?;
+
+    session.remove(PASSKEY_REGISTRATION_STATE_SESSION_KEY);
+
+    let username = username.into_inner();
+    let (user_id, creation_challenge_response, registration_state) = service
+        .start_passkey_registration(&mut transaction, &username)
+        .await?;
+
+    session
+        .insert(
+            PASSKEY_REGISTRATION_STATE_SESSION_KEY,
+            (username.0.as_str(), user_id),
+        )
+        .context("Failed to insert Passkey registration state into the session")?;
+    let Ok(registration_state_to_store) = serde_json::to_string(&registration_state) else {
+        return Err(UniversalInboxError::Unexpected(anyhow!(
+            "Failed to serialize Passkey registration state"
+        )));
+    };
+    cache
+        .connection_manager
+        .clone()
+        .set(
+            format!("{}::{}", PASSKEY_REGISTRATION_STATE_SESSION_KEY, user_id),
+            registration_state_to_store,
+        )
+        .await
+        .context("Failed to store Passkey registration state in Redis")?;
+
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit while starting Passkey registration")?;
+
+    Ok(web::Json(creation_challenge_response))
+}
+
+pub async fn finish_passkey_registration(
+    user_service: web::Data<Arc<UserService>>,
+    auth_token_service: web::Data<Arc<RwLock<AuthenticationTokenService>>>,
+    session: Session,
+    cache: web::Data<Cache>,
+    register_credentials: web::Json<RegisterPublicKeyCredential>,
+) -> Result<web::Json<User>, UniversalInboxError> {
+    let service = user_service.clone();
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while finishing Passkey registration")?;
+
+    let (username, user_id) = session
+        .get(PASSKEY_REGISTRATION_STATE_SESSION_KEY)
+        .context("Failed to extract Passkey registration state from the session")?
+        .ok_or_else(|| anyhow!("Unable to find Passkey registration state in session"))?;
+    session.remove(PASSKEY_REGISTRATION_STATE_SESSION_KEY);
+    let str: String = cache
+        .connection_manager
+        .clone()
+        .get_del(format!(
+            "{}::{}",
+            PASSKEY_REGISTRATION_STATE_SESSION_KEY, user_id
+        ))
+        .await
+        .context("Failed to fetch Passkey registration state from Redis")?;
+    let Ok(registration_state) = serde_json::from_str(&str) else {
+        return Err(UniversalInboxError::Unexpected(anyhow!(
+            "Failed to parse Passkey registration state"
+        )));
+    };
+
+    let new_user = service
+        .finish_passkey_registration(
+            &mut transaction,
+            &username,
+            user_id,
+            register_credentials.into_inner(),
+            registration_state,
+        )
+        .await?;
+
+    let auth_token_service = auth_token_service.read().await;
+    let auth_token = auth_token_service
+        .create_auth_token(&mut transaction, true, user_id, None, false)
+        .await?;
+    session
+        .insert(
+            JWT_SESSION_KEY,
+            auth_token.jwt_token.expose_secret().0.clone(),
+        )
+        .context("Failed to insert JWT token into the session")?;
+    session
+        .insert(USER_AUTH_KIND_SESSION_KEY, UserAuthKind::Passkey)
+        .context("Failed to insert authentication type into the session")?;
+
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit while finishing Passkey registration")?;
+
+    Ok(web::Json(new_user))
+}
+
+#[allow(dependency_on_unit_never_type_fallback)]
+pub async fn start_passkey_authentication(
+    user_service: web::Data<Arc<UserService>>,
+    session: Session,
+    cache: web::Data<Cache>,
+    username: web::Json<Username>,
+) -> Result<web::Json<RequestChallengeResponse>, UniversalInboxError> {
+    let service = user_service.clone();
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while starting Passkey authentication")?;
+
+    session.remove(PASSKEY_AUTHENTICATION_STATE_SESSION_KEY);
+
+    let username = username.into_inner();
+    let (user_id, request_challenge_response, authentication_state) = service
+        .start_passkey_authentication(&mut transaction, &username)
+        .await?;
+
+    session
+        .insert(PASSKEY_AUTHENTICATION_STATE_SESSION_KEY, user_id)
+        .context("Failed to insert Passkey authentication state into the session")?;
+    let Ok(authentication_state_to_store) = serde_json::to_string(&authentication_state) else {
+        return Err(UniversalInboxError::Unexpected(anyhow!(
+            "Failed to serialize Passkey authentication state"
+        )));
+    };
+    cache
+        .connection_manager
+        .clone()
+        .set(
+            format!("{}::{}", PASSKEY_AUTHENTICATION_STATE_SESSION_KEY, user_id),
+            authentication_state_to_store,
+        )
+        .await
+        .context("Failed to store Passkey authentication state in Redis")?;
+
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit while starting Passkey authentication")?;
+
+    Ok(web::Json(request_challenge_response))
+}
+
+pub async fn finish_passkey_authentication(
+    user_service: web::Data<Arc<UserService>>,
+    auth_token_service: web::Data<Arc<RwLock<AuthenticationTokenService>>>,
+    session: Session,
+    cache: web::Data<Cache>,
+    credentials: web::Json<PublicKeyCredential>,
+) -> Result<web::Json<User>, UniversalInboxError> {
+    let service = user_service.clone();
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while finishing Passkey authentication")?;
+
+    let user_id = session
+        .get(PASSKEY_AUTHENTICATION_STATE_SESSION_KEY)
+        .context("Failed to extract Passkey authentication state from the session")?
+        .ok_or_else(|| anyhow!("Unable to find Passkey authentication state in session"))?;
+    session.remove(PASSKEY_AUTHENTICATION_STATE_SESSION_KEY);
+    let str: String = cache
+        .connection_manager
+        .clone()
+        .get_del(format!(
+            "{}::{}",
+            PASSKEY_AUTHENTICATION_STATE_SESSION_KEY, user_id
+        ))
+        .await
+        .context("Failed to fetch Passkey authentication state in Redis")?;
+    let Ok(authentication_state) = serde_json::from_str(&str) else {
+        return Err(UniversalInboxError::Unexpected(anyhow!(
+            "Failed to load Passkey authentication state"
+        )));
+    };
+
+    let user = service
+        .finish_passkey_authentication(
+            &mut transaction,
+            user_id,
+            credentials.into_inner(),
+            authentication_state,
+        )
+        .await?;
+
+    let auth_token_service = auth_token_service.read().await;
+    let auth_token = auth_token_service
+        .create_auth_token(&mut transaction, true, user_id, None, false)
+        .await?;
+    session
+        .insert(
+            JWT_SESSION_KEY,
+            auth_token.jwt_token.expose_secret().0.clone(),
+        )
+        .context("Failed to insert JWT token into the session")?;
+    session
+        .insert(USER_AUTH_KIND_SESSION_KEY, UserAuthKind::Passkey)
+        .context("Failed to insert authentication type into the session")?;
+
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit while finishing Passkey authentication")?;
+
+    Ok(web::Json(user))
 }

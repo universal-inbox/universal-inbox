@@ -25,7 +25,7 @@ use universal_inbox_api::{
         notification::service::NotificationService, task::service::TaskService,
         third_party::service::ThirdPartyItemService, user::service::UserService,
     },
-    utils::cache::Cache,
+    utils::{cache::Cache, passkey::build_webauthn},
 };
 
 use crate::helpers::mailer::MailerStub;
@@ -195,6 +195,10 @@ pub async fn tested_app(
     }
 
     let pool: Arc<PgPool> = db_connection.await;
+    let webauthn = Arc::new(
+        build_webauthn(&settings.application.front_base_url)
+            .expect("Failed to build a Webauthn context"),
+    );
 
     let nango_service = NangoService::new(
         nango_mock_server_url.parse::<Url>().unwrap(),
@@ -222,6 +226,7 @@ pub async fn tested_app(
         Some(todoist_mock_server_url.to_string()),
         nango_service,
         mailer_stub.clone(),
+        webauthn,
     )
     .await;
 
@@ -337,6 +342,10 @@ pub async fn tested_app_with_local_auth(
         &settings.oauth2.nango_secret_key,
     )
     .expect("Failed to create new NangoService");
+    let webauthn = Arc::new(
+        build_webauthn(&settings.application.front_base_url)
+            .expect("Failed to build a Webauthn context"),
+    );
 
     let mailer_stub = Arc::new(RwLock::new(MailerStub::new()));
     let (
@@ -358,6 +367,7 @@ pub async fn tested_app_with_local_auth(
         Some(todoist_mock_server_url.to_string()),
         nango_service,
         mailer_stub.clone(),
+        webauthn,
     )
     .await;
 

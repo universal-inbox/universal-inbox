@@ -55,7 +55,7 @@ pub enum UniversalInboxError {
     #[error("The entity {id} already exists")]
     AlreadyExists {
         #[source]
-        source: sqlx::Error,
+        source: Option<sqlx::Error>,
         id: Uuid,
     },
     #[error("Unsupported action: {0}")]

@@ -14,7 +14,7 @@ use crate::{
     },
     config::{get_api_base_url, APP_CONFIG},
     form::FormValues,
-    icons::GOOGLE_LOGO,
+    icons::{GOOGLE_LOGO, PASSKEY_LOGO},
     route::Route,
     services::user_service::{UserCommand, CONNECTED_USER},
 };
@@ -47,7 +47,10 @@ pub fn SignupPage() -> Element {
             FrontAuthenticationConfig::OIDCGoogleAuthorizationCodeFlow(_)
         )
     });
-    let form_style = if is_google_auth_enabled { "" } else { "pb-8" };
+    let is_passkey_auth_enabled = app_config
+        .authentication_configs
+        .iter()
+        .any(|auth_config| matches!(auth_config, FrontAuthenticationConfig::Passkey));
 
     rsx! {
         div {
@@ -60,71 +63,94 @@ pub fn SignupPage() -> Element {
             }
         }
 
-        if is_local_auth_enabled {
-            form {
-                class: "flex flex-col justify-center gap-4 px-10 {form_style}",
-                onsubmit: move |evt| {
-                    match FormValues(evt.values()).try_into() {
-                        Ok(params) => {
-                            user_service.send(UserCommand::RegisterUser(params));
-                        },
-                        Err(err) => {
-                            *force_validation.write() = true;
-                            error!("Failed to parse form values as RegisterUserParameters: {err}");
+        div {
+            class: "flex flex-col gap-4 pb-8",
+
+            if is_local_auth_enabled {
+                form {
+                    class: "flex flex-col justify-center gap-4 px-10",
+                    onsubmit: move |evt| {
+                        match FormValues(evt.values()).try_into() {
+                            Ok(params) => {
+                                user_service.send(UserCommand::RegisterUser(params));
+                            },
+                            Err(err) => {
+                                *force_validation.write() = true;
+                                error!("Failed to parse form values as RegisterUserParameters: {err}");
+                            }
                         }
+                    },
+
+                    FloatingLabelInputText::<EmailAddress> {
+                        name: "email".to_string(),
+                        label: Some("Email".to_string()),
+                        required: true,
+                        value: email,
+                        force_validation: force_validation(),
+                        r#type: "email".to_string()
                     }
-                },
 
-                FloatingLabelInputText::<EmailAddress> {
-                    name: "email".to_string(),
-                    label: Some("Email".to_string()),
-                    required: true,
-                    value: email,
-                    force_validation: force_validation(),
-                    r#type: "email".to_string()
-                }
-
-                FloatingLabelInputText::<Password> {
-                    name: "password".to_string(),
-                    label: Some("Password".to_string()),
-                    required: true,
-                    value: password,
-                    force_validation: force_validation(),
-                    r#type: "password".to_string()
-                }
-
-                button {
-                    class: "btn btn-primary mt-2",
-                    r#type: "submit",
-                    "Sign up"
-                }
-            }
-
-            if is_google_auth_enabled {
-                div {
-                    class: "flex flex-col px-10 pb-8",
-
-                    div { class: "divider", "Or" }
+                    FloatingLabelInputText::<Password> {
+                        name: "password".to_string(),
+                        label: Some("Password".to_string()),
+                        required: true,
+                        value: password,
+                        force_validation: force_validation(),
+                        r#type: "password".to_string()
+                    }
 
                     button {
-                        class: "btn btn-primary w-full relative",
-                        onclick: move |_| {
-                            spawn({
-                                async move {
-                                    if let Err(auth_error) =
-                                        authenticate_authorization_code_flow(&api_base_url()).await
-                                    {
-                                        error!("An error occured while authenticating: {:?}", auth_error);
-                                    }
-                                }
-                            });
-                        },
+                        class: "btn btn-primary mt-2",
+                        r#type: "submit",
+                        "Sign up"
+                    }
+                }
 
-                        img {
-                            class: "h-8 w-8 bg-white rounded-md absolute left-2",
-                            src: "{GOOGLE_LOGO}",
+                if is_google_auth_enabled || is_passkey_auth_enabled {
+                    div { class: "divider px-10", "Or" }
+                }
+
+                if is_google_auth_enabled {
+                    div {
+                        class: "flex flex-col px-10",
+
+                        button {
+                            class: "btn btn-primary w-full relative",
+                            onclick: move |_| {
+                                spawn({
+                                    async move {
+                                        if let Err(auth_error) =
+                                            authenticate_authorization_code_flow(&api_base_url()).await
+                                        {
+                                            error!("An error occured while authenticating: {:?}", auth_error);
+                                        }
+                                    }
+                                });
+                            },
+
+                            img {
+                                class: "h-8 w-8 bg-white rounded-md absolute left-2",
+                                src: "{GOOGLE_LOGO}",
+                            }
+                            "Sign up with Google"
                         }
-                        "Sign up with Google"
+                    }
+                }
+
+                if is_passkey_auth_enabled {
+                    div {
+                        class: "flex flex-col px-10",
+
+                        Link {
+                            class: "btn btn-primary w-full relative",
+                            to: Route::PasskeySignupPage {},
+
+                            img {
+                                class: "h-8 w-8 bg-white rounded-md absolute left-2",
+                                src: "{PASSKEY_LOGO}",
+                            }
+                            "Sign up with a passkey"
+                        }
                     }
                 }
             }

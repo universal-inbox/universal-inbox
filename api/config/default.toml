@@ -55,6 +55,11 @@ argon2_version = 19
 argon2_memory_size = 20000
 argon2_iterations = 2
 argon2_parallelism = 1
+#
+# OR
+#
+# [[application.security.authentication]]
+# type = "Passkey"
 
 [application.http_session]
 # secret_key = ""
