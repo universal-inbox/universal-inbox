@@ -4,6 +4,7 @@ rustflags = ["--cfg=web_sys_unstable_apis"]
 
 [target.wasm32-unknown-unknown]
 runner = 'wasm-bindgen-test-runner'
+rustflags = ['--cfg', 'getrandom_backend="wasm_js"']
 
 [profile.release]
 opt-level = "z"

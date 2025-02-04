@@ -78,6 +78,18 @@ features = [
   "Window",
 ]
 
+# Only used to force enabling the `wasm_js` feature
+# This is a transitive dependency of:
+# - slack-morphism
+# - rand
+# - rand_core
+[dependencies.getrandom]
+version = "*"
+features = ["wasm_js"]
+
+[package.metadata.cargo-machete]
+ignored = ["getrandom"]
+
 [dev-dependencies]
 pretty_assertions = { workspace = true }
 wasm-bindgen-test = "0.3.0"
