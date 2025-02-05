@@ -10,7 +10,7 @@ use tokio_retry::{
     strategy::{jitter, ExponentialBackoff},
     Retry,
 };
-use tracing::debug;
+use tracing::{debug, warn};
 use universal_inbox::{
     integration_connection::{
         config::IntegrationConnectionConfig,
@@ -40,7 +40,6 @@ pub async fn push_slack_event(
     slack_push_event: web::Json<SlackPushEvent>,
     storage: web::Data<RedisStorage<UniversalInboxJob>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
-    debug!("{}", &serde_json::to_string(&slack_push_event).unwrap());
     match slack_push_event.into_inner() {
         SlackPushEvent::UrlVerification(SlackUrlVerificationEvent { challenge }) => {
             return Ok(HttpResponse::Ok()
@@ -168,8 +167,30 @@ pub async fn push_slack_event(
                 }
             }
         }
-        event => {
-            debug!("Received a push event from Slack: {event:?}");
+        SlackPushEvent::AppRateLimited(SlackAppRateLimitedEvent {
+            team_id,
+            minute_rate_limited,
+            api_app_id,
+        }) => {
+            warn!(
+                ?team_id,
+                ?api_app_id,
+                ?minute_rate_limited,
+                "Slack pushed events are rate limited"
+            );
+        }
+        SlackPushEvent::EventCallback(SlackPushEventCallback {
+            team_id,
+            api_app_id,
+            event_id,
+            ..
+        }) => {
+            warn!(
+                ?team_id,
+                ?api_app_id,
+                ?event_id,
+                "Received an unknown push event from Slack"
+            );
         }
     }
 

@@ -5,7 +5,6 @@ use apalis::prelude::Data;
 use serde::{Deserialize, Serialize};
 use slack_morphism::prelude::*;
 use tokio::sync::RwLock;
-use tracing::info;
 
 use crate::{
     integrations::slack::SlackService,
@@ -45,7 +44,6 @@ pub async fn handle_slack_push_event(
     third_party_item_service: Data<Arc<RwLock<ThirdPartyItemService>>>,
     slack_service: Data<Arc<SlackService>>,
 ) -> Result<(), UniversalInboxError> {
-    info!(?job, "Processing Slack push event");
     let service = notification_service.read().await;
     let mut transaction = service
         .begin()
