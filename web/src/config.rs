@@ -4,7 +4,6 @@ use anyhow::Result;
 use dioxus::prelude::*;
 use reqwest::Method;
 use url::Url;
-use wasm_bindgen::prelude::*;
 
 use universal_inbox::{
     integration_connection::{provider::IntegrationProviderKind, NangoPublicKey},
@@ -24,20 +23,12 @@ pub struct AppConfig {
     pub show_changelog: bool,
 }
 
-#[wasm_bindgen(module = "/js/api.js")]
-extern "C" {
-    fn api_base_url() -> String;
-}
-
 pub static APP_CONFIG: GlobalSignal<Option<AppConfig>> = Signal::global(|| None);
 
 pub fn get_api_base_url() -> Result<Url> {
-    match Url::parse(&api_base_url()) {
+    match current_origin()?.join("/api/") {
         Ok(url) => Ok(url),
-        Err(err) => match current_origin()?.join(&api_base_url()) {
-            Ok(url) => Ok(url),
-            Err(_) => Err(anyhow::anyhow!("Failed to parse api_base_url: {}", err)),
-        },
+        Err(err) => Err(anyhow::anyhow!("Failed to parse api_base_url: {}", err)),
     }
 }
 

@@ -16,7 +16,10 @@ image = ["images/favicon.ico"]
 # when watcher trigger, regenerate the `index.html`
 reload_html = true
 # which files or dirs will be watcher monitoring
-watch_path = ["src", "dist", "js"]
+watch_path = ["src", "public"]
 
 [web.wasm_opt]
-level = "z"
+level = "0"
+
+[[web.proxy]]
+backend = "http://localhost:8000/api/"

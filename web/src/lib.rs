@@ -141,7 +141,7 @@ pub fn App() -> Element {
             let head = rsx! {};
         } else {
             let head = rsx! {
-                document::Stylesheet { href: asset!("./dist/css/universal-inbox.min.css") }
+                document::Stylesheet { href: asset!("./public/css/universal-inbox.min.css") }
                 document::Link { rel: "icon", href: asset!("./images/favicon.ico") }
             };
         }

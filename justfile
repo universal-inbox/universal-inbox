@@ -161,4 +161,8 @@ run-nango-server: create-docker-network
         nangohq/nango-server:hosted-02c1ee2bcbd92741057582169c95c4157ba98262
 
 run-all:
-    process-compose -f .devbox/virtenv/redis/process-compose.yaml -f .devbox/virtenv/postgresql_15/process-compose.yaml -f process-compose.yaml -p 9999
+    process-compose \
+        -f .devbox/virtenv/redis/process-compose.yaml \
+        -f .devbox/virtenv/postgresql_15/process-compose.yaml \
+        -f process-compose.yaml \
+        -p 9999

@@ -60,8 +60,7 @@ COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/Cargo.toml web/Cargo.toml
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" src src
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web web
 RUN devbox run -- just web/build-release
-RUN sed -i 's#http://localhost:8000/api#/api#' web/dist/snippets/universal-inbox-web-*/js/api.js
-RUN sed -i 's#http://localhost:8000/api#/api#' web/dist/index.html
+RUN sed -i 's#http://localhost:8000/api#/api#' web/public/index.html
 
 FROM dep-api-builder as release-api-builder
 ARG VERSION
@@ -88,7 +87,7 @@ COPY --from=release-api-builder /app/api/config/default.toml config/default.toml
 COPY --from=release-api-builder /app/api/config/prod.toml config/prod.toml
 COPY --from=release-api-builder /app/api/migrations migrations
 COPY --from=tools /usr/local/cargo/bin/sqlx /usr/local/bin/sqlx
-COPY --from=release-web-builder /app/web/dist/ statics
+COPY --from=release-web-builder /app/web/public/ statics
 ENV CONFIG_FILE /app/config/prod.toml
 ENV UNIVERSAL_INBOX__APPLICATION__VERSION=${VERSION}
 ENTRYPOINT ["/app/universal-inbox-entrypoint"]

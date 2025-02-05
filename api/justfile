@@ -33,13 +33,13 @@ test-coverage:
 
 ## Run recipes
 run:
-    watchexec --stop-timeout 5 --debounce 500 --exts toml,rs --restart --watch src cargo run --color always -- serve --embed-async-workers
+    watchexec --stop-timeout 10 --debounce 500 --exts toml,rs --restart --watch src cargo run --color always -- serve --embed-async-workers
 
 run-api:
-    watchexec --stop-timeout 5 --debounce 500 --exts toml,rs --restart --watch src cargo run --color always -- serve
+    watchexec --stop-timeout 10 --debounce 500 --exts toml,rs --restart --watch src cargo run --color always -- serve
 
 run-workers:
-    watchexec --stop-timeout 5 --debounce 500 --exts toml,rs --restart --watch src cargo run --color always -- start-workers
+    watchexec --stop-timeout 10 --debounce 500 --exts toml,rs --restart --watch src cargo run --color always -- start-workers
 
 sync-tasks $RUST_LOG="info":
     cargo run -- sync-tasks

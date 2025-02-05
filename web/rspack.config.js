@@ -8,7 +8,7 @@ module.exports = {
     outputModule: true,
   },
   output: {
-    path: path.resolve(__dirname, "dist/js"),
+    path: path.resolve(__dirname, "public/js"),
     filename: "index.js",
     library: {
       type: "module",

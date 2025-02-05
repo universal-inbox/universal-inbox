@@ -3,22 +3,24 @@
 @tailwind utilities;
 
 @layer components {
-    :root {
-        --rounded-btn: 0.25rem;
-        --rounded-box: 0.5rem;
-    }
+  :root {
+    --rounded-btn: 0.25rem;
+    --rounded-box: 0.5rem;
+  }
 
-    .slack-emoji {
-        @apply !my-0 !mx-0.5;
-        @apply w-4 h-4 inline-block;
-    }
+  .slack-emoji {
+    @apply !my-0 !mx-0.5;
+    @apply w-4 h-4 inline-block;
+  }
 }
 
 .collapse-arrow > .collapse-title:after {
-    top: 1.2rem;
+  top: 1.2rem;
 }
 
-ol > li::marker { content: counters(list-item, '.') '. '; }
+ol > li::marker {
+  content: counters(list-item, ".") ". ";
+}
 
 #HW_badge_cont {
   position: absolute !important;
@@ -27,7 +29,7 @@ ol > li::marker { content: counters(list-item, '.') '. '; }
 }
 
 #HW_badge {
-  background: #3778FF !important;
+  background: #3778ff !important;
   top: 4px !important;
   left: 28px !important;
 }

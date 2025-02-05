@@ -11,7 +11,7 @@ build-release:
     trunk build --release --features trunk
 
 build-tailwind:
-    npx tailwindcss -i css/universal-inbox.css -o dist/css/universal-inbox.min.css --minify
+    npx tailwindcss -i css/universal-inbox.css -o public/css/universal-inbox.min.css --minify
 
 bundle-js:
     npx rspack build
@@ -35,7 +35,7 @@ run: bundle-js build-tailwind
     dx serve --verbose
 
 run-tailwind:
-    npx tailwindcss -i css/universal-inbox.css -o dist/css/universal-inbox.min.css --minify --watch
+    npx tailwindcss -i css/universal-inbox.css -o public/css/universal-inbox.min.css --minify --watch
 
 run-bundle-js:
     npx rspack build --watch
