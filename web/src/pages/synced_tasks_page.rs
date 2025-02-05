@@ -20,6 +20,17 @@ use crate::{
 
 static KEYBOARD_HANDLER: SyncTasksPageKeyboardHandler = SyncTasksPageKeyboardHandler {};
 
+fn due_at_group_from_task(task: &TaskWithOrder) -> String {
+    task.task
+        .due_at
+        .as_ref()
+        .map(|due_at| due_at.display_date())
+        .unwrap_or_else(|| "No due date".to_string())
+}
+
+static SORTED_SYNCED_TASKS: GlobalSignal<SortedGroups<String, TaskWithOrder>> =
+    Signal::global(|| SortedGroups::new(vec![], due_at_group_from_task));
+
 #[component]
 pub fn SyncedTasksPage() -> Element {
     debug!("Rendering synced tasks page");
@@ -29,10 +40,7 @@ pub fn SyncedTasksPage() -> Element {
         if tasks_count > 0 && UI_MODEL.read().selected_task_index >= tasks_count {
             UI_MODEL.write().selected_task_index = tasks_count - 1;
         }
-    });
-
-    let tasks = use_memo(move || {
-        SortedGroups::new(
+        *SORTED_SYNCED_TASKS.write() = SortedGroups::new(
             SYNCED_TASKS_PAGE()
                 .content
                 .into_iter()
@@ -40,14 +48,8 @@ pub fn SyncedTasksPage() -> Element {
                     task,
                     compare_by: CompareBy::DueAt,
                 }),
-            |task| {
-                task.task
-                    .due_at
-                    .as_ref()
-                    .map(|due_at| due_at.display_date())
-                    .unwrap_or_else(|| "No due date".to_string())
-            },
-        )
+            due_at_group_from_task,
+        );
     });
 
     use_drop(move || {
@@ -62,7 +64,7 @@ pub fn SyncedTasksPage() -> Element {
                 KEYBOARD_MANAGER.write().active_keyboard_handler = Some(&KEYBOARD_HANDLER);
             },
 
-            if tasks().is_empty() {
+            if SORTED_SYNCED_TASKS().is_empty() {
                 div {
                     class: "relative w-full h-full flex justify-center items-center",
                     img {
@@ -80,10 +82,10 @@ pub fn SyncedTasksPage() -> Element {
                     id: "synced-tasks-list",
                     class: "h-full basis-2/3 overflow-auto scroll-auto px-2 snap-y snap-mandatory",
 
-                    TasksList { tasks }
+                    TasksList { tasks: SORTED_SYNCED_TASKS.signal() }
                 }
 
-                if let Some((_, task)) = tasks().get(UI_MODEL.read().selected_task_index) {
+                if let Some((_, task)) = SORTED_SYNCED_TASKS().get(UI_MODEL.read().selected_task_index) {
                     div {
                         id: "task-preview",
                         class: "h-full basis-1/3 overflow-auto scroll-auto px-2 py-2 flex flex-row",
@@ -106,9 +108,9 @@ struct SyncTasksPageKeyboardHandler {}
 impl KeyboardHandler for SyncTasksPageKeyboardHandler {
     fn handle_keydown(&self, event: &KeyboardEvent) -> bool {
         let task_service = use_coroutine_handle::<TaskCommand>();
-        let tasks_page = SYNCED_TASKS_PAGE();
-        let list_length = tasks_page.content.len();
-        let selected_task = tasks_page.content.get(UI_MODEL.peek().selected_task_index);
+        let sorted_tasks = SORTED_SYNCED_TASKS();
+        let list_length = sorted_tasks.len();
+        let selected_task = sorted_tasks.get(UI_MODEL.peek().selected_task_index);
         let mut handled = true;
 
         match event.key().as_ref() {
@@ -121,7 +123,7 @@ impl KeyboardHandler for SyncTasksPageKeyboardHandler {
                 ui_model.selected_task_index -= 1;
             }
             "c" => {
-                if let Some(task) = selected_task {
+                if let Some((_, TaskWithOrder { task, .. })) = selected_task {
                     task_service.send(TaskCommand::Complete(task.id))
                 }
             }
@@ -138,7 +140,7 @@ impl KeyboardHandler for SyncTasksPageKeyboardHandler {
                 UI_MODEL.write().toggle_preview_cards();
             }
             "Enter" => {
-                if let Some(task) = selected_task {
+                if let Some((_, TaskWithOrder { task, .. })) = selected_task {
                     let _ = open_link(task.get_html_url().as_str());
                 }
             }
