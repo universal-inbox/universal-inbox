@@ -3,7 +3,7 @@
 target/
 api/config/local.*
 api/tests
-web/dist
+web/public
 web/node_modules
 .local_envrc
 node_modules
