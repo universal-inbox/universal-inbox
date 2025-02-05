@@ -121,6 +121,11 @@ pub async fn handle_universal_inbox_job(
 ) -> Result<(), UniversalInboxError> {
     let current_span = tracing::Span::current();
 
+    info!(
+        job_id = job.id.to_string(),
+        "Processing {} job",
+        job.payload.name()
+    );
     let result = match job.payload {
         UniversalInboxJobPayload::SyncNotifications(job) => {
             sync::handle_sync_notifications(job, notification_service).await
@@ -144,12 +149,15 @@ pub async fn handle_universal_inbox_job(
     match result {
         Ok(_) => {
             current_span.set_status(Status::Ok);
-            info!("Successfully executed job");
+            info!(job_id = job.id.to_string(), "Successfully executed job");
             Ok(())
         }
         Err(err) => {
             current_span.set_status(Status::error(err.to_string()));
-            error!("Failed to execute job: {err:?}");
+            error!(
+                job_id = job.id.to_string(),
+                "Failed to execute job: {err:?}"
+            );
             Err(err)
         }
     }
