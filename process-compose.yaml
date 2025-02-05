@@ -1,4 +1,4 @@
-version: "0.5"
+version: "0.6"
 
 processes:
   ui-api:
@@ -45,8 +45,7 @@ processes:
       failure_threshold: 3
     availability:
       restart: no
-    # dx does not yet output anything in non-interactive mode
-    disabled: true
+    disabled: false
     is_tty: true
     namespace: "universal-inbox"
 
@@ -58,16 +57,6 @@ processes:
   bundle-js:
     command: "just web/run-bundle-js"
     is_tty: true
-    namespace: "universal-inbox"
-
-  sync-notifications:
-    command: "just sync-notifications"
-    disabled: true
-    namespace: "universal-inbox"
-
-  sync-tasks:
-    command: "just sync-tasks"
-    disabled: true
     namespace: "universal-inbox"
 
   nango-db:
@@ -90,3 +79,10 @@ processes:
         path: "/"
         port: 3003
     namespace: "nango"
+
+  caddy:
+    command: "caddy run --config=$CADDY_CONFIG"
+    is_tty: true
+    availability:
+      restart: on_failure
+      max_restarts: 5

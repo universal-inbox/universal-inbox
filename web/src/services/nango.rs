@@ -4,7 +4,7 @@ use universal_inbox::integration_connection::{ConnectionId, NangoProviderKey, Na
 use url::Url;
 use wasm_bindgen::prelude::*;
 
-#[wasm_bindgen(module = "/dist/js/index.js")]
+#[wasm_bindgen(module = "/public/js/index.js")]
 extern "C" {
     #[wasm_bindgen(catch)]
     async fn auth_provider(

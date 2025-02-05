@@ -1,5 +1,6 @@
 /target
 api/config/local.*
+web/public
 web/dist
 .local_envrc
 node_modules

@@ -27,7 +27,7 @@ struct DatepickerOptions {
     pub button_class: String,
 }
 
-#[wasm_bindgen(module = "/dist/js/index.js")]
+#[wasm_bindgen(module = "/public/js/index.js")]
 extern "C" {
     type Datepicker;
 
