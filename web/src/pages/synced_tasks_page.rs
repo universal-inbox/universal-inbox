@@ -46,7 +46,7 @@ pub fn SyncedTasksPage() -> Element {
                 .into_iter()
                 .map(|task| TaskWithOrder {
                     task,
-                    compare_by: CompareBy::DueAt,
+                    compare_by: CompareBy::Priority,
                 }),
             due_at_group_from_task,
         );
@@ -164,6 +164,7 @@ impl Eq for TaskWithOrder {}
 enum CompareBy {
     #[allow(dead_code)]
     Priority,
+    #[allow(dead_code)]
     DueAt,
 }
 
