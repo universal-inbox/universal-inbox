@@ -1,3 +1,5 @@
+import? 'justfile.local'
+
 export NANGO_POSTGRES_PASSWORD := "nango"
 export NANGO_POSTGRES_USER := "nango"
 export NANGO_POSTGRES_DB := "nango"
