@@ -6,12 +6,12 @@
   "htmlLink": "https://www.google.com/calendar/event?eid=test",
   "created": "2024-12-30T22:32:57.000Z",
   "updated": "2025-01-02T22:30:24.198Z",
-  "summary": "Event summary",
+  "summary": "Weekly meeting",
   "creator": {
-    "email": "user1@example.com"
+    "email": "david@universal-inbox.com"
   },
   "organizer": {
-    "email": "user1@example.com"
+    "email": "david@universal-inbox.com"
   },
   "start": {
     "dateTime": "2025-01-03T15:00:00+01:00",
@@ -30,7 +30,7 @@
       "responseStatus": "needsAction"
     },
     {
-      "email": "user1@example.com",
+      "email": "david@universal-inbox.com",
       "organizer": true,
       "responseStatus": "accepted"
     }

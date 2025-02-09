@@ -540,7 +540,10 @@ mod search_tasks {
         )
         .await;
         let task1 = creation.task.as_ref().unwrap().clone();
-        assert_eq!(task1.title, "Task 1".to_string());
+        assert_eq!(
+            task1.title,
+            "Release new version of Universal Inbox".to_string()
+        );
 
         let mut other_todoist_item = todoist_item.clone();
         other_todoist_item.id = "5678".to_string();
@@ -571,7 +574,7 @@ mod search_tasks {
         assert_eq!(task2.title, "Other todo".to_string());
 
         // Search by task title
-        let tasks = search_tasks(&app.client, &app.app.api_address, "Task").await;
+        let tasks = search_tasks(&app.client, &app.app.api_address, "Release new version").await;
 
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0].id, task1.id);

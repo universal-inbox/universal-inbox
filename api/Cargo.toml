@@ -118,6 +118,7 @@ sqlx = { version = "0.8.0", default-features = false, features = [
   "migrate",
   "json",
 ] }
+tabled = "0.18.0"
 thiserror = { workspace = true }
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
 tonic = { version = "0.12.3", features = ["tls", "tls-roots", "gzip"] }

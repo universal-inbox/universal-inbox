@@ -374,7 +374,7 @@ pub fn slack_starred_message() -> Box<SlackStarItem> {
             )]),
             channels: HashMap::from([(
                 SlackChannelId("C05XXX".to_string()),
-                Some("test".to_string()),
+                Some("universal-inbox".to_string()),
             )]),
             usergroups: HashMap::from([(
                 SlackUserGroupId("S05ZZZ".to_string()),

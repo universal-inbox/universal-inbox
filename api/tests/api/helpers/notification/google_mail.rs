@@ -248,7 +248,7 @@ pub fn assert_sync_notifications(
         assert_eq!(notification.user_id, expected_user_id);
         match notification.source_item.source_id.as_ref() {
             "123" => {
-                assert_eq!(notification.title, "test subject 123".to_string());
+                assert_eq!(notification.title, "News from Universal Inbox".to_string());
                 assert_eq!(notification.kind, NotificationSourceKind::GoogleMail);
                 assert_eq!(notification.status, NotificationStatus::Unread);
                 assert_eq!(

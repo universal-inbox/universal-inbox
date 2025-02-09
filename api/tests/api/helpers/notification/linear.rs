@@ -292,7 +292,10 @@ pub fn assert_sync_notifications(
         match notification.source_item.source_id.as_ref() {
             // This Issue notification should have been updated
             "0c28d222-c599-43bb-af99-fcd3e99daff0" => {
-                assert_eq!(notification.title, "Test issue 3".to_string());
+                assert_eq!(
+                    notification.title,
+                    "Add keyboard shortcuts to scroll the preview pane".to_string()
+                );
                 assert_eq!(notification.status, NotificationStatus::Read);
                 assert_eq!(
                     notification.get_html_url(),
@@ -321,7 +324,7 @@ pub fn assert_sync_notifications(
 
             // Project notification
             "df45c8cf-c717-4db7-abb9-5c5b73b50cc9" => {
-                assert_eq!(notification.title, "Test project".to_string());
+                assert_eq!(notification.title, "Universal Inbox".to_string());
                 assert_eq!(notification.status, NotificationStatus::Unread);
                 assert_eq!(
                     notification.get_html_url(),
@@ -348,7 +351,7 @@ pub fn assert_sync_notifications(
                                     &Uuid::parse_str("c1b0f0f8-9e16-4335-a540-bda09cc491df")
                                         .unwrap()
                                 );
-                                assert_eq!(name, "Test project");
+                                assert_eq!(name, "Universal Inbox");
                                 assert_eq!(icon, &Some("🚀".to_string()));
                             }
                             _ => {

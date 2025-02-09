@@ -136,7 +136,7 @@ pub fn assert_sync_notifications(
         assert_eq!(notification.kind, NotificationSourceKind::Github);
         match notification.source_item.source_id.as_ref() {
             "123" => {
-                assert_eq!(notification.title, "Greetings 1".to_string());
+                assert_eq!(notification.title, "Add passkey authentication".to_string());
                 assert_eq!(notification.status, NotificationStatus::Unread);
                 assert_eq!(
                     notification.get_html_url(),
@@ -158,7 +158,10 @@ pub fn assert_sync_notifications(
             }
             // This notification should be updated
             "456" => {
-                assert_eq!(notification.title, "Greetings 2".to_string());
+                assert_eq!(
+                    notification.title,
+                    "Load custom emoji from Slack".to_string()
+                );
                 assert_eq!(notification.status, NotificationStatus::Read);
                 assert_eq!(
                     notification.get_html_url(),

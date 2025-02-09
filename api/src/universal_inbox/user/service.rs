@@ -94,6 +94,21 @@ impl UserService {
         self.repository.fetch_all_users(executor).await
     }
 
+    pub async fn fetch_all_users_and_auth(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+    ) -> Result<Vec<(User, UserAuth)>, UniversalInboxError> {
+        self.repository.fetch_all_users_and_auth(executor).await
+    }
+
+    pub async fn delete_user(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+    ) -> Result<bool, UniversalInboxError> {
+        self.repository.delete_user(executor, user_id).await
+    }
+
     /// In an OpenID Connect Authorization code flow, the API has fetched the access token and
     /// thus does not need to validate it.
     #[tracing::instrument(level = "debug", skip_all, err)]

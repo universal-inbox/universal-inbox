@@ -10,7 +10,7 @@
       "message": {
         "ts": "1707686216.825719",
         "client_msg_id": "4b5a82e0-e533-41fb-a4f3-9b99cf5f0021",
-        "text": ":red_circle:  *Test title* :red_circle:\n\n• list 1\n• list 2\n1. number 1\n2. number 2\n&gt; quote\n```$ echo Hello world```\n_Some_ `formatted` ~text~.\n\nHere is a <https://www.universal-inbox.com|link>",
+        "text": ":inbox_tray:  *Universal Inbox new release* :inbox_tray:\n\n• list 1\n• list 2\n1. number 1\n2. number 2\n&gt; quote\n```$ echo Hello world```\n_Some_ `formatted` ~text~.\n\nHere is a <https://www.universal-inbox.com|link>",
         "blocks": [
           {
             "type": "rich_text",
@@ -20,7 +20,7 @@
                 "type": "rich_text_section",
                 "elements": [
                   {
-                    "name": "red_circle",
+                    "name": "inbox_tray",
                     "type": "emoji",
                     "unicode": "1f534"
                   },
@@ -29,7 +29,7 @@
                     "type": "text"
                   },
                   {
-                    "text": "Test title",
+                    "text": "Universal Inbox new release",
                     "type": "text",
                     "style": {
                       "bold": true
@@ -40,7 +40,7 @@
                     "type": "text"
                   },
                   {
-                    "name": "red_circle",
+                    "name": "inbox_tray",
                     "type": "emoji",
                     "unicode": "1f534"
                   },

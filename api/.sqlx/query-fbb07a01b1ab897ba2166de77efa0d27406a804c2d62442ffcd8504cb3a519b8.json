@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT\n                  \"user\".id,\n                  \"user\".first_name,\n                  \"user\".last_name,\n                  \"user\".email,\n                  \"user\".email_validated_at,\n                  \"user\".email_validation_sent_at,\n                  \"user\".created_at,\n                  \"user\".updated_at\n                FROM \"user\"\n                WHERE \"user\".id = $1\n            ",
+  "query": "\n                SELECT\n                  \"user\".id,\n                  \"user\".first_name,\n                  \"user\".last_name,\n                  \"user\".email,\n                  \"user\".email_validated_at,\n                  \"user\".email_validation_sent_at,\n                  \"user\".is_testing,\n                  \"user\".created_at,\n                  \"user\".updated_at\n                FROM \"user\"\n                INNER JOIN user_auth ON user_auth.user_id = \"user\".id\n                WHERE user_auth.auth_user_id = $1\n            ",
   "describe": {
     "columns": [
       {
@@ -35,18 +35,23 @@
       },
       {
         "ordinal": 6,
+        "name": "is_testing",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 7,
         "name": "created_at",
         "type_info": "Timestamp"
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "updated_at",
         "type_info": "Timestamp"
       }
     ],
     "parameters": {
       "Left": [
-        "Uuid"
+        "Text"
       ]
     },
     "nullable": [
@@ -57,8 +62,9 @@
       true,
       true,
       false,
+      false,
       false
     ]
   },
-  "hash": "472bb09057a0fbc3af7c3217c02f37791cdc807f0bfbfc45a79d5735ce8461b4"
+  "hash": "fbb07a01b1ab897ba2166de77efa0d27406a804c2d62442ffcd8504cb3a519b8"
 }

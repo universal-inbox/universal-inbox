@@ -480,7 +480,7 @@ mod tests {
 
             assert_eq!(
                 google_calendar_notification.title,
-                "Event summary".to_string()
+                "Weekly meeting".to_string()
             );
             assert_eq!(
                 google_calendar_notification.source_item.source_id,

@@ -5,10 +5,17 @@ use chrono::{TimeDelta, Utc};
 use email_address::EmailAddress;
 use log::{error, info};
 use secrecy::ExposeSecret;
+use tabled::{
+    builder::Builder,
+    settings::{object::Rows, style::Style, Color},
+};
 use tokio::sync::RwLock;
 
+use universal_inbox::user::UserId;
+
 use crate::universal_inbox::{
-    auth_token::service::AuthenticationTokenService, user::service::UserService,
+    auth_token::service::AuthenticationTokenService,
+    user::{model::UserAuth, service::UserService},
     UniversalInboxError,
 };
 
@@ -155,6 +162,75 @@ pub async fn generate_jwt_token(
         user.id,
         auth_token.jwt_token.expose_secret().0
     );
+
+    Ok(())
+}
+
+#[tracing::instrument(name = "list-users", level = "info", skip(user_service), err)]
+pub async fn list_users(user_service: Arc<UserService>) -> Result<(), UniversalInboxError> {
+    let service = user_service.clone();
+
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while listing users")?;
+
+    let users = service.fetch_all_users_and_auth(&mut transaction).await?;
+
+    let mut rows: Vec<Vec<String>> = users
+        .iter()
+        .map(|(user, user_auth)| {
+            vec![
+                user.id.to_string(),
+                user.email
+                    .as_ref()
+                    .map(|email| email.to_string())
+                    .unwrap_or_default(),
+                match user_auth {
+                    UserAuth::Passkey(passkey_user_auth) => passkey_user_auth.username.to_string(),
+                    _ => "".to_string(),
+                },
+                user_auth.to_string(),
+            ]
+        })
+        .collect();
+    rows.insert(
+        0,
+        vec![
+            "User ID".to_string(),
+            "Email".to_string(),
+            "Username".to_string(),
+            "Authentication".to_string(),
+        ],
+    );
+    let mut user_table = Builder::from(rows).build();
+    user_table
+        .with(Style::rounded())
+        .modify(Rows::first(), Color::FG_BLUE);
+
+    println!("{}", user_table);
+
+    Ok(())
+}
+
+#[tracing::instrument(name = "delete-user", level = "info", skip(user_service), err)]
+pub async fn delete_user(
+    user_service: Arc<UserService>,
+    user_id: UserId,
+) -> Result<(), UniversalInboxError> {
+    let service = user_service.clone();
+
+    let mut transaction = service.begin().await.context(format!(
+        "Failed to create new transaction while deleting user {user_id}"
+    ))?;
+
+    service.delete_user(&mut transaction, user_id).await?;
+
+    transaction.commit().await.context(format!(
+        "Failed to commit transaction while deleting user {user_id}"
+    ))?;
+
+    info!("User {user_id} and its data was successfully deleted");
 
     Ok(())
 }

@@ -7,11 +7,11 @@
         "title": "test discussion",
         "bodyHTML": "<p>This is a discussion</p>",
         "number": 1,
-        "url": "https://github.com/octocat/Hello-World/discussions/1",
+        "url": "https://github.com/octocat/universal-inbox/discussions/1",
         "stateReason": null,
         "repository": {
-          "nameWithOwner": "octocat/Hello-World",
-          "url": "https://github.com/octocat/Hello-World"
+          "nameWithOwner": "octocat/universal-inbox",
+          "url": "https://github.com/octocat/universal-inbox"
         },
         "closedAt": null,
         "createdAt": "2023-07-09T12:57:11Z",
@@ -37,7 +37,7 @@
         },
         "answer": {
           "bodyHTML": "<p dir=\"auto\">test answer</p>",
-          "url": "https://github.com/octocat/Hello-World/discussions/1",
+          "url": "https://github.com/octocat/universal-inbox/discussions/1",
           "createdAt": "2023-10-19T20:35:06Z",
           "author": {
             "__typename": "User",
