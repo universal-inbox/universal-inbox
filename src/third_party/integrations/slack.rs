@@ -779,7 +779,7 @@ mod test_message_details {
         fn test_render_starred_message_with_blocks(slack_starred_message: SlackStarItem) {
             assert_eq!(
                 slack_starred_message.render_content(),
-                r#"🔴  *Test title* 🔴
+                r#"📥  *Universal Inbox new release* 📥
 - list 1
 - list 2
 
@@ -822,7 +822,7 @@ Here is a [link](https://www.universal-inbox.com)"#
             message.message.content.blocks = Some(vec![]);
             assert_eq!(
                 slack_starred_message.render_content(),
-                r#"🔴  *Test title* 🔴
+                r#"📥  *Universal Inbox new release* 📥
 - list 1
 - list 2
 
@@ -917,7 +917,10 @@ Here is a [link](https://www.universal-inbox.com)"#
 
         #[rstest]
         fn test_render_starred_message_with_blocks(slack_starred_message: SlackStarItem) {
-            assert_eq!(slack_starred_message.render_title(), "🔴  Test title 🔴...");
+            assert_eq!(
+                slack_starred_message.render_title(),
+                "📥  Universal Inbox new release 📥..."
+            );
         }
 
         #[rstest]

@@ -5,7 +5,7 @@
     {
       "client_msg_id": "2e6c52e9-7b61-404d-9358-66327f6eaaaa",
       "type": "message",
-      "text": ":red_circle:  *Test title* :red_circle:\n\n• list 1\n• list 2\n1. number 1\n2. number 2\n&gt; quote\n```$ echo Hello world```\n_Some_ `formatted` ~text~.\n\nHere is a <https://www.universal-inbox.com|link>",
+      "text": ":inbox_tray:  *Universal Inbox new release* :inbox_tray:\n\n• list 1\n• list 2\n1. number 1\n2. number 2\n&gt; quote\n```$ echo Hello world```\n_Some_ `formatted` ~text~.\n\nHere is a <https://www.universal-inbox.com|link>",
       "user": "U05YYY",
       "ts": "1707686216.825719",
       "blocks": [
@@ -18,7 +18,7 @@
               "elements": [
                 {
                   "type": "emoji",
-                  "name": "red_circle",
+                  "name": "inbox_tray",
                   "unicode": "1f534"
                 },
                 {
@@ -27,7 +27,7 @@
                 },
                 {
                   "type": "text",
-                  "text": "Test title",
+                  "text": "Universal Inbox new release",
                   "style": {
                     "bold": true
                   }
@@ -38,7 +38,7 @@
                 },
                 {
                   "type": "emoji",
-                  "name": "red_circle",
+                  "name": "inbox_tray",
                   "unicode": "1f534"
                 },
                 {
@@ -221,8 +221,7 @@
         }
       ],
       "team": "T05XXX",
-      "attachments": [
-      ],
+      "attachments": [],
       "saved": {
         "is_archived": false,
         "date_completed": 0,

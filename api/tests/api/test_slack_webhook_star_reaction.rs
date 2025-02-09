@@ -326,7 +326,10 @@ async fn test_receive_star_or_reaction_added_event_as_notification(
 
     assert_eq!(notifications.len(), 1);
     assert_eq!(notifications[0].source_item.source_id, "1707686216.825719");
-    assert_eq!(notifications[0].title, "🔴  Test title 🔴...");
+    assert_eq!(
+        notifications[0].title,
+        "📥  Universal Inbox new release 📥..."
+    );
     assert_eq!(notifications[0].kind, NotificationSourceKind::Slack);
     assert!(notifications[0].last_read_at.is_none());
     assert!(notifications[0].task_id.is_none());
@@ -357,7 +360,7 @@ async fn test_receive_star_or_reaction_added_event_as_notification(
                 )]),
                 channels: HashMap::from([(
                     SlackChannelId("C05XXX".to_string()),
-                    Some("test".to_string()),
+                    Some("universal-inbox".to_string()),
                 )]),
                 usergroups: HashMap::from([(
                     SlackUserGroupId("S05ZZZ".to_string()),
@@ -411,7 +414,7 @@ async fn test_receive_star_or_reaction_added_event_as_notification(
                 )]),
                 channels: HashMap::from([(
                     SlackChannelId("C05XXX".to_string()),
-                    Some("test".to_string()),
+                    Some("universal-inbox".to_string()),
                 )]),
                 usergroups: HashMap::from([(
                     SlackUserGroupId("S05ZZZ".to_string()),
@@ -574,7 +577,10 @@ async fn test_receive_bot_star_added_event_as_notification(
 
     assert_eq!(notifications.len(), 1);
     assert_eq!(notifications[0].source_item.source_id, "1707686216.825719");
-    assert_eq!(notifications[0].title, "🔴  Test title 🔴...");
+    assert_eq!(
+        notifications[0].title,
+        "📥  Universal Inbox new release 📥..."
+    );
     assert_eq!(notifications[0].kind, NotificationSourceKind::Slack);
     assert!(notifications[0].last_read_at.is_none());
     assert!(notifications[0].task_id.is_none());
@@ -610,7 +616,7 @@ async fn test_receive_bot_star_added_event_as_notification(
             )]),
             channels: HashMap::from([(
                 SlackChannelId("C05XXX".to_string()),
-                Some("test".to_string()),
+                Some("universal-inbox".to_string()),
             )]),
             usergroups: HashMap::from([(
                 SlackUserGroupId("S05ZZZ".to_string()),
@@ -845,7 +851,10 @@ async fn test_receive_star_or_reaction_removed_event_as_notification(
     assert_eq!(notifications.len(), 1);
     assert_eq!(notifications[0].id, star_added_notification_id);
     assert_eq!(notifications[0].source_item.source_id, "1707686216.825719");
-    assert_eq!(notifications[0].title, "🔴  Test title 🔴...");
+    assert_eq!(
+        notifications[0].title,
+        "📥  Universal Inbox new release 📥..."
+    );
     assert_eq!(notifications[0].kind, NotificationSourceKind::Slack);
     assert!(notifications[0].last_read_at.is_none());
     assert!(notifications[0].task_id.is_none());
@@ -947,9 +956,10 @@ async fn test_receive_star_or_reaction_added_event_as_task(
     let todoist_item_add_mock = mock_todoist_item_add_service(
         &app.app.todoist_mock_server,
         &todoist_item.id,
-        "[🔴  Test title 🔴...](https://slack.com/archives/C05XXX/p1234567890)".to_string(),
+        "[📥  Universal Inbox new release 📥...](https://slack.com/archives/C05XXX/p1234567890)"
+            .to_string(),
         Some(
-            r#"🔴  *Test title* 🔴
+            r#"📥  *Universal Inbox new release* 📥
 - list 1
 - list 2
 
@@ -965,7 +975,7 @@ $ echo Hello world
 \
 _Some_ `formatted` ~text~.\
 \
-Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#test
+Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-inbox
 👋![:unknown2:](https://emoji.com/unknown2.png)"#
                 .to_string(),
         ),
@@ -1157,9 +1167,10 @@ async fn test_receive_star_or_reaction_removed_and_added_event_as_task(
     let todoist_item_add_mock = mock_todoist_item_add_service(
         &app.app.todoist_mock_server,
         &todoist_item.id,
-        "[🔴  Test title 🔴...](https://slack.com/archives/C05XXX/p1234567890)".to_string(),
+        "[📥  Universal Inbox new release 📥...](https://slack.com/archives/C05XXX/p1234567890)"
+            .to_string(),
         Some(
-            r#"🔴  *Test title* 🔴
+            r#"📥  *Universal Inbox new release* 📥
 - list 1
 - list 2
 
@@ -1175,7 +1186,7 @@ $ echo Hello world
 \
 _Some_ `formatted` ~text~.\
 \
-Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#test
+Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-inbox
 👋![:unknown2:](https://emoji.com/unknown2.png)"#
                 .to_string(),
         ),

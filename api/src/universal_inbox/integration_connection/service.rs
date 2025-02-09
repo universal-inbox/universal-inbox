@@ -1143,6 +1143,32 @@ impl IntegrationConnectionService {
         )
         .await
     }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(integration_connection_id, user_id, status),
+        err
+    )]
+    pub async fn update_integration_connection_status(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        integration_connection_id: IntegrationConnectionId,
+        user_id: UserId,
+        status: IntegrationConnectionStatus,
+        registered_oauth_scopes: Vec<String>,
+    ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
+        self.repository
+            .update_integration_connection_status(
+                executor,
+                integration_connection_id,
+                status,
+                None,
+                Some(registered_oauth_scopes),
+                user_id,
+            )
+            .await
+    }
 }
 
 #[io_cached(

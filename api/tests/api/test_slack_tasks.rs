@@ -151,9 +151,10 @@ async fn test_sync_todoist_slack_task(
     let todoist_item_add_mock = mock_todoist_item_add_service(
         &app.app.todoist_mock_server,
         &todoist_item.id,
-        "[🔴  Test title 🔴...](https://slack.com/archives/C05XXX/p1234567890)".to_string(),
+        "[📥  Universal Inbox new release 📥...](https://slack.com/archives/C05XXX/p1234567890)"
+            .to_string(),
         Some(
-            r#"🔴  *Test title* 🔴
+            r#"📥  *Universal Inbox new release* 📥
 - list 1
 - list 2
 
@@ -169,7 +170,7 @@ $ echo Hello world
 \
 _Some_ `formatted` ~text~.\
 \
-Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#test
+Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-inbox
 👋![:unknown2:](https://emoji.com/unknown2.png)"#
                 .to_string(),
         ),
@@ -364,9 +365,9 @@ async fn test_patch_slack_task_status_as_done(
     mock_todoist_item_add_service(
         &app.app.todoist_mock_server,
         &todoist_item.id,
-        "[🔴  Test title 🔴...](https://example.com/)".to_string(),
+        "[📥  Universal Inbox new release 📥...](https://example.com/)".to_string(),
         Some(
-            r#"🔴  *Test title* 🔴
+            r#"📥  *Universal Inbox new release* 📥
 - list 1
 - list 2
 
@@ -382,7 +383,7 @@ $ echo Hello world
 \
 _Some_ `formatted` ~text~.\
 \
-Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#test
+Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-inbox
 👋![:unknown2:](https://emoji.com/unknown2.png)"#
                 .to_string(),
         ),

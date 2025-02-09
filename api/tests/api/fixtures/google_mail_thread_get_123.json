@@ -5,11 +5,7 @@
     {
       "id": "123",
       "threadId": "123",
-      "labelIds": [
-        "STARRED",
-        "INBOX",
-        "UNREAD"
-      ],
+      "labelIds": ["STARRED", "INBOX", "UNREAD"],
       "snippet": "test",
       "payload": {
         "mimeType": "multipart/alternative",
@@ -20,11 +16,11 @@
           },
           {
             "name": "Subject",
-            "value": "test subject 123"
+            "value": "News from Universal Inbox"
           },
           {
             "name": "From",
-            "value": "from@example.com"
+            "value": "no-reply@universal-inbox.com"
           },
           {
             "name": "To",

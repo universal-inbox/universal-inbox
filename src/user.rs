@@ -18,6 +18,7 @@ pub struct User {
     pub email: Option<EmailAddress>,
     pub email_validated_at: Option<DateTime<Utc>>,
     pub email_validation_sent_at: Option<DateTime<Utc>>,
+    pub is_testing: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -31,6 +32,7 @@ impl User {
             email: Some(email),
             email_validated_at: None,
             email_validation_sent_at: None,
+            is_testing: false,
             created_at: Utc::now().with_nanosecond(0).unwrap(),
             updated_at: Utc::now().with_nanosecond(0).unwrap(),
         }
@@ -44,13 +46,16 @@ impl User {
             email: None,
             email_validated_at: None,
             email_validation_sent_at: None,
+            is_testing: false,
             created_at: Utc::now().with_nanosecond(0).unwrap(),
             updated_at: Utc::now().with_nanosecond(0).unwrap(),
         }
     }
 
     pub fn is_email_validated(&self) -> bool {
-        self.email_validation_sent_at.is_none() || self.email_validated_at.is_some()
+        self.is_testing
+            || self.email_validation_sent_at.is_none()
+            || self.email_validated_at.is_some()
     }
 }
 

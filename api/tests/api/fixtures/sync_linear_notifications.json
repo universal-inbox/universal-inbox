@@ -11,9 +11,9 @@
           "snoozedUntilAt": null,
           "project": {
             "id": "c1b0f0f8-9e16-4335-a540-bda09cc491df",
-            "name": "Test project",
+            "name": "Universal Inbox",
             "url": "https://linear.app/universal-inbox/project/test-project-33065448b39c",
-            "description": "This is a test project",
+            "description": "Universal Inbox is your notification hub",
             "icon": "Rocket",
             "color": "#FFFFFF",
             "state": "started",
@@ -32,11 +32,11 @@
             "health": "onTrack",
             "user": {
               "displayName": "John Smith",
-              "avatarUrl": "https://avatar.url",
+              "avatarUrl": "https://avatars.githubusercontent.com/u/1062408?v=4",
               "url": "https://linear.app/user/john-smith"
             },
             "url": "https://linear.app/universal-inbox/project/test-project-33065448b39c#projectUpdate-0d3d3a0d"
-}
+          }
         },
         {
           "__typename": "ProjectNotification",
@@ -47,9 +47,9 @@
           "snoozedUntilAt": null,
           "project": {
             "id": "c1b0f0f8-9e16-4335-a540-bda09cc491df",
-            "name": "Test project",
+            "name": "Universal Inbox",
             "url": "https://linear.app/universal-inbox/project/test-project-33065448b39c",
-            "description": "This is a test project",
+            "description": "Universal Inbox is your notification hub",
             "icon": "Rocket",
             "color": "#FFFFFF",
             "state": "started",
@@ -58,7 +58,7 @@
             "targetDate": "2023-08-31",
             "lead": {
               "displayName": "John Smith",
-              "avatarUrl": "https://avatar.url",
+              "avatarUrl": "https://avatars.githubusercontent.com/u/1062408?v=4",
               "url": "https://linear.app/user/john-smith"
             }
           }
@@ -78,14 +78,14 @@
             "cancelledAt": null,
             "dueDate": null,
             "identifier": "UNI-13",
-            "title": "Test issue 3",
+            "title": "Add keyboard shortcuts to scroll the preview pane",
             "url": "https://linear.app/universal-inbox/issue/UNI-13/test-issue-3",
             "priority": 0,
             "project": {
               "id": "c1b0f0f8-9e16-4335-a540-bda09cc491df",
-              "name": "Test project",
+              "name": "Universal Inbox",
               "url": "https://linear.app/universal-inbox/project/test-project-33065448b39c",
-              "description": "This is a test project",
+              "description": "Universal Inbox is your notification hub",
               "icon": "Rocket",
               "color": "#FFFFFF",
               "state": "started",
@@ -94,14 +94,14 @@
               "targetDate": "2023-08-31",
               "lead": {
                 "displayName": "John Smith",
-                "avatarUrl": "https://avatar.url",
+                "avatarUrl": "https://avatars.githubusercontent.com/u/1062408?v=4",
                 "url": "https://linear.app/user/john-smith"
               }
-          },
+            },
             "projectMilestone": null,
             "creator": {
               "displayName": "John Smith",
-              "avatarUrl": "https://avatar.url",
+              "avatarUrl": "https://avatars.githubusercontent.com/u/1062408?v=4",
               "url": "https://linear.app/user/john-smith"
             },
             "assignee": null,
@@ -215,9 +215,9 @@
             "priority": 1,
             "project": {
               "id": "c1b0f0f8-9e16-4335-a540-bda09cc491df",
-              "name": "Test project",
+              "name": "Universal Inbox",
               "url": "https://linear.app/universal-inbox/project/test-project-33065448b39c",
-              "description": "This is a test project",
+              "description": "Universal Inbox is your notification hub",
               "icon": "Rocket",
               "color": "#FFFFFF",
               "state": "started",
@@ -226,7 +226,7 @@
               "targetDate": "2023-08-31",
               "lead": {
                 "displayName": "John Smith",
-                "avatarUrl": "https://avatar.url",
+                "avatarUrl": "https://avatars.githubusercontent.com/u/1062408?v=4",
                 "url": "https://linear.app/user/john-smith"
               }
             },
@@ -236,12 +236,12 @@
             },
             "creator": {
               "displayName": "John Smith",
-              "avatarUrl": "https://avatar.url",
+              "avatarUrl": "https://avatars.githubusercontent.com/u/1062408?v=4",
               "url": "https://linear.app/user/john-smith"
             },
             "assignee": {
               "displayName": "John Smith",
-              "avatarUrl": "https://avatar.url",
+              "avatarUrl": "https://avatars.githubusercontent.com/u/1062408?v=4",
               "url": "https://linear.app/user/john-smith"
             },
             "state": {
@@ -335,9 +335,9 @@
             "priority": 2,
             "project": {
               "id": "c1b0f0f8-9e16-4335-a540-bda09cc491df",
-              "name": "Test project",
+              "name": "Universal Inbox",
               "url": "https://linear.app/universal-inbox/project/test-project-33065448b39c",
-              "description": "This is a test project",
+              "description": "Universal Inbox is your notification hub",
               "icon": "Rocket",
               "color": "#FFFFFF",
               "state": "started",
@@ -346,14 +346,14 @@
               "targetDate": "2023-08-31",
               "lead": {
                 "displayName": "John Smith",
-                "avatarUrl": "https://avatar.url",
+                "avatarUrl": "https://avatars.githubusercontent.com/u/1062408?v=4",
                 "url": "https://linear.app/user/john-smith"
               }
             },
             "projectMilestone": null,
             "creator": {
               "displayName": "John Smith",
-              "avatarUrl": "https://avatar.url",
+              "avatarUrl": "https://avatars.githubusercontent.com/u/1062408?v=4",
               "url": "https://linear.app/user/john-smith"
             },
             "assignee": null,

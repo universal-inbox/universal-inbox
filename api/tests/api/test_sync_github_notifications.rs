@@ -779,7 +779,7 @@ async fn test_sync_discussion_notification_with_details(
                     assert_eq!(discussion.title, "test discussion");
                     assert_eq!(
                         discussion.url,
-                        "https://github.com/octocat/Hello-World/discussions/1"
+                        "https://github.com/octocat/universal-inbox/discussions/1"
                             .parse()
                             .unwrap()
                     );

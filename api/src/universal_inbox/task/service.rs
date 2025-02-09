@@ -16,8 +16,9 @@ use universal_inbox::{
         NotificationStatus,
     },
     task::{
-        service::TaskPatch, ProjectSummary, Task, TaskCreation, TaskCreationResult, TaskId,
-        TaskSource, TaskSourceKind, TaskStatus, TaskSummary, TaskSyncSourceKind,
+        service::TaskPatch, CreateOrUpdateTaskRequest, ProjectSummary, Task, TaskCreation,
+        TaskCreationResult, TaskId, TaskSource, TaskSourceKind, TaskStatus, TaskSummary,
+        TaskSyncSourceKind,
     },
     third_party::{
         integrations::slack::{SlackReaction, SlackStar},
@@ -817,6 +818,26 @@ impl TaskService {
         let task_request = third_party_task_service
             .third_party_item_into_task(executor, &data, third_party_item, task_creation, user_id)
             .await?;
+        self.repository
+            .create_or_update_task(executor, task_request)
+            .await
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            source_item_id = task_request.source_item.id.to_string(),
+            source_item_source_id = task_request.source_item.source_id,
+            user.id = task_request.user_id.to_string()
+        ),
+        err
+    )]
+    pub async fn create_or_update_task(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        task_request: Box<CreateOrUpdateTaskRequest>,
+    ) -> Result<UpsertStatus<Box<Task>>, UniversalInboxError> {
         self.repository
             .create_or_update_task(executor, task_request)
             .await

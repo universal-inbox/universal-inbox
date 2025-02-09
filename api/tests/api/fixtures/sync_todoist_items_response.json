@@ -6,12 +6,9 @@
       "project_id": "1111",
       "sync_id": "1234567890",
       "section_id": "7025",
-      "content": "Task 1",
+      "content": "Release new version of Universal Inbox",
       "description": "",
-      "labels": [
-        "Food",
-        "Shopping"
-      ],
+      "labels": ["Food", "Shopping"],
       "child_order": 1,
       "day_order": -1,
       "priority": 1,

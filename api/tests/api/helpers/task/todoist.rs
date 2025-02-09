@@ -228,7 +228,10 @@ pub fn assert_sync_items(
         assert_eq!(task.user_id, expected_user_id);
         match task.source_item.source_id.as_ref() {
             "1123" => {
-                assert_eq!(task.title, "Task 1".to_string());
+                assert_eq!(
+                    task.title,
+                    "Release new version of Universal Inbox".to_string()
+                );
                 assert_eq!(
                     task.status,
                     if sync_todoist_items[0].checked {
