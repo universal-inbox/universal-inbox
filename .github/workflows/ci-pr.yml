@@ -119,7 +119,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:15.1
+        image: postgres:15.11
         env:
           POSTGRES_PASSWORD: password
         options: >-
