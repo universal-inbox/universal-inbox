@@ -57,14 +57,10 @@ pub fn TodoistTaskPreview(
 
                 Icon { class: "flex-none h-5 w-5 {task_priority_style}", icon: BsCardChecklist }
                 a {
+                    class: "flex items-center",
                     href: "{link}",
                     target: "_blank",
                     Markdown { text: task().title.clone() }
-                }
-                a {
-                    class: "flex-none",
-                    href: "{link}",
-                    target: "_blank",
                     Icon { class: "h-5 w-5 text-gray-400 p-1", icon: BsArrowUpRightSquare }
                 }
             }
@@ -105,7 +101,10 @@ pub fn TodoistTaskPreview(
                 }
             }
 
-            Markdown { text: task().body }
+            Markdown {
+                class: "w-full max-w-full",
+                text: task().body
+            }
         }
     }
 }

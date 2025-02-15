@@ -35,16 +35,10 @@ pub fn SlackThreadPreview(
                 SlackTeamDisplay { team: slack_thread().team }
 
                 a {
-                    class: "text-xs text-gray-400",
-                    href: "{slack_thread().get_channel_html_url()}",
-                    target: "_blank",
-                    "#{channel_name}"
-                }
-
-                a {
-                    class: "flex-none",
+                    class: "flex items-center text-xs text-gray-400",
                     href: "{slack_thread().url}",
                     target: "_blank",
+                    "#{channel_name}"
                     Icon { class: "h-5 w-5 text-gray-400 p-1", icon: BsArrowUpRightSquare }
                 }
             }

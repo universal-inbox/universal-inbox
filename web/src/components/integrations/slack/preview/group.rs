@@ -40,15 +40,10 @@ pub fn SlackGroupPreview(
 
                 { icon }
                 a {
+                    class: "flex items-center",
                     href: "{slack_group().get_html_url()}",
                     target: "_blank",
-
                     SlackMarkdown { text: "{title}" }
-                }
-                a {
-                    class: "flex-none",
-                    href: "{slack_group().get_html_url()}",
-                    target: "_blank",
                     Icon { class: "h-5 w-5 text-gray-400 p-1", icon: BsArrowUpRightSquare }
                 }
             }

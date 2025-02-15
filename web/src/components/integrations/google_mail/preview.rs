@@ -49,14 +49,10 @@ pub fn GoogleMailThreadPreview(
 
                 Mail { class: "flex-none h-5 w-5 {mail_icon_style}" }
                 a {
+                    class: "flex items-center",
                     href: "{link}",
                     target: "_blank",
                     "{notification().title}"
-                }
-                a {
-                    class: "flex-none",
-                    href: "{link}",
-                    target: "_blank",
                     Icon { class: "h-5 w-5 text-gray-400 p-1", icon: BsArrowUpRightSquare }
                 }
             }

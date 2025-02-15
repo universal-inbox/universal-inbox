@@ -14,6 +14,7 @@ use universal_inbox::{
     third_party::integrations::google_mail::{
         GoogleMailThread, MessageSelection, GOOGLE_MAIL_IMPORTANT_LABEL, GOOGLE_MAIL_STARRED_LABEL,
     },
+    HasHtmlUrl,
 };
 
 use crate::components::{
@@ -42,11 +43,13 @@ pub fn GoogleMailThreadListItem(
         (true, false) => "text-yellow-500",
         _ => "",
     };
+    let link = notification().get_html_url();
 
     rsx! {
         ListItem {
             key: "{notification().id}",
             title: "{notification().title}",
+            link,
             subtitle: rsx! { GoogleMailThreadSubtitle { google_mail_thread } },
             icon: rsx! { GoogleMail { class: "h-5 w-5" }, TaskHint { task: notification().task } },
             subicon: rsx! { Mail { class: "h-5 w-5 min-w-5 {mail_icon_style}" } },

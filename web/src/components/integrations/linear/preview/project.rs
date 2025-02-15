@@ -39,14 +39,10 @@ pub fn LinearProjectPreview(
                 }
 
                 a {
+                    class: "flex items-center",
                     href: "{linear_project().url}",
                     target: "_blank",
                     "{linear_project().name}"
-                }
-                a {
-                    class: "flex-none",
-                    href: "{linear_project().url}",
-                    target: "_blank",
                     Icon { class: "h-5 w-5 text-gray-400 p-1", icon: BsArrowUpRightSquare }
                 }
             }
@@ -77,7 +73,10 @@ pub fn LinearProjectDetails(
                 class: "{cards_style}",
                 header: rsx! { span { class: "text-gray-400 ", "Description" } },
                 opened: expand_details(),
-                Markdown { class: "{proses_style}", text: linear_project().description.clone() }
+                Markdown {
+                    class: "{proses_style} w-full max-w-full",
+                    text: linear_project().description.clone()
+                }
             }
 
             if let Some(linear_notification) = linear_notification() {
@@ -167,7 +166,10 @@ fn LinearProjectUpdateDetails(project_update: ReadOnlySignal<LinearProjectUpdate
         CardWithHeaders {
             headers: headers,
 
-            Markdown { text: project_update().body.clone() }
+            Markdown {
+                class: "w-full max-w-full",
+                text: project_update().body.clone()
+            }
         }
     }
 }

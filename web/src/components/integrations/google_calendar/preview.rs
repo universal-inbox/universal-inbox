@@ -73,14 +73,10 @@ pub fn GoogleCalendarEventPreview(
 
                 Icon { class: "flex-none h-5 w-5", icon: BsCalendar2Event }
                 a {
+                    class: "flex items-center",
                     href: "{link}",
                     target: "_blank",
                     "{notification().title}"
-                }
-                a {
-                    class: "flex-none",
-                    href: "{link}",
-                    target: "_blank",
                     Icon { class: "h-5 w-5 text-gray-400 p-1", icon: BsArrowUpRightSquare }
                 }
             }

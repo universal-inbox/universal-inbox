@@ -63,14 +63,10 @@ pub fn LinearIssuePreview(
 
                 LinearIssueIcon { class: "h-5 w-5", linear_issue: linear_issue }
                 a {
+                    class: "flex items-center",
                     href: "{linear_issue().url}",
                     target: "_blank",
                     Markdown { text: linear_issue().title.clone() }
-                }
-                a {
-                    class: "flex-none",
-                    href: "{linear_issue().url}",
-                    target: "_blank",
                     Icon { class: "h-5 w-5 text-gray-400 p-1", icon: BsArrowUpRightSquare }
                 }
             }
@@ -109,7 +105,10 @@ fn LinearIssueDetails(
                 CollapseCard {
                     header: rsx! { span { class: "text-gray-400", "Description" } },
                     opened: true,
-                    Markdown { text: description.clone() }
+                    Markdown {
+                        class: "w-full max-w-full",
+                        text: description.clone()
+                    }
                 }
             }
 
@@ -271,7 +270,10 @@ fn LinearCommentDisplay(
                 span { " {updated_at}" }
             }
 
-            Markdown { text: linear_comment().body.clone() }
+            Markdown {
+                class: "w-full max-w-full",
+                text: linear_comment().body.clone()
+            }
 
             for child_comment in linear_comment().children.into_iter() {
                 LinearCommentDisplay {

@@ -13,6 +13,7 @@ use dioxus_free_icons::{
 use universal_inbox::{
     notification::NotificationWithTask,
     third_party::integrations::google_calendar::{GoogleCalendarEvent, GoogleCalendarEventStatus},
+    HasHtmlUrl,
 };
 
 use crate::{
@@ -50,11 +51,13 @@ pub fn GoogleCalendarEventListItem(
             rsx! { Icon { class: "h-5 w-5 text-error", icon: BsXCircleFill } }
         }
     };
+    let link = notification().get_html_url();
 
     rsx! {
         ListItem {
             key: "{notification().id}",
             title: "{notification().title}",
+            link,
             subtitle: rsx! { GoogleCalendarEventSubtitle { google_calendar_event } },
             icon: rsx! { GoogleCalendar { class: "h-8 w-8" }, TaskHint { task: notification().task } },
             subicon: rsx! { Icon { class: "h-5 w-5", icon: BsCalendar2Event } },

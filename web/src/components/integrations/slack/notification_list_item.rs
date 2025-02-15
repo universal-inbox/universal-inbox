@@ -19,6 +19,7 @@ use universal_inbox::{
         item::ThirdPartyItemData,
     },
     utils::emoji::replace_emoji_code_with_emoji,
+    HasHtmlUrl,
 };
 
 use crate::components::{
@@ -93,12 +94,14 @@ pub fn SlackNotificationListItem(
             .to_string()
     });
     let list_context = use_context::<Memo<ListContext>>();
+    let link = notification().get_html_url();
 
     rsx! {
         ListItem {
             key: "{notification().id}",
             title: "{notification().title}",
             subtitle: rsx! { SlackNotificationSubtitle { notification } },
+            link,
             icon: rsx! { Icon { class: "h-5 w-5", icon: BsSlack }, TaskHint { task: notification().task } },
             subicon,
             action_buttons: get_notification_list_item_action_buttons(
