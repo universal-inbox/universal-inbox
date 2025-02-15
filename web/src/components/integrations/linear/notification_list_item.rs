@@ -6,6 +6,7 @@ use dioxus::prelude::*;
 use universal_inbox::{
     notification::NotificationWithTask,
     third_party::integrations::linear::{LinearIssue, LinearNotification, LinearProject},
+    HasHtmlUrl,
 };
 
 use crate::components::{
@@ -64,12 +65,14 @@ pub fn LinearIssueNotificationListItem(
             .to_string()
     });
     let list_context = use_context::<Memo<ListContext>>();
+    let link = notification().get_html_url();
 
     rsx! {
         ListItem {
             key: "{notification().id}",
             title: "{notification().title}",
             subtitle: rsx! { LinearIssueListItemSubtitle { linear_issue }},
+            link,
             icon: rsx! { Linear { class: "h-5 w-5" }, TaskHint { task: notification().task } },
             subicon: rsx! { LinearIssueIcon { class: "h-5 w-5 min-w-5", linear_issue } },
             action_buttons: get_notification_list_item_action_buttons(
@@ -111,12 +114,14 @@ pub fn LinearProjectNotificationListItem(
             .to_string()
     });
     let list_context = use_context::<Memo<ListContext>>();
+    let link = notification().get_html_url();
 
     rsx! {
         ListItem {
             key: "{notification().id}",
             title: "{notification().title}",
             subtitle: rsx! { },
+            link,
             icon: rsx! { Linear { class: "h-5 w-5" }, TaskHint { task: notification().task } },
             subicon: rsx! {
                 LinearProjectIcon {

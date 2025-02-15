@@ -1,6 +1,8 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
+use dioxus_free_icons::{icons::bs_icons::BsArrowUpRightSquare, Icon};
+use url::Url;
 
 use crate::components::markdown::Markdown;
 
@@ -29,6 +31,7 @@ pub fn List(id: String, show_shortcut: ReadOnlySignal<bool>, children: Element) 
 pub fn ListItem(
     title: ReadOnlySignal<String>,
     subtitle: ReadOnlySignal<Element>,
+    link: ReadOnlySignal<Url>,
     icon: Option<Element>,
     subicon: Option<Element>,
     is_selected: ReadOnlySignal<bool>,
@@ -101,7 +104,17 @@ pub fn ListItem(
                     div {
                         class: "flex flex-col grow",
 
-                        Markdown { text: "{title}" }
+                        div {
+                            class: "flex",
+                            a {
+                                class: "flex items-center",
+                                href: "{link}",
+                                target: "_blank",
+                                Markdown { text: "{title}" }
+                                Icon { class: "h-5 w-5 text-gray-400 p-1", icon: BsArrowUpRightSquare }
+                            }
+                            div { class: "grow" }
+                        }
 
                         { subtitle() }
                     }

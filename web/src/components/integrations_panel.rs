@@ -450,7 +450,10 @@ pub fn Documentation(config: ReadOnlySignal<IntegrationProviderStaticConfig>) ->
                 div {
                     class: "collapse-content flex flex-col gap-2",
 
-                    Markdown { class: "!prose-invert", text: config().doc.clone() }
+                    Markdown {
+                        class: "!prose-invert w-full max-w-full",
+                        text: config().doc.clone()
+                    }
 
                     if !doc_for_actions.is_empty() {
                         div { class: "text-base", "Actions on notifications" }

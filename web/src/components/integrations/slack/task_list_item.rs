@@ -7,11 +7,12 @@ use dioxus_free_icons::{icons::bs_icons::BsSlack, Icon};
 use slack_morphism::SlackChannelInfo;
 use universal_inbox::{
     task::Task,
-    third_party::integrations::slack::{SlackFileDetails, SlackMessageDetails},
     third_party::integrations::slack::{
-        SlackReaction, SlackReactionItem, SlackStar, SlackStarItem,
+        SlackFileDetails, SlackMessageDetails, SlackReaction, SlackReactionItem, SlackStar,
+        SlackStarItem,
     },
     utils::emoji::replace_emoji_code_with_emoji,
+    HasHtmlUrl,
 };
 
 use crate::components::{
@@ -40,12 +41,14 @@ pub fn SlackStarTaskListItem(
             .to_string()
     });
     let list_context = use_context::<Memo<ListContext>>();
+    let link = task().get_html_url();
 
     rsx! {
         ListItem {
             key: "{task().id}",
             title: "{task().title}",
             subtitle: rsx! { SlackStarTaskSubtitle { slack_star } },
+            link,
             icon: rsx! {
                 Icon { class: "h-5 w-5", icon: BsSlack },
                 TaskHint { task: Some(task()) }
@@ -80,12 +83,14 @@ pub fn SlackReactionTaskListItem(
     let list_context = use_context::<Memo<ListContext>>();
     let reaction_emoji =
         replace_emoji_code_with_emoji(&slack_reaction().name.0).unwrap_or("👀".to_string());
+    let link = task().get_html_url();
 
     rsx! {
         ListItem {
             key: "{task().id}",
             title: "{task().title}",
             subtitle: rsx! { SlackReactionTaskSubtitle { slack_reaction } },
+            link,
             icon: rsx! {
                 Icon { class: "h-5 w-5", icon: BsSlack }
                 TaskHint { task: Some(task()) }

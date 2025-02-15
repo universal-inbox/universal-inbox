@@ -8,6 +8,7 @@ use dioxus_free_icons::{icons::bs_icons::BsCardChecklist, Icon};
 use universal_inbox::{
     notification::NotificationWithTask,
     third_party::integrations::todoist::{TodoistItem, TodoistItemPriority},
+    HasHtmlUrl,
 };
 
 use crate::components::{
@@ -36,12 +37,14 @@ pub fn TodoistNotificationListItem(
         TodoistItemPriority::P3 => "text-orange-500",
         TodoistItemPriority::P4 => "text-red-500",
     };
+    let link = notification().get_html_url();
 
     rsx! {
         ListItem {
             key: "{notification().id}",
             title: "{notification().title}",
             subtitle: rsx! { TodoistListItemSubtitle { todoist_item } },
+            link,
             icon: rsx! { Todoist { class: "h-5 w-5" }, TaskHint { task: notification().task } },
             subicon: rsx! {
                 Icon { class: "h-5 w-5 min-w-5 {task_icon_style}", icon: BsCardChecklist }

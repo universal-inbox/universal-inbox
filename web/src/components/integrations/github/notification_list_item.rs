@@ -10,6 +10,7 @@ use universal_inbox::{
         GithubDiscussion, GithubNotification, GithubNotificationItem, GithubPullRequest,
         GithubPullRequestReviewDecision,
     },
+    HasHtmlUrl,
 };
 
 use crate::components::{
@@ -78,12 +79,14 @@ pub fn DefaultGithubNotificationListItem(
             .to_string()
     });
     let list_context = use_context::<Memo<ListContext>>();
+    let link = notification().get_html_url();
 
     rsx! {
         ListItem {
             key: "{notification().id}",
             title: "{notification().title}",
             subtitle: rsx! { GithubNotificationSubtitle { github_notification } },
+            link,
             icon: rsx! { Github { class: "h-5 w-5" }, TaskHint { task: notification().task } },
             subicon: rsx! {
                 GithubNotificationIcon {
@@ -118,12 +121,14 @@ pub fn GithubPullRequestNotificationListItem(
             .to_string()
     });
     let list_context = use_context::<Memo<ListContext>>();
+    let link = notification().get_html_url();
 
     rsx! {
         ListItem {
             key: "{notification().id}",
             title: "{notification().title}",
             subtitle: rsx! { GithubNotificationSubtitle { github_notification } },
+            link,
             icon: rsx! { Github { class: "h-5 w-5" }, TaskHint { task: notification().task } },
             subicon: rsx! {
                 GithubNotificationIcon {
@@ -178,12 +183,14 @@ pub fn GithubDiscussionNotificationListItem(
             .to_string()
     });
     let list_context = use_context::<Memo<ListContext>>();
+    let link = notification().get_html_url();
 
     rsx! {
         ListItem {
             key: "{notification().id}",
             title: "{notification().title}",
             subtitle: rsx! { GithubNotificationSubtitle { github_notification } },
+            link,
             icon: rsx! { Github { class: "h-5 w-5" }, TaskHint { task: notification().task } },
             subicon: rsx! {
                 GithubNotificationIcon {

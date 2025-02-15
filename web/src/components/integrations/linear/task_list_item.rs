@@ -3,7 +3,7 @@
 use chrono::{DateTime, Local};
 use dioxus::prelude::*;
 
-use universal_inbox::{task::Task, third_party::integrations::linear::LinearIssue};
+use universal_inbox::{task::Task, third_party::integrations::linear::LinearIssue, HasHtmlUrl};
 
 use crate::components::{
     integrations::linear::{
@@ -29,12 +29,14 @@ pub fn LinearTaskListItem(
             .to_string()
     });
     let list_context = use_context::<Memo<ListContext>>();
+    let link = task().get_html_url();
 
     rsx! {
         ListItem {
             key: "{task().id}",
             title: "{linear_issue().title}",
             subtitle: rsx! { LinearIssueListItemSubtitle { linear_issue }},
+            link,
             icon: rsx! {
                 Linear { class: "h-5 w-5" }
                 TaskHint { task: Some(task()) }
