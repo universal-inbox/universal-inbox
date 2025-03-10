@@ -11,7 +11,7 @@ default:
 init-db:
   #!/usr/bin/env bash
 
-  [ -d .devbox/virtenv/postgresql_15/data ] || initdb --username=postgres --pwfile=<(echo password)
+  [ -f .devbox/virtenv/postgresql_15/data/postgresql.conf ] || initdb --username=postgres --pwfile=<(echo password)
 
 install-rust-toolchain:
   #!/usr/bin/env bash
