@@ -42,6 +42,7 @@ regex = { workspace = true }
 reqwest = { workspace = true }
 secrecy = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 serde-wasm-bindgen = "0.6.0"
 slack-blocks-render = { workspace = true }
 slack-morphism = { workspace = true }
