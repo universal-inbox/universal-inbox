@@ -113,7 +113,7 @@ pub async fn notification_service(
                     .write()
                     .remove_element(|notif| notif.id != notification_id);
 
-                let _result: Result<Notification> = call_api_and_notify(
+                let _result: Result<Option<Notification>> = call_api_and_notify(
                     Method::PATCH,
                     &api_base_url,
                     &format!("notifications/{notification_id}"),
@@ -135,7 +135,7 @@ pub async fn notification_service(
                     .write()
                     .remove_element(|notif| notif.id != notification_id);
 
-                let _result: Result<Notification> = call_api_and_notify(
+                let _result: Result<Option<Notification>> = call_api_and_notify(
                     Method::PATCH,
                     &api_base_url,
                     &format!("notifications/{notification_id}"),
@@ -190,7 +190,7 @@ pub async fn notification_service(
                     .write()
                     .remove_element(|notif| notif.id != notification_id);
 
-                let _result: Result<NotificationWithTask> = call_api_and_notify(
+                let _result: Result<Option<NotificationWithTask>> = call_api_and_notify(
                     Method::PATCH,
                     &api_base_url,
                     &format!("notifications/{notification_id}"),
@@ -275,7 +275,7 @@ async fn delete_notification(
         .write()
         .remove_element(|notif| notif.id != notification_id);
 
-    let _result: Result<Notification, anyhow::Error> = call_api_and_notify(
+    let _result: Result<Option<Notification>, anyhow::Error> = call_api_and_notify(
         Method::PATCH,
         api_base_url,
         &format!("notifications/{notification_id}"),
@@ -342,7 +342,7 @@ async fn patch_invitation(
         notif.id == notification_id && notif.kind == NotificationSourceKind::GoogleCalendar
     }) {
         page.remove_element(|notif| notif.id != notification_id);
-        let _result: Result<Notification> = call_api_and_notify(
+        let _result: Result<Option<Notification>> = call_api_and_notify(
             Method::PATCH,
             api_base_url,
             &format!("notifications/{notification_id}/invitation"),

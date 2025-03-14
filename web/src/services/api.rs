@@ -2,11 +2,12 @@ use std::collections::HashMap;
 
 use anyhow::{anyhow, Result};
 use dioxus::prelude::*;
-use log::error;
+use log::{debug, error};
 use reqwest::{
     header::{HeaderMap, HeaderValue},
     Client, Method, Response, StatusCode,
 };
+use serde_json;
 use url::Url;
 
 use crate::{
@@ -76,6 +77,22 @@ pub async fn call_api<R: for<'de> serde::de::Deserialize<'de>, B: serde::Seriali
         } else if ui_model.read().authentication_state != AuthenticationState::Authenticated {
             ui_model.write().authentication_state = AuthenticationState::Authenticated;
         }
+    }
+
+    // Handle 304 Not Modified responses as successful
+    if response.status() == StatusCode::NOT_MODIFIED {
+        debug!("Received 304 Not Modified response from {}", response.url());
+
+        let empty_value_result = serde_json::from_str::<R>("{}")
+            .or_else(|_| serde_json::from_str::<R>("[]"))
+            .or_else(|_| serde_json::from_str::<R>("null"));
+        if let Ok(empty_value) = empty_value_result {
+            return Ok(empty_value);
+        }
+
+        debug!("All deserialization attempts of an empty result failed for 304 response");
+        // Just continue with normal processing, which might fail
+        // but at least we tried to handle 304 specially
     }
 
     Ok(response.json().await?)

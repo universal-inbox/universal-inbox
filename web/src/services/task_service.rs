@@ -49,7 +49,7 @@ pub async fn task_service(
 
         match msg {
             Some(TaskCommand::Delete(task_id)) => {
-                let _result: Result<Task> = call_api_and_notify(
+                let _result: Result<Option<Task>> = call_api_and_notify(
                     Method::PATCH,
                     &api_base_url,
                     &format!("tasks/{task_id}"),
@@ -77,7 +77,7 @@ pub async fn task_service(
             }
 
             Some(TaskCommand::Plan(task_id, parameters)) => {
-                let _result: Result<Task> = call_api_and_notify(
+                let _result: Result<Option<Task>> = call_api_and_notify(
                     Method::PATCH,
                     &api_base_url,
                     &format!("tasks/{task_id}"),
@@ -151,7 +151,7 @@ async fn complete_task(
         .write()
         .remove_element(|t| t.id != task_id);
 
-    let _result: Result<Task> = call_api_and_notify(
+    let _result: Result<Option<Task>> = call_api_and_notify(
         Method::PATCH,
         api_base_url,
         &format!("tasks/{task_id}"),

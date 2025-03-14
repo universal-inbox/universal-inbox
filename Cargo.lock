@@ -7802,6 +7802,7 @@ dependencies = [
  "secrecy",
  "serde",
  "serde-wasm-bindgen 0.6.5",
+ "serde_json",
  "slack-blocks-render",
  "slack-morphism",
  "sorted-groups",
