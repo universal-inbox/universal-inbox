@@ -16,27 +16,27 @@ test = false
 
 [dependencies]
 actix-cors = "0.7.0"
-actix-jwt-authc = { git = "https://github.com/dax/actix-jwt-authc", rev = "d0467f2455d9bc1e5fd493c94c8e9544e9421162", features = [
+actix-jwt-authc = { git = "https://github.com/dax/actix-jwt-authc", rev = "b1029ca79d66b4cbef10505101b1f8e01aafb624", features = [
   "session",
 ] }
 actix-http = "3.0.0"
 actix-session = { version = "0.10.0", features = ["cookie-session"] }
 actix-web = "4.0.0"
-actix-web-lab = { version = "0.23.0", features = ["spa"] }
+actix-web-lab = { version = "0.24.0", features = ["spa"] }
 anyhow = { workspace = true }
-apalis = { git = "https://github.com/dax/apalis", rev = "84ffdb8563068ae2055e5ad6d7ce7074c4c0a500", default-features = false, features = ["redis", "tokio-comp", "tracing"] }
-apalis-redis = { git = "https://github.com/dax/apalis", rev = "84ffdb8563068ae2055e5ad6d7ce7074c4c0a500" }
+apalis = { version = "0.6", features = ["limit"] }
+apalis-redis = { version = "0.6" }
 argon2 = { version = "0.5", features = ["std"] }
 async-trait = "0.1.0"
 base64 = { workspace = true }
-cached = { version = "0.54.0", features = [
+cached = { version = "0.55.0", features = [
   "async_tokio_rt_multi_thread",
   "redis_tokio",
   "redis_connection_manager",
 ] }
 chrono = { workspace = true, features = ["serde"] }
 clap = { workspace = true }
-color-backtrace = "0.6"
+color-backtrace = "0.7"
 config = { version = "0.15.0", default-features = false, features = [
   "toml",
   "convert-case",
@@ -72,15 +72,16 @@ macro-attr = { workspace = true }
 mailgen = "0.3.0"
 once_cell = "1.20.0"
 openidconnect = { workspace = true }
-opentelemetry = { version = "0.27.0", features = ["trace", "logs"] }
-opentelemetry_sdk = { version = "0.27.0", features = [
+opentelemetry = { version = "0.28.0", features = ["trace", "logs"] }
+opentelemetry_sdk = { version = "0.28.0", features = [
   "trace",
   "logs",
   "rt-tokio",
 ] }
-opentelemetry-appender-tracing = { version = "0.27", features = ["experimental_use_tracing_span_context"] }
-opentelemetry-http = { version = "0.27.0", features = ["reqwest"] }
-opentelemetry-otlp = { version = "0.27.0", features = [
+opentelemetry-appender-tracing = { version = "0.28", features = ["experimental_use_tracing_span_context"] }
+#opentelemetry-appender-tracing = { version = "0.27" }
+opentelemetry-http = { version = "0.28.0", features = ["reqwest"] }
+opentelemetry-otlp = { version = "0.28.0", features = [
   "http-proto",
   "grpc-tonic",
   "trace",
@@ -92,7 +93,7 @@ opentelemetry-otlp = { version = "0.27.0", features = [
 ] }
 rand = { version = "0.8", features = ["std_rng"] }
 ring = "0.17.0"
-redis = { version = "0.28.0", features = [
+redis = { version = "0.29.0", features = [
   "tokio-comp",
   "tokio-native-tls-comp",
   "connection-manager",
@@ -129,7 +130,7 @@ tracing-actix-web = { version = "0.7.0", features = [
   "uuid_v7"
 ] }
 tracing-log = "0.2.0"
-tracing-opentelemetry = { version = "0.28.0", features = ["tracing-log"] }
+tracing-opentelemetry = { version = "0.29.0", features = ["tracing-log"] }
 tracing-subscriber = { version = "0.3.0", features = [
   "std",
   "env-filter",

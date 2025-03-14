@@ -38,8 +38,8 @@ pub async fn handle_slack_message_push_event(
             team_id,
             event:
                 SlackEventCallbackBody::Message(SlackMessageEvent {
-                    origin: SlackMessageOrigin { ref thread_ts, .. },
-                    content: Some(ref content),
+                    origin: SlackMessageOrigin { thread_ts, .. },
+                    content: Some(content),
                     ..
                 }),
             ..

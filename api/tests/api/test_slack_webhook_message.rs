@@ -51,7 +51,7 @@ mod webhook {
         #[future] authenticated_app: AuthenticatedApp,
         slack_push_message_event: Box<SlackPushEvent>,
     ) {
-        let app = authenticated_app.await;
+        let mut app = authenticated_app.await;
 
         let response = create_resource_response(
             &app.client,
@@ -62,7 +62,7 @@ mod webhook {
         .await;
 
         assert_eq!(response.status(), 200);
-        assert_message_ignored(&app.app).await;
+        assert_message_ignored(&mut app.app).await;
     }
 
     #[rstest]
@@ -71,7 +71,7 @@ mod webhook {
         #[future] authenticated_app: AuthenticatedApp,
         mut slack_push_message_event: Box<SlackPushEvent>,
     ) {
-        let app = authenticated_app.await;
+        let mut app = authenticated_app.await;
         let SlackPushEvent::EventCallback(event) = &mut *slack_push_message_event else {
             unreachable!("Unexpected event type");
         };
@@ -86,7 +86,7 @@ mod webhook {
         .await;
 
         assert_eq!(response.status(), 200);
-        assert_message_processed(&app.app).await;
+        assert_message_processed(&mut app.app).await;
     }
 
     #[rstest]
@@ -95,7 +95,7 @@ mod webhook {
         #[future] authenticated_app: AuthenticatedApp,
         slack_push_message_in_thread_event: Box<SlackPushEvent>,
     ) {
-        let app = authenticated_app.await;
+        let mut app = authenticated_app.await;
 
         let response = create_resource_response(
             &app.client,
@@ -106,7 +106,7 @@ mod webhook {
         .await;
 
         assert_eq!(response.status(), 200);
-        assert_message_ignored(&app.app).await;
+        assert_message_ignored(&mut app.app).await;
     }
 
     #[rstest]
@@ -121,7 +121,7 @@ mod webhook {
         mut slack_thread: Box<SlackThread>,
         #[case] subscribed: bool,
     ) {
-        let app = authenticated_app.await;
+        let mut app = authenticated_app.await;
         let slack_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
@@ -164,7 +164,7 @@ mod webhook {
         // Message is processed even if thread is marked as unsubscribed as it may
         // have been marked as subscribed again from Slack. Universal Inbox must
         // update the thread to get the actual subscription status.
-        assert_message_processed(&app.app).await;
+        assert_message_processed(&mut app.app).await;
     }
 
     #[rstest]
@@ -176,7 +176,7 @@ mod webhook {
         mut slack_push_message_in_thread_event: Box<SlackPushEvent>,
         mut slack_thread: Box<SlackThread>,
     ) {
-        let app = tested_app_with_local_auth.await;
+        let mut app = tested_app_with_local_auth.await;
         // `slack_thread` contains 2 messages from 2 different users:
         // - first (read) message from user U01
         // - second (unread) message from user U02 (this message is also the one that is received in the event)
@@ -226,10 +226,10 @@ mod webhook {
         .await;
 
         assert_eq!(response.status(), 200);
-        assert_message_processed(&app).await;
+        assert_message_processed(&mut app).await;
     }
 
-    async fn assert_message_ignored(app: &TestedApp) {
+    async fn assert_message_ignored(app: &mut TestedApp) {
         assert!(app
             .redis_storage
             .is_empty()
@@ -237,7 +237,7 @@ mod webhook {
             .expect("Failed to get jobs count"));
     }
 
-    async fn assert_message_processed(app: &TestedApp) {
+    async fn assert_message_processed(app: &mut TestedApp) {
         assert!(!app
             .redis_storage
             .is_empty()

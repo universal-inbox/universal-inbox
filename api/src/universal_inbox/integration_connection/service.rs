@@ -2,7 +2,8 @@ use core::fmt;
 use std::{collections::HashMap, sync::Arc};
 
 use anyhow::{anyhow, Context};
-use apalis::{prelude::*, redis::RedisStorage};
+use apalis::prelude::*;
+use apalis_redis::RedisStorage;
 use cached::proc_macro::io_cached;
 use chrono::{TimeDelta, Utc};
 use sqlx::{Postgres, Transaction};
@@ -28,7 +29,7 @@ use crate::{
     integrations::oauth2::{AccessToken, NangoService},
     jobs::{
         sync::{SyncNotificationsJob, SyncTasksJob},
-        UniversalInboxJob, UniversalInboxJobPayload,
+        UniversalInboxJob,
     },
     repository::{
         integration_connection::{
@@ -221,12 +222,10 @@ impl IntegrationConnectionService {
             || async {
                 job_storage
                     .clone()
-                    .push(UniversalInboxJob::new(
-                        UniversalInboxJobPayload::SyncNotifications(SyncNotificationsJob {
-                            source: notification_sync_source_kind,
-                            user_id: for_user_id,
-                        }),
-                    ))
+                    .push(UniversalInboxJob::SyncNotifications(SyncNotificationsJob {
+                        source: notification_sync_source_kind,
+                        user_id: for_user_id,
+                    }))
                     .await
             },
         )
@@ -265,12 +264,10 @@ impl IntegrationConnectionService {
             || async {
                 job_storage
                     .clone()
-                    .push(UniversalInboxJob::new(UniversalInboxJobPayload::SyncTasks(
-                        SyncTasksJob {
-                            source: task_sync_source_kind,
-                            user_id: for_user_id,
-                        },
-                    )))
+                    .push(UniversalInboxJob::SyncTasks(SyncTasksJob {
+                        source: task_sync_source_kind,
+                        user_id: for_user_id,
+                    }))
                     .await
             },
         )

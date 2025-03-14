@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 
+use anyhow::anyhow;
 use chrono::{TimeDelta, TimeZone, Timelike, Utc};
 use http::StatusCode;
 use pretty_assertions::assert_eq;
 use rstest::*;
 use tokio::time::{sleep, Duration};
+use tokio_retry::{strategy::FixedInterval, Retry};
 use uuid::Uuid;
 
 use universal_inbox::{
@@ -898,8 +900,7 @@ async fn test_sync_all_tasks_asynchronously(
         assert_eq!(response.status(), StatusCode::CREATED);
     }
 
-    let mut i = 0;
-    let synchronized = loop {
+    Retry::spawn(FixedInterval::from_millis(100).take(10), || async {
         let result = list_tasks(
             &app.client,
             &app.app.api_address,
@@ -909,20 +910,14 @@ async fn test_sync_all_tasks_asynchronously(
         .await;
 
         if result.len() == 2 {
-            // The existing task's status has been updated to Deleted
-            break true;
+            Ok(())
+        } else {
+            Err(anyhow!("Not yet synchronized"))
         }
+    })
+    .await
+    .unwrap();
 
-        if i == 10 {
-            // Give up after 10 attempts
-            break false;
-        }
-
-        sleep(Duration::from_millis(100)).await;
-        i += 1;
-    };
-
-    assert!(synchronized);
     todoist_tasks_mock.assert();
     todoist_projects_mock.assert();
 

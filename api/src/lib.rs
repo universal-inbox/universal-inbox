@@ -7,7 +7,11 @@ extern crate macro_attr;
 extern crate enum_derive;
 
 use std::{
-    net::TcpListener, num::NonZeroUsize, sync::Arc, sync::Weak, thread,
+    fmt::{Debug, Display},
+    net::TcpListener,
+    num::NonZeroUsize,
+    sync::{Arc, Weak},
+    thread,
     time::Duration as StdDuration,
 };
 
@@ -36,8 +40,8 @@ use anyhow::Context;
 use apalis::{
     layers::tracing::{DefaultOnRequest, DefaultOnResponse, OnFailure, TraceLayer},
     prelude::*,
-    redis::RedisStorage,
 };
+use apalis_redis::RedisStorage;
 use configuration::AuthenticationSettings;
 use csp::{Directive, Source, Sources, CSP};
 use futures::channel::mpsc;
@@ -269,8 +273,8 @@ pub async fn run_server(
 #[derive(Clone, Debug)]
 struct WorkerOnFailure {}
 
-impl OnFailure for WorkerOnFailure {
-    fn on_failure(&mut self, error: &Error, latency: StdDuration, span: &Span) {
+impl<E: Display + Debug> OnFailure<E> for WorkerOnFailure {
+    fn on_failure(&mut self, error: &E, latency: StdDuration, span: &Span) {
         event!(
             parent: span,
             Level::ERROR,
@@ -288,7 +292,7 @@ pub async fn run_worker(
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     third_party_item_service: Arc<RwLock<ThirdPartyItemService>>,
     slack_service: Arc<SlackService>,
-) -> Monitor<TokioExecutor> {
+) -> Monitor {
     let count = workers_count.unwrap_or_else(|| {
         thread::available_parallelism()
             .unwrap_or(NonZeroUsize::new(1).unwrap())
@@ -296,8 +300,7 @@ pub async fn run_worker(
     });
     info!("Starting {count} asynchronous Workers");
     Monitor::new()
-        .register_with_count(
-            count,
+        .register(
             WorkerBuilder::new("universal-inbox-worker")
                 .layer(
                     TraceLayer::new()
@@ -305,12 +308,13 @@ pub async fn run_worker(
                         .on_response(DefaultOnResponse::default().level(Level::INFO))
                         .on_failure(WorkerOnFailure {}),
                 )
-                .with_storage(redis_storage.clone())
+                .concurrency(count)
                 .data(notification_service)
                 .data(task_service)
                 .data(integration_connection_service)
                 .data(third_party_item_service)
                 .data(slack_service)
+                .backend(redis_storage.clone())
                 .build_fn(handle_universal_inbox_job),
         )
         .on_event(|e| {

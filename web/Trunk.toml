@@ -13,6 +13,7 @@ command_arguments = [
 
 [build]
 target = "index-trunk.html"
+html_output = "index.html"
 minify = "always"
 dist = "public"
 

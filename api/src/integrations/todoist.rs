@@ -478,7 +478,7 @@ impl TodoistService {
 
 #[cached(
     result = true,
-    sync_writes = true,
+    sync_writes = "by_key",
     size = 1,
     time = 600,
     key = "String",

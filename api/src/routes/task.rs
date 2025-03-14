@@ -7,7 +7,7 @@ use actix_web::{
     web, HttpResponse, Scope,
 };
 use anyhow::Context;
-use apalis::redis::RedisStorage;
+use apalis_redis::RedisStorage;
 use serde::Deserialize;
 use serde_json::json;
 use tokio::sync::RwLock;
