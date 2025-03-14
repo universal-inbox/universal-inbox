@@ -105,16 +105,13 @@ impl Task {
     pub fn is_in_inbox(&self) -> bool {
         match self.kind {
             TaskSourceKind::Todoist => self.project == TODOIST_INBOX_PROJECT,
-            _ => {
-                if let Some(sink_item) = &self.sink_item {
-                    match sink_item.get_third_party_item_source_kind() {
-                        ThirdPartyItemSourceKind::Todoist => self.project == TODOIST_INBOX_PROJECT,
-                        _ => false,
-                    }
-                } else {
-                    false
-                }
-            }
+            _ => match &self.sink_item {
+                Some(sink_item) => match sink_item.get_third_party_item_source_kind() {
+                    ThirdPartyItemSourceKind::Todoist => self.project == TODOIST_INBOX_PROJECT,
+                    _ => false,
+                },
+                _ => false,
+            },
         }
     }
 

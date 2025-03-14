@@ -384,10 +384,9 @@ impl SlackMessageRender for SlackHistoryMessage {
             }
         }
 
-        let message = if let Some(text) = &self.content.text {
-            sanitize_slack_markdown(text)
-        } else {
-            "A slack message".to_string()
+        let message = match &self.content.text {
+            Some(text) => sanitize_slack_markdown(text),
+            _ => "A slack message".to_string(),
         };
 
         replace_emoji_code_in_string_with_emoji(&message)
