@@ -11,7 +11,7 @@ default:
 init-db:
   #!/usr/bin/env bash
 
-  [ -f .devbox/virtenv/postgresql_15/data/postgresql.conf ] || initdb --username=postgres --pwfile=<(echo password)
+  [ -f .devbox/virtenv/postgresql_16/data/postgresql.conf ] || initdb --username=postgres --pwfile=<(echo password)
 
 install-rust-toolchain:
   #!/usr/bin/env bash
@@ -57,7 +57,7 @@ publish-container:
 
 ## Dev recipes
 run-db:
-    process-compose -f .devbox/virtenv/redis/process-compose.yaml -f .devbox/virtenv/postgresql_15/process-compose.yaml -p 9999
+    process-compose -f .devbox/virtenv/redis/process-compose.yaml -f .devbox/virtenv/postgresql_16/process-compose.yaml -p 9999
 
 check:
     cargo clippy --tests -- -D warnings
@@ -165,6 +165,6 @@ run-nango-server: create-docker-network
 run-all:
     process-compose \
         -f .devbox/virtenv/redis/process-compose.yaml \
-        -f .devbox/virtenv/postgresql_15/process-compose.yaml \
+        -f .devbox/virtenv/postgresql_16/process-compose.yaml \
         -f process-compose.yaml \
         -p 9999

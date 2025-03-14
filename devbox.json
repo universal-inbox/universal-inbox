@@ -9,7 +9,7 @@
         "cargo-outdated": "latest",
         "just": "latest",
         "watchexec": "latest",
-        "postgresql_15": "latest",
+        "postgresql_16": "latest",
         "redis": "latest",
         "iconv": "latest",
         "nodejs_22": "latest",
@@ -43,6 +43,6 @@
     },
     "env": {
         "TARGET_CC": "cc",
-        "RUST_TOOLCHAIN_VERSION": "1.84"
+        "RUST_TOOLCHAIN_VERSION": "1.85"
     }
 }
