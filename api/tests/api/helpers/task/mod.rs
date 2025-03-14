@@ -1,5 +1,7 @@
+use anyhow::anyhow;
 use reqwest::{Client, Response};
 use serde_json::json;
+use tokio_retry::{strategy::FixedInterval, Retry};
 
 use universal_inbox::{
     task::{
@@ -59,6 +61,25 @@ pub async fn list_tasks(
             .await
             .expect("Cannot parse JSON result");
     tasks.content
+}
+
+pub async fn list_tasks_until(
+    client: &Client,
+    api_address: &str,
+    status_filter: TaskStatus,
+    expected_tasks_count: usize,
+) -> Vec<Task> {
+    Retry::spawn(FixedInterval::from_millis(500).take(10), || async {
+        let tasks = list_tasks(client, api_address, status_filter, false).await;
+
+        if tasks.len() == expected_tasks_count {
+            Ok(tasks)
+        } else {
+            Err(anyhow!("Not yet synchronized"))
+        }
+    })
+    .await
+    .unwrap()
 }
 
 pub async fn get_task_response(client: &Client, api_address: &str, task_id: TaskId) -> Response {

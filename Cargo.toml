@@ -69,8 +69,8 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 serde_urlencoded = { version = "0.7.0" }
 serde_with = { version = "3.8.0" }
-slack-blocks-render = { version = "0.3.0" }
-slack-morphism = { version = "2.8.0" }
+slack-blocks-render = { version = "0.4.0" }
+slack-morphism = { version = "2.10.0" }
 thiserror = { version = "1.0" }
 tracing = { version = "0.1.0", features = ["log"] }
 url = { version = "2.5.0" }
@@ -84,15 +84,6 @@ webauthn-rs-proto = { version = "0.5.1" }
 pretty_assertions = { workspace = true }
 rstest = { workspace = true }
 
-[patch.crates-io]
-slack-blocks-render = { git = "https://github.com/dax/slack-blocks-render", branch = "render-custom-emojis" }
-slack-morphism = { git = "https://github.com/dax/slack-morphism-rust", branch = "add-video-slack-block" }
-opentelemetry = { package = "opentelemetry",git = "https://github.com/dylanahsmith/opentelemetry-rust.git", branch = "appender-tracing-fix-trace-context"  }
-opentelemetry-appender-tracing = { package = "opentelemetry-appender-tracing", git = "https://github.com/dylanahsmith/opentelemetry-rust.git", branch = "appender-tracing-fix-trace-context" }
-opentelemetry-http = { package = "opentelemetry-http", git = "https://github.com/dylanahsmith/opentelemetry-rust.git", branch = "appender-tracing-fix-trace-context"  }
-opentelemetry-otlp = { package = "opentelemetry-otlp", git = "https://github.com/dylanahsmith/opentelemetry-rust.git", branch = "appender-tracing-fix-trace-context"  }
-opentelemetry_sdk = { package = "opentelemetry_sdk", git = "https://github.com/dylanahsmith/opentelemetry-rust.git", branch = "appender-tracing-fix-trace-context"  }
-
 [profile]
 
 [profile.wasm-dev]
@@ -104,3 +95,8 @@ inherits = "dev"
 
 [profile.android-dev]
 inherits = "dev"
+
+[patch.crates-io]
+# Depends on Apalis with Redis 0.29. Remove when Apalis >0.6.4 is released
+apalis = { git = "https://github.com/geofmureithi/apalis", rev = "c9f4c631585faaa411e20d3f0e483ace4aa63a50" }
+apalis-redis = { git = "https://github.com/geofmureithi/apalis", rev = "c9f4c631585faaa411e20d3f0e483ace4aa63a50", package = "apalis-redis" }

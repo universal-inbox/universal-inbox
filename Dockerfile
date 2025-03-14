@@ -71,7 +71,7 @@ COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" src src
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" api api
 RUN devbox run -- just api/build-release
 
-FROM debian:bookworm-slim AS runtime
+FROM debian:testing-slim AS runtime
 ARG VERSION
 ENV VERSION=${VERSION}
 WORKDIR /app

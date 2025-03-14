@@ -1,6 +1,6 @@
 use std::{env, fs, net::TcpListener, str::FromStr, sync::Arc};
 
-use apalis::redis::RedisStorage;
+use apalis_redis::RedisStorage;
 use httpmock::MockServer;
 use openidconnect::{ClientId, IntrospectionUrl, IssuerUrl};
 use rstest::*;
@@ -32,7 +32,6 @@ use crate::helpers::mailer::MailerStub;
 
 pub mod auth;
 pub mod integration_connection;
-pub mod job;
 pub mod mailer;
 pub mod notification;
 pub mod rest;
@@ -125,13 +124,12 @@ async fn db_connection(mut settings: Settings) -> Arc<PgPool> {
 
 #[fixture]
 async fn redis_storage(settings: Settings) -> RedisStorage<UniversalInboxJob> {
-    let mut config = apalis_redis::Config::default();
-    config.set_queue_name_prefix(Some(Uuid::new_v4().to_string()));
+    let namespace = format!("universal-inbox:jobs:UniversalInboxJob:{}", Uuid::new_v4());
     RedisStorage::new_with_config(
-        apalis::redis::connect(settings.redis.connection_string())
+        apalis_redis::connect(settings.redis.connection_string())
             .await
             .expect("Redis storage connection failed"),
-        config,
+        apalis_redis::Config::default().set_namespace(&namespace),
     )
 }
 

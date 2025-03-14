@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use actix_web::{web, HttpResponse, Scope};
 use anyhow::Context;
-use apalis::{prelude::Storage, redis::RedisStorage};
+use apalis::prelude::Storage;
+use apalis_redis::RedisStorage;
 use serde_json::json;
 use slack_morphism::prelude::*;
 use tokio::sync::RwLock;
@@ -201,15 +202,13 @@ async fn send_slack_push_event_callback_job(
     storage: &RedisStorage<UniversalInboxJob>,
     event: SlackPushEventCallback,
 ) -> Result<(), UniversalInboxError> {
-    let job_id = Retry::spawn(
+    let job = Retry::spawn(
         ExponentialBackoff::from_millis(10).map(jitter).take(10),
         || async {
             storage
                 .clone()
-                .push(UniversalInboxJob::new(
-                    crate::jobs::UniversalInboxJobPayload::SlackPushEventCallback(
-                        SlackPushEventCallbackJob(event.clone()),
-                    ),
+                .push(UniversalInboxJob::SlackPushEventCallback(
+                    SlackPushEventCallbackJob(event.clone()),
                 ))
                 .await
         },
@@ -217,8 +216,8 @@ async fn send_slack_push_event_callback_job(
     .await
     .context("Failed to push Slack event to queue")?;
     debug!(
-        "Pushed a Slack event {} to the queue with job ID {job_id:?}",
-        event.event_id
+        "Pushed a Slack event {} to the queue with job ID {}",
+        event.event_id, job.task_id
     );
     Ok(())
 }

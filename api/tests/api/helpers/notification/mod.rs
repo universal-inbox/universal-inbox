@@ -2,8 +2,10 @@
 
 use std::{fmt::Debug, sync::Arc};
 
+use anyhow::anyhow;
 use reqwest::{Client, Response};
 use serde_json::json;
+use tokio_retry::{strategy::FixedInterval, Retry};
 
 use universal_inbox::{
     integration_connection::IntegrationConnectionId,
@@ -119,6 +121,34 @@ pub async fn list_notifications(
     .into_iter()
     .map(|n| n.into())
     .collect()
+}
+
+pub async fn list_notifications_until(
+    client: &Client,
+    api_address: &str,
+    notification_status: Vec<NotificationStatus>,
+    expected_notifications_count: usize,
+) -> Vec<Notification> {
+    Retry::spawn(FixedInterval::from_millis(500).take(10), || async {
+        let notifications = list_notifications(
+            client,
+            api_address,
+            notification_status.clone(),
+            false,
+            None,
+            None,
+            false,
+        )
+        .await;
+
+        if notifications.len() == expected_notifications_count {
+            Ok(notifications)
+        } else {
+            Err(anyhow!("Not yet synchronized"))
+        }
+    })
+    .await
+    .unwrap()
 }
 
 pub async fn sync_notifications_response(

@@ -13,8 +13,8 @@ use opentelemetry_otlp::{
     LogExporter, SpanExporter, WithExportConfig, WithHttpConfig, WithTonicConfig,
 };
 use opentelemetry_sdk::{
-    logs::LoggerProvider,
-    trace::{RandomIdGenerator, Sampler, TracerProvider},
+    logs::SdkLoggerProvider,
+    trace::{RandomIdGenerator, Sampler, SdkTracerProvider},
     Resource,
 };
 use tokio::task::JoinHandle;
@@ -38,8 +38,8 @@ use crate::{
 
 type SubscriberWithTelemetry = Layered<
     OpenTelemetryTracingBridge<
-        opentelemetry_sdk::logs::LoggerProvider,
-        opentelemetry_sdk::logs::Logger,
+        opentelemetry_sdk::logs::SdkLoggerProvider,
+        opentelemetry_sdk::logs::SdkLogger,
     >,
     Layered<
         OpenTelemetryLayer<Layered<EnvFilter, Registry>, opentelemetry_sdk::trace::Tracer>,
@@ -58,7 +58,7 @@ pub fn get_subscriber_with_telemetry(
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(env_filter_str));
 
     let resource = build_resource(environment, service_name, version);
-    let tracer_provider = TracerProvider::builder()
+    let tracer_provider = SdkTracerProvider::builder()
         .with_sampler(Sampler::AlwaysOn)
         .with_id_generator(RandomIdGenerator::default())
         .with_max_events_per_span(256)
@@ -73,7 +73,7 @@ pub fn get_subscriber_with_telemetry(
     let tracer = tracer_provider.tracer("universal-inbox");
     let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
 
-    let logger = LoggerProvider::builder()
+    let logger = SdkLoggerProvider::builder()
         .with_resource(resource)
         .with_batch_exporter(build_log_exporter(
             config.otlp_exporter_protocol,

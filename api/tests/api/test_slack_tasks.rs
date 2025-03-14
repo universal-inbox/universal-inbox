@@ -4,7 +4,6 @@ use chrono::{Timelike, Utc};
 use pretty_assertions::assert_eq;
 use rstest::*;
 use slack_morphism::prelude::*;
-use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
 use universal_inbox::{
@@ -33,7 +32,6 @@ use crate::helpers::{
     integration_connection::{
         create_and_mock_integration_connection, nango_slack_connection, nango_todoist_connection,
     },
-    job::wait_for_jobs_completion,
     notification::{
         list_notifications_with_tasks,
         slack::{
@@ -46,7 +44,7 @@ use crate::helpers::{
     rest::{create_resource, create_resource_response, get_resource, patch_resource},
     settings,
     task::{
-        list_tasks, sync_tasks,
+        list_tasks_until, sync_tasks,
         todoist::{
             mock_todoist_complete_item_service, mock_todoist_get_item_service,
             mock_todoist_item_add_service, mock_todoist_sync_resources_service,
@@ -194,9 +192,17 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
     .await;
 
     assert_eq!(response.status(), 200);
-    assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
-    // make sure the task will be updated
-    sleep(Duration::from_millis(1000)).await;
+    let tasks = list_tasks_until(
+        &app.client,
+        &app.app.api_address,
+        if expected_new_task_status == TaskStatus::Done {
+            TaskStatus::Active
+        } else {
+            TaskStatus::Done
+        },
+        1,
+    )
+    .await;
 
     slack_fetch_user_mock.assert();
     slack_fetch_message_mock.assert();
@@ -206,18 +212,6 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
     todoist_projects_mock.assert();
     todoist_item_add_mock.assert();
     todoist_get_item_mock.assert();
-
-    let tasks = list_tasks(
-        &app.client,
-        &app.app.api_address,
-        if expected_new_task_status == TaskStatus::Done {
-            TaskStatus::Active
-        } else {
-            TaskStatus::Done
-        },
-        false,
-    )
-    .await;
 
     assert_eq!(tasks.len(), 1);
     let existing_task = tasks.first().unwrap();

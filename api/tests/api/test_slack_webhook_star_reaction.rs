@@ -6,7 +6,6 @@ use pretty_assertions::assert_eq;
 use rstest::*;
 use slack_blocks_render::SlackReferences;
 use slack_morphism::prelude::*;
-use tokio::time::{sleep, Duration};
 
 use universal_inbox::{
     integration_connection::{
@@ -38,9 +37,8 @@ use crate::helpers::{
     integration_connection::{
         create_and_mock_integration_connection, nango_slack_connection, nango_todoist_connection,
     },
-    job::wait_for_jobs_completion,
     notification::{
-        list_notifications, list_notifications_with_tasks,
+        list_notifications, list_notifications_until,
         slack::{
             mock_slack_fetch_bot, mock_slack_fetch_channel, mock_slack_fetch_reply,
             mock_slack_fetch_team, mock_slack_fetch_user, mock_slack_get_chat_permalink,
@@ -52,7 +50,7 @@ use crate::helpers::{
     rest::create_resource_response,
     settings,
     task::{
-        list_synced_tasks, list_tasks,
+        list_synced_tasks, list_tasks_until,
         todoist::{
             mock_todoist_complete_item_service, mock_todoist_get_item_service,
             mock_todoist_item_add_service, mock_todoist_sync_resources_service,
@@ -71,7 +69,7 @@ async fn test_receive_star_reaction_event_for_unknown_user(
     slack_push_reaction_added_event: Box<SlackPushEvent>,
     #[case] star_added_case: bool,
 ) {
-    let app = authenticated_app.await;
+    let mut app = authenticated_app.await;
 
     let response = create_resource_response(
         &app.client,
@@ -119,7 +117,7 @@ async fn test_receive_star_reaction_event_for_disabled_config(
     #[case] star_added_case: bool,
     nango_slack_connection: Box<NangoConnection>,
 ) {
-    let app = authenticated_app.await;
+    let mut app = authenticated_app.await;
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
@@ -174,7 +172,7 @@ async fn test_receive_reaction_event_for_different_reaction(
     slack_push_reaction_added_event: Box<SlackPushEvent>,
     nango_slack_connection: Box<NangoConnection>,
 ) {
-    let app = authenticated_app.await;
+    let mut app = authenticated_app.await;
     create_and_mock_integration_connection(
         &app.app,
         app.user.id,
@@ -304,25 +302,19 @@ async fn test_receive_star_or_reaction_added_event_as_notification(
     };
 
     assert_eq!(response.status(), 200);
-    assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
-    sleep(Duration::from_secs(1)).await;
+    let notifications = list_notifications_until(
+        &app.client,
+        &app.app.api_address,
+        vec![NotificationStatus::Unread],
+        1,
+    )
+    .await;
 
     slack_fetch_user_mock.assert();
     slack_fetch_message_mock.assert();
     slack_fetch_channel_mock.assert();
     slack_fetch_team_mock.assert();
     slack_list_usergroups_mock.assert();
-
-    let notifications = list_notifications(
-        &app.client,
-        &app.app.api_address,
-        vec![NotificationStatus::Unread],
-        false,
-        None,
-        None,
-        false,
-    )
-    .await;
 
     assert_eq!(notifications.len(), 1);
     assert_eq!(notifications[0].source_item.source_id, "1707686216.825719");
@@ -468,16 +460,12 @@ async fn test_receive_star_or_reaction_added_event_as_notification(
         .await
     };
     assert_eq!(response.status(), 200);
-    assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
 
-    let notifications = list_notifications(
+    let notifications = list_notifications_until(
         &app.client,
         &app.app.api_address,
         vec![NotificationStatus::Unread],
-        false,
-        None,
-        None,
-        false,
+        1,
     )
     .await;
 
@@ -554,8 +542,13 @@ async fn test_receive_bot_star_added_event_as_notification(
     .await;
 
     assert_eq!(response.status(), 200);
-    assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
-    sleep(Duration::from_secs(1)).await;
+    let notifications = list_notifications_until(
+        &app.client,
+        &app.app.api_address,
+        vec![NotificationStatus::Unread],
+        1,
+    )
+    .await;
 
     slack_fetch_bot_mock.assert();
     slack_fetch_message_mock.assert();
@@ -563,17 +556,6 @@ async fn test_receive_bot_star_added_event_as_notification(
     slack_fetch_team_mock.assert();
     slack_list_usergroups_mock.assert();
     slack_fetch_user_mock.assert();
-
-    let notifications = list_notifications(
-        &app.client,
-        &app.app.api_address,
-        vec![NotificationStatus::Unread],
-        false,
-        None,
-        None,
-        false,
-    )
-    .await;
 
     assert_eq!(notifications.len(), 1);
     assert_eq!(notifications[0].source_item.source_id, "1707686216.825719");
@@ -653,16 +635,11 @@ async fn test_receive_bot_star_added_event_as_notification(
     )
     .await;
     assert_eq!(response.status(), 200);
-    assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
-
-    let notifications = list_notifications(
+    let notifications = list_notifications_until(
         &app.client,
         &app.app.api_address,
         vec![NotificationStatus::Unread],
-        false,
-        None,
-        None,
-        false,
+        1,
     )
     .await;
 
@@ -779,24 +756,19 @@ async fn test_receive_star_or_reaction_removed_event_as_notification(
         .await
     };
     assert_eq!(response.status(), 200);
-    assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
+    let notifications = list_notifications_until(
+        &app.client,
+        &app.app.api_address,
+        vec![NotificationStatus::Unread],
+        1,
+    )
+    .await;
 
     slack_fetch_user_mock.assert();
     slack_fetch_message_mock.assert();
     slack_fetch_channel_mock.assert();
     slack_fetch_team_mock.assert();
     slack_list_usergroups_mock.assert();
-
-    let notifications = list_notifications(
-        &app.client,
-        &app.app.api_address,
-        vec![NotificationStatus::Unread],
-        false,
-        None,
-        None,
-        false,
-    )
-    .await;
 
     assert_eq!(notifications.len(), 1);
     assert_eq!(notifications[0].source_item.source_id, "1707686216.825719");
@@ -821,30 +793,21 @@ async fn test_receive_star_or_reaction_removed_event_as_notification(
         .await
     };
     assert_eq!(response.status(), 200);
-    assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
-    sleep(Duration::from_secs(1)).await;
 
     // No unread notification, it should have been deleted
-    let notifications = list_notifications(
+    list_notifications_until(
         &app.client,
         &app.app.api_address,
         vec![NotificationStatus::Unread],
-        false,
-        None,
-        None,
-        false,
+        0,
     )
     .await;
-    assert_eq!(notifications.len(), 0);
 
-    let notifications = list_notifications(
+    let notifications = list_notifications_until(
         &app.client,
         &app.app.api_address,
         vec![NotificationStatus::Deleted],
-        false,
-        None,
-        None,
-        false,
+        1,
     )
     .await;
 
@@ -1005,7 +968,8 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
     };
 
     assert_eq!(response.status(), 200);
-    assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
+    list_notifications_until(&app.client, &app.app.api_address, vec![], 0).await;
+    let tasks = list_tasks_until(&app.client, &app.app.api_address, TaskStatus::Active, 1).await;
 
     slack_fetch_user_mock.assert();
     slack_fetch_message_mock.assert();
@@ -1015,21 +979,6 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
     todoist_projects_mock.assert();
     todoist_item_add_mock.assert();
     todoist_get_item_mock.assert();
-
-    let notifications = list_notifications(
-        &app.client,
-        &app.app.api_address,
-        vec![],
-        false,
-        None,
-        None,
-        false,
-    )
-    .await;
-
-    assert_eq!(notifications.len(), 0);
-
-    let tasks = list_tasks(&app.client, &app.app.api_address, TaskStatus::Active, false).await;
 
     assert_eq!(tasks.len(), 1);
     assert_eq!(tasks[0].status, TaskStatus::Active);
@@ -1075,10 +1024,8 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
         .await
     };
     assert_eq!(response.status(), 200);
-    assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
 
-    let tasks = list_tasks(&app.client, &app.app.api_address, TaskStatus::Active, false).await;
-
+    let tasks = list_tasks_until(&app.client, &app.app.api_address, TaskStatus::Active, 1).await;
     assert_eq!(tasks.len(), 1);
 }
 
@@ -1216,9 +1163,15 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
         .await
     };
     assert_eq!(response.status(), 200);
-    assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
-    // Make sure the task will be updated
-    sleep(Duration::from_secs(1)).await;
+
+    list_notifications_until(
+        &app.client,
+        &app.app.api_address,
+        vec![NotificationStatus::Deleted],
+        0,
+    )
+    .await;
+    let tasks = list_tasks_until(&app.client, &app.app.api_address, TaskStatus::Active, 1).await;
 
     slack_fetch_user_mock.assert();
     slack_fetch_message_mock.assert();
@@ -1228,21 +1181,6 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
     todoist_projects_mock.assert();
     todoist_item_add_mock.assert();
     todoist_get_item_mock.assert();
-
-    let notifications = list_notifications_with_tasks(
-        &app.client,
-        &app.app.api_address,
-        vec![NotificationStatus::Deleted],
-        false,
-        None,
-        None,
-        false,
-    )
-    .await;
-
-    assert_eq!(notifications.len(), 0);
-
-    let tasks = list_tasks(&app.client, &app.app.api_address, TaskStatus::Active, false).await;
 
     assert_eq!(tasks.len(), 1);
     let star_added_task = &tasks[0];
@@ -1286,25 +1224,16 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
         .await
     };
     assert_eq!(response.status(), 200);
-    assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
-    sleep(Duration::from_secs(1)).await;
-
-    todoist_complete_item_mock.assert();
-
-    let notifications = list_notifications(
+    list_notifications_until(
         &app.client,
         &app.app.api_address,
         vec![NotificationStatus::Deleted],
-        false,
-        None,
-        None,
-        false,
+        0,
     )
     .await;
+    let tasks = list_tasks_until(&app.client, &app.app.api_address, TaskStatus::Done, 1).await;
 
-    assert_eq!(notifications.len(), 0);
-
-    let tasks = list_tasks(&app.client, &app.app.api_address, TaskStatus::Done, false).await;
+    todoist_complete_item_mock.assert();
 
     assert_eq!(tasks.len(), 1);
     assert_eq!(tasks[0].id, star_added_task.id);
@@ -1348,12 +1277,9 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
         .await
     };
     assert_eq!(response.status(), 200);
-    assert!(wait_for_jobs_completion(&app.app.redis_storage).await);
-    sleep(Duration::from_secs(1)).await;
+    let tasks = list_tasks_until(&app.client, &app.app.api_address, TaskStatus::Active, 1).await;
 
     todoist_uncomplete_item_mock.assert();
-
-    let tasks = list_tasks(&app.client, &app.app.api_address, TaskStatus::Active, false).await;
 
     assert_eq!(tasks.len(), 1);
     assert_eq!(tasks[0].id, star_added_task.id);

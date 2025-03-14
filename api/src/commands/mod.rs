@@ -244,10 +244,12 @@ impl Cli {
                     "Connecting to Redis server for job queuing on {}",
                     &settings.redis.safe_connection_string()
                 );
-                let redis_storage = RedisStorage::new(
-                    apalis::redis::connect(settings.redis.connection_string())
+                let redis_storage = RedisStorage::new_with_config(
+                    apalis_redis::connect(settings.redis.connection_string())
                         .await
                         .expect("Redis storage connection failed"),
+                    apalis_redis::Config::default()
+                        .set_namespace("universal-inbox:jobs:UniversalInboxJob"),
                 );
 
                 let listener = TcpListener::bind(format!(
@@ -297,10 +299,12 @@ impl Cli {
                     "Connecting to Redis server for job queuing on {}",
                     &settings.redis.safe_connection_string()
                 );
-                let redis_storage = RedisStorage::new(
-                    apalis::redis::connect(settings.redis.connection_string())
+                let redis_storage = RedisStorage::new_with_config(
+                    apalis_redis::connect(settings.redis.connection_string())
                         .await
                         .expect("Redis storage connection failed"),
+                    apalis_redis::Config::default()
+                        .set_namespace("universal-inbox:jobs:UniversalInboxJob"),
                 );
 
                 let worker = run_worker(
