@@ -141,6 +141,7 @@ impl LinearService {
                                     id: "user_id".to_string()
                                 },
                                 issue: NotificationSubscribersQueryNotificationOnIssueNotificationIssue {
+                                    id: "fake_issue_id".into(),
                                     subscribers: NotificationSubscribersQueryNotificationOnIssueNotificationIssueSubscribers {
                                         nodes: vec![]
                                     }
@@ -702,7 +703,8 @@ impl ThirdPartyNotificationSourceService<LinearNotification> for LinearService {
                     issue: notification_subscribers_query::NotificationSubscribersQueryNotificationOnIssueNotificationIssue {
                         subscribers: notification_subscribers_query::NotificationSubscribersQueryNotificationOnIssueNotificationIssueSubscribers {
                             nodes
-                        }
+                        },
+                        id: issue_id
                     }
                 }
             )
@@ -715,7 +717,7 @@ impl ThirdPartyNotificationSourceService<LinearNotification> for LinearService {
                 ).collect();
             if initial_subscribers_count > subscriber_ids.len() {
                 self
-                    .update_issue_subscribers(&access_token, source_item.source_id.to_string(), subscriber_ids)
+                    .update_issue_subscribers(&access_token, issue_id, subscriber_ids)
                     .await?;
             }
         }
