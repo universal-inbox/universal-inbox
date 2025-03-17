@@ -14,7 +14,10 @@ use universal_inbox::{
         service::NotificationPatch, Notification, NotificationSourceKind, NotificationStatus,
     },
     third_party::{
-        integrations::{linear::LinearNotification, todoist::TodoistItem},
+        integrations::{
+            linear::{LinearIssue, LinearNotification},
+            todoist::TodoistItem,
+        },
         item::{ThirdPartyItem, ThirdPartyItemCreationResult, ThirdPartyItemData},
     },
 };
@@ -37,7 +40,7 @@ use crate::helpers::{
             assert_sync_notifications, create_notification_from_linear_notification,
             mock_linear_notifications_query, sync_linear_notifications_response,
         },
-        sync_notifications, update_notification,
+        list_notifications, sync_notifications, update_notification,
     },
     rest::{create_resource, get_resource},
     settings,
@@ -245,4 +248,137 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         IntegrationConnectionStatus::Validated
     );
     assert!(integration_connection.failure_message.is_none(),);
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_sync_linear_notifications_should_mark_existing_notifications_for_same_issue_as_deleted(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    mut sync_linear_notifications_response: Response<notifications_query::ResponseData>,
+    nango_linear_connection: Box<NangoConnection>,
+) {
+    let app = authenticated_app.await;
+    let linear_integration_connection = create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        &settings.oauth2.nango_secret_key,
+        IntegrationConnectionConfig::Linear(LinearConfig::enabled()),
+        &settings,
+        nango_linear_connection,
+        None,
+        None,
+    )
+    .await;
+
+    let sync_linear_notifications: Vec<LinearNotification> = sync_linear_notifications_response
+        .data
+        .clone()
+        .unwrap()
+        .try_into()
+        .unwrap();
+
+    let issue_notification1 = sync_linear_notifications[2].clone();
+    let LinearNotification::IssueNotification {
+        id: issue_notification1_id,
+        issue: LinearIssue { id: issue_id, .. },
+        ..
+    } = &issue_notification1
+    else {
+        unreachable!("Linear notification was supposed to be an issue notification");
+    };
+    let issue_notification2_id = Uuid::new_v4();
+
+    let existing_notification = create_notification_from_linear_notification(
+        &app.app,
+        &issue_notification1,
+        app.user.id,
+        linear_integration_connection.id,
+    )
+    .await;
+    assert_eq!(existing_notification.status, NotificationStatus::Read);
+
+    // Add a new Linear notification to the mock response
+    let modified_data = sync_linear_notifications_response.data.as_mut().unwrap();
+    let nodes = &mut modified_data.notifications.nodes;
+    let mut new_update_node = nodes[2].clone();
+    new_update_node.id = issue_notification2_id.to_string();
+    new_update_node.updated_at = Utc::now();
+    if let notifications_query::NotificationsQueryNotificationsNodes {
+        on:
+            notifications_query::NotificationsQueryNotificationsNodesOn::IssueNotification(
+                notifications_query::NotificationsQueryNotificationsNodesOnIssueNotification {
+                    comment,
+                    ..
+                },
+            ),
+        ..
+    } = &mut new_update_node
+    {
+        *comment = Some(
+            notifications_query::NotificationsQueryNotificationsNodesOnIssueNotificationComment {
+                body: "Updated comment".to_string(),
+                updated_at: Utc::now(),
+                user: None,
+                url: "https://test.com".to_string(),
+                parent: None,
+            },
+        )
+    }
+    nodes.push(new_update_node);
+
+    let linear_notifications_mock = mock_linear_notifications_query(
+        &app.app.linear_mock_server,
+        &sync_linear_notifications_response,
+    );
+
+    let synced_notifications: Vec<Notification> = sync_notifications(
+        &app.client,
+        &app.app.api_address,
+        Some(NotificationSourceKind::Linear),
+        false,
+    )
+    .await;
+    linear_notifications_mock.assert();
+    // 6 notifications were fetched but 2 for the same Linear issue
+    assert_eq!(synced_notifications.len(), 5);
+
+    let notifications = list_notifications(
+        &app.client,
+        &app.app.api_address,
+        vec![],
+        false,
+        None,
+        None,
+        false,
+    )
+    .await;
+    // Find the new notification for the same issue
+    let notifications_for_linear_notification: Vec<_> = notifications
+        .iter()
+        .filter(|n| {
+            if let ThirdPartyItemData::LinearNotification(linear_notification) = &n.source_item.data
+            {
+                if let LinearNotification::IssueNotification { issue, .. } = &**linear_notification
+                {
+                    issue.id == *issue_id
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        })
+        .collect();
+
+    assert_eq!(notifications_for_linear_notification.len(), 2);
+    for notification in notifications_for_linear_notification {
+        if notification.source_item.source_id == issue_notification1_id.to_string() {
+            assert_eq!(notification.status, NotificationStatus::Deleted);
+        } else if notification.source_item.source_id == issue_notification2_id.to_string() {
+            assert_eq!(notification.status, NotificationStatus::Read);
+        } else {
+            unreachable!("Unexpected notification ID");
+        }
+    }
 }
