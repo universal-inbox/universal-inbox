@@ -1,12 +1,14 @@
 set fallback
 
+tag := `git rev-parse HEAD`
+
 default:
     @just --choose
 
 @build:
     docker-compose build universal-inbox
 
-publish:
+publish tag=tag:
     #!/usr/bin/env bash
 
     if [ -z "$DOCKER_BUILDX_BUILDER" ]; then
@@ -20,11 +22,11 @@ publish:
       --builder "$DOCKER_BUILDX_BUILDER" \
       --push \
       --platform linux/amd64,linux/arm64 \
-      --label version=$(git rev-parse HEAD) \
-      --build-arg VERSION=$(git rev-parse HEAD) \
-      -t dax42/universal-inbox:$(git rev-parse HEAD) \
+      --label version={{ tag }} \
+      --build-arg VERSION={{ tag }} \
+      -t dax42/universal-inbox:{{ tag }} \
       -t dax42/universal-inbox:latest \
       --label service="universal-inbox" \
       --file ../Dockerfile \
       ..
-    echo "🚀 Docker image dax42/universal-inbox published with tag $(git rev-parse HEAD)"
+    echo "🚀 Docker image dax42/universal-inbox published with tag {{ tag }}"
