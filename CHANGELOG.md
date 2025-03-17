@@ -23,6 +23,7 @@
 - Disable Todoist task search when not connected
 - Fix Slack message format with missing new lines
 - Consider API calls without change (304 status) as successful
+- Fix Linear notification unsubscribe
 
 ## 2024-10-21
 

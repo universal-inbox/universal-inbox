@@ -82,6 +82,7 @@ pub fn mock_linear_issue_notification_subscribers_query(
     linear_mock_server: &MockServer,
     notification_id: String,
     user_id: String,
+    issue_id: String,
     subscriber_ids: Vec<String>,
 ) -> Mock {
     let expected_subscribers_request_body =
@@ -102,6 +103,7 @@ pub fn mock_linear_issue_notification_subscribers_query(
                                 id: user_id
                             },
                             issue: NotificationSubscribersQueryNotificationOnIssueNotificationIssue {
+                                id: issue_id,
                                 subscribers: NotificationSubscribersQueryNotificationOnIssueNotificationIssueSubscribers {
                                     nodes: subscriber_ids.into_iter().map(|id| NotificationSubscribersQueryNotificationOnIssueNotificationIssueSubscribersNodes {
                                         id
@@ -143,14 +145,14 @@ pub fn mock_linear_project_notification_subscribers_query(
 
 pub fn mock_linear_update_issue_subscribers_query(
     linear_mock_server: &MockServer,
-    notification_id: String,
+    issue_id: String,
     subscriber_ids: Vec<String>,
     successful_response: bool,
     errors: Option<Vec<Error>>,
 ) -> Mock {
     let expected_update_request_body =
         IssueUpdateSubscribers::build_query(issue_update_subscribers::Variables {
-            id: notification_id,
+            id: issue_id,
             subscriber_ids,
         });
     linear_mock_server.mock(|when, then| {

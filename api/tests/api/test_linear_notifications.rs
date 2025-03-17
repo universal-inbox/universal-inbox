@@ -266,12 +266,13 @@ mod patch_resource {
                 &app.app.linear_mock_server,
                 expected_notification.source_item.source_id.clone(),
                 "user_id".to_string(),
+                "issue_id".to_string(),
                 vec!["user_id".to_string(), "other_user_id".to_string()],
             );
 
         let linear_update_issue_subscribers_mock = mock_linear_update_issue_subscribers_query(
             &app.app.linear_mock_server,
-            expected_notification.source_item.source_id.clone(),
+            "issue_id".to_string(),
             vec!["other_user_id".to_string()],
             true,
             None,
