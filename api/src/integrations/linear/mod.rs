@@ -1,3 +1,4 @@
+use std::collections::{hash_map::Entry, HashMap};
 use std::sync::Arc;
 
 use anyhow::{anyhow, Context};
@@ -550,10 +551,43 @@ impl ThirdPartyItemSourceService<LinearNotification> for LinearService {
             .await?
             .ok_or_else(|| anyhow!("Cannot fetch Linear notifications without an access token"))?;
 
-        let linear_notifications: Vec<LinearNotification> =
+        let all_notifications: Vec<LinearNotification> =
             self.query_notifications(&access_token).await?.try_into()?;
 
-        Ok(linear_notifications
+        // Keep only the latest linear notification for each linear issue
+        let mut issue_notifications: HashMap<Uuid, LinearNotification> = HashMap::new();
+        let mut project_notifications: Vec<LinearNotification> = vec![];
+        for notification in all_notifications {
+            match &notification {
+                LinearNotification::IssueNotification {
+                    issue, updated_at, ..
+                } => match issue_notifications.entry(issue.id) {
+                    Entry::Occupied(mut entry) => {
+                        if let LinearNotification::IssueNotification {
+                            updated_at: ref existing_updated_at,
+                            ..
+                        } = entry.get()
+                        {
+                            if updated_at > existing_updated_at {
+                                entry.insert(notification);
+                            }
+                        }
+                    }
+                    Entry::Vacant(entry) => {
+                        entry.insert(notification);
+                    }
+                },
+                LinearNotification::ProjectNotification { .. } => {
+                    project_notifications.push(notification);
+                }
+            }
+        }
+        let deduplicated_notifications: Vec<LinearNotification> = issue_notifications
+            .into_values()
+            .chain(project_notifications.into_iter())
+            .collect();
+
+        Ok(deduplicated_notifications
             .into_iter()
             .map(|linear_notification| {
                 linear_notification.into_third_party_item(user_id, integration_connection.id)
