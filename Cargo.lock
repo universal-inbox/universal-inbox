@@ -6394,9 +6394,9 @@ dependencies = [
 
 [[package]]
 name = "slack-blocks-render"
-version = "0.4.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "23df4d6c5180ae9fe68faad31a17967a82fb047d2686c49c48d689d86a0675c2"
+checksum = "07d7b32189e2931a1e4716aee24ae601f1f6fee5e26772c55ca1b0003c2f9393"
 dependencies = [
  "despatma",
  "emojis",
@@ -6408,9 +6408,9 @@ dependencies = [
 
 [[package]]
 name = "slack-morphism"
-version = "2.10.0"
+version = "2.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9066a0fb16e1b85ba88893d41813bd0b30723f928e0eadb2e5fb43f5734ce170"
+checksum = "e0fdcc4b89e28a950f127f77f44a41e65abaabecdbfb8832e545b4a7958906b7"
 dependencies = [
  "async-recursion",
  "async-trait",
