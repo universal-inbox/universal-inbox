@@ -516,6 +516,58 @@
         }
       }
     },
+    "hadolint@latest": {
+      "last_modified": "2025-03-11T17:52:14Z",
+      "resolved": "github:NixOS/nixpkgs/0d534853a55b5d02a4ababa1d71921ce8f0aee4c#hadolint",
+      "source": "devbox-search",
+      "version": "2.12.0",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/ckwcm65ggb3g6j9bl25d9zrbbjnvk5vg-hadolint-2.12.0",
+              "default": true
+            },
+            {
+              "name": "doc",
+              "path": "/nix/store/wwh726bysc3lja4qmy4gckvd6lrnq3ib-hadolint-2.12.0-doc"
+            }
+          ],
+          "store_path": "/nix/store/ckwcm65ggb3g6j9bl25d9zrbbjnvk5vg-hadolint-2.12.0"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/3968dak7x1vwfpnzsywzfldxwdlpsbw0-hadolint-2.12.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/3968dak7x1vwfpnzsywzfldxwdlpsbw0-hadolint-2.12.0"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/18861yxizsa40pipz2j564inav7m3jck-hadolint-2.12.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/18861yxizsa40pipz2j564inav7m3jck-hadolint-2.12.0"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/0l1vvybdavd1l598w70pw4kfrcbxky99-hadolint-2.12.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/0l1vvybdavd1l598w70pw4kfrcbxky99-hadolint-2.12.0"
+        }
+      }
+    },
     "iconv@latest": {
       "last_modified": "2025-03-13T11:38:39Z",
       "resolved": "github:NixOS/nixpkgs/573c650e8a14b2faa0041645ab18aed7e60f0c9a#iconv",

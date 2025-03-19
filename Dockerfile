@@ -1,4 +1,4 @@
-FROM jetpackio/devbox:latest as devbox
+FROM jetpackio/devbox:0.14.0 as devbox
 
 FROM devbox as base
 ENV PATH="/home/devbox/.cargo/bin:${PATH}"
@@ -7,8 +7,8 @@ WORKDIR /app
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" devbox.json devbox.json
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" devbox.lock devbox.lock
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" justfile justfile
-RUN sudo chown -R "${DEVBOX_USER}:${DEVBOX_USER}" /app
-RUN devbox run -- echo "Installed Packages."
+RUN chown -R "${DEVBOX_USER}:${DEVBOX_USER}" /app \
+  && devbox run -- echo "Installed Packages."
 
 FROM base as planner
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/.cargo web/.cargo
@@ -28,29 +28,27 @@ COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/package.json web/package.json
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/package-lock.json web/package-lock.json
 RUN devbox run -- just web/install
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" --from=planner /app/recipe.json recipe.json
-RUN devbox run -- cargo chef cook --release -p universal-inbox-web --recipe-path recipe.json --target wasm32-unknown-unknown --no-build
 # Only dependencies will be compiled as cargo chef has modfied main.rs and lib.rs to be empty
-RUN <<EOF cat > web/index.html
-<!DOCTYPE html>
-<html class="dark h-full">
-
-<head>
-  <link data-integrity="none" data-trunk rel="rust" data-wasm-opt="z" />
-</head>
-
-<body class="h-full">
-  <div id="main" class="h-full"></div>
-</body>
-</html>
-EOF
-RUN devbox run -- just web/build-release
+RUN devbox run -- \
+    cargo chef cook \
+    --release \
+    -p universal-inbox-web \
+    --recipe-path recipe.json \
+    --target wasm32-unknown-unknown \
+    --no-build \
+  && devbox run -- just web/build-release
 
 FROM base as dep-api-builder
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" api/justfile api/justfile
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" --from=planner /app/recipe.json recipe.json
-RUN devbox run -- cargo chef cook --release -p universal-inbox-api --recipe-path recipe.json --no-build
 # Only dependencies will be compiled as cargo chef has modfied main.rs and lib.rs to be empty
-RUN devbox run -- just api/build-release
+RUN devbox run -- \
+    cargo chef cook \
+    --release \
+    -p universal-inbox-api \
+    --recipe-path recipe.json \
+    --no-build \
+  && devbox run -- just api/build-release
 
 FROM dep-web-builder as release-web-builder
 ARG VERSION
@@ -59,8 +57,8 @@ COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" Cargo.toml Cargo.lock ./
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/Cargo.toml web/Cargo.toml
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" src src
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web web
-RUN devbox run -- just web/build-release
-RUN sed -i 's#http://localhost:8000/api#/api#' web/public/index.html
+RUN devbox run -- just web/build-release \
+  && sed -i 's#http://localhost:8000/api#/api#' web/public/index.html
 
 FROM dep-api-builder as release-api-builder
 ARG VERSION
@@ -78,8 +76,9 @@ WORKDIR /app
 RUN mkdir /data
 COPY docker/universal-inbox-entrypoint universal-inbox-entrypoint
 COPY --from=release-api-builder /app/target/release/universal-inbox-api universal-inbox
+# hadolint ignore=DL3008
 RUN apt-get update \
-  && apt-get install -y ca-certificates patchelf curl \
+  && apt-get install -y --no-install-recommends ca-certificates patchelf curl \
   && patchelf --set-interpreter /usr/bin/ld.so universal-inbox \
   && apt-get purge -y patchelf \
   && rm -rf /var/lib/apt/lists/*

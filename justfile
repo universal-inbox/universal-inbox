@@ -78,7 +78,10 @@ format-sql sql-files="api/migrations":
 check-format:
     cargo fmt --all --check
 
-check-commit: format check-unused-dependencies check-all test-all
+lint-dockerfile:
+    hadolint Dockerfile
+
+check-commit: format lint-dockerfile check-unused-dependencies check-all test-all
 
 ## Test recipes
 test test-filter="" $RUST_LOG="info":

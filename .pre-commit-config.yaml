@@ -10,32 +10,38 @@ repos:
         files: \.rs$
         pass_filenames: false
         args: []
-        stages: [commit]
+        stages: [pre-commit]
       - id: clippy
         name: Check Rust code
         language: system
         pass_filenames: false
         entry: just check-all
         files: \.rs$
-        stages: [commit]
+        stages: [pre-commit]
       - id: cargo-machete
         name: Detect unused Rust dependencies
         language: system
         pass_filenames: false
         entry: just check-unused-dependencies
-        stages: [commit]
+        stages: [pre-commit]
       - id: cargo-machete
         name: Format SQL
         language: system
         entry: just format-sql
         file: \.sql$
-        stages: [commit]
+        stages: [pre-commit]
       - id: todo
         name: Check TODO in the code
         language: system
         pass_filenames: false
         entry: bash -c 'rg TODO && false || true'
-        stages: [commit]
+        stages: [pre-commit]
+      - id: hadolint
+        name: Lint Dockerfile
+        language: system
+        entry: just lint-dockerfile
+        file: Dockerfile$
+        stages: [pre-commit]
   - repo: https://github.com/crate-ci/committed
     rev: v1.0.5
     hooks:
