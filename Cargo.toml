@@ -71,7 +71,7 @@ serde_urlencoded = { version = "0.7.0" }
 serde_with = { version = "3.8.0" }
 slack-blocks-render = { version = "0.4.1" }
 slack-morphism = { version = "2.10.1" }
-thiserror = { version = "1.0" }
+thiserror = { version = "2.0" }
 tracing = { version = "0.1.0", features = ["log"] }
 url = { version = "2.5.0" }
 uuid = { version = "1.0", features = ["v4"] }
