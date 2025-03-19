@@ -23,6 +23,16 @@ jobs:
         with:
           enable-cache: "true"
 
+  lint-dockerfile:
+    needs: base
+    name: Dockerfile lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+
   rustfmt:
     needs: base
     name: Rustfmt
