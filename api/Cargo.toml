@@ -91,7 +91,7 @@ opentelemetry-otlp = { version = "0.28.0", features = [
   "tls",
   "tls-roots"
 ] }
-rand = { version = "0.8", features = ["std_rng"] }
+rand = { version = "0.9", features = ["std_rng"] }
 ring = "0.17.0"
 redis = { version = "0.29.0", features = [
   "tokio-comp",
