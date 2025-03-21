@@ -4,6 +4,14 @@ command = "sh"
 command_arguments = ["-c", "npx rspack"]
 
 [[hooks]]
+stage = "build"
+command = "sh"
+command_arguments = [
+  "-c",
+  "just build-tailwind $TRUNK_STAGING_DIR",
+]
+
+[[hooks]]
 stage = "post_build"
 command = "sh"
 command_arguments = [

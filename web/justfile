@@ -4,11 +4,13 @@ default:
     @just --choose
 
 ## Build recipes
-build: bundle-js build-tailwind
+build: build-assets
     trunk build --features trunk
 
 build-release:
     trunk build --release --features trunk
+
+build-assets: bundle-js build-tailwind bundle-fonts
 
 build-tailwind:
     npx tailwindcss -i css/universal-inbox.css -o public/css/universal-inbox.min.css --minify
@@ -16,22 +18,26 @@ build-tailwind:
 bundle-js:
     npx rspack build
 
+bundle-fonts output-dir="public":
+    mkdir -p {{ output-dir }}
+    cp -a fonts {{ output-dir }}
+
 ## Dev recipes
-check: install bundle-js build-tailwind
+check: install build-assets
     cargo clippy --tests -- -D warnings
 
 install:
     npm install --dev
 
 ## Test recipes
-test test-filter="" $RUST_LOG="info": bundle-js build-tailwind
+test test-filter="" $RUST_LOG="info": build-assets
     cargo test {{test-filter}}
 
-test-ci: install bundle-js build-tailwind
+test-ci: install build-assets
     cargo test
 
 ## Run recipes
-run: bundle-js build-tailwind
+run: build-assets
     dx serve --verbose
 
 run-tailwind:
