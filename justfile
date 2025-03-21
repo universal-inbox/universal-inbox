@@ -28,7 +28,6 @@ install-rust-tools:
   #!/usr/bin/env bash
   if [ -z "$DOCKER_BUILD" ]; then
     cargo binstall -y cargo-llvm-cov --version 0.6.16
-    cargo binstall -y dioxus-cli --version 0.6.2
   fi
 
 ## Build recipes

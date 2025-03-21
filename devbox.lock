@@ -400,6 +400,54 @@
         }
       }
     },
+    "dioxus-cli@latest": {
+      "last_modified": "2025-03-11T17:52:14Z",
+      "resolved": "github:NixOS/nixpkgs/0d534853a55b5d02a4ababa1d71921ce8f0aee4c#dioxus-cli",
+      "source": "devbox-search",
+      "version": "0.6.3",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/b0mz3f7l3nhmy7hpx1bxavb4951k8q8r-dioxus-cli-0.6.3",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/b0mz3f7l3nhmy7hpx1bxavb4951k8q8r-dioxus-cli-0.6.3"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/g57jd83ljvc32abqqi74nn8v6cp8rzkl-dioxus-cli-0.6.3",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/g57jd83ljvc32abqqi74nn8v6cp8rzkl-dioxus-cli-0.6.3"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/v2qg3b4j38sz719cm0y0w0j78g0yf9dx-dioxus-cli-0.6.3",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/v2qg3b4j38sz719cm0y0w0j78g0yf9dx-dioxus-cli-0.6.3"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/j6gdc5c1nqfmvjk2cjxcinlzb5n8jsz5-dioxus-cli-0.6.3",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/j6gdc5c1nqfmvjk2cjxcinlzb5n8jsz5-dioxus-cli-0.6.3"
+        }
+      }
+    },
     "docker-compose@latest": {
       "last_modified": "2025-03-11T17:52:14Z",
       "resolved": "github:NixOS/nixpkgs/0d534853a55b5d02a4ababa1d71921ce8f0aee4c#docker-compose",
@@ -515,6 +563,10 @@
           "store_path": "/nix/store/0jcwaphckifvjlidxg9y2n37d7ri6whx-fzf-0.60.3"
         }
       }
+    },
+    "github:NixOS/nixpkgs/nixpkgs-unstable": {
+      "last_modified": "2025-04-13T09:22:33Z",
+      "resolved": "github:NixOS/nixpkgs/18dd725c29603f582cf1900e0d25f9f1063dbf11?lastModified=1744536153&narHash=sha256-awS2zRgF4uTwrOKwwiJcByDzDOdo3Q1rPZbiHQg%2FN38%3D"
     },
     "hadolint@latest": {
       "last_modified": "2025-03-11T17:52:14Z",
