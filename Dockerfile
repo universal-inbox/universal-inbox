@@ -22,6 +22,7 @@ RUN cargo install sqlx-cli --version 0.8.3
 
 FROM base as dep-web-builder
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/justfile web/justfile
+COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/index-empty.html web/index.html
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/.cargo web/.cargo
 # Create fake index.html for Trunk build to succeed without the real index.html
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/package.json web/package.json

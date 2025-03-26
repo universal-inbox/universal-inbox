@@ -4,7 +4,7 @@ default:
     @just --choose
 
 ## Build recipes
-build: build-assets
+build:
     trunk build --features trunk
 
 build-release:
