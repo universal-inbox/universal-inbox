@@ -49,6 +49,7 @@ pub fn SlackProviderConfiguration(
                     role: "tab",
                     class: "tab",
                     checked: true,
+                    "aria-label": "Saved for later",
                     div {
                         class: "flex items-center gap-2",
                         SlackNotificationIcon { class: "h-3 w-3" }
@@ -66,6 +67,7 @@ pub fn SlackProviderConfiguration(
                     name: "slack_config",
                     role: "tab",
                     class: "tab",
+                    "aria-label": "Reaction",
                     div {
                         class: "flex items-center gap-2",
                         span { "{emoji}" }
@@ -83,6 +85,7 @@ pub fn SlackProviderConfiguration(
                     name: "slack_config",
                     role: "tab",
                     class: "tab",
+                    "aria-label": "Mention",
                     div {
                         class: "flex items-center gap-2",
                         Icon { class: "h-5 w-5 min-w-5", icon: BsChatText },
