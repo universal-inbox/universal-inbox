@@ -14,12 +14,12 @@ pub fn GithubProviderConfiguration(
         div {
             class: "flex flex-col",
 
-            div {
-                class: "form-control",
+            fieldset {
+                class: "fieldset",
                 label {
-                    class: "cursor-pointer label py-1",
+                    class: "fieldset-label cursor-pointer py-1 text-sm text-base-content",
                     span {
-                        class: "label-text",
+                        class: "label-text grow",
                         "Synchronize Github notifications"
                     }
                     input {

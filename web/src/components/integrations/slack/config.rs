@@ -41,60 +41,51 @@ pub fn SlackProviderConfiguration(
 
             div {
                 role: "tablist",
-                class: "tabs tabs-lifted",
+                class: "tabs tabs-lift",
 
-                input {
-                    "type": "radio",
-                    name: "slack_config",
-                    role: "tab",
-                    class: "tab",
-                    checked: true,
-                    "aria-label": "Saved for later",
-                    div {
-                        class: "flex items-center gap-2",
-                        SlackNotificationIcon { class: "h-3 w-3" }
-                        "Saved for later"
-                    },
+                label {
+                    class: "tab flex items-center gap-2",
+                    input {
+                        "type": "radio",
+                        name: "slack_config",
+                        checked: true,
+                    }
+                    SlackNotificationIcon { class: "h-3 w-3" }
+                    "Saved for later"
                 }
                 div {
                     role: "tabpanel",
-                    class: "tab-content bg-base-100 border-base-300 rounded-box p-6",
+                    class: "tab-content bg-base-100 border-base-300 p-6",
                     SlackStarConfiguration { config, ui_model, on_config_change }
                 }
 
-                input {
-                    "type": "radio",
-                    name: "slack_config",
-                    role: "tab",
-                    class: "tab",
-                    "aria-label": "Reaction",
-                    div {
-                        class: "flex items-center gap-2",
-                        span { "{emoji}" }
-                        span { "Reaction" }
+                label {
+                    class: "tab flex items-center gap-2",
+                    input {
+                        "type": "radio",
+                        name: "slack_config",
                     }
+                    span { "{emoji}" }
+                    span { "Reaction" }
                 }
                 div {
                     role: "tabpanel",
-                    class: "tab-content bg-base-100 border-base-300 rounded-box p-6",
+                    class: "tab-content bg-base-100 border-base-300 p-6",
                     SlackReactionConfiguration { config, ui_model, on_config_change }
                 }
 
-                input {
-                    "type": "radio",
-                    name: "slack_config",
-                    role: "tab",
-                    class: "tab",
-                    "aria-label": "Mention",
-                    div {
-                        class: "flex items-center gap-2",
-                        Icon { class: "h-5 w-5 min-w-5", icon: BsChatText },
-                        span { "Mention" }
+                label {
+                    class: "tab flex items-center gap-2",
+                    input {
+                        "type": "radio",
+                        name: "slack_config",
                     }
+                    Icon { class: "h-5 w-5 min-w-5", icon: BsChatText },
+                    span { "Mention" }
                 }
                 div {
                     role: "tabpanel",
-                    class: "tab-content bg-base-100 border-base-300 rounded-box p-6",
+                    class: "tab-content bg-base-100 border-base-300 p-6",
                     SlackMessageConfiguration { config, ui_model, on_config_change }
                 }
             }
@@ -132,12 +123,12 @@ fn SlackStarConfiguration(
     });
 
     rsx! {
-        div {
-            class: "form-control",
+        fieldset {
+            class: "fieldset",
             label {
-                class: "cursor-pointer label py-1",
+                class: "fieldset-label cursor-pointer py-1 text-sm text-base-content",
                 span {
-                    class: "label-text",
+                    class: "label-text grow",
                     "Synchronize Slack \"saved for later\" items"
                 }
                 input {
@@ -157,12 +148,12 @@ fn SlackStarConfiguration(
             }
         }
 
-        div {
-            class: "form-control",
+        fieldset {
+            class: "fieldset",
             label {
-                class: "cursor-pointer label py-1",
+                class: "fieldset-label cursor-pointer py-1 text-sm text-base-content",
                 span {
-                    class: "label-text",
+                    class: "label-text grow",
                     "Synchronize Slack \"saved for later\" items as notifications"
                 }
                 input {
@@ -187,12 +178,12 @@ fn SlackStarConfiguration(
         div {
             class: "collapse {collapse_style} overflow-visible",
 
-            div {
-                class: "form-control collapse-title p-0 min-h-0",
+            fieldset {
+                class: "fieldset collapse-title p-0 min-h-0",
                 label {
-                    class: "cursor-pointer label py-1",
+                    class: "fieldset-label cursor-pointer py-1 text-sm text-base-content",
                     span {
-                        class: "label-text",
+                        class: "label-text grow",
                         "Synchronize Slack \"saved for later\" items as tasks"
                     }
                     if !ui_model.read().is_task_actions_enabled {
@@ -226,16 +217,16 @@ fn SlackStarConfiguration(
             div {
                 class: "collapse-content pb-0 pr-0",
 
-                div {
-                    class: "form-control",
+                fieldset {
+                    class: "fieldset",
                     label {
-                        class: "cursor-pointer label py-1",
+                        class: "fieldset-label cursor-pointer py-1 text-sm text-base-content",
                         span {
-                            class: "label-text",
+                            class: "label-text grow",
                             "Project to assign synchronized tasks to"
                         }
                         TaskProjectSearch {
-                            class: "w-full max-w-xs bg-base-100 rounded",
+                            class: "w-full max-w-xs bg-base-100 rounded-sm",
                             default_project_name: default_project().unwrap_or_default(),
                             selected_project: selected_project,
                             ui_model: ui_model,
@@ -260,18 +251,18 @@ fn SlackStarConfiguration(
                     }
                 }
 
-                div {
-                    class: "form-control",
+                fieldset {
+                    class: "fieldset",
                     label {
-                        class: "cursor-pointer label py-1",
+                        class: "fieldset-label cursor-pointer py-1 text-sm text-base-content",
                         span {
-                            class: "label-text",
+                            class: "label-text grow",
                             "Due date to assign to synchronized tasks"
                         }
 
                         FloatingLabelSelect::<PresetDueDate> {
                             label: None,
-                            class: "w-full max-w-xs bg-base-100 rounded",
+                            class: "w-full max-w-xs bg-base-100 rounded-sm",
                             name: "task-due-at-input".to_string(),
                             disabled: !ui_model.read().is_task_actions_enabled,
                             on_select: move |default_due_at| {
@@ -301,18 +292,18 @@ fn SlackStarConfiguration(
                     }
                 }
 
-                div {
-                    class: "form-control",
+                fieldset {
+                    class: "fieldset",
                     label {
-                        class: "cursor-pointer label py-1",
+                        class: "fieldset-label cursor-pointer py-1 text-sm text-base-content",
                         span {
-                            class: "label-text",
+                            class: "label-text grow",
                             "Priority to assign to synchronized tasks"
                         }
 
                         FloatingLabelSelect::<TaskPriority> {
                             label: None,
-                            class: "w-full max-w-xs bg-base-100 rounded",
+                            class: "w-full max-w-xs bg-base-100 rounded-sm",
                             name: "task-priority-input".to_string(),
                             disabled: !ui_model.read().is_task_actions_enabled,
                             required: true,
@@ -380,12 +371,12 @@ fn SlackReactionConfiguration(
     });
 
     rsx! {
-        div {
-            class: "form-control",
+        fieldset {
+            class: "fieldset",
             label {
-                class: "cursor-pointer label py-1",
+                class: "fieldset-label cursor-pointer py-1 text-sm text-base-content",
                 span {
-                    class: "label-text",
+                    class: "label-text grow",
                     "Synchronize Slack reacted items"
                 }
                 input {
@@ -405,45 +396,45 @@ fn SlackReactionConfiguration(
             }
         }
 
-                div {
-                    class: "form-control",
-                    label {
-                        class: "cursor-pointer label py-1",
-                        span {
-                            class: "label-text",
-                            "Emoji reaction to synchronize"
-                        }
-
-                        FloatingLabelSelect::<String> {
-                            label: None,
-                            class: "w-full max-w-xs bg-base-100 rounded",
-                            name: "reaction-name-input".to_string(),
-                            required: true,
-                            on_select: move |reaction: Option<String>| {
-                                on_config_change.call(IntegrationConnectionConfig::Slack(SlackConfig {
-                                    reaction_config: SlackReactionConfig {
-                                        reaction_name: SlackReactionName(reaction.unwrap_or("eyes".to_string())),
-                                        ..config().reaction_config
-                                    },
-                                    ..config()
-                                }));
-                            },
-
-                            option { selected: default_emoji() == *"eyes", value: "eyes", "👀 :eyes:" }
-                            option { selected: default_emoji() == *"raising_hand", value: "raising_hand", "🙋 :raising_hand:" }
-                            option { selected: default_emoji() == *"inbox_tray", value: "inbox_tray", "📥 :inbox_tray:" }
-                            option { selected: default_emoji() == *"white_check_mark", value: "white_check_mark", "✅ :white_check_mark:" }
-                            option { selected: default_emoji() == *"bookmark", value: "bookmark", "🔖 :bookmark:" }
-                        }
-                    }
+        fieldset {
+            class: "fieldset",
+            label {
+                class: "fieldset-label cursor-pointer py-1 text-sm text-base-content",
+                span {
+                    class: "label-text grow",
+                    "Emoji reaction to synchronize"
                 }
 
-        div {
-            class: "form-control",
+                FloatingLabelSelect::<String> {
+                    label: None,
+                    class: "w-full max-w-xs bg-base-100 rounded-sm",
+                    name: "reaction-name-input".to_string(),
+                    required: true,
+                    on_select: move |reaction: Option<String>| {
+                        on_config_change.call(IntegrationConnectionConfig::Slack(SlackConfig {
+                            reaction_config: SlackReactionConfig {
+                                reaction_name: SlackReactionName(reaction.unwrap_or("eyes".to_string())),
+                                ..config().reaction_config
+                            },
+                            ..config()
+                        }));
+                    },
+
+                    option { selected: default_emoji() == *"eyes", value: "eyes", "👀 :eyes:" }
+                    option { selected: default_emoji() == *"raising_hand", value: "raising_hand", "🙋 :raising_hand:" }
+                    option { selected: default_emoji() == *"inbox_tray", value: "inbox_tray", "📥 :inbox_tray:" }
+                    option { selected: default_emoji() == *"white_check_mark", value: "white_check_mark", "✅ :white_check_mark:" }
+                    option { selected: default_emoji() == *"bookmark", value: "bookmark", "🔖 :bookmark:" }
+                }
+            }
+        }
+
+        fieldset {
+            class: "fieldset",
             label {
-                class: "cursor-pointer label py-1",
+                class: "fieldset-label cursor-pointer py-1 text-sm text-base-content",
                 span {
-                    class: "label-text",
+                    class: "label-text grow",
                     "Synchronize Slack reacted items as notifications"
                 }
                 input {
@@ -468,12 +459,12 @@ fn SlackReactionConfiguration(
         div {
             class: "collapse {collapse_style} overflow-visible",
 
-            div {
-                class: "form-control collapse-title p-0 min-h-0",
+            fieldset {
+                class: "fieldset collapse-title p-0 min-h-0",
                 label {
-                    class: "cursor-pointer label py-1",
+                    class: "fieldset-label cursor-pointer py-1 text-sm text-base-content",
                     span {
-                        class: "label-text",
+                        class: "label-text grow",
                         "Synchronize Slack reacted items as tasks"
                     }
                     if !ui_model.read().is_task_actions_enabled {
@@ -507,16 +498,16 @@ fn SlackReactionConfiguration(
             div {
                 class: "collapse-content pb-0 pr-0",
 
-                div {
-                    class: "form-control",
+                fieldset {
+                    class: "fieldset",
                     label {
-                        class: "cursor-pointer label py-1",
+                        class: "fieldset-label cursor-pointer py-1 text-sm text-base-content",
                         span {
-                            class: "label-text",
+                            class: "label-text grow",
                             "Project to assign synchronized tasks to"
                         }
                         TaskProjectSearch {
-                            class: "w-full max-w-xs bg-base-100 rounded",
+                            class: "w-full max-w-xs bg-base-100 rounded-sm",
                             default_project_name: default_project().unwrap_or_default(),
                             selected_project: selected_project,
                             disabled: !ui_model.read().is_task_actions_enabled,
@@ -541,18 +532,18 @@ fn SlackReactionConfiguration(
                     }
                 }
 
-                div {
-                    class: "form-control",
+                fieldset {
+                    class: "fieldset",
                     label {
-                        class: "cursor-pointer label py-1",
+                        class: "fieldset-label cursor-pointer py-1 text-sm text-base-content",
                         span {
-                            class: "label-text",
+                            class: "label-text grow",
                             "Due date to assign to synchronized tasks"
                         }
 
                         FloatingLabelSelect::<PresetDueDate> {
                             label: None,
-                            class: "w-full max-w-xs bg-base-100 rounded",
+                            class: "w-full max-w-xs bg-base-100 rounded-sm",
                             name: "task-due-at-input".to_string(),
                             disabled: !ui_model.read().is_task_actions_enabled,
                             on_select: move |default_due_at| {
@@ -582,18 +573,18 @@ fn SlackReactionConfiguration(
                     }
                 }
 
-                div {
-                    class: "form-control",
+                fieldset {
+                    class: "fieldset",
                     label {
-                        class: "cursor-pointer label py-1",
+                        class: "fieldset-label cursor-pointer py-1 text-sm text-base-content",
                         span {
-                            class: "label-text",
+                            class: "label-text grow",
                             "Priority to assign to synchronized tasks"
                         }
 
                         FloatingLabelSelect::<TaskPriority> {
                             label: None,
-                            class: "w-full max-w-xs bg-base-100 rounded",
+                            class: "w-full max-w-xs bg-base-100 rounded-sm",
                             name: "task-priority-input".to_string(),
                             disabled: !ui_model.read().is_task_actions_enabled,
                             required: true,
@@ -636,12 +627,12 @@ fn SlackMessageConfiguration(
     on_config_change: EventHandler<IntegrationConnectionConfig>,
 ) -> Element {
     rsx! {
-        div {
-            class: "form-control",
+        fieldset {
+            class: "fieldset",
             label {
-                class: "cursor-pointer label py-1",
+                class: "fieldset-label cursor-pointer py-1 text-sm text-base-content",
                 span {
-                    class: "label-text",
+                    class: "label-text grow",
                     "Synchronize Slack mentions"
                 }
                 input {

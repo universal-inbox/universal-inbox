@@ -76,16 +76,16 @@ pub fn NotificationPreview(
             class: "flex flex-col gap-4 w-full",
 
             div {
-                class: "tabs tabs-bordered w-full",
+                class: "tabs tabs-border w-full",
                 role: "tablist",
 
                 if has_notification_details_preview {
                     button {
-                        class: "tab {notification_tab_style}",
+                        class: "tab {notification_tab_style} w-full",
                         role: "tab",
                         onclick: move |_| { ui_model.write().selected_preview_pane = PreviewPane::Notification },
                         span {
-                            class: "{shortcut_visibility_style} indicator-item indicator-top indicator-start badge text-xs text-gray-400 z-50",
+                            class: "{shortcut_visibility_style} indicator-item indicator-top indicator-start badge badge-sm text-xs text-gray-400 z-50",
                             "▼ j"
                         }
                         div { class: "grow" }
@@ -96,14 +96,14 @@ pub fn NotificationPreview(
                         }
                         div { class: "grow" }
                         span {
-                            class: "{shortcut_visibility_style} indicator-item indicator-top indicator-start badge text-xs text-gray-400 z-50",
+                            class: "{shortcut_visibility_style} indicator-item indicator-top indicator-start badge badge-sm text-xs text-gray-400 z-50",
                             "▲ k"
                         }
                     }
                 }
                 if has_task_details_preview {
                     button {
-                        class: "tab {task_tab_style}",
+                        class: "tab {task_tab_style} w-full",
                         role: "tab",
                         onclick: move |_| { ui_model.write().selected_preview_pane = PreviewPane::Task },
                         div {
@@ -119,12 +119,12 @@ pub fn NotificationPreview(
 
             if shortcut_visibility_style == "visible" {
                 span {
-                    class: "{shortcut_visibility_style} indicator-item indicator-top indicator-start badge text-xs text-gray-400 z-50",
+                    class: "{shortcut_visibility_style} indicator-item indicator-top indicator-start badge badge-sm text-xs text-gray-400 z-50",
                     "e: expand/collapse"
                 }
                 if has_task_details_preview {
                     span {
-                        class: "{shortcut_visibility_style} indicator-item indicator-top indicator-start badge text-xs text-gray-400 z-50",
+                        class: "{shortcut_visibility_style} indicator-item indicator-top indicator-start badge badge-sm text-xs text-gray-400 z-50",
                         "tab: switch between tabs"
                     }
                 }

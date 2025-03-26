@@ -61,7 +61,7 @@ fn CollapseCard(
                 class: "card-body p-0",
                 div {
                     class: "collapse collapse-arrow",
-                    input { "class": "min-h-0 p-2", "type": "checkbox", checked },
+                    input { "class": "min-h-0! p-2", "type": "checkbox", checked },
                     div {
                         class: "collapse-title min-h-0 p-2",
                         div { class: "flex items-center gap-2", { header } }
@@ -236,7 +236,7 @@ pub fn TagDisplay(tag: Tag, class: Option<String>) -> Element {
 
     rsx! {
         div {
-            class: "badge {badge_text_class} {badge_class} text-xs text-light {class} whitespace-nowrap",
+            class: "badge badge-sm {badge_text_class} {badge_class} text-xs text-light {class} whitespace-nowrap",
             style: "{badge_style}",
             "{tag.get_name()}"
         }

@@ -451,7 +451,7 @@ pub fn Documentation(config: ReadOnlySignal<IntegrationProviderStaticConfig>) ->
                     class: "collapse-content flex flex-col gap-2",
 
                     Markdown {
-                        class: "!prose-invert w-full max-w-full",
+                        class: "prose-invert! w-full max-w-full",
                         text: config().doc.clone()
                     }
 

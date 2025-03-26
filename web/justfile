@@ -12,8 +12,8 @@ build-release:
 
 build-assets: bundle-js build-tailwind bundle-fonts
 
-build-tailwind:
-    npx tailwindcss -i css/universal-inbox.css -o public/css/universal-inbox.min.css --minify
+build-tailwind output-dir="public":
+    npx @tailwindcss/cli -i css/universal-inbox.css -o {{ output-dir }}/css/universal-inbox.min.css --minify
 
 bundle-js:
     npx rspack build
@@ -41,7 +41,7 @@ run: build-assets
     dx serve --verbose
 
 run-tailwind:
-    npx tailwindcss -i css/universal-inbox.css -o public/css/universal-inbox.min.css --minify --watch
+    npx @tailwindcss/cli -i css/universal-inbox.css -o public/css/universal-inbox.min.css --minify --watch
 
 run-bundle-js:
     npx rspack build --watch

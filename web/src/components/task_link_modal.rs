@@ -46,7 +46,7 @@ pub fn TaskLinkModal(
         dialog {
             id: "task-link-modal",
             tabindex: "-1",
-            class: "modal modal-open text-base-content backdrop-blur-sm fixed top-0 left-0 w-full h-full",
+            class: "modal modal-open text-base-content backdrop-blur-xs fixed top-0 left-0 w-full h-full",
             open: true,
 
             div {

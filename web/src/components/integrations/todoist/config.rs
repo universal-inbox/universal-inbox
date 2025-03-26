@@ -17,12 +17,12 @@ pub fn TodoistProviderConfiguration(
         div {
             class: "flex flex-col",
 
-            div {
-                class: "form-control",
+            fieldset {
+                class: "fieldset",
                 label {
-                    class: "cursor-pointer label py-1",
+                    class: "fieldset-label cursor-pointer py-1 text-sm text-base-content",
                     span {
-                        class: "label-text",
+                        class: "label-text grow",
                         "Synchronize Todoist tasks"
                     }
                     input {
@@ -39,15 +39,15 @@ pub fn TodoistProviderConfiguration(
                 }
             }
 
-            div {
-                class: "form-control",
+            fieldset {
+                class: "fieldset",
                 label {
-                    class: "cursor-pointer label py-1",
-                    div {
-                        class: "flex items-center gap-2",
-                        span { class: "label-text", "Synchronize Todoist tasks from" }
+                    class: "fieldset-label cursor-pointer py-1 text-sm text-base-content",
+                    span {
+                        class: "label-text grow",
+                        "Synchronize Todoist tasks from "
                         code { "#{TODOIST_INBOX_PROJECT}" }
-                        span { class: "label-text", "as notifications" }
+                        " as notifications"
                     }
                     input {
                         r#type: "checkbox",

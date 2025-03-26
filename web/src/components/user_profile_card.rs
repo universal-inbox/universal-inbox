@@ -47,7 +47,7 @@ pub fn UserProfileCard() -> Element {
                         class: "avatar",
 
                         div {
-                            class: "w-24 rounded-full ring ring-primary ring-offset-base-100 ring-offset-2",
+                            class: "w-24 rounded-full ring-3 ring-primary ring-offset-base-100 ring-offset-2",
                             img { src: "{user_avatar}", alt: "{user_name}" }
                         }
                     }

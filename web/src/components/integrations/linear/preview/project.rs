@@ -60,7 +60,7 @@ pub fn LinearProjectDetails(
     dark_bg: Option<bool>,
 ) -> Element {
     let (cards_style, proses_style) = if dark_bg.unwrap_or_default() {
-        ("bg-neutral text-neutral-content", "!prose-invert")
+        ("bg-neutral text-neutral-content", "prose-invert!")
     } else {
         ("bg-base-200 text-base-content", "dark:prose-invert")
     };

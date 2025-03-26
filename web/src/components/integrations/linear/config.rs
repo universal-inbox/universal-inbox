@@ -53,12 +53,12 @@ pub fn LinearProviderConfiguration(
         div {
             class: "flex flex-col",
 
-            div {
-                class: "form-control",
+            fieldset {
+                class: "fieldset",
                 label {
-                    class: "cursor-pointer label py-1",
+                    class: "fieldset-label cursor-pointer py-1 text-sm text-base-content",
                     span {
-                        class: "label-text",
+                        class: "label-text grow",
                         "Synchronize Linear notifications"
                     }
                     input {
@@ -78,12 +78,12 @@ pub fn LinearProviderConfiguration(
             div {
                 class: "collapse {collapse_style} overflow-visible",
 
-                div {
-                    class: "form-control collapse-title p-0 min-h-0",
+                fieldset {
+                    class: "fieldset collapse-title p-0 min-h-0",
                     label {
-                        class: "cursor-pointer label py-1",
+                        class: "fieldset-label cursor-pointer py-1 text-sm text-base-content",
                         span {
-                            class: "label-text",
+                            class: "label-text grow",
                             "Synchronize Linear assigned issues as tasks"
                         }
                         if !ui_model.read().is_task_actions_enabled {
@@ -113,16 +113,16 @@ pub fn LinearProviderConfiguration(
                 div {
                     class: "collapse-content pb-0 pr-0",
 
-                    div {
-                        class: "form-control",
+                    fieldset {
+                        class: "fieldset",
                         label {
-                            class: "cursor-pointer label py-1",
+                            class: "fieldset-label cursor-pointer py-1 text-sm text-base-content",
                             span {
-                                class: "label-text",
+                                class: "label-text grow",
                                 "Project to assign synchronized tasks to"
                             }
                             TaskProjectSearch {
-                                class: "w-full max-w-xs bg-base-100 rounded",
+                                class: "w-full max-w-xs bg-base-100 rounded-sm",
                                 default_project_name: default_project().unwrap_or_default(),
                                 selected_project: selected_project,
                                 ui_model: ui_model,
@@ -141,18 +141,18 @@ pub fn LinearProviderConfiguration(
                         }
                     }
 
-                    div {
-                        class: "form-control",
+                    fieldset {
+                        class: "fieldset",
                         label {
-                            class: "cursor-pointer label py-1",
+                            class: "fieldset-label cursor-pointer py-1 text-sm text-base-content",
                             span {
-                                class: "label-text",
+                                class: "label-text grow",
                                 "Due date to assign to synchronized tasks"
                             }
 
                             FloatingLabelSelect::<PresetDueDate> {
                                 label: None,
-                                class: "w-full max-w-xs bg-base-100 rounded",
+                                class: "w-full max-w-xs bg-base-100 rounded-sm",
                                 name: "task-due-at-input".to_string(),
                                 disabled: !ui_model.read().is_task_actions_enabled,
                                 on_select: move |default_due_at| {

@@ -103,7 +103,7 @@ where
                 "type": "{input_type}",
                 name: "{props.name}",
                 id: "{props.name}",
-                class: "{input_style} block py-2 px-3 w-full bg-transparent border-0 border-b-2 focus:outline-none focus:ring-0 peer",
+                class: "{input_style} block py-2 px-3 w-full bg-transparent border-0 border-b-2 focus:outline-hidden focus:ring-0 peer",
                 placeholder: " ",
                 required: "{required}",
                 value: "{props.value}",
@@ -193,7 +193,7 @@ where
             select {
                 id: "{props.name}",
                 name: "{props.name}",
-                class: "{input_style} block py-2 px-3 w-full bg-transparent bg-right border-0 border-b-2 appearance-none focus:outline-none focus:ring-0 peer",
+                class: "{input_style} block py-2 px-3 w-full bg-transparent bg-right border-0 border-b-2 appearance-none focus:outline-hidden focus:ring-0 peer",
                 oninput: move |evt| {
                     *validate.write() = true;
                     value_to_validate.write().clone_from(&evt.data.value());
@@ -375,7 +375,7 @@ where
                     name: "selected-result",
                     disabled: props.disabled.unwrap_or_default(),
                     "type": "button",
-                    class: "{border_style} {button_style} grow truncate block bg-transparent text-left border-0 border-b-2 focus:outline-none focus:ring-0 peer join-item px-3",
+                    class: "{border_style} {button_style} grow truncate block bg-transparent text-left border-0 border-b-2 focus:outline-hidden focus:ring-0 peer join-item px-3",
                     onclick: move |_| {
                         if button_just_got_focus() {
                             // Focus has already opened the dropdown, no need to handle click
@@ -409,7 +409,7 @@ where
             ErrorMessage { message: error_message }
 
             div {
-                class: "{dropdown_style} rounded-box absolute z-50 group-focus:visible group-focus:opacity-100 w-full my-2 shadow-sm menu bg-base-200 overflow-y-scroll max-h-64",
+                class: "{dropdown_style} rounded-box absolute z-50 group-focus:visible group-focus:opacity-100 w-full my-2 shadow-xs menu bg-base-200 overflow-y-scroll max-h-64",
                 ul {
                     id: "search-list",
                     tabindex: -1,
@@ -447,7 +447,7 @@ where
                             "type": "text",
                             name: "{props.name}",
                             id: "{props.name}",
-                            class: "input bg-transparent w-full pl-12 focus:ring-0 focus:outline-none h-10",
+                            class: "input bg-transparent w-full pl-12 focus:ring-0 focus:outline-hidden h-10",
                             disabled: props.disabled.unwrap_or_default(),
                             placeholder: " ",
                             value: "{props.search_expression}",
