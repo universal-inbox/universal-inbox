@@ -84,7 +84,7 @@ pub fn NavBar() -> Element {
                         p { "Inbox" }
                     }
                     if NOTIFICATIONS_PAGE().total > 0 {
-                      span { class: "indicator-item indicator-top badge badge-primary text-xs", "{NOTIFICATIONS_PAGE().total}" }
+                      span { class: "indicator-item indicator-top badge badge-sm badge-primary text-xs", "{NOTIFICATIONS_PAGE().total}" }
                     }
                 }
 
@@ -98,7 +98,7 @@ pub fn NavBar() -> Element {
                         p { "Synced tasks" }
                     }
                     if SYNCED_TASKS_PAGE().total > 0 {
-                      span { class: "indicator-item indicator-top badge badge-primary text-xs", "{SYNCED_TASKS_PAGE().total}" }
+                      span { class: "indicator-item indicator-top badge badge-sm badge-primary text-xs", "{SYNCED_TASKS_PAGE().total}" }
                     }
                 }
             }
@@ -179,7 +179,7 @@ pub fn NavBar() -> Element {
                     }
 
                     ul {
-                        class: "mt-3 p-2 shadow menu dropdown-content bg-base-100 rounded-box w-52",
+                        class: "mt-3 p-2 shadow-sm menu dropdown-content bg-base-100 rounded-box w-52",
                         tabindex: 0,
 
                         li {

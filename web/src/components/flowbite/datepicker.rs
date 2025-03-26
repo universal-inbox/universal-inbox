@@ -81,7 +81,7 @@ where
                 today_highlight,
                 format: "yyyy-mm-dd".to_string(),
                 // Override Flowbite default button class
-                button_class: "btn btn-primary !text-black !border-0 !bg-primary hover:!bg-primary/90 !rounded".to_string(),
+                button_class: "btn btn-primary text-black! border-0! bg-primary! hover:bg-primary/90! rounded-sm!".to_string(),
             })
             .unwrap(),
         );

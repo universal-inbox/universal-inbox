@@ -56,7 +56,7 @@ pub fn Footer() -> Element {
         footer {
             class: "w-full",
 
-            hr {}
+            hr { class: "text-gray-200" }
             div {
                 class: "w-full flex gap-2 p-1 justify-end items-center",
 
@@ -72,7 +72,7 @@ pub fn Footer() -> Element {
 
                     if let Some(message) = message {
                         div {
-                            class: "{message_style} w-full rounded p-1.5 flex justify-center text-xs",
+                            class: "{message_style} w-full rounded-sm p-1.5 flex justify-center text-xs",
                             Link {
                                 to: Route::SettingsPage {},
                                 span { "{message}" }

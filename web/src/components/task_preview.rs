@@ -32,17 +32,17 @@ pub fn TaskPreview(
                 div {
                     class: "flex flex-row w-full",
                     span {
-                        class: "{shortcut_visibility_style} indicator-item indicator-top indicator-start badge text-xs text-gray-400 z-50",
+                        class: "{shortcut_visibility_style} indicator-item indicator-top indicator-start badge badge-sm text-xs text-gray-400 z-50",
                         "▼ j"
                     }
                     div { class: "grow" }
                     span {
-                        class: "{shortcut_visibility_style} indicator-item indicator-top indicator-start badge text-xs text-gray-400 z-50",
+                        class: "{shortcut_visibility_style} indicator-item indicator-top indicator-start badge badge-sm text-xs text-gray-400 z-50",
                         "e: expand/collapse"
                     }
                     div { class: "grow" }
                     span {
-                        class: "{shortcut_visibility_style} indicator-item indicator-top indicator-start badge text-xs text-gray-400 z-50",
+                        class: "{shortcut_visibility_style} indicator-item indicator-top indicator-start badge badge-sm text-xs text-gray-400 z-50",
                         "▲ k"
                     }
                 }

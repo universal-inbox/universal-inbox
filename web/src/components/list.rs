@@ -58,7 +58,7 @@ pub fn ListItem(
 
     rsx! {
         tr {
-            class: "hover flex items-center py-1 {style} group snap-start cursor-pointer",
+            class: "hover:bg-base-300 flex items-center py-1 {style} group snap-start cursor-pointer",
             onclick: move |_| {
                 if !is_selected() {
                     on_select.call(());
@@ -68,11 +68,11 @@ pub fn ListItem(
             td {
                 class: "flex items-center px-2 py-0 rounded-none relative h-12 indicator",
                 span {
-                    class: "{shortcut_visibility_style} indicator-item indicator-top indicator-start badge text-xs text-gray-400 z-50",
+                    class: "{shortcut_visibility_style} indicator-item indicator-top indicator-start badge badge-sm text-xs text-gray-400 z-50",
                     "▲"
                 }
                 span {
-                    class: "{shortcut_visibility_style} indicator-item indicator-bottom indicator-start badge text-xs text-gray-400 z-50",
+                    class: "{shortcut_visibility_style} indicator-item indicator-bottom indicator-start badge badge-sm text-xs text-gray-400 z-50",
                     "▼"
                 }
 
@@ -184,7 +184,7 @@ pub fn ListItemActionButton(props: ListItemActionButtonProps) -> Element {
                 class: "indicator group/notification-button",
 
                 span {
-                    class: "{shortcut_visibility_style} indicator-item indicator-bottom indicator-center badge text-xs text-gray-400 z-50",
+                    class: "{shortcut_visibility_style} indicator-item indicator-bottom indicator-center badge badge-sm text-xs text-gray-400 z-50",
                     "{props.shortcut}"
                 }
 

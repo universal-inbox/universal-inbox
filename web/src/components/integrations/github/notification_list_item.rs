@@ -244,13 +244,13 @@ pub fn GithubReviewStatus(github_pull_request: ReadOnlySignal<GithubPullRequest>
         .as_ref()
         .map(|review_decision| match review_decision {
             GithubPullRequestReviewDecision::Approved => {
-                rsx! { div { class: "badge p-1 whitespace-nowrap bg-success text-xs text-white", "Approved" } }
+                rsx! { div { class: "badge badge-sm p-1 whitespace-nowrap bg-success text-xs text-white", "Approved" } }
             }
             GithubPullRequestReviewDecision::ChangesRequested => {
-                rsx! { div { class: "badge p-1 whitespace-nowrap bg-error text-xs text-white", "Changes requested" } }
+                rsx! { div { class: "badge badge-sm p-1 whitespace-nowrap bg-error text-xs text-white", "Changes requested" } }
             }
             GithubPullRequestReviewDecision::ReviewRequired => {
-                rsx! { div { class: "badge p-1 whitespace-nowrap bg-info text-xs text-white", "Review required" } }
+                rsx! { div { class: "badge badge-sm p-1 whitespace-nowrap bg-info text-xs text-white", "Review required" } }
             }
         })
         .unwrap_or_else(|| rsx! {})

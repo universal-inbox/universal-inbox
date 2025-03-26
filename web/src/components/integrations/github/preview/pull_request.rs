@@ -621,7 +621,7 @@ fn GithubReviewLine(review: GithubReview, expand_details: ReadOnlySignal<bool>) 
                         }
 
                         div {
-                            class: "bg-neutral text-neutral-content p-2 my-1 rounded",
+                            class: "bg-neutral text-neutral-content p-2 my-1 rounded-sm",
                             dangerous_inner_html: "{review_body}"
                         }
                     }

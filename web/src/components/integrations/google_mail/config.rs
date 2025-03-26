@@ -24,12 +24,12 @@ pub fn GoogleMailProviderConfiguration(
         div {
             class: "flex flex-col",
 
-            div {
-                class: "form-control",
+            fieldset {
+                class: "fieldset",
                 label {
-                    class: "cursor-pointer label py-1",
+                    class: "fieldset-label cursor-pointer py-1 text-sm text-base-content",
                     span {
-                        class: "label-text",
+                        class: "label-text grow",
                         "Synchronize Google Mail threads as notification"
                     }
                     input {
@@ -46,18 +46,18 @@ pub fn GoogleMailProviderConfiguration(
                 }
             }
 
-            div {
-                class: "form-control",
+            fieldset {
+                class: "fieldset",
                 label {
-                    class: "label",
+                    class: "fieldset-label text-sm text-base-content",
                     span {
-                        class: "label-text",
+                        class: "label-text grow",
                         "Google Mail label to synchronize"
                     }
 
                     FloatingLabelSelect::<String> {
                         label: None,
-                        class: "w-full max-w-xs bg-base-100 rounded",
+                        class: "w-full max-w-xs bg-base-100 rounded-sm",
                         name: "google-mail-label".to_string(),
                         required: true,
                         on_select: move |label_id| {

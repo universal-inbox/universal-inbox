@@ -1520,50 +1520,50 @@
       }
     },
     "trunk@latest": {
-      "last_modified": "2025-03-11T17:52:14Z",
-      "resolved": "github:NixOS/nixpkgs/0d534853a55b5d02a4ababa1d71921ce8f0aee4c#trunk",
+      "last_modified": "2025-03-18T04:27:45Z",
+      "resolved": "github:NixOS/nixpkgs/3549532663732bfd89993204d40543e9edaec4f2#trunk",
       "source": "devbox-search",
-      "version": "0.21.8",
+      "version": "0.21.9",
       "systems": {
         "aarch64-darwin": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/jrvrh2ip9zb60f59gs2vhzggp7br27c3-trunk-0.21.8",
+              "path": "/nix/store/x19b02c5zs703gsfr1n8p3p7a5nhqlrr-trunk-0.21.9",
               "default": true
             }
           ],
-          "store_path": "/nix/store/jrvrh2ip9zb60f59gs2vhzggp7br27c3-trunk-0.21.8"
+          "store_path": "/nix/store/x19b02c5zs703gsfr1n8p3p7a5nhqlrr-trunk-0.21.9"
         },
         "aarch64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/gabnf3zzxr9j9gd6xyhip78b0ysqvj5l-trunk-0.21.8",
+              "path": "/nix/store/zvajp518hdjhp3bj3qzw9k21nw65dwqv-trunk-0.21.9",
               "default": true
             }
           ],
-          "store_path": "/nix/store/gabnf3zzxr9j9gd6xyhip78b0ysqvj5l-trunk-0.21.8"
+          "store_path": "/nix/store/zvajp518hdjhp3bj3qzw9k21nw65dwqv-trunk-0.21.9"
         },
         "x86_64-darwin": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/frkxsa45fqk64lqr2r873dhxl0znw93x-trunk-0.21.8",
+              "path": "/nix/store/8zncr9lgbfmmkvpk7xaaw1cpdh7gmqjk-trunk-0.21.9",
               "default": true
             }
           ],
-          "store_path": "/nix/store/frkxsa45fqk64lqr2r873dhxl0znw93x-trunk-0.21.8"
+          "store_path": "/nix/store/8zncr9lgbfmmkvpk7xaaw1cpdh7gmqjk-trunk-0.21.9"
         },
         "x86_64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/bczybp60wlzgv8rs9g75c8rnlgi6idyx-trunk-0.21.8",
+              "path": "/nix/store/kbpxiys2394l2ydlb39jgmy0idnp4q33-trunk-0.21.9",
               "default": true
             }
           ],
-          "store_path": "/nix/store/bczybp60wlzgv8rs9g75c8rnlgi6idyx-trunk-0.21.8"
+          "store_path": "/nix/store/kbpxiys2394l2ydlb39jgmy0idnp4q33-trunk-0.21.9"
         }
       }
     },

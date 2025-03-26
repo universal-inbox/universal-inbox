@@ -84,7 +84,7 @@ pub fn AuthenticationTokensCard() -> Element {
                     }
 
                     table {
-                        class: "table table-xs table-fixed",
+                        class: "table table-sm table-fixed",
                         thead {
                             tr {
                                 th { class: "w-72", "ID" }

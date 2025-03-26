@@ -109,7 +109,7 @@ pub fn GoogleCalendarEventPreview(
                 icon: rsx! { Icon { class: "h-5 w-5", icon: BsPeople } },
                 opened: expand_details(),
                 table {
-                    class: "table table-auto table-xs w-full",
+                    class: "table table-auto table-sm w-full",
                     tbody {
                         for attendee in google_calendar_event().attendees {
                             CalendarEventAttendeeRow { attendee }
