@@ -35,6 +35,9 @@
 
 @plugin "@iconify/tailwind4";
 
+@import "../node_modules/notyf/notyf.min.css";
+@import "../node_modules/flyonui/src/vendor/notyf.css";
+
 @utility slack-emoji {
     @apply my-0! mx-0.5!;
     @apply w-4 h-4 inline-block;
