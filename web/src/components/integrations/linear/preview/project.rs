@@ -16,7 +16,7 @@ use crate::components::{
         icons::{LinearProjectHealtIcon, LinearProjectIcon},
     },
     markdown::Markdown,
-    CardWithHeaders, CollapseCard, SmallCard, Tag, TagDisplay, UserWithAvatar,
+    CardWithHeaders, CollapseCard, MessageHeader, SmallCard, Tag, TagDisplay, UserWithAvatar,
 };
 
 #[component]
@@ -29,8 +29,8 @@ pub fn LinearProjectPreview(
         div {
             class: "flex flex-col gap-2 w-full",
 
-            h2 {
-                class: "flex items-center gap-2 text-lg",
+            h3 {
+                class: "flex items-center gap-2 text-base",
 
                 LinearProjectIcon { class: "h-5 w-5", linear_project: linear_project }
 
@@ -43,7 +43,7 @@ pub fn LinearProjectPreview(
                     href: "{linear_project().url}",
                     target: "_blank",
                     "{linear_project().name}"
-                    Icon { class: "h-5 w-5 text-gray-400 p-1", icon: BsArrowUpRightSquare }
+                    Icon { class: "h-5 w-5 min-w-5 text-base-content/50 p-1", icon: BsArrowUpRightSquare }
                 }
             }
 
@@ -59,30 +59,39 @@ pub fn LinearProjectDetails(
     expand_details: ReadOnlySignal<bool>,
     dark_bg: Option<bool>,
 ) -> Element {
-    let (cards_style, proses_style) = if dark_bg.unwrap_or_default() {
-        ("bg-neutral text-neutral-content", "prose-invert!")
+    let (card_style, header_style, prose_style) = if dark_bg.unwrap_or_default() {
+        (
+            "bg-neutral text-neutral-content text-sm",
+            "text-neutral-content/75",
+            "prose-invert!",
+        )
     } else {
-        ("bg-base-200 text-base-content", "dark:prose-invert")
+        (
+            "bg-base-200 text-base-content text-sm",
+            "text-base-content/50",
+            "",
+        )
     };
 
     rsx! {
         div {
-            class: "flex flex-col gap-2 w-full",
+            class: "flex flex-col gap-2 w-full text-sm",
 
             CollapseCard {
-                class: "{cards_style}",
-                header: rsx! { span { class: "text-gray-400 ", "Description" } },
+                id: "linear-project-details",
+                class: "{card_style}",
+                header: rsx! { span { class: "{header_style}", "Description" } },
                 opened: expand_details(),
                 Markdown {
-                    class: "{proses_style} w-full max-w-full",
+                    class: "{prose_style} prose prose-sm w-full max-w-full",
                     text: linear_project().description.clone()
                 }
             }
 
             if let Some(linear_notification) = linear_notification() {
                 SmallCard {
-                    card_class: "{cards_style}",
-                    span { class: "text-gray-400", "Reason:" }
+                    card_class: "{card_style}",
+                    span { class: "{header_style}", "Reason:" }
                     TagDisplay {
                         tag: Into::<Tag>::into(get_notification_type_label(&linear_notification.get_type()))
                     }
@@ -91,8 +100,8 @@ pub fn LinearProjectDetails(
 
             if let Some(lead) = linear_project().lead {
                 SmallCard {
-                    card_class: "{cards_style}",
-                    span { class: "text-gray-400", "Led by" }
+                    card_class: "{card_style}",
+                    span { class: "{header_style}", "Led by" }
                     UserWithAvatar {
                         user_name: lead.name.clone(),
                         avatar_url: lead.avatar_url.clone(),
@@ -102,7 +111,7 @@ pub fn LinearProjectDetails(
             }
 
             SmallCard {
-                card_class: "{cards_style}",
+                card_class: "{card_style}",
                 LinearProjectIcon { class: "h-5 w-5", linear_project }
                 "{linear_project().state}",
                 if linear_project().progress > 0 {
@@ -117,30 +126,43 @@ pub fn LinearProjectDetails(
 
             if let Some(start_date) = linear_project().start_date {
                 SmallCard {
-                    card_class: "{cards_style}",
-                    Icon { class: "h-5 w-5 text-gray-400", icon: BsCalendar2Event }
+                    card_class: "{card_style}",
+                    Icon { class: "h-5 w-5 {header_style}", icon: BsCalendar2Event }
                     span { "{start_date}" }
-                    Icon { class: "h-5 w-5 text-gray-400", icon: BsArrowRight }
+                    Icon { class: "h-5 w-5 {header_style}", icon: BsArrowRight }
                     if let Some(target_date) = linear_project().target_date {
-                        Icon { class: "h-5 w-5 text-gray-400", icon: BsCalendar2Event }
+                        Icon { class: "h-5 w-5 {header_style}", icon: BsCalendar2Event }
                         span { "{target_date}" }
                     }
                 }
             }
 
             if let Some(LinearNotification::ProjectNotification { project_update: Some(project_update), .. }) = linear_notification() {
-                LinearProjectUpdateDetails { project_update }
+                LinearProjectUpdateDetails { project_update, dark_bg }
             }
         }
     }
 }
 
 #[component]
-fn LinearProjectUpdateDetails(project_update: ReadOnlySignal<LinearProjectUpdate>) -> Element {
-    let updated_at = project_update()
-        .updated_at
-        .format("%Y-%m-%d %H:%M")
-        .to_string();
+fn LinearProjectUpdateDetails(
+    project_update: ReadOnlySignal<LinearProjectUpdate>,
+    dark_bg: Option<bool>,
+) -> Element {
+    let (card_style, header_style, prose_style) = if dark_bg.unwrap_or_default() {
+        (
+            "bg-base-200 text-base-content text-sm",
+            "text-base-content/50",
+            "prose-invert!",
+        )
+    } else {
+        (
+            "bg-neutral text-neutral-content text-sm",
+            "text-neutral-content/75",
+            "dark:prose-invert",
+        )
+    };
+
     let health_icon_style = match project_update().health {
         LinearProjectUpdateHealthType::OnTrack => "text-success",
         LinearProjectUpdateHealthType::AtRisk => "text-warning",
@@ -148,26 +170,26 @@ fn LinearProjectUpdateDetails(project_update: ReadOnlySignal<LinearProjectUpdate
     };
     let headers = vec![rsx! {
         div {
-            class: "flex flex-row items-center gap-2",
+            class: "flex flex-row flex-wrap items-center gap-2 {header_style}",
             LinearProjectHealtIcon { class: "h-3 w-3 {health_icon_style}" }
             span { "{project_update().health}" }
-            span { class: "text-gray-400", "by" }
-            UserWithAvatar {
+            span { class: "text-xs", "by" }
+            MessageHeader {
                 user_name: project_update().user.name.clone(),
                 avatar_url: project_update().user.avatar_url.clone(),
                 display_name: true,
+                sent_at: project_update().updated_at,
             }
-            span { class: "text-gray-400", "on" }
-            span { " {updated_at}" }
         }
     }];
 
     rsx! {
         CardWithHeaders {
+            card_class: "{card_style}",
             headers: headers,
 
             Markdown {
-                class: "w-full max-w-full",
+                class: "{prose_style} prose prose-sm w-full max-w-full",
                 text: project_update().body.clone()
             }
         }

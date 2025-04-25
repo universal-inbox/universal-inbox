@@ -63,7 +63,7 @@ pub fn SlackStarTaskListItem(
 
             SlackStarTaskListItemDetails { slack_star }
 
-            span { class: "text-gray-400 whitespace-nowrap text-xs font-mono", "{task_updated_at}" }
+            span { class: "text-base-content/50 whitespace-nowrap text-xs font-mono", "{task_updated_at}" }
         }
     }
 }
@@ -105,7 +105,7 @@ pub fn SlackReactionTaskListItem(
 
             SlackReactionTaskListItemDetails { slack_reaction }
 
-            span { class: "text-gray-400 whitespace-nowrap text-xs font-mono", "{task_updated_at}" }
+            span { class: "text-base-content/50 whitespace-nowrap text-xs font-mono", "{task_updated_at}" }
         }
     }
 }
@@ -123,7 +123,7 @@ pub fn SlackStarTaskSubtitle(slack_star: ReadOnlySignal<SlackStar>) -> Element {
 
     rsx! {
         span {
-            class: "flex gap-2 text-xs text-gray-400",
+            class: "flex gap-2 text-xs text-base-content/50",
             "{subtitle}"
         }
     }
@@ -144,7 +144,7 @@ pub fn SlackReactionTaskSubtitle(slack_reaction: ReadOnlySignal<SlackReaction>) 
 
     rsx! {
         span {
-            class: "flex gap-2 text-xs text-gray-400",
+            class: "flex gap-2 text-xs text-base-content/50",
             "{subtitle}"
         }
     }

@@ -26,8 +26,8 @@ use universal_inbox::{
     integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
     notification::{Notification, NotificationSource, NotificationSourceKind, NotificationStatus},
     task::{
-        service::TaskPatch, CreateOrUpdateTaskRequest, TaskCreation, TaskSource, TaskSourceKind,
-        TaskStatus,
+        integrations::todoist::TODOIST_INBOX_PROJECT, service::TaskPatch,
+        CreateOrUpdateTaskRequest, TaskCreationConfig, TaskSource, TaskSourceKind, TaskStatus,
     },
     third_party::{
         integrations::slack::{
@@ -1894,10 +1894,10 @@ impl ThirdPartyTaskService<SlackStar> for SlackService {
         _executor: &mut Transaction<'_, Postgres>,
         source: &SlackStar,
         source_third_party_item: &ThirdPartyItem,
-        task_creation: Option<TaskCreation>,
+        task_creation_config: Option<TaskCreationConfig>,
         user_id: UserId,
     ) -> Result<Box<CreateOrUpdateTaskRequest>, UniversalInboxError> {
-        let task_creation = task_creation.ok_or_else(|| {
+        let task_creation_config = task_creation_config.ok_or_else(|| {
             UniversalInboxError::Unexpected(anyhow!(
                 "Cannot build a Slack task without a task creation"
             ))
@@ -1926,11 +1926,17 @@ impl ThirdPartyTaskService<SlackStar> for SlackService {
             body,
             status,
             completed_at,
-            priority: task_creation.priority,
-            due_at: DefaultValue::new(task_creation.due_at.clone(), None),
+            priority: task_creation_config.priority,
+            due_at: DefaultValue::new(task_creation_config.due_at.clone(), None),
             tags: vec![],
             parent_id: None,
-            project: DefaultValue::new(task_creation.project.name.clone(), None),
+            project: DefaultValue::new(
+                task_creation_config
+                    .project_name
+                    .clone()
+                    .unwrap_or_else(|| TODOIST_INBOX_PROJECT.to_string()),
+                None,
+            ),
             is_recurring: false,
             created_at,
             updated_at,
@@ -2054,10 +2060,10 @@ impl ThirdPartyTaskService<SlackReaction> for SlackService {
         _executor: &mut Transaction<'_, Postgres>,
         source: &SlackReaction,
         source_third_party_item: &ThirdPartyItem,
-        task_creation: Option<TaskCreation>,
+        task_creation_config: Option<TaskCreationConfig>,
         user_id: UserId,
     ) -> Result<Box<CreateOrUpdateTaskRequest>, UniversalInboxError> {
-        let task_creation = task_creation.ok_or_else(|| {
+        let task_creation_config = task_creation_config.ok_or_else(|| {
             UniversalInboxError::Unexpected(anyhow!(
                 "Cannot build a Slack task without a task creation"
             ))
@@ -2086,11 +2092,17 @@ impl ThirdPartyTaskService<SlackReaction> for SlackService {
             body,
             status,
             completed_at,
-            priority: task_creation.priority,
-            due_at: DefaultValue::new(task_creation.due_at.clone(), None),
+            priority: task_creation_config.priority,
+            due_at: DefaultValue::new(task_creation_config.due_at.clone(), None),
             tags: vec![],
             parent_id: None,
-            project: DefaultValue::new(task_creation.project.name.clone(), None),
+            project: DefaultValue::new(
+                task_creation_config
+                    .project_name
+                    .clone()
+                    .unwrap_or_else(|| TODOIST_INBOX_PROJECT.to_string()),
+                None,
+            ),
             is_recurring: false,
             created_at,
             updated_at,

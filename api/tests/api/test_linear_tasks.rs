@@ -80,7 +80,7 @@ async fn test_sync_todoist_linear_task(
     .await;
     let project = ProjectSummary {
         name: "Inbox".to_string(),
-        source_id: "1111".to_string(),
+        source_id: "1111".into(),
     };
     let linear_integration_connection = create_and_mock_integration_connection(
         &app.app,

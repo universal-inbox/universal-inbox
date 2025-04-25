@@ -51,7 +51,10 @@ pub fn GoogleMailThreadListItem(
             title: "{notification().title}",
             link,
             subtitle: rsx! { GoogleMailThreadSubtitle { google_mail_thread } },
-            icon: rsx! { GoogleMail { class: "h-5 w-5" }, TaskHint { task: notification().task } },
+            icon: rsx! {
+                GoogleMail { class: "h-5 w-5" },
+                TaskHint { task: notification().task }
+            },
             subicon: rsx! { Mail { class: "h-5 w-5 min-w-5 {mail_icon_style}" } },
             action_buttons: get_notification_list_item_action_buttons(
                 notification,
@@ -67,7 +70,7 @@ pub fn GoogleMailThreadListItem(
                 Icon { class: "mx-0.5 h-5 w-5 text-red-500", icon: BsExclamationCircle }
             }
 
-            span { class: "text-gray-400 whitespace-nowrap text-xs font-mono", "{notification_updated_at}" }
+            span { class: "text-base-content/50 whitespace-nowrap text-xs font-mono", "{notification_updated_at}" }
         }
     }
 }
@@ -88,7 +91,7 @@ fn GoogleMailThreadSubtitle(google_mail_thread: ReadOnlySignal<GoogleMailThread>
 
     rsx! {
         div {
-            class: "flex gap-2 text-xs text-gray-400",
+            class: "flex gap-2 text-xs text-base-content/50",
 
             if let Some(from_address) = from_address {
                 span { "{from_address}" }

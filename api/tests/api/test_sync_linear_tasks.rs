@@ -95,7 +95,7 @@ async fn test_sync_tasks_should_create_new_task(
                 enabled: true,
                 target_project: Some(ProjectSummary {
                     name: "Project2".to_string(),
-                    source_id: "2222".to_string(),
+                    source_id: "2222".into(),
                 }),
                 default_due_at: Some(PresetDueDate::Today),
             },
@@ -133,7 +133,7 @@ async fn test_sync_tasks_should_create_new_task(
         &todoist_item.id,
         expected_task_title.clone(),
         sync_linear_issues[0].description.clone(),
-        "2222".to_string(), // ie. "Project2"
+        Some("2222".to_string()), // ie. "Project2"
         Some((&due_at).into()),
         TodoistItemPriority::P1,
     );
@@ -226,7 +226,7 @@ async fn test_sync_tasks_should_not_update_default_values(
     .await;
     let project = ProjectSummary {
         name: "Project2".to_string(),
-        source_id: "2222".to_string(),
+        source_id: "2222".into(),
     };
     let linear_integration_connection = create_and_mock_integration_connection(
         &app.app,
@@ -260,7 +260,7 @@ async fn test_sync_tasks_should_not_update_default_values(
         linear_issue,
         ProjectSummary {
             name: "Project1".to_string(),
-            source_id: "1111".to_string(),
+            source_id: "1111".into(),
         },
         app.user.id,
         linear_integration_connection.id,
@@ -339,7 +339,7 @@ async fn test_sync_tasks_should_complete_existing_task(
     .await;
     let project = ProjectSummary {
         name: "Project2".to_string(),
-        source_id: "2222".to_string(),
+        source_id: "2222".into(),
     };
     let linear_integration_connection = create_and_mock_integration_connection(
         &app.app,
@@ -442,7 +442,7 @@ async fn test_sync_tasks_should_complete_existing_task_and_recreate_sink_task_if
     .await;
     let project = ProjectSummary {
         name: "Project2".to_string(),
-        source_id: "2222".to_string(),
+        source_id: "2222".into(),
     };
     let linear_integration_connection = create_and_mock_integration_connection(
         &app.app,
@@ -529,7 +529,7 @@ async fn test_sync_tasks_should_complete_existing_task_and_recreate_sink_task_if
         &new_todoist_item_id,
         existing_task.title.clone(),
         Some(existing_task.body.clone()),
-        "2222".to_string(), // ie. "Project2"
+        Some("2222".to_string()), // ie. "Project2"
         Some((&Into::<DueDate>::into(PresetDueDate::Today)).into()),
         TodoistItemPriority::P1,
     );

@@ -21,7 +21,8 @@ pub fn EmailValidatedLayout() -> Element {
     } else {
         rsx! {
             div {
-                class: "alert alert-info text-sm",
+                class: "alert alert-info text-sm flex gap-2",
+                role: "alert",
                 Icon { class: "w-5 h-5", icon: BsQuestionCircle }
                 "Please check your emails for a verification link"
             }

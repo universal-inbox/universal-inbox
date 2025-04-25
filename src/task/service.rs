@@ -14,7 +14,7 @@ pub struct SyncTasksParameters {
 #[derive(Serialize, Deserialize, Debug, Default, PartialEq, Eq)]
 pub struct TaskPatch {
     pub status: Option<TaskStatus>,
-    pub project: Option<String>,
+    pub project_name: Option<String>,
     pub due_at: Option<Option<DueDate>>,
     pub priority: Option<TaskPriority>,
     pub body: Option<String>,

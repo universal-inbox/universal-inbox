@@ -23,7 +23,7 @@ pub fn FullpageLayout() -> Element {
 
             if CONNECTED_USER.read().is_some() {
                 button {
-                    class: "btn btn-ghost absolute top-4 right-4",
+                    class: "btn btn-text absolute top-4 right-4",
                     "data-tip": "Logout",
                     onclick: move |_| user_service.send(UserCommand::Logout),
                     Icon { class: "w-5 h-5", icon: BsBoxArrowInLeft }
@@ -44,7 +44,11 @@ pub fn FullpageLayout() -> Element {
                     }
 
                     if let Some(error_message) = &UI_MODEL.read().error_message {
-                        div { class: "alert alert-error text-sm", "{error_message}" }
+                        div {
+                            class: "alert alert-error text-sm flex gap-2",
+                            role: "alert",
+                            "{error_message}"
+                        }
                     }
 
                     if let Some(confirmation_message) = &UI_MODEL.read().confirmation_message {
@@ -52,7 +56,8 @@ pub fn FullpageLayout() -> Element {
                             class: "flex flex-col items-center justify-center",
 
                             div {
-                                class: "alert alert-success text-sm",
+                                class: "alert alert-success text-sm flex gap-2",
+                                role: "alert",
                                 Icon { class: "w-5 h-5", icon: BsCheckCircle }
                                 "{confirmation_message}"
                             }

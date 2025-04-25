@@ -9,7 +9,7 @@ pub fn Markdown(text: String, class: Option<String>) -> Element {
     let class = class.unwrap_or("dark:prose-invert".to_string());
     rsx! {
         p {
-            class: "prose prose-sm {class}",
+            class: "{class}",
             dangerous_inner_html: "{markdown_to_html(&text)}"
         }
     }
@@ -31,7 +31,7 @@ pub fn SlackMarkdown(text: String, class: Option<String>) -> Element {
     let class = class.unwrap_or("dark:prose-invert".to_string());
     rsx! {
         p {
-            class: "w-full max-w-full prose prose-sm {class}",
+            class: "w-full max-w-full {class}",
             dangerous_inner_html: "{markdown_to_html_with_slack_references(&text)}"
         }
     }

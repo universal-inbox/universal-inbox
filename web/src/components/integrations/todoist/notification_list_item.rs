@@ -45,7 +45,10 @@ pub fn TodoistNotificationListItem(
             title: "{notification().title}",
             subtitle: rsx! { TodoistListItemSubtitle { todoist_item } },
             link,
-            icon: rsx! { Todoist { class: "h-5 w-5" }, TaskHint { task: notification().task } },
+            icon: rsx! {
+                Todoist { class: "h-5 w-5" },
+                TaskHint { task: notification().task }
+            },
             subicon: rsx! {
                 Icon { class: "h-5 w-5 min-w-5 {task_icon_style}", icon: BsCardChecklist }
             },
@@ -63,7 +66,7 @@ pub fn TodoistNotificationListItem(
                     TagDisplay { tag }
                 }
 
-            span { class: "text-gray-400 whitespace-nowrap text-xs font-mono", "{notification_updated_at}" }
+            span { class: "text-base-content/50 whitespace-nowrap text-xs font-mono", "{notification_updated_at}" }
         }
     }
 }

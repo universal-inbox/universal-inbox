@@ -59,7 +59,10 @@ pub fn GoogleCalendarEventListItem(
             title: "{notification().title}",
             link,
             subtitle: rsx! { GoogleCalendarEventSubtitle { google_calendar_event } },
-            icon: rsx! { GoogleCalendar { class: "h-8 w-8" }, TaskHint { task: notification().task } },
+            icon: rsx! {
+                GoogleCalendar { class: "h-8 w-8" },
+                TaskHint { task: notification().task }
+            },
             subicon: rsx! { Icon { class: "h-5 w-5", icon: BsCalendar2Event } },
             action_buttons: get_google_calendar_notification_list_item_action_buttons(
                 notification,
@@ -69,7 +72,7 @@ pub fn GoogleCalendarEventListItem(
             on_select,
 
             { status_icon }
-            span { class: "text-gray-400 whitespace-nowrap text-xs font-mono", "{notification_updated_at}" }
+            span { class: "text-base-content/50 whitespace-nowrap text-xs font-mono", "{notification_updated_at}" }
         }
     }
 }
@@ -83,11 +86,11 @@ fn GoogleCalendarEventSubtitle(
 
     rsx! {
         div {
-            class: "flex gap-2 text-xs text-gray-400",
+            class: "flex gap-2 text-xs text-base-content/50",
 
-            span { class: "text-xs text-gray-400", "{organizer}" }
+            span { class: "text-xs text-base-content/50 break-all", "{organizer}" }
             if let Some(date_label) = date_label() {
-                span { class: "text-xs text-gray-400", "{date_label}" }
+                span { class: "text-xs text-base-content/50", "{date_label}" }
             }
         }
     }

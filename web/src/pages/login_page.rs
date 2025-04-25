@@ -104,7 +104,7 @@ pub fn LoginPage() -> Element {
                         div {
                             class: "label",
                             Link {
-                                class: "link-hover link label-text-alt link-primary",
+                                class: "link-hover link link-primary label-text-alt",
                                 to: Route::PasswordResetPage {},
                                 "Forgot password?"
                             }
@@ -173,7 +173,7 @@ pub fn LoginPage() -> Element {
                 UniversalInboxTitle {}
                 span { "? " }
                 Link {
-                    class: "link-hover link link-primary font-bold",
+                    class: "link-hover link link-primary",
                     to: Route::SignupPage {},
                     "Create new account"
                 }

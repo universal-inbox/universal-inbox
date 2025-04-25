@@ -2,13 +2,19 @@
 
 use std::{fmt::Display, marker::PhantomData, str::FromStr};
 
-use dioxus::{html::input_data::keyboard_types::Key, prelude::*};
-use dioxus_free_icons::{icons::bs_icons::BsSearch, Icon};
+use dioxus::prelude::*;
+use dioxus::web::WebEventExt;
+use json_value_merge::Merge;
 use log::error;
-use wasm_bindgen::{prelude::Closure, JsCast};
-use web_sys::KeyboardEvent;
+use serde_json::json;
 
-use crate::utils::{focus_and_select_input_element, wait_for_element_by_id};
+use crate::{
+    services::flyonui::{
+        forget_flyonui_select_element, get_flyonui_selected_remote_value,
+        init_flyonui_select_element,
+    },
+    utils::focus_and_select_input_element,
+};
 
 #[derive(Props, Clone, PartialEq)]
 pub struct InputProps<T: Clone + PartialEq + 'static> {
@@ -31,9 +37,6 @@ pub struct InputProps<T: Clone + PartialEq + 'static> {
     phantom: PhantomData<T>,
 }
 
-const INPUT_INVALID_STYLE: &str = "border-error focus:border-error";
-const FLOATING_LABEL_INVALID_STYLE: &str = "text-error peer-focus:text-error";
-
 #[component]
 pub fn FloatingLabelInputText<T>(mut props: InputProps<T>) -> Element
 where
@@ -44,32 +47,17 @@ where
     let required_label_style = required
         .then_some("after:content-['*'] after:ml-0.5 after:text-error")
         .unwrap_or_default();
+    let has_icon = props.icon.is_some();
+    let label_style = use_memo(move || {
+        if (props.value)().is_empty() && has_icon {
+            "left-8 peer-focus:left-0"
+        } else {
+            "left-0"
+        }
+    });
 
     let error_message = use_signal(|| None);
-    let icon = props.icon.clone();
-    let input_style = use_memo(move || {
-        to_owned![icon];
-        format!(
-            "{} {}",
-            error_message()
-                .and(Some(INPUT_INVALID_STYLE))
-                .unwrap_or("border-base-200 focus:border-primary"),
-            if icon.is_some() { "pl-7" } else { "pl-0" }
-        )
-    });
-    let icon = props.icon.clone();
-    let label_style = use_memo(move || {
-        to_owned![icon];
-        format!(
-            "{} {}",
-            error_message()
-                .and(Some(FLOATING_LABEL_INVALID_STYLE))
-                .unwrap_or_default(),
-            icon.is_some()
-                .then_some("peer-placeholder-shown:pl-7")
-                .unwrap_or_default()
-        )
-    });
+    let input_style = use_memo(move || error_message().and(Some("is-invalid")).unwrap_or(""));
 
     let input_type = props.r#type.clone().unwrap_or("text".to_string());
     let mut validate = use_signal(|| false);
@@ -90,46 +78,49 @@ where
 
     rsx! {
         div {
-            class: "relative w-full",
+            class: "input-floating input-sm",
 
-            if let Some(icon) = &props.icon {
-                div {
-                    class: "absolute inset-y-0 start-0 flex py-2.5 pointer-events-none {label_style}",
-                    { icon }
-                }
-            }
+            div {
+                class: "w-full input rounded-b-none border-t-0 border-l-0 border-r-0 focus-within:outline-none",
 
-            input {
-                "type": "{input_type}",
-                name: "{props.name}",
-                id: "{props.name}",
-                class: "{input_style} block py-2 px-3 w-full bg-transparent border-0 border-b-2 focus:outline-hidden focus:ring-0 peer",
-                placeholder: " ",
-                required: "{required}",
-                value: "{props.value}",
-                oninput: move |evt| {
-                    props.value.write().clone_from(&evt.value());
-                },
-                onchange: move |evt| {
-                    props.value.write().clone_from(&evt.value());
-                },
-                onfocusout: move |_| {
-                    *validate.write() = true;
-                    if let Some(on_update) = &props.on_update {
-                        on_update.call(props.value.read().clone());
+                if let Some(icon) = &props.icon {
+                    div {
+                        class: "text-base-content/80 my-auto me-3 size-5 shrink-0",
+                        { icon }
                     }
-                },
-                autofocus: props.autofocus.unwrap_or_default(),
-            }
+                }
 
-            if let Some(label) = (props.label)() {
-                label {
-                    "for": "{props.name}",
-                    class: "{label_style} {required_label_style} absolute duration-300 transform -translate-y-6 scale-75 top-3 origin-[0] peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-6 peer-focus:left-0 peer-focus:pl-0",
-                    "{label}"
+                input {
+                    class: "{input_style} peer",
+                    "type": "{input_type}",
+                    name: "{props.name}",
+                    id: "{props.name}",
+                    placeholder: " ",
+                    required: "{required}",
+                    value: "{props.value}",
+                    oninput: move |evt| {
+                        props.value.write().clone_from(&evt.value());
+                    },
+                    onchange: move |evt| {
+                        props.value.write().clone_from(&evt.value());
+                    },
+                    onfocusout: move |_| {
+                        *validate.write() = true;
+                        if let Some(on_update) = &props.on_update {
+                            on_update.call(props.value.read().clone());
+                        }
+                    },
+                    autofocus: props.autofocus.unwrap_or_default(),
+                }
+
+                if let Some(label) = (props.label)() {
+                    label {
+                        "for": "{props.name}",
+                        class: "{required_label_style} {label_style} input-floating-label",
+                        "{label}"
+                    }
                 }
             }
-
             ErrorMessage { message: error_message }
         }
     }
@@ -149,7 +140,10 @@ pub struct InputSelectProps<T: Clone + PartialEq + 'static> {
     #[props(default)]
     force_validation: Option<bool>,
     #[props(default)]
+    default_value: Option<String>,
+    #[props(default)]
     disabled: Option<bool>,
+    #[props(default)]
     on_select: Option<EventHandler<Option<T>>>,
     children: Element,
     #[props(default)]
@@ -168,18 +162,14 @@ where
         .unwrap_or_default();
 
     let error_message = use_signal(|| None);
-    let input_style = use_memo(move || {
-        error_message()
-            .and(Some(INPUT_INVALID_STYLE))
-            .unwrap_or("border-base-200 focus:border-primary")
-    });
-    let label_style = use_memo(move || {
-        error_message()
-            .and(Some(FLOATING_LABEL_INVALID_STYLE))
-            .unwrap_or_default()
-    });
+    let input_style = use_memo(move || error_message().and(Some("is-invalid")).unwrap_or(""));
     let mut value_to_validate = use_signal(|| "".to_string());
     let mut validate = use_signal(|| false);
+    use_effect(move || {
+        if let Some(default_value) = &props.default_value {
+            *value_to_validate.write() = default_value.clone();
+        }
+    });
     let _ = use_memo(move || {
         if props.force_validation.unwrap_or_default() || (*validate)() {
             validate_value::<T>(&value_to_validate(), error_message, required);
@@ -189,12 +179,12 @@ where
 
     rsx! {
         div {
-            class: "relative {class}",
+            class: "select-floating {class}",
             select {
                 id: "{props.name}",
                 name: "{props.name}",
-                class: "{input_style} block py-2 px-3 w-full bg-transparent bg-right border-0 border-b-2 appearance-none focus:outline-hidden focus:ring-0 peer",
-                oninput: move |evt| {
+                class: "{input_style} select select-sm rounded-b-none border-t-0 border-l-0 border-r-0 focus:outline-none",
+                onchange: move |evt| {
                     *validate.write() = true;
                     value_to_validate.write().clone_from(&evt.data.value());
                     if let Some(on_select) = &props.on_select {
@@ -214,7 +204,7 @@ where
             if let Some(label) = (props.label)() {
                 label {
                     "for": "{props.name}",
-                    class: "{label_style} {required_label_style} absolute duration-300 transform -translate-y-6 scale-75 top-3 -z-10 origin-[0]",
+                    class: "{required_label_style} select-floating-label",
                     "{label}"
                 }
             }
@@ -224,333 +214,110 @@ where
     }
 }
 
-pub trait Searchable {
-    // Returns a string to be used to render the searchable object
-    fn get_title(&self) -> String;
-    // Returns a unique identifier of the searchable object
-    fn get_id(&self) -> String;
-}
-
 #[derive(Props, Clone, PartialEq)]
-pub struct InputSearchProps<T: Clone + PartialEq + Searchable + 'static>
-where
-    T: Clone + PartialEq + Searchable + 'static,
-{
+pub struct InputSearchProps<T: Clone + PartialEq + 'static> {
     name: ReadOnlySignal<String>,
-    #[props(!optional)]
+    #[props(optional)]
     label: ReadOnlySignal<Option<String>>,
-    value: Signal<Option<T>>,
-    search_expression: Signal<String>,
-    search_results: Signal<Vec<T>>,
     #[props(default)]
     required: Option<bool>,
     #[props(default)]
     autofocus: Option<bool>,
     #[props(default)]
     disabled: Option<bool>,
-    on_select: EventHandler<T>,
+    #[props(default)]
+    on_select: Option<EventHandler<Option<T>>>,
+    #[props(default)]
+    data_select: ReadOnlySignal<Option<serde_json::Value>>,
     #[props(default)]
     class: Option<String>,
     children: Element,
 }
 
 #[component]
-pub fn FloatingLabelInputSearchSelect<T>(mut props: InputSearchProps<T>) -> Element
+pub fn FloatingLabelInputSearchSelect<T>(props: InputSearchProps<T>) -> Element
 where
-    T: Clone + PartialEq + Searchable + 'static,
+    T: Display + Clone + PartialEq + for<'de> serde::Deserialize<'de>,
 {
-    let mut dropdown_opened = use_signal(|| false);
     let required = props.required.unwrap_or_default();
     let required_label_style = required
         .then_some("after:content-['*'] after:ml-0.5 after:text-error")
         .unwrap_or_default();
 
-    let mut selected_index = use_signal(|| 0);
-    use_effect(move || *selected_index.write() = 0);
-
-    let selected_result_title = use_memo(move || {
-        (*props.value)()
-            .map(|value| value.get_title())
-            .unwrap_or_default()
-    });
-
-    let mut error_message = use_signal(|| None);
-    let button_style = use_memo(move || {
-        if (*props.value)().is_none() {
-            if is_dropdown_opened(
-                (*props.value)().is_some(),
-                props.autofocus.unwrap_or_default(),
-                dropdown_opened(),
-            ) {
-                "issearching"
-            } else {
-                "isempty text-opacity-0 text-base-100"
-            }
-        } else {
-            "isnotempty"
-        }
-    });
-    let border_style = use_memo(move || {
-        error_message()
-            .and(Some(INPUT_INVALID_STYLE))
-            .unwrap_or("border-base-200 focus:border-primary")
-    });
-    let label_style = use_memo(move || {
-        error_message()
-            .and(Some(FLOATING_LABEL_INVALID_STYLE))
-            .unwrap_or_default()
-    });
-
-    let dropdown_style = use_memo(move || {
-        if is_dropdown_opened(
-            (*props.value)().is_some(),
-            props.autofocus.unwrap_or_default(),
-            dropdown_opened(),
-        ) {
-            "visible opacity-100"
-        } else {
-            "invisible opacity-0"
-        }
-    });
-
-    let mut button_just_got_focus = use_signal(|| false);
-    let _ = use_resource(move || async move {
-        if props.autofocus.unwrap_or_default() || dropdown_opened() {
-            let name = (props.name)();
-            if let Err(error) = focus_and_select_input_element(&name).await {
-                error!("Error focusing element {}: {error:?}", name);
-            }
-        };
-    });
-
-    // Tricks to be able to prevent default Enter behavior as Dioxus does not yet support
-    // preventing an event conditionnaly (ie. in a handler).
-    // This creates a `keydown` event handler using the DOM API on the `search-list` and set the
-    // `select_value` flag to trigger the following `use_memo`.
-    let mut select_value = use_signal(|| false);
-    let _ = use_resource(move || async move {
-        let Ok(search_list) = wait_for_element_by_id("search-list", 300).await else {
-            error!("Element `search-list` not found");
-            return;
-        };
-        let handler = Closure::wrap(Box::new(move |evt: KeyboardEvent| {
-            if &evt.key() == "Enter" {
-                *select_value.write() = true;
-                evt.prevent_default();
-            }
-        }) as Box<dyn FnMut(KeyboardEvent)>);
-
-        search_list
-            .add_event_listener_with_callback("keydown", handler.as_ref().unchecked_ref())
-            .expect("Failed to add `keydown` event listener to search-list");
-        handler.forget();
-    });
-
-    use_effect(move || {
-        if select_value() {
-            *select_value.write() = false;
-            let result = &(*props.search_results)()[(*selected_index)()];
-            *error_message.write() = None;
-            *props.value.write() = Some(result.clone());
-            *props.search_expression.write() = "".to_string();
-            *props.search_results.write() = vec![];
-            *dropdown_opened.write() = false;
-            props.on_select.call(result.clone());
-        }
-    });
+    let error_message: Signal<Option<String>> = use_signal(|| None);
+    let input_style = use_memo(move || error_message().and(Some("is-invalid")).unwrap_or(""));
     let class = props.class.unwrap_or_default();
+    let mut mounted_element: Signal<Option<web_sys::Element>> = use_signal(|| None);
+
+    let data_select = use_memo(move || {
+        let mut default_data_select = json!({
+            "toggleTag": "<button type=\"button\" aria-expanded=\"false\"></button>",
+            "toggleClasses": "advance-select-toggle advance-select-sm select-disabled:pointer-events-none select-disabled:opacity-40 rounded-b-none border-t-0 border-l-0 border-r-0 focus:outline-none",
+            "hasSearch": true,
+            "minSearchLength": 1,
+            "dropdownClasses": "advance-select-menu menu-sm max-h-52 pt-0 overflow-y-auto z-80",
+            "optionTemplate": "<div class=\"flex justify-between items-center w-full\"><span data-title></span><span class=\"icon-[tabler--check] shrink-0 size-4 text-primary hidden selected:block \"></span></div>",
+            "extraMarkup": "<span class=\"icon-[tabler--chevron-down] shrink-0 size-5 text-base-content/75 absolute top-1/2 end-2.5 -translate-y-1/2 \"></span>",
+            "optionClasses": "advance-select-option selected:select-active",
+            "optionAllowEmptyOption": true
+        });
+        if let Some(data_select) = (props.data_select)() {
+            default_data_select.merge(&data_select);
+        }
+        default_data_select
+    });
+
+    use_drop(move || {
+        if let Some(element) = mounted_element() {
+            *mounted_element.write() = None;
+            forget_flyonui_select_element(&element);
+        }
+    });
 
     rsx! {
         div {
-            class: "dropdown group {class}",
-
-            label {
-                class: "join h-10 group w-full",
-                tabindex: -1,
-
-                { props.children }
-
-                button {
-                    id: "selected-result",
-                    name: "selected-result",
-                    disabled: props.disabled.unwrap_or_default(),
-                    "type": "button",
-                    class: "{border_style} {button_style} grow truncate block bg-transparent text-left border-0 border-b-2 focus:outline-hidden focus:ring-0 peer join-item px-3",
-                    onclick: move |_| {
-                        if button_just_got_focus() {
-                            // Focus has already opened the dropdown, no need to handle click
-                            // and close it
-                            *button_just_got_focus.write() = false;
-                            return;
+            class: "w-full select-floating {class}",
+            select {
+                id: "{props.name}",
+                name: "{props.name}",
+                "data-select": "{data_select}",
+                onmounted: move |element| {
+                    let web_element = element.as_web_event();
+                    init_flyonui_select_element(&web_element);
+                    mounted_element.set(Some(web_element));
+                },
+                class: "{input_style} hidden",
+                onchange: move |_| {
+                    if let Some(element) = mounted_element() {
+                        if let Some(on_select) = &props.on_select {
+                            if let Ok(selected_remote_value) = serde_wasm_bindgen::from_value::<T>(get_flyonui_selected_remote_value(&element)) {
+                                on_select.call(Some(selected_remote_value));
+                            }
                         }
-                        *dropdown_opened.write() = !dropdown_opened();
-                    },
-                    onfocus: move |_| {
-                        *button_just_got_focus.write() = true;
-                        *dropdown_opened.write() = !dropdown_opened();
-                    },
-
-                    "{selected_result_title}"
-                }
-                span {
-                    class: "{border_style} block py-2 bg-transparent border-0 border-b-2 join-item",
-                    ArrowDown { class: "h-5 w-5 group-hover:visible invisible" }
-                }
-
-                if let Some(label) = (props.label)() {
-                    label {
-                        "for": "selected-result",
-                        class: "{label_style} {required_label_style} absolute duration-300 transform -translate-y-0 scale-100 top-2 z-10 origin-[0] peer-[.isnotempty]:scale-75 peer-[.isnotempty]:-translate-y-6 peer-[.issearching]:scale-75 peer-[.issearching]:-translate-y-6 peer-focus:scale-75 peer-focus:-translate-y-6",
-                        "{label}"
                     }
+                },
+                disabled: props.disabled.unwrap_or_default(),
+            }
+
+            if let Some(label) = (props.label)() {
+                label {
+                    "for": "{props.name}",
+                    class: "{required_label_style} select-floating-label",
+                    "{label}"
                 }
             }
 
             ErrorMessage { message: error_message }
-
-            div {
-                class: "{dropdown_style} rounded-box absolute z-50 group-focus:visible group-focus:opacity-100 w-full my-2 shadow-xs menu bg-base-200 overflow-y-scroll max-h-64",
-                ul {
-                    id: "search-list",
-                    tabindex: -1,
-                    class: "divide-y",
-                    onkeydown: move |evt| {
-                        match evt.key() {
-                            Key::ArrowDown => {
-                                let value = selected_index();
-                                if value < (props.search_results)().len() - 1 {
-                                    *selected_index.write() = value + 1;
-                                }
-                            }
-                            Key::ArrowUp => {
-                                let value = selected_index();
-                                if value > 0 {
-                                    *selected_index.write() = value - 1;
-                                }
-                            }
-                            Key::Tab | Key::Escape => {
-                                if required {
-                                    *error_message.write() = Some(format!(
-                                        "{} value required",
-                                        (props.label)().unwrap_or_default()
-                                    ));
-                                }
-                            }
-                            _ => {}
-                        }
-                    },
-
-                    li {
-                        class: "w-full bg-base-400",
-
-                        input {
-                            "type": "text",
-                            name: "{props.name}",
-                            id: "{props.name}",
-                            class: "input bg-transparent w-full pl-12 focus:ring-0 focus:outline-hidden h-10",
-                            disabled: props.disabled.unwrap_or_default(),
-                            placeholder: " ",
-                            value: "{props.search_expression}",
-                            autocomplete: "off",
-                            oninput: move |evt| {
-                                props.search_expression.write().clone_from(&evt.value());
-                            },
-                            autofocus: props.autofocus.unwrap_or_default(),
-                        }
-                        Icon {
-                            class: "p-0 w-6 h-6 absolute my-2 ml-2 opacity-60 text-base-content",
-                            icon: BsSearch
-                        }
-                    }
-
-                    {
-                        (props.search_results)().into_iter().enumerate().map(|(i, result)| {
-                            let _row_key = result.get_id();
-                            let title = result.get_title();
-                            rsx! {
-                                SearchResultRow {
-                                    key: _row_key,
-                                    title,
-                                    selected: i == selected_index(),
-                                    on_select: move |_| {
-                                        *error_message.write() = None;
-                                        *props.value.write() = Some(result.clone());
-                                        *props.search_expression.write() = "".to_string();
-                                        *props.search_results.write() = vec![];
-                                        *dropdown_opened.write() = false;
-                                        props.on_select.call(result.clone());
-                                    },
-                                }
-                            }
-                        })
-                    }
-                }
-            }
         }
     }
-}
-
-#[component]
-fn ArrowDown(class: Option<String>) -> Element {
-    rsx! {
-        svg {
-            xmlns: "http://www.w3.org/2000/svg",
-            class: class.unwrap_or_default(),
-            role: "img",
-            "viewBox": "0 0 24 24",
-            fill: "currentColor",
-            "fill-rule": "evenodd",
-            stroke: "currentColor",
-            "stroke-linecap": "round",
-            "stroke-linejoin": "round",
-            title { "arrow down" }
-            path {
-                d: "M16 10l-4 4-4-4"
-            }
-        }
-    }
-}
-
-fn is_dropdown_opened(has_value: bool, autofocus: bool, dropdown_opened: bool) -> bool {
-    (!has_value && autofocus) || dropdown_opened
 }
 
 #[component]
 pub fn ErrorMessage(message: ReadOnlySignal<Option<String>>) -> Element {
     if let Some(error) = message() {
-        rsx! {
-            p {
-                class: "mt-2 text-error dark:text-error",
-                span { "{error}" }
-            }
-        }
+        rsx! { span { class: "helper-text ps-3", "{error} "} }
     } else {
         rsx! {}
-    }
-}
-
-#[component]
-fn SearchResultRow(
-    selected: bool,
-    title: ReadOnlySignal<String>,
-    on_select: EventHandler<()>,
-) -> Element {
-    let style = if selected { "active" } else { "" };
-
-    rsx! {
-        li {
-            class: "w-full inline-block",
-            onclick: move |event| {
-                event.prevent_default();
-                on_select.call(());
-            },
-
-            span {
-                class: "w-full {style} block",
-
-                p { class: "truncate", "{title}" }
-            }
-        }
     }
 }
 
@@ -572,38 +339,5 @@ where
         }
     } else {
         *error_message.write() = T::from_str(value).err().map(|error| error.to_string());
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    mod compute_dropdown_style {
-        use super::super::*;
-        use wasm_bindgen_test::*;
-
-        #[wasm_bindgen_test]
-        fn test_has_no_value_and_autofocus() {
-            assert!(is_dropdown_opened(false, true, false));
-        }
-
-        #[wasm_bindgen_test]
-        fn test_has_no_value_and_not_autofocus() {
-            assert!(!is_dropdown_opened(false, false, false));
-        }
-
-        #[wasm_bindgen_test]
-        fn test_has_no_value_and_not_autofocus_and_opened() {
-            assert!(is_dropdown_opened(false, false, true));
-        }
-
-        #[wasm_bindgen_test]
-        fn test_has_value_and_opened() {
-            assert!(is_dropdown_opened(true, false, true));
-        }
-
-        #[wasm_bindgen_test]
-        fn test_has_value_and_not_opened() {
-            assert!(!is_dropdown_opened(true, false, false));
-        }
     }
 }

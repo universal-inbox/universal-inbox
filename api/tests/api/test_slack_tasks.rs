@@ -172,7 +172,7 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
 👋![:unknown2:](https://emoji.com/unknown2.png)"#
                 .to_string(),
         ),
-        todoist_item.project_id.clone(),
+        Some(todoist_item.project_id.clone()),
         None,
         TodoistItemPriority::P1,
     );
@@ -381,7 +381,7 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
 👋![:unknown2:](https://emoji.com/unknown2.png)"#
                 .to_string(),
         ),
-        todoist_item.project_id.clone(),
+        Some(todoist_item.project_id.clone()),
         None,
         TodoistItemPriority::P1,
     );

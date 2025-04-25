@@ -73,7 +73,10 @@ pub fn LinearIssueNotificationListItem(
             title: "{notification().title}",
             subtitle: rsx! { LinearIssueListItemSubtitle { linear_issue }},
             link,
-            icon: rsx! { Linear { class: "h-5 w-5" }, TaskHint { task: notification().task } },
+            icon: rsx! {
+                Linear { class: "h-5 w-5" },
+                TaskHint { task: notification().task }
+            },
             subicon: rsx! { LinearIssueIcon { class: "h-5 w-5 min-w-5", linear_issue } },
             action_buttons: get_notification_list_item_action_buttons(
                 notification,
@@ -95,7 +98,7 @@ pub fn LinearIssueNotificationListItem(
                 UserWithAvatar {}
             }
 
-            span { class: "text-gray-400 whitespace-nowrap text-xs font-mono", "{notification_updated_at}" }
+            span { class: "text-base-content/50 whitespace-nowrap text-xs font-mono", "{notification_updated_at}" }
         }
     }
 }
@@ -122,7 +125,10 @@ pub fn LinearProjectNotificationListItem(
             title: "{notification().title}",
             subtitle: rsx! { },
             link,
-            icon: rsx! { Linear { class: "h-5 w-5" }, TaskHint { task: notification().task } },
+            icon: rsx! {
+                Linear { class: "h-5 w-5" },
+                TaskHint { task: notification().task }
+            },
             subicon: rsx! {
                 LinearProjectIcon {
                     class: "h-5 w-5 min-w-5",
@@ -147,7 +153,7 @@ pub fn LinearProjectNotificationListItem(
                 UserWithAvatar { avatar_url: lead.avatar_url.clone(), user_name: lead.name.clone() }
             }
 
-            span { class: "text-gray-400 whitespace-nowrap text-xs font-mono", "{notification_updated_at}" }
+            span { class: "text-base-content/50 whitespace-nowrap text-xs font-mono", "{notification_updated_at}" }
         }
     }
 }

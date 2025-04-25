@@ -319,7 +319,7 @@ impl ThirdPartyItemService {
         let user_id = task.user_id;
         let third_party_task_service = self.todoist_service.clone(); // Shortcut as only Todoist is supported for now as a sink
         let integration_provider_kind = third_party_task_service.get_integration_provider_kind();
-        let (access_token, integration_connection) = self
+        let (_, integration_connection) = self
             .integration_connection_service
             .read()
             .await
@@ -327,13 +327,10 @@ impl ThirdPartyItemService {
             .await?
             .ok_or_else(|| anyhow!("Cannot create a sink item without an access token for {integration_provider_kind}"))?;
 
-        let project = third_party_task_service
-            .get_or_create_project(executor, &task.project, user_id, Some(&access_token))
-            .await?;
         let task_creation = TaskCreation {
             title: task.title.clone(),
             body: Some(task.body.clone()),
-            project,
+            project_name: Some(task.project.clone()),
             due_at: task.due_at.clone(),
             priority: task.priority,
         };

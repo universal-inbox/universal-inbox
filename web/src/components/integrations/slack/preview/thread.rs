@@ -8,9 +8,10 @@ use universal_inbox::third_party::integrations::slack::{SlackMessageRender, Slac
 
 use crate::components::{
     integrations::slack::{
-        preview::reactions::SlackReactions, SlackMessageActorDisplay, SlackTeamDisplay,
+        get_sender_name_and_avatar, preview::reactions::SlackReactions, SlackTeamDisplay,
     },
     markdown::SlackMarkdown,
+    MessageHeader,
 };
 
 #[component]
@@ -35,11 +36,11 @@ pub fn SlackThreadPreview(
                 SlackTeamDisplay { team: slack_thread().team }
 
                 a {
-                    class: "flex items-center text-xs text-gray-400",
+                    class: "flex items-center text-xs text-base-content/50",
                     href: "{slack_thread().url}",
                     target: "_blank",
                     "#{channel_name}"
-                    Icon { class: "h-5 w-5 text-gray-400 p-1", icon: BsArrowUpRightSquare }
+                    Icon { class: "h-5 w-5 min-w-5 text-base-content/50 p-1", icon: BsArrowUpRightSquare }
                 }
             }
 
@@ -95,7 +96,7 @@ fn SlackThreadDisplay(
 
     rsx! {
         div {
-            class: "card w-full bg-base-200 text-base-content",
+            class: "card w-full bg-base-200",
             div {
                 class: "card-body p-2 flex flex-col gap-2",
 
@@ -104,7 +105,7 @@ fn SlackThreadDisplay(
                         SlackThreadMessageDisplay { message: first_read_message, slack_thread }
                         if let Some(invisible_read_message) = invisible_read_message {
                             div {
-                                class: "flex items-center gap-2 text-xs text-gray-400",
+                                class: "flex items-center gap-2 text-xs text-base-content/50",
                                 a {
                                     class: "link link-hover link-primary",
                                     onclick: move |_| { *show_all.write() = true; },
@@ -144,25 +145,31 @@ fn SlackThreadMessageDisplay(
     slack_thread: ReadOnlySignal<SlackThread>,
 ) -> Element {
     let posted_at = message().origin.ts.to_date_time_opt();
-    let sender = message().get_sender(&slack_thread().sender_profiles);
+    let sender = message()
+        .get_sender(&slack_thread().sender_profiles)
+        .map(|sender| get_sender_name_and_avatar(&sender));
     let text = message().render_content(slack_thread().references.clone(), true);
 
     rsx! {
         div {
             class: "flex flex-col gap-0",
             div {
-                class: "flex items-center gap-2 text-xs text-gray-400",
-                if let Some(sender) = sender {
-                    SlackMessageActorDisplay { sender, display_name: true }
-                }
-                if let Some(posted_at) = posted_at {
-                    span { "{posted_at}" }
+                class: "flex items-center gap-2 text-xs text-base-content/50",
+
+                if let Some((user_name, avatar_url)) = sender {
+                    MessageHeader {
+                        user_name,
+                        avatar_url,
+                        display_name: true,
+                        sent_at: posted_at,
+                        date_class: "text-base-content/75",
+                    }
                 }
             }
 
             div {
                 class: "flex flex-col",
-                SlackMarkdown { text }
+                SlackMarkdown { class: "prose prose-sm", text }
 
                 if let Some(reactions) = message().content.reactions {
                     SlackReactions {

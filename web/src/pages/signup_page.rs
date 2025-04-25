@@ -159,7 +159,7 @@ pub fn SignupPage() -> Element {
                 class: "text-base px-10",
                 span { "Already have an account? " }
                 Link {
-                    class: "link-hover link link-primary font-bold",
+                    class: "link-hover link link-primary",
                     to: Route::LoginPage {},
                     "Log in"
                 }

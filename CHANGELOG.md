@@ -14,6 +14,7 @@
 
 - Sort synced tasks list
 - Email from Google Mail are now fully rendered as HTML or plain text
+- Refresh UI look & feel
 
 ### Fixed
 

@@ -942,7 +942,7 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
 👋![:unknown2:](https://emoji.com/unknown2.png)"#
                 .to_string(),
         ),
-        "1111".to_string(), // ie. "Inbox"
+        Some("1111".to_string()), // ie. "Inbox"
         None,
         TodoistItemPriority::P1,
     );
@@ -1137,7 +1137,7 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
 👋![:unknown2:](https://emoji.com/unknown2.png)"#
                 .to_string(),
         ),
-        "1111".to_string(), // ie. "Inbox"
+        Some("1111".to_string()), // ie. "Inbox"
         None,
         TodoistItemPriority::P1,
     );

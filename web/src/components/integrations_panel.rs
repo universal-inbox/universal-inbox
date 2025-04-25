@@ -27,6 +27,7 @@ use universal_inbox::{
 
 use crate::{
     components::{
+        flyonui::collapse::Collapse,
         integrations::{
             github::config::GithubProviderConfiguration,
             google_calendar::config::GoogleCalendarProviderConfiguration,
@@ -63,14 +64,16 @@ pub fn IntegrationsPanel(
 
             if !integration_connections.iter().any(|c| c.is_connected()) {
                 div {
-                    class: "alert alert-info shadow-lg my-4",
+                    class: "alert rounded-md! alert-soft alert-info shadow-lg my-4 text-sm flex gap-2",
+                    role: "alert",
 
                     Icon { class: "w-5 h-5", icon: BsPlug }
                     "You have no integrations connected. Connect an integration to get started."
                 }
             } else if !integration_connections.iter().any(|c| c.is_connected_task_service()) {
                 div {
-                    class: "alert alert-warning shadow-lg my-4",
+                    class: "alert rounded-md! alert-soft alert-warning shadow-lg my-4 text-sm flex gap-2",
+                    role: "alert",
 
                     Icon { class: "w-5 h-5", icon: BsExclamationTriangle }
                     "To fully use Universal Inbox, you need to connect at least one task management service."
@@ -78,9 +81,9 @@ pub fn IntegrationsPanel(
             }
 
             div {
-                class: "flex gap-4 w-full",
+                class: "flex items-center gap-4 w-full",
                 div {
-                    class: "leading-none relative",
+                    class: "leading-none relative shrink-0",
                     span { class: "w-0 h-12 inline-block align-middle" }
                     span { class: "relative text-2xl", "Notifications source services" }
                 }
@@ -105,7 +108,7 @@ pub fn IntegrationsPanel(
             div {
                 class: "flex gap-4 w-full",
                 div {
-                    class: "leading-none relative",
+                    class: "leading-none relative shrink-0",
                     span { class: "w-0 h-12 inline-block align-middle" }
                     span { class: "relative text-2xl", "Todo list services" }
                 }
@@ -130,7 +133,7 @@ pub fn IntegrationsPanel(
             div {
                 class: "flex gap-4 w-full",
                 div {
-                    class: "leading-none relative",
+                    class: "leading-none relative shrink-0",
                     span { class: "w-0 h-12 inline-block align-middle" }
                     span { class: "relative text-2xl", "Utility services" }
                 }
@@ -200,7 +203,7 @@ pub fn IntegrationSettings(
                 if config().is_enabled {
                     ("Connect", "btn-primary", false)
                 } else {
-                    ("Not yet implemented", "btn-disabled btn-ghost", false)
+                    ("Not yet implemented", "btn-disabled btn-soft", false)
                 }
             }
         })();
@@ -317,16 +320,16 @@ pub fn IntegrationSettings(
 
     rsx! {
         div {
-            class: "card w-full bg-base-200 text-base-content",
+            class: "card w-full bg-base-200",
 
             div {
-                class: "card-body",
+                class: "card-body text-sm",
 
                 div {
                     class: "flex flex-row gap-4",
 
                     div {
-                        class: "card-title",
+                        class: "card-title flex items-center gap-2",
                         figure { class: "p-2", IntegrationProviderIcon { class: icon_style, provider_kind: kind } }
                         "{config().name}"
                     }
@@ -380,7 +383,8 @@ pub fn IntegrationSettings(
 
                 if let Some(Some(IntegrationConnection { failure_message: Some(failure_message), .. })) = connection() {
                     div {
-                        class: "alert alert-error shadow-lg",
+                        class: "alert rounded-md! alert-soft alert-error shadow-lg text-sm flex gap-2",
+                        role: "alert",
 
                         Icon { class: "w-5 h-5", icon: BsExclamationTriangle }
                         span { "{failure_message}" }
@@ -390,7 +394,8 @@ pub fn IntegrationSettings(
                 if let Some(Some(IntegrationConnection { status: IntegrationConnectionStatus::Validated, .. })) = connection() {
                     if !has_all_oauth_scopes {
                         div {
-                            class: "alert alert-warning shadow-lg",
+                            class: "alert rounded-md! alert-soft alert-warning shadow-lg text-sm flex gap-2",
+                            role: "alert",
 
                             Icon { class: "w-5 h-5", icon: BsExclamationTriangle }
                             div {
@@ -412,14 +417,20 @@ pub fn IntegrationSettings(
                     }
                 }
 
-                Documentation { config: config }
+                Documentation {
+                    id: "integration-connection-{kind}",
+                    config
+                }
             }
         }
     }
 }
 
 #[component]
-pub fn Documentation(config: ReadOnlySignal<IntegrationProviderStaticConfig>) -> Element {
+pub fn Documentation(
+    id: ReadOnlySignal<String>,
+    config: ReadOnlySignal<IntegrationProviderStaticConfig>,
+) -> Element {
     let doc_for_actions = config().doc_for_actions;
     let mut doc_for_actions: Vec<(&String, &String)> = doc_for_actions.iter().collect();
     doc_for_actions.sort_by(|e1, e2| e1.0.cmp(e2.0));
@@ -428,7 +439,8 @@ pub fn Documentation(config: ReadOnlySignal<IntegrationProviderStaticConfig>) ->
         if let Some(ref warning_message) = config().warning_message {
             if !warning_message.is_empty() {
                 div {
-                    class: "alert alert-warning shadow-lg my-4 py-2",
+                    class: "alert rounded-md! alert-soft alert-warning shadow-lg my-4 py-2 text-sm flex gap-2",
+                    role: "alert",
                     Icon { class: "w-5 h-5", icon: BsExclamationTriangle }
                     p { class: "max-w-full prose prose-sm", dangerous_inner_html: "{warning_message}" }
                 }
@@ -436,36 +448,35 @@ pub fn Documentation(config: ReadOnlySignal<IntegrationProviderStaticConfig>) ->
         }
 
         if !config().doc.is_empty() {
-            details {
-                class: "collapse collapse-arrow bg-neutral text-neutral-content",
-                summary {
-                    class: "collapse-title text-lg font-medium min-h-min",
-                    div {
-                        class: "flex gap-2 items-center",
-                        Icon { class: "w-5 h-5 text-info", icon: BsInfoCircle }
-                        "Documentation"
-                    }
-                }
+            div {
+                class: "card bg-neutral text-neutral-content",
 
-                div {
-                    class: "collapse-content flex flex-col gap-2",
+                Collapse {
+                    id: "{id}",
+                    header: rsx! {
+                        div {
+                            class: "flex items-center gap-2 grow text-lg font-medium",
+                            Icon { class: "w-5 h-5 text-info", icon: BsInfoCircle }
+                            "Documentation"
+                        }
+                    },
 
                     Markdown {
-                        class: "prose-invert! w-full max-w-full",
+                        class: "prose prose-sm text-neutral-content w-full max-w-full",
                         text: config().doc.clone()
                     }
 
                     if !doc_for_actions.is_empty() {
-                        div { class: "text-base", "Actions on notifications" }
+                        div { class: "text-lg", "Actions on notifications" }
                         table {
                             class: "table-auto",
 
                             tbody {
                                 for (action, doc) in doc_for_actions.iter() {
                                     tr {
-                                        td { IconForAction { action: action.to_string() } }
-                                        td { class: "pr-4 font-semibold", "{action}" }
-                                        td { "{doc}" }
+                                        td { class: "p-2", IconForAction { action: action.to_string() } }
+                                        td { class: "p-2 font-semibold", "{action}" }
+                                        td { class: "p-2", "{doc}" }
                                     }
                                 }
                             }
@@ -489,7 +500,7 @@ pub fn IconForAction(action: String) -> Element {
 
     rsx! {
         button {
-            class: "btn btn-ghost btn-square pointer-events-none",
+            class: "btn btn-soft btn-square pointer-events-none",
             { icon }
         }
     }

@@ -7,10 +7,10 @@ use universal_inbox::third_party::integrations::slack::SlackMessageDetails;
 
 use crate::components::{
     integrations::slack::{
-        preview::reactions::SlackReactions, SlackMessageActorDisplay, SlackTeamDisplay,
+        get_sender_name_and_avatar, preview::reactions::SlackReactions, SlackTeamDisplay,
     },
     markdown::SlackMarkdown,
-    CardWithHeaders,
+    CardWithHeaders, MessageHeader,
 };
 
 #[component]
@@ -34,15 +34,15 @@ pub fn SlackMessagePreview(
 
                 SlackTeamDisplay { team: slack_message().team }
                 a {
-                    class: "text-xs text-gray-400",
+                    class: "text-xs text-base-content/50",
                     href: "{slack_message().get_channel_html_url()}",
                     target: "_blank",
                     "#{channel_name}"
                 }
             }
 
-            h2 {
-                class: "flex items-center gap-2 text-lg",
+            h3 {
+                class: "flex items-center gap-2 text-base",
 
                 { icon }
                 a {
@@ -50,7 +50,7 @@ pub fn SlackMessagePreview(
                     href: "{slack_message().url}",
                     target: "_blank",
                     SlackMarkdown { text: "{title}" }
-                    Icon { class: "h-5 w-5 text-gray-400 p-1", icon: BsArrowUpRightSquare }
+                    Icon { class: "h-5 w-5 min-w-5 text-base-content/50 p-1", icon: BsArrowUpRightSquare }
                 }
             }
 
@@ -63,24 +63,25 @@ pub fn SlackMessagePreview(
 fn SlackMessageDisplay(slack_message: ReadOnlySignal<SlackMessageDetails>) -> Element {
     let posted_at = slack_message().message.origin.ts.to_date_time_opt();
     let text = slack_message().render_content();
+    let (user_name, avatar_url) = get_sender_name_and_avatar(&slack_message().sender);
 
     rsx! {
         CardWithHeaders {
+            card_class: "bg-neutral text-neutral-content text-xs",
             headers: vec![
                 rsx! {
-                    div {
-                        class: "flex items-center gap-2",
-                        SlackMessageActorDisplay { sender: slack_message().sender, display_name: true }
-                        if let Some(ref posted_at) = posted_at {
-                            span { class: "text-xs text-gray-400", "{posted_at}" }
-                        }
+                    MessageHeader {
+                        user_name,
+                        avatar_url,
+                        display_name: true,
+                        sent_at: posted_at
                     }
                 }
             ],
 
             div {
                 class: "flex flex-col",
-                SlackMarkdown { text }
+                SlackMarkdown { class: "prose prose-sm", text }
 
                 if let Some(reactions) = slack_message().message.content.reactions {
                     SlackReactions {

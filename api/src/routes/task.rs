@@ -285,7 +285,7 @@ pub async fn search_projects(
         .begin()
         .await
         .context("Failed to create new transaction while listing tasks")?;
-    let tasks: Vec<ProjectSummary> = service
+    let task_projects: Vec<ProjectSummary> = service
         .search_projects(&mut transaction, &search_project_request.matches, user_id)
         .await?;
 
@@ -295,5 +295,5 @@ pub async fn search_projects(
             CacheDirective::Private,
             CacheDirective::MaxAge(600u32),
         ]))
-        .body(serde_json::to_string(&tasks).context("Cannot serialize task projects")?))
+        .body(serde_json::to_string(&task_projects).context("Cannot serialize task projects")?))
 }

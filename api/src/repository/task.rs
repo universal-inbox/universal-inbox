@@ -934,7 +934,7 @@ impl TaskRepository for Repository {
             }
         }
 
-        if let Some(project) = &patch.project {
+        if let Some(project) = &patch.project_name {
             separated
                 .push(" project = ")
                 .push_bind_unseparated(project.to_string());
@@ -1027,7 +1027,7 @@ impl TaskRepository for Repository {
                 .push_bind_unseparated(status.to_string());
         }
 
-        if let Some(project) = &patch.project {
+        if let Some(project) = &patch.project_name {
             separated
                 .push(" project != ")
                 .push_bind_unseparated(project.to_string());

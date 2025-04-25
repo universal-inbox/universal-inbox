@@ -55,7 +55,7 @@ pub fn LinearTaskListItem(
                 UserWithAvatar {}
             }
 
-            span { class: "text-gray-400 whitespace-nowrap text-xs font-mono", "{task_updated_at}" }
+            span { class: "text-base-content/50 whitespace-nowrap text-xs font-mono", "{task_updated_at}" }
         }
     }
 }

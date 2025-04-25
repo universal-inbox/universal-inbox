@@ -28,15 +28,15 @@ pub fn SlackFilePreview(
 
                 SlackTeamDisplay { team: slack_file().team }
                 a {
-                    class: "text-xs text-gray-400",
+                    class: "text-xs text-base-content/50",
                     href: "{slack_file().get_html_url()}",
                     target: "_blank",
                     "#{channel_name}"
                 }
             }
 
-            h2 {
-                class: "flex items-center gap-2 text-lg",
+            h3 {
+                class: "flex items-center gap-2 text-base",
 
                 { icon }
                 a {
@@ -44,7 +44,7 @@ pub fn SlackFilePreview(
                     href: "{slack_file().get_html_url()}",
                     target: "_blank",
                     SlackMarkdown { text: "{title}" }
-                    Icon { class: "h-5 w-5 text-gray-400 p-1", icon: BsArrowUpRightSquare }
+                    Icon { class: "h-5 w-5 min-w-5 text-base-content/50 p-1", icon: BsArrowUpRightSquare }
                 }
             }
         }

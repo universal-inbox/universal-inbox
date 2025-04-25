@@ -60,16 +60,28 @@ pub fn GoogleCalendarEventPreview(
             attendee.response_status == GoogleCalendarEventAttendeeResponseStatus::Tentative
         })
     });
-    let accepted_style = if is_accepted() { "bg-success" } else { "" };
-    let declined_style = if is_declined() { "bg-error" } else { "" };
-    let tentative_style = if is_tentative() { "bg-warning" } else { "" };
+    let accepted_style = if is_accepted() {
+        "btn-success checked:bg-success! checked:text-success-content!"
+    } else {
+        "btn-soft"
+    };
+    let declined_style = if is_declined() {
+        "btn-error checked:bg-error! checked:text-error-content!"
+    } else {
+        "btn-soft"
+    };
+    let tentative_style = if is_tentative() {
+        "btn-warning checked:bg-warning! checked:text-warning-content!"
+    } else {
+        "btn-soft"
+    };
 
     rsx! {
         div {
             class: "flex flex-col gap-2 w-full",
 
-            h2 {
-                class: "flex items-center gap-2 text-lg",
+            h3 {
+                class: "flex items-center gap-2 text-base",
 
                 Icon { class: "flex-none h-5 w-5", icon: BsCalendar2Event }
                 a {
@@ -77,7 +89,7 @@ pub fn GoogleCalendarEventPreview(
                     href: "{link}",
                     target: "_blank",
                     "{notification().title}"
-                    Icon { class: "h-5 w-5 text-gray-400 p-1", icon: BsArrowUpRightSquare }
+                    Icon { class: "h-5 w-5 min-w-5 text-base-content/50 p-1", icon: BsArrowUpRightSquare }
                 }
             }
 
@@ -87,26 +99,27 @@ pub fn GoogleCalendarEventPreview(
 
             if let Some(creator_label) = creator_label.as_ref() {
                 SmallCard {
-                    Icon { class: "h-5 w-5", icon: BsPerson }
+                    Icon { class: "text-base-content/50 h-5 w-5", icon: BsPerson }
                     span { "{creator_label}" }
                 }
             }
 
             SmallCard {
-                Icon { class: "h-5 w-5", icon: BsPersonFill }
+                Icon { class: "text-base-content/50 h-5 w-5", icon: BsPersonFill }
                 span { "{organizer_label}" }
             }
 
             if let Some(date_label) = date_label() {
                 SmallCard {
-                    Icon { class: "h-5 w-5", icon: BsCalendar2Event }
+                    Icon { class: "text-base-content/50 h-5 w-5", icon: BsCalendar2Event }
                     span { "{date_label}" }
                 }
             }
 
             CollapseCardWithIcon {
+                id: "google-calendar-guests",
                 title: "Guests",
-                icon: rsx! { Icon { class: "h-5 w-5", icon: BsPeople } },
+                icon: rsx! { Icon { class: "text-base-content/50 h-5 w-5", icon: BsPeople } },
                 opened: expand_details(),
                 table {
                     class: "table table-auto table-sm w-full",
@@ -120,7 +133,7 @@ pub fn GoogleCalendarEventPreview(
 
             if let Some(location) = google_calendar_event().location.as_ref() {
                 SmallCard {
-                    Icon { class: "h-5 w-5", icon: MdLocationOn }
+                    Icon { class: "text-base-content/50 h-5 w-5", icon: MdLocationOn }
                     span { "{location}" }
                 }
             }
@@ -128,7 +141,7 @@ pub fn GoogleCalendarEventPreview(
             div {
                 class: "join w-full",
                 input {
-                    class: "join-item btn btn-sm rounded-l-lg grow {accepted_style}",
+                    class: "join-item btn rounded-l-lg grow {accepted_style}",
                     type: "radio",
                     name: "action",
                     checked: "{is_accepted}",
@@ -140,7 +153,7 @@ pub fn GoogleCalendarEventPreview(
                     "Yes"
                 }
                 input {
-                    class: "join-item btn btn-sm grow {declined_style}",
+                    class: "join-item btn grow {declined_style}",
                     type: "radio",
                     name: "action",
                     checked: "{is_declined}",
@@ -152,7 +165,7 @@ pub fn GoogleCalendarEventPreview(
                     "No"
                 }
                 input {
-                    class: "join-item btn btn-sm rounded-r-lg grow {tentative_style}",
+                    class: "join-item btn rounded-r-lg grow {tentative_style}",
                     type: "radio",
                     name: "action",
                     checked: "{is_tentative}",

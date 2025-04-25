@@ -2,7 +2,9 @@ use chrono::{TimeDelta, Timelike, Utc};
 
 use universal_inbox::{
     integration_connection::IntegrationConnectionId,
-    task::{service::TaskPatch, PresetDueDate, ProjectSummary, Task, TaskCreation, TaskPriority},
+    task::{
+        service::TaskPatch, PresetDueDate, ProjectSummary, Task, TaskCreationConfig, TaskPriority,
+    },
     third_party::{
         integrations::{linear::LinearIssue, todoist::TodoistItem},
         item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemFromSource},
@@ -49,12 +51,10 @@ pub async fn create_linear_task(
             &mut transaction,
             linear_issue,
             &source_third_party_item,
-            Some(TaskCreation {
-                title: "".to_string(),
-                body: None,
-                project: project.clone(),
+            Some(TaskCreationConfig {
+                project_name: Some(project.name.clone()),
                 due_at: Some(PresetDueDate::Today.into()),
-                priority: TaskPriority::P1,
+                priority: TaskPriority::default(),
             }),
             user_id,
         )
@@ -63,7 +63,7 @@ pub async fn create_linear_task(
     let todoist_item = TodoistItem {
         id: todoist_source_id,
         parent_id: None,
-        project_id: project.source_id.clone(),
+        project_id: project.source_id.to_string(),
         sync_id: None,
         section_id: None,
         content: task_request.title.clone(),

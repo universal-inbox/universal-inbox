@@ -15,7 +15,12 @@ use universal_inbox::{
 };
 
 use crate::{
-    components::integrations::icons::IntegrationProviderIcon, config::APP_CONFIG, route::Route,
+    components::{
+        flyonui::tooltip::{Tooltip, TooltipPlacement},
+        integrations::icons::IntegrationProviderIcon,
+    },
+    config::APP_CONFIG,
+    route::Route,
     services::integration_connection_service::INTEGRATION_CONNECTIONS,
 };
 
@@ -31,7 +36,7 @@ pub fn Footer() -> Element {
         if has_connection_issue {
             return (
                 Some("Some integrations have issues, please reconnect them."),
-                "bg-error",
+                "bg-error text-error-content",
             );
         };
         let has_missing_permission = integration_connections.iter().any(|c| {
@@ -45,7 +50,7 @@ pub fn Footer() -> Element {
         if has_missing_permission {
             (
                 Some("Some integrations are missing permissions, please reconnect them."),
-                "bg-warning",
+                "bg-warning text-warning-content",
             )
         } else {
             (None, "")
@@ -61,7 +66,7 @@ pub fn Footer() -> Element {
                 class: "w-full flex gap-2 p-1 justify-end items-center",
 
                 div {
-                    class: "text-xs text-gray-400",
+                    class: "text-xs text-base-content/50",
                     "Press "
                     kbd { class: "kbd kbd-xs", "?" }
                     " to display keyboard shortcuts"
@@ -147,51 +152,65 @@ pub fn IntegrationConnectionsStatus(
     });
 
     rsx! {
-        if let Some(tooltip) = connection_issue_tooltip {
+        div {
+            class: "flex divide-x divide-base-content/25 items-center",
+
+            if let Some(tooltip) = connection_issue_tooltip {
+                div {
+                    class: "px-2",
+                    Tooltip {
+                        tooltip_class: "tooltip-error",
+                        text: "{tooltip}",
+                        placement: TooltipPlacement::Left,
+
+                        Link {
+                            class: "tooltip-toggle text-error",
+                            to: Route::SettingsPage {},
+                            Icon { class: "w-5 h-5", icon: BsPlug }
+                        }
+                    }
+                }
+            }
+
             div {
-                class: "tooltip tooltip-left text-xs text-error",
-                "data-tip": "{tooltip}",
-
-                Link {
-                    to: Route::SettingsPage {},
-                    Icon { class: "w-5 h-5", icon: BsPlug }
-                }
-            }
-        }
-
-        for integration_connection in sorted_notification_connections {
-            if let Some(provider_config) = integration_providers.get(&integration_connection.provider.kind()) {
-                if provider_config.is_enabled {
-                    IntegrationConnectionStatus {
-                        connection: integration_connection.clone(),
-                        config: provider_config.clone(),
+                class: "px-2",
+                for integration_connection in sorted_notification_connections {
+                    if let Some(provider_config) = integration_providers.get(&integration_connection.provider.kind()) {
+                        if provider_config.is_enabled {
+                            IntegrationConnectionStatus {
+                                connection: integration_connection.clone(),
+                                config: provider_config.clone(),
+                            }
+                        }
                     }
                 }
             }
-        }
 
-        div { class: "divider divider-horizontal" }
-
-        for integration_connection in sorted_task_connections {
-            if let Some(provider_config) = integration_providers.get(&integration_connection.provider.kind()) {
-                if provider_config.is_enabled {
-                    IntegrationConnectionStatus {
-                        connection: integration_connection.clone(),
-                        config: provider_config.clone(),
+            div {
+                class: "px-2",
+                for integration_connection in sorted_task_connections {
+                    if let Some(provider_config) = integration_providers.get(&integration_connection.provider.kind()) {
+                        if provider_config.is_enabled {
+                            IntegrationConnectionStatus {
+                                connection: integration_connection.clone(),
+                                config: provider_config.clone(),
+                            }
+                        }
                     }
                 }
             }
-        }
 
-        div { class: "divider divider-horizontal" }
-
-        for integration_connection in sorted_utils_connections {
-            if let Some(provider_config) = integration_providers.get(&integration_connection.provider.kind()) {
-                if provider_config.is_enabled {
-                    IntegrationConnectionStatus {
-                        connection: integration_connection.clone(),
-                        config: provider_config.clone(),
-                        icon_class: "w-6 h-6",
+            div {
+                class: "px-2",
+                for integration_connection in sorted_utils_connections {
+                    if let Some(provider_config) = integration_providers.get(&integration_connection.provider.kind()) {
+                        if provider_config.is_enabled {
+                            IntegrationConnectionStatus {
+                                connection: integration_connection.clone(),
+                                config: provider_config.clone(),
+                                icon_class: "w-6 h-6",
+                            }
+                        }
                     }
                 }
             }
@@ -208,7 +227,7 @@ pub fn IntegrationConnectionStatus(
     let icon_style = icon_class.unwrap_or("w-4 h-4");
     let provider_kind = connection.provider.kind();
     let connection_is_syncing = connection.is_syncing();
-    let (connection_style, tooltip) = use_memo(move || match &connection {
+    let (connection_style, tooltip_style, tooltip) = use_memo(move || match &connection {
         IntegrationConnection {
             status: ConnectionStatus::Validated,
             last_notifications_sync_started_at: notifs_started_at,
@@ -228,6 +247,7 @@ pub fn IntegrationConnectionStatus(
                 };
                 (
                     "text-success",
+                    "tooltip-success",
                     started_at
                         .map(|started_at| {
                             format!(
@@ -242,6 +262,7 @@ pub fn IntegrationConnectionStatus(
             } else {
                 (
                     "text-warning",
+                    "tooltip-warning",
                     format!(
                         "{provider_kind} connection is missing some permissions, please reconnect."
                     ),
@@ -254,6 +275,7 @@ pub fn IntegrationConnectionStatus(
             ..
         } => (
             "text-error",
+            "tooltip-error",
             message
                 .as_ref()
                 .map(|message| format!("{provider_kind} connection failed: {message}"))
@@ -268,20 +290,24 @@ pub fn IntegrationConnectionStatus(
             ..
         } => (
             "text-error",
+            "tooltip-error",
             format!("{provider_kind} failed to sync: {message}"),
         ),
-        IntegrationConnection { .. } => {
-            ("", format!("{provider_kind} connection is not connected."))
-        }
+        IntegrationConnection { .. } => (
+            "",
+            "",
+            format!("{provider_kind} connection is not connected."),
+        ),
     })();
 
     rsx! {
-        div {
-            class: "tooltip tooltip-left text-xs",
-            "data-tip": "{tooltip}",
+        Tooltip {
+            tooltip_class: "{tooltip_style}",
+            text: "{tooltip}",
+            placement: TooltipPlacement::Left,
 
             div {
-                class: "relative flex items-center justify-center w-6 h-6",
+                class: "relative flex items-center justify-center w-6 h-6 tooltip-toggle",
                 if connection_is_syncing {
                     span { class: "absolute top-0 left-0 w-6 h-6 loading loading-spinner loading-xs {connection_style} opacity-50" }
                 }

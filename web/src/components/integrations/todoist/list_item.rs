@@ -13,7 +13,7 @@ pub fn TodoistListItemSubtitle(todoist_item: ReadOnlySignal<TodoistItem>) -> Ele
     rsx! {
         if let Some(due) = todoist_item().due {
             div {
-                class: "flex items-center text-xs text-gray-400 gap-1",
+                class: "flex items-center text-xs text-base-content/50 gap-1",
 
                 Icon { class: "h-3 w-3", icon: BsCalendar2Check }
                 span { "{due.date}" }

@@ -14,7 +14,10 @@ use crate::{
     images::UI_LOGO_SYMBOL_TRANSPARENT,
     keyboard_manager::{KeyboardHandler, KEYBOARD_MANAGER},
     model::{PreviewPane, UI_MODEL},
-    services::notification_service::{NotificationCommand, NOTIFICATIONS_PAGE},
+    services::{
+        flyonui::{has_flyonui_modal_opened, open_flyonui_modal},
+        notification_service::{NotificationCommand, NOTIFICATIONS_PAGE},
+    },
     utils::{open_link, scroll_element, scroll_element_by_page},
 };
 
@@ -39,7 +42,7 @@ pub fn NotificationsPage() -> Element {
     rsx! {
         div {
             id: "notifications-page",
-            class: "h-full mx-auto flex flex-row px-4 divide-x divide-base-200",
+            class: "h-full mx-auto flex flex-row px-4 divide-x divide-base-content/25",
             onmounted: move |_| {
                 KEYBOARD_MANAGER.write().active_keyboard_handler = Some(&KEYBOARD_HANDLER);
             },
@@ -55,7 +58,7 @@ pub fn NotificationsPage() -> Element {
                     div {
                         class: "flex flex-col items-center absolute object-center top-2/3 transform translate-y-1/4",
                         p { class: "text-gray-500 font-semibold", "Congrats! You have reached inbox zero 🎉" }
-                        p { class: "text-gray-400", "You don't have any new notifications." }
+                        p { class: "text-base-content/50", "You don't have any new notifications." }
                     }
                 }
             } else {
@@ -90,17 +93,9 @@ struct NotificationsPageKeyboardHandler {}
 
 impl KeyboardHandler for NotificationsPageKeyboardHandler {
     fn handle_keydown(&self, event: &KeyboardEvent) -> bool {
-        if UI_MODEL.peek().task_planning_modal_opened || UI_MODEL.peek().task_link_modal_opened {
-            return match event.key().as_ref() {
-                "Escape" => {
-                    UI_MODEL.write().task_planning_modal_opened = false;
-                    UI_MODEL.write().task_link_modal_opened = false;
-                    true
-                }
-                _ => false,
-            };
+        if has_flyonui_modal_opened() {
+            return false;
         }
-
         let notification_service = use_coroutine_handle::<NotificationCommand>();
         let notifications_page = NOTIFICATIONS_PAGE();
         let list_length = notifications_page.content.len();
@@ -177,8 +172,16 @@ impl KeyboardHandler for NotificationsPageKeyboardHandler {
                     ))
                 }
             }
-            "p" => UI_MODEL.write().task_planning_modal_opened = true,
-            "l" => UI_MODEL.write().task_link_modal_opened = true,
+            "p" => {
+                if UI_MODEL.peek().is_task_actions_enabled {
+                    open_flyonui_modal("#task-planning-modal");
+                }
+            }
+            "l" => {
+                if UI_MODEL.peek().is_task_actions_enabled {
+                    open_flyonui_modal("#task-linking-modal");
+                }
+            }
             "j" => {
                 let _ = scroll_element("notification-preview", 100.0);
             }

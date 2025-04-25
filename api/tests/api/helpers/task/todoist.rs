@@ -46,7 +46,7 @@ pub fn mock_todoist_item_add_service<'a>(
     new_item_id: &str,
     content: String,
     description: Option<String>,
-    project_id: String,
+    project_id: Option<String>,
     due: Option<TodoistItemDue>,
     priority: TodoistItemPriority,
 ) -> Mock<'a> {
