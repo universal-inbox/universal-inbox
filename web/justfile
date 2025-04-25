@@ -13,6 +13,8 @@ build-release:
 build-assets: bundle-js build-tailwind bundle-fonts
 
 build-tailwind output-dir="public":
+    mkdir -p {{ output-dir }}/css
+    cp node_modules/flatpickr/dist/flatpickr.min.css {{ output-dir }}/css/
     npx @tailwindcss/cli -i css/universal-inbox.css -o {{ output-dir }}/css/universal-inbox.min.css --minify
 
 bundle-js:
@@ -40,7 +42,8 @@ test-ci: install build-assets
 run: build-assets
     dx serve --verbose
 
-run-tailwind:
+run-tailwind output-dir="public":
+    cp node_modules/flatpickr/dist/flatpickr.min.css {{ output-dir }}/css/
     npx @tailwindcss/cli -i css/universal-inbox.css -o public/css/universal-inbox.min.css --minify --watch
 
 run-bundle-js:

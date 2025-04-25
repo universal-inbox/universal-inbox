@@ -39,7 +39,7 @@ pub fn AuthenticationTokensCard() -> Element {
     let Some(authentication_tokens) = AUTHENTICATION_TOKENS.read().clone() else {
         return rsx! {
             div {
-                class: "card w-full bg-base-200 text-base-content",
+                class: "card w-full bg-base-200",
                 Loading { label: "Loading API keys..." }
             }
         };
@@ -47,7 +47,7 @@ pub fn AuthenticationTokensCard() -> Element {
 
     rsx! {
         div {
-            class: "card w-full bg-base-200 text-base-content",
+            class: "card w-full bg-base-200",
 
             div {
                 class: "card-body",
@@ -87,7 +87,7 @@ pub fn AuthenticationTokensCard() -> Element {
                         class: "table table-sm table-fixed",
                         thead {
                             tr {
-                                th { class: "w-72", "ID" }
+                                th { class: "w-80", "ID" }
                                 th { class: "w-32", "Expiration date" }
                                 th { "Key" }
                                 th { class: "w-32", "" }
@@ -136,7 +136,7 @@ pub fn AuthenticationToken(
     let mut is_copied = use_signal(|| false);
     let (line_class, td_class) = if is_copiable {
         (
-            "bg-green-50 ring-2 ring-success/50 ring-offset-2 ring-offset-base-200 rounded-md",
+            "bg-success/50 text-success-content ring-2 ring-success/50 ring-offset-2 rounded-md",
             "my-0",
         )
     } else {
@@ -174,7 +174,7 @@ pub fn AuthenticationToken(
                     }
                 } else {
                     button {
-                        class: "btn btn-ghost btn-sm",
+                        class: "btn btn-text btn-sm",
                         onclick: move |_| {
                             let jwt_token = jwt_token.clone();
                             async move {

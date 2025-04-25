@@ -836,7 +836,7 @@ where
         .await?
         .value();
 
-    let task_creation = integration_connection
+    let task_creation_config = integration_connection
         .provider
         .get_task_creation_default_values(&third_party_item);
 
@@ -847,7 +847,7 @@ where
             executor,
             third_party_task_service,
             &third_party_item,
-            task_creation,
+            task_creation_config,
             user_id,
         )
         .await?;

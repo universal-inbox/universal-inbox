@@ -92,7 +92,7 @@ pub fn PasskeyLoginPage() -> Element {
             UniversalInboxTitle {}
             span { "? " }
             Link {
-                class: "link-hover link link-primary font-bold",
+                class: "link-hover link link-primary",
                 to: Route::SignupPage {},
                 "Create new account"
             }

@@ -44,8 +44,8 @@ pub fn GoogleMailThreadPreview(
         div {
             class: "flex flex-col gap-2 w-full",
 
-            h2 {
-                class: "flex items-center gap-2 text-lg",
+            h3 {
+                class: "flex items-center gap-2 text-base",
 
                 Mail { class: "flex-none h-5 w-5 {mail_icon_style}" }
                 a {
@@ -53,7 +53,7 @@ pub fn GoogleMailThreadPreview(
                     href: "{link}",
                     target: "_blank",
                     "{notification().title}"
-                    Icon { class: "h-5 w-5 text-gray-400 p-1", icon: BsArrowUpRightSquare }
+                    Icon { class: "h-5 w-5 min-w-5 text-base-content/50 p-1", icon: BsArrowUpRightSquare }
                 }
             }
 
@@ -86,24 +86,30 @@ pub fn GoogleMailThreadPreview(
 fn GoogleMailThreadMessage(message: ReadOnlySignal<GoogleMailMessage>) -> Element {
     let mut headers = vec![];
     if let Some(from) = message().get_header("From") {
-        headers.push(rsx! { span { class: "text-gray-400", "From:" }, span { "{from}" } });
+        headers
+            .push(rsx! { span { class: "text-neutral-content/75", "From:" }, span { "{from}" } });
     }
     if let Some(to) = message().get_header("To") {
-        headers.push(rsx! { span { class: "text-gray-400", "To:" }, span { "{to}" } });
+        headers.push(rsx! { span { class: "text-neutral-content/75", "To:" }, span { "{to}" } });
     }
     if let Some(cc) = message().get_header("Cc") {
-        headers.push(rsx! { span { class: "text-gray-400", "Cc:" }, span { "{cc}" } });
+        headers.push(rsx! { span { class: "text-neutral-content/75", "Cc:" }, span { "{cc}" } });
     }
     if let Some(date) = message().get_header("Date") {
-        headers.push(rsx! { span { class: "text-gray-400", "Date:" }, span { "{date}" } });
+        headers
+            .push(rsx! { span { class: "text-neutral-content/75", "Date:" }, span { "{date}" } });
     }
     let message_body = use_memo(move || ammonia::clean(&message().render_content_as_html()));
 
     rsx! {
         CardWithHeaders {
-            headers: headers,
+            card_class: "bg-neutral text-neutral-content text-xs",
+            headers,
 
-            span { dangerous_inner_html: "{message_body()}" }
+            span {
+                class: "prose prose-sm prose-table:text-sm prose-img:max-w-none",
+                dangerous_inner_html: "{message_body()}"
+            }
         }
     }
 }

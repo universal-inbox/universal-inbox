@@ -14,7 +14,10 @@ use crate::{
     images::UI_LOGO_SYMBOL_TRANSPARENT,
     keyboard_manager::{KeyboardHandler, KEYBOARD_MANAGER},
     model::UI_MODEL,
-    services::task_service::{TaskCommand, SYNCED_TASKS_PAGE},
+    services::{
+        flyonui::has_flyonui_modal_opened,
+        task_service::{TaskCommand, SYNCED_TASKS_PAGE},
+    },
     utils::{open_link, scroll_element, scroll_element_by_page},
 };
 
@@ -59,7 +62,7 @@ pub fn SyncedTasksPage() -> Element {
     rsx! {
         div {
             id: "tasks-page",
-            class: "h-full mx-auto flex flex-row px-4 divide-x divide-base-200",
+            class: "h-full mx-auto flex flex-row px-4 divide-x divide-base-content/25",
             onmounted: move |_| {
                 KEYBOARD_MANAGER.write().active_keyboard_handler = Some(&KEYBOARD_HANDLER);
             },
@@ -107,6 +110,9 @@ struct SyncTasksPageKeyboardHandler {}
 
 impl KeyboardHandler for SyncTasksPageKeyboardHandler {
     fn handle_keydown(&self, event: &KeyboardEvent) -> bool {
+        if has_flyonui_modal_opened() {
+            return false;
+        }
         let task_service = use_coroutine_handle::<TaskCommand>();
         let sorted_tasks = SORTED_SYNCED_TASKS();
         let list_length = sorted_tasks.len();

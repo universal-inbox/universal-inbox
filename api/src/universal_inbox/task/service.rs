@@ -12,13 +12,12 @@ use tracing::{debug, error, info};
 use universal_inbox::{
     integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
     notification::{
-        service::NotificationPatch, Notification, NotificationSource, NotificationSourceKind,
-        NotificationStatus,
+        service::NotificationPatch, Notification, NotificationSource, NotificationStatus,
     },
     task::{
         service::TaskPatch, CreateOrUpdateTaskRequest, ProjectSummary, Task, TaskCreation,
-        TaskCreationResult, TaskId, TaskSource, TaskSourceKind, TaskStatus, TaskSummary,
-        TaskSyncSourceKind,
+        TaskCreationConfig, TaskCreationResult, TaskId, TaskSource, TaskSourceKind, TaskStatus,
+        TaskSummary, TaskSyncSourceKind,
     },
     third_party::{
         integrations::slack::{SlackReaction, SlackStar},
@@ -254,7 +253,7 @@ impl TaskService {
 
                 let task_patch = TaskPatch {
                     status: (new_task.status != old_task.status).then_some(new_task.status),
-                    project: (new_task.project != old_task.project)
+                    project_name: (new_task.project != old_task.project)
                         .then(|| new_task.project.clone()),
                     due_at: (new_task.due_at != old_task.due_at).then(|| new_task.due_at.clone()),
                     priority: (new_task.priority != old_task.priority).then_some(new_task.priority),
@@ -753,7 +752,7 @@ impl TaskService {
         executor: &mut Transaction<'_, Postgres>,
         third_party_task_service: Arc<U>,
         third_party_item: &ThirdPartyItem,
-        task_creation: Option<TaskCreation>,
+        task_creation_config: Option<TaskCreationConfig>,
         user_id: UserId,
     ) -> Result<UpsertStatus<Box<Task>>, UniversalInboxError>
     where
@@ -766,7 +765,7 @@ impl TaskService {
                 executor,
                 third_party_task_service,
                 third_party_item,
-                task_creation,
+                task_creation_config,
                 user_id,
             )
             .await?;
@@ -799,7 +798,7 @@ impl TaskService {
         executor: &mut Transaction<'_, Postgres>,
         third_party_task_service: Arc<U>,
         third_party_item: &ThirdPartyItem,
-        task_creation: Option<TaskCreation>,
+        task_creation_config: Option<TaskCreationConfig>,
         user_id: UserId,
     ) -> Result<UpsertStatus<Box<Task>>, UniversalInboxError>
     where
@@ -816,7 +815,13 @@ impl TaskService {
         })?;
 
         let task_request = third_party_task_service
-            .third_party_item_into_task(executor, &data, third_party_item, task_creation, user_id)
+            .third_party_item_into_task(
+                executor,
+                &data,
+                third_party_item,
+                task_creation_config,
+                user_id,
+            )
             .await?;
         self.repository
             .create_or_update_task(executor, task_request)
@@ -1003,35 +1008,32 @@ impl TaskService {
             .update_task(executor, task_id, patch, for_user_id)
             .await?;
 
+        if let UpdateStatus {
+            updated: _,
+            result: Some(task),
+        } = &updated_task
+        {
+            if task.kind == TaskSourceKind::Todoist && patch.status.is_some() {
+                let notification_patch = NotificationPatch {
+                    status: Some(NotificationStatus::Deleted),
+                    ..Default::default()
+                };
+
+                self.notification_service
+                    .upgrade()
+                    .context("Unable to access notification_service from task_service")?
+                    .read()
+                    .await
+                    .patch_notifications_for_task(executor, task.id, None, &notification_patch)
+                    .await?;
+            }
+        }
+
         match updated_task {
             UpdateStatus {
                 updated: true,
                 result: Some(ref task),
             } => {
-                if task.kind == TaskSourceKind::Todoist
-                    && (patch.status == Some(TaskStatus::Deleted)
-                        || patch.status == Some(TaskStatus::Done)
-                        || (patch.project.is_some() && !task.is_in_inbox()))
-                {
-                    let notification_patch = NotificationPatch {
-                        status: Some(NotificationStatus::Deleted),
-                        ..Default::default()
-                    };
-
-                    self.notification_service
-                        .upgrade()
-                        .context("Unable to access notification_service from task_service")?
-                        .read()
-                        .await
-                        .patch_notifications_for_task(
-                            executor,
-                            task.id,
-                            Some(NotificationSourceKind::Todoist),
-                            &notification_patch,
-                        )
-                        .await?;
-                }
-
                 self.apply_task_third_party_item_side_effect(
                     executor,
                     patch,

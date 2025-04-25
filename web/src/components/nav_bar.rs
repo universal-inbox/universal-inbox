@@ -1,6 +1,7 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
+use dioxus::web::WebEventExt;
 use dioxus_free_icons::{
     icons::{
         bs_icons::{
@@ -19,6 +20,7 @@ use crate::{
     model::{DEFAULT_USER_AVATAR, UI_MODEL, VERSION},
     route::Route,
     services::{
+        flyonui::{forget_flyonui_dropdown_element, init_flyonui_dropdown_element},
         headway::init_headway,
         notification_service::NOTIFICATIONS_PAGE,
         task_service::SYNCED_TASKS_PAGE,
@@ -55,6 +57,14 @@ pub fn NavBar() -> Element {
         .map(|config| config.show_changelog)
         .unwrap_or_default();
 
+    let mut mounted_element: Signal<Option<web_sys::Element>> = use_signal(|| None);
+
+    use_drop(move || {
+        if let Some(element) = mounted_element() {
+            forget_flyonui_dropdown_element(&element);
+        }
+    });
+
     use_effect(move || {
         if show_changelog {
             init_headway();
@@ -63,10 +73,10 @@ pub fn NavBar() -> Element {
 
     rsx! {
         div {
-            class: "navbar shadow-lg z-10 h-12",
+            class: "navbar shadow-lg z-10 p-2",
 
             div {
-                class: "navbar-start",
+                class: "navbar-start items-center gap-8",
 
                 img {
                     class: "rounded-full w-12 h-12",
@@ -75,30 +85,30 @@ pub fn NavBar() -> Element {
                 }
 
                 div {
-                    class: "indicator mx-4",
+                    class: "indicator",
                     Link {
-                        class: "btn btn-ghost px-2 min-h-10 h-10",
+                        class: "btn btn-text px-2 min-h-10 h-10",
                         active_class: "btn-active",
                         to: Route::NotificationsPage {},
                         Icon { class: "w-5 h-5", icon: BsInbox }
                         p { "Inbox" }
                     }
                     if NOTIFICATIONS_PAGE().total > 0 {
-                      span { class: "indicator-item indicator-top badge badge-sm badge-primary text-xs", "{NOTIFICATIONS_PAGE().total}" }
+                        span { class: "indicator-item indicator-top badge badge-sm badge-primary rounded-full text-xs", "{NOTIFICATIONS_PAGE().total}" }
                     }
                 }
 
                 div {
-                    class: "indicator mx-4",
+                    class: "indicator",
                     Link {
-                        class: "btn btn-ghost px-2 min-h-10 h-10",
+                        class: "btn btn-text px-2 min-h-10 h-10",
                         active_class: "btn-active",
                         to: Route::SyncedTasksPage {},
                         Icon { class: "w-5 h-5", icon: BsBookmarkCheck }
                         p { "Synced tasks" }
                     }
                     if SYNCED_TASKS_PAGE().total > 0 {
-                      span { class: "indicator-item indicator-top badge badge-sm badge-primary text-xs", "{SYNCED_TASKS_PAGE().total}" }
+                        span { class: "indicator-item indicator-top badge badge-sm badge-primary rounded-full text-xs", "{SYNCED_TASKS_PAGE().total}" }
                     }
                 }
             }
@@ -107,16 +117,16 @@ pub fn NavBar() -> Element {
                 if UI_MODEL.read().is_help_enabled {
                     div {
                         class: "navbar-center",
-                        span { class: "text-xs text-gray-300", "build: {version}" }
+                        span { class: "text-xs text-base-content/50", "build: {version}" }
                     }
                 }
             }
 
             div {
-                class: "navbar-end",
+                class: "navbar-end items-center gap-2",
 
                 a {
-                    class: "p-2",
+                    class: "p-2 text-neutral",
                     href: "https://github.com/universal-inbox/universal-inbox",
                     title: "Universal Inbox on GitHub",
                     target: "_blank",
@@ -125,7 +135,7 @@ pub fn NavBar() -> Element {
 
                 if show_changelog {
                     button {
-                       class: "btn btn-ghost btn-square relative",
+                       class: "btn btn-text btn-square relative",
                        div { id: "ui-changelog", class: "absolute top-0 left-0" }
                        Icon { class: "w-5 h-5", icon: BsBell }
                     }
@@ -133,7 +143,7 @@ pub fn NavBar() -> Element {
 
                 if let Some(support_href) = support_href {
                     a {
-                        class: "btn btn-ghost btn-square",
+                        class: "btn btn-text btn-square",
                         href: "{support_href}",
                         title: "Contact support",
                         Icon { class: "w-5 h-5", icon: BsQuestionLg }
@@ -141,7 +151,7 @@ pub fn NavBar() -> Element {
                 }
 
                 label {
-                    class: "btn btn-ghost btn-square swap swap-rotate",
+                    class: "btn btn-text btn-square swap swap-rotate",
                     input {
                         class: "hidden",
                         "type": "checkbox",
@@ -155,35 +165,48 @@ pub fn NavBar() -> Element {
                 }
 
                 Link {
-                    class: "btn btn-ghost btn-square",
+                    class: "btn btn-text btn-square",
                     active_class: "btn-active",
                     to: Route::SettingsPage {},
                     Icon { class: "w-5 h-5", icon: BsGear }
                 }
 
                 div {
-                    class: "dropdown dropdown-end",
+                    class: "dropdown relative inline-flex",
+                    onmounted: move |element| {
+                        let web_element = element.as_web_event();
+                        init_flyonui_dropdown_element(&web_element);
+                        mounted_element.set(Some(web_element));
+                    },
 
-                    label {
-                        class: "btn btn-ghost btn-square avatar",
+                    button {
+                        class: "btn btn-text btn-square dropdown-toggle",
+                        "aria-haspopup": "menu",
+                        "aria-expanded": "false",
+                        "aria-label": "Dropdown",
+                        type: "button",
                         tabindex: 0,
 
                         div {
-                            class: "rounded-full w-8 h-8",
+                            class: "avatar w-8 h-8",
 
                             img {
-                                class: "",
+                                class: "rounded-full",
                                 src: "{user_avatar}",
                             }
                         }
                     }
 
                     ul {
-                        class: "mt-3 p-2 shadow-sm menu dropdown-content bg-base-100 rounded-box w-52",
+                        class: "mt-3 p-2 shadow-sm dropdown-menu dropdown-open:opacity-100 hidden rounded-box w-52",
+                        role: "menu",
+                        "aria-orientation": "vertical",
+                        "aria-labelledby": "dropdown-menu-icon",
                         tabindex: 0,
 
                         li {
                             Link {
+                                class: "dropdown-item",
                                 to: Route::UserProfilePage {},
                                 Icon { class: "w-5 h-5", icon: BsPerson }
                                 p { "Profile" }
@@ -191,6 +214,7 @@ pub fn NavBar() -> Element {
                         }
                         li {
                             a {
+                                class: "dropdown-item",
                                 onclick: move |_| user_service.send(UserCommand::Logout),
                                 Icon { class: "w-5 h-5", icon: BsBoxArrowInLeft }
                                 p { "Logout" }

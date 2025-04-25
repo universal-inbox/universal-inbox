@@ -13,25 +13,31 @@ pub fn GoogleCalendarProviderConfiguration(
 ) -> Element {
     rsx! {
         div {
-            class: "flex flex-col",
+            class: "flex flex-col gap-2",
 
-            fieldset {
-                class: "fieldset",
+            div {
+                class: "flex items-center",
                 label {
-                    class: "fieldset-label cursor-pointer py-1 text-sm text-base-content",
-                    span {
-                        class: "label-text grow",
-                        "Synchronize Google Calendar invitation as notification"
-                    }
+                    class: "label-text cursor-pointer grow text-sm text-base-content",
+                    "Synchronize Google Calendar invitation as notification"
+                }
+                div {
+                    class: "relative inline-block",
                     input {
                         r#type: "checkbox",
-                        class: "toggle toggle-ghost",
+                        class: "switch switch-soft switch-outline switch-sm peer",
                         oninput: move |event| {
                             on_config_change.call(IntegrationConnectionConfig::GoogleCalendar(GoogleCalendarConfig {
                                 sync_event_details_enabled: event.value() == "true",
                             }))
                         },
                         checked: config().sync_event_details_enabled
+                    }
+                    span {
+                        class: "icon-[tabler--check] text-primary-content absolute start-1 top-1 hidden size-4 peer-checked:block"
+                    }
+                    span {
+                        class: "icon-[tabler--x] text-neutral-content absolute end-1 top-1 block size-4 peer-checked:hidden"
                     }
                 }
             }

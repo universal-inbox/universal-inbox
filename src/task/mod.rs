@@ -91,13 +91,41 @@ impl fmt::Display for TaskSummary {
 #[serde_as]
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
 pub struct ProjectSummary {
-    pub source_id: String,
+    pub source_id: ProjectId,
     pub name: String,
 }
 
 impl fmt::Display for ProjectSummary {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.name)
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Hash)]
+#[serde(transparent)]
+pub struct ProjectId(pub String);
+
+impl fmt::Display for ProjectId {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<&str> for ProjectId {
+    fn from(s: &str) -> Self {
+        Self(s.to_string())
+    }
+}
+
+impl From<String> for ProjectId {
+    fn from(s: String) -> Self {
+        Self(s)
+    }
+}
+
+impl From<ProjectId> for String {
+    fn from(project_id: ProjectId) -> Self {
+        project_id.0
     }
 }
 
@@ -274,7 +302,14 @@ macro_attr! {
 pub struct TaskCreation {
     pub title: String,
     pub body: Option<String>,
-    pub project: ProjectSummary,
+    pub project_name: Option<String>,
+    pub due_at: Option<DueDate>,
+    pub priority: TaskPriority,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+pub struct TaskCreationConfig {
+    pub project_name: Option<String>,
     pub due_at: Option<DueDate>,
     pub priority: TaskPriority,
 }
@@ -327,7 +362,7 @@ impl From<CreateOrUpdateTaskRequest> for Task {
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct TaskPlanning {
-    pub project: ProjectSummary,
+    pub project_name: String,
     pub due_at: Option<DueDate>,
     pub priority: TaskPriority,
 }

@@ -10,8 +10,6 @@ pub struct UniversalInboxUIModel {
     pub selected_task_index: usize,
     pub is_help_enabled: bool,
     pub is_task_actions_enabled: bool,
-    pub task_planning_modal_opened: bool,
-    pub task_link_modal_opened: bool,
     pub authentication_state: AuthenticationState,
     pub selected_preview_pane: PreviewPane,
     pub error_message: Option<String>,
@@ -65,7 +63,7 @@ pub enum PreviewPane {
     Task,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum LoadState<T> {
     None,
     Loading,

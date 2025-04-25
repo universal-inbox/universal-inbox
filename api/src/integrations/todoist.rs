@@ -39,8 +39,8 @@ use universal_inbox::{
     task::{
         integrations::todoist::{TodoistProject, TODOIST_INBOX_PROJECT},
         service::TaskPatch,
-        CreateOrUpdateTaskRequest, ProjectSummary, TaskCreation, TaskSource, TaskSourceKind,
-        TaskStatus,
+        CreateOrUpdateTaskRequest, ProjectSummary, TaskCreation, TaskCreationConfig, TaskSource,
+        TaskSourceKind, TaskStatus,
     },
     third_party::{
         integrations::todoist::{TodoistItem, TodoistItemDue, TodoistItemPriority},
@@ -119,7 +119,7 @@ pub enum TodoistSyncCommand {
 pub struct TodoistSyncCommandItemAddArgs {
     pub content: String,
     pub description: Option<String>,
-    pub project_id: String,
+    pub project_id: Option<String>,
     pub due: Option<TodoistItemDue>,
     pub priority: TodoistItemPriority,
 }
@@ -588,7 +588,7 @@ impl ThirdPartyTaskService<TodoistItem> for TodoistService {
         executor: &mut Transaction<'_, Postgres>,
         source: &TodoistItem,
         source_third_party_item: &ThirdPartyItem,
-        _task_creation: Option<TaskCreation>,
+        _task_creation_config: Option<TaskCreationConfig>,
         user_id: UserId,
     ) -> Result<Box<CreateOrUpdateTaskRequest>, UniversalInboxError> {
         let (access_token, _) = self
@@ -758,7 +758,7 @@ impl ThirdPartyTaskService<TodoistItem> for TodoistService {
             .await?
             .ok_or_else(|| anyhow!("Cannot update a Todoist task without an access token"))?;
         let mut commands: Vec<TodoistSyncCommand> = vec![];
-        if let Some(ref project_name) = patch.project {
+        if let Some(ref project_name) = patch.project_name {
             let project = self
                 .get_or_create_project(executor, project_name, user_id, Some(&access_token))
                 .await?;
@@ -766,7 +766,7 @@ impl ThirdPartyTaskService<TodoistItem> for TodoistService {
                 uuid: Uuid::new_v4(),
                 args: TodoistSyncCommandItemMoveArgs {
                     id: id.to_string(),
-                    project_id: project.source_id.clone(),
+                    project_id: project.source_id.to_string(),
                 },
             });
         }
@@ -822,6 +822,16 @@ impl ThirdPartyTaskSourceService<TodoistItem> for TodoistService {
             .find_access_token(executor, IntegrationProviderKind::Todoist, user_id)
             .await?
             .ok_or_else(|| anyhow!("Cannot create a Todoist task without an access token"))?;
+        let project_id = if let Some(project_name) = &task.project_name {
+            Some(
+                self.get_or_create_project(executor, project_name, user_id, Some(&access_token))
+                    .await?
+                    .source_id
+                    .to_string(),
+            )
+        } else {
+            None
+        };
         let sync_result = self
             .send_sync_commands(
                 vec![TodoistSyncCommand::ItemAdd {
@@ -830,7 +840,7 @@ impl ThirdPartyTaskSourceService<TodoistItem> for TodoistService {
                     args: TodoistSyncCommandItemAddArgs {
                         content: task.title.clone(),
                         description: task.body.clone(),
-                        project_id: task.project.source_id.clone(),
+                        project_id,
                         due: task.due_at.as_ref().map(|due| due.into()),
                         priority: task.priority.into(),
                     },
@@ -870,13 +880,15 @@ impl ThirdPartyTaskSourceService<TodoistItem> for TodoistService {
         matches: &str,
         user_id: UserId,
     ) -> Result<Vec<ProjectSummary>, UniversalInboxError> {
-        let (access_token, _) = self
+        let Some((access_token, _)) = self
             .integration_connection_service
             .read()
             .await
             .find_access_token(executor, IntegrationProviderKind::Todoist, user_id)
             .await?
-            .ok_or_else(|| anyhow!("Cannot search Todoist projects without an access token"))?;
+        else {
+            return Ok(vec![]);
+        };
 
         let projects = self
             .fetch_all_projects(user_id, &access_token, None)
@@ -893,7 +905,7 @@ impl ThirdPartyTaskSourceService<TodoistItem> for TodoistService {
             .into_iter()
             .filter(|todoist_project| search_regex.is_match(&todoist_project.name))
             .map(|todoist_project| ProjectSummary {
-                source_id: todoist_project.id,
+                source_id: todoist_project.id.into(),
                 name: todoist_project.name,
             })
             .collect())
@@ -938,7 +950,7 @@ impl ThirdPartyTaskSourceService<TodoistItem> for TodoistService {
             .find(|project| project.name == *project_name)
         {
             return Ok(ProjectSummary {
-                source_id: project.id.clone(),
+                source_id: project.id.clone().into(),
                 name: project.name.clone(),
             });
         }
@@ -965,7 +977,7 @@ impl ThirdPartyTaskSourceService<TodoistItem> for TodoistService {
             .context("Cannot find newly added project's ID".to_string())?
             .to_string();
         Ok(ProjectSummary {
-            source_id: project_id,
+            source_id: project_id.into(),
             name: project_name.to_string(),
         })
     }

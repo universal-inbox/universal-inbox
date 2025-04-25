@@ -12,7 +12,7 @@ pub fn LinearIssueListItemSubtitle(linear_issue: ReadOnlySignal<LinearIssue>) ->
 
     rsx! {
         div {
-            class: "flex gap-2 text-xs text-gray-400",
+            class: "flex gap-2 text-xs text-base-content/50",
 
             if let Some(team_icon) = team.icon {
                 span { "{team_icon} {team.name}" }

@@ -22,14 +22,14 @@ pub fn SlackReactionTaskPreview(
             SlackFilePreview {
                 slack_file,
                 title: task().title,
-                icon: rsx! { SlackNotificationIcon { class: "h-5 w-5" } },
+                icon: rsx! { SlackNotificationIcon { class: "h-5 w-5 min-w-5" } },
             }
         },
         SlackReactionItem::SlackMessage(slack_message) => rsx! {
             SlackMessagePreview {
                 slack_message,
                 title: task().title,
-                icon: rsx! { SlackNotificationIcon { class: "h-5 w-5" } },
+                icon: rsx! { SlackNotificationIcon { class: "h-5 w-5 min-w-5" } },
             }
         },
     }

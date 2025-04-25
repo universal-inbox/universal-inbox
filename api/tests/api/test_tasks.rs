@@ -644,7 +644,7 @@ mod search_projects {
         assert_eq!(
             projects[0],
             ProjectSummary {
-                source_id: "1111".to_string(),
+                source_id: "1111".into(),
                 name: "Inbox".to_string()
             }
         );
@@ -654,7 +654,7 @@ mod search_projects {
         assert_eq!(
             projects[0],
             ProjectSummary {
-                source_id: "1111".to_string(),
+                source_id: "1111".into(),
                 name: "Inbox".to_string()
             }
         );
@@ -665,7 +665,7 @@ mod search_projects {
         assert_eq!(
             projects[0],
             ProjectSummary {
-                source_id: "2222".to_string(),
+                source_id: "2222".into(),
                 name: "Project2".to_string()
             }
         );

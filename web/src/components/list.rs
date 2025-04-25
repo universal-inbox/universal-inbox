@@ -4,7 +4,10 @@ use dioxus::prelude::*;
 use dioxus_free_icons::{icons::bs_icons::BsArrowUpRightSquare, Icon};
 use url::Url;
 
-use crate::components::markdown::Markdown;
+use crate::components::{
+    flyonui::tooltip::{Tooltip, TooltipPlacement},
+    markdown::Markdown,
+};
 
 #[derive(Clone, PartialEq)]
 pub struct ListContext {
@@ -39,7 +42,7 @@ pub fn ListItem(
     action_buttons: ReadOnlySignal<Vec<Element>>,
     children: Element,
 ) -> Element {
-    let style = use_memo(move || if is_selected() { "active" } else { "" });
+    let style = use_memo(move || if is_selected() { "row-active" } else { "" });
     let list_context = use_context::<Memo<ListContext>>();
     let shortcut_visibility_style = use_memo(move || {
         if is_selected() && list_context().show_shortcut {
@@ -58,7 +61,7 @@ pub fn ListItem(
 
     rsx! {
         tr {
-            class: "hover:bg-base-300 flex items-center py-1 {style} group snap-start cursor-pointer",
+            class: "row-hover flex items-center py-1 {style} group snap-start cursor-pointer",
             onclick: move |_| {
                 if !is_selected() {
                     on_select.call(());
@@ -66,13 +69,13 @@ pub fn ListItem(
             },
 
             td {
-                class: "flex items-center px-2 py-0 rounded-none relative h-12 indicator",
+                class: "flex items-center px-2 py-0 rounded-none relative h-12 relative",
                 span {
-                    class: "{shortcut_visibility_style} indicator-item indicator-top indicator-start badge badge-sm text-xs text-gray-400 z-50",
+                    class: "{shortcut_visibility_style} kbd kbd-xs z-50 absolute bottom-10",
                     "▲"
                 }
                 span {
-                    class: "{shortcut_visibility_style} indicator-item indicator-bottom indicator-start badge badge-sm text-xs text-gray-400 z-50",
+                    class: "{shortcut_visibility_style} kbd kbd-xs z-50 absolute top-10",
                     "▼"
                 }
 
@@ -87,7 +90,7 @@ pub fn ListItem(
             }
 
             td {
-                class: "px-2 py-0 grow",
+                class: "px-2 py-0 grow whitespace-normal",
 
                 div {
                     class: "flex items-center gap-2",
@@ -111,7 +114,7 @@ pub fn ListItem(
                                 href: "{link}",
                                 target: "_blank",
                                 Markdown { text: "{title}" }
-                                Icon { class: "h-5 w-5 text-gray-400 p-1", icon: BsArrowUpRightSquare }
+                                Icon { class: "h-5 w-5 min-w-5 text-base-content/50 p-1", icon: BsArrowUpRightSquare }
                             }
                             div { class: "grow" }
                         }
@@ -152,6 +155,8 @@ pub struct ListItemActionButtonProps {
     disabled_label: Option<Option<String>>,
     show_shortcut: ReadOnlySignal<bool>,
     #[props(optional)]
+    data_overlay: Option<String>,
+    #[props(optional)]
     onclick: Option<EventHandler<MouseEvent>>,
 }
 
@@ -163,15 +168,17 @@ pub fn ListItemActionButton(props: ListItemActionButtonProps) -> Element {
             "invisible group-hover/notification-button:visible"
         }
     });
+    let data_overlay = props.data_overlay.clone().unwrap_or_default();
 
     if let Some(Some(label)) = props.disabled_label {
         rsx! {
-            div {
-                class: "tooltip tooltip-left text-xs text-gray-400",
-                "data-tip": "{label}",
+            Tooltip {
+                tooltip_class: "tooltip-warning",
+                text: "{label}",
+                placement: TooltipPlacement::Left,
 
                 button {
-                    class: "btn btn-ghost btn-square btn-disabled",
+                    class: "btn btn-text btn-square btn-sm btn-disabled",
                     title: "{props.title}",
 
                     { props.children }
@@ -181,16 +188,17 @@ pub fn ListItemActionButton(props: ListItemActionButtonProps) -> Element {
     } else {
         rsx! {
             div {
-                class: "indicator group/notification-button",
+                class: "relative group/notification-button",
 
                 span {
-                    class: "{shortcut_visibility_style} indicator-item indicator-bottom indicator-center badge badge-sm text-xs text-gray-400 z-50",
+                    class: "{shortcut_visibility_style} kbd kbd-xs z-50 absolute top-5 left-1.5",
                     "{props.shortcut}"
                 }
 
                 button {
-                    class: "btn btn-ghost btn-square btn-sm",
+                    class: "btn btn-text btn-square btn-sm",
                     title: "{props.title}",
+                    "data-overlay": "{data_overlay}",
                     onclick: move |evt| {
                         if let Some(handler) = &props.onclick {
                             handler.call(evt)

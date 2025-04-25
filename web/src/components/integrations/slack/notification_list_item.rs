@@ -102,7 +102,10 @@ pub fn SlackNotificationListItem(
             title: "{notification().title}",
             subtitle: rsx! { SlackNotificationSubtitle { notification } },
             link,
-            icon: rsx! { Icon { class: "h-5 w-5", icon: BsSlack }, TaskHint { task: notification().task } },
+            icon: rsx! {
+                Icon { class: "h-5 w-5", icon: BsSlack },
+                TaskHint { task: notification().task }
+            },
             subicon,
             action_buttons: get_notification_list_item_action_buttons(
                 notification,
@@ -113,7 +116,7 @@ pub fn SlackNotificationListItem(
 
             SlackNotificationListItemDetails { notification }
 
-            span { class: "text-gray-400 whitespace-nowrap text-xs font-mono", "{notification_updated_at}" }
+            span { class: "text-base-content/50 whitespace-nowrap text-xs font-mono", "{notification_updated_at}" }
         }
     }
 }
@@ -160,7 +163,7 @@ pub fn SlackNotificationSubtitle(notification: ReadOnlySignal<NotificationWithTa
 
     rsx! {
         span {
-            class: "flex gap-2 text-xs text-gray-400",
+            class: "flex gap-2 text-xs text-base-content/50",
             "{subtitle}"
         }
     }

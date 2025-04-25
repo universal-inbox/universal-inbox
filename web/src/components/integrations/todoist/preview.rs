@@ -45,15 +45,15 @@ pub fn TodoistTaskPreview(
                 class: "flex gap-2",
 
                 a {
-                    class: "text-xs text-gray-400",
+                    class: "text-xs text-base-content/50",
                     href: "{project_link}",
                     target: "_blank",
                     "#{task().project}"
                 }
             }
 
-            h2 {
-                class: "flex items-center gap-2 text-lg",
+            h3 {
+                class: "flex items-center gap-2 text-base",
 
                 Icon { class: "flex-none h-5 w-5 {task_priority_style}", icon: BsCardChecklist }
                 a {
@@ -61,7 +61,7 @@ pub fn TodoistTaskPreview(
                     href: "{link}",
                     target: "_blank",
                     Markdown { text: task().title.clone() }
-                    Icon { class: "h-5 w-5 text-gray-400 p-1", icon: BsArrowUpRightSquare }
+                    Icon { class: "h-5 w-5 min-w-5 text-base-content/50 p-1", icon: BsArrowUpRightSquare }
                 }
             }
 
@@ -69,7 +69,7 @@ pub fn TodoistTaskPreview(
                 class: "flex flex-col gap-2 w-full",
 
                 div {
-                    class: "flex text-gray-400 gap-1 text-xs",
+                    class: "flex text-base-content/50 gap-1 text-xs",
 
                     "Created at ",
                     span { class: "text-primary", "{todoist_item().added_at}" }
@@ -86,7 +86,7 @@ pub fn TodoistTaskPreview(
                 if let Some(due) = todoist_item().due {
                     SmallCard {
                         Icon { class: "h-3 w-3", icon: BsCalendar2Check }
-                        span { class: "text-gray-400", "Due date:" }
+                        span { class: "text-base-content/50", "Due date:" }
                         "{due.date}",
                         if due.is_recurring {
                             Icon { class: "h-3 w-3", icon: BsArrowRepeat }
@@ -96,13 +96,13 @@ pub fn TodoistTaskPreview(
 
                 SmallCard {
                     Icon { class: "h-3 w-3 {task_priority_style}", icon: BsFlag }
-                    span { class: "text-gray-400", "Priority:" }
+                    span { class: "text-base-content/50", "Priority:" }
                     "{priority}"
                 }
             }
 
             Markdown {
-                class: "w-full max-w-full",
+                class: "prose prose-sm w-full max-w-full",
                 text: task().body
             }
         }

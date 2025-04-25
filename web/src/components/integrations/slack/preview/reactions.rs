@@ -19,17 +19,14 @@ pub fn SlackReactions(
 
             for reaction in reactions() {
                 div {
-                    class: "flex badge badge-lg gap-1 bg-gray-300 text-sm py-1",
+                    class: "flex badge gap-1 bg-secondary text-secondary-content text-sm",
 
                     SlackEmojiDisplay {
                         emoji_name: reaction.name.0,
                         slack_references
                     },
 
-                    span {
-                        class: "text-gray-500",
-                        "{reaction.count}"
-                    }
+                    span { "{reaction.count}" }
                 }
             }
         }
@@ -41,13 +38,8 @@ pub fn SlackEmojiDisplay(
     emoji_name: ReadOnlySignal<String>,
     slack_references: ReadOnlySignal<SlackReferences>,
 ) -> Element {
-    let emoji = use_memo(move || {
-        render_emoji(
-            &SlackEmojiName(emoji_name()),
-            &slack_references(),
-            "w-5 h-5",
-        )
-    });
+    let emoji =
+        use_memo(move || render_emoji(&SlackEmojiName(emoji_name()), &slack_references(), "h-5"));
 
     rsx! { { emoji } }
 }

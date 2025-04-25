@@ -1,7 +1,6 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
-
 use dioxus_free_icons::{
     icons::{
         bs_icons::{
@@ -21,6 +20,7 @@ use universal_inbox::{
 
 use crate::{
     components::{
+        flyonui::tooltip::{Tooltip, TooltipPlacement},
         integrations::{
             github::notification_list_item::GithubNotificationListItem,
             google_calendar::notification_list_item::GoogleCalendarEventListItem,
@@ -59,6 +59,9 @@ pub fn NotificationsList(notifications: ReadOnlySignal<Vec<NotificationWithTask>
         notification_service,
     });
     use_context_provider(move || context);
+    let current_notification = notifications()
+        .get(UI_MODEL.read().selected_notification_index)
+        .map(|notification| Signal::new(notification.clone()));
 
     rsx! {
         List {
@@ -78,17 +81,13 @@ pub fn NotificationsList(notifications: ReadOnlySignal<Vec<NotificationWithTask>
             }
         }
 
-        if UI_MODEL.read().task_planning_modal_opened {
-            if let Some(notification) = notifications()
-                .get(UI_MODEL.read().selected_notification_index)
-                .map(|notification| Signal::new(notification.clone())) {
+        if let Some(notification) = current_notification {
                 TaskPlanningModal {
-                    notification_to_plan: notification,
+                    api_base_url: api_base_url(),
+                    notification_to_plan: notification(),
                     task_service_integration_connection: TASK_SERVICE_INTEGRATION_CONNECTION.signal(),
                     ui_model: UI_MODEL.signal(),
-                    on_close: move |_| { UI_MODEL.write().task_planning_modal_opened = false; },
                     on_task_planning: move |(params, task_id): (TaskPlanning, TaskId)| {
-                        UI_MODEL.write().task_planning_modal_opened = false;
                         notification_service.send(NotificationCommand::PlanTask(
                             notification(),
                             task_id,
@@ -96,7 +95,6 @@ pub fn NotificationsList(notifications: ReadOnlySignal<Vec<NotificationWithTask>
                         ));
                     },
                     on_task_creation: move |params| {
-                        UI_MODEL.write().task_planning_modal_opened = false;
                         notification_service.send(NotificationCommand::CreateTaskFromNotification(
                             notification(),
                             params
@@ -104,19 +102,13 @@ pub fn NotificationsList(notifications: ReadOnlySignal<Vec<NotificationWithTask>
                     },
                 }
             }
-        }
 
-        if UI_MODEL.read().task_link_modal_opened {
-            if let Some(notification) = notifications()
-                .get(UI_MODEL.read().selected_notification_index)
-                .map(|notification| Signal::new(notification.clone())) {
+        if let Some(notification) = current_notification {
                 TaskLinkModal {
-                    api_base_url,
-                    notification_to_link: notification,
+                    api_base_url: api_base_url(),
+                    notification_to_link: notification(),
                     ui_model: UI_MODEL.signal(),
-                    on_close: move |_| { UI_MODEL.write().task_link_modal_opened = false; },
                     on_task_link: move |task_id| {
-                        UI_MODEL.write().task_link_modal_opened = false;
                         notification_service.send(NotificationCommand::LinkNotificationWithTask(
                             notification().id,
                             task_id,
@@ -124,7 +116,6 @@ pub fn NotificationsList(notifications: ReadOnlySignal<Vec<NotificationWithTask>
                     },
                 }
             }
-        }
     }
 }
 
@@ -262,9 +253,7 @@ pub fn get_notification_list_item_action_buttons(
                     disabled_label: (!context().is_task_actions_enabled)
                         .then_some("No task management service connected".to_string()),
                     show_shortcut,
-                    onclick: move |_| {
-                        UI_MODEL.write().task_planning_modal_opened = true;
-                    },
+                    data_overlay: "#task-planning-modal",
                     Icon { class: "w-5 h-5", icon: MdAddTask }
                 }
             });
@@ -276,9 +265,7 @@ pub fn get_notification_list_item_action_buttons(
                     disabled_label: (!context().is_task_actions_enabled)
                         .then_some("No task management service connected".to_string()),
                     show_shortcut,
-                    onclick: move |_| {
-                        UI_MODEL.write().task_link_modal_opened = true;
-                    },
+                    data_overlay: "#task-linking-modal",
                     Icon { class: "w-5 h-5", icon: BsLink45deg }
                 }
             });
@@ -333,9 +320,7 @@ pub fn get_notification_list_item_action_buttons(
                     disabled_label: (!context().is_task_actions_enabled)
                         .then_some("No task management service connected".to_string()),
                     show_shortcut,
-                    onclick: move |_| {
-                        UI_MODEL.write().task_planning_modal_opened = true;
-                    },
+                    data_overlay: "#task-planning-modal",
                     Icon { class: "w-5 h-5", icon: BsCalendar2Check }
                 }
             },
@@ -349,31 +334,34 @@ pub fn TaskHint(task: ReadOnlySignal<Option<Task>>) -> Element {
         return rsx! {};
     };
     let html_url = task.get_html_url();
-    let style = match task {
+    let (tooltip_style, content_style) = match task {
         Task {
             priority: TaskPriority::P1,
             ..
-        } => "text-red-500",
+        } => ("tooltip-red-500", "text-red-500"),
         Task {
             priority: TaskPriority::P2,
             ..
-        } => "text-orange-500",
+        } => ("tooltip-orange-500", "text-orange-500"),
         Task {
             priority: TaskPriority::P3,
             ..
-        } => "text-yellow-500",
+        } => ("tooltip-yellow-500", "text-yellow-500"),
         Task {
             priority: TaskPriority::P4,
             ..
-        } => "text-gray-500",
+        } => ("tooltip-gray-500", "text-gray-500"),
     };
 
     rsx! {
-        div {
-            class: "absolute top-0 right-0 tooltip tooltip-right text-xs {style}",
-            "data-tip": "Linked to a {task.kind} task",
+        Tooltip {
+            class: "absolute top-0 right-0",
+            tooltip_class: "{tooltip_style}",
+            text: "Linked to a {task.kind} task",
+            placement: TooltipPlacement::Right,
 
             a {
+                class: "{content_style}",
                 href: "{html_url}",
                 target: "_blank",
                 Icon { class: "w-4 h-4", icon: BsBookmarkCheck }

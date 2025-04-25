@@ -82,9 +82,10 @@ pub async fn task_service(
                     &api_base_url,
                     &format!("tasks/{task_id}"),
                     Some(TaskPatch {
-                        project: Some(parameters.project.to_string()),
+                        project_name: Some(parameters.project_name),
                         due_at: Some(parameters.due_at),
                         priority: Some(parameters.priority),
+                        status: Some(TaskStatus::Active),
                         ..Default::default()
                     }),
                     Some(ui_model),

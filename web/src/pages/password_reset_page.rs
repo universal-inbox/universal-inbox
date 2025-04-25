@@ -56,7 +56,7 @@ pub fn PasswordResetPage() -> Element {
             div {
                 class: "label justify-end",
                 Link {
-                    class: "link-hover link label-text-alt",
+                    class: "link-hover link link-primary label-text-alt",
                     to: Route::LoginPage {},
                     "Login to existing account"
                 }

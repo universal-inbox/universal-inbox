@@ -66,9 +66,9 @@ pub fn NotificationPreview(
 
     let (notification_tab_style, task_tab_style) =
         if ui_model.read().selected_preview_pane == PreviewPane::Notification {
-            ("tab-active", "")
+            ("active", "")
         } else {
-            ("", "tab-active")
+            ("", "active")
         };
 
     rsx! {
@@ -76,42 +76,46 @@ pub fn NotificationPreview(
             class: "flex flex-col gap-4 w-full",
 
             div {
-                class: "tabs tabs-border w-full",
-                role: "tablist",
+                class: "relative w-full",
 
-                if has_notification_details_preview {
-                    button {
-                        class: "tab {notification_tab_style} w-full",
-                        role: "tab",
-                        onclick: move |_| { ui_model.write().selected_preview_pane = PreviewPane::Notification },
-                        span {
-                            class: "{shortcut_visibility_style} indicator-item indicator-top indicator-start badge badge-sm text-xs text-gray-400 z-50",
-                            "▼ j"
-                        }
-                        div { class: "grow" }
-                        div {
-                            class: "flex gap-2 items-center",
-                            NotificationIcon { kind: notification().kind }
-                            "Notification"
-                        }
-                        div { class: "grow" }
-                        span {
-                            class: "{shortcut_visibility_style} indicator-item indicator-top indicator-start badge badge-sm text-xs text-gray-400 z-50",
-                            "▲ k"
+                span {
+                    class: "{shortcut_visibility_style} kbd kbd-xs z-50 absolute left-0",
+                    "▼ j"
+                }
+                span {
+                    class: "{shortcut_visibility_style} kbd kbd-xs z-50 absolute right-0",
+                    "▲ k"
+                }
+                nav {
+                    class: "tabs tabs-bordered w-full",
+                    role: "tablist",
+
+                    if has_notification_details_preview {
+                        button {
+                            class: "tab active-tab:tab-active {notification_tab_style} w-full",
+                            "data-tab": "#notification-tab",
+                            role: "tab",
+                            onclick: move |_| { ui_model.write().selected_preview_pane = PreviewPane::Notification },
+                            div {
+                                class: "flex gap-2 items-center text-base-content",
+                                NotificationIcon { kind: notification().kind }
+                                "Notification"
+                            }
                         }
                     }
-                }
-                if has_task_details_preview {
-                    button {
-                        class: "tab {task_tab_style} w-full",
-                        role: "tab",
-                        onclick: move |_| { ui_model.write().selected_preview_pane = PreviewPane::Task },
-                        div {
-                            class: "flex gap-2",
-                            if let Some(task) = notification().task {
-                                TaskIcon { class: "h-5 w-5", _kind: task.kind }
+                    if has_task_details_preview {
+                        button {
+                            class: "tab active-tab:tab-active {task_tab_style} w-full",
+                            "data-tab": "#task-tab",
+                            role: "tab",
+                            onclick: move |_| { ui_model.write().selected_preview_pane = PreviewPane::Task },
+                            div {
+                                class: "flex gap-2 text-base-content",
+                                if let Some(task) = notification().task {
+                                    TaskIcon { class: "h-5 w-5", _kind: task.kind }
+                                }
+                                "Task"
                             }
-                            "Task"
                         }
                     }
                 }
@@ -119,12 +123,12 @@ pub fn NotificationPreview(
 
             if shortcut_visibility_style == "visible" {
                 span {
-                    class: "{shortcut_visibility_style} indicator-item indicator-top indicator-start badge badge-sm text-xs text-gray-400 z-50",
+                    class: "{shortcut_visibility_style} kbd kbd-xs z-50",
                     "e: expand/collapse"
                 }
                 if has_task_details_preview {
                     span {
-                        class: "{shortcut_visibility_style} indicator-item indicator-top indicator-start badge badge-sm text-xs text-gray-400 z-50",
+                        class: "{shortcut_visibility_style} kbd kbd-xs z-50",
                         "tab: switch between tabs"
                     }
                 }
@@ -132,16 +136,22 @@ pub fn NotificationPreview(
 
             match ui_model.read().selected_preview_pane {
                 PreviewPane::Notification => rsx! {
-                    NotificationDetailsPreview {
-                        notification,
-                        expand_details: ui_model.read().preview_cards_expanded
+                    div {
+                        id: "notification-tab",
+                        NotificationDetailsPreview {
+                            notification,
+                            expand_details: ui_model.read().preview_cards_expanded
+                        }
                     }
                 },
                 PreviewPane::Task => rsx! {
                     if let Some(task) = notification().task {
-                        TaskDetailsPreview {
-                            task,
-                            expand_details: ui_model.read().preview_cards_expanded
+                        div {
+                            id: "task-tab",
+                            TaskDetailsPreview {
+                                task,
+                                expand_details: ui_model.read().preview_cards_expanded
+                            }
                         }
                     }
                 },

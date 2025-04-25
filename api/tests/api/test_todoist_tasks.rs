@@ -12,9 +12,7 @@ use universal_inbox::{
     notification::{
         service::NotificationPatch, Notification, NotificationStatus, NotificationWithTask,
     },
-    task::{
-        service::TaskPatch, DueDate, ProjectSummary, Task, TaskCreation, TaskPriority, TaskStatus,
-    },
+    task::{service::TaskPatch, DueDate, Task, TaskCreation, TaskPriority, TaskStatus},
     third_party::{
         integrations::{
             github::GithubNotification,
@@ -57,6 +55,8 @@ use crate::helpers::{
 };
 
 mod patch_task {
+    use crate::helpers::task::todoist::mock_todoist_uncomplete_item_service;
+
     use super::*;
     use pretty_assertions::assert_eq;
 
@@ -305,6 +305,8 @@ mod patch_task {
             &new_project,
             &new_project_id,
         );
+        let todoist_uncomplete_item_mock =
+            mock_todoist_uncomplete_item_service(&app.app.todoist_mock_server, &todoist_item.id);
         let todoist_sync_mock = mock_todoist_sync_service(
             &app.app.todoist_mock_server,
             vec![
@@ -339,9 +341,10 @@ mod patch_task {
             "tasks",
             existing_todoist_task.id.into(),
             &TaskPatch {
-                project: Some(new_project.clone()),
+                project_name: Some(new_project.clone()),
                 due_at: Some(Some(new_due_at.clone())),
                 priority: Some(new_priority.into()),
+                status: Some(TaskStatus::Active),
                 ..Default::default()
             },
         )
@@ -350,6 +353,7 @@ mod patch_task {
         todoist_projects_mock.assert();
         todoist_project_add_mock.assert();
         todoist_sync_mock.assert();
+        todoist_uncomplete_item_mock.assert();
 
         assert_eq!(
             patched_task,
@@ -449,7 +453,7 @@ mod patch_task {
             &todoist_item.id,
             todoist_item.content.clone(),
             body.clone(),
-            todoist_item.project_id.clone(),
+            Some(todoist_item.project_id.clone()),
             due_at.as_ref().map(|due_at| due_at.into()),
             todoist_item.priority,
         );
@@ -463,10 +467,7 @@ mod patch_task {
             &TaskCreation {
                 title: todoist_item.content.clone(),
                 body,
-                project: ProjectSummary {
-                    source_id: "2222".to_string(),
-                    name: "Project2".to_string(),
-                },
+                project_name: Some("Project2".to_string()),
                 due_at,
                 priority: todoist_item.priority.into(),
             },

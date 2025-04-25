@@ -18,7 +18,7 @@ use crate::{
             preview::project::LinearProjectDetails,
         },
         markdown::Markdown,
-        CollapseCard, SmallCard, Tag, TagDisplay, TagsInCard, UserWithAvatar,
+        CollapseCard, MessageHeader, SmallCard, Tag, TagDisplay, TagsInCard, UserWithAvatar,
     },
     theme::{
         PRIORITY_HIGH_COLOR_CLASS, PRIORITY_LOW_COLOR_CLASS, PRIORITY_NORMAL_COLOR_CLASS,
@@ -41,25 +41,25 @@ pub fn LinearIssuePreview(
 
                 if let Some(linear_notification) = linear_notification() {
                     a {
-                        class: "text-xs text-gray-400",
+                        class: "text-xs text-base-content/50",
                         href: "{linear_issue().team.get_url(linear_notification.get_organization())}",
                         target: "_blank",
                         "{linear_issue().team.name}"
                     }
                 } else {
-                    span { class: "text-xs text-gray-400", "{linear_issue().team.name}" }
+                    span { class: "text-xs text-base-content/50", "{linear_issue().team.name}" }
                 }
 
                 a {
-                    class: "text-xs text-gray-400",
+                    class: "text-xs text-base-content/50",
                     href: "{linear_issue().url}",
                     target: "_blank",
                     "#{linear_issue().identifier} "
                 }
             }
 
-            h2 {
-                class: "flex items-center gap-2 text-lg",
+            h3 {
+                class: "flex items-center gap-2 text-base",
 
                 LinearIssueIcon { class: "h-5 w-5", linear_issue: linear_issue }
                 a {
@@ -67,7 +67,7 @@ pub fn LinearIssuePreview(
                     href: "{linear_issue().url}",
                     target: "_blank",
                     Markdown { text: linear_issue().title.clone() }
-                    Icon { class: "h-5 w-5 text-gray-400 p-1", icon: BsArrowUpRightSquare }
+                    Icon { class: "h-5 w-5 min-w-5 text-base-content/50 p-1", icon: BsArrowUpRightSquare }
                 }
             }
 
@@ -95,7 +95,7 @@ fn LinearIssueDetails(
             class: "flex flex-col gap-2 w-full",
 
             div {
-                class: "flex text-gray-400 gap-1 text-xs",
+                class: "flex text-base-content/50 gap-1 text-xs",
 
                 "Created at ",
                 span { class: "text-primary", "{linear_issue().created_at}" }
@@ -103,10 +103,11 @@ fn LinearIssueDetails(
 
             if let Some(description) = linear_issue().description {
                 CollapseCard {
-                    header: rsx! { span { class: "text-gray-400", "Description" } },
-                    opened: true,
+                    id: "linear-issue-details",
+                    header: rsx! { span { class: "text-base-content/50", "Description" } },
+                    opened: expand_details(),
                     Markdown {
-                        class: "w-full max-w-full",
+                        class: "prose prose-sm w-full max-w-full",
                         text: description.clone()
                     }
                 }
@@ -114,7 +115,7 @@ fn LinearIssueDetails(
 
             if let Some(linear_notification) = linear_notification() {
                 SmallCard {
-                    span { class: "text-gray-400", "Reason:" }
+                    span { class: "text-base-content/50", "Reason:" }
                     TagDisplay {
                         tag: Into::<Tag>::into(get_notification_type_label(&linear_notification.get_type()))
                     }
@@ -123,7 +124,7 @@ fn LinearIssueDetails(
 
             if let Some(creator) = linear_issue().creator {
                 SmallCard {
-                    span { class: "text-gray-400", "Created by" }
+                    span { class: "text-base-content/50", "Created by" }
                     UserWithAvatar {
                         user_name: creator.name.clone(),
                         avatar_url: creator.avatar_url.clone(),
@@ -134,7 +135,7 @@ fn LinearIssueDetails(
 
             if let Some(assignee) = linear_issue().assignee {
                 SmallCard {
-                    span { class: "text-gray-400", "Assigned to" }
+                    span { class: "text-base-content/50", "Assigned to" }
                     UserWithAvatar {
                         user_name: assignee.name.clone(),
                         avatar_url: assignee.avatar_url.clone(),
@@ -159,7 +160,7 @@ fn LinearIssueDetails(
             if let Some(due_date) = linear_issue().due_date {
                 SmallCard {
                     Icon { class: "h-5 w-5", icon: BsCalendar2Check }
-                    span { class: "text-gray-400", "Due date:" }
+                    span { class: "text-base-content/50", "Due date:" }
                     "{due_date}"
                 }
             }
@@ -167,7 +168,7 @@ fn LinearIssueDetails(
             if linear_issue().priority != LinearIssuePriority::NoPriority {
                 SmallCard {
                     Icon { class: "h-5 w-5 {issue_priority_style}", icon: BsFlag }
-                    span { class: "text-gray-400", "Priority:" }
+                    span { class: "text-base-content/50", "Priority:" }
                     "{linear_issue().priority}"
                 }
             }
@@ -179,14 +180,14 @@ fn LinearIssueDetails(
             if let Some(project_milestone) = linear_issue().project_milestone {
                 SmallCard {
                     LinearProjectMilestoneIcon { class: "h-5 w-5" }
-                    span { class: "text-gray-400", "Milestone:" }
+                    span { class: "text-base-content/50", "Milestone:" }
                     "{project_milestone.name}"
                 }
             }
 
             if let Some(LinearNotification::IssueNotification { comment: Some(linear_comment), .. }) = linear_notification() {
                 div {
-                    class: "card w-full bg-base-200 text-base-content",
+                    class: "card w-full bg-base-200",
                     div {
                         class: "card-body flex flex-col gap-2 p-2",
                         LinearCommentDisplay { linear_comment }
@@ -205,12 +206,13 @@ pub fn LinearProjectCard(
 ) -> Element {
     rsx! {
         CollapseCard {
+            id: "linear-project",
             header: rsx! {
                 div {
                     style: "color: {linear_project().color}",
                     LinearProjectIcon { class: "h-5 w-5", linear_project }
                 },
-                span { class: "text-gray-400", "Project:" }
+                span { class: "text-base-content/50", "Project:" }
 
                 if let Some(icon) = linear_project().icon {
                     span { "{icon}" }
@@ -224,7 +226,7 @@ pub fn LinearProjectCard(
                     class: "flex-none",
                     href: "{linear_project().url}",
                     target: "_blank",
-                    Icon { class: "h-5 w-5 text-gray-400 p-1", icon: BsArrowUpRightSquare }
+                    Icon { class: "h-5 w-5 min-w-5 text-base-content/50 p-1", icon: BsArrowUpRightSquare }
                 }
             },
             opened: expand_details(),
@@ -244,34 +246,37 @@ fn LinearCommentDisplay(
     linear_comment: ReadOnlySignal<LinearComment>,
     class: Option<String>,
 ) -> Element {
-    let updated_at = linear_comment()
-        .updated_at
-        .format("%Y-%m-%d %H:%M")
-        .to_string();
     let class = class.unwrap_or_default();
 
     rsx! {
         div {
             class: "flex flex-col gap-2 {class}",
 
-            SmallCard {
-                class: "flex flex-row items-center gap-2 text-xs",
-                card_class: "bg-neutral text-neutral-content",
+            if let Some(user) = linear_comment().user {
+                SmallCard {
+                    class: "flex flex-row items-center gap-2",
+                    card_class: "bg-neutral text-neutral-content text-xs",
 
-                if let Some(user) = linear_comment().user {
-                    span { class: "text-gray-400", "From" }
-                    UserWithAvatar {
+                    MessageHeader {
                         user_name: user.name.clone(),
                         avatar_url: user.avatar_url.clone(),
-                        display_name: true
+                        display_name: true,
+                        sent_at: Some(linear_comment().updated_at)
                     }
+                    // span { class: "text-neutral-content/75", "From" }
+                    // UserWithAvatar {
+                    //     class: "text-xs",
+                    //     user_name: user.name.clone(),
+                    //     avatar_url: user.avatar_url.clone(),
+                    //     display_name: true
+                    // }
                 }
-                span { class: "text-gray-400", "on" }
-                span { " {updated_at}" }
+                // span { class: "text-neutral-content/75", "at" }
+                // span { " {updated_at}" }
             }
 
             Markdown {
-                class: "w-full max-w-full",
+                class: "prose prose-sm w-full max-w-full",
                 text: linear_comment().body.clone()
             }
 

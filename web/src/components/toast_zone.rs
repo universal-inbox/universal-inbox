@@ -157,7 +157,7 @@ fn ToastElement(
 
                 button {
                     "type": "button",
-                    class: "rounded-sm btn-ghost p-0 min-h-5 h-5",
+                    class: "rounded-sm btn-text p-0 min-h-5 h-5",
                     onclick: move |_| on_close.call(()),
                     span { class: "sr-only", "Close" }
                     Icon { class: "w-5 h-5", icon: BsX }

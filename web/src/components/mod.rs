@@ -1,14 +1,18 @@
 #![allow(non_snake_case)]
 
+use chrono::{DateTime, Utc};
 use dioxus::prelude::*;
 use dioxus_free_icons::{icons::bs_icons::BsPersonCircle, Icon};
 use url::Url;
 
-use crate::utils::compute_text_color_from_background_color;
+use crate::{
+    components::flyonui::collapse::Collapse, utils::compute_text_color_from_background_color,
+};
 
 pub mod authentication_tokens_card;
+pub mod datepicker;
 pub mod floating_label_inputs;
-pub mod flowbite;
+pub mod flyonui;
 pub mod footer;
 pub mod integrations;
 pub mod integrations_panel;
@@ -29,15 +33,17 @@ pub mod user_profile_card;
 
 #[component]
 fn CollapseCardWithIcon(
+    id: String,
     icon: Element,
     title: ReadOnlySignal<String>,
-    opened: Option<bool>,
+    opened: ReadOnlySignal<Option<bool>>,
     children: Element,
 ) -> Element {
     rsx! {
         CollapseCard {
+            id,
             header: rsx! { { icon }, span { "{title}" } },
-            opened: opened.unwrap_or_default(),
+            opened,
             children
         }
     }
@@ -45,13 +51,13 @@ fn CollapseCardWithIcon(
 
 #[component]
 fn CollapseCard(
+    id: ReadOnlySignal<String>,
     header: Element,
     children: Element,
     class: Option<String>,
-    opened: Option<bool>,
+    opened: ReadOnlySignal<Option<bool>>,
 ) -> Element {
-    let card_style = class.unwrap_or("bg-base-200 text-base-content".to_string());
-    let checked = opened.unwrap_or_default();
+    let card_style = class.unwrap_or("bg-base-200".to_string());
 
     rsx! {
         div {
@@ -59,15 +65,15 @@ fn CollapseCard(
 
             div {
                 class: "card-body p-0",
-                div {
-                    class: "collapse collapse-arrow",
-                    input { "class": "min-h-0! p-2", "type": "checkbox", checked },
-                    div {
-                        class: "collapse-title min-h-0 p-2",
-                        div { class: "flex items-center gap-2", { header } }
-                    }
 
-                    div { class: "collapse-content", { children } }
+                Collapse {
+                    id,
+                    opened,
+                    header: rsx! {
+                        div { class: "flex items-center gap-2 grow text-sm", { header } }
+                    },
+
+                    { children }
                 }
             }
         }
@@ -78,14 +84,14 @@ fn CollapseCard(
 fn SmallCard(card_class: Option<String>, class: Option<String>, children: Element) -> Element {
     let card_class = card_class
         .and_then(|card_class| (!card_class.is_empty()).then_some(card_class))
-        .unwrap_or("bg-base-200 text-base-content".to_string());
+        .unwrap_or("bg-base-200 text-base-content text-sm".to_string());
     let class = class.unwrap_or_default();
 
     rsx! {
         div {
             class: "card w-full {card_class}",
             div {
-                class: "card-body p-2",
+                class: "card-body py-1 px-2",
                 div {
                     class: "flex items-center gap-2 {class}",
                     { children }
@@ -108,13 +114,15 @@ pub fn UserWithAvatar(
     user_name: Option<String>,
     avatar_url: Option<Option<Url>>,
     display_name: Option<bool>,
+    class: Option<String>,
 ) -> Element {
     let display_name = display_name.unwrap_or_default();
     let initials = user_name.as_ref().map(|name| get_initials_from_name(name));
+    let class = class.unwrap_or("text-sm".to_string());
 
     rsx! {
         div {
-            class: "flex gap-2 items-center",
+            class: "flex gap-2 items-center {class}",
 
             match avatar_url {
                 Some(Some(avatar_url)) => rsx! {
@@ -130,9 +138,9 @@ pub fn UserWithAvatar(
                     if let Some(initials) = initials {
                         rsx! {
                             div {
-                                class: "avatar placeholder",
+                                class: "avatar avatar-placeholder",
                                 div {
-                                    class: "w-5 rounded-full bg-accent text-accent-content",
+                                    class: "w-5 rounded-full bg-primary text-primary-content",
                                     span { class: "text-xs", "{initials}" }
                                 }
                             }
@@ -140,9 +148,9 @@ pub fn UserWithAvatar(
                     } else {
                         rsx! {
                             div {
-                                class: "avatar placeholder",
+                                class: "avatar avatar-placeholder",
                                 div {
-                                    class: "w-5 rounded-full bg-accent text-accent-content",
+                                    class: "w-5 rounded-full bg-primary text-primary-content",
                                     Icon { class: "h-5 w-5", icon: BsPersonCircle }
                                 }
                             }
@@ -154,7 +162,7 @@ pub fn UserWithAvatar(
 
             if display_name {
                 if let Some(user_name) = user_name {
-                    span { class: "text-sm", "{user_name}" }
+                    span { "{user_name}" }
                 }
             }
         }
@@ -244,23 +252,52 @@ pub fn TagDisplay(tag: Tag, class: Option<String>) -> Element {
 }
 
 #[component]
-pub fn CardWithHeaders(headers: Vec<Element>, children: Element) -> Element {
+pub fn CardWithHeaders(
+    headers: Vec<Element>,
+    children: Element,
+    card_class: Option<String>,
+) -> Element {
+    let card_class = card_class.unwrap_or("bg-neutral text-neutral-content".to_string());
+
     rsx! {
         div {
-            class: "card w-full bg-base-200 text-base-content",
+            class: "card w-full bg-base-200",
             div {
                 class: "card-body flex flex-col gap-2 p-2",
 
                 for header in headers {
                     SmallCard {
-                        class: "text-xs",
-                        card_class: "bg-neutral text-neutral-content",
+                        card_class: "{card_class}",
 
                         { header }
                     }
                 }
 
                 { children }
+            }
+        }
+    }
+}
+
+#[component]
+pub fn MessageHeader(
+    user_name: Option<String>,
+    avatar_url: Option<Option<Url>>,
+    display_name: Option<bool>,
+    sent_at: ReadOnlySignal<Option<DateTime<Utc>>>,
+    date_class: Option<String>,
+) -> Element {
+    let sent_at =
+        use_memo(move || sent_at().map(|sent_at| sent_at.format("%Y-%m-%d %H:%M:%S").to_string()));
+    let date_class = date_class.unwrap_or_else(|| "text-neutral-content/75".to_string());
+
+    rsx! {
+        div {
+            class: "flex items-center gap-2 text-xs",
+
+            UserWithAvatar { user_name, avatar_url, display_name }
+            if let Some(sent_at) = sent_at() {
+                span { class: "{date_class}", "at {sent_at}" }
             }
         }
     }

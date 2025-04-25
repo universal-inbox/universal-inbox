@@ -17,9 +17,7 @@ use crate::{
             todoist::{TodoistConfig, TodoistContext},
         },
     },
-    task::{
-        integrations::todoist::TODOIST_INBOX_PROJECT, ProjectSummary, TaskCreation, TaskPriority,
-    },
+    task::{TaskCreationConfig, TaskPriority},
     third_party::item::{ThirdPartyItem, ThirdPartyItemSource, ThirdPartyItemSourceKind},
 };
 
@@ -198,7 +196,7 @@ impl IntegrationProvider {
     pub fn get_task_creation_default_values(
         &self,
         third_party_item: &ThirdPartyItem,
-    ) -> Option<TaskCreation> {
+    ) -> Option<TaskCreationConfig> {
         let (target_project, default_due_at, default_priority) = match self {
             IntegrationProvider::Slack { config, .. } => {
                 match third_party_item.get_third_party_item_source_kind() {
@@ -261,13 +259,8 @@ impl IntegrationProvider {
             _ => return None,
         };
 
-        Some(TaskCreation {
-            title: "Unused".to_string(),
-            body: None,
-            project: target_project.cloned().unwrap_or_else(|| ProjectSummary {
-                source_id: "Unused".to_string(),
-                name: TODOIST_INBOX_PROJECT.to_string(),
-            }),
+        Some(TaskCreationConfig {
+            project_name: target_project.map(|project| project.name.clone()),
             due_at: default_due_at.map(|due_at| due_at.clone().into()),
             priority: *default_priority,
         })

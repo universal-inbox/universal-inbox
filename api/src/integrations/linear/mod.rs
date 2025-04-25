@@ -27,6 +27,7 @@ use reqwest_tracing::{
 use serde_json::json;
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
+use universal_inbox::task::integrations::todoist::TODOIST_INBOX_PROJECT;
 use url::Url;
 use uuid::Uuid;
 
@@ -34,8 +35,8 @@ use universal_inbox::{
     integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
     notification::{Notification, NotificationSource, NotificationSourceKind, NotificationStatus},
     task::{
-        service::TaskPatch, CreateOrUpdateTaskRequest, TaskCreation, TaskSource, TaskSourceKind,
-        TaskStatus,
+        service::TaskPatch, CreateOrUpdateTaskRequest, TaskCreationConfig, TaskSource,
+        TaskSourceKind, TaskStatus,
     },
     third_party::{
         integrations::linear::{LinearIssue, LinearNotification},
@@ -869,10 +870,10 @@ impl ThirdPartyTaskService<LinearIssue> for LinearService {
         _executor: &mut Transaction<'_, Postgres>,
         source: &LinearIssue,
         source_third_party_item: &ThirdPartyItem,
-        task_creation: Option<TaskCreation>,
+        task_creation_config: Option<TaskCreationConfig>,
         user_id: UserId,
     ) -> Result<Box<CreateOrUpdateTaskRequest>, UniversalInboxError> {
-        let task_creation = task_creation.ok_or_else(|| {
+        let task_creation_config = task_creation_config.ok_or_else(|| {
             UniversalInboxError::Unexpected(anyhow!(
                 "Cannot build a Linear task without a task creation"
             ))
@@ -886,7 +887,7 @@ impl ThirdPartyTaskService<LinearIssue> for LinearService {
             completed_at: source.completed_at,
             priority: source.priority.into(),
             due_at: DefaultValue::new(
-                task_creation.due_at.clone(),
+                task_creation_config.due_at.clone(),
                 source.due_date.map(|due_date| Some(due_date.into())),
             ),
             tags: source
@@ -895,7 +896,13 @@ impl ThirdPartyTaskService<LinearIssue> for LinearService {
                 .map(|label| label.name.clone())
                 .collect(),
             parent_id: None,
-            project: DefaultValue::new(task_creation.project.name.clone(), None),
+            project: DefaultValue::new(
+                task_creation_config
+                    .project_name
+                    .clone()
+                    .unwrap_or_else(|| TODOIST_INBOX_PROJECT.to_string()),
+                None,
+            ),
             is_recurring: false,
             created_at: source.created_at,
             updated_at: source.updated_at,

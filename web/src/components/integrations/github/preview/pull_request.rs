@@ -20,10 +20,15 @@ use universal_inbox::third_party::integrations::github::{
     GithubPullRequestReviewState, GithubPullRequestState, GithubRepositorySummary, GithubReviewer,
     GithubTeamSummary, GithubUserSummary, GithubWorkflow,
 };
+use uuid::Uuid;
 
 use crate::components::{
-    integrations::github::{icons::GithubPullRequestIcon, GithubActorDisplay},
-    CardWithHeaders, CollapseCardWithIcon, SmallCard, Tag, TagsInCard, UserWithAvatar,
+    flyonui::collapse::Collapse,
+    integrations::github::{
+        get_github_actor_name_and_url, icons::GithubPullRequestIcon, GithubActorDisplay,
+    },
+    CardWithHeaders, CollapseCardWithIcon, MessageHeader, SmallCard, Tag, TagsInCard,
+    UserWithAvatar,
 };
 
 #[component]
@@ -40,7 +45,7 @@ pub fn GithubPullRequestPreview(
 
                 if let Some(head_repository) = github_pull_request().head_repository {
                     a {
-                        class: "text-xs text-gray-400",
+                        class: "text-xs text-base-content/50",
                         href: "{head_repository.url}",
                         target: "_blank",
                         "{head_repository.name_with_owner}"
@@ -48,15 +53,15 @@ pub fn GithubPullRequestPreview(
                 }
 
                 a {
-                    class: "text-xs text-gray-400",
+                    class: "text-xs text-base-content/50",
                     href: "{github_pull_request().url}",
                     target: "_blank",
                     "#{github_pull_request().number}"
                 }
             }
 
-            h2 {
-                class: "flex items-center gap-2 text-lg",
+            h3 {
+                class: "flex items-center gap-2 text-base",
 
                 GithubPullRequestIcon { class: "h-5 w-5", github_pull_request: github_pull_request() }
                 a {
@@ -68,7 +73,7 @@ pub fn GithubPullRequestPreview(
                     class: "flex-none",
                     href: "{github_pull_request().url}",
                     target: "_blank",
-                    Icon { class: "h-5 w-5 text-gray-400 p-1", icon: BsArrowUpRightSquare }
+                    Icon { class: "h-5 w-5 min-w-5 text-base-content/50 p-1", icon: BsArrowUpRightSquare }
                 }
             }
 
@@ -141,14 +146,14 @@ fn GithubPullRequestDetails(
             class: "flex flex-col gap-2 w-full",
 
             div {
-                class: "flex text-gray-400 gap-1 text-xs",
+                class: "flex text-base-content/50 gap-1 text-xs",
 
                 "Created at ",
                 span { class: "text-primary", "{github_pull_request().created_at}" }
             }
 
             div {
-                class: "flex flex-wrap items-center text-gray-400 gap-1 text-xs",
+                class: "flex flex-wrap items-center text-base-content/50 gap-1 text-xs",
 
                 "From"
                 if show_base_and_head_repositories {
@@ -177,7 +182,7 @@ fn GithubPullRequestDetails(
             }
 
             div {
-                class: "flex flex-wrap items-center text-gray-400 gap-1 text-xs",
+                class: "flex flex-wrap items-center text-base-content/50 gap-1 text-xs",
                 span { class: "text-red-500", "-{github_pull_request().deletions}" }
                 span { "/" }
                 span { class: "text-green-500", "+{github_pull_request().additions}" }
@@ -196,14 +201,14 @@ fn GithubPullRequestDetails(
 
             if let Some(actor) = github_pull_request().author {
                 SmallCard {
-                    span { class: "text-gray-400", "Opened by" }
+                    span { class: "text-base-content/50", "Opened by" }
                     GithubActorDisplay { actor: actor, display_name: true }
                 }
             }
 
             if !github_pull_request().assignees.is_empty() {
                 SmallCard {
-                    span { class: "text-gray-400", "Assigned to" }
+                    span { class: "text-base-content/50", "Assigned to" }
                     div {
                         class: "flex flex-col",
                         for assignee in github_pull_request().assignees {
@@ -215,7 +220,7 @@ fn GithubPullRequestDetails(
 
             if let Some(merged_by) = github_pull_request().merged_by {
                 SmallCard {
-                    span { class: "text-gray-400", "Merged by" }
+                    span { class: "text-base-content/50", "Merged by" }
                     GithubActorDisplay { actor: merged_by, display_name: true }
                 }
             }
@@ -297,6 +302,7 @@ pub fn ChecksGithubPullRequest(
     if with_details {
         return rsx! {
             CollapseCardWithIcon {
+                id: "checks-github-pull-request",
                 title: "{checks_state.0}",
                 icon: checks_state.1,
                 opened: expand_details(),
@@ -508,6 +514,7 @@ fn ReviewsGithubPullRequest(
 
     rsx! {
         CollapseCardWithIcon {
+            id: "reviews-github-pull-request",
             title: "{reviews_state.0}",
             icon: reviews_state.1,
             opened: expand_details(),
@@ -544,6 +551,7 @@ fn ReviewsGithubPullRequestDetails(
 
 #[component]
 fn GithubReviewLine(review: GithubReview, expand_details: ReadOnlySignal<bool>) -> Element {
+    let id = use_memo(|| Uuid::new_v4().to_string())();
     let (reviewer, review_body, review_status_icon) = match review {
         GithubReview::Requested { reviewer } => (
             reviewer,
@@ -592,21 +600,15 @@ fn GithubReviewLine(review: GithubReview, expand_details: ReadOnlySignal<bool>) 
             login, avatar_url, ..
         }) => (login.clone(), Some(avatar_url.clone())),
     };
-    let collapse_style = if expand_details() {
-        "collapse-open"
-    } else {
-        "collapse-close"
-    };
 
     rsx! {
         tr {
             td {
                 if let Some(review_body) = review_body {
-                    details {
-                        class: "collapse collapse-arrow {collapse_style}",
-                        open: expand_details(),
-                        summary {
-                            class: "collapse-title min-h-min py-2 px-0",
+                    Collapse {
+                        id: "github-review-{id}",
+                        opened: expand_details(),
+                        header: rsx! {
                             div {
                                 class: "flex gap-2 items-center",
 
@@ -618,7 +620,7 @@ fn GithubReviewLine(review: GithubReview, expand_details: ReadOnlySignal<bool>) 
                                     display_name: true,
                                 },
                             }
-                        }
+                        },
 
                         div {
                             class: "bg-neutral text-neutral-content p-2 my-1 rounded-sm",
@@ -627,7 +629,7 @@ fn GithubReviewLine(review: GithubReview, expand_details: ReadOnlySignal<bool>) 
                     }
                 } else {
                     div {
-                        class: "flex gap-2 items-center",
+                        class: "flex gap-2 items-center p-2",
 
                         { review_status_icon }
 
@@ -710,13 +712,19 @@ pub fn GithubCommentList(comments: ReadOnlySignal<Vec<GithubIssueComment>>) -> E
             class: "flex flex-col gap-2",
             for comment in comments() {
                 CardWithHeaders {
-                    headers: if let Some(author) = comment.author {
+                    headers: if let Some((user_name, avatar_url)) = comment
+                        .author
+                        .map(get_github_actor_name_and_url) {
                         vec![rsx! {
-                            GithubActorDisplay { actor: author, display_name: true },
-                            span { class: "text-gray-400", "at {comment.created_at}" }
+                            MessageHeader {
+                                user_name,
+                                avatar_url: Some(avatar_url),
+                                display_name: true,
+                                sent_at: comment.created_at
+                            }
                         }]
                     } else { vec![] },
-                    span { dangerous_inner_html: "{comment.body}" }
+                    span { class: "prose prose-sm", dangerous_inner_html: "{comment.body}" }
                 }
             }
         }

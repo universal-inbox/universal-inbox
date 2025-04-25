@@ -47,7 +47,7 @@ pub fn TasksList(tasks: ReadOnlySignal<SortedGroups<String, TaskWithOrder>>) -> 
                     thead {
                         tr {
                             th {
-                                class: "flex flex-col px-0 pb-1 text-gray-400 border-b snap-start",
+                                class: "flex flex-col px-0 pb-1 text-base-content/50 text-sm border-b snap-start",
                                 span { "{group}" }
                             }
                         }

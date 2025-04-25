@@ -87,7 +87,10 @@ pub fn DefaultGithubNotificationListItem(
             title: "{notification().title}",
             subtitle: rsx! { GithubNotificationSubtitle { github_notification } },
             link,
-            icon: rsx! { Github { class: "h-5 w-5" }, TaskHint { task: notification().task } },
+            icon: rsx! {
+                Github { class: "h-5 w-5" },
+                TaskHint { task: notification().task }
+            },
             subicon: rsx! {
                 GithubNotificationIcon {
                     class: "h-5 w-5 min-w-5",
@@ -102,7 +105,7 @@ pub fn DefaultGithubNotificationListItem(
             is_selected,
             on_select,
 
-            span { class: "text-gray-400 whitespace-nowrap text-xs font-mono", "{notification_updated_at}" }
+            span { class: "text-base-content/50 whitespace-nowrap text-xs font-mono", "{notification_updated_at}" }
         }
     }
 }
@@ -129,7 +132,10 @@ pub fn GithubPullRequestNotificationListItem(
             title: "{notification().title}",
             subtitle: rsx! { GithubNotificationSubtitle { github_notification } },
             link,
-            icon: rsx! { Github { class: "h-5 w-5" }, TaskHint { task: notification().task } },
+            icon: rsx! {
+                Github { class: "h-5 w-5" },
+                TaskHint { task: notification().task }
+            },
             subicon: rsx! {
                 GithubNotificationIcon {
                     class: "h-5 w-5 min-w-5",
@@ -154,7 +160,7 @@ pub fn GithubPullRequestNotificationListItem(
                 div {
                     class: "flex gap-1 items-center",
                     Icon { class: "h-5 w-5 text-info", icon: BsChatTextFill }
-                    span { class: "text-xs text-gray-400", "{github_pull_request().comments_count}" }
+                    span { class: "text-xs text-base-content/50", "{github_pull_request().comments_count}" }
                 }
             }
 
@@ -164,7 +170,7 @@ pub fn GithubPullRequestNotificationListItem(
                 GithubActorDisplay { actor }
             }
 
-            span { class: "text-gray-400 whitespace-nowrap text-xs font-mono", "{notification_updated_at}" }
+            span { class: "text-base-content/50 whitespace-nowrap text-xs font-mono", "{notification_updated_at}" }
         }
     }
 }
@@ -191,7 +197,10 @@ pub fn GithubDiscussionNotificationListItem(
             title: "{notification().title}",
             subtitle: rsx! { GithubNotificationSubtitle { github_notification } },
             link,
-            icon: rsx! { Github { class: "h-5 w-5" }, TaskHint { task: notification().task } },
+            icon: rsx! {
+                Github { class: "h-5 w-5" },
+                TaskHint { task: notification().task }
+            },
             subicon: rsx! {
                 GithubNotificationIcon {
                     class: "h-5 w-5 min-w-5",
@@ -210,7 +219,7 @@ pub fn GithubDiscussionNotificationListItem(
                 div {
                     class: "flex gap-1 items-center",
                     Icon { class: "h-5 w-5 text-info", icon: BsChatTextFill }
-                    span { class: "text-xs text-gray-400", "{github_discussion().comments_count}" }
+                    span { class: "text-xs text-base-content/50", "{github_discussion().comments_count}" }
                 }
             }
 
@@ -218,7 +227,7 @@ pub fn GithubDiscussionNotificationListItem(
                 GithubActorDisplay { actor }
             }
 
-            span { class: "text-gray-400 whitespace-nowrap text-xs font-mono", "{notification_updated_at}" }
+            span { class: "text-base-content/50 whitespace-nowrap text-xs font-mono", "{notification_updated_at}" }
         }
     }
 }
@@ -227,7 +236,7 @@ pub fn GithubDiscussionNotificationListItem(
 fn GithubNotificationSubtitle(github_notification: ReadOnlySignal<GithubNotification>) -> Element {
     rsx! {
         div {
-            class: "flex gap-2 text-xs text-gray-400",
+            class: "flex gap-2 text-xs text-base-content/50",
 
             span { "{github_notification().repository.full_name}" }
             if let Some(github_notification_id) = github_notification().extract_id() {
@@ -244,13 +253,13 @@ pub fn GithubReviewStatus(github_pull_request: ReadOnlySignal<GithubPullRequest>
         .as_ref()
         .map(|review_decision| match review_decision {
             GithubPullRequestReviewDecision::Approved => {
-                rsx! { div { class: "badge badge-sm p-1 whitespace-nowrap bg-success text-xs text-white", "Approved" } }
+                rsx! { div { class: "badge badge-sm p-1 whitespace-nowrap text-xs badge-success", "Approved" } }
             }
             GithubPullRequestReviewDecision::ChangesRequested => {
-                rsx! { div { class: "badge badge-sm p-1 whitespace-nowrap bg-error text-xs text-white", "Changes requested" } }
+                rsx! { div { class: "badge badge-sm p-1 whitespace-nowrap text-xs basge-error", "Changes requested" } }
             }
             GithubPullRequestReviewDecision::ReviewRequired => {
-                rsx! { div { class: "badge badge-sm p-1 whitespace-nowrap bg-info text-xs text-white", "Review required" } }
+                rsx! { div { class: "badge badge-sm p-1 whitespace-nowrap text-xs badge-info", "Review required" } }
             }
         })
         .unwrap_or_else(|| rsx! {})

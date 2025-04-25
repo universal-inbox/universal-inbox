@@ -23,22 +23,22 @@ pub fn GithubDiscussionPreview(
                 class: "flex gap-2",
 
                 a {
-                    class: "text-xs text-gray-400",
+                    class: "text-xs text-base-content/50",
                     href: "{github_discussion().repository.url}",
                     target: "_blank",
                     "{github_discussion().repository.name_with_owner}"
                 }
 
                 a {
-                    class: "text-xs text-gray-400",
+                    class: "text-xs text-base-content/50",
                     href: "{github_discussion().url}",
                     target: "_blank",
                     "#{github_discussion().number}"
                 }
             }
 
-            h2 {
-                class: "flex items-center gap-2 text-lg",
+            h3 {
+                class: "flex items-center gap-2 text-base",
 
                 GithubDiscussionIcon { class: "h-5 w-5", github_discussion: github_discussion() }
                 a {
@@ -50,7 +50,7 @@ pub fn GithubDiscussionPreview(
                     class: "flex-none",
                     href: "{github_discussion().url}",
                     target: "_blank",
-                    Icon { class: "h-5 w-5 text-gray-400 p-1", icon: BsArrowUpRightSquare }
+                    Icon { class: "h-5 w-5 min-w-5 text-base-content/50 p-1", icon: BsArrowUpRightSquare }
                 }
             }
 
@@ -69,7 +69,7 @@ fn GithubDiscussionDetails(
             class: "flex flex-col gap-2 w-full",
 
             div {
-                class: "flex text-gray-400 gap-1 text-xs",
+                class: "flex text-base-content/50 gap-1 text-xs",
 
                 "Created at ",
                 span { class: "text-primary", "{github_discussion().created_at}" }
@@ -85,7 +85,7 @@ fn GithubDiscussionDetails(
 
             if let Some(actor) = &github_discussion().author {
                 SmallCard {
-                    span { class: "text-gray-400", "Opened by" }
+                    span { class: "text-base-content/50", "Opened by" }
                     GithubActorDisplay { actor: actor.clone(), display_name: true }
                 }
             }
@@ -93,8 +93,9 @@ fn GithubDiscussionDetails(
             if let Some(actor) = &github_discussion().answer_chosen_by {
                 if let Some(answer) = &github_discussion().answer {
                     CollapseCard {
+                        id: "github-discussion-details",
                         header: rsx! {
-                            span { class: "text-gray-400", "Answered by" }
+                            span { class: "text-base-content/50", "Answered by" }
                             GithubActorDisplay { actor: actor.clone(), display_name: true }
                         },
                         opened: expand_details(),

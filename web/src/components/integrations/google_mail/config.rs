@@ -22,19 +22,19 @@ pub fn GoogleMailProviderConfiguration(
 
     rsx! {
         div {
-            class: "flex flex-col",
+            class: "flex flex-col gap-2",
 
-            fieldset {
-                class: "fieldset",
+            div {
+                class: "flex items-center",
                 label {
-                    class: "fieldset-label cursor-pointer py-1 text-sm text-base-content",
-                    span {
-                        class: "label-text grow",
-                        "Synchronize Google Mail threads as notification"
-                    }
+                    class: "label-text cursor-pointer grow text-sm text-base-content",
+                    "Synchronize Google Mail threads as notification"
+                }
+                div {
+                    class: "relative inline-block",
                     input {
                         r#type: "checkbox",
-                        class: "toggle toggle-ghost",
+                        class: "switch switch-soft switch-outline switch-sm peer",
                         oninput: move |event| {
                             on_config_change.call(IntegrationConnectionConfig::GoogleMail(GoogleMailConfig {
                                 sync_notifications_enabled: event.value() == "true",
@@ -43,47 +43,51 @@ pub fn GoogleMailProviderConfiguration(
                         },
                         checked: config().sync_notifications_enabled
                     }
+                    span {
+                        class: "icon-[tabler--check] text-primary-content absolute start-1 top-1 hidden size-4 peer-checked:block"
+                    }
+                    span {
+                        class: "icon-[tabler--x] text-neutral-content absolute end-1 top-1 block size-4 peer-checked:hidden"
+                    }
                 }
             }
 
-            fieldset {
-                class: "fieldset",
+            div {
+                class: "flex items-center",
                 label {
-                    class: "fieldset-label text-sm text-base-content",
-                    span {
-                        class: "label-text grow",
-                        "Google Mail label to synchronize"
-                    }
+                    class: "label-text cursor-pointer grow text-sm text-base-content",
+                    "Google Mail label to synchronize"
+                }
 
-                    FloatingLabelSelect::<String> {
-                        label: None,
-                        class: "w-full max-w-xs bg-base-100 rounded-sm",
-                        name: "google-mail-label".to_string(),
-                        required: true,
-                        on_select: move |label_id| {
-                            if let Some(Some(context)) = context() {
-                                if let Some(label_id) = label_id {
-                                    let label = context
-                                        .labels
-                                        .iter()
-                                        .find(|label| label.id == label_id);
-                                    if let Some(label) = label {
-                                        on_config_change.call(IntegrationConnectionConfig::GoogleMail(GoogleMailConfig {
-                                            synced_label: label.clone(),
-                                            ..config()
-                                        }));
-                                    }
+                FloatingLabelSelect::<String> {
+                    label: None,
+                    class: "max-w-xs",
+                    name: "google-mail-label".to_string(),
+                    required: true,
+                    default_value: selected_label_id(),
+                    on_select: move |label_id| {
+                        if let Some(Some(context)) = context() {
+                            if let Some(label_id) = label_id {
+                                let label = context
+                                    .labels
+                                    .iter()
+                                    .find(|label| label.id == label_id);
+                                if let Some(label) = label {
+                                    on_config_change.call(IntegrationConnectionConfig::GoogleMail(GoogleMailConfig {
+                                        synced_label: label.clone(),
+                                        ..config()
+                                    }));
                                 }
                             }
-                        },
-
-                        if let Some(Some(context)) = context() {
-                            for label in &context.labels {
-                                option { selected: selected_label_id() == Some(label.id.clone()), value: "{label.id}", "{label.name}" }
-                            }
-                        } else {
-                            option { selected: true, "{config().synced_label.name}" }
                         }
+                    },
+
+                    if let Some(Some(context)) = context() {
+                        for label in &context.labels {
+                            option { selected: selected_label_id() == Some(label.id.clone()), value: "{label.id}", "{label.name}" }
+                        }
+                    } else {
+                        option { selected: true, "{config().synced_label.name}" }
                     }
                 }
             }

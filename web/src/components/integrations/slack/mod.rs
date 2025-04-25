@@ -18,11 +18,12 @@ pub mod task_list_item;
 pub fn SlackMessageActorDisplay(
     sender: ReadOnlySignal<SlackMessageSenderDetails>,
     display_name: Option<bool>,
+    class: Option<String>,
 ) -> Element {
     let display_name = display_name.unwrap_or_default();
     let (user_name, avatar_url) = get_sender_name_and_avatar(&sender());
 
-    rsx! { UserWithAvatar { user_name, avatar_url, display_name } }
+    rsx! { UserWithAvatar { class, user_name, avatar_url, display_name } }
 }
 
 #[component]

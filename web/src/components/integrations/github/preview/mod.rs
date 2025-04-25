@@ -40,7 +40,7 @@ pub fn GithubNotificationDefaultPreview(
                 class: "flex gap-2",
 
                 a {
-                    class: "text-xs text-gray-400",
+                    class: "text-xs text-base-content/50",
                     href: "{github_notification.repository.html_url.clone()}",
                     target: "_blank",
                     "{github_notification.repository.full_name}"
@@ -48,7 +48,7 @@ pub fn GithubNotificationDefaultPreview(
 
                 if let Some(github_notification_id) = github_notification_id {
                     a {
-                        class: "text-xs text-gray-400",
+                        class: "text-xs text-base-content/50",
                         href: "{link}",
                         target: "_blank",
                         "#{github_notification_id}"
@@ -56,8 +56,8 @@ pub fn GithubNotificationDefaultPreview(
                 }
             }
 
-            h2 {
-                class: "flex items-center gap-2 text-lg",
+            h3 {
+                class: "flex items-center gap-2 text-base",
 
                 { type_icon }
                 a {
@@ -65,7 +65,7 @@ pub fn GithubNotificationDefaultPreview(
                     href: "{link}",
                     target: "_blank",
                     "{notification().title}"
-                    Icon { class: "h-5 w-5 text-gray-400 p-1", icon: BsArrowUpRightSquare }
+                    Icon { class: "h-5 w-5 min-w-5 text-base-content/50 p-1", icon: BsArrowUpRightSquare }
                 }
             }
         }

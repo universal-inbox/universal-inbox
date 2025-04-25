@@ -13,7 +13,7 @@ pub fn UserProfileCard() -> Element {
     let Some(user) = CONNECTED_USER.read().clone() else {
         return rsx! {
             div {
-                class: "card w-full bg-base-200 text-base-content",
+                class: "card w-full bg-base-200",
                 Loading { label: "Loading user profile..." }
             }
         };
@@ -36,7 +36,7 @@ pub fn UserProfileCard() -> Element {
 
     rsx! {
         div {
-            class: "card w-full bg-base-200 text-base-content",
+            class: "card w-full bg-base-200",
 
             div {
                 class: "card-body",
