@@ -1,10 +1,6 @@
 #![allow(non_snake_case, clippy::derive_partial_eq_without_eq)]
 
 use dioxus::prelude::*;
-use dioxus_free_icons::{
-    icons::bs_icons::{BsCheckCircle, BsExclamationTriangle, BsX},
-    Icon,
-};
 use gloo_timers::future::TimeoutFuture;
 use js_sys::Date;
 use uuid::Uuid;
@@ -48,7 +44,7 @@ pub fn ToastZone() -> Element {
 
     rsx! {
         div {
-            class: "toast toast-bottom toast-end items-end absolute bottom-0 right-0",
+            class: "notyf",
 
             for (id, toast) in TOASTS() {
                 ToastElement {
@@ -73,35 +69,17 @@ fn ToastElement(
     on_undo: Option<EventHandler>,
     on_close: EventHandler,
 ) -> Element {
-    let mut timeout_progress = use_signal(|| 100.0);
-    let (alert_style, progress_style) = use_memo(move || {
-        let border_style = if timeout().flatten().is_some() {
-            "border-0"
-        } else {
-            "border-t-4"
-        };
-        match kind() {
-            ToastKind::Message => (
-                format!("text-info bg-blue-50 border-info {border_style}"),
-                "progress-info",
-            ),
-            ToastKind::Loading => (
-                format!("text-info bg-blue-50 border-info {border_style}"),
-                "progress-info",
-            ),
-            ToastKind::Success => (
-                format!("text-success bg-green-50 border-success {border_style}"),
-                "progress-success",
-            ),
-            ToastKind::Failure => (
-                format!("text-error bg-red-50 border-error {border_style}"),
-                "progress-error",
-            ),
-        }
+    let mut timeout_progress = use_signal(|| 50.0);
+    let mut dismiss = use_signal(|| "");
+    let toast_style = use_memo(move || match kind() {
+        ToastKind::Message => "notyf__toast--info bg-info",
+        ToastKind::Loading => "notyf__toast--info bg-info",
+        ToastKind::Success => "notyf__toast--success bg-success",
+        ToastKind::Failure => "notyf__toast--error bg-error",
     })();
 
     let _ = use_resource(move || async move {
-        // Due to a bug in Dioxus 0.5.1 (https://github.com/DioxusLabs/dioxus/issues/2235)
+        // BUG: Due to a bug in Dioxus 0.5.1 (https://github.com/DioxusLabs/dioxus/issues/2235)
         // reading the `timeout` signal makes the future to be dropped before the end of the loop.
         // So hardcoding the timeout for now.
         let time = 5000;
@@ -113,56 +91,66 @@ fn ToastElement(
             let elapsed = Date::now() - time_start;
             *timeout_progress.write() = 100.0 - (elapsed * 100.0 / time_f);
         }
+        *dismiss.write() = "notyf__toast--disappear";
+        TimeoutFuture::new(300).await;
         on_close.call(());
         // }
     });
 
     rsx! {
         div {
-            id: "toast-undo",
-            class: "{alert_style} shadow-lg p-0 flex flex-col gap-0 dark:bg-gray-800 w-fit",
-
-            if timeout().flatten().is_some() && (timeout_progress() > 0.0) {
-                progress {
-                    class: "progress {progress_style} w-full h-1",
-                    value: "{timeout_progress}",
-                    max: "100"
-                }
-            }
+            id: "toast-element",
+            class: "notyf__toast notyf__toast--dismissible notyf__toast--lower max-w-md! {dismiss} {toast_style}",
 
             div {
-                class: "w-full flex items-center px-4 py-2 h-12 gap-4",
+                class: "notyf__wrapper",
 
                 match kind() {
                     ToastKind::Message => rsx! {},
                     ToastKind::Loading => rsx! {
-                        Spinner { class: "w-4 h-4" }
+                        div {
+                            class: "notyf__icon",
+                            Spinner { class: "text-info" }
+                        }
                     },
                     ToastKind::Success => rsx! {
-                        Icon { class: "w-4 h-4", icon: BsCheckCircle }
+                        div {
+                            class: "notyf__icon",
+                            i { class: "notyf__icon--success text-success" }
+                        }
                     },
                     ToastKind::Failure => rsx! {
-                        Icon { class: "w-4 h-4", icon: BsExclamationTriangle }
+                        div {
+                            class: "notyf__icon",
+                            i { class: "icon-[tabler--alert-triangle] text-error" }
+                        }
                     },
                 }
 
-                p {
-                    class: "max-w-full whitespace-normal",
-                    "{message}"
-                }
+                p { class: "notyf__message text-sm!", "{message}" }
 
                 if let Some(handler) = on_undo {
                     a { onclick: move |_| handler.call(()), "Undo" }
                 }
 
-                button {
-                    "type": "button",
-                    class: "rounded-sm btn-text p-0 min-h-5 h-5",
-                    onclick: move |_| on_close.call(()),
-                    span { class: "sr-only", "Close" }
-                    Icon { class: "w-5 h-5", icon: BsX }
+                div {
+                    class: "notyf__dismiss",
+                    button {
+                        "type": "button",
+                        class: "notyf__dismiss-btn",
+                        onclick: move |_| {
+                            spawn({
+                                async move {
+                                    *dismiss.write() = "notyf__toast--disappear";
+                                    TimeoutFuture::new(300).await;
+                                    on_close.call(());
+                                }
+                            });
+                        }
+                    }
                 }
             }
+            div { class: "notyf__ripple" }
         }
     }
 }
