@@ -30,12 +30,7 @@ pub enum TaskCommand {
     Sync(Option<TaskSyncSourceKind>),
 }
 
-pub static SYNCED_TASKS_PAGE: GlobalSignal<Page<Task>> = Signal::global(|| Page {
-    page: 0,
-    per_page: 0,
-    total: 0,
-    content: vec![],
-});
+pub static SYNCED_TASKS_PAGE: GlobalSignal<Page<Task>> = Signal::global(Page::default);
 
 pub async fn task_service(
     mut rx: UnboundedReceiver<TaskCommand>,

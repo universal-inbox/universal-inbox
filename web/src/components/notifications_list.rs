@@ -12,10 +12,10 @@ use dioxus_free_icons::{
 };
 
 use universal_inbox::{
-    notification::NotificationWithTask,
+    notification::{NotificationListOrder, NotificationWithTask},
     task::{Task, TaskId, TaskPlanning, TaskPriority},
     third_party::item::ThirdPartyItemData,
-    HasHtmlUrl,
+    HasHtmlUrl, Page, PageToken,
 };
 
 use crate::{
@@ -25,6 +25,7 @@ use crate::{
             github::notification_list_item::GithubNotificationListItem,
             google_calendar::notification_list_item::GoogleCalendarEventListItem,
             google_mail::notification_list_item::GoogleMailThreadListItem,
+            icons::IntegrationProviderIcon,
             linear::notification_list_item::LinearNotificationListItem,
             slack::notification_list_item::{
                 SlackReactionNotificationListItem, SlackStarNotificationListItem,
@@ -37,10 +38,13 @@ use crate::{
         task_planning_modal::TaskPlanningModal,
     },
     config::get_api_base_url,
+    images::UI_LOGO_SYMBOL_TRANSPARENT,
     model::UI_MODEL,
     services::{
         integration_connection_service::TASK_SERVICE_INTEGRATION_CONNECTION,
-        notification_service::NotificationCommand,
+        notification_service::{
+            NotificationCommand, NotificationFilters, NotificationSourceKindFilter,
+        },
     },
 };
 
@@ -51,7 +55,10 @@ pub struct NotificationListContext {
 }
 
 #[component]
-pub fn NotificationsList(notifications: ReadOnlySignal<Vec<NotificationWithTask>>) -> Element {
+pub fn NotificationsList(
+    notifications: ReadOnlySignal<Page<NotificationWithTask>>,
+    notification_filters: Signal<NotificationFilters>,
+) -> Element {
     let api_base_url = use_memo(move || get_api_base_url().unwrap());
     let notification_service = use_coroutine_handle::<NotificationCommand>();
     let context = use_memo(move || NotificationListContext {
@@ -60,22 +67,92 @@ pub fn NotificationsList(notifications: ReadOnlySignal<Vec<NotificationWithTask>
     });
     use_context_provider(move || context);
     let current_notification = notifications()
+        .content
         .get(UI_MODEL.read().selected_notification_index)
         .map(|notification| Signal::new(notification.clone()));
+    let current_page = use_signal(|| 1);
+    let filters_str = notification_filters()
+        .selected()
+        .iter()
+        .map(|f| f.to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
 
     rsx! {
-        List {
-            id: "notifications_list",
-            show_shortcut: UI_MODEL.read().is_help_enabled,
+        div {
+            class: "flex flex-col h-full",
+            div {
+                class: "flex w-full p-2 gap-2 text-sm text-base-content/50",
 
-            tbody {
-                for (i, notification) in notifications().into_iter().map(Signal::new).enumerate() {
-                    NotificationListItem {
-                        notification,
-                        is_selected: i == UI_MODEL.read().selected_notification_index,
-                        on_select: move |_| {
-                            UI_MODEL.write().selected_notification_index = i;
+                div {
+                    class: "flex items-center flex-1 justify-start",
+                    ListPaginationButtons {
+                        current_page,
+                        page: notifications,
+                        on_select: move |selected_page_token| {
+                            notification_filters.write().current_page_token = selected_page_token;
+                            notification_service.send(NotificationCommand::Refresh);
+                        }
+                    }
+                }
+
+                div {
+                    class: "flex items-center flex-1 justify-center",
+                    NotificationSourceKindFilters {
+                        notification_source_kind_filters: notification_filters().notification_source_kind_filters,
+                        on_select: move |filter| {
+                            notification_filters.write().select(filter);
+                            notification_service.send(NotificationCommand::Refresh);
                         },
+                    }
+                }
+
+                div {
+                    class: "flex items-center flex-1 justify-end",
+                    NotificationListOrdering {
+                        notification_list_order: notification_filters().sort_by,
+                        on_change: move |new_order| {
+                            notification_filters.write().sort_by = new_order;
+                            notification_service.send(NotificationCommand::Refresh);
+                        }
+                    }
+                }
+            }
+
+            if notifications().content.is_empty() && notification_filters().is_filtered() {
+                div {
+                    class: "relative w-full h-full flex justify-center items-center",
+                    img {
+                        class: "h-full opacity-30 dark:opacity-10",
+                        src: "{UI_LOGO_SYMBOL_TRANSPARENT}",
+                        alt: "No notifications"
+                    }
+                    div {
+                        class: "flex flex-col items-center absolute object-center top-2/3 transform translate-y-1/4",
+                        p {
+                            class: "text-base-content/50",
+                            "There's no new {filters_str} notifications"
+                        }
+                    }
+                }
+            } else {
+                div {
+                    class: "h-full overflow-auto scroll-auto px-2 snap-y snap-mandatory",
+                    List {
+                        id: "notifications_list",
+                        show_shortcut: UI_MODEL.read().is_help_enabled,
+
+                        tbody {
+                            for (i, notification) in notifications().content.into_iter().map(Signal::new).enumerate() {
+                                NotificationListItem {
+                                    notification,
+                                    is_selected: i == UI_MODEL.read().selected_notification_index,
+                                    on_select: move |_| {
+                                        UI_MODEL.write().selected_notification_index = i;
+                                    },
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -365,6 +442,219 @@ pub fn TaskHint(task: ReadOnlySignal<Option<Task>>) -> Element {
                 href: "{html_url}",
                 target: "_blank",
                 Icon { class: "w-4 h-4", icon: BsBookmarkCheck }
+            }
+        }
+    }
+}
+
+#[component]
+pub fn ListPaginationButtons(
+    current_page: Signal<usize>,
+    page: ReadOnlySignal<Page<NotificationWithTask>>,
+    on_select: EventHandler<PageToken>,
+) -> Element {
+    if page().pages_count == 0 {
+        return rsx! {};
+    }
+
+    let previous_button_style = if page().pages_count == 1 || current_page() == 1 {
+        "btn-disabled"
+    } else {
+        ""
+    };
+    let previous_pages_style = if current_page() > 3 {
+        "visible"
+    } else {
+        "hidden"
+    };
+    let previous_page_style = if current_page() > 2 {
+        "visible"
+    } else {
+        "hidden"
+    };
+    let current_page_style = if current_page() > 1 && current_page() < page().pages_count {
+        "visible"
+    } else {
+        "hidden"
+    };
+    let next_page_style = if current_page() < (page().pages_count - 1) {
+        "visible"
+    } else {
+        "hidden"
+    };
+    let next_pages_style = if page().pages_count > 4 && current_page() < (page().pages_count - 2) {
+        "visible"
+    } else {
+        "hidden"
+    };
+    let last_page_style = if page().pages_count > 1 {
+        "visible"
+    } else {
+        "hidden"
+    };
+    let next_button_style = if page().pages_count == 1 || current_page() == page().pages_count {
+        "btn-disabled"
+    } else {
+        ""
+    };
+
+    rsx! {
+        nav {
+            class: "join",
+
+            button {
+                "type": "button",
+                class: "btn btn-text btn-xs btn-circle join-item {previous_button_style}",
+                "aria-label": "Previous Button",
+                onclick: move |_| {
+                    current_page -= 1;
+                    on_select.call(page().previous_page_token.unwrap_or_default());
+                },
+                span { class: "icon-[tabler--chevron-left] size-5 rtl:rotate-180" }
+            }
+            button {
+                "type": "button",
+                class: "btn btn-text btn-xs join-item btn-circle aria-[current='page']:text-bg-soft-primary",
+                "aria-current": if current_page() == 1 { "page" },
+                onclick: move |_| {
+                    current_page.set(1);
+                    on_select.call(PageToken::Offset(0));
+                },
+                "1"
+            }
+
+            button {
+                "type": "button",
+                class: "btn btn-text btn-xs join-item btn-circle {previous_pages_style}",
+                onclick: move |_| {
+                    current_page -= 2;
+                    on_select.call(PageToken::Offset((current_page() - 1) * page().per_page));
+                },
+                "..."
+            }
+
+            button {
+                "type": "button",
+                class: "btn btn-text btn-xs join-item btn-circle {previous_page_style}",
+                onclick: move |_| {
+                    current_page -= 1;
+                    on_select.call(page().previous_page_token.unwrap_or_default());
+                },
+                "{current_page() - 1}"
+            }
+            button {
+                "type": "button",
+                class: "btn btn-text btn-xs join-item btn-circle aria-[current='page']:text-bg-soft-primary {current_page_style}",
+                "aria-current": "page",
+                "{current_page()}"
+            }
+            button {
+                "type": "button",
+                class: "btn btn-text btn-xs join-item btn-circle {next_page_style}",
+                onclick: move |_| {
+                    current_page += 1;
+                    on_select.call(page().next_page_token.unwrap_or_default());
+                },
+                "{current_page() + 1}"
+            }
+
+            button {
+                "type": "button",
+                class: "btn btn-text btn-xs join-item btn-circle {next_pages_style}",
+                onclick: move |_| {
+                    current_page += 2;
+                    on_select.call(PageToken::Offset((current_page() - 1) * page().per_page));
+                },
+                "..."
+            }
+
+            button {
+                "type": "button",
+                class: "btn btn-text btn-xs join-item btn-circle aria-[current='page']:text-bg-soft-primary {last_page_style}",
+                "aria-current": if current_page() == page().pages_count { "page" },
+                onclick: move |_| {
+                    current_page.set(page().pages_count);
+                    on_select.call(PageToken::Offset((current_page() - 1) * page().per_page));
+                },
+                "{page().pages_count}"
+            }
+            button {
+                "type": "button",
+                class: "btn btn-text btn-xs btn-circle join-item {next_button_style}",
+                "aria-label": "Next Button",
+                onclick: move |_| {
+                    current_page += 1;
+                    on_select.call(page().next_page_token.unwrap_or_default());
+                },
+                span { class: "icon-[tabler--chevron-right] size-5 rtl:rotate-180" }
+            }
+        }
+    }
+}
+
+#[component]
+pub fn NotificationSourceKindFilters(
+    notification_source_kind_filters: ReadOnlySignal<Vec<NotificationSourceKindFilter>>,
+    on_select: EventHandler<NotificationSourceKindFilter>,
+) -> Element {
+    rsx! {
+        div {
+            class: "flex gap-2",
+            span { "Filters: " }
+            for filter in notification_source_kind_filters() {
+                NotificationSourceKindFilterButton { filter, on_select }
+            }
+        }
+    }
+}
+
+#[component]
+pub fn NotificationSourceKindFilterButton(
+    filter: ReadOnlySignal<NotificationSourceKindFilter>,
+    on_select: EventHandler<NotificationSourceKindFilter>,
+) -> Element {
+    let style = use_memo(move || {
+        if filter().selected {
+            "text-bg-soft-primary btn-active"
+        } else {
+            "btn-disabled pointer-events-auto!"
+        }
+    });
+
+    rsx! {
+        button {
+            class: "btn btn-circle btn-text btn-xs {style}",
+            onclick: move |_| on_select.call(filter()),
+            IntegrationProviderIcon { class: "w-4 h-4", provider_kind: filter().kind.into() }
+        }
+    }
+}
+
+#[component]
+pub fn NotificationListOrdering(
+    notification_list_order: ReadOnlySignal<NotificationListOrder>,
+    on_change: EventHandler<NotificationListOrder>,
+) -> Element {
+    rsx! {
+        Tooltip {
+            text: "Sort by updated date",
+            placement: TooltipPlacement::Left,
+
+            label {
+                class: "swap swap-flip",
+                input {
+                    "type": "checkbox",
+                    onclick: move |_| {
+                        let new_order = match notification_list_order() {
+                            NotificationListOrder::UpdatedAtAsc => NotificationListOrder::UpdatedAtDesc,
+                            NotificationListOrder::UpdatedAtDesc => NotificationListOrder::UpdatedAtAsc,
+                        };
+                        on_change.call(new_order);
+                    },
+                    checked: "{notification_list_order() == NotificationListOrder::UpdatedAtDesc}",
+                }
+                span { class: "swap-on icon-[tabler--chevron-down] size-5" }
+                span { class: "swap-off icon-[tabler--chevron-up] size-5" }
             }
         }
     }

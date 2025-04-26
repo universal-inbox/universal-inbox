@@ -13,8 +13,9 @@ use universal_inbox::{
     integration_connection::provider::IntegrationProvider,
     notification::{
         service::{InvitationPatch, NotificationPatch},
-        Notification, NotificationId, NotificationSource, NotificationSourceKind,
-        NotificationStatus, NotificationSyncSourceKind, NotificationWithTask,
+        Notification, NotificationId, NotificationListOrder, NotificationSource,
+        NotificationSourceKind, NotificationStatus, NotificationSyncSourceKind,
+        NotificationWithTask,
     },
     task::{service::TaskPatch, Task, TaskCreation, TaskId, TaskStatus},
     third_party::{
@@ -22,7 +23,7 @@ use universal_inbox::{
         item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemId, ThirdPartyItemKind},
     },
     user::UserId,
-    Page,
+    Page, PageToken,
 };
 
 use crate::{
@@ -206,7 +207,9 @@ impl NotificationService {
             status = status.iter().map(|s| s.to_string()).collect::<Vec<String>>().join(","),
             include_snoozed_notifications,
             task_id = task_id.map(|id| id.to_string()),
-            notification_kind = notification_kind.map(|k| k.to_string()),
+            order_by,
+            from_sources,
+            page_token,
             user.id = user_id.to_string()
         ),
         err
@@ -218,7 +221,9 @@ impl NotificationService {
         status: Vec<NotificationStatus>,
         include_snoozed_notifications: bool,
         task_id: Option<TaskId>,
-        notification_kind: Option<NotificationSourceKind>,
+        order_by: NotificationListOrder,
+        from_sources: Vec<NotificationSourceKind>,
+        page_token: Option<PageToken>,
         user_id: UserId,
         job_storage: Option<RedisStorage<UniversalInboxJob>>,
     ) -> Result<Page<NotificationWithTask>, UniversalInboxError> {
@@ -229,7 +234,9 @@ impl NotificationService {
                 status,
                 include_snoozed_notifications,
                 task_id,
-                notification_kind,
+                order_by,
+                from_sources,
+                page_token,
                 user_id,
             )
             .await?;
@@ -1088,7 +1095,17 @@ impl NotificationService {
         <T as TryFrom<ThirdPartyItem>>::Error: Send + Sync,
     {
         let existing_notifications = self
-            .list_notifications(executor, vec![], true, Some(task.id), None, user_id, None)
+            .list_notifications(
+                executor,
+                vec![],
+                true,
+                Some(task.id),
+                NotificationListOrder::UpdatedAtAsc,
+                vec![],
+                None,
+                user_id,
+                None,
+            )
             .await?
             // Considering the list of notifications for a task is small enough to fit in a single page
             .content;
