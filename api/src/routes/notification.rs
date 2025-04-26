@@ -13,11 +13,13 @@ use tokio::sync::RwLock;
 use universal_inbox::{
     notification::{
         service::{InvitationPatch, NotificationPatch, SyncNotificationsParameters},
-        NotificationId, NotificationSourceKind, NotificationStatus, NotificationWithTask,
+        NotificationId, NotificationListOrder, NotificationSourceKind, NotificationStatus,
+        NotificationWithTask,
     },
     task::{TaskCreation, TaskId},
     user::UserId,
-    Page,
+    utils::base64::decode_base64,
+    Page, PageToken,
 };
 
 use crate::{
@@ -59,8 +61,11 @@ pub struct ListNotificationRequest {
     status: Option<Vec<NotificationStatus>>,
     include_snoozed_notifications: Option<bool>,
     task_id: Option<TaskId>,
-    notification_kind: Option<NotificationSourceKind>,
     trigger_sync: Option<bool>,
+    order_by: Option<NotificationListOrder>,
+    #[serde_as(as = "Option<StringWithSeparator::<CommaSeparator, NotificationSourceKind>>")]
+    sources: Option<Vec<NotificationSourceKind>>,
+    page_token: Option<String>,
 }
 
 pub async fn list_notifications(
@@ -74,11 +79,29 @@ pub async fn list_notifications(
         .sub
         .parse::<UserId>()
         .context("Wrong user ID format")?;
+    let page_token: Option<PageToken> = if let Some(token) = &list_notification_request.page_token {
+        let Ok(decoded_token) = decode_base64(token) else {
+            return Ok(HttpResponse::BadRequest()
+                .content_type("application/json")
+                .body(json!({"error": "Invalid page token format"}).to_string()));
+        };
+
+        let Ok(token) = serde_json::from_str(&decoded_token) else {
+            return Ok(HttpResponse::BadRequest()
+                .content_type("application/json")
+                .body(json!({"error": "Invalid page token structure"}).to_string()));
+        };
+        Some(token)
+    } else {
+        None
+    };
+
     let service = notification_service.read().await;
     let mut transaction = service
         .begin()
         .await
         .context("Failed to create new transaction while listing notifications")?;
+
     let result: Page<NotificationWithTask> = service
         .list_notifications(
             &mut transaction,
@@ -87,7 +110,12 @@ pub async fn list_notifications(
                 .include_snoozed_notifications
                 .unwrap_or(false),
             list_notification_request.task_id,
-            list_notification_request.notification_kind,
+            list_notification_request.order_by.unwrap_or_default(),
+            list_notification_request
+                .sources
+                .clone()
+                .unwrap_or_default(),
+            page_token,
             user_id,
             list_notification_request
                 .trigger_sync

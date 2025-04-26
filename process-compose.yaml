@@ -16,7 +16,7 @@ processes:
         port: 8000
       initial_delay_seconds: 60
       period_seconds: 10
-      failure_threshold: 3
+      failure_threshold: 10
     availability:
       restart: no
     namespace: "universal-inbox"

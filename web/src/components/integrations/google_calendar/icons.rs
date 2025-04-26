@@ -9,7 +9,7 @@ pub fn GoogleCalendar(class: Option<String>) -> Element {
             xmlns: "http://www.w3.org/2000/svg",
             class: class.unwrap_or_default(),
             role: "img",
-            "viewBox": "0 0 100 100",
+            "viewBox": "10 10 75 75",
             fill: "currentColor",
             title { "Google Calendar" }
             path {

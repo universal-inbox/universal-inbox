@@ -11,7 +11,7 @@ use universal_inbox::{
         TaskSourceKind, TaskStatus, TaskSummary,
     },
     user::UserId,
-    Page,
+    Page, PageToken, DEFAULT_PAGE_SIZE,
 };
 
 use crate::universal_inbox::{UniversalInboxError, UpdateStatus, UpsertStatus};
@@ -327,7 +327,9 @@ impl TaskRepository for Repository {
 
         add_filters(&mut query_builder, status, only_synced_tasks, user_id);
 
-        query_builder.push(" ORDER BY task.updated_at ASC LIMIT 100");
+        query_builder
+            .push(" ORDER BY task.updated_at ASC LIMIT ")
+            .push_bind(DEFAULT_PAGE_SIZE as i64);
 
         let rows = query_builder
             .build_query_as::<TaskRow>()
@@ -341,14 +343,18 @@ impl TaskRepository for Repository {
                 }
             })?;
 
+        let total: usize = count.try_into().unwrap(); // count(*) cannot be negative
+        let content = rows
+            .iter()
+            .map(|r| r.try_into())
+            .collect::<Result<Vec<Task>, UniversalInboxError>>()?;
         Ok(Page {
-            page: 1,
-            per_page: 100,
-            total: count.try_into().unwrap(), // count(*) cannot be negative
-            content: rows
-                .iter()
-                .map(|r| r.try_into())
-                .collect::<Result<Vec<Task>, UniversalInboxError>>()?,
+            per_page: DEFAULT_PAGE_SIZE,
+            pages_count: total.div_ceil(DEFAULT_PAGE_SIZE),
+            total,
+            previous_page_token: content.first().map(|t| PageToken::Before(t.updated_at)),
+            next_page_token: content.last().map(|t| PageToken::After(t.updated_at)),
+            content,
         })
     }
 

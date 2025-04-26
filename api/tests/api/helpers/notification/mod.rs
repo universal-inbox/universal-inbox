@@ -61,7 +61,7 @@ pub async fn list_notifications_response(
         format!("status={filters}&")
     };
     let notification_kind_parameter = notification_kind
-        .map(|kind| format!("notification_kind={kind}&"))
+        .map(|kind| format!("sources={kind}&"))
         .unwrap_or_default();
 
     client

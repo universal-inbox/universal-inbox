@@ -7,13 +7,13 @@ use uuid::Uuid;
 
 use universal_inbox::{
     notification::{
-        service::NotificationPatch, Notification, NotificationId, NotificationSourceKind,
-        NotificationStatus, NotificationWithTask,
+        service::NotificationPatch, Notification, NotificationId, NotificationListOrder,
+        NotificationSourceKind, NotificationStatus, NotificationWithTask,
     },
     task::TaskId,
     third_party::item::ThirdPartyItemId,
     user::UserId,
-    Page,
+    Page, PageToken, DEFAULT_PAGE_SIZE,
 };
 
 use crate::{
@@ -41,13 +41,16 @@ pub trait NotificationRepository {
         executor: &mut Transaction<'_, Postgres>,
         id: NotificationId,
     ) -> Result<bool, UniversalInboxError>;
+    #[allow(clippy::too_many_arguments)]
     async fn fetch_all_notifications(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         status: Vec<NotificationStatus>,
         include_snoozed_notifications: bool,
         task_id: Option<TaskId>,
-        notification_kind: Option<NotificationSourceKind>,
+        order_by: NotificationListOrder,
+        from_sources: Vec<NotificationSourceKind>,
+        page_token: Option<PageToken>,
         user_id: UserId,
     ) -> Result<Page<NotificationWithTask>, UniversalInboxError>;
     async fn create_notification(
@@ -251,18 +254,23 @@ impl NotificationRepository for Repository {
             status,
             include_snoozed_notifications,
             task_id = task_id.map(|id| id.to_string()),
-            notification_kind = notification_kind.map(|kind| kind.to_string()),
+            order_by,
+            from_sources,
+            page_token,
             user.id = user_id.to_string()
         ),
         err
     )]
+    #[allow(clippy::too_many_arguments)]
     async fn fetch_all_notifications(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         status: Vec<NotificationStatus>,
         include_snoozed_notifications: bool,
         task_id: Option<TaskId>,
-        notification_kind: Option<NotificationSourceKind>,
+        order_by: NotificationListOrder,
+        from_sources: Vec<NotificationSourceKind>,
+        page_token: Option<PageToken>,
         user_id: UserId,
     ) -> Result<Page<NotificationWithTask>, UniversalInboxError> {
         fn add_filters(
@@ -270,7 +278,9 @@ impl NotificationRepository for Repository {
             status: Vec<NotificationStatus>,
             include_snoozed_notifications: bool,
             task_id: Option<TaskId>,
-            notification_kind: Option<NotificationSourceKind>,
+            order_by: NotificationListOrder,
+            from_sources: &[NotificationSourceKind],
+            page_token: &Option<PageToken>,
             user_id: UserId,
         ) {
             let mut separated = query_builder.separated(" AND ");
@@ -302,10 +312,41 @@ impl NotificationRepository for Repository {
                     .push_bind_unseparated(id.0);
             }
 
-            if let Some(notification_kind) = notification_kind {
+            if !from_sources.is_empty() {
+                let from_sources_str = from_sources
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<String>>();
                 separated
-                    .push(" notification.kind::TEXT = ")
-                    .push_bind_unseparated(notification_kind.to_string());
+                    .push(" notification.kind::TEXT = ANY(")
+                    .push_bind_unseparated(from_sources_str)
+                    .push_unseparated(")");
+            }
+
+            match page_token {
+                Some(PageToken::After(updated_at)) => {
+                    separated
+                        .push(format!(
+                            " notification.{} ",
+                            match order_by {
+                                NotificationListOrder::UpdatedAtAsc => "updated_at >",
+                                NotificationListOrder::UpdatedAtDesc => "updated_at <",
+                            }
+                        ))
+                        .push_bind_unseparated(updated_at.naive_utc());
+                }
+                Some(PageToken::Before(updated_at)) => {
+                    separated
+                        .push(format!(
+                            " notification.{} ",
+                            match order_by {
+                                NotificationListOrder::UpdatedAtAsc => "updated_at <",
+                                NotificationListOrder::UpdatedAtDesc => "updated_at >",
+                            }
+                        ))
+                        .push_bind_unseparated(updated_at.naive_utc());
+                }
+                _ => {}
             }
         }
 
@@ -317,7 +358,9 @@ impl NotificationRepository for Repository {
             status.clone(),
             include_snoozed_notifications,
             task_id,
-            notification_kind,
+            order_by,
+            &from_sources,
+            &None,
             user_id,
         );
 
@@ -409,11 +452,31 @@ impl NotificationRepository for Repository {
             status,
             include_snoozed_notifications,
             task_id,
-            notification_kind,
+            order_by,
+            &from_sources,
+            &page_token,
             user_id,
         );
 
-        query_builder.push(" ORDER BY notification.updated_at ASC LIMIT 100");
+        let reverse_order = matches!(page_token, Some(PageToken::Before(_)));
+        let order_by_column = match order_by {
+            NotificationListOrder::UpdatedAtAsc => format!(
+                "notification.updated_at {}",
+                if reverse_order { "DESC" } else { "ASC" }
+            ),
+            NotificationListOrder::UpdatedAtDesc => format!(
+                "notification.updated_at {}",
+                if reverse_order { "ASC" } else { "DESC" }
+            ),
+        };
+
+        query_builder
+            .push(format!(" ORDER BY {} ", order_by_column))
+            .push(" LIMIT ")
+            .push_bind(DEFAULT_PAGE_SIZE as i64);
+        if let Some(PageToken::Offset(offset)) = page_token {
+            query_builder.push(" OFFSET ").push_bind(offset as i64);
+        }
 
         let records = query_builder
             .build_query_as::<NotificationWithTaskRow>()
@@ -427,14 +490,22 @@ impl NotificationRepository for Repository {
                 }
             })?;
 
+        let total: usize = count.try_into().unwrap(); // count(*) cannot be negative
+        let mut content = records
+            .iter()
+            .map(|r| r.try_into())
+            .collect::<Result<Vec<NotificationWithTask>, UniversalInboxError>>()?;
+        if reverse_order {
+            content.reverse();
+        }
+
         Ok(Page {
-            page: 1,
-            per_page: 100,
-            total: count.try_into().unwrap(), // count(*) cannot be negative
-            content: records
-                .iter()
-                .map(|r| r.try_into())
-                .collect::<Result<Vec<NotificationWithTask>, UniversalInboxError>>()?,
+            per_page: DEFAULT_PAGE_SIZE,
+            pages_count: total.div_ceil(DEFAULT_PAGE_SIZE),
+            total,
+            previous_page_token: content.first().map(|n| PageToken::Before(n.updated_at)),
+            next_page_token: content.last().map(|n| PageToken::After(n.updated_at)),
+            content,
         })
     }
 

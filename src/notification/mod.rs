@@ -5,6 +5,7 @@ use chrono::{DateTime, Utc};
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
+use strum::{Display, EnumIter, EnumString};
 use url::Url;
 use uuid::Uuid;
 
@@ -183,7 +184,7 @@ macro_attr! {
 macro_attr! {
     // tag: New notification integration
     // notification sources, either direct or from tasks
-    #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!)]
+    #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!, EnumIter)]
     pub enum NotificationSourceKind {
         Github,
         Todoist,
@@ -249,6 +250,7 @@ impl TryFrom<IntegrationProviderKind> for NotificationSourceKind {
             IntegrationProviderKind::Github => Ok(Self::Github),
             IntegrationProviderKind::Linear => Ok(Self::Linear),
             IntegrationProviderKind::GoogleMail => Ok(Self::GoogleMail),
+            IntegrationProviderKind::GoogleCalendar => Ok(Self::GoogleCalendar),
             IntegrationProviderKind::Todoist => Ok(Self::Todoist),
             IntegrationProviderKind::Slack => Ok(Self::Slack),
             _ => Err(()),
@@ -256,7 +258,28 @@ impl TryFrom<IntegrationProviderKind> for NotificationSourceKind {
     }
 }
 
+impl From<NotificationSourceKind> for IntegrationProviderKind {
+    // tag: New notification integration
+    fn from(kind: NotificationSourceKind) -> Self {
+        match kind {
+            NotificationSourceKind::Github => Self::Github,
+            NotificationSourceKind::Linear => Self::Linear,
+            NotificationSourceKind::GoogleMail => Self::GoogleMail,
+            NotificationSourceKind::GoogleCalendar => Self::GoogleCalendar,
+            NotificationSourceKind::Todoist => Self::Todoist,
+            NotificationSourceKind::Slack => Self::Slack,
+        }
+    }
+}
+
 pub trait NotificationSource: IntegrationProviderSource {
     fn get_notification_source_kind(&self) -> NotificationSourceKind;
     fn is_supporting_snoozed_notifications(&self) -> bool;
+}
+
+#[derive(Copy, Clone, PartialEq, Default, Debug, Display, EnumString, Serialize, Deserialize)]
+pub enum NotificationListOrder {
+    #[default]
+    UpdatedAtAsc,
+    UpdatedAtDesc,
 }

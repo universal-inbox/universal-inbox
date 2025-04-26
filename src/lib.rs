@@ -1,9 +1,13 @@
 use std::collections::HashMap;
 
+use anyhow::Result;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use strum::Display;
 use url::Url;
 
 use integration_connection::{provider::IntegrationProviderKind, NangoProviderKey, NangoPublicKey};
+use utils::base64::{decode_base64, encode_base64};
 
 #[macro_use]
 extern crate macro_attr;
@@ -73,15 +77,39 @@ pub struct SuccessResponse {
     pub message: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Hash, Default)]
+pub const DEFAULT_PAGE_SIZE: usize = 25;
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Hash)]
+#[serde(bound = "T: Serialize + for<'d> Deserialize<'d>")]
 pub struct Page<T> {
-    pub page: usize,
     pub per_page: usize,
+    pub pages_count: usize,
     pub total: usize,
+    pub previous_page_token: Option<PageToken>,
+    pub next_page_token: Option<PageToken>,
     pub content: Vec<T>,
 }
 
-impl<T> Page<T> {
+impl<T> Default for Page<T>
+where
+    T: Serialize + for<'d> Deserialize<'d>,
+{
+    fn default() -> Self {
+        Self {
+            per_page: 0,
+            pages_count: 1,
+            total: 0,
+            previous_page_token: None,
+            next_page_token: None,
+            content: vec![],
+        }
+    }
+}
+
+impl<T> Page<T>
+where
+    T: Serialize + for<'d> Deserialize<'d>,
+{
     pub fn remove_element<F>(&mut self, filter: F)
     where
         F: FnMut(&T) -> bool,
@@ -91,6 +119,31 @@ impl<T> Page<T> {
         if original_len != self.content.len() {
             self.total -= 1;
         }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Hash, Display)]
+pub enum PageToken {
+    Before(DateTime<Utc>),
+    After(DateTime<Utc>),
+    Offset(usize),
+}
+
+impl Default for PageToken {
+    fn default() -> Self {
+        PageToken::Offset(0)
+    }
+}
+
+impl PageToken {
+    pub fn to_url_parameter(&self) -> Result<String> {
+        let json = serde_json::to_string(self)?;
+        Ok(encode_base64(&json))
+    }
+
+    pub fn from_url_parameter(data: &str) -> Result<Self> {
+        let decoded = decode_base64(data)?;
+        Ok(serde_json::from_str(&decoded)?)
     }
 }
 

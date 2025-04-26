@@ -1,11 +1,10 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
-
 use log::debug;
 use web_sys::KeyboardEvent;
 
-use universal_inbox::HasHtmlUrl;
+use universal_inbox::{notification::NotificationWithTask, HasHtmlUrl, Page};
 
 use crate::{
     components::{
@@ -16,7 +15,7 @@ use crate::{
     model::{PreviewPane, UI_MODEL},
     services::{
         flyonui::{has_flyonui_modal_opened, open_flyonui_modal},
-        notification_service::{NotificationCommand, NOTIFICATIONS_PAGE},
+        notification_service::{NotificationCommand, NOTIFICATIONS_PAGE, NOTIFICATION_FILTERS},
     },
     utils::{open_link, scroll_element, scroll_element_by_page},
 };
@@ -47,7 +46,7 @@ pub fn NotificationsPage() -> Element {
                 KEYBOARD_MANAGER.write().active_keyboard_handler = Some(&KEYBOARD_HANDLER);
             },
 
-            if NOTIFICATIONS_PAGE.read().content.is_empty() {
+            if NOTIFICATIONS_PAGE.read().content.is_empty() && !NOTIFICATION_FILTERS().is_filtered() {
                 div {
                     class: "relative w-full h-full flex justify-center items-center",
                     img {
@@ -63,11 +62,11 @@ pub fn NotificationsPage() -> Element {
                 }
             } else {
                 div {
-                    id: "notifications-list",
-                    class: "h-full basis-2/3 overflow-auto scroll-auto px-2 snap-y snap-mandatory",
+                    class: "h-full basis-2/3",
 
                     NotificationsList {
-                        notifications: NOTIFICATIONS_PAGE.read().content.clone(),
+                        notifications: Into::<ReadOnlySignal<Page<NotificationWithTask>>>::into(NOTIFICATIONS_PAGE.signal()),
+                        notification_filters: NOTIFICATION_FILTERS.signal(),
                     }
                 }
 

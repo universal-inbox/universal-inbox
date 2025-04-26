@@ -1,20 +1,20 @@
 use anyhow::Result;
 use chrono::{DateTime, Local, TimeDelta, TimeZone, Timelike, Utc};
 use dioxus::prelude::*;
-
 use futures_util::StreamExt;
 use reqwest::Method;
+use strum::IntoEnumIterator;
 use url::Url;
 
 use universal_inbox::{
     notification::{
         service::{InvitationPatch, NotificationPatch, SyncNotificationsParameters},
-        Notification, NotificationId, NotificationSourceKind, NotificationStatus,
-        NotificationSyncSourceKind, NotificationWithTask,
+        Notification, NotificationId, NotificationListOrder, NotificationSourceKind,
+        NotificationStatus, NotificationSyncSourceKind, NotificationWithTask,
     },
     task::{TaskCreation, TaskId, TaskPlanning},
     third_party::integrations::google_calendar::GoogleCalendarEventAttendeeResponseStatus,
-    Page,
+    Page, PageToken,
 };
 
 use crate::{
@@ -42,17 +42,16 @@ pub enum NotificationCommand {
     TentativelyAcceptInvitation(NotificationId),
 }
 
-pub static NOTIFICATIONS_PAGE: GlobalSignal<Page<NotificationWithTask>> = Signal::global(|| Page {
-    page: 0,
-    per_page: 0,
-    total: 0,
-    content: vec![],
-});
+pub static NOTIFICATIONS_PAGE: GlobalSignal<Page<NotificationWithTask>> =
+    Signal::global(Page::default);
+pub static NOTIFICATION_FILTERS: GlobalSignal<NotificationFilters> =
+    Signal::global(NotificationFilters::default);
 
 pub async fn notification_service(
     mut rx: UnboundedReceiver<NotificationCommand>,
     api_base_url: Url,
     mut notifications_page: Signal<Page<NotificationWithTask>>,
+    notification_filters: Signal<NotificationFilters>,
     ui_model: Signal<UniversalInboxUIModel>,
     task_service: Coroutine<TaskCommand>,
     toast_service: Coroutine<ToastCommand>,
@@ -61,7 +60,13 @@ pub async fn notification_service(
         let msg = rx.next().await;
         match msg {
             Some(NotificationCommand::Refresh) => {
-                refresh_notifications(&api_base_url, notifications_page, ui_model).await;
+                refresh_notifications(
+                    &api_base_url,
+                    notifications_page,
+                    notification_filters,
+                    ui_model,
+                )
+                .await;
             }
             Some(NotificationCommand::Sync(source)) => {
                 let result: Result<Vec<Notification>> = call_api_and_notify(
@@ -79,7 +84,13 @@ pub async fn notification_service(
                 )
                 .await;
                 if result.is_ok() {
-                    refresh_notifications(&api_base_url, notifications_page, ui_model).await;
+                    refresh_notifications(
+                        &api_base_url,
+                        notifications_page,
+                        notification_filters,
+                        ui_model,
+                    )
+                    .await;
                 }
             }
             Some(NotificationCommand::DeleteFromNotification(ref notification)) => {
@@ -247,12 +258,31 @@ pub async fn notification_service(
 async fn refresh_notifications(
     api_base_url: &Url,
     mut notifications_page: Signal<Page<NotificationWithTask>>,
+    notification_filters: Signal<NotificationFilters>,
     ui_model: Signal<UniversalInboxUIModel>,
 ) {
+    let source_filters: Vec<String> = notification_filters()
+        .notification_source_kind_filters
+        .iter()
+        .filter(|f| f.selected)
+        .map(|f| f.kind.to_string())
+        .collect();
+
+    let mut parameters = vec![
+        ("status", "Unread,Read".to_string()),
+        ("with_tasks", "true".to_string()),
+        ("order_by", notification_filters().sort_by.to_string()),
+        ("sources", source_filters.join(",")),
+    ];
+    if let Ok(url_parameters) = notification_filters().current_page_token.to_url_parameter() {
+        parameters.push(("page_token", url_parameters));
+    }
+
+    let filters = serde_urlencoded::to_string(parameters).unwrap_or_default();
     let result: Result<Page<NotificationWithTask>> = call_api(
         Method::GET,
         api_base_url,
-        "notifications?status=Unread,Read&with_tasks=true",
+        &format!("notifications?{filters}"),
         // random type as we don't care about the body's type
         None::<i32>,
         Some(ui_model),
@@ -353,6 +383,87 @@ async fn patch_invitation(
             "Invitation successfully accepted",
         )
         .await;
+    }
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub struct NotificationSourceKindFilter {
+    pub selected: bool,
+    pub kind: NotificationSourceKind,
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub struct NotificationFilters {
+    pub notification_source_kind_filters: Vec<NotificationSourceKindFilter>,
+    pub sort_by: NotificationListOrder,
+    pub current_page_token: PageToken,
+}
+
+impl NotificationFilters {
+    pub fn select(&mut self, filter: NotificationSourceKindFilter) {
+        let selected_count = self
+            .notification_source_kind_filters
+            .iter()
+            .filter(|f| f.selected)
+            .count();
+        let total = self.notification_source_kind_filters.len();
+
+        if selected_count == total {
+            for f in &mut self.notification_source_kind_filters {
+                if f.kind != filter.kind {
+                    f.selected = false;
+                }
+            }
+        } else if selected_count == 1
+            && self
+                .notification_source_kind_filters
+                .iter()
+                .any(|f| f.selected && f.kind == filter.kind)
+        {
+            for f in &mut self.notification_source_kind_filters {
+                f.selected = true;
+            }
+        } else if let Some(f) = self
+            .notification_source_kind_filters
+            .iter_mut()
+            .find(|f| f.kind == filter.kind)
+        {
+            f.selected = !f.selected;
+        }
+    }
+
+    pub fn is_filtered(&self) -> bool {
+        self.notification_source_kind_filters
+            .iter()
+            .any(|f| !f.selected)
+    }
+
+    pub fn selected(&self) -> Vec<NotificationSourceKind> {
+        self.notification_source_kind_filters
+            .iter()
+            .filter(|f| f.selected)
+            .map(|f| f.kind)
+            .collect::<Vec<_>>()
+    }
+}
+
+impl Default for NotificationFilters {
+    fn default() -> Self {
+        let mut notification_source_kind_filters: Vec<NotificationSourceKindFilter> =
+            NotificationSourceKind::iter()
+                .map(|kind| NotificationSourceKindFilter {
+                    selected: true,
+                    kind,
+                })
+                .collect();
+        notification_source_kind_filters
+            .sort_by(|a, b| a.kind.to_string().cmp(&b.kind.to_string()));
+
+        Self {
+            notification_source_kind_filters,
+            sort_by: NotificationListOrder::default(),
+            current_page_token: PageToken::Offset(0),
+        }
     }
 }
 
