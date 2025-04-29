@@ -3,7 +3,7 @@
 use dioxus::prelude::*;
 
 use universal_inbox::third_party::integrations::linear::{
-    LinearIssue, LinearProject, LinearProjectState, LinearWorkflowStateType,
+    LinearIssue, LinearProject, LinearProjectStatus, LinearWorkflowStateType,
 };
 
 use crate::theme::{
@@ -191,27 +191,27 @@ pub fn LinearProjectIcon(
     let class = class.unwrap_or_default();
 
     let (icon, color_style) = match linear_project().state {
-        LinearProjectState::Planned => (
+        LinearProjectStatus::Planned => (
             rsx! { LinearProjectPlannedIcon { class: "{class}" } },
             DRAFT_TEXT_COLOR_CLASS,
         ),
-        LinearProjectState::Backlog => (
+        LinearProjectStatus::Backlog => (
             rsx! { LinearProjectBacklogIcon { class: "{class}" } },
             BACKLOG_TEXT_COLOR_CLASS,
         ),
-        LinearProjectState::Started => (
+        LinearProjectStatus::Started => (
             rsx! { LinearProjectStartedIcon { class: "{class}" } },
             STARTED_TEXT_COLOR_CLASS,
         ),
-        LinearProjectState::Paused => (
+        LinearProjectStatus::Paused => (
             rsx! { LinearProjectPausedIcon { class: "{class}" } },
             BACKLOG_TEXT_COLOR_CLASS,
         ),
-        LinearProjectState::Completed => (
+        LinearProjectStatus::Completed => (
             rsx! { LinearProjectCompletedIcon { class: "{class}" } },
             COMPLETED_TEXT_COLOR_CLASS,
         ),
-        LinearProjectState::Canceled => (
+        LinearProjectStatus::Canceled => (
             rsx! { LinearProjectCanceledIcon { class: "{class}" } },
             CANCELED_TEXT_COLOR_CLASS,
         ),

@@ -367,7 +367,7 @@ pub struct LinearProject {
     pub description: String,
     pub icon: Option<String>,
     pub color: String,
-    pub state: LinearProjectState,
+    pub state: LinearProjectStatus,
     pub progress: i64, // percentage between 0 and 100
     pub start_date: Option<NaiveDate>,
     pub target_date: Option<NaiveDate>,
@@ -381,7 +381,7 @@ impl HasHtmlUrl for LinearProject {
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
-pub enum LinearProjectState {
+pub enum LinearProjectStatus {
     Planned,
     Backlog,
     Started,
@@ -390,37 +390,18 @@ pub enum LinearProjectState {
     Canceled,
 }
 
-impl TryFrom<String> for LinearProjectState {
-    type Error = anyhow::Error;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        match value.as_str() {
-            "planned" => Ok(LinearProjectState::Planned),
-            "backlog" => Ok(LinearProjectState::Backlog),
-            "started" => Ok(LinearProjectState::Started),
-            "paused" => Ok(LinearProjectState::Paused),
-            "completed" => Ok(LinearProjectState::Completed),
-            "canceled" => Ok(LinearProjectState::Canceled),
-            _ => Err(anyhow!(
-                "Unable to find LinearProjectState value for `{}`",
-                value
-            )),
-        }
-    }
-}
-
-impl fmt::Display for LinearProjectState {
+impl fmt::Display for LinearProjectStatus {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "{}",
             match self {
-                LinearProjectState::Backlog => "backlog",
-                LinearProjectState::Canceled => "canceled",
-                LinearProjectState::Completed => "completed",
-                LinearProjectState::Paused => "paused",
-                LinearProjectState::Planned => "planned",
-                LinearProjectState::Started => "started",
+                LinearProjectStatus::Backlog => "backlog",
+                LinearProjectStatus::Canceled => "canceled",
+                LinearProjectStatus::Completed => "completed",
+                LinearProjectStatus::Paused => "paused",
+                LinearProjectStatus::Planned => "planned",
+                LinearProjectStatus::Started => "started",
             }
         )
     }
