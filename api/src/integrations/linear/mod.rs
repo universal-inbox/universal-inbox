@@ -7,7 +7,7 @@ use chrono::{DateTime, Timelike, Utc};
 use graphql::{
     issue_update_state::IssueUpdateStateIssueUpdate,
     issue_update_subscribers::IssueUpdateSubscribersIssueUpdate,
-    notification_archive::NotificationArchiveNotificationArchive,
+    notification_archive::NotificationArchiveNotificationArchiveAll,
     notification_subscribers_query::{
         NotificationSubscribersQueryNotification,
         NotificationSubscribersQueryNotificationOnIssueNotification,
@@ -185,7 +185,7 @@ impl LinearService {
                     .insert_header("content-type", "application/json")
                     .set_body_json(&Response {
                         data: Some(notification_archive::ResponseData {
-                            notification_archive: NotificationArchiveNotificationArchive {
+                            notification_archive_all: NotificationArchiveNotificationArchiveAll {
                                 success: true,
                             },
                         }),
@@ -366,7 +366,7 @@ impl LinearService {
             .data
             .ok_or_else(|| anyhow!("Failed to parse `data` from Linear graphql response"))?;
 
-        if !response_data.notification_archive.success {
+        if !response_data.notification_archive_all.success {
             return Err(UniversalInboxError::Unexpected(anyhow!(
                 "Linear API call failed with an unknown error"
             )));

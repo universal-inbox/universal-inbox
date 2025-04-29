@@ -20,7 +20,7 @@ use universal_inbox_api::integrations::linear::graphql::{
     assigned_issues_query,
     issue_update_state::{self, IssueUpdateStateIssueUpdate},
     issue_update_subscribers::{self, IssueUpdateSubscribersIssueUpdate},
-    notification_archive::{self, NotificationArchiveNotificationArchive},
+    notification_archive::{self, NotificationArchiveNotificationArchiveAll},
     notification_subscribers_query::{
         self, NotificationSubscribersQueryNotification,
         NotificationSubscribersQueryNotificationOnIssueNotification,
@@ -193,7 +193,7 @@ pub fn mock_linear_archive_notification_query(
             .json_body_obj(&Response {
                 data: if errors.is_none() {
                     Some(notification_archive::ResponseData {
-                        notification_archive: NotificationArchiveNotificationArchive {
+                        notification_archive_all: NotificationArchiveNotificationArchiveAll {
                             success: successful_response,
                         },
                     })

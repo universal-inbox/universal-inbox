@@ -1,3 +1,3 @@
 mutation NotificationArchive($id: String!) {
-  notificationArchive(id: $id) { success }
+  notificationArchiveAll(input: { id: $id }) { success }
 }
