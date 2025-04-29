@@ -24,7 +24,7 @@ query AssignedIssuesQuery {
         description
         icon
         color
-        state
+        status { type }
         progress
         startDate
         targetDate

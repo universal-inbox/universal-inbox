@@ -27,7 +27,7 @@ query NotificationsQuery {
             description
             icon
             color
-            state
+            status { type }
             progress
             startDate
             targetDate
@@ -128,7 +128,7 @@ query NotificationsQuery {
           description
           icon
           color
-          state
+          status { type }
           progress
           startDate
           targetDate

@@ -3,8 +3,8 @@ use uuid::Uuid;
 
 use universal_inbox::{
     third_party::integrations::linear::{
-        LinearIssue, LinearLabel, LinearProject, LinearProjectMilestone, LinearTeam, LinearUser,
-        LinearWorkflowState, LinearWorkflowStateIds,
+        LinearIssue, LinearLabel, LinearProject, LinearProjectMilestone, LinearProjectStatus,
+        LinearTeam, LinearUser, LinearWorkflowState, LinearWorkflowStateIds,
     },
     utils::emoji::replace_emoji_code_with_emoji,
 };
@@ -74,12 +74,26 @@ impl TryFrom<assigned_issues_query::AssignedIssuesQueryIssuesNodesProject> for L
                 .icon
                 .and_then(|icon| replace_emoji_code_with_emoji(&icon)),
             color: value.color,
-            state: value.state.try_into()?,
+            state: value.status.type_.into(),
             progress: (value.progress * 100.0).round() as i64,
             start_date: value.start_date,
             target_date: value.target_date,
             lead: value.lead.map(|lead| lead.try_into()).transpose()?,
         })
+    }
+}
+
+impl From<assigned_issues_query::ProjectStatusType> for LinearProjectStatus {
+    fn from(value: assigned_issues_query::ProjectStatusType) -> Self {
+        match value {
+            assigned_issues_query::ProjectStatusType::backlog => LinearProjectStatus::Backlog,
+            assigned_issues_query::ProjectStatusType::planned => LinearProjectStatus::Planned,
+            assigned_issues_query::ProjectStatusType::started => LinearProjectStatus::Started,
+            assigned_issues_query::ProjectStatusType::paused => LinearProjectStatus::Paused,
+            assigned_issues_query::ProjectStatusType::completed => LinearProjectStatus::Completed,
+            assigned_issues_query::ProjectStatusType::canceled => LinearProjectStatus::Canceled,
+            assigned_issues_query::ProjectStatusType::Other(_) => LinearProjectStatus::Backlog,
+        }
     }
 }
 

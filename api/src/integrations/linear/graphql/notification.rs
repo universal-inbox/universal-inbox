@@ -4,8 +4,9 @@ use uuid::Uuid;
 use universal_inbox::{
     third_party::integrations::linear::{
         LinearComment, LinearIssue, LinearLabel, LinearNotification, LinearOrganization,
-        LinearProject, LinearProjectMilestone, LinearProjectUpdate, LinearProjectUpdateHealthType,
-        LinearTeam, LinearUser, LinearWorkflowState, LinearWorkflowStateIds,
+        LinearProject, LinearProjectMilestone, LinearProjectStatus, LinearProjectUpdate,
+        LinearProjectUpdateHealthType, LinearTeam, LinearUser, LinearWorkflowState,
+        LinearWorkflowStateIds,
     },
     utils::emoji::replace_emoji_code_with_emoji,
 };
@@ -85,7 +86,7 @@ impl
                 .icon
                 .and_then(|icon| replace_emoji_code_with_emoji(&icon)),
             color: value.color,
-            state: value.state.try_into()?,
+            state: value.status.type_.into(),
             progress: (value.progress * 100.0).round() as i64,
             start_date: value.start_date,
             target_date: value.target_date,
@@ -328,12 +329,26 @@ impl TryFrom<notifications_query::NotificationsQueryNotificationsNodesOnProjectN
                 .icon
                 .and_then(|icon| replace_emoji_code_with_emoji(&icon)),
             color: value.color,
-            state: value.state.try_into()?,
+            state: value.status.type_.into(),
             progress: (value.progress * 100.0).round() as i64,
             start_date: value.start_date,
             target_date: value.target_date,
             lead: value.lead.map(|lead| lead.try_into()).transpose()?,
         })
+    }
+}
+
+impl From<notifications_query::ProjectStatusType> for LinearProjectStatus {
+    fn from(value: notifications_query::ProjectStatusType) -> Self {
+        match value {
+            notifications_query::ProjectStatusType::backlog => LinearProjectStatus::Backlog,
+            notifications_query::ProjectStatusType::planned => LinearProjectStatus::Planned,
+            notifications_query::ProjectStatusType::started => LinearProjectStatus::Started,
+            notifications_query::ProjectStatusType::paused => LinearProjectStatus::Paused,
+            notifications_query::ProjectStatusType::completed => LinearProjectStatus::Completed,
+            notifications_query::ProjectStatusType::canceled => LinearProjectStatus::Canceled,
+            notifications_query::ProjectStatusType::Other(_) => LinearProjectStatus::Backlog,
+        }
     }
 }
 
