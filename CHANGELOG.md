@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## 2025-05-03
+
 ### Added
 
 - Synchronize one way (Slack => Universal Inbox) Slack mentions as notifications
