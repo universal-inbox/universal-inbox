@@ -67,7 +67,7 @@ pub fn IntegrationsPanel(
                     class: "alert rounded-md! alert-soft alert-info shadow-lg my-4 text-sm flex gap-2",
                     role: "alert",
 
-                    Icon { class: "w-5 h-5", icon: BsPlug }
+                    Icon { class: "min-w-5 h-5", icon: BsPlug }
                     "You have no integrations connected. Connect an integration to get started."
                 }
             } else if !integration_connections.iter().any(|c| c.is_connected_task_service()) {
@@ -75,7 +75,7 @@ pub fn IntegrationsPanel(
                     class: "alert rounded-md! alert-soft alert-warning shadow-lg my-4 text-sm flex gap-2",
                     role: "alert",
 
-                    Icon { class: "w-5 h-5", icon: BsExclamationTriangle }
+                    Icon { class: "min-w-5 h-5", icon: BsExclamationTriangle }
                     "To fully use Universal Inbox, you need to connect at least one task management service."
                 }
             }
@@ -326,58 +326,64 @@ pub fn IntegrationSettings(
                 class: "card-body text-sm",
 
                 div {
-                    class: "flex flex-row gap-4",
+                    class: "flex flex-col sm:flex-row gap-4",
 
                     div {
-                        class: "card-title flex items-center gap-2",
+                        class: "card-title flex gap-2 items-center justify-center sm:justify-start grow",
                         figure { class: "p-2", IntegrationProviderIcon { class: icon_style, provider_kind: kind } }
                         "{config().name}"
                     }
-                    div {
-                        class: "flex flex-col grow justify-center items-start",
-                        if let Some(notifications_sync_message) = &notifications_sync_message {
-                            span { "{notifications_sync_message}" }
-                        }
-                        if let Some(tasks_sync_message) = &tasks_sync_message {
-                            span { "{tasks_sync_message}" }
-                        }
-                        if notifications_sync_message.is_none() && tasks_sync_message.is_none() {
-                            span { }
-                        }
-                    }
-                    div {
-                        class: "card-actions justify-end",
 
-                        button {
-                            class: "btn {connection_button_style}",
-                            onclick: move |_| {
-                                match connection() {
-                                    Some(Some(c @ IntegrationConnection { status: IntegrationConnectionStatus::Validated, .. })) => if has_all_oauth_scopes { on_disconnect.call(c) } else { on_reconnect.call(c) },
-                                    Some(Some(c @ IntegrationConnection { status: IntegrationConnectionStatus::Failing, .. })) => on_reconnect.call(c),
-                                    Some(Some(c @ IntegrationConnection { status: IntegrationConnectionStatus::Created, .. })) => on_connect.call(Some(c)),
-                                    _ => on_connect.call(None),
+                    div {
+                        class: "flex gap-4",
+
+                        if add_disconnect_button {
+                            div {
+                                class: "card-actions flex-1 justify-start items-center",
+
+                                button {
+                                    class: "btn btn-primary",
+                                    onclick: move |_| {
+                                        if let Some(Some(c)) = connection() {
+                                            on_disconnect.call(c);
+                                        }
+                                    },
+
+                                    "Disconnect"
                                 }
-                            },
-
-                            "{connection_button_label}"
+                            }
                         }
-                    }
 
-                    if add_disconnect_button {
                         div {
-                            class: "card-actions justify-end",
+                            class: "card-actions flex-1 justify-end items-center",
 
                             button {
-                                class: "btn btn-primary",
+                                class: "btn {connection_button_style}",
                                 onclick: move |_| {
-                                    if let Some(Some(c)) = connection() {
-                                        on_disconnect.call(c);
+                                    match connection() {
+                                        Some(Some(c @ IntegrationConnection { status: IntegrationConnectionStatus::Validated, .. })) => if has_all_oauth_scopes { on_disconnect.call(c) } else { on_reconnect.call(c) },
+                                        Some(Some(c @ IntegrationConnection { status: IntegrationConnectionStatus::Failing, .. })) => on_reconnect.call(c),
+                                        Some(Some(c @ IntegrationConnection { status: IntegrationConnectionStatus::Created, .. })) => on_connect.call(Some(c)),
+                                        _ => on_connect.call(None),
                                     }
                                 },
 
-                                "Disconnect"
+                                "{connection_button_label}"
                             }
                         }
+                    }
+                }
+
+                div {
+                    class: "flex flex-col grow justify-center items-start",
+                    if let Some(notifications_sync_message) = &notifications_sync_message {
+                        span { "{notifications_sync_message}" }
+                    }
+                    if let Some(tasks_sync_message) = &tasks_sync_message {
+                        span { "{tasks_sync_message}" }
+                    }
+                    if notifications_sync_message.is_none() && tasks_sync_message.is_none() {
+                        span { }
                     }
                 }
 
@@ -386,7 +392,7 @@ pub fn IntegrationSettings(
                         class: "alert rounded-md! alert-soft alert-error shadow-lg text-sm flex gap-2",
                         role: "alert",
 
-                        Icon { class: "w-5 h-5", icon: BsExclamationTriangle }
+                        Icon { class: "min-w-5 h-5", icon: BsExclamationTriangle }
                         span { "{failure_message}" }
                     }
                 }
@@ -397,7 +403,7 @@ pub fn IntegrationSettings(
                             class: "alert rounded-md! alert-soft alert-warning shadow-lg text-sm flex gap-2",
                             role: "alert",
 
-                            Icon { class: "w-5 h-5", icon: BsExclamationTriangle }
+                            Icon { class: "min-w-5 h-5", icon: BsExclamationTriangle }
                             div {
                                 class: "flex flex-col gap-1",
                                 span { "{kind} is connected, but it is missing some permissions. Some Universal Inbox features may not work properly." }
@@ -441,7 +447,7 @@ pub fn Documentation(
                 div {
                     class: "alert rounded-md! alert-soft alert-warning shadow-lg my-4 py-2 text-sm flex gap-2",
                     role: "alert",
-                    Icon { class: "w-5 h-5", icon: BsExclamationTriangle }
+                    Icon { class: "min-w-5 h-5", icon: BsExclamationTriangle }
                     p { class: "max-w-full prose prose-sm", dangerous_inner_html: "{warning_message}" }
                 }
             }

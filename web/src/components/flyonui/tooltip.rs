@@ -13,6 +13,7 @@ pub fn Tooltip(
     class: ReadOnlySignal<Option<String>>,
     tooltip_class: ReadOnlySignal<Option<String>>,
     placement: Option<TooltipPlacement>,
+    disabled: ReadOnlySignal<Option<bool>>,
     children: Element,
 ) -> Element {
     let placement_class = placement.unwrap_or(TooltipPlacement::Left).to_string();
@@ -22,6 +23,10 @@ pub fn Tooltip(
             forget_flyonui_tooltip_element(&element);
         }
     });
+
+    if disabled().unwrap_or_default() {
+        return rsx! { { children } };
+    }
 
     rsx! {
         div {

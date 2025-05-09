@@ -54,7 +54,9 @@ pub fn TodoistNotificationListItem(
             },
             action_buttons: get_notification_list_item_action_buttons(
                 notification,
-                list_context().show_shortcut
+                list_context().show_shortcut,
+                None,
+                None
             ),
             is_selected,
             on_select,

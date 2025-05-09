@@ -6,8 +6,8 @@ pub const VERSION: Option<&'static str> = option_env!("VERSION");
 
 #[derive(Debug, Default)]
 pub struct UniversalInboxUIModel {
-    pub selected_notification_index: usize,
-    pub selected_task_index: usize,
+    pub selected_notification_index: Option<usize>,
+    pub selected_task_index: Option<usize>,
     pub is_help_enabled: bool,
     pub is_task_actions_enabled: bool,
     pub authentication_state: AuthenticationState,

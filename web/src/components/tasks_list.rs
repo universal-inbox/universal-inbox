@@ -38,28 +38,31 @@ pub fn TasksList(tasks: ReadOnlySignal<SortedGroups<String, TaskWithOrder>>) -> 
     let mut current_group = None;
 
     rsx! {
-        List {
-            id: "tasks_list",
-            show_shortcut: UI_MODEL.read().is_help_enabled,
+        div {
+            class: "h-full overflow-y-auto scroll-y-auto px-2 snap-y snap-mandatory",
+            List {
+                id: "tasks_list",
+                show_shortcut: UI_MODEL.read().is_help_enabled,
 
-            for (i, (group, task)) in tasks.read().iter().enumerate() {
-                if current_group != Some(group) {
-                    thead {
-                        tr {
-                            th {
-                                class: "flex flex-col px-0 pb-1 text-base-content/50 text-sm border-b snap-start",
-                                span { "{group}" }
+                for (i, (group, task)) in tasks.read().iter().enumerate() {
+                    if current_group != Some(group) {
+                        thead {
+                            tr {
+                                th {
+                                    class: "flex flex-col px-0 pb-1 text-base-content/50 text-sm border-b snap-start",
+                                    span { "{group}" }
+                                }
                             }
                         }
+                        { current_group = Some(group); }
                     }
-                    { current_group = Some(group); }
-                }
 
-                tbody {
-                    TaskListItem {
-                        task: Signal::new(task.task.clone()),
-                        is_selected: i == UI_MODEL.read().selected_task_index,
-                        on_select: move |_| { UI_MODEL.write().selected_task_index = i; },
+                    tbody {
+                        TaskListItem {
+                            task: Signal::new(task.task.clone()),
+                            is_selected: Some(i) == UI_MODEL.read().selected_task_index,
+                            on_select: move |_| { UI_MODEL.write().selected_task_index = Some(i); },
+                        }
                     }
                 }
             }
@@ -113,6 +116,8 @@ fn TaskListItem(
 pub fn get_task_list_item_action_buttons(
     task: ReadOnlySignal<Task>,
     show_shortcut: bool,
+    button_class: Option<String>,
+    container_class: Option<String>,
 ) -> Vec<Element> {
     let context = use_context::<Memo<TaskListContext>>();
 
@@ -123,6 +128,8 @@ pub fn get_task_list_item_action_buttons(
             disabled_label: (!context().is_task_actions_enabled)
                 .then_some("No task management service connected".to_string()),
             show_shortcut,
+            button_class,
+            container_class,
             onclick: move |_| {
                 context().task_service
                     .send(TaskCommand::Complete(task().id));

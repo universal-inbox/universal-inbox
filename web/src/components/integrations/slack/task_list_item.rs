@@ -57,6 +57,8 @@ pub fn SlackStarTaskListItem(
             action_buttons: get_task_list_item_action_buttons(
                 task,
                 list_context().show_shortcut,
+                None,
+                None
             ),
             is_selected,
             on_select,
@@ -99,6 +101,8 @@ pub fn SlackReactionTaskListItem(
             action_buttons: get_task_list_item_action_buttons(
                 task,
                 list_context().show_shortcut,
+                None,
+                None,
             ),
             is_selected,
             on_select,

@@ -15,7 +15,7 @@ pub fn UserProfilePage() -> Element {
             class: "h-full mx-auto flex flex-row px-4",
 
             div {
-                class: "flex flex-col h-full w-full overflow-auto scroll-auto gap-4 p-8",
+                class: "flex flex-col h-full w-full overflow-y-auto scroll-y-auto gap-4 p-8",
 
                 UserProfileCard {}
                 AuthenticationTokensCard {}

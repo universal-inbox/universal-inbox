@@ -28,7 +28,7 @@ pub fn SlackThreadPreview(
 
     rsx! {
         div {
-            class: "flex flex-col w-full gap-2",
+            class: "flex flex-col w-full gap-2 h-full",
 
             div {
                 class: "flex items-center gap-2",
@@ -96,7 +96,8 @@ fn SlackThreadDisplay(
 
     rsx! {
         div {
-            class: "card w-full bg-base-200",
+            id: "notification-preview-details",
+            class: "card w-full bg-base-200 h-full overflow-y-auto scroll-y-auto",
             div {
                 class: "card-body p-2 flex flex-col gap-2",
 
@@ -127,7 +128,7 @@ fn SlackThreadDisplay(
 
                 if let Some(unread_message) = unread_message {
                     div {
-                        class: "divider divider-primary grow my-0 text-xs text-primary",
+                        class: "divider divider-primary my-0 text-xs text-primary",
                         "{unread_message}"
                     }
                     for message in unread_messages {

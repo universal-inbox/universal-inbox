@@ -11,7 +11,10 @@ use universal_inbox::{
 };
 
 use crate::{
-    components::floating_label_inputs::{FloatingLabelInputSearchSelect, FloatingLabelSelect},
+    components::{
+        floating_label_inputs::{FloatingLabelInputSearchSelect, FloatingLabelSelect},
+        flyonui::tooltip::{Tooltip, TooltipPlacement},
+    },
     config::get_api_base_url,
     model::UniversalInboxUIModel,
 };
@@ -44,13 +47,14 @@ pub fn LinearProviderConfiguration(
         }
     });
     let api_base_url = get_api_base_url().unwrap();
+    let as_tasks_disabled = !ui_model.read().is_task_actions_enabled;
 
     rsx! {
         div {
             class: "flex flex-col gap-2",
 
             div {
-                class: "flex items-center",
+                class: "flex items-center gap-2",
                 label {
                     class: "label-text cursor-pointer grow text-sm text-base-content",
                     "Synchronize Linear notifications"
@@ -80,41 +84,42 @@ pub fn LinearProviderConfiguration(
             div {
                 class: "flex flex-col gap-2 overflow-visible",
 
-                div {
-                    class: "flex items-center",
-                    label {
-                        class: "label-text cursor-pointer grow text-sm text-base-content",
-                        "for": "linear-issues-as-tasks",
-                        "Synchronize Linear assigned issues as tasks"
-                    }
-                    if !ui_model.read().is_task_actions_enabled {
-                        span {
-                            class: "label-text text-error",
-                            "A task management service must be connected to enable this feature"
-                        }
-                    }
+                Tooltip {
+                    placement: TooltipPlacement::Bottom,
+                    disabled: !as_tasks_disabled,
+                    tooltip_class: "tooltip-error",
+                    text: "A task management service must be connected to enable this feature",
+
                     div {
-                        class: "relative inline-block",
-                        input {
-                            r#type: "checkbox",
-                            class: "switch switch-soft switch-outline switch-sm peer",
-                            disabled: !ui_model.read().is_task_actions_enabled,
-                            oninput: move |event| {
-                                on_config_change.call(IntegrationConnectionConfig::Linear(LinearConfig {
-                                    sync_task_config: LinearSyncTaskConfig {
-                                        enabled: event.value() == "true",
-                                        ..config().sync_task_config
-                                    },
-                                    ..config()
-                                }))
-                            },
-                            checked: config().sync_task_config.enabled
+                        class: "flex items-center gap-2",
+                        label {
+                            class: "label-text cursor-pointer grow text-sm text-base-content text-start",
+                            "for": "linear-issues-as-tasks",
+                            "Synchronize Linear assigned issues as tasks"
                         }
-                        span {
-                            class: "icon-[tabler--check] text-primary-content absolute start-1 top-1 hidden size-4 peer-checked:block"
-                        }
-                        span {
-                            class: "icon-[tabler--x] text-neutral-content absolute end-1 top-1 block size-4 peer-checked:hidden"
+                        div {
+                            class: "relative inline-block",
+                            input {
+                                r#type: "checkbox",
+                                class: "switch switch-soft switch-outline switch-sm peer",
+                                disabled: as_tasks_disabled,
+                                oninput: move |event| {
+                                    on_config_change.call(IntegrationConnectionConfig::Linear(LinearConfig {
+                                        sync_task_config: LinearSyncTaskConfig {
+                                            enabled: event.value() == "true",
+                                            ..config().sync_task_config
+                                        },
+                                        ..config()
+                                    }))
+                                },
+                                checked: config().sync_task_config.enabled
+                            }
+                            span {
+                                class: "icon-[tabler--check] text-primary-content absolute start-1 top-1 hidden size-4 peer-checked:block"
+                            }
+                            span {
+                                class: "icon-[tabler--x] text-neutral-content absolute end-1 top-1 block size-4 peer-checked:hidden"
+                            }
                         }
                     }
                 }
@@ -123,7 +128,7 @@ pub fn LinearProviderConfiguration(
                     class: "collapse transition-[height] duration-300 {collapse_style} pb-0 pr-0 flex flex-col gap-2",
 
                     div {
-                        class: "flex items-center",
+                        class: "flex items-center gap-2",
                         label {
                             class: "label-text cursor-pointer grow text-sm text-base-content",
                             "Project to assign synchronized tasks to"
@@ -156,7 +161,7 @@ pub fn LinearProviderConfiguration(
                     }
 
                     div {
-                        class: "flex items-center",
+                        class: "flex items-center gap-2",
                         label {
                             class: "label-text cursor-pointer grow text-sm text-base-content",
                             "Due date to assign to synchronized tasks"

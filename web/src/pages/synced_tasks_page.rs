@@ -7,7 +7,7 @@ use log::debug;
 use sorted_groups::SortedGroups;
 use web_sys::KeyboardEvent;
 
-use universal_inbox::{task::Task, HasHtmlUrl};
+use universal_inbox::{task::Task, HasHtmlUrl, Page};
 
 use crate::{
     components::{task_preview::TaskPreview, tasks_list::TasksList},
@@ -18,7 +18,7 @@ use crate::{
         flyonui::has_flyonui_modal_opened,
         task_service::{TaskCommand, SYNCED_TASKS_PAGE},
     },
-    utils::{open_link, scroll_element, scroll_element_by_page},
+    utils::{get_screen_width, open_link, scroll_element, scroll_element_by_page},
 };
 
 static KEYBOARD_HANDLER: SyncTasksPageKeyboardHandler = SyncTasksPageKeyboardHandler {};
@@ -37,11 +37,20 @@ static SORTED_SYNCED_TASKS: GlobalSignal<SortedGroups<String, TaskWithOrder>> =
 #[component]
 pub fn SyncedTasksPage() -> Element {
     debug!("Rendering synced tasks page");
+    let tasks = Into::<ReadOnlySignal<Page<Task>>>::into(SYNCED_TASKS_PAGE.signal());
 
     use_effect(move || {
         let tasks_count = SYNCED_TASKS_PAGE().content.len();
-        if tasks_count > 0 && UI_MODEL.read().selected_task_index >= tasks_count {
-            UI_MODEL.write().selected_task_index = tasks_count - 1;
+        if tasks_count > 0 {
+            let mut model = UI_MODEL.write();
+            if let Some(index) = model.selected_task_index {
+                if index >= tasks_count {
+                    model.selected_task_index = Some(tasks_count - 1);
+                }
+            } else if get_screen_width().unwrap_or_default() >= 1024 {
+                // ie. lg screen
+                model.selected_task_index = Some(0);
+            }
         }
         *SORTED_SYNCED_TASKS.write() = SortedGroups::new(
             SYNCED_TASKS_PAGE()
@@ -62,7 +71,7 @@ pub fn SyncedTasksPage() -> Element {
     rsx! {
         div {
             id: "tasks-page",
-            class: "h-full mx-auto flex flex-row px-4 divide-x divide-base-content/25",
+            class: "h-full mx-auto flex flex-row lg:px-4 lg:divide-x divide-base-content/25 relative",
             onmounted: move |_| {
                 KEYBOARD_MANAGER.write().active_keyboard_handler = Some(&KEYBOARD_HANDLER);
             },
@@ -82,21 +91,24 @@ pub fn SyncedTasksPage() -> Element {
                 }
             } else {
                 div {
-                    id: "synced-tasks-list",
-                    class: "h-full basis-2/3 overflow-auto scroll-auto px-2 snap-y snap-mandatory",
+                    class: "h-full lg:basis-2/3 max-lg:w-full max-lg:absolute",
 
                     TasksList { tasks: SORTED_SYNCED_TASKS.signal() }
                 }
 
-                if let Some((_, task)) = SORTED_SYNCED_TASKS().get(UI_MODEL.read().selected_task_index) {
-                    div {
-                        id: "task-preview",
-                        class: "h-full basis-1/3 overflow-auto scroll-auto px-2 py-2 flex flex-row",
+                if let Some(index) = UI_MODEL.read().selected_task_index {
+                    if let Some((_, task)) = SORTED_SYNCED_TASKS().get(index) {
+                        div {
+                            id: "task-preview",
+                            class: "h-full lg:basis-1/3 max-lg:w-full max-lg:absolute lg:max-w-sm xl:max-w-md 2xl:max-w-xl px-2 py-2 flex flex-row bg-base-100 z-auto",
 
-                        TaskPreview {
-                            task: task.task.clone(),
-                            expand_details: UI_MODEL.read().preview_cards_expanded,
-                            is_help_enabled: UI_MODEL.read().is_help_enabled,
+                            TaskPreview {
+                                task: task.task.clone(),
+                                expand_details: UI_MODEL.read().preview_cards_expanded,
+                                is_help_enabled: UI_MODEL.read().is_help_enabled,
+                                ui_model: UI_MODEL.signal(),
+                                tasks_count: tasks().content.len()
+                            }
                         }
                     }
                 }
@@ -116,17 +128,26 @@ impl KeyboardHandler for SyncTasksPageKeyboardHandler {
         let task_service = use_coroutine_handle::<TaskCommand>();
         let sorted_tasks = SORTED_SYNCED_TASKS();
         let list_length = sorted_tasks.len();
-        let selected_task = sorted_tasks.get(UI_MODEL.peek().selected_task_index);
+        let selected_task_index = UI_MODEL.peek().selected_task_index;
+        let selected_task = selected_task_index.and_then(|index| sorted_tasks.get(index));
         let mut handled = true;
 
         match event.key().as_ref() {
-            "ArrowDown" if UI_MODEL.peek().selected_task_index < (list_length - 1) => {
-                let mut ui_model = UI_MODEL.write();
-                ui_model.selected_task_index += 1;
+            "ArrowDown" => {
+                if let Some(index) = selected_task_index {
+                    if index < (list_length - 1) {
+                        let mut ui_model = UI_MODEL.write();
+                        ui_model.selected_task_index = Some(index + 1);
+                    }
+                }
             }
-            "ArrowUp" if UI_MODEL.peek().selected_task_index > 0 => {
-                let mut ui_model = UI_MODEL.write();
-                ui_model.selected_task_index -= 1;
+            "ArrowUp" => {
+                if let Some(index) = selected_task_index {
+                    if index > 0 {
+                        let mut ui_model = UI_MODEL.write();
+                        ui_model.selected_task_index = Some(index - 1);
+                    }
+                }
             }
             "c" => {
                 if let Some((_, TaskWithOrder { task, .. })) = selected_task {

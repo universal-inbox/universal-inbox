@@ -39,18 +39,7 @@ pub fn TodoistTaskPreview(
 
     rsx! {
         div {
-            class: "flex flex-col gap-2 w-full",
-
-            div {
-                class: "flex gap-2",
-
-                a {
-                    class: "text-xs text-base-content/50",
-                    href: "{project_link}",
-                    target: "_blank",
-                    "#{task().project}"
-                }
-            }
+            class: "flex flex-col gap-2 w-full h-full",
 
             h3 {
                 class: "flex items-center gap-2 text-base",
@@ -66,7 +55,19 @@ pub fn TodoistTaskPreview(
             }
 
             div {
-                class: "flex flex-col gap-2 w-full",
+                id: "task-preview-details",
+                class: "flex flex-col gap-2 w-full h-full overflow-y-auto scroll-y-auto",
+
+                div {
+                    class: "flex gap-2",
+
+                    a {
+                        class: "text-xs text-base-content/50",
+                        href: "{project_link}",
+                        target: "_blank",
+                        "#{task().project}"
+                    }
+                }
 
                 div {
                     class: "flex text-base-content/50 gap-1 text-xs",
@@ -99,11 +100,11 @@ pub fn TodoistTaskPreview(
                     span { class: "text-base-content/50", "Priority:" }
                     "{priority}"
                 }
-            }
 
-            Markdown {
-                class: "prose prose-sm w-full max-w-full",
-                text: task().body
+                Markdown {
+                    class: "prose prose-sm w-full max-w-full",
+                    text: task().body
+                }
             }
         }
     }

@@ -16,7 +16,7 @@ use gravatar_rs::Generator;
 
 use crate::{
     config::APP_CONFIG,
-    images::UI_LOGO_TRANSPARENT,
+    icons::UILogo,
     model::{DEFAULT_USER_AVATAR, UI_MODEL, VERSION},
     route::Route,
     services::{
@@ -46,10 +46,6 @@ pub fn NavBar() -> Element {
             }
         })
         .unwrap_or_else(|| DEFAULT_USER_AVATAR.to_string());
-    let support_href = APP_CONFIG
-        .read()
-        .as_ref()
-        .and_then(|config| config.support_href.clone());
 
     let show_changelog = APP_CONFIG
         .read()
@@ -76,13 +72,9 @@ pub fn NavBar() -> Element {
             class: "navbar shadow-lg z-10 p-2",
 
             div {
-                class: "navbar-start items-center gap-8",
+                class: "sm:navbar-start max-sm:flex max-sm:grow items-center gap-8",
 
-                img {
-                    class: "rounded-full w-12 h-12",
-                    src: "{UI_LOGO_TRANSPARENT}",
-                    alt: "Universal Inbox logo",
-                }
+                UILogo { class: "rounded-full w-12 h-12" }
 
                 div {
                     class: "indicator",
@@ -116,59 +108,19 @@ pub fn NavBar() -> Element {
             if let Some(version) = VERSION {
                 if UI_MODEL.read().is_help_enabled {
                     div {
-                        class: "navbar-center",
+                        class: "navbar-center max-sm:hidden",
                         span { class: "text-xs text-base-content/50", "build: {version}" }
                     }
                 }
             }
 
             div {
-                class: "navbar-end items-center gap-2",
+                class: "sm:navbar-end items-center gap-2",
 
-                a {
-                    class: "p-2 text-neutral",
-                    href: "https://github.com/universal-inbox/universal-inbox",
-                    title: "Universal Inbox on GitHub",
-                    target: "_blank",
-                    Icon { class: "w-5 h-5", icon: GoMarkGithub }
-                }
-
-                if show_changelog {
-                    button {
-                       class: "btn btn-text btn-square relative",
-                       div { id: "ui-changelog", class: "absolute top-0 left-0" }
-                       Icon { class: "w-5 h-5", icon: BsBell }
-                    }
-                }
-
-                if let Some(support_href) = support_href {
-                    a {
-                        class: "btn btn-text btn-square",
-                        href: "{support_href}",
-                        title: "Contact support",
-                        Icon { class: "w-5 h-5", icon: BsQuestionLg }
-                    }
-                }
-
-                label {
-                    class: "btn btn-text btn-square swap swap-rotate",
-                    input {
-                        class: "hidden",
-                        "type": "checkbox",
-                        checked: "{IS_DARK_MODE}",
-                        onclick: move |_| {
-                            *IS_DARK_MODE.write() = toggle_dark_mode(true).expect("Failed to switch the theme");
-                        }
-                    }
-                    Icon { class: "swap-on w-5 h-5", icon: BsSun }
-                    Icon { class: "swap-off w-5 h-5", icon: BsMoon }
-                }
-
-                Link {
-                    class: "btn btn-text btn-square",
-                    active_class: "btn-active",
-                    to: Route::SettingsPage {},
-                    Icon { class: "w-5 h-5", icon: BsGear }
+                NavBarUtils {
+                    class: "max-sm:hidden",
+                    show_changelog,
+                    in_menu: false
                 }
 
                 div {
@@ -204,6 +156,12 @@ pub fn NavBar() -> Element {
                         "aria-labelledby": "dropdown-menu-icon",
                         tabindex: 0,
 
+                        NavBarUtils {
+                            class: "sm:hidden",
+                            show_changelog,
+                            in_menu: true
+                        }
+
                         li {
                             Link {
                                 class: "dropdown-item",
@@ -221,6 +179,80 @@ pub fn NavBar() -> Element {
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn NavBarUtils(show_changelog: bool, in_menu: bool, class: Option<String>) -> Element {
+    let support_href = APP_CONFIG
+        .read()
+        .as_ref()
+        .and_then(|config| config.support_href.clone());
+    let class = class.unwrap_or_default();
+
+    rsx! {
+        div {
+            class: "flex {class}",
+
+            a {
+                class: "grow p-2 text-neutral",
+                href: "https://github.com/universal-inbox/universal-inbox",
+                title: "Universal Inbox on GitHub",
+                target: "_blank",
+                Icon { class: "w-5 h-5", icon: GoMarkGithub }
+            }
+
+            if show_changelog {
+                button {
+                    class: "btn btn-text btn-square grow relative",
+                    div { id: "ui-changelog", class: "absolute top-0 left-0" }
+                    Icon { class: "w-5 h-5", icon: BsBell }
+                }
+            }
+
+            if let Some(support_href) = support_href {
+                a {
+                    class: "btn btn-text btn-square grow",
+                    href: "{support_href}",
+                    title: "Contact support",
+                    Icon { class: "w-5 h-5", icon: BsQuestionLg }
+                }
+            }
+
+            label {
+                class: "btn btn-text btn-square swap swap-rotate grow",
+                input {
+                    class: "hidden",
+                    "type": "checkbox",
+                    checked: "{IS_DARK_MODE}",
+                    onclick: move |_| {
+                        *IS_DARK_MODE.write() = toggle_dark_mode(true).expect("Failed to switch the theme");
+                    }
+                }
+                Icon { class: "swap-on w-5 h-5", icon: BsSun }
+                Icon { class: "swap-off w-5 h-5", icon: BsMoon }
+            }
+
+            if !in_menu {
+                Link {
+                    class: "btn btn-text btn-square grow",
+                    active_class: "btn-active",
+                    to: Route::SettingsPage {},
+                    Icon { class: "w-5 h-5", icon: BsGear }
+                }
+            }
+        }
+
+        if in_menu {
+            li {
+                Link {
+                    class: "dropdown-item {class}",
+                    to: Route::SettingsPage {},
+                    Icon { class: "w-5 h-5", icon: BsGear }
+                    p { "Settings" }
                 }
             }
         }

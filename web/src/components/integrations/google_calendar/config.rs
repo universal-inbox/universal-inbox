@@ -16,7 +16,7 @@ pub fn GoogleCalendarProviderConfiguration(
             class: "flex flex-col gap-2",
 
             div {
-                class: "flex items-center",
+                class: "flex items-center gap-2",
                 label {
                     class: "label-text cursor-pointer grow text-sm text-base-content",
                     "Synchronize Google Calendar invitation as notification"

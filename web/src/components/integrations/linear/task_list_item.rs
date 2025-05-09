@@ -44,7 +44,9 @@ pub fn LinearTaskListItem(
             subicon: rsx! { LinearIssueIcon { class: "h-5 w-5 min-w-5", linear_issue } },
             action_buttons: get_task_list_item_action_buttons(
                 task,
-                list_context().show_shortcut
+                list_context().show_shortcut,
+                None,
+                None,
             ),
             is_selected,
             on_select,

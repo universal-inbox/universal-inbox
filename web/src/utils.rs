@@ -179,3 +179,12 @@ pub async fn get_navigator_credentials(
     .map_err(|err| JsError::try_from(err).unwrap())
     .context("Failed to get public key for Passkey authentication")
 }
+
+pub fn get_screen_width() -> Result<usize> {
+    let window = web_sys::window().context("Unable to load `window`")?;
+    Ok(window
+        .inner_width()
+        .map_err(|err| JsError::try_from(err).unwrap())?
+        .as_f64()
+        .unwrap_or_default() as usize)
+}

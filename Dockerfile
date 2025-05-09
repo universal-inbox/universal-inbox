@@ -60,8 +60,7 @@ COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/Cargo.toml web/Cargo.toml
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" src src
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web web
 RUN devbox run -- just web/build-assets \
-  && devbox run -- just web/build-release \
-  && sed -i 's#http://localhost:8000/api#/api#' web/public/index.html
+  && devbox run -- just web/build-release
 
 FROM dep-api-builder as release-api-builder
 ARG VERSION

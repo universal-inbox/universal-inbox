@@ -27,19 +27,7 @@ pub fn SlackMessagePreview(
 
     rsx! {
         div {
-            class: "flex flex-col w-full gap-2",
-
-            div {
-                class: "flex items-center gap-2",
-
-                SlackTeamDisplay { team: slack_message().team }
-                a {
-                    class: "text-xs text-base-content/50",
-                    href: "{slack_message().get_channel_html_url()}",
-                    target: "_blank",
-                    "#{channel_name}"
-                }
-            }
+            class: "flex flex-col w-full gap-2 h-full",
 
             h3 {
                 class: "flex items-center gap-2 text-base",
@@ -51,6 +39,18 @@ pub fn SlackMessagePreview(
                     target: "_blank",
                     SlackMarkdown { text: "{title}" }
                     Icon { class: "h-5 w-5 min-w-5 text-base-content/50 p-1", icon: BsArrowUpRightSquare }
+                }
+            }
+
+            div {
+                class: "flex items-center gap-2",
+
+                SlackTeamDisplay { team: slack_message().team }
+                a {
+                    class: "text-xs text-base-content/50",
+                    href: "{slack_message().get_channel_html_url()}",
+                    target: "_blank",
+                    "#{channel_name}"
                 }
             }
 
@@ -66,27 +66,31 @@ fn SlackMessageDisplay(slack_message: ReadOnlySignal<SlackMessageDetails>) -> El
     let (user_name, avatar_url) = get_sender_name_and_avatar(&slack_message().sender);
 
     rsx! {
-        CardWithHeaders {
-            card_class: "bg-neutral text-neutral-content text-xs",
-            headers: vec![
-                rsx! {
-                    MessageHeader {
-                        user_name,
-                        avatar_url,
-                        display_name: true,
-                        sent_at: posted_at
+        div {
+            id: "task-preview-details",
+            class: "flex flex-col h-full overflow-y-auto scroll-y-auto",
+            CardWithHeaders {
+                card_class: "bg-neutral text-neutral-content text-xs",
+                headers: vec![
+                    rsx! {
+                        MessageHeader {
+                            user_name,
+                            avatar_url,
+                            display_name: true,
+                            sent_at: posted_at
+                        }
                     }
-                }
-            ],
+                ],
 
-            div {
-                class: "flex flex-col",
-                SlackMarkdown { class: "prose prose-sm", text }
+                div {
+                    class: "flex flex-col",
+                    SlackMarkdown { class: "prose prose-sm", text }
 
-                if let Some(reactions) = slack_message().message.content.reactions {
-                    SlackReactions {
-                        reactions,
-                        slack_references: slack_message().references.unwrap_or_default(),
+                    if let Some(reactions) = slack_message().message.content.reactions {
+                        SlackReactions {
+                            reactions,
+                            slack_references: slack_message().references.unwrap_or_default(),
+                        }
                     }
                 }
             }

@@ -6,7 +6,7 @@ use chrono::{DateTime, Utc};
 use dioxus::prelude::*;
 use dioxus_free_icons::{
     icons::{
-        bs_icons::{BsKey, BsShieldLock},
+        bs_icons::{BsKey, BsShieldLock, BsTrash},
         go_icons::GoCopy,
     },
     Icon,
@@ -55,9 +55,9 @@ pub fn AuthenticationTokensCard() -> Element {
                     class: "flex flex-col gap-2",
 
                     div {
-                        class: "flex flex-row justify-between items-center",
+                        class: "flex flex-col sm:flex-row justify-between items-center",
                         div {
-                            class: "card-title",
+                            class: "card-title flex flex-row items-center",
                             figure { class: "p-2", Icon { class: "w-8 h-8", icon: BsShieldLock } }
                             "API keys"
                         }
@@ -84,13 +84,12 @@ pub fn AuthenticationTokensCard() -> Element {
                     }
 
                     table {
-                        class: "table table-sm table-fixed",
+                        class: "table table-xs sm:table-sm table-fixed",
                         thead {
                             tr {
-                                th { class: "w-80", "ID" }
                                 th { class: "w-32", "Expiration date" }
                                 th { "Key" }
-                                th { class: "w-32", "" }
+                                th { class: "sm:w-32 w-8", "" }
                             }
                         }
                         tbody {
@@ -146,7 +145,6 @@ pub fn AuthenticationToken(
     rsx! {
         tr {
             class: "{line_class}",
-            td { "{id}" }
 
             if let Some(expire_at) = expire_at {
                 td { r#"{expire_at.date_naive().format("%Y-%m-%d")}"# }
@@ -163,9 +161,14 @@ pub fn AuthenticationToken(
 
                 if !is_copiable {
                     button {
-                        class: "btn btn-sm btn-error btn-disabled",
+                        class: "btn btn-sm btn-error btn-disabled hidden sm:block",
                         onclick: move |_| {},
                         "Revoke"
+                    }
+                    button {
+                        class: "btn btn-sm btn-error btn-disabled sm:hidden",
+                        onclick: move |_| {},
+                        Icon { class: "w-4 h-4", icon: BsTrash }
                     }
                 } else if is_copied() {
                     div {

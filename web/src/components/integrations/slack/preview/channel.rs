@@ -21,7 +21,7 @@ pub fn SlackChannelPreview(
 
     rsx! {
         div {
-            class: "flex flex-col w-full gap-2",
+            class: "flex flex-col w-full gap-2 h-full",
 
             div {
                 class: "flex items-center gap-2",

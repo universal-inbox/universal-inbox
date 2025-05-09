@@ -110,12 +110,13 @@ pub fn ListItem(
                         div {
                             class: "flex",
                             a {
-                                class: "flex items-center",
+                                class: "flex items-center max-lg:hidden",
                                 href: "{link}",
                                 target: "_blank",
                                 Markdown { text: "{title}" }
                                 Icon { class: "h-5 w-5 min-w-5 text-base-content/50 p-1", icon: BsArrowUpRightSquare }
                             }
+                            Markdown { class: "lg:hidden", text: "{title}" }
                             div { class: "grow" }
                         }
 
@@ -125,7 +126,7 @@ pub fn ListItem(
             }
 
             td {
-                class: "px-2 py-0 rounded-none flex items-center justify-end",
+                class: "px-2 py-0 rounded-none flex items-center justify-end max-lg:hidden",
                 div {
                     class: "swap {button_active_style}",
                     // Buttons
@@ -153,6 +154,8 @@ pub struct ListItemActionButtonProps {
     title: ReadOnlySignal<String>,
     shortcut: ReadOnlySignal<String>,
     disabled_label: Option<Option<String>>,
+    button_class: Option<String>,
+    container_class: Option<String>,
     show_shortcut: ReadOnlySignal<bool>,
     #[props(optional)]
     data_overlay: Option<String>,
@@ -169,16 +172,21 @@ pub fn ListItemActionButton(props: ListItemActionButtonProps) -> Element {
         }
     });
     let data_overlay = props.data_overlay.clone().unwrap_or_default();
+    let button_class = props
+        .button_class
+        .unwrap_or_else(|| "btn btn-text btn-square btn-sm".to_string());
+    let container_class = props.container_class.unwrap_or_default();
 
     if let Some(Some(label)) = props.disabled_label {
         rsx! {
             Tooltip {
+                class: "flex justify-center {container_class}",
                 tooltip_class: "tooltip-warning",
                 text: "{label}",
                 placement: TooltipPlacement::Left,
 
                 button {
-                    class: "btn btn-text btn-square btn-sm btn-disabled",
+                    class: "{button_class} btn-disabled",
                     title: "{props.title}",
 
                     { props.children }
@@ -188,7 +196,7 @@ pub fn ListItemActionButton(props: ListItemActionButtonProps) -> Element {
     } else {
         rsx! {
             div {
-                class: "relative group/notification-button",
+                class: "relative group/notification-button flex justify-center {container_class}",
 
                 span {
                     class: "{shortcut_visibility_style} kbd kbd-xs z-50 absolute top-5 left-1.5",
@@ -196,7 +204,7 @@ pub fn ListItemActionButton(props: ListItemActionButtonProps) -> Element {
                 }
 
                 button {
-                    class: "btn btn-text btn-square btn-sm",
+                    class: "{button_class}",
                     title: "{props.title}",
                     "data-overlay": "{data_overlay}",
                     onclick: move |evt| {

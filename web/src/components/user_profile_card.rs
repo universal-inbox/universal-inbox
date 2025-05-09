@@ -41,10 +41,10 @@ pub fn UserProfileCard() -> Element {
             div {
                 class: "card-body",
                 div {
-                    class: "flex flex-row gap-4",
+                    class: "flex flex-col sm:flex-row gap-4",
 
                     div {
-                        class: "avatar",
+                        class: "avatar justify-center",
 
                         div {
                             class: "w-24 rounded-full ring-3 ring-primary ring-offset-base-100 ring-offset-2",
@@ -56,13 +56,13 @@ pub fn UserProfileCard() -> Element {
                         class: "flex flex-col gap-2 justify-center grow",
 
                         div {
-                            class: "text-xl font-bold",
+                            class: "text-lg font-bold",
                             "{user_name}"
                         }
 
                         if let Some(ref email) = user.email {
                             div {
-                                class: "text-xl font-semibold",
+                                class: "text-lg font-semibold",
                                 "{email}"
                             }
                         }

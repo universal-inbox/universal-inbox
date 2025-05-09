@@ -80,7 +80,9 @@ pub fn LinearIssueNotificationListItem(
             subicon: rsx! { LinearIssueIcon { class: "h-5 w-5 min-w-5", linear_issue } },
             action_buttons: get_notification_list_item_action_buttons(
                 notification,
-                list_context().show_shortcut
+                list_context().show_shortcut,
+                None,
+                None
             ),
             is_selected,
             on_select,
@@ -137,7 +139,9 @@ pub fn LinearProjectNotificationListItem(
             },
             action_buttons: get_notification_list_item_action_buttons(
                 notification,
-                list_context().show_shortcut
+                list_context().show_shortcut,
+                None,
+                None
             ),
             is_selected,
             on_select,

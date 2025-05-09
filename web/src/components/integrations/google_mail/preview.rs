@@ -42,7 +42,7 @@ pub fn GoogleMailThreadPreview(
 
     rsx! {
         div {
-            class: "flex flex-col gap-2 w-full",
+            class: "flex flex-col gap-2 w-full h-full",
 
             h3 {
                 class: "flex items-center gap-2 text-base",
@@ -57,26 +57,31 @@ pub fn GoogleMailThreadPreview(
                 }
             }
 
-            TagsInCard {
-                tags: labels
-                    .iter()
-                    .map(|label| {
-                        let class = match label.as_str() {
-                            GOOGLE_MAIL_IMPORTANT_LABEL => Some("bg-red-500".to_string()),
-                            GOOGLE_MAIL_STARRED_LABEL => Some("bg-yellow-500".to_string()),
-                            _ => None,
-                        };
-                        if let Some(class) = class {
-                            Tag::Stylized { name: label.clone(), class }
-                        } else {
-                            Tag::Default { name: label.clone() }
-                        }
-                    })
-                    .collect()
-            }
+            div {
+                id: "notification-preview-details",
+                class: "flex flex-col gap-2 w-full h-full overflow-y-auto scroll-y-auto",
 
-            for message in google_mail_thread().messages.into_iter() {
-                GoogleMailThreadMessage { message: message }
+                TagsInCard {
+                    tags: labels
+                        .iter()
+                        .map(|label| {
+                            let class = match label.as_str() {
+                                GOOGLE_MAIL_IMPORTANT_LABEL => Some("bg-red-500".to_string()),
+                                GOOGLE_MAIL_STARRED_LABEL => Some("bg-yellow-500".to_string()),
+                                _ => None,
+                            };
+                            if let Some(class) = class {
+                                Tag::Stylized { name: label.clone(), class }
+                            } else {
+                                Tag::Default { name: label.clone() }
+                            }
+                        })
+                        .collect()
+                }
+
+                for message in google_mail_thread().messages.into_iter() {
+                    GoogleMailThreadMessage { message }
+                }
             }
         }
     }

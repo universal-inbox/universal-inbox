@@ -21,6 +21,7 @@ use universal_inbox::{
 use crate::{
     components::{
         floating_label_inputs::{FloatingLabelInputSearchSelect, FloatingLabelSelect},
+        flyonui::tooltip::{Tooltip, TooltipPlacement},
         integrations::slack::icons::SlackNotificationIcon,
     },
     config::get_api_base_url,
@@ -50,7 +51,7 @@ pub fn SlackProviderConfiguration(
 
             nav {
                 role: "tablist",
-                class: "tabs tabs-lifted tabs-sm",
+                class: "tabs tabs-bordered tabs-sm flex-wrap",
                 onmounted: move |element| {
                     let web_element = element.as_web_event();
                     init_flyonui_tabs_element(&web_element);
@@ -139,10 +140,12 @@ fn SlackStarConfiguration(
         }
     });
     let api_base_url = get_api_base_url().unwrap();
+    let as_tasks_disabled =
+        !config().star_config.sync_enabled || !ui_model.read().is_task_actions_enabled;
 
     rsx! {
         div {
-            class: "flex items-center",
+            class: "flex items-center gap-2",
             label {
                 class: "label-text cursor-pointer grow text-sm text-base-content",
                 "Synchronize Slack \"saved for later\" items"
@@ -173,7 +176,7 @@ fn SlackStarConfiguration(
         }
 
         div {
-            class: "flex items-center",
+            class: "flex items-center gap-2",
             label {
                 class: "label-text cursor-pointer grow text-sm text-base-content",
                 "for": "slack-saved-for-later-as-notifications",
@@ -201,38 +204,39 @@ fn SlackStarConfiguration(
         div {
             class: "flex flex-col gap-2 overflow-visible",
 
-            div {
-                class: "flex items-center",
-                label {
-                    class: "label-text cursor-pointer grow text-sm text-base-content",
-                    "for": "slack-saved-for-later-as-tasks",
-                    "Synchronize Slack \"saved for later\" items as tasks"
-                }
-                if !ui_model.read().is_task_actions_enabled {
-                    span {
-                        class: "label-text text-error",
-                        "A task management service must be connected to enable this feature"
+            Tooltip {
+                placement: TooltipPlacement::Bottom,
+                disabled: !as_tasks_disabled,
+                tooltip_class: "tooltip-error",
+                text: "A task management service must be connected to enable this feature",
+
+                div {
+                    class: "flex items-center gap-2",
+                    label {
+                        class: "label-text cursor-pointer grow text-sm text-base-content text-start",
+                        "for": "slack-saved-for-later-as-tasks",
+                        "Synchronize Slack \"saved for later\" items as tasks"
                     }
-                }
-                input {
-                    id: "slack-saved-for-later-as-tasks",
-                    disabled: !config().star_config.sync_enabled || !ui_model.read().is_task_actions_enabled,
-                    name: "star-sync-type",
-                    class: "radio radio-soft radio-sm",
-                    r#type: "radio",
-                    oninput: move |_event| {
-                        on_config_change.call(IntegrationConnectionConfig::Slack(SlackConfig {
-                            star_config: SlackStarConfig {
-                                sync_type: SlackSyncType::AsTasks(match &config().star_config.sync_type {
-                                    SlackSyncType::AsTasks(config) => config.clone(),
-                                    _ => Default::default(),
-                                }),
-                                ..config().star_config
-                            },
-                            ..config()
-                        }))
-                    },
-                    checked: !(config().star_config.sync_type == SlackSyncType::AsNotifications)
+                    input {
+                        id: "slack-saved-for-later-as-tasks",
+                        disabled: as_tasks_disabled,
+                        name: "star-sync-type",
+                        class: "radio radio-soft radio-sm",
+                        r#type: "radio",
+                        oninput: move |_event| {
+                            on_config_change.call(IntegrationConnectionConfig::Slack(SlackConfig {
+                                star_config: SlackStarConfig {
+                                    sync_type: SlackSyncType::AsTasks(match &config().star_config.sync_type {
+                                        SlackSyncType::AsTasks(config) => config.clone(),
+                                        _ => Default::default(),
+                                    }),
+                                    ..config().star_config
+                                },
+                                ..config()
+                            }))
+                        },
+                        checked: !(config().star_config.sync_type == SlackSyncType::AsNotifications)
+                    }
                 }
             }
 
@@ -240,7 +244,7 @@ fn SlackStarConfiguration(
                 class: "collapse transition-[height] duration-300 {collapse_style} pb-0 pr-0 flex flex-col gap-2",
 
                 div {
-                    class: "flex items-center",
+                    class: "flex items-center gap-2",
                     label {
                         class: "label-text cursor-pointer grow text-sm text-base-content",
                         "Project to assign synchronized tasks to"
@@ -279,7 +283,7 @@ fn SlackStarConfiguration(
                 }
 
                 div {
-                    class: "flex items-center",
+                    class: "flex items-center gap-2",
                     label {
                         class: "label-text cursor-pointer grow text-sm text-base-content",
                         "Due date to assign to synchronized tasks"
@@ -317,7 +321,7 @@ fn SlackStarConfiguration(
                 }
 
                 div {
-                    class: "flex items-center",
+                    class: "flex items-center gap-2",
                     label {
                         class: "label-text cursor-pointer grow text-sm text-base-content",
                         "Priority to assign to synchronized tasks"
@@ -390,10 +394,12 @@ fn SlackReactionConfiguration(
         }
     });
     let api_base_url = get_api_base_url().unwrap();
+    let as_tasks_disabled =
+        !config().reaction_config.sync_enabled || !ui_model.read().is_task_actions_enabled;
 
     rsx! {
         div {
-            class: "flex items-center",
+            class: "flex items-center gap-2",
 
             label {
                 class: "label-text cursor-pointer grow text-sm text-base-content",
@@ -425,7 +431,7 @@ fn SlackReactionConfiguration(
         }
 
         div {
-            class: "flex items-center",
+            class: "flex items-center gap-2",
             label {
                 class: "label-text cursor-pointer grow text-sm text-base-content",
                 "Emoji reaction to synchronize"
@@ -455,7 +461,7 @@ fn SlackReactionConfiguration(
         }
 
         div {
-            class: "flex items-center",
+            class: "flex items-center gap-2",
             label {
                 class: "label-text cursor-pointer grow text-sm text-base-content",
                 "for": "slack-reaction-as-notifications",
@@ -483,38 +489,39 @@ fn SlackReactionConfiguration(
         div {
             class: "flex flex-col gap-2 overflow-visible",
 
-            div {
-                class: "flex items-center",
-                label {
-                    class: "label-text cursor-pointer grow text-sm text-base-content",
-                    "for": "slack-reaction-as-tasks",
-                    "Synchronize Slack reacted items as tasks"
-                }
-                if !ui_model.read().is_task_actions_enabled {
-                    span {
-                        class: "label-text text-error",
-                        "A task management service must be connected to enable this feature"
+            Tooltip {
+                placement: TooltipPlacement::Bottom,
+                disabled: !as_tasks_disabled,
+                tooltip_class: "tooltip-error",
+                text: "A task management service must be connected to enable this feature",
+
+                div {
+                    class: "flex items-center gap-2",
+                    label {
+                        class: "label-text cursor-pointer grow text-sm text-base-content text-start",
+                        "for": "slack-reaction-as-tasks",
+                        "Synchronize Slack reacted items as tasks"
                     }
-                }
-                input {
-                    id: "slack-reaction-as-tasks",
-                    disabled: !config().reaction_config.sync_enabled || !ui_model.read().is_task_actions_enabled,
-                    name: "reaction-sync-type",
-                    class: "radio radio-soft radio-sm",
-                    r#type: "radio",
-                    oninput: move |_event| {
-                        on_config_change.call(IntegrationConnectionConfig::Slack(SlackConfig {
-                            reaction_config: SlackReactionConfig {
-                                sync_type: SlackSyncType::AsTasks(match &config().reaction_config.sync_type {
-                                    SlackSyncType::AsTasks(config) => config.clone(),
-                                    _ => Default::default(),
-                                }),
-                                ..config().reaction_config
-                            },
-                            ..config()
-                        }))
-                    },
-                    checked: !(config().reaction_config.sync_type == SlackSyncType::AsNotifications)
+                    input {
+                        id: "slack-reaction-as-tasks",
+                        disabled: as_tasks_disabled,
+                        name: "reaction-sync-type",
+                        class: "radio radio-soft radio-sm",
+                        r#type: "radio",
+                        oninput: move |_event| {
+                            on_config_change.call(IntegrationConnectionConfig::Slack(SlackConfig {
+                                reaction_config: SlackReactionConfig {
+                                    sync_type: SlackSyncType::AsTasks(match &config().reaction_config.sync_type {
+                                        SlackSyncType::AsTasks(config) => config.clone(),
+                                        _ => Default::default(),
+                                    }),
+                                    ..config().reaction_config
+                                },
+                                ..config()
+                            }))
+                        },
+                        checked: !(config().reaction_config.sync_type == SlackSyncType::AsNotifications)
+                    }
                 }
             }
 
@@ -522,7 +529,7 @@ fn SlackReactionConfiguration(
                 class: "collapse transition-[height] duration-300 {collapse_style} pb-0 pr-0 flex flex-col gap-2",
 
                 div {
-                    class: "flex items-center",
+                    class: "flex items-center gap-2",
                     label {
                         class: "label-text cursor-pointer grow text-sm text-base-content",
                         "Project to assign synchronized tasks to"
@@ -561,7 +568,7 @@ fn SlackReactionConfiguration(
                 }
 
                 div {
-                    class: "flex items-center",
+                    class: "flex items-center gap-2",
                     label {
                         class: "label-text cursor-pointer grow text-sm text-base-content",
                         "Due date to assign to synchronized tasks"
@@ -599,7 +606,7 @@ fn SlackReactionConfiguration(
                 }
 
                 div {
-                    class: "flex items-center",
+                    class: "flex items-center gap-2",
                     label {
                         class: "label-text cursor-pointer grow text-sm text-base-content",
                         "Priority to assign to synchronized tasks"
@@ -649,7 +656,7 @@ fn SlackMessageConfiguration(
 ) -> Element {
     rsx! {
         div {
-            class: "flex items-center",
+            class: "flex items-center gap-2",
 
             label {
                 class: "label-text cursor-pointer grow text-sm text-base-content",

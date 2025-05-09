@@ -30,16 +30,25 @@ use crate::{
                 im::SlackImPreview, message::SlackMessagePreview, thread::SlackThreadPreview,
             },
         },
+        notifications_list::{get_notification_list_item_action_buttons, NotificationListContext},
         task_preview::TaskDetailsPreview,
     },
     model::{PreviewPane, UniversalInboxUIModel},
+    services::notification_service::NotificationCommand,
 };
 
 #[component]
 pub fn NotificationPreview(
     ui_model: Signal<UniversalInboxUIModel>,
     notification: ReadOnlySignal<NotificationWithTask>,
+    notifications_count: ReadOnlySignal<usize>,
 ) -> Element {
+    let notification_service = use_coroutine_handle::<NotificationCommand>();
+    let context = use_memo(move || NotificationListContext {
+        is_task_actions_enabled: ui_model.read().is_task_actions_enabled,
+        notification_service,
+    });
+    use_context_provider(move || context);
     let has_notification_details_preview = !notification().is_built_from_task();
     let has_task_details_preview = notification().task.is_some();
     let shortcut_visibility_style = use_memo(move || {
@@ -64,6 +73,27 @@ pub fn NotificationPreview(
         }
     });
 
+    let previous_button_style = if ui_model
+        .read()
+        .selected_notification_index
+        .unwrap_or_default()
+        == 0
+    {
+        "btn-disabled"
+    } else {
+        ""
+    };
+    let next_button_style = if ui_model
+        .read()
+        .selected_notification_index
+        .unwrap_or_default()
+        == notifications_count() - 1
+    {
+        "btn-disabled"
+    } else {
+        ""
+    };
+
     let (notification_tab_style, task_tab_style) =
         if ui_model.read().selected_preview_pane == PreviewPane::Notification {
             ("active", "")
@@ -73,7 +103,7 @@ pub fn NotificationPreview(
 
     rsx! {
         div {
-            class: "flex flex-col gap-4 w-full",
+            class: "flex flex-col w-full h-full",
 
             div {
                 class: "relative w-full",
@@ -86,8 +116,9 @@ pub fn NotificationPreview(
                     class: "{shortcut_visibility_style} kbd kbd-xs z-50 absolute right-0",
                     "▲ k"
                 }
+
                 nav {
-                    class: "tabs tabs-bordered w-full",
+                    class: "tabs tabs-bordered w-full pb-2",
                     role: "tablist",
 
                     if has_notification_details_preview {
@@ -112,13 +143,19 @@ pub fn NotificationPreview(
                             div {
                                 class: "flex gap-2 text-base-content",
                                 if let Some(task) = notification().task {
-                                    TaskIcon { class: "h-5 w-5", _kind: task.kind }
+                                    TaskIcon { class: "h-5 w-5", kind: task.kind }
                                 }
                                 "Task"
                             }
                         }
                     }
                 }
+            }
+
+            button {
+                class: "btn btn-text absolute left-0 lg:hidden",
+                onclick: move |_| ui_model.write().selected_notification_index = None,
+                span { class: "icon-[tabler--arrow-left] size-8" }
             }
 
             if shortcut_visibility_style == "visible" {
@@ -138,6 +175,7 @@ pub fn NotificationPreview(
                 PreviewPane::Notification => rsx! {
                     div {
                         id: "notification-tab",
+                        class: "flex-1 overflow-hidden",
                         NotificationDetailsPreview {
                             notification,
                             expand_details: ui_model.read().preview_cards_expanded
@@ -148,6 +186,7 @@ pub fn NotificationPreview(
                     if let Some(task) = notification().task {
                         div {
                             id: "task-tab",
+                            class: "flex-1 overflow-hidden",
                             TaskDetailsPreview {
                                 task,
                                 expand_details: ui_model.read().preview_cards_expanded
@@ -155,6 +194,51 @@ pub fn NotificationPreview(
                         }
                     }
                 },
+            }
+
+            div {
+                class: "flex flex-col w-full gap-2 lg:hidden",
+
+                hr { class: "text-gray-200" }
+                div {
+                    class: "flex w-full justify-center text-sm text-base-content/50",
+
+                    span { "{ui_model.read().selected_notification_index.unwrap_or_default() + 1} of {notifications_count()}" }
+                }
+
+                div {
+                    class: "flex w-full",
+                    button {
+                        "type": "button",
+                        class: "btn btn-text btn-square btn-lg {previous_button_style}",
+                        "aria-label": "Previous notification",
+                        onclick: move |_| {
+                            let mut model = ui_model.write();
+                            model.selected_notification_index = Some(model.selected_notification_index.unwrap_or_default() - 1);
+                        },
+                        span { class: "icon-[tabler--chevron-left] size-5" }
+                    }
+
+                    for btn in get_notification_list_item_action_buttons(
+                        notification,
+                        false,
+                        Some("btn btn-square btn-primary btn-lg".to_string()),
+                        Some("flex-1".to_string())) {
+                        { btn }
+                    }
+
+                    button {
+                        "type": "button",
+                        class: "btn btn-text btn-square btn-lg {next_button_style}",
+                        "aria-label": "Next notification",
+                        onclick: move |_| {
+                            let mut model = ui_model.write();
+                            model.selected_notification_index = Some(model.selected_notification_index.unwrap_or_default() + 1);
+                        },
+                        span { class: "icon-[tabler--chevron-right] size-5" }
+                    }
+                }
+
             }
         }
     }
