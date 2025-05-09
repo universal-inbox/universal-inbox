@@ -78,7 +78,7 @@ pub fn GoogleCalendarEventPreview(
 
     rsx! {
         div {
-            class: "flex flex-col gap-2 w-full",
+            class: "flex flex-col gap-2 w-full h-full",
 
             h3 {
                 class: "flex items-center gap-2 text-base",
@@ -93,88 +93,93 @@ pub fn GoogleCalendarEventPreview(
                 }
             }
 
-            if let Some(description) = google_calendar_event().description.as_ref() {
-                SmallCard { span { "{description}" } }
-            }
+            div {
+                id: "notification-preview-details",
+                class: "flex flex-col gap-2 w-full h-full overflow-y-auto scroll-y-auto",
 
-            if let Some(creator_label) = creator_label.as_ref() {
-                SmallCard {
-                    Icon { class: "text-base-content/50 h-5 w-5", icon: BsPerson }
-                    span { "{creator_label}" }
+                if let Some(description) = google_calendar_event().description.as_ref() {
+                    SmallCard { span { "{description}" } }
                 }
-            }
 
-            SmallCard {
-                Icon { class: "text-base-content/50 h-5 w-5", icon: BsPersonFill }
-                span { "{organizer_label}" }
-            }
-
-            if let Some(date_label) = date_label() {
-                SmallCard {
-                    Icon { class: "text-base-content/50 h-5 w-5", icon: BsCalendar2Event }
-                    span { "{date_label}" }
+                if let Some(creator_label) = creator_label.as_ref() {
+                    SmallCard {
+                        Icon { class: "text-base-content/50 h-5 w-5", icon: BsPerson }
+                        span { "{creator_label}" }
+                    }
                 }
-            }
 
-            CollapseCardWithIcon {
-                id: "google-calendar-guests",
-                title: "Guests",
-                icon: rsx! { Icon { class: "text-base-content/50 h-5 w-5", icon: BsPeople } },
-                opened: expand_details(),
-                table {
-                    class: "table table-auto table-sm w-full",
-                    tbody {
-                        for attendee in google_calendar_event().attendees {
-                            CalendarEventAttendeeRow { attendee }
+                SmallCard {
+                    Icon { class: "text-base-content/50 h-5 w-5", icon: BsPersonFill }
+                    span { "{organizer_label}" }
+                }
+
+                if let Some(date_label) = date_label() {
+                    SmallCard {
+                        Icon { class: "text-base-content/50 h-5 w-5", icon: BsCalendar2Event }
+                        span { "{date_label}" }
+                    }
+                }
+
+                CollapseCardWithIcon {
+                    id: "google-calendar-guests",
+                    title: "Guests",
+                    icon: rsx! { Icon { class: "text-base-content/50 h-5 w-5", icon: BsPeople } },
+                    opened: expand_details(),
+                    table {
+                        class: "table table-auto table-sm w-full",
+                        tbody {
+                            for attendee in google_calendar_event().attendees {
+                                CalendarEventAttendeeRow { attendee }
+                            }
                         }
                     }
                 }
-            }
 
-            if let Some(location) = google_calendar_event().location.as_ref() {
-                SmallCard {
-                    Icon { class: "text-base-content/50 h-5 w-5", icon: MdLocationOn }
-                    span { "{location}" }
+                if let Some(location) = google_calendar_event().location.as_ref() {
+                    SmallCard {
+                        Icon { class: "text-base-content/50 h-5 w-5", icon: MdLocationOn }
+                        span { "{location}" }
+                    }
                 }
-            }
 
-            div {
-                class: "join w-full",
-                input {
-                    class: "join-item btn rounded-l-lg grow {accepted_style}",
-                    type: "radio",
-                    name: "action",
-                    checked: "{is_accepted}",
-                    onclick: move |_| {
-                        notification_service
-                            .send(NotificationCommand::AcceptInvitation(notification().id));
-                    },
-                    Icon { class: "h-5 w-5", icon: BsPersonCheck }
-                    "Yes"
-                }
-                input {
-                    class: "join-item btn grow {declined_style}",
-                    type: "radio",
-                    name: "action",
-                    checked: "{is_declined}",
-                    onclick: move |_| {
-                        notification_service
-                            .send(NotificationCommand::AcceptInvitation(notification().id));
-                    },
-                    Icon { class: "h-5 w-5", icon: BsPersonX }
-                    "No"
-                }
-                input {
-                    class: "join-item btn rounded-r-lg grow {tentative_style}",
-                    type: "radio",
-                    name: "action",
-                    checked: "{is_tentative}",
-                    onclick: move |_| {
-                        notification_service
-                            .send(NotificationCommand::AcceptInvitation(notification().id));
-                    },
-                    Icon { class: "h-5 w-5", icon: BsPersonDash }
-                    "Maybe"
+                div {
+                    class: "join w-full",
+                    input {
+                        class: "join-item btn rounded-l-lg grow {accepted_style}",
+                        type: "radio",
+                        name: "action",
+                        checked: "{is_accepted}",
+                        onclick: move |_| {
+                            notification_service
+                                .send(NotificationCommand::AcceptInvitation(notification().id));
+                        },
+                        Icon { class: "h-5 w-5", icon: BsPersonCheck }
+                        "Yes"
+                    }
+                    input {
+                        class: "join-item btn grow {declined_style}",
+                        type: "radio",
+                        name: "action",
+                        checked: "{is_declined}",
+                        onclick: move |_| {
+                            notification_service
+                                .send(NotificationCommand::AcceptInvitation(notification().id));
+                        },
+                        Icon { class: "h-5 w-5", icon: BsPersonX }
+                        "No"
+                    }
+                    input {
+                        class: "join-item btn rounded-r-lg grow {tentative_style}",
+                        type: "radio",
+                        name: "action",
+                        checked: "{is_tentative}",
+                        onclick: move |_| {
+                            notification_service
+                                .send(NotificationCommand::AcceptInvitation(notification().id));
+                        },
+                        Icon { class: "h-5 w-5", icon: BsPersonDash }
+                        "Maybe"
+                    }
                 }
             }
         }

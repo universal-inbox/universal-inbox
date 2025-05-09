@@ -34,29 +34,7 @@ pub fn LinearIssuePreview(
 ) -> Element {
     rsx! {
         div {
-            class: "flex flex-col gap-2 w-full",
-
-            div {
-                class: "flex gap-2",
-
-                if let Some(linear_notification) = linear_notification() {
-                    a {
-                        class: "text-xs text-base-content/50",
-                        href: "{linear_issue().team.get_url(linear_notification.get_organization())}",
-                        target: "_blank",
-                        "{linear_issue().team.name}"
-                    }
-                } else {
-                    span { class: "text-xs text-base-content/50", "{linear_issue().team.name}" }
-                }
-
-                a {
-                    class: "text-xs text-base-content/50",
-                    href: "{linear_issue().url}",
-                    target: "_blank",
-                    "#{linear_issue().identifier} "
-                }
-            }
+            class: "flex flex-col gap-2 w-full h-full",
 
             h3 {
                 class: "flex items-center gap-2 text-base",
@@ -92,7 +70,30 @@ fn LinearIssueDetails(
 
     rsx! {
         div {
-            class: "flex flex-col gap-2 w-full",
+            id: "notification-preview-details",
+            class: "flex flex-col gap-2 w-full h-full overflow-y-auto scroll-y-auto",
+
+            div {
+                class: "flex gap-2",
+
+                if let Some(linear_notification) = linear_notification() {
+                    a {
+                        class: "text-xs text-base-content/50",
+                        href: "{linear_issue().team.get_url(linear_notification.get_organization())}",
+                        target: "_blank",
+                        "{linear_issue().team.name}"
+                    }
+                } else {
+                    span { class: "text-xs text-base-content/50", "{linear_issue().team.name}" }
+                }
+
+                a {
+                    class: "text-xs text-base-content/50",
+                    href: "{linear_issue().url}",
+                    target: "_blank",
+                    "#{linear_issue().identifier} "
+                }
+            }
 
             div {
                 class: "flex text-base-content/50 gap-1 text-xs",

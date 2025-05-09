@@ -21,19 +21,7 @@ pub fn SlackGroupPreview(
 
     rsx! {
         div {
-            class: "flex flex-col w-full gap-2",
-
-            div {
-                class: "flex items-center gap-2",
-
-                SlackTeamDisplay { team: slack_group().team }
-                a {
-                    class: "text-xs text-base-content/50",
-                    href: "{slack_group().get_html_url()}",
-                    target: "_blank",
-                    "#{channel_name}"
-                }
-            }
+            class: "flex flex-col w-full gap-2 h-full",
 
             h3 {
                 class: "flex items-center gap-2 text-base",
@@ -45,6 +33,18 @@ pub fn SlackGroupPreview(
                     target: "_blank",
                     SlackMarkdown { text: "{title}" }
                     Icon { class: "h-5 w-5 min-w-5 text-base-content/50 p-1", icon: BsArrowUpRightSquare }
+                }
+            }
+
+            div {
+                class: "flex items-center gap-2",
+
+                SlackTeamDisplay { team: slack_group().team }
+                a {
+                    class: "text-xs text-base-content/50",
+                    href: "{slack_group().get_html_url()}",
+                    target: "_blank",
+                    "#{channel_name}"
                 }
             }
         }

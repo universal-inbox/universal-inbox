@@ -44,7 +44,7 @@ pub fn ToastZone() -> Element {
 
     rsx! {
         div {
-            class: "notyf",
+            class: "notyf max-lg:justify-start! lg:justify-end!",
 
             for (id, toast) in TOASTS() {
                 ToastElement {

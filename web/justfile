@@ -24,6 +24,9 @@ bundle-fonts output-dir="public":
     mkdir -p {{ output-dir }}
     cp -a fonts {{ output-dir }}
 
+clear-dev-assets:
+    rm -rf ../target/dx/universal-inbox-web/debug/web/public/assets
+
 ## Dev recipes
 check: install build-assets
     cargo clippy --tests -- -D warnings
@@ -39,7 +42,7 @@ test-ci: install build-assets
     cargo test
 
 ## Run recipes
-run: build-assets
+run: clear-dev-assets build-assets
     dx serve --verbose
 
 run-tailwind output-dir="public":

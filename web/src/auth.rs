@@ -44,8 +44,6 @@ pub fn Authenticated(
     let mut error = use_signal(|| None::<anyhow::Error>);
     let current_url = current_location().unwrap();
     let nav = use_navigator();
-    // Workaround for Dioxus 0.4.1 bug: https://github.com/DioxusLabs/dioxus/issues/1511
-    let local_storage = get_local_storage().unwrap();
     let oidc_auth_code_pkce_flow_config =
         authentication_configs
             .iter()
@@ -55,29 +53,32 @@ pub fn Authenticated(
                 }
                 _ => None,
             });
-    let auth_code = oidc_auth_code_pkce_flow_config.as_ref().and_then(|config| {
-        if current_url.path() == config.oidc_redirect_url.path() {
-            local_storage
+    let is_oidc_redirect_url = oidc_auth_code_pkce_flow_config
+        .as_ref()
+        .map(|config| config.oidc_redirect_url.path() == current_url.path());
+    // Workaround for Dioxus 0.4.1 bug: https://github.com/DioxusLabs/dioxus/issues/1511
+    let auth_code = use_memo(move || {
+        let local_storage = get_local_storage().unwrap();
+        if is_oidc_redirect_url.unwrap_or_default() {
+            let auth_code = local_storage
                 .get_item("auth-oidc-callback-code")
                 .unwrap()
-                .and_then(|code| (!code.is_empty()).then_some(code))
+                .and_then(|code| (!code.is_empty()).then_some(code));
+            // If we are on the authentication redirection URL with an authentication code,
+            // we should exchange it for an access token and authentication state is not unknown anymore
+            if auth_code.is_some()
+                && UI_MODEL.peek().authentication_state == AuthenticationState::Unknown
+            {
+                UI_MODEL.write().authentication_state = AuthenticationState::FetchingAccessToken;
+            }
+            auth_code
         } else {
             None
         }
-    });
+    })();
     // end workaround
 
-    // If we are on the authentication redirection URL with an authentication code,
-    // we should exchange it for an access token and authentication state is not unknown anymore
-    if auth_code.is_some() && UI_MODEL.peek().authentication_state == AuthenticationState::Unknown {
-        UI_MODEL.write().authentication_state = AuthenticationState::FetchingAccessToken;
-    }
-    let authentication_state = UI_MODEL.read().authentication_state;
-
     let auth_configs = authentication_configs.clone();
-    let oidc_redirect_url = oidc_auth_code_pkce_flow_config
-        .as_ref()
-        .map(|config| config.oidc_redirect_url.clone());
     let _ = use_resource(move || {
         to_owned![auth_code];
         to_owned![auth_configs];
@@ -91,10 +92,11 @@ pub fn Authenticated(
                 debug!("auth: Unknown authentication state, triggering API call");
                 return;
             }
-            if authentication_state == AuthenticationState::Authenticated
-                || authentication_state == AuthenticationState::RedirectingToAuthProvider
-            {
-                debug!("auth: Already authenticated or authenticating, skipping authentication");
+            if authentication_state == AuthenticationState::Authenticated {
+                return;
+            }
+            if authentication_state == AuthenticationState::RedirectingToAuthProvider {
+                debug!("auth: Already authenticating, skipping authentication");
                 return;
             }
 
@@ -155,18 +157,21 @@ pub fn Authenticated(
         };
     }
 
+    let authentication_state = UI_MODEL.read().authentication_state;
     debug!("auth: Authentication state: {authentication_state:?}");
     match authentication_state {
         AuthenticationState::Authenticated => {
-            if let Some(oidc_redirect_url) = oidc_redirect_url {
-                if current_url.path() == oidc_redirect_url.path() {
-                    debug!("auth: Authenticated, redirecting to /");
-                    needs_update();
-                    nav.replace(Route::NotificationsPage {});
-                    return rsx! {};
-                }
+            if is_oidc_redirect_url.unwrap_or_default() {
+                debug!("auth: Authenticated, redirecting to /");
+                needs_update();
+                nav.replace(Route::NotificationsPage {});
+                return rsx! {};
             }
             rsx! { { children } }
+        }
+        AuthenticationState::Unknown => {
+            debug!("auth: Unknown authentication state, doing nothing");
+            rsx! { Loading { label: "Loading Universal Inbox..." } }
         }
         value => {
             if (authentication_configs.len() == 1
@@ -179,13 +184,16 @@ pub fn Authenticated(
                     && history().current_route() != *"/passkey-signup"
                     && history().current_route() != *"/password-reset"
                 {
+                    debug!("auth: Not authenticated, redirecting to the login page");
                     nav.replace(Route::LoginPage {});
                     needs_update();
                     rsx! {}
                 } else {
+                    debug!("auth: Not authenticated, loading authentication page");
                     rsx! { Outlet::<Route> {} }
                 }
             } else {
+                debug!("auth: Not authenticated, no authentication page to load");
                 rsx! { Loading { label: "{value.label()}" } }
             }
         }

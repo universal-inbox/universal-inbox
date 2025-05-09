@@ -2,20 +2,41 @@
 
 use dioxus::prelude::*;
 
-use universal_inbox::{task::Task, third_party::item::ThirdPartyItemData};
+use universal_inbox::{
+    task::Task,
+    third_party::item::{ThirdPartyItemData, ThirdPartyItemKind},
+};
 
-use crate::components::integrations::{
-    linear::preview::issue::LinearIssuePreview,
-    slack::preview::{slack_reaction::SlackReactionTaskPreview, slack_star::SlackStarTaskPreview},
-    todoist::preview::TodoistTaskPreview,
+use crate::{
+    components::{
+        integrations::{
+            icons::TaskIcon,
+            linear::preview::issue::LinearIssuePreview,
+            slack::preview::{
+                slack_reaction::SlackReactionTaskPreview, slack_star::SlackStarTaskPreview,
+            },
+            todoist::preview::TodoistTaskPreview,
+        },
+        tasks_list::{get_task_list_item_action_buttons, TaskListContext},
+    },
+    model::UniversalInboxUIModel,
+    services::task_service::TaskCommand,
 };
 
 #[component]
 pub fn TaskPreview(
+    ui_model: Signal<UniversalInboxUIModel>,
     task: ReadOnlySignal<Task>,
     expand_details: ReadOnlySignal<bool>,
     is_help_enabled: ReadOnlySignal<bool>,
+    tasks_count: ReadOnlySignal<usize>,
 ) -> Element {
+    let task_service = use_coroutine_handle::<TaskCommand>();
+    let context = use_memo(move || TaskListContext {
+        is_task_actions_enabled: ui_model.read().is_task_actions_enabled,
+        task_service,
+    });
+    use_context_provider(move || context);
     let shortcut_visibility_style = use_memo(move || {
         if is_help_enabled() {
             "visible"
@@ -23,32 +44,117 @@ pub fn TaskPreview(
             "invisible"
         }
     });
+    let previous_button_style = if ui_model.read().selected_task_index.unwrap_or_default() == 0 {
+        "btn-disabled"
+    } else {
+        ""
+    };
+    let next_button_style =
+        if ui_model.read().selected_task_index.unwrap_or_default() == tasks_count() - 1 {
+            "btn-disabled"
+        } else {
+            ""
+        };
+    let task_type = match task().source_item.kind() {
+        ThirdPartyItemKind::TodoistItem => "Task",
+        ThirdPartyItemKind::SlackStar => "Saved for later message",
+        ThirdPartyItemKind::SlackReaction => "Reaction",
+        ThirdPartyItemKind::LinearIssue => "Issue",
+        _ => "Task",
+    };
 
     rsx! {
         div {
-            class: "flex flex-col gap-4 w-full",
+            class: "flex flex-col w-full h-full",
 
-            if shortcut_visibility_style == "visible" {
-                div {
-                    class: "flex flex-row w-full indicator",
-                    span {
-                        class: "{shortcut_visibility_style} kbd kbd-xs z-50",
-                        "▼ j"
-                    }
-                    div { class: "grow" }
-                    span {
-                        class: "{shortcut_visibility_style} kbd kbd-xs z-50",
-                        "e: expand/collapse"
-                    }
-                    div { class: "grow" }
-                    span {
-                        class: "{shortcut_visibility_style} kbd kbd-xs z-50",
-                        "▲ k"
+            div {
+                class: "relative w-full",
+
+                span {
+                    class: "{shortcut_visibility_style} kbd kbd-xs z-50 absolute left-0",
+                    "▼ j"
+                }
+                span {
+                    class: "{shortcut_visibility_style} kbd kbd-xs z-50 absolute right-0",
+                    "▲ k"
+                }
+
+                nav {
+                    class: "tabs tabs-bordered w-full pb-2",
+                    role: "tablist",
+
+                    button {
+                        class: "tab active-tab:tab-active active w-full",
+                        "data-tab": "#source-task-tab",
+                        role: "tab",
+                        div {
+                            class: "flex gap-2 items-center text-base-content",
+                            TaskIcon { class: "h-5 w-5", kind: task().kind }
+                            "{task_type}"
+                        }
                     }
                 }
             }
 
-            TaskDetailsPreview { task, expand_details },
+            button {
+                class: "btn btn-text absolute left-0 lg:hidden",
+                onclick: move |_| ui_model.write().selected_task_index = None,
+                span { class: "icon-[tabler--arrow-left] size-8" }
+            }
+
+            if shortcut_visibility_style == "visible" {
+                span {
+                    class: "{shortcut_visibility_style} kbd kbd-xs z-50",
+                    "e: expand/collapse"
+                }
+            }
+
+            TaskDetailsPreview { task, expand_details }
+
+            div {
+                class: "flex flex-col w-full gap-2 lg:hidden",
+
+                hr { class: "text-gray-200" }
+                div {
+                    class: "flex w-full justify-center text-sm text-base-content/50",
+
+                    span { "{ui_model.read().selected_task_index.unwrap_or_default() + 1} of {tasks_count()}" }
+                }
+
+                div {
+                    class: "flex w-full",
+                    button {
+                        "type": "button",
+                        class: "btn btn-text btn-square btn-lg {previous_button_style}",
+                        "aria-label": "Previous notification",
+                        onclick: move |_| {
+                            let mut model = ui_model.write();
+                            model.selected_task_index = Some(model.selected_task_index.unwrap_or_default() - 1);
+                        },
+                        span { class: "icon-[tabler--chevron-left] size-5 rtl:rotate-180" }
+                    }
+
+                    for btn in get_task_list_item_action_buttons(
+                        task,
+                        false,
+                        Some("btn btn-square btn-primary btn-lg".to_string()),
+                        Some("flex-1".to_string())) {
+                        { btn }
+                    }
+
+                    button {
+                        "type": "button",
+                        class: "btn btn-text btn-square btn-lg {next_button_style}",
+                        "aria-label": "Next notification",
+                        onclick: move |_| {
+                            let mut model = ui_model.write();
+                            model.selected_task_index = Some(model.selected_task_index.unwrap_or_default() + 1);
+                        },
+                        span { class: "icon-[tabler--chevron-right] size-5 rtl:rotate-180" }
+                    }
+                }
+            }
+
         }
     }
 }

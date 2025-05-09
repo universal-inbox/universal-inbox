@@ -38,27 +38,7 @@ pub fn GithubPullRequestPreview(
 ) -> Element {
     rsx! {
         div {
-            class: "flex flex-col w-full gap-2",
-
-            div {
-                class: "flex gap-2",
-
-                if let Some(head_repository) = github_pull_request().head_repository {
-                    a {
-                        class: "text-xs text-base-content/50",
-                        href: "{head_repository.url}",
-                        target: "_blank",
-                        "{head_repository.name_with_owner}"
-                    }
-                }
-
-                a {
-                    class: "text-xs text-base-content/50",
-                    href: "{github_pull_request().url}",
-                    target: "_blank",
-                    "#{github_pull_request().number}"
-                }
-            }
+            class: "flex flex-col w-full gap-2 h-full",
 
             h3 {
                 class: "flex items-center gap-2 text-base",
@@ -143,7 +123,28 @@ fn GithubPullRequestDetails(
 
     rsx! {
         div {
-            class: "flex flex-col gap-2 w-full",
+            id: "notification-preview-details",
+            class: "flex flex-col gap-2 w-full h-full overflow-y-auto scroll-y-auto",
+
+            div {
+                class: "flex gap-2",
+
+                if let Some(head_repository) = github_pull_request().head_repository {
+                    a {
+                        class: "text-xs text-base-content/50",
+                        href: "{head_repository.url}",
+                        target: "_blank",
+                        "{head_repository.name_with_owner}"
+                    }
+                }
+
+                a {
+                    class: "text-xs text-base-content/50",
+                    href: "{github_pull_request().url}",
+                    target: "_blank",
+                    "#{github_pull_request().number}"
+                }
+            }
 
             div {
                 class: "flex text-base-content/50 gap-1 text-xs",

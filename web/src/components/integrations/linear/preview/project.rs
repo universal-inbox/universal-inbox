@@ -27,7 +27,7 @@ pub fn LinearProjectPreview(
 ) -> Element {
     rsx! {
         div {
-            class: "flex flex-col gap-2 w-full",
+            class: "flex flex-col gap-2 w-full h-full",
 
             h3 {
                 class: "flex items-center gap-2 text-base",
@@ -75,7 +75,8 @@ pub fn LinearProjectDetails(
 
     rsx! {
         div {
-            class: "flex flex-col gap-2 w-full text-sm",
+            id: "notification-preview-details",
+            class: "flex flex-col gap-2 w-full text-sm h-full overflow-y-auto scroll-y-auto",
 
             CollapseCard {
                 id: "linear-project-details",

@@ -83,15 +83,15 @@ pub fn TickTick(class: Option<String>) -> Element {
 pub fn IntegrationProviderIcon(class: String, provider_kind: IntegrationProviderKind) -> Element {
     // tag: New notification integration
     match provider_kind {
-        IntegrationProviderKind::Github => rsx! { Github { class: class } },
-        IntegrationProviderKind::Linear => rsx! { Linear { class: class } },
-        IntegrationProviderKind::GoogleCalendar => rsx! { GoogleCalendar { class: class } },
-        IntegrationProviderKind::GoogleDocs => rsx! { GoogleDocs { class: class } },
-        IntegrationProviderKind::GoogleMail => rsx! { GoogleMail { class: class } },
-        IntegrationProviderKind::Notion => rsx! { Notion { class: class } },
-        IntegrationProviderKind::Slack => rsx! { Icon { class: class, icon: BsSlack } },
-        IntegrationProviderKind::Todoist => rsx! { Todoist { class: class } },
-        IntegrationProviderKind::TickTick => rsx! { TickTick { class: class } },
+        IntegrationProviderKind::Github => rsx! { Github { class } },
+        IntegrationProviderKind::Linear => rsx! { Linear { class } },
+        IntegrationProviderKind::GoogleCalendar => rsx! { GoogleCalendar { class } },
+        IntegrationProviderKind::GoogleDocs => rsx! { GoogleDocs { class } },
+        IntegrationProviderKind::GoogleMail => rsx! { GoogleMail { class } },
+        IntegrationProviderKind::Notion => rsx! { Notion { class } },
+        IntegrationProviderKind::Slack => rsx! { Icon { class, icon: BsSlack } },
+        IntegrationProviderKind::Todoist => rsx! { Todoist { class } },
+        IntegrationProviderKind::TickTick => rsx! { TickTick { class } },
     }
 }
 
@@ -109,7 +109,11 @@ pub fn NotificationIcon(kind: NotificationSourceKind) -> Element {
 }
 
 #[component]
-pub fn TaskIcon(class: String, _kind: TaskSourceKind) -> Element {
-    // _kind is not yet used as Todoist is the only task provider for now
-    rsx! { Todoist { class: class } }
+pub fn TaskIcon(class: String, kind: TaskSourceKind) -> Element {
+    // tag: New notification integration
+    match kind {
+        TaskSourceKind::Todoist => rsx! { Todoist { class } },
+        TaskSourceKind::Linear => rsx! { Linear { class } },
+        TaskSourceKind::Slack => rsx! { Icon { class, icon: BsSlack } },
+    }
 }

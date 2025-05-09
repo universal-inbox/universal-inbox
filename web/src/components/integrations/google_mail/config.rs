@@ -25,7 +25,7 @@ pub fn GoogleMailProviderConfiguration(
             class: "flex flex-col gap-2",
 
             div {
-                class: "flex items-center",
+                class: "flex items-center gap-2",
                 label {
                     class: "label-text cursor-pointer grow text-sm text-base-content",
                     "Synchronize Google Mail threads as notification"
@@ -53,7 +53,7 @@ pub fn GoogleMailProviderConfiguration(
             }
 
             div {
-                class: "flex items-center",
+                class: "flex items-center gap-2",
                 label {
                     class: "label-text cursor-pointer grow text-sm text-base-content",
                     "Google Mail label to synchronize"

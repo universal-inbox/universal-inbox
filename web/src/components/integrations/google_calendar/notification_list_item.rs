@@ -146,6 +146,8 @@ fn get_google_calendar_notification_list_item_action_buttons(
     .chain(get_notification_list_item_action_buttons(
         notification,
         show_shortcut,
+        None,
+        None,
     ))
     .collect::<Vec<Element>>()
 }

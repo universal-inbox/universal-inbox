@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Make Universal Inbox UI mobile friendly
+
 ## 2025-05-03
 
 ### Added

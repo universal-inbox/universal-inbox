@@ -34,7 +34,20 @@ pub fn GithubNotificationDefaultPreview(
 
     rsx! {
         div {
-            class: "flex flex-col w-full gap-2",
+            class: "flex flex-col w-full gap-2 h-full",
+
+            h3 {
+                class: "flex items-center gap-2 text-base",
+
+                { type_icon }
+                a {
+                    class: "flex items-center",
+                    href: "{link}",
+                    target: "_blank",
+                    "{notification().title}"
+                    Icon { class: "h-5 w-5 min-w-5 text-base-content/50 p-1", icon: BsArrowUpRightSquare }
+                }
+            }
 
             div {
                 class: "flex gap-2",
@@ -53,19 +66,6 @@ pub fn GithubNotificationDefaultPreview(
                         target: "_blank",
                         "#{github_notification_id}"
                     }
-                }
-            }
-
-            h3 {
-                class: "flex items-center gap-2 text-base",
-
-                { type_icon }
-                a {
-                    class: "flex items-center",
-                    href: "{link}",
-                    target: "_blank",
-                    "{notification().title}"
-                    Icon { class: "h-5 w-5 min-w-5 text-base-content/50 p-1", icon: BsArrowUpRightSquare }
                 }
             }
         }

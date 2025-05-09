@@ -17,25 +17,7 @@ pub fn GithubDiscussionPreview(
 ) -> Element {
     rsx! {
         div {
-            class: "flex flex-col w-full gap-2",
-
-            div {
-                class: "flex gap-2",
-
-                a {
-                    class: "text-xs text-base-content/50",
-                    href: "{github_discussion().repository.url}",
-                    target: "_blank",
-                    "{github_discussion().repository.name_with_owner}"
-                }
-
-                a {
-                    class: "text-xs text-base-content/50",
-                    href: "{github_discussion().url}",
-                    target: "_blank",
-                    "#{github_discussion().number}"
-                }
-            }
+            class: "flex flex-col w-full gap-2 h-full",
 
             h3 {
                 class: "flex items-center gap-2 text-base",
@@ -66,7 +48,26 @@ fn GithubDiscussionDetails(
 ) -> Element {
     rsx! {
         div {
-            class: "flex flex-col gap-2 w-full",
+            id: "notification-preview-details",
+            class: "flex flex-col gap-2 w-full h-full overflow-y-auto scroll-y-auto",
+
+            div {
+                class: "flex gap-2",
+
+                a {
+                    class: "text-xs text-base-content/50",
+                    href: "{github_discussion().repository.url}",
+                    target: "_blank",
+                    "{github_discussion().repository.name_with_owner}"
+                }
+
+                a {
+                    class: "text-xs text-base-content/50",
+                    href: "{github_discussion().url}",
+                    target: "_blank",
+                    "#{github_discussion().number}"
+                }
+            }
 
             div {
                 class: "flex text-base-content/50 gap-1 text-xs",

@@ -11,16 +11,13 @@ use crate::{
 pub fn NavBarLayout() -> Element {
     rsx! {
         div {
-            class: "h-full flex flex-col relative text-sm h-16",
+            class: "h-full flex flex-col relative text-sm",
             NavBar {}
             div {
-                class: "w-full h-full flex-1 absolute top-0 pt-16 pb-10",
+                class: "w-full flex-1 overflow-hidden",
                 Outlet::<Route> {}
             }
-            div {
-                class: "w-full absolute bottom-0 h-10",
-                Footer {}
-            }
+            Footer {}
             ToastZone {}
         }
     }

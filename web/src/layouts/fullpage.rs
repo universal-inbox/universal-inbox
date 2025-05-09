@@ -7,7 +7,7 @@ use dioxus_free_icons::{
 };
 
 use crate::{
-    images::UI_LOGO_TRANSPARENT,
+    icons::UILogo,
     model::UI_MODEL,
     route::Route,
     services::user_service::{UserCommand, CONNECTED_USER},
@@ -36,11 +36,7 @@ pub fn FullpageLayout() -> Element {
                 main {
                     div {
                         class: "flex flex-col items-center justify-center",
-                        img {
-                            class: "rounded-full w-48 h-48",
-                            src: "{UI_LOGO_TRANSPARENT}",
-                            alt: "Universal Inbox logo",
-                        }
+                        UILogo { class: "rounded-full w-48 h-48" }
                     }
 
                     if let Some(error_message) = &UI_MODEL.read().error_message {

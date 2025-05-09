@@ -58,7 +58,9 @@ pub fn GoogleMailThreadListItem(
             subicon: rsx! { Mail { class: "h-5 w-5 min-w-5 {mail_icon_style}" } },
             action_buttons: get_notification_list_item_action_buttons(
                 notification,
-                list_context().show_shortcut
+                list_context().show_shortcut,
+                None,
+                None
             ),
             is_selected,
             on_select,

@@ -25,18 +25,19 @@ use crate::{
 };
 
 pub fn Footer() -> Element {
-    let (message, message_style) = use_memo(move || {
+    let (message, message_style, container_style) = use_memo(move || {
         let Some(integration_connections) = INTEGRATION_CONNECTIONS() else {
-            return (None, "");
+            return (None, "", "max-sm:hidden");
         };
         let Some(app_config) = APP_CONFIG() else {
-            return (None, "");
+            return (None, "", "max-sm:hidden");
         };
         let has_connection_issue = integration_connections.iter().any(|c| c.is_failing());
         if has_connection_issue {
             return (
                 Some("Some integrations have issues, please reconnect them."),
                 "bg-error text-error-content",
+                "",
             );
         };
         let has_missing_permission = integration_connections.iter().any(|c| {
@@ -51,29 +52,30 @@ pub fn Footer() -> Element {
             (
                 Some("Some integrations are missing permissions, please reconnect them."),
                 "bg-warning text-warning-content",
+                "",
             )
         } else {
-            (None, "")
+            (None, "", "max-sm:hidden")
         }
     })();
 
     rsx! {
         footer {
-            class: "w-full",
+            class: "w-full max-h-20",
 
             hr { class: "text-gray-200" }
             div {
-                class: "w-full flex gap-2 p-1 justify-end items-center",
+                class: "w-full flex max-sm:flex-col gap-2 p-1 justify-end items-center",
 
                 div {
-                    class: "text-xs text-base-content/50",
+                    class: "text-xs text-base-content/50 pointer-coarse:hidden",
                     "Press "
                     kbd { class: "kbd kbd-xs", "?" }
                     " to display keyboard shortcuts"
                 }
 
                 div {
-                    class: "grow",
+                    class: "grow {container_style}",
 
                     if let Some(message) = message {
                         div {
@@ -94,8 +96,6 @@ pub fn Footer() -> Element {
                         }
                     }
                 }
-
-                div { class: "w-2" }
             }
         }
     }

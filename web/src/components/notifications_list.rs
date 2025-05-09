@@ -38,7 +38,7 @@ use crate::{
         task_planning_modal::TaskPlanningModal,
     },
     config::get_api_base_url,
-    images::UI_LOGO_SYMBOL_TRANSPARENT,
+    icons::UILogo,
     model::UI_MODEL,
     services::{
         integration_connection_service::TASK_SERVICE_INTEGRATION_CONNECTION,
@@ -66,10 +66,15 @@ pub fn NotificationsList(
         notification_service,
     });
     use_context_provider(move || context);
-    let current_notification = notifications()
-        .content
-        .get(UI_MODEL.read().selected_notification_index)
-        .map(|notification| Signal::new(notification.clone()));
+    let current_notification = UI_MODEL
+        .read()
+        .selected_notification_index
+        .and_then(|index| {
+            notifications()
+                .content
+                .get(index)
+                .map(|notification| Signal::new(notification.clone()))
+        });
     let current_page = use_signal(|| 1);
     let filters_str = notification_filters()
         .selected()
@@ -85,7 +90,7 @@ pub fn NotificationsList(
                 class: "flex w-full p-2 gap-2 text-sm text-base-content/50",
 
                 div {
-                    class: "flex items-center flex-1 justify-start",
+                    class: "flex items-center flex-1 justify-start max-lg:hidden",
                     ListPaginationButtons {
                         current_page,
                         page: notifications,
@@ -122,9 +127,8 @@ pub fn NotificationsList(
             if notifications().content.is_empty() && notification_filters().is_filtered() {
                 div {
                     class: "relative w-full h-full flex justify-center items-center",
-                    img {
-                        class: "h-full opacity-30 dark:opacity-10",
-                        src: "{UI_LOGO_SYMBOL_TRANSPARENT}",
+                    UILogo {
+                        class: "opacity-30 dark:opacity-10 w-96 h-96",
                         alt: "No notifications"
                     }
                     div {
@@ -137,7 +141,7 @@ pub fn NotificationsList(
                 }
             } else {
                 div {
-                    class: "h-full overflow-auto scroll-auto px-2 snap-y snap-mandatory",
+                    class: "h-full overflow-y-auto scroll-y-auto px-2 snap-y snap-mandatory",
                     List {
                         id: "notifications_list",
                         show_shortcut: UI_MODEL.read().is_help_enabled,
@@ -146,12 +150,29 @@ pub fn NotificationsList(
                             for (i, notification) in notifications().content.into_iter().map(Signal::new).enumerate() {
                                 NotificationListItem {
                                     notification,
-                                    is_selected: i == UI_MODEL.read().selected_notification_index,
+                                    is_selected: Some(i) == UI_MODEL.read().selected_notification_index,
                                     on_select: move |_| {
-                                        UI_MODEL.write().selected_notification_index = i;
+                                        UI_MODEL.write().selected_notification_index = Some(i);
                                     },
                                 }
                             }
+                        }
+                    }
+                }
+            }
+
+            div {
+                class: "flex flex-col w-full pb-2 gap-2 text-base text-base-content/50 lg:hidden",
+
+                hr { class: "text-gray-200" }
+                div {
+                    class: "flex items-center flex-1 justify-center",
+                    ListPaginationButtons {
+                        current_page,
+                        page: notifications,
+                        on_select: move |selected_page_token| {
+                            notification_filters.write().current_page_token = selected_page_token;
+                            notification_service.send(NotificationCommand::Refresh);
                         }
                     }
                 }
@@ -264,6 +285,8 @@ fn NotificationListItem(
 pub fn get_notification_list_item_action_buttons(
     notification: ReadOnlySignal<NotificationWithTask>,
     show_shortcut: bool,
+    button_class: Option<String>,
+    container_class: Option<String>,
 ) -> Vec<Element> {
     let context = use_context::<Memo<NotificationListContext>>();
 
@@ -273,6 +296,8 @@ pub fn get_notification_list_item_action_buttons(
                 title: "Delete notification",
                 shortcut: "d",
                 show_shortcut,
+                button_class: button_class.clone(),
+                container_class: container_class.clone(),
                 onclick: move |_| {
                     context().notification_service
                         .send(NotificationCommand::DeleteFromNotification(notification()));
@@ -289,6 +314,8 @@ pub fn get_notification_list_item_action_buttons(
                     disabled_label: (!context().is_task_actions_enabled)
                         .then_some("No task management service connected".to_string()),
                     show_shortcut,
+                    button_class: button_class.clone(),
+                    container_class: container_class.clone(),
                     onclick: move |_| {
                         context().notification_service
                             .send(NotificationCommand::CompleteTaskFromNotification(notification()));
@@ -303,6 +330,8 @@ pub fn get_notification_list_item_action_buttons(
                 title: "Unsubscribe from the notification",
                 shortcut: "u",
                 show_shortcut,
+                button_class: button_class.clone(),
+                container_class: container_class.clone(),
                 onclick: move |_| {
                     context().notification_service.send(NotificationCommand::Unsubscribe(notification().id));
                 },
@@ -315,6 +344,8 @@ pub fn get_notification_list_item_action_buttons(
                 title: "Snooze notification",
                 shortcut: "s",
                 show_shortcut,
+                button_class: button_class.clone(),
+                container_class: container_class.clone(),
                 onclick: move |_| {
                     context().notification_service.send(NotificationCommand::Snooze(notification().id));
                 },
@@ -330,6 +361,8 @@ pub fn get_notification_list_item_action_buttons(
                     disabled_label: (!context().is_task_actions_enabled)
                         .then_some("No task management service connected".to_string()),
                     show_shortcut,
+                    button_class: button_class.clone(),
+                    container_class: container_class.clone(),
                     data_overlay: "#task-planning-modal",
                     Icon { class: "w-5 h-5", icon: MdAddTask }
                 }
@@ -342,6 +375,8 @@ pub fn get_notification_list_item_action_buttons(
                     disabled_label: (!context().is_task_actions_enabled)
                         .then_some("No task management service connected".to_string()),
                     show_shortcut,
+                    button_class: button_class.clone(),
+                    container_class: container_class.clone(),
                     data_overlay: "#task-linking-modal",
                     Icon { class: "w-5 h-5", icon: BsLink45deg }
                 }
@@ -358,6 +393,8 @@ pub fn get_notification_list_item_action_buttons(
                     disabled_label: (!context().is_task_actions_enabled)
                         .then_some("No task management service connected".to_string()),
                     show_shortcut,
+                    button_class: button_class.clone(),
+                    container_class: container_class.clone(),
                     onclick: move |_| {
                         context().notification_service
                             .send(NotificationCommand::DeleteFromNotification(notification()));
@@ -372,6 +409,8 @@ pub fn get_notification_list_item_action_buttons(
                     disabled_label: (!context().is_task_actions_enabled)
                         .then_some("No task management service connected".to_string()),
                     show_shortcut,
+                    button_class: button_class.clone(),
+                    container_class: container_class.clone(),
                     onclick: move |_| {
                         context().notification_service
                             .send(NotificationCommand::CompleteTaskFromNotification(notification()));
@@ -384,6 +423,8 @@ pub fn get_notification_list_item_action_buttons(
                     title: "Snooze notification",
                     shortcut: "s",
                     show_shortcut,
+                    button_class: button_class.clone(),
+                    container_class: container_class.clone(),
                     onclick: move |_| {
                         context().notification_service.send(NotificationCommand::Snooze(notification().id));
                     },
@@ -397,6 +438,8 @@ pub fn get_notification_list_item_action_buttons(
                     disabled_label: (!context().is_task_actions_enabled)
                         .then_some("No task management service connected".to_string()),
                     show_shortcut,
+                    button_class: button_class.clone(),
+                    container_class: container_class.clone(),
                     data_overlay: "#task-planning-modal",
                     Icon { class: "w-5 h-5", icon: BsCalendar2Check }
                 }
@@ -504,8 +547,8 @@ pub fn ListPaginationButtons(
 
             button {
                 "type": "button",
-                class: "btn btn-text btn-xs btn-circle join-item {previous_button_style}",
-                "aria-label": "Previous Button",
+                class: "btn btn-text lg:btn-xs max-lg:btn-lg btn-circle join-item {previous_button_style}",
+                "aria-label": "Previous page",
                 onclick: move |_| {
                     current_page -= 1;
                     on_select.call(page().previous_page_token.unwrap_or_default());
@@ -514,7 +557,7 @@ pub fn ListPaginationButtons(
             }
             button {
                 "type": "button",
-                class: "btn btn-text btn-xs join-item btn-circle aria-[current='page']:text-bg-soft-primary",
+                class: "btn btn-text lg:btn-xs max-lg:btn-lg join-item btn-circle aria-[current='page']:text-bg-soft-primary",
                 "aria-current": if current_page() == 1 { "page" },
                 onclick: move |_| {
                     current_page.set(1);
@@ -525,7 +568,7 @@ pub fn ListPaginationButtons(
 
             button {
                 "type": "button",
-                class: "btn btn-text btn-xs join-item btn-circle {previous_pages_style}",
+                class: "btn btn-text lg:btn-xs max-lg:btn-lg join-item btn-circle {previous_pages_style}",
                 onclick: move |_| {
                     current_page -= 2;
                     on_select.call(PageToken::Offset((current_page() - 1) * page().per_page));
@@ -535,7 +578,7 @@ pub fn ListPaginationButtons(
 
             button {
                 "type": "button",
-                class: "btn btn-text btn-xs join-item btn-circle {previous_page_style}",
+                class: "btn btn-text lg:btn-xs max-lg:btn-lg join-item btn-circle {previous_page_style}",
                 onclick: move |_| {
                     current_page -= 1;
                     on_select.call(page().previous_page_token.unwrap_or_default());
@@ -544,13 +587,13 @@ pub fn ListPaginationButtons(
             }
             button {
                 "type": "button",
-                class: "btn btn-text btn-xs join-item btn-circle aria-[current='page']:text-bg-soft-primary {current_page_style}",
+                class: "btn btn-text lg:btn-xs max-lg:btn-lg join-item btn-circle aria-[current='page']:text-bg-soft-primary {current_page_style}",
                 "aria-current": "page",
                 "{current_page()}"
             }
             button {
                 "type": "button",
-                class: "btn btn-text btn-xs join-item btn-circle {next_page_style}",
+                class: "btn btn-text lg:btn-xs max-lg:btn-lg join-item btn-circle {next_page_style}",
                 onclick: move |_| {
                     current_page += 1;
                     on_select.call(page().next_page_token.unwrap_or_default());
@@ -560,7 +603,7 @@ pub fn ListPaginationButtons(
 
             button {
                 "type": "button",
-                class: "btn btn-text btn-xs join-item btn-circle {next_pages_style}",
+                class: "btn btn-text lg:btn-xs max-lg:btn-lg join-item btn-circle {next_pages_style}",
                 onclick: move |_| {
                     current_page += 2;
                     on_select.call(PageToken::Offset((current_page() - 1) * page().per_page));
@@ -570,7 +613,7 @@ pub fn ListPaginationButtons(
 
             button {
                 "type": "button",
-                class: "btn btn-text btn-xs join-item btn-circle aria-[current='page']:text-bg-soft-primary {last_page_style}",
+                class: "btn btn-text lg:btn-xs max-lg:btn-lg join-item btn-circle aria-[current='page']:text-bg-soft-primary {last_page_style}",
                 "aria-current": if current_page() == page().pages_count { "page" },
                 onclick: move |_| {
                     current_page.set(page().pages_count);
@@ -580,8 +623,8 @@ pub fn ListPaginationButtons(
             }
             button {
                 "type": "button",
-                class: "btn btn-text btn-xs btn-circle join-item {next_button_style}",
-                "aria-label": "Next Button",
+                class: "btn btn-text lg:btn-xs max-lg:btn-lg btn-circle join-item {next_button_style}",
+                "aria-label": "Next page",
                 onclick: move |_| {
                     current_page += 1;
                     on_select.call(page().next_page_token.unwrap_or_default());
@@ -599,7 +642,7 @@ pub fn NotificationSourceKindFilters(
 ) -> Element {
     rsx! {
         div {
-            class: "flex gap-2",
+            class: "flex items-center gap-2",
             span { "Filters: " }
             for filter in notification_source_kind_filters() {
                 NotificationSourceKindFilterButton { filter, on_select }
@@ -623,7 +666,7 @@ pub fn NotificationSourceKindFilterButton(
 
     rsx! {
         button {
-            class: "btn btn-circle btn-text btn-xs {style}",
+            class: "btn btn-circle btn-text lg:btn-xs max-lg:btn-lg {style}",
             onclick: move |_| on_select.call(filter()),
             IntegrationProviderIcon { class: "w-4 h-4", provider_kind: filter().kind.into() }
         }
@@ -653,8 +696,8 @@ pub fn NotificationListOrdering(
                     },
                     checked: "{notification_list_order() == NotificationListOrder::UpdatedAtDesc}",
                 }
-                span { class: "swap-on icon-[tabler--chevron-down] size-5" }
-                span { class: "swap-off icon-[tabler--chevron-up] size-5" }
+                span { class: "swap-on icon-[tabler--chevron-down] lg:size-5 max-lg:size-6" }
+                span { class: "swap-off icon-[tabler--chevron-up] lg:size-5 max-lg:size-6" }
             }
         }
     }

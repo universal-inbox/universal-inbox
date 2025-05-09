@@ -37,7 +37,7 @@ pub fn SettingsPage() -> Element {
                     class: "h-full mx-auto flex flex-row px-4",
 
                     div {
-                        class: "h-full w-full overflow-auto scroll-auto px-2",
+                        class: "h-full w-full overflow-y-auto scroll-y-auto px-2",
 
                         IntegrationsPanel {
                             ui_model: UI_MODEL.signal(),
