@@ -16,6 +16,7 @@ ammonia = "4.0.0"
 anyhow = { workspace = true }
 cfg-if = "1.0"
 chrono = { workspace = true, features = ["wasmbind"] }
+chrono-tz = "0.10"
 comrak = { version = "0.36.0", default-features = false, features = [
   "shortcodes",
 ] }
