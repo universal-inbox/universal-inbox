@@ -9,6 +9,7 @@
 ### Changed
 
 - Make Universal Inbox UI mobile friendly
+- Collapse read Google mails
 
 ### Fixed
 
