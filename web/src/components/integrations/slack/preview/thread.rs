@@ -106,7 +106,7 @@ fn SlackThreadDisplay(
                         SlackThreadMessageDisplay { message: first_read_message, slack_thread }
                         if let Some(invisible_read_message) = invisible_read_message {
                             div {
-                                class: "flex items-center gap-2 text-xs text-base-content/50",
+                                class: "divider divider-primary text-xs",
                                 a {
                                     class: "link link-hover link-primary",
                                     onclick: move |_| { *show_all.write() = true; },

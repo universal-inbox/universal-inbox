@@ -250,6 +250,10 @@ impl GoogleMailMessage {
             .map(|header| header.value.clone())
     }
 
+    pub fn is_read(&self) -> bool {
+        !self.is_tagged_with(GOOGLE_MAIL_UNREAD_LABEL)
+    }
+
     pub fn is_tagged_with(&self, label_id: &str) -> bool {
         self.label_ids
             .as_ref()

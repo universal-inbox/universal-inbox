@@ -328,7 +328,8 @@ fn NotificationDetailsPreview(
         ThirdPartyItemData::GoogleMailThread(google_mail_thread) => rsx! {
             GoogleMailThreadPreview {
                 notification,
-                google_mail_thread: *google_mail_thread
+                google_mail_thread: *google_mail_thread,
+                expand_details,
             }
         },
         ThirdPartyItemData::GoogleCalendarEvent(google_calendar_event) => rsx! {
