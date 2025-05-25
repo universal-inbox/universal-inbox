@@ -10,6 +10,10 @@
 
 - Make Universal Inbox UI mobile friendly
 
+### Fixed
+
+- Convert calendar event times to event's timezone
+
 ## 2025-05-03
 
 ### Added
