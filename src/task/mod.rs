@@ -187,6 +187,14 @@ impl From<TaskId> for Uuid {
     }
 }
 
+impl FromStr for TaskId {
+    type Err = uuid::Error;
+
+    fn from_str(uuid: &str) -> Result<Self, Self::Err> {
+        Ok(Self(Uuid::parse_str(uuid)?))
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
 #[serde(tag = "type", content = "content")]
 pub enum DueDate {

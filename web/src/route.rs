@@ -1,6 +1,10 @@
 use dioxus::prelude::*;
 
-use universal_inbox::user::{EmailValidationToken, PasswordResetToken, UserId};
+use universal_inbox::{
+    notification::NotificationId,
+    task::TaskId,
+    user::{EmailValidationToken, PasswordResetToken, UserId},
+};
 
 use crate::{
     auth::AuthPage,
@@ -9,11 +13,17 @@ use crate::{
         fullpage::FullpageLayout, nav_bar::NavBarLayout,
     },
     pages::{
-        email_verification_page::EmailVerificationPage, login_page::LoginPage,
-        notifications_page::NotificationsPage, page_not_found::PageNotFound,
-        passkey_login_page::PasskeyLoginPage, passkey_signup_page::PasskeySignupPage,
-        password_reset_page::PasswordResetPage, password_update_page::PasswordUpdatePage,
-        settings_page::SettingsPage, signup_page::SignupPage, synced_tasks_page::SyncedTasksPage,
+        email_verification_page::EmailVerificationPage,
+        login_page::LoginPage,
+        notifications_page::{NotificationPage, NotificationsPage},
+        page_not_found::PageNotFound,
+        passkey_login_page::PasskeyLoginPage,
+        passkey_signup_page::PasskeySignupPage,
+        password_reset_page::PasswordResetPage,
+        password_update_page::PasswordUpdatePage,
+        settings_page::SettingsPage,
+        signup_page::SignupPage,
+        synced_tasks_page::{SyncedTaskPage, SyncedTasksPage},
         user_profile_page::UserProfilePage,
     },
 };
@@ -46,8 +56,12 @@ pub enum Route {
         #[layout(NavBarLayout)]
           #[route("/")]
           NotificationsPage {},
+          #[route("/notifications/:notification_id")]
+          NotificationPage { notification_id: NotificationId },
           #[route("/synced-tasks")]
           SyncedTasksPage {},
+          #[route("/synced-task/:task_id")]
+          SyncedTaskPage { task_id: TaskId },
           #[route("/settings")]
           SettingsPage {},
           #[route("/profile")]

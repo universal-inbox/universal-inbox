@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, str::FromStr};
 
 use anyhow::anyhow;
 use chrono::{DateTime, Utc};
@@ -157,6 +157,14 @@ impl From<Uuid> for NotificationId {
 impl From<NotificationId> for Uuid {
     fn from(id: NotificationId) -> Self {
         id.0
+    }
+}
+
+impl FromStr for NotificationId {
+    type Err = uuid::Error;
+
+    fn from_str(uuid: &str) -> Result<Self, Self::Err> {
+        Ok(Self(Uuid::parse_str(uuid)?))
     }
 }
 

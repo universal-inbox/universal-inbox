@@ -155,11 +155,6 @@ pub fn App() -> Element {
         Router::<Route> {
             config: move || {
                 RouterConfig::default()
-                    .on_update(move |_state| {
-                        UI_MODEL.write().error_message = None;
-                        UI_MODEL.write().confirmation_message = None;
-                        None
-                    })
             }
         }
     }

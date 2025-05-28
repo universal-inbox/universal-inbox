@@ -16,6 +16,7 @@ use crate::{
 #[component]
 pub fn FullpageLayout() -> Element {
     let user_service = use_coroutine_handle::<UserCommand>();
+    let nav = use_navigator();
 
     rsx! {
         div {
@@ -49,7 +50,7 @@ pub fn FullpageLayout() -> Element {
 
                     if let Some(confirmation_message) = &UI_MODEL.read().confirmation_message {
                         div {
-                            class: "flex flex-col items-center justify-center",
+                            class: "flex flex-col items-center justify-center gap-10",
 
                             div {
                                 class: "alert alert-success text-sm flex gap-2",
@@ -58,9 +59,13 @@ pub fn FullpageLayout() -> Element {
                                 "{confirmation_message}"
                             }
 
-                            Link {
+                            button {
                                 class: "btn btn-primary mt-2",
-                                to: Route::LoginPage {},
+                                onclick: move |_| {
+                                    UI_MODEL.write().confirmation_message = None;
+                                    UI_MODEL.write().error_message = None;
+                                    nav.push(Route::LoginPage {});
+                                },
                                 "Return to Universal Inbox"
                             }
                         }
