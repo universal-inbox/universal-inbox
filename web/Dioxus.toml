@@ -20,6 +20,7 @@ watch_path = ["src", "public"]
 
 [web.wasm_opt]
 level = "0"
+debug = true
 
 [[web.proxy]]
 backend = "http://localhost:8000/api/"

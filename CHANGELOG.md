@@ -5,6 +5,7 @@
 ### Added
 
 - Add Universal Inbox documentation website
+- Add notifications and tasks deep linking
 
 ### Changed
 

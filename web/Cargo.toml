@@ -104,3 +104,6 @@ wasm-bindgen-test = "0.3.0"
 default = ["web", "console_log"]
 web = ["dioxus/web"]
 trunk = []
+
+[package.metadata.wasm-pack.profile.dev.wasm-bindgen]
+dwarf-debug-info = true

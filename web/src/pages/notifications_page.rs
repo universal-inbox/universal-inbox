@@ -4,7 +4,10 @@ use dioxus::prelude::*;
 use log::debug;
 use web_sys::KeyboardEvent;
 
-use universal_inbox::{notification::NotificationWithTask, HasHtmlUrl, Page};
+use universal_inbox::{
+    notification::{NotificationId, NotificationWithTask},
+    HasHtmlUrl, Page,
+};
 
 use crate::{
     components::{
@@ -13,6 +16,7 @@ use crate::{
     icons::UILogo,
     keyboard_manager::{KeyboardHandler, KEYBOARD_MANAGER},
     model::{PreviewPane, UI_MODEL},
+    route::Route,
     services::{
         flyonui::{has_flyonui_modal_opened, open_flyonui_modal},
         notification_service::{NotificationCommand, NOTIFICATIONS_PAGE, NOTIFICATION_FILTERS},
@@ -22,11 +26,13 @@ use crate::{
 
 static KEYBOARD_HANDLER: NotificationsPageKeyboardHandler = NotificationsPageKeyboardHandler {};
 
-pub fn NotificationsPage() -> Element {
-    debug!("Rendering notifications page");
-    let notifications =
-        Into::<ReadOnlySignal<Page<NotificationWithTask>>>::into(NOTIFICATIONS_PAGE.signal());
+#[component]
+pub fn NotificationPage(notification_id: NotificationId) -> Element {
+    rsx! { InternalNotificationPage { notification_id } }
+}
 
+#[component]
+pub fn NotificationsPage() -> Element {
     use_effect(move || {
         let notifications_count = NOTIFICATIONS_PAGE().content.len();
         if notifications_count > 0 {
@@ -39,6 +45,55 @@ pub fn NotificationsPage() -> Element {
                 // ie. lg screen
                 model.selected_notification_index = Some(0);
             }
+        }
+    });
+
+    rsx! { InternalNotificationPage {} }
+}
+
+#[component]
+fn InternalNotificationPage(notification_id: ReadOnlySignal<Option<NotificationId>>) -> Element {
+    let notifications =
+        Into::<ReadOnlySignal<Page<NotificationWithTask>>>::into(NOTIFICATIONS_PAGE.signal());
+    let nav = use_navigator();
+    debug!(
+        "Rendering notifications page for notification {:?}",
+        notification_id()
+    );
+
+    use_effect(move || {
+        if let Some(notification_id) = notification_id() {
+            if let Some(notification_index) = notifications()
+                .content
+                .iter()
+                .position(|n| n.id == notification_id)
+            {
+                if UI_MODEL.peek().selected_notification_index != Some(notification_index) {
+                    UI_MODEL.write().selected_notification_index = Some(notification_index);
+                }
+            }
+        } else if UI_MODEL.peek().selected_notification_index.is_some() {
+            if get_screen_width().unwrap_or_default() < 1024 {
+                UI_MODEL.write().selected_notification_index = None;
+            }
+        }
+    });
+
+    use_effect(move || {
+        if let Some(index) = UI_MODEL.read().selected_notification_index {
+            if let Some(selected_notification) = notifications().content.get(index) {
+                if notification_id
+                    .peek()
+                    .map_or(true, |id| selected_notification.id != id)
+                {
+                    let route = Route::NotificationPage {
+                        notification_id: selected_notification.id,
+                    };
+                    nav.push(route);
+                }
+            }
+        } else if notification_id.peek().is_some() {
+            nav.push(Route::NotificationsPage {});
         }
     });
 

@@ -7,13 +7,17 @@ use log::debug;
 use sorted_groups::SortedGroups;
 use web_sys::KeyboardEvent;
 
-use universal_inbox::{task::Task, HasHtmlUrl, Page};
+use universal_inbox::{
+    task::{Task, TaskId},
+    HasHtmlUrl, Page,
+};
 
 use crate::{
     components::{task_preview::TaskPreview, tasks_list::TasksList},
     images::UI_LOGO_SYMBOL_TRANSPARENT,
     keyboard_manager::{KeyboardHandler, KEYBOARD_MANAGER},
     model::UI_MODEL,
+    route::Route,
     services::{
         flyonui::has_flyonui_modal_opened,
         task_service::{TaskCommand, SYNCED_TASKS_PAGE},
@@ -35,10 +39,12 @@ static SORTED_SYNCED_TASKS: GlobalSignal<SortedGroups<String, TaskWithOrder>> =
     Signal::global(|| SortedGroups::new(vec![], due_at_group_from_task));
 
 #[component]
-pub fn SyncedTasksPage() -> Element {
-    debug!("Rendering synced tasks page");
-    let tasks = Into::<ReadOnlySignal<Page<Task>>>::into(SYNCED_TASKS_PAGE.signal());
+pub fn SyncedTaskPage(task_id: TaskId) -> Element {
+    rsx! { InternalSyncedTaskPage { task_id } }
+}
 
+#[component]
+pub fn SyncedTasksPage() -> Element {
     use_effect(move || {
         let tasks_count = SYNCED_TASKS_PAGE().content.len();
         if tasks_count > 0 {
@@ -52,6 +58,18 @@ pub fn SyncedTasksPage() -> Element {
                 model.selected_task_index = Some(0);
             }
         }
+    });
+
+    rsx! { InternalSyncedTaskPage {} }
+}
+
+#[component]
+fn InternalSyncedTaskPage(task_id: ReadOnlySignal<Option<TaskId>>) -> Element {
+    let tasks = Into::<ReadOnlySignal<Page<Task>>>::into(SYNCED_TASKS_PAGE.signal());
+    let nav = use_navigator();
+    debug!("Rendering synced tasks page for task {:?}", task_id(),);
+
+    use_effect(move || {
         *SORTED_SYNCED_TASKS.write() = SortedGroups::new(
             SYNCED_TASKS_PAGE()
                 .content
@@ -62,6 +80,41 @@ pub fn SyncedTasksPage() -> Element {
                 }),
             due_at_group_from_task,
         );
+    });
+
+    use_effect(move || {
+        if let Some(task_id) = task_id() {
+            if let Some(task_index) = SORTED_SYNCED_TASKS()
+                .iter()
+                .position(|(_, t)| t.task.id == task_id)
+            {
+                if UI_MODEL.peek().selected_task_index != Some(task_index) {
+                    UI_MODEL.write().selected_task_index = Some(task_index);
+                }
+            }
+        } else if UI_MODEL.peek().selected_task_index.is_some() {
+            if get_screen_width().unwrap_or_default() < 1024 {
+                UI_MODEL.write().selected_task_index = None;
+            }
+        }
+    });
+
+    use_effect(move || {
+        if let Some(index) = UI_MODEL.read().selected_task_index {
+            if let Some((_, selected_task)) = SORTED_SYNCED_TASKS().get(index) {
+                if task_id
+                    .peek()
+                    .map_or(true, |id| selected_task.task.id != id)
+                {
+                    let route = Route::SyncedTaskPage {
+                        task_id: selected_task.task.id,
+                    };
+                    nav.push(route);
+                }
+            }
+        } else if task_id.peek().is_some() {
+            nav.push(Route::SyncedTasksPage {});
+        }
     });
 
     use_drop(move || {
@@ -100,7 +153,7 @@ pub fn SyncedTasksPage() -> Element {
                     if let Some((_, task)) = SORTED_SYNCED_TASKS().get(index) {
                         div {
                             id: "task-preview",
-                            class: "h-full lg:basis-1/3 max-lg:w-full max-lg:absolute lg:max-w-sm xl:max-w-md 2xl:max-w-xl px-2 py-2 flex flex-row bg-base-100 z-auto",
+                            class: "h-full lg:basis-1/3 max-lg:w-full max-lg:absolute lg:max-w-sm xl:max-w-md 2xl:max-w-xl px-2 py-2 flex flex-row bg-base-100 z-10",
 
                             TaskPreview {
                                 task: task.task.clone(),
