@@ -72,10 +72,10 @@ fn InternalNotificationPage(notification_id: ReadOnlySignal<Option<NotificationI
                     UI_MODEL.write().selected_notification_index = Some(notification_index);
                 }
             }
-        } else if UI_MODEL.peek().selected_notification_index.is_some() {
-            if get_screen_width().unwrap_or_default() < 1024 {
-                UI_MODEL.write().selected_notification_index = None;
-            }
+        } else if UI_MODEL.peek().selected_notification_index.is_some()
+            && get_screen_width().unwrap_or_default() < 1024
+        {
+            UI_MODEL.write().selected_notification_index = None;
         }
     });
 
