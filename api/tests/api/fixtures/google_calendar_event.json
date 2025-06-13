@@ -66,6 +66,9 @@
     "conferenceId": "abc-def-ghi"
   },
   "guestsCanModify": true,
+  "recurrence": [
+    "RRULE:FREQ=WEEKLY;BYDAY=FR"
+  ],
   "reminders": {
     "useDefault": true
   },

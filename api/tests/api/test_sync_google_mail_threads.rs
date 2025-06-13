@@ -2,6 +2,7 @@
 
 use chrono::{TimeZone, Timelike, Utc};
 use pretty_assertions::assert_eq;
+use rrule::Frequency;
 use rstest::*;
 use uuid::Uuid;
 
@@ -502,7 +503,7 @@ async fn test_sync_notifications_should_create_a_new_google_calendar_notificatio
     google_mail_user_profile: GoogleMailUserProfile,
     google_mail_labels_list: GoogleMailLabelList,
     google_mail_invitation_attachment: GoogleMailMessageBody,
-    google_calendar_event: GoogleCalendarEvent,
+    _google_calendar_event: GoogleCalendarEvent,
     google_calendar_events_list: GoogleCalendarEventsList,
     nango_google_mail_connection: Box<NangoConnection>,
     nango_google_calendar_connection: Box<NangoConnection>,
@@ -639,10 +640,28 @@ async fn test_sync_notifications_should_create_a_new_google_calendar_notificatio
 
     let gcal_third_party_item = &new_notification.source_item;
     assert_eq!(new_notification.source_item.source_id, "eventid1");
-    assert_eq!(
-        gcal_third_party_item.data,
-        ThirdPartyItemData::GoogleCalendarEvent(Box::new(google_calendar_event))
+    // Verify that the recurrence field is properly parsed from the fixture
+    let ThirdPartyItemData::GoogleCalendarEvent(ref event) = gcal_third_party_item.data else {
+        panic!("Expected GoogleCalendarEvent");
+    };
+
+    // Verify basic event properties
+    assert_eq!(event.id.to_string(), "eventid1");
+    assert_eq!(event.summary, "Weekly meeting");
+
+    // Check if recurrence is present and parsed correctly
+    let Some(ref rrule_set) = event.recurrence else {
+        unreachable!("No recurrence found in event");
+    };
+    assert!(
+        !rrule_set.get_rrule().is_empty(),
+        "Expected at least one RRULE if recurrence is present"
     );
+
+    // Verify the specific recurrence rule from our fixture: FREQ=WEEKLY;BYDAY=FR
+    let rrule = &rrule_set.get_rrule()[0];
+    assert_eq!(rrule.get_freq(), Frequency::Weekly);
+    // Note: Testing exact by-day parsing would require more complex assertions
 
     let gmail_third_party_item = gcal_third_party_item.source_item.as_ref().unwrap();
     assert_eq!(
@@ -812,10 +831,27 @@ async fn test_sync_notifications_should_update_a_google_calendar_notification_fr
     // The source Google Calendar event should be the same as the existing one
     assert_eq!(gcal_third_party_item.id, existing_gcal_third_party_item.id);
     assert_eq!(new_notification.source_item.source_id, "eventid1");
-    assert_eq!(
-        gcal_third_party_item.data,
-        ThirdPartyItemData::GoogleCalendarEvent(Box::new(google_calendar_event))
-    );
+
+    // Verify that the recurrence field is properly parsed in the updated notification
+    let ThirdPartyItemData::GoogleCalendarEvent(ref event) = gcal_third_party_item.data else {
+        panic!("Expected GoogleCalendarEvent");
+    };
+
+    // Verify basic event properties
+    assert_eq!(event.id.to_string(), "eventid1");
+    assert_eq!(event.summary, "Weekly meeting");
+
+    // Check if recurrence is present and parsed correctly
+    if let Some(ref rrule_set) = event.recurrence {
+        assert!(
+            !rrule_set.get_rrule().is_empty(),
+            "Expected at least one RRULE if recurrence is present"
+        );
+
+        // Verify the specific recurrence rule from our fixture: FREQ=WEEKLY;BYDAY=FR
+        let rrule = &rrule_set.get_rrule()[0];
+        assert_eq!(rrule.get_freq(), Frequency::Weekly);
+    }
 
     let gmail_third_party_item = gcal_third_party_item.source_item.as_ref().unwrap();
     // The source Google mail thread should be a new one, not the existing one

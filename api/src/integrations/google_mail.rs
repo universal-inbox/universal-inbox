@@ -655,10 +655,12 @@ impl GoogleMailService {
             .and_then(|method_str| method_str.parse().ok())
             .unwrap_or_default(); // Default to REQUEST
 
-        let vcal_uid = vcal
+        let vcal_event = vcal
             .events
             .first()
-            .ok_or_else(|| anyhow!("Failed to parse VCal events"))?
+            .ok_or_else(|| anyhow!("Failed to parse VCal events"))?;
+
+        let vcal_uid = vcal_event
             .properties
             .iter()
             .find_map(|p| {
@@ -669,6 +671,7 @@ impl GoogleMailService {
                 }
             })
             .ok_or_else(|| anyhow!("Failed to parse VCal events"))?;
+
         let mut event = self
             .google_calendar_service
             .get_event("primary", &vcal_uid, &gcal_access_token)
