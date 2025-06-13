@@ -2,6 +2,7 @@ use anyhow::anyhow;
 use chrono::{DateTime, NaiveDate, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
+use std::str::FromStr;
 use typed_id::TypedId;
 use url::Url;
 use uuid::Uuid;
@@ -15,9 +16,50 @@ use crate::{
 
 pub const DEFAULT_GOOGLE_CALENDAR_HTML_URL: &str = "https://calendar.google.com";
 
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy, Default)]
+pub enum EventMethod {
+    #[serde(rename = "PUBLISH")]
+    Publish,
+    #[default]
+    #[serde(rename = "REQUEST")]
+    Request,
+    #[serde(rename = "REFRESH")]
+    Refresh,
+    #[serde(rename = "CANCEL")]
+    Cancel,
+    #[serde(rename = "ADD")]
+    Add,
+    #[serde(rename = "REPLY")]
+    Reply,
+    #[serde(rename = "COUNTER")]
+    Counter,
+    #[serde(rename = "DECLINECOUNTER")]
+    DeclineCounter,
+}
+
+impl FromStr for EventMethod {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "PUBLISH" => Ok(EventMethod::Publish),
+            "REQUEST" => Ok(EventMethod::Request),
+            "REFRESH" => Ok(EventMethod::Refresh),
+            "CANCEL" => Ok(EventMethod::Cancel),
+            "ADD" => Ok(EventMethod::Add),
+            "REPLY" => Ok(EventMethod::Reply),
+            "COUNTER" => Ok(EventMethod::Counter),
+            "DECLINECOUNTER" => Ok(EventMethod::DeclineCounter),
+            _ => Err(anyhow!("Unknown iCal METHOD value: {}", s)),
+        }
+    }
+}
+
 #[serde_as]
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
 pub struct GoogleCalendarEvent {
+    #[serde(default)]
+    pub method: EventMethod,
     pub kind: String,
     pub etag: String,
     pub id: GoogleCalendarEventId,
@@ -430,6 +472,55 @@ impl ThirdPartyItemFromSource for GoogleCalendarEvent {
             user_id,
             integration_connection_id,
             source_item: None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    mod event_method {
+        use super::*;
+
+        #[test]
+        fn test_event_method_from_str() {
+            assert_eq!(
+                "REQUEST".parse::<EventMethod>().unwrap(),
+                EventMethod::Request
+            );
+            assert_eq!(
+                "CANCEL".parse::<EventMethod>().unwrap(),
+                EventMethod::Cancel
+            );
+            assert_eq!("REPLY".parse::<EventMethod>().unwrap(), EventMethod::Reply);
+            assert_eq!(
+                "PUBLISH".parse::<EventMethod>().unwrap(),
+                EventMethod::Publish
+            );
+            assert_eq!(
+                "REFRESH".parse::<EventMethod>().unwrap(),
+                EventMethod::Refresh
+            );
+            assert_eq!("ADD".parse::<EventMethod>().unwrap(), EventMethod::Add);
+            assert_eq!(
+                "COUNTER".parse::<EventMethod>().unwrap(),
+                EventMethod::Counter
+            );
+            assert_eq!(
+                "DECLINECOUNTER".parse::<EventMethod>().unwrap(),
+                EventMethod::DeclineCounter
+            );
+        }
+
+        #[test]
+        fn test_event_method_from_str_invalid() {
+            assert!("INVALID".parse::<EventMethod>().is_err());
+        }
+
+        #[test]
+        fn test_event_method_default() {
+            assert_eq!(EventMethod::default(), EventMethod::Request);
         }
     }
 }

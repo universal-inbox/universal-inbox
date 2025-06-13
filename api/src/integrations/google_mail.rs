@@ -636,10 +636,26 @@ impl GoogleMailService {
             format!("Failed to decode Google Mail calendar attachment for message `{message_id}`")
         })?;
         let mut vcal_events = IcalParser::new(BufReader::new(raw_vcal_event.as_bytes()));
-        let vcal_uid = vcal_events
+        let vcal = vcal_events
             .next()
-            .ok_or_else(|| anyhow!("Failed to parse VCal events"))?
-            .context("Failed to parse VCal events")?
+            .ok_or_else(|| anyhow!("Failed to find VCalendar"))?
+            .context("Failed to parse VCalendar")?;
+
+        // Extract the METHOD property from the vcal
+        let vcal_method = vcal
+            .properties
+            .iter()
+            .find_map(|p| {
+                if p.name == "METHOD" {
+                    p.value.clone()
+                } else {
+                    None
+                }
+            })
+            .and_then(|method_str| method_str.parse().ok())
+            .unwrap_or_default(); // Default to REQUEST
+
+        let vcal_uid = vcal
             .events
             .first()
             .ok_or_else(|| anyhow!("Failed to parse VCal events"))?
@@ -653,13 +669,16 @@ impl GoogleMailService {
                 }
             })
             .ok_or_else(|| anyhow!("Failed to parse VCal events"))?;
-        let event = self
+        let mut event = self
             .google_calendar_service
             .get_event("primary", &vcal_uid, &gcal_access_token)
             .await
             .with_context(|| {
                 format!("Failed to fetch Google Calendar event with iCalUID `{vcal_uid}`")
             })?;
+
+        // Set the method from the vcal attachment
+        event.method = vcal_method;
 
         Ok(Some(event.into_third_party_item(
             user_id,

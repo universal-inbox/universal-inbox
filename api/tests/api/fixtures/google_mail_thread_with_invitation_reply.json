@@ -1,0 +1,103 @@
+{
+  "id": "890",
+  "historyId": "222",
+  "messages": [
+    {
+      "id": "890",
+      "threadId": "890",
+      "labelIds": ["STARRED", "INBOX", "UNREAD"],
+      "snippet": "replied to event",
+      "payload": {
+        "mimeType": "multipart/mixed",
+        "headers": [
+          {
+            "name": "Date",
+            "value": "Sat, 16 Sep 2023 21:11:28 GMT"
+          },
+          {
+            "name": "Subject",
+            "value": "Event reply: Test event reply"
+          },
+          {
+            "name": "From",
+            "value": "user2@example.com"
+          },
+          {
+            "name": "To",
+            "value": "user1@example.com"
+          }
+        ],
+        "body": {
+          "size": 0
+        },
+        "parts": [
+          {
+            "partId": "0",
+            "mimeType": "multipart/alternative",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "multipart/alternative"
+              }
+            ],
+            "body": {
+              "size": 0
+            },
+            "parts": [
+              {
+                "partId": "0.0",
+                "mimeType": "text/plain",
+                "headers": [
+                  {
+                    "name": "Content-Type",
+                    "value": "text/plain; charset=utf-8"
+                  }
+                ],
+                "body": {
+                  "size": 20,
+                  "data": "SSBhY2NlcHQgdGhlIGludml0YXRpb24K"
+                }
+              },
+              {
+                "partId": "0.1",
+                "mimeType": "text/html",
+                "headers": [
+                  {
+                    "name": "Content-Type",
+                    "value": "text/html; charset=utf-8"
+                  }
+                ],
+                "body": {
+                  "size": 30,
+                  "data": "PGh0bWw+SSBhY2NlcHQgdGhlIGludml0YXRpb248L2h0bWw+Cg=="
+                }
+              },
+              {
+                "partId": "0.2",
+                "mimeType": "text/calendar",
+                "filename": "reply.ics",
+                "headers": [
+                  {
+                    "name": "Content-Type",
+                    "value": "text/calendar; charset=utf-8; method=REPLY"
+                  },
+                  {
+                    "name": "Content-Transfer-Encoding",
+                    "value": "quoted-printable"
+                  }
+                ],
+                "body": {
+                  "attachmentId": "attachmentid2",
+                  "size": 20
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "sizeEstimate": 2222,
+      "historyId": "222",
+      "internalDate": "1694898688000"
+    }
+  ]
+}

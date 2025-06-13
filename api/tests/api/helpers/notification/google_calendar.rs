@@ -142,6 +142,16 @@ pub fn google_calendar_events_list() -> GoogleCalendarEventsList {
 }
 
 #[fixture]
+pub fn google_calendar_events_list_reply() -> GoogleCalendarEventsList {
+    load_json_fixture_file("google_calendar_events_list_reply.json")
+}
+
+#[fixture]
 pub fn google_calendar_event() -> GoogleCalendarEvent {
     load_json_fixture_file("google_calendar_event.json")
+}
+
+#[fixture]
+pub fn google_calendar_event_reply() -> GoogleCalendarEvent {
+    load_json_fixture_file("google_calendar_event_reply.json")
 }
