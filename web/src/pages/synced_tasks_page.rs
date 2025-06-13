@@ -92,10 +92,10 @@ fn InternalSyncedTaskPage(task_id: ReadOnlySignal<Option<TaskId>>) -> Element {
                     UI_MODEL.write().selected_task_index = Some(task_index);
                 }
             }
-        } else if UI_MODEL.peek().selected_task_index.is_some() {
-            if get_screen_width().unwrap_or_default() < 1024 {
-                UI_MODEL.write().selected_task_index = None;
-            }
+        } else if UI_MODEL.peek().selected_task_index.is_some()
+            && get_screen_width().unwrap_or_default() < 1024
+        {
+            UI_MODEL.write().selected_task_index = None;
         }
     });
 
