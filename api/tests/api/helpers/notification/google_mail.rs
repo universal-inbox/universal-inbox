@@ -187,6 +187,11 @@ pub fn google_mail_invitation_attachment() -> GoogleMailMessageBody {
 }
 
 #[fixture]
+pub fn google_mail_invitation_reply_attachment() -> GoogleMailMessageBody {
+    load_json_fixture_file("google_mail_invitation_reply_attachment.json")
+}
+
+#[fixture]
 pub fn google_mail_user_profile() -> GoogleMailUserProfile {
     load_json_fixture_file("google_mail_user_profile.json")
 }
@@ -236,6 +241,20 @@ pub fn google_mail_thread_with_invitation(
 ) -> GoogleMailThread {
     let user_email_address: EmailAddress = google_mail_user_profile.email_address.into();
     raw_google_mail_thread_with_invitation.into_google_mail_thread(user_email_address)
+}
+
+#[fixture]
+pub fn raw_google_mail_thread_with_invitation_reply() -> RawGoogleMailThread {
+    load_json_fixture_file("google_mail_thread_with_invitation_reply.json")
+}
+
+#[fixture]
+pub fn google_mail_thread_with_invitation_reply(
+    raw_google_mail_thread_with_invitation_reply: RawGoogleMailThread,
+    google_mail_user_profile: GoogleMailUserProfile,
+) -> GoogleMailThread {
+    let user_email_address: EmailAddress = google_mail_user_profile.email_address.into();
+    raw_google_mail_thread_with_invitation_reply.into_google_mail_thread(user_email_address)
 }
 
 pub fn assert_sync_notifications(

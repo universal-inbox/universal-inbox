@@ -54,12 +54,14 @@ use crate::helpers::{
     notification::{
         google_calendar::{
             create_notification_from_google_calendar_event, google_calendar_event,
-            google_calendar_events_list, mock_google_calendar_list_events_service,
+            google_calendar_event_reply, google_calendar_events_list,
+            google_calendar_events_list_reply, mock_google_calendar_list_events_service,
         },
         google_mail::{
             assert_sync_notifications, create_notification_from_google_mail_thread,
-            google_mail_invitation_attachment, google_mail_labels_list, google_mail_thread_get_123,
-            google_mail_thread_get_456, google_mail_thread_with_invitation,
+            google_mail_invitation_attachment, google_mail_invitation_reply_attachment,
+            google_mail_labels_list, google_mail_thread_get_123, google_mail_thread_get_456,
+            google_mail_thread_with_invitation, google_mail_thread_with_invitation_reply,
             google_mail_user_profile, mock_google_mail_get_attachment_service,
             mock_google_mail_get_user_profile_service, mock_google_mail_labels_list_service,
             mock_google_mail_thread_get_service, mock_google_mail_thread_modify_service,
@@ -824,5 +826,173 @@ async fn test_sync_notifications_should_update_a_google_calendar_notification_fr
     assert_eq!(
         gmail_third_party_item.data,
         ThirdPartyItemData::GoogleMailThread(Box::new(google_mail_thread_with_invitation))
+    );
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_sync_notifications_should_create_a_new_google_calendar_notification_from_a_google_mail_invitation_reply(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    google_mail_thread_with_invitation_reply: GoogleMailThread,
+    google_mail_user_profile: GoogleMailUserProfile,
+    google_mail_labels_list: GoogleMailLabelList,
+    google_mail_invitation_reply_attachment: GoogleMailMessageBody,
+    google_calendar_event_reply: GoogleCalendarEvent,
+    google_calendar_events_list_reply: GoogleCalendarEventsList,
+    nango_google_mail_connection: Box<NangoConnection>,
+    nango_google_calendar_connection: Box<NangoConnection>,
+) {
+    let app = authenticated_app.await;
+    let google_mail_threads_list = GoogleMailThreadList {
+        threads: Some(vec![GoogleMailThreadMinimal {
+            id: google_mail_thread_with_invitation_reply.id.clone(),
+            snippet: google_mail_thread_with_invitation_reply.messages[0]
+                .snippet
+                .clone(),
+            history_id: google_mail_thread_with_invitation_reply.history_id.clone(),
+        }]),
+        result_size_estimate: 1,
+        next_page_token: Some("next_token".to_string()),
+    };
+
+    create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        &settings.oauth2.nango_secret_key,
+        IntegrationConnectionConfig::GoogleCalendar(GoogleCalendarConfig::enabled()),
+        &settings,
+        nango_google_calendar_connection,
+        None,
+        None,
+    )
+    .await;
+
+    let google_mail_config = GoogleMailConfig::enabled();
+    create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        &settings.oauth2.nango_secret_key,
+        IntegrationConnectionConfig::GoogleMail(google_mail_config.clone()),
+        &settings,
+        nango_google_mail_connection,
+        None,
+        None,
+    )
+    .await;
+
+    let google_mail_get_user_profile_mock = mock_google_mail_get_user_profile_service(
+        &app.app.google_mail_mock_server,
+        &google_mail_user_profile,
+    );
+    let google_mail_labels_list_mock = mock_google_mail_labels_list_service(
+        &app.app.google_mail_mock_server,
+        &google_mail_labels_list,
+    );
+    let google_mail_threads_list_mock = mock_google_mail_threads_list_service(
+        &app.app.google_mail_mock_server,
+        None,
+        settings
+            .integrations
+            .get("google_mail")
+            .unwrap()
+            .page_size
+            .unwrap(),
+        Some(vec![google_mail_config.synced_label.id.clone()]),
+        &google_mail_threads_list,
+    );
+    let empty_result = GoogleMailThreadList {
+        threads: None,
+        result_size_estimate: 1,
+        next_page_token: None,
+    };
+    mock_google_mail_threads_list_service(
+        &app.app.google_mail_mock_server,
+        Some("next_token"),
+        settings
+            .integrations
+            .get("google_mail")
+            .unwrap()
+            .page_size
+            .unwrap(),
+        Some(vec![google_mail_config.synced_label.id.clone()]),
+        &empty_result,
+    );
+
+    let raw_google_mail_thread_with_invitation_reply =
+        google_mail_thread_with_invitation_reply.clone().into();
+    let google_mail_thread_with_invitation_reply_mock = mock_google_mail_thread_get_service(
+        &app.app.google_mail_mock_server,
+        "890",
+        &raw_google_mail_thread_with_invitation_reply,
+    );
+    let google_mail_get_attachment_mock = mock_google_mail_get_attachment_service(
+        &app.app.google_mail_mock_server,
+        "890",
+        "attachmentid2", // Found in google_mail_thread_with_invitation_reply
+        &google_mail_invitation_reply_attachment,
+    );
+    let google_calendar_list_events_mock = mock_google_calendar_list_events_service(
+        &app.app.google_calendar_mock_server,
+        "event_icaluid2", // Found in the ical attachment in google_mail_invitation_reply_attachment
+        &google_calendar_events_list_reply,
+    );
+
+    let notifications: Vec<Notification> = sync_notifications(
+        &app.client,
+        &app.app.api_address,
+        Some(NotificationSourceKind::GoogleMail),
+        false,
+    )
+    .await;
+
+    assert_eq!(notifications.len(), 1);
+    assert_eq!(
+        notifications[0].kind,
+        NotificationSourceKind::GoogleCalendar
+    );
+
+    google_mail_get_user_profile_mock.assert_hits(1);
+    google_mail_labels_list_mock.assert_hits(1);
+    google_mail_threads_list_mock.assert();
+    google_mail_thread_with_invitation_reply_mock.assert();
+    google_mail_get_attachment_mock.assert();
+    google_calendar_list_events_mock.assert();
+
+    let new_notification: Box<Notification> = get_resource(
+        &app.client,
+        &app.app.api_address,
+        "notifications",
+        notifications[0].id.into(),
+    )
+    .await;
+    assert_eq!(new_notification.id, notifications[0].id);
+    assert_eq!(
+        new_notification.kind,
+        NotificationSourceKind::GoogleCalendar
+    );
+    assert_eq!(new_notification.status, NotificationStatus::Unread);
+    assert!(new_notification.last_read_at.is_none());
+
+    let gcal_third_party_item = &new_notification.source_item;
+    assert_eq!(new_notification.source_item.source_id, "eventid2");
+    assert_eq!(
+        gcal_third_party_item.data,
+        ThirdPartyItemData::GoogleCalendarEvent(Box::new(google_calendar_event_reply))
+    );
+
+    // Verify the REPLY method is correctly extracted and stored
+    let ThirdPartyItemData::GoogleCalendarEvent(gcal_event) = &gcal_third_party_item.data else {
+        unreachable!("Expected GoogleCalendarEvent");
+    };
+    assert_eq!(
+        gcal_event.method,
+        universal_inbox::third_party::integrations::google_calendar::EventMethod::Reply
+    );
+
+    let gmail_third_party_item = gcal_third_party_item.source_item.as_ref().unwrap();
+    assert_eq!(
+        gmail_third_party_item.data,
+        ThirdPartyItemData::GoogleMailThread(Box::new(google_mail_thread_with_invitation_reply))
     );
 }

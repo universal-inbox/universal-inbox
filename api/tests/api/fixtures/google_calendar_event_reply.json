@@ -1,0 +1,43 @@
+{
+  "method": "REPLY",
+  "kind": "calendar#event",
+  "etag": "\"3471714048456000\"",
+  "id": "eventid2",
+  "status": "confirmed",
+  "htmlLink": "https://www.google.com/calendar/event?eid=test2",
+  "created": "2024-12-30T22:32:57.000Z",
+  "updated": "2025-01-02T22:30:24.198Z",
+  "summary": "Test event reply",
+  "creator": {
+    "email": "user1@example.com"
+  },
+  "organizer": {
+    "email": "user1@example.com"
+  },
+  "start": {
+    "dateTime": "2024-05-06T15:15:00+02:00",
+    "timeZone": "Europe/Paris"
+  },
+  "end": {
+    "dateTime": "2024-05-06T15:30:00+02:00",
+    "timeZone": "Europe/Paris"
+  },
+  "iCalUID": "event_icaluid2",
+  "sequence": 1,
+  "attendees": [
+    {
+      "email": "user2@example.com",
+      "self": true,
+      "responseStatus": "needsAction"
+    },
+    {
+      "email": "user1@example.com",
+      "organizer": true,
+      "responseStatus": "accepted"
+    }
+  ],
+  "reminders": {
+    "useDefault": true
+  },
+  "eventType": "default"
+}
