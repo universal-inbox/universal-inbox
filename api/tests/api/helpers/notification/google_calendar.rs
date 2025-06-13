@@ -155,3 +155,24 @@ pub fn google_calendar_event() -> GoogleCalendarEvent {
 pub fn google_calendar_event_reply() -> GoogleCalendarEvent {
     load_json_fixture_file("google_calendar_event_reply.json")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rrule::Frequency;
+
+    #[rstest]
+    fn test_google_calendar_event_fixture_has_recurrence() {
+        let event = google_calendar_event();
+
+        let Some(rrule_set) = event.recurrence else {
+            unreachable!("Expected recurrence to be present in fixture");
+        };
+
+        let Some(rrule) = rrule_set.get_rrule().first() else {
+            unreachable!("Expected at least one RRULE");
+        };
+
+        assert_eq!(rrule.get_freq(), Frequency::Weekly);
+    }
+}
