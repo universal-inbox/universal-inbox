@@ -7,6 +7,7 @@
 - Add Universal Inbox documentation website
 - Add notifications and tasks deep linking
 - Display cancelled calendar events
+- Display calendar events recurrence
 
 ### Changed
 

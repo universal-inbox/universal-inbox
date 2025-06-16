@@ -5,7 +5,7 @@ use dioxus::prelude::*;
 
 use dioxus_free_icons::{
     icons::bs_icons::{
-        BsCalendar2Event, BsCheckCircleFill, BsPersonCheck, BsPersonDash, BsPersonX,
+        BsArrowRepeat, BsCalendar2Event, BsCheckCircleFill, BsPersonCheck, BsPersonDash, BsPersonX,
         BsQuestionCircleFill, BsXCircleFill,
     },
     Icon,
@@ -59,6 +59,10 @@ pub fn GoogleCalendarEventListItem(
             rsx! { Icon { class: "h-5 w-5 text-warning", icon: BsQuestionCircleFill } }
         }
     };
+
+    // Check if the event is recurring
+    let is_recurring = google_calendar_event().recurrence.is_some()
+        || google_calendar_event().recurring_event_id.is_some();
     let link = notification().get_html_url();
 
     rsx! {
@@ -80,6 +84,9 @@ pub fn GoogleCalendarEventListItem(
             on_select,
 
             { status_icon }
+            if is_recurring {
+                Icon { class: "h-5 w-5 text-base-content/70", icon: BsArrowRepeat }
+            }
             span { class: "text-base-content/50 whitespace-nowrap text-xs font-mono", "{notification_updated_at}" }
         }
     }
