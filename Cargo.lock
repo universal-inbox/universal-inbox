@@ -7899,6 +7899,7 @@ dependencies = [
  "pretty_assertions",
  "regex",
  "reqwest 0.12.14",
+ "rrule",
  "secrecy",
  "serde",
  "serde-wasm-bindgen 0.6.5",
