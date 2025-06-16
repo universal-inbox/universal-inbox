@@ -12,7 +12,9 @@ use dioxus_free_icons::{
 };
 use universal_inbox::{
     notification::NotificationWithTask,
-    third_party::integrations::google_calendar::{GoogleCalendarEvent, GoogleCalendarEventStatus},
+    third_party::integrations::google_calendar::{
+        EventMethod, GoogleCalendarEvent, GoogleCalendarEventStatus,
+    },
     HasHtmlUrl,
 };
 
@@ -40,15 +42,21 @@ pub fn GoogleCalendarEventListItem(
             .to_string()
     });
     let list_context = use_context::<Memo<ListContext>>();
-    let status_icon = match google_calendar_event().status {
-        GoogleCalendarEventStatus::Confirmed => {
+    let status_icon = match (
+        google_calendar_event().status,
+        google_calendar_event().method,
+    ) {
+        // Cancelled events - either by status or method
+        (GoogleCalendarEventStatus::Cancelled, _) | (_, EventMethod::Cancel) => {
+            rsx! { Icon { class: "h-5 w-5 text-error", icon: BsXCircleFill } }
+        }
+        // Confirmed events
+        (GoogleCalendarEventStatus::Confirmed, _) => {
             rsx! { Icon { class: "h-5 w-5 text-success", icon: BsCheckCircleFill } }
         }
-        GoogleCalendarEventStatus::Tentative => {
+        // Tentative events
+        (GoogleCalendarEventStatus::Tentative, _) => {
             rsx! { Icon { class: "h-5 w-5 text-warning", icon: BsQuestionCircleFill } }
-        }
-        GoogleCalendarEventStatus::Cancelled => {
-            rsx! { Icon { class: "h-5 w-5 text-error", icon: BsXCircleFill } }
         }
     };
     let link = notification().get_html_url();
@@ -101,6 +109,29 @@ fn get_google_calendar_notification_list_item_action_buttons(
     show_shortcut: bool,
 ) -> Vec<Element> {
     let context = use_context::<Memo<NotificationListContext>>();
+
+    // Get the Google Calendar event from the notification
+    let google_calendar_event_data = use_memo(move || {
+        if let universal_inbox::third_party::item::ThirdPartyItemData::GoogleCalendarEvent(event) =
+            &notification().source_item.data
+        {
+            Some(event.as_ref().clone())
+        } else {
+            None
+        }
+    });
+
+    let is_cancelled = use_memo(move || {
+        google_calendar_event_data().is_some_and(|event| {
+            event.status == GoogleCalendarEventStatus::Cancelled
+                || event.method == EventMethod::Cancel
+        })
+    });
+
+    if is_cancelled() {
+        return vec![];
+    }
+
     vec![
         rsx! {
             ListItemActionButton {
