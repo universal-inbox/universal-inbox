@@ -5,7 +5,7 @@ use dioxus_free_icons::{
     icons::{
         bs_icons::{
             BsArrowUpRightSquare, BsCalendar2Event, BsPeople, BsPerson, BsPersonCheck,
-            BsPersonDash, BsPersonFill, BsPersonX,
+            BsPersonDash, BsPersonFill, BsPersonX, BsXCircleFill,
         },
         md_communication_icons::MdLocationOn,
     },
@@ -15,7 +15,8 @@ use dioxus_free_icons::{
 use universal_inbox::{
     notification::NotificationWithTask,
     third_party::integrations::google_calendar::{
-        EventAttendee, GoogleCalendarEvent, GoogleCalendarEventAttendeeResponseStatus,
+        EventAttendee, EventMethod, GoogleCalendarEvent, GoogleCalendarEventAttendeeResponseStatus,
+        GoogleCalendarEventStatus,
     },
     HasHtmlUrl,
 };
@@ -45,6 +46,10 @@ pub fn GoogleCalendarEventPreview(
         creator.display_name.or(creator.email)
     });
     let self_attendee = use_memo(move || google_calendar_event().get_self_attendee());
+    let is_cancelled = use_memo(move || {
+        let event = google_calendar_event();
+        event.status == GoogleCalendarEventStatus::Cancelled || event.method == EventMethod::Cancel
+    });
     let is_accepted = use_memo(move || {
         self_attendee().is_some_and(|attendee| {
             attendee.response_status == GoogleCalendarEventAttendeeResponseStatus::Accepted
@@ -90,6 +95,20 @@ pub fn GoogleCalendarEventPreview(
                     target: "_blank",
                     "{notification().title}"
                     Icon { class: "h-5 w-5 min-w-5 text-base-content/50 p-1", icon: BsArrowUpRightSquare }
+                }
+            }
+
+            if is_cancelled() {
+                div {
+                    class: "alert alert-error mt-2",
+                    div {
+                        class: "flex items-center gap-2",
+                        Icon { class: "h-6 w-6", icon: BsXCircleFill }
+                        span {
+                            class: "font-semibold",
+                            "This event has been cancelled"
+                        }
+                    }
                 }
             }
 
@@ -142,43 +161,45 @@ pub fn GoogleCalendarEventPreview(
                     }
                 }
 
-                div {
-                    class: "join w-full",
-                    input {
-                        class: "join-item btn rounded-l-lg grow {accepted_style}",
-                        type: "radio",
-                        name: "action",
-                        checked: "{is_accepted}",
-                        onclick: move |_| {
-                            notification_service
-                                .send(NotificationCommand::AcceptInvitation(notification().id));
-                        },
-                        Icon { class: "h-5 w-5", icon: BsPersonCheck }
-                        "Yes"
-                    }
-                    input {
-                        class: "join-item btn grow {declined_style}",
-                        type: "radio",
-                        name: "action",
-                        checked: "{is_declined}",
-                        onclick: move |_| {
-                            notification_service
-                                .send(NotificationCommand::AcceptInvitation(notification().id));
-                        },
-                        Icon { class: "h-5 w-5", icon: BsPersonX }
-                        "No"
-                    }
-                    input {
-                        class: "join-item btn rounded-r-lg grow {tentative_style}",
-                        type: "radio",
-                        name: "action",
-                        checked: "{is_tentative}",
-                        onclick: move |_| {
-                            notification_service
-                                .send(NotificationCommand::AcceptInvitation(notification().id));
-                        },
-                        Icon { class: "h-5 w-5", icon: BsPersonDash }
-                        "Maybe"
+                if !is_cancelled() {
+                    div {
+                        class: "join w-full",
+                        input {
+                            class: "join-item btn rounded-l-lg grow {accepted_style}",
+                            type: "radio",
+                            name: "action",
+                            checked: "{is_accepted}",
+                            onclick: move |_| {
+                                notification_service
+                                    .send(NotificationCommand::AcceptInvitation(notification().id));
+                            },
+                            Icon { class: "h-5 w-5", icon: BsPersonCheck }
+                            "Yes"
+                        }
+                        input {
+                            class: "join-item btn grow {declined_style}",
+                            type: "radio",
+                            name: "action",
+                            checked: "{is_declined}",
+                            onclick: move |_| {
+                                notification_service
+                                    .send(NotificationCommand::DeclineInvitation(notification().id));
+                            },
+                            Icon { class: "h-5 w-5", icon: BsPersonX }
+                            "No"
+                        }
+                        input {
+                            class: "join-item btn rounded-r-lg grow {tentative_style}",
+                            type: "radio",
+                            name: "action",
+                            checked: "{is_tentative}",
+                            onclick: move |_| {
+                                notification_service
+                                    .send(NotificationCommand::TentativelyAcceptInvitation(notification().id));
+                            },
+                            Icon { class: "h-5 w-5", icon: BsPersonDash }
+                            "Maybe"
+                        }
                     }
                 }
             }
