@@ -17,6 +17,7 @@
 ### Fixed
 
 - Convert calendar event times to event's timezone
+- Display calendar event descriptions as HTML
 
 ## 2025-05-03
 
