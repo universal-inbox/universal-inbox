@@ -131,7 +131,7 @@ impl IntegrationConnectionService {
                 executor,
                 for_user_id,
                 Some(IntegrationConnectionStatus::Validated),
-                true,
+                false,
             )
             .await?;
         for integration_connection in integration_connections.iter_mut() {

@@ -18,6 +18,7 @@
 
 - Convert calendar event times to event's timezone
 - Display calendar event descriptions as HTML
+- Prevent application freeze when third party API is slow
 
 ## 2025-05-03
 
