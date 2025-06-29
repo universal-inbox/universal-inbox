@@ -707,7 +707,12 @@ async fn create_integration_connection(
     let integration_connection = integration_connection_service
         .read()
         .await
-        .create_integration_connection(executor, integration_provider_kind, user_id)
+        .create_integration_connection(
+            executor,
+            integration_provider_kind,
+            IntegrationConnectionStatus::Created,
+            user_id,
+        )
         .await?;
 
     if let Some(integration_connection_config) = integration_connection_config {

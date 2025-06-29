@@ -8,6 +8,7 @@
 - Add notifications and tasks deep linking
 - Display cancelled calendar events
 - Display calendar events recurrence
+- Add Universal Inbox "Web Page" notification type (browser extension)
 
 ### Changed
 

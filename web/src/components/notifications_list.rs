@@ -22,6 +22,7 @@ use crate::{
     components::{
         flyonui::tooltip::{Tooltip, TooltipPlacement},
         integrations::{
+            api::web_page::notification_list_item::WebPageNotificationListItem,
             github::notification_list_item::GithubNotificationListItem,
             google_calendar::notification_list_item::GoogleCalendarEventListItem,
             google_mail::notification_list_item::GoogleMailThreadListItem,
@@ -279,6 +280,14 @@ fn NotificationListItem(
             }
         },
         ThirdPartyItemData::LinearIssue(_) => rsx! {},
+        ThirdPartyItemData::WebPage(web_page) => rsx! {
+            WebPageNotificationListItem {
+                notification,
+                web_page: *web_page,
+                is_selected,
+                on_select
+            }
+        },
     }
 }
 

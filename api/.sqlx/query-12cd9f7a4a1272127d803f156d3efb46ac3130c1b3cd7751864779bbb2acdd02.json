@@ -42,7 +42,8 @@
                 "Linear",
                 "GoogleMail",
                 "Slack",
-                "GoogleCalendar"
+                "GoogleCalendar",
+                "API"
               ]
             }
           }

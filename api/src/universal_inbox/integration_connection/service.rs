@@ -282,7 +282,8 @@ impl IntegrationConnectionService {
         skip_all,
         fields(
             user.id = for_user_id.to_string(),
-            integration_provider_kind = integration_provider_kind.to_string()
+            integration_provider_kind = integration_provider_kind.to_string(),
+            status = status.to_string(),
         ),
         err
     )]
@@ -290,16 +291,55 @@ impl IntegrationConnectionService {
         &self,
         executor: &mut Transaction<'_, Postgres>,
         integration_provider_kind: IntegrationProviderKind,
+        status: IntegrationConnectionStatus,
         for_user_id: UserId,
     ) -> Result<Box<IntegrationConnection>, UniversalInboxError> {
         let integration_connection = Box::new(IntegrationConnection::new(
             for_user_id,
             integration_provider_kind.default_integration_connection_config(),
+            status,
         ));
 
         self.repository
             .create_integration_connection(executor, integration_connection)
             .await
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            user.id = for_user_id.to_string(),
+            integration_provider_kind = integration_provider_kind.to_string()
+        ),
+        err
+    )]
+    pub async fn get_or_create_integration_connection(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        integration_provider_kind: IntegrationProviderKind,
+        for_user_id: UserId,
+    ) -> Result<Box<IntegrationConnection>, UniversalInboxError> {
+        if let Some(integration_connection) = self
+            .repository
+            .get_integration_connection_per_provider(
+                executor,
+                for_user_id,
+                integration_provider_kind,
+                None,
+                Some(IntegrationConnectionStatus::Validated),
+            )
+            .await?
+        {
+            return Ok(Box::new(integration_connection));
+        }
+        self.create_integration_connection(
+            executor,
+            integration_provider_kind,
+            IntegrationConnectionStatus::Validated,
+            for_user_id,
+        )
+        .await
     }
 
     #[tracing::instrument(

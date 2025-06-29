@@ -1263,6 +1263,8 @@ enum PgNotificationSourceKind {
     GoogleMail,
     GoogleCalendar,
     Slack,
+    #[allow(clippy::upper_case_acronyms)]
+    API,
 }
 
 impl TryFrom<&PgNotificationSourceKind> for NotificationSourceKind {

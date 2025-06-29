@@ -19,7 +19,8 @@
                 "GoogleMail",
                 "Slack",
                 "TickTick",
-                "GoogleCalendar"
+                "GoogleCalendar",
+                "API"
               ]
             }
           }

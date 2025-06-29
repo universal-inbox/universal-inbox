@@ -45,7 +45,7 @@ use apalis_redis::RedisStorage;
 use configuration::AuthenticationSettings;
 use csp::{Directive, Source, Sources, CSP};
 use futures::channel::mpsc;
-use integrations::{google_calendar::GoogleCalendarService, slack::SlackService};
+use integrations::{api::APIService, google_calendar::GoogleCalendarService, slack::SlackService};
 use jobs::UniversalInboxJob;
 use jsonwebtoken::{Algorithm, Validation};
 use mailer::Mailer;
@@ -430,6 +430,7 @@ pub async fn build_services(
         slack_base_url,
         integration_connection_service.clone(),
     ));
+    let api_service = Arc::new(APIService::new());
 
     let third_party_item_service = Arc::new(RwLock::new(ThirdPartyItemService::new(
         repository.clone(),
@@ -439,6 +440,7 @@ pub async fn build_services(
         todoist_service.clone(),
         slack_service.clone(),
         linear_service.clone(),
+        api_service.clone(),
     )));
 
     // tag: New notification integration

@@ -45,7 +45,7 @@ pub fn Footer() -> Element {
             {
                 c.is_connected() && !c.has_oauth_scopes(&provider_config.required_oauth_scopes)
             } else {
-                true
+                false
             }
         });
         if has_missing_permission {

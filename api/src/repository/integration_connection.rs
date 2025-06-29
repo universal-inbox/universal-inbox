@@ -2,6 +2,7 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use sqlx::{types::Json, Postgres, QueryBuilder, Transaction};
+use tracing::debug;
 use uuid::Uuid;
 
 use universal_inbox::{
@@ -930,6 +931,7 @@ impl IntegrationConnectionRepository for Repository {
         executor: &mut Transaction<'_, Postgres>,
         integration_connection: Box<IntegrationConnection>,
     ) -> Result<Box<IntegrationConnection>, UniversalInboxError> {
+        debug!("Creating integration connection: {integration_connection:?}");
         sqlx::query!(
             r#"
                 INSERT INTO integration_connection

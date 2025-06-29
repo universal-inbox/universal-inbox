@@ -199,7 +199,8 @@ macro_attr! {
         Linear,
         GoogleMail,
         GoogleCalendar,
-        Slack
+        Slack,
+        API,
     }
 }
 
@@ -215,6 +216,7 @@ impl TryFrom<ThirdPartyItemSourceKind> for NotificationSourceKind {
             ThirdPartyItemSourceKind::SlackReaction | ThirdPartyItemSourceKind::SlackStar => {
                 Ok(Self::Slack)
             }
+            ThirdPartyItemSourceKind::WebPage => Ok(Self::API),
             _ => Err(anyhow!(
                 "ThirdPartyItemSourceKind {source_kind} is not a valid NotificationSourceKind"
             )),
@@ -276,6 +278,7 @@ impl From<NotificationSourceKind> for IntegrationProviderKind {
             NotificationSourceKind::GoogleCalendar => Self::GoogleCalendar,
             NotificationSourceKind::Todoist => Self::Todoist,
             NotificationSourceKind::Slack => Self::Slack,
+            NotificationSourceKind::API => Self::API,
         }
     }
 }

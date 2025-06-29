@@ -25,6 +25,7 @@ pub enum IntegrationConnectionConfig {
     Notion,
     Slack(SlackConfig),
     TickTick,
+    API,
 }
 
 impl IntegrationConnectionConfig {
@@ -39,6 +40,7 @@ impl IntegrationConnectionConfig {
             Self::Notion => IntegrationProviderKind::Notion,
             Self::Slack(_) => IntegrationProviderKind::Slack,
             Self::TickTick => IntegrationProviderKind::TickTick,
+            Self::API => IntegrationProviderKind::API,
         }
     }
 
@@ -53,6 +55,7 @@ impl IntegrationConnectionConfig {
             Self::Notion => None,
             Self::Slack(_) => Some(NotificationSourceKind::Slack),
             Self::TickTick => None,
+            Self::API => Some(NotificationSourceKind::API),
         }
     }
 }
