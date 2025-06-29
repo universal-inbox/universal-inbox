@@ -16,6 +16,7 @@ use universal_inbox::{
 use crate::{
     components::{
         integrations::{
+            api::web_page::preview::WebPagePreview,
             github::preview::{
                 discussion::GithubDiscussionPreview, pull_request::GithubPullRequestPreview,
                 GithubNotificationDefaultPreview,
@@ -338,6 +339,9 @@ fn NotificationDetailsPreview(
                 google_calendar_event: *google_calendar_event,
                 expand_details
             }
+        },
+        ThirdPartyItemData::WebPage(web_page) => rsx! {
+            WebPagePreview { notification, web_page: *web_page }
         },
         ThirdPartyItemData::LinearIssue(_) | ThirdPartyItemData::TodoistItem(_) => rsx! {},
     }

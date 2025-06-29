@@ -27,16 +27,19 @@ use reqwest_tracing::{
 use serde_json::json;
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
-use universal_inbox::task::integrations::todoist::TODOIST_INBOX_PROJECT;
 use url::Url;
 use uuid::Uuid;
+use wiremock::{
+    matchers::{body_partial_json, method},
+    Mock, MockServer, ResponseTemplate,
+};
 
 use universal_inbox::{
     integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
     notification::{Notification, NotificationSource, NotificationSourceKind, NotificationStatus},
     task::{
-        service::TaskPatch, CreateOrUpdateTaskRequest, TaskCreationConfig, TaskSource,
-        TaskSourceKind, TaskStatus,
+        integrations::todoist::TODOIST_INBOX_PROJECT, service::TaskPatch,
+        CreateOrUpdateTaskRequest, TaskCreationConfig, TaskSource, TaskSourceKind, TaskStatus,
     },
     third_party::{
         integrations::linear::{LinearIssue, LinearNotification},
@@ -47,10 +50,6 @@ use universal_inbox::{
     user::UserId,
     utils::default_value::DefaultValue,
     HasHtmlUrl,
-};
-use wiremock::{
-    matchers::{body_partial_json, method},
-    Mock, MockServer, ResponseTemplate,
 };
 
 use crate::{

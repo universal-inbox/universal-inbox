@@ -48,6 +48,7 @@ pub enum IntegrationProvider {
         config: TodoistConfig,
     },
     TickTick,
+    API,
 }
 
 impl IntegrationProvider {
@@ -100,6 +101,7 @@ impl IntegrationProvider {
                 config,
             }),
             IntegrationConnectionConfig::TickTick => Ok(Self::TickTick),
+            IntegrationConnectionConfig::API => Ok(Self::API),
         }
     }
 
@@ -114,6 +116,7 @@ impl IntegrationProvider {
             IntegrationProvider::Slack { context, .. } => context.is_none(),
             IntegrationProvider::Todoist { context, .. } => context.is_none(),
             IntegrationProvider::TickTick => false,
+            IntegrationProvider::API => false,
         }
     }
 
@@ -136,6 +139,7 @@ impl IntegrationProvider {
             IntegrationProvider::Slack { .. } => IntegrationProviderKind::Slack,
             IntegrationProvider::Todoist { .. } => IntegrationProviderKind::Todoist,
             IntegrationProvider::TickTick => IntegrationProviderKind::TickTick,
+            IntegrationProvider::API => IntegrationProviderKind::API,
         }
     }
 
@@ -162,6 +166,7 @@ impl IntegrationProvider {
                 IntegrationConnectionConfig::Slack(config.clone())
             }
             IntegrationProvider::TickTick => IntegrationConnectionConfig::TickTick,
+            IntegrationProvider::API => IntegrationConnectionConfig::API,
         }
     }
 
@@ -291,7 +296,8 @@ macro_attr! {
         Notion,
         Slack,
         Todoist,
-        TickTick
+        TickTick,
+        API,
     }
 }
 
@@ -308,6 +314,7 @@ impl IntegrationProviderKind {
             || *self == IntegrationProviderKind::Notion
             || *self == IntegrationProviderKind::GoogleDocs
             || *self == IntegrationProviderKind::Slack
+            || *self == IntegrationProviderKind::API
     }
 
     pub fn default_integration_connection_config(&self) -> IntegrationConnectionConfig {
@@ -333,6 +340,7 @@ impl IntegrationProviderKind {
                 IntegrationConnectionConfig::Todoist(Default::default())
             }
             IntegrationProviderKind::TickTick => IntegrationConnectionConfig::TickTick,
+            IntegrationProviderKind::API => IntegrationConnectionConfig::API,
         }
     }
 }

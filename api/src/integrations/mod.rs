@@ -17,6 +17,7 @@ use crate::{integrations::oauth2::AccessToken, universal_inbox::UniversalInboxEr
 static APP_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
 
 // tag: New notification integration
+pub mod api;
 pub mod github;
 pub mod google_calendar;
 pub mod google_mail;

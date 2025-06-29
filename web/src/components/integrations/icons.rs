@@ -9,9 +9,12 @@ use universal_inbox::{
     notification::NotificationSourceKind, task::TaskSourceKind,
 };
 
-use crate::components::integrations::{
-    github::icons::Github, google_calendar::icons::GoogleCalendar, google_mail::icons::GoogleMail,
-    linear::icons::Linear, todoist::icons::Todoist,
+use crate::{
+    components::integrations::{
+        github::icons::Github, google_calendar::icons::GoogleCalendar,
+        google_mail::icons::GoogleMail, linear::icons::Linear, todoist::icons::Todoist,
+    },
+    icons::UniversalInbox,
 };
 
 cfg_if! {
@@ -92,6 +95,7 @@ pub fn IntegrationProviderIcon(class: String, provider_kind: IntegrationProvider
         IntegrationProviderKind::Slack => rsx! { Icon { class, icon: BsSlack } },
         IntegrationProviderKind::Todoist => rsx! { Todoist { class } },
         IntegrationProviderKind::TickTick => rsx! { TickTick { class } },
+        IntegrationProviderKind::API => rsx! { UniversalInbox { class } },
     }
 }
 
@@ -105,6 +109,7 @@ pub fn NotificationIcon(kind: NotificationSourceKind) -> Element {
         NotificationSourceKind::GoogleMail => rsx! { GoogleMail { class: "h-5 w-5" } },
         NotificationSourceKind::Todoist => rsx! { Todoist { class: "h-5 w-5" } },
         NotificationSourceKind::Slack => rsx! { Icon { class: "h-5 w-5", icon: BsSlack } },
+        NotificationSourceKind::API => rsx! { UniversalInbox { class: "h-5 w-5" } },
     }
 }
 

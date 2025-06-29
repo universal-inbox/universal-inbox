@@ -717,6 +717,9 @@ impl NotificationService {
                             )));
                         }
                     }
+                    NotificationSourceKind::API => {
+                        // API notifications do not have side effects
+                    }
                 };
 
                 if let Some(task_id) = patch.task_id {

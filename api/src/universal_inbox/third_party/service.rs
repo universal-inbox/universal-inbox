@@ -9,13 +9,14 @@ use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
 
 use universal_inbox::{
-    integration_connection::provider::IntegrationProviderSource,
+    integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
     task::{service::TaskPatch, Task, TaskCreation},
     third_party::{
         integrations::slack::{SlackReaction, SlackStar},
         item::{
-            ThirdPartyItem, ThirdPartyItemCreationResult, ThirdPartyItemFromSource,
-            ThirdPartyItemKind, ThirdPartyItemSource, ThirdPartyItemSourceKind,
+            ThirdPartyItem, ThirdPartyItemCreationResult, ThirdPartyItemData,
+            ThirdPartyItemFromSource, ThirdPartyItemKind, ThirdPartyItemSource,
+            ThirdPartyItemSourceKind,
         },
     },
     user::UserId,
@@ -23,8 +24,9 @@ use universal_inbox::{
 
 use crate::{
     integrations::{
-        linear::LinearService, slack::SlackService, task::ThirdPartyTaskSourceService,
-        third_party::ThirdPartyItemSourceService, todoist::TodoistService,
+        api::APIService, linear::LinearService, slack::SlackService,
+        task::ThirdPartyTaskSourceService, third_party::ThirdPartyItemSourceService,
+        todoist::TodoistService,
     },
     repository::{third_party::ThirdPartyItemRepository, Repository},
     universal_inbox::{
@@ -42,9 +44,11 @@ pub struct ThirdPartyItemService {
     todoist_service: Arc<TodoistService>,
     slack_service: Arc<SlackService>,
     linear_service: Arc<LinearService>,
+    api_service: Arc<APIService>,
 }
 
 impl ThirdPartyItemService {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         repository: Arc<Repository>,
         task_service: Weak<RwLock<TaskService>>,
@@ -53,6 +57,7 @@ impl ThirdPartyItemService {
         todoist_service: Arc<TodoistService>,
         slack_service: Arc<SlackService>,
         linear_service: Arc<LinearService>,
+        api_service: Arc<APIService>,
     ) -> Self {
         Self {
             repository,
@@ -62,6 +67,7 @@ impl ThirdPartyItemService {
             todoist_service,
             slack_service,
             linear_service,
+            api_service,
         }
     }
 
@@ -175,6 +181,75 @@ impl ThirdPartyItemService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
+        fields(
+            third_party_item_kind = third_party_item_data.kind().to_string(),
+            user.id = user_id.to_string()
+        ),
+        err
+    )]
+    pub async fn create_notification_item(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        third_party_item_data: ThirdPartyItemData,
+        user_id: UserId,
+    ) -> Result<Option<ThirdPartyItemCreationResult>, UniversalInboxError> {
+        let integration_connection = self
+            .integration_connection_service
+            .read()
+            .await
+            .get_or_create_integration_connection(executor, IntegrationProviderKind::API, user_id)
+            .await?;
+        let new_third_party_item = match third_party_item_data {
+            ThirdPartyItemData::WebPage(web_page) => {
+                web_page.into_third_party_item(user_id, integration_connection.id)
+            }
+            _ => {
+                return Err(UniversalInboxError::UnsupportedAction(format!(
+                    "Cannot create a notification item from a third party item of kind {}",
+                    third_party_item_data.kind()
+                )));
+            }
+        };
+        let upserted_third_party_item = self
+            .create_or_update_third_party_item(executor, Box::new(new_third_party_item))
+            .await?;
+        let third_party_item = upserted_third_party_item.value();
+
+        let notification = match third_party_item.get_third_party_item_source_kind() {
+            ThirdPartyItemSourceKind::WebPage => {
+                self.notification_service
+                    .upgrade()
+                    .context("Unable to access notification_service from third_party_service")?
+                    .read()
+                    .await
+                    .create_notification_from_third_party_item(
+                        executor,
+                        *third_party_item.clone(),
+                        self.api_service.clone(),
+                        user_id,
+                    )
+                    .await?
+            }
+            kind => {
+                return Err(anyhow!(
+                    "Cannot create a notification item from a third party item of kind {kind}",
+                )
+                .into());
+            }
+        };
+
+        Ok(
+            notification.map(|notification| ThirdPartyItemCreationResult {
+                third_party_item: *third_party_item,
+                task: None,
+                notification: Some(notification),
+            }),
+        )
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
         fields(user.id = user_id.to_string()),
         err
     )]
@@ -244,7 +319,7 @@ impl ThirdPartyItemService {
             } else if let Ok(notification_source_kind) = kind.try_into() {
                 self.notification_service
                     .upgrade()
-                    .context("Unable to access task_service from third_party_service")?
+                    .context("Unable to access notification_service from third_party_service")?
                     .read()
                     .await
                     .delete_stale_notifications_status_from_source_ids(

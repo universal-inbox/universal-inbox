@@ -1,0 +1,76 @@
+#![allow(non_snake_case)]
+
+use chrono::{DateTime, Local};
+use dioxus::prelude::*;
+
+use dioxus_free_icons::{icons::bs_icons::BsLink45deg, Icon};
+
+use universal_inbox::{
+    notification::NotificationWithTask, third_party::integrations::api::WebPage, HasHtmlUrl,
+};
+
+use crate::{
+    components::{
+        list::{ListContext, ListItem},
+        notifications_list::get_notification_list_item_action_buttons,
+    },
+    icons::UniversalInbox,
+};
+
+#[component]
+pub fn WebPageNotificationListItem(
+    notification: ReadOnlySignal<NotificationWithTask>,
+    web_page: ReadOnlySignal<WebPage>,
+    is_selected: ReadOnlySignal<bool>,
+    on_select: EventHandler<()>,
+) -> Element {
+    let notification_updated_at = use_memo(move || {
+        Into::<DateTime<Local>>::into(notification().updated_at)
+            .format("%Y-%m-%d %H:%M")
+            .to_string()
+    });
+    let list_context = use_context::<Memo<ListContext>>();
+    let link = notification().get_html_url();
+    let subicon = if web_page().favicon.is_some() {
+        rsx! {
+            img {
+                class: "h-5 w-5 min-w-5",
+                src: "{web_page().favicon.as_ref().unwrap()}",
+                alt: "Favicon"
+            }
+        }
+    } else {
+        rsx! { Icon { class: "h-5 w-5 min-w-5", icon: BsLink45deg } }
+    };
+
+    rsx! {
+        ListItem {
+            key: "{notification().id}",
+            title: "{notification().title}",
+            subtitle: rsx! { WebPageListItemSubtitle { web_page } },
+            link,
+            icon: rsx! { UniversalInbox { class: "h-5 w-5" } },
+            subicon,
+            action_buttons: get_notification_list_item_action_buttons(
+                notification,
+                list_context().show_shortcut,
+                None,
+                None
+            ),
+            is_selected,
+            on_select,
+
+            span { class: "text-base-content/50 whitespace-nowrap text-xs font-mono", "{notification_updated_at}" }
+        }
+    }
+}
+
+#[component]
+pub fn WebPageListItemSubtitle(web_page: ReadOnlySignal<WebPage>) -> Element {
+    rsx! {
+        div {
+            class: "flex items-center text-xs text-base-content/50 gap-1",
+            span { "{web_page().url}" }
+        }
+    }
+}

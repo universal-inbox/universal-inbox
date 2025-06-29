@@ -114,7 +114,8 @@ pub async fn create_integration_connection(
     initial_sync_failures: Option<u32>,
 ) -> Box<IntegrationConnection> {
     let mut transaction = app.repository.begin().await.unwrap();
-    let mut new_integration_connection = IntegrationConnection::new(user_id, config);
+    let mut new_integration_connection =
+        IntegrationConnection::new(user_id, config, IntegrationConnectionStatus::Created);
     if let Some(initial_sync_failures) = initial_sync_failures {
         new_integration_connection.notifications_sync_failures = initial_sync_failures;
     }

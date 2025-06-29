@@ -43,13 +43,17 @@ pub struct IntegrationConnection {
 }
 
 impl IntegrationConnection {
-    pub fn new(user_id: UserId, config: IntegrationConnectionConfig) -> Self {
+    pub fn new(
+        user_id: UserId,
+        config: IntegrationConnectionConfig,
+        status: IntegrationConnectionStatus,
+    ) -> Self {
         Self {
             id: Uuid::new_v4().into(),
             connection_id: Uuid::new_v4().into(),
             user_id,
             provider_user_id: None,
-            status: IntegrationConnectionStatus::Created,
+            status,
             failure_message: None,
             created_at: Utc::now().with_nanosecond(0).unwrap(),
             updated_at: Utc::now().with_nanosecond(0).unwrap(),
@@ -252,6 +256,7 @@ mod tests {
         IntegrationConnection::new(
             Uuid::new_v4().into(),
             IntegrationConnectionConfig::Todoist(TodoistConfig::default()),
+            IntegrationConnectionStatus::Created,
         )
     }
 

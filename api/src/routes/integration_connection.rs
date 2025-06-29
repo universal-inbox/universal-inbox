@@ -10,7 +10,7 @@ use tokio::sync::RwLock;
 use universal_inbox::{
     integration_connection::{
         config::IntegrationConnectionConfig, IntegrationConnection, IntegrationConnectionCreation,
-        IntegrationConnectionId,
+        IntegrationConnectionId, IntegrationConnectionStatus,
     },
     user::UserId,
 };
@@ -89,6 +89,7 @@ pub async fn create_integration_connection(
         .create_integration_connection(
             &mut transaction,
             integration_connection_creation.provider_kind,
+            IntegrationConnectionStatus::Created,
             user_id,
         )
         .await?;
