@@ -163,7 +163,6 @@ pub async fn run_server(
             .app_data(web::Data::new(notification_service.clone()))
             .app_data(web::Data::new(task_service.clone()))
             .app_data(web::Data::new(user_service.clone()))
-            .app_data(web::Data::new(integration_connection_service.clone()))
             .app_data(web::Data::new(auth_token_service.clone()))
             .app_data(web::Data::new(third_party_item_service.clone()));
 
@@ -243,7 +242,8 @@ pub async fn run_server(
             .service(api_scope)
             .app_data(settings_web_data.clone())
             .app_data(storage_data.clone())
-            .app_data(cache_data.clone());
+            .app_data(cache_data.clone())
+            .app_data(web::Data::new(integration_connection_service.clone()));
 
         if let Some(path) = &static_path {
             info!(
