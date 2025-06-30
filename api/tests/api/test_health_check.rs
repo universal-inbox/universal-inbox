@@ -1,4 +1,5 @@
 use rstest::*;
+use serde_json::json;
 
 use crate::helpers::{tested_app, TestedApp};
 
@@ -12,5 +13,9 @@ async fn health_check_works(#[future] tested_app: TestedApp) {
         .expect("Failed to execute request.");
 
     assert!(response.status().is_success());
-    assert_eq!(Some(0), response.content_length());
+    let body = response.text().await.expect("Failed to parse JSON result");
+    assert_eq!(
+        json!({ "cache": "healthy", "database": "healthy" }).to_string(),
+        body
+    );
 }

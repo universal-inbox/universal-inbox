@@ -48,7 +48,10 @@ mod content_security_policy {
             .unwrap();
 
         assert_eq!(response.status(), 200);
-        assert!(response.headers().get("content-type").is_none());
+        assert_eq!(
+            response.headers().get("content-type"),
+            Some(&HeaderValue::from_static("application/json"))
+        );
         assert!(response.headers().get("content-security-policy").is_none());
     }
 }
