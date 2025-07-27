@@ -1168,128 +1168,128 @@
         }
       }
     },
-    "postgresql_16@latest": {
-      "last_modified": "2025-03-11T17:52:14Z",
+    "postgresql_17@latest": {
+      "last_modified": "2024-12-17T11:43:56Z",
       "plugin_version": "0.0.2",
-      "resolved": "github:NixOS/nixpkgs/0d534853a55b5d02a4ababa1d71921ce8f0aee4c#postgresql_16",
+      "resolved": "github:NixOS/nixpkgs/4989a246d7a390a859852baddb1013f825435cee#postgresql_17",
       "source": "devbox-search",
-      "version": "16.8",
+      "version": "17.1",
       "systems": {
         "aarch64-darwin": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/yvd4n7lf2a39i3bq82id6hc1vcw8djms-postgresql-16.8",
+              "path": "/nix/store/l25sfwhmkg9sy3bp8gvk5372xbrxsjld-postgresql-17.1",
               "default": true
             },
             {
               "name": "man",
-              "path": "/nix/store/pp3330kg3dfji9sifw7xb08xpc2ksj2a-postgresql-16.8-man",
+              "path": "/nix/store/5kggab1xrqiggfdxd9919dp74ckaw4j1-postgresql-17.1-man",
               "default": true
             },
             {
               "name": "dev",
-              "path": "/nix/store/5fgsl08cwh6v4wsfs7s9s9cgm29h6wj2-postgresql-16.8-dev"
+              "path": "/nix/store/mr90ndxiwc97455df4hwmwr9gn695357-postgresql-17.1-dev"
             },
             {
               "name": "doc",
-              "path": "/nix/store/3k0kpf066y3h9fl2375p35mqhqxjp3vm-postgresql-16.8-doc"
+              "path": "/nix/store/pdpp0slrghgfic6fzh58mzig0hdbqpmd-postgresql-17.1-doc"
             },
             {
               "name": "lib",
-              "path": "/nix/store/k0mvaafry5yyfklxhvzxxzf1in869ms6-postgresql-16.8-lib"
+              "path": "/nix/store/sayrsqfa0rwfs3zqvwslgpz6aalvbs3q-postgresql-17.1-lib"
             }
           ],
-          "store_path": "/nix/store/yvd4n7lf2a39i3bq82id6hc1vcw8djms-postgresql-16.8"
+          "store_path": "/nix/store/l25sfwhmkg9sy3bp8gvk5372xbrxsjld-postgresql-17.1"
         },
         "aarch64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/p6dpfjd241njw4005l3j6sb8j0c3qvs3-postgresql-16.8",
+              "path": "/nix/store/mwjghibhmk8v8z98scy4qj6cimrc94g7-postgresql-17.1",
               "default": true
             },
             {
               "name": "man",
-              "path": "/nix/store/i89q7sdxla3w8a22yjpw48g80irs3fny-postgresql-16.8-man",
+              "path": "/nix/store/grhl0mnpfwq93ar5ldynd6glq29m4k6y-postgresql-17.1-man",
               "default": true
             },
             {
               "name": "debug",
-              "path": "/nix/store/8rrb5s40p1iq38zjn0vyxjlm3jcgqk9h-postgresql-16.8-debug"
+              "path": "/nix/store/cmq1r81as95jjmk9vf2i5vl78d9zjdh5-postgresql-17.1-debug"
             },
             {
               "name": "dev",
-              "path": "/nix/store/cwn3fvmlw4578d90wi5nr3f8bsvlsx5i-postgresql-16.8-dev"
+              "path": "/nix/store/wnal3kfgrl3wnh7xyrzzcm4ngihsbfv8-postgresql-17.1-dev"
             },
             {
               "name": "doc",
-              "path": "/nix/store/ba04q2gq0m0yxj03zi59rihchj4dyxi4-postgresql-16.8-doc"
+              "path": "/nix/store/jyg2hgdfazxn6q5f16jqcpixx0vikkv5-postgresql-17.1-doc"
             },
             {
               "name": "lib",
-              "path": "/nix/store/6cvpddnrz14p7ipq8xdkclrxv7r4zx4x-postgresql-16.8-lib"
+              "path": "/nix/store/bmwksmvifm77f09rs0jshs48ik6w7fda-postgresql-17.1-lib"
             }
           ],
-          "store_path": "/nix/store/p6dpfjd241njw4005l3j6sb8j0c3qvs3-postgresql-16.8"
+          "store_path": "/nix/store/mwjghibhmk8v8z98scy4qj6cimrc94g7-postgresql-17.1"
         },
         "x86_64-darwin": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/1qj8dp38pi1zyi7r8lr0dvsk6dr9wvrw-postgresql-16.8",
+              "path": "/nix/store/9dhdq8xh6vgkihwslb4h5hfw41g1xkpa-postgresql-17.1",
               "default": true
             },
             {
               "name": "man",
-              "path": "/nix/store/3bgf3mx229pgsmw976fvb04j4gma7w3x-postgresql-16.8-man",
+              "path": "/nix/store/4mg81k14awdgrbhazr4aicgmzkp0gpjk-postgresql-17.1-man",
               "default": true
             },
             {
+              "name": "dev",
+              "path": "/nix/store/4whhg776i1hl6sjyw0l9qh8n64chhhr2-postgresql-17.1-dev"
+            },
+            {
               "name": "doc",
-              "path": "/nix/store/aga09pssxz1r8v37m5alzf9xzl391cws-postgresql-16.8-doc"
+              "path": "/nix/store/wlq2lghr87x1102plapqjm1fj1gn9mzj-postgresql-17.1-doc"
             },
             {
               "name": "lib",
-              "path": "/nix/store/zdyd5mwc36a3z1g8c5ja7fbhqxrlkyml-postgresql-16.8-lib"
-            },
-            {
-              "name": "dev",
-              "path": "/nix/store/cas6cvbm87xkpbx1clxfn6fs1nglzml1-postgresql-16.8-dev"
+              "path": "/nix/store/jvzd6klmmbgz45jp5vh6z5bplr5p8dg3-postgresql-17.1-lib"
             }
           ],
-          "store_path": "/nix/store/1qj8dp38pi1zyi7r8lr0dvsk6dr9wvrw-postgresql-16.8"
+          "store_path": "/nix/store/9dhdq8xh6vgkihwslb4h5hfw41g1xkpa-postgresql-17.1"
         },
         "x86_64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/c8biii3axhckd1fp2sg8lmslbhsx6a6y-postgresql-16.8",
+              "path": "/nix/store/j70pk2jhkv86dlmys0xf5jssacz7f4cd-postgresql-17.1",
               "default": true
             },
             {
               "name": "man",
-              "path": "/nix/store/g9rz4pnli22i0sp7js1l1g3fm9lf2lp9-postgresql-16.8-man",
+              "path": "/nix/store/m21hdfws10fi74hnsql1m8q21v4nda1d-postgresql-17.1-man",
               "default": true
             },
             {
+              "name": "debug",
+              "path": "/nix/store/r1x7flf46zbc2zipnimvm1gp0hvk11yk-postgresql-17.1-debug"
+            },
+            {
               "name": "dev",
-              "path": "/nix/store/3mgkxjp57c5plvqnh80r2l00z7jjlfb4-postgresql-16.8-dev"
+              "path": "/nix/store/1mcmns7893i8040dpy5biw2x2g0pis26-postgresql-17.1-dev"
             },
             {
               "name": "doc",
-              "path": "/nix/store/n3zkvn2fps4gf6qami0frj2sjy3lxczj-postgresql-16.8-doc"
+              "path": "/nix/store/5zl70spm7wbl4l0maxz56yc9ll7i0ajz-postgresql-17.1-doc"
             },
             {
               "name": "lib",
-              "path": "/nix/store/vp1fzizqghakbavzs3kwyaizrwzapvc9-postgresql-16.8-lib"
-            },
-            {
-              "name": "debug",
-              "path": "/nix/store/34bv0r27h9cz9g15rkzmzri5i6jhyq62-postgresql-16.8-debug"
+              "path": "/nix/store/xigrk9jaf2kmnsqw78580mys0gnshvpc-postgresql-17.1-lib"
             }
           ],
-          "store_path": "/nix/store/c8biii3axhckd1fp2sg8lmslbhsx6a6y-postgresql-16.8"
+          "store_path": "/nix/store/j70pk2jhkv86dlmys0xf5jssacz7f4cd-postgresql-17.1"
         }
       }
     },

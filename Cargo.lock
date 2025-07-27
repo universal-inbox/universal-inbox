@@ -6652,10 +6652,9 @@ dependencies = [
  "indexmap 2.8.0",
  "log",
  "memchr",
+ "native-tls",
  "once_cell",
  "percent-encoding",
- "rustls 0.23.23",
- "rustls-pemfile 2.2.0",
  "serde",
  "serde_json",
  "sha2",
@@ -6666,7 +6665,6 @@ dependencies = [
  "tracing",
  "url",
  "uuid",
- "webpki-roots 0.26.8",
 ]
 
 [[package]]

@@ -9,7 +9,7 @@
     "cargo-outdated": "latest",
     "just":           "latest",
     "watchexec":      "latest",
-    "postgresql_16":  "latest",
+    "postgresql_17":  "latest",
     "redis":          "latest",
     "iconv":          "latest",
     "nodejs_22":      "latest",
