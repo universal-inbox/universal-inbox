@@ -2,6 +2,15 @@
 
 set -Eeo pipefail
 
+UNIVERSAL_INBOX_ENV_FILE="${UNIVERSAL_INBOX_ENV_FILE:-/app/universal-inbox.env}"
+
+if [ -f "$UNIVERSAL_INBOX_ENV_FILE" ]; then
+  echo "Loading environment variables from $UNIVERSAL_INBOX_ENV_FILE"
+  set -a
+  source "$UNIVERSAL_INBOX_ENV_FILE"
+  set +a
+fi
+
 if [ "${AUTHENTICATION__LOCAL__ENABLED:-}" = "true" ]; then
 
   cat <<EOF >> /app/config/prod.toml
