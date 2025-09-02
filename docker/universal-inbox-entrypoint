@@ -63,4 +63,4 @@ if [ -n "$UNIVERSAL_INBOX__APPLICATION__FRONT_BASE_URL" ]; then
 fi
 
 echo "Starting Universal Inbox"
-exec /app/universal-inbox "$*"
+exec /app/universal-inbox "$@"
