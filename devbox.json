@@ -37,7 +37,8 @@
     "dioxus-cli":       "latest",
     "mdbook":           "latest",
     "mdbook-admonish":  "latest",
-    "mdbook-linkcheck": "latest"
+    "mdbook-linkcheck": "latest",
+    "jq":               "latest"
   },
   "shell": {
     "init_hook": [
