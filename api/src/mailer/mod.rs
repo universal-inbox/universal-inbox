@@ -50,7 +50,7 @@ impl EmailTemplate {
         }
     }
 
-    pub fn build_email_body(&self) -> Email {
+    pub fn build_email_body(&self) -> Email<'_> {
         match self {
             EmailTemplate::EmailVerification {
                 first_name,

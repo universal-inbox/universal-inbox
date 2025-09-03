@@ -75,7 +75,7 @@ pub fn mock_todoist_item_add_service<'a>(
 pub fn mock_todoist_get_item_service(
     todoist_mock_server: &MockServer,
     result: Box<TodoistItem>,
-) -> Mock {
+) -> Mock<'_> {
     let item_id = result.id.clone();
     let response = TodoistItemInfoResponse { item: *result };
 
@@ -162,7 +162,7 @@ pub fn mock_todoist_sync_service(
     todoist_mock_server: &MockServer,
     commands: Vec<TodoistSyncPartialCommand>,
     result: Option<TodoistSyncStatusResponse>,
-) -> Mock {
+) -> Mock<'_> {
     let body = json!({ "commands": commands });
 
     let response = result.unwrap_or_else(|| {

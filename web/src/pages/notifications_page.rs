@@ -82,10 +82,7 @@ fn InternalNotificationPage(notification_id: ReadOnlySignal<Option<NotificationI
     use_effect(move || {
         if let Some(index) = UI_MODEL.read().selected_notification_index {
             if let Some(selected_notification) = notifications().content.get(index) {
-                if notification_id
-                    .peek()
-                    .map_or(true, |id| selected_notification.id != id)
-                {
+                if *notification_id.peek() != Some(selected_notification.id) {
                     let route = Route::NotificationPage {
                         notification_id: selected_notification.id,
                     };

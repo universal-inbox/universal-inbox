@@ -44,9 +44,11 @@ where
     <T as FromStr>::Err: Display,
 {
     let required = props.required.unwrap_or_default();
-    let required_label_style = required
-        .then_some("after:content-['*'] after:ml-0.5 after:text-error")
-        .unwrap_or_default();
+    let required_label_style = if required {
+        "after:content-['*'] after:ml-0.5 after:text-error"
+    } else {
+        Default::default()
+    };
     let has_icon = props.icon.is_some();
     let label_style = use_memo(move || {
         if (props.value)().is_empty() && has_icon {
@@ -157,9 +159,11 @@ where
     <T as FromStr>::Err: Display,
 {
     let required = props.required.unwrap_or_default();
-    let required_label_style = required
-        .then_some("after:content-['*'] after:ml-0.5 after:text-error")
-        .unwrap_or_default();
+    let required_label_style = if required {
+        "after:content-['*'] after:ml-0.5 after:text-error"
+    } else {
+        Default::default()
+    };
 
     let error_message = use_signal(|| None);
     let input_style = use_memo(move || error_message().and(Some("is-invalid")).unwrap_or(""));
@@ -240,9 +244,11 @@ where
     T: Display + Clone + PartialEq + for<'de> serde::Deserialize<'de>,
 {
     let required = props.required.unwrap_or_default();
-    let required_label_style = required
-        .then_some("after:content-['*'] after:ml-0.5 after:text-error")
-        .unwrap_or_default();
+    let required_label_style = if required {
+        "after:content-['*'] after:ml-0.5 after:text-error"
+    } else {
+        Default::default()
+    };
 
     let error_message: Signal<Option<String>> = use_signal(|| None);
     let input_style = use_memo(move || error_message().and(Some("is-invalid")).unwrap_or(""));
