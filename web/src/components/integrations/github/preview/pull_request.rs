@@ -867,7 +867,7 @@ mod tests {
                             state: GithubPullRequestReviewState::Approved,
                         }
                     ],
-                    &[requested_reviewer.clone()]
+                    std::slice::from_ref(&requested_reviewer)
                 ),
                 vec![
                     GithubReview::Requested {
@@ -904,7 +904,7 @@ mod tests {
                             state: GithubPullRequestReviewState::Approved,
                         }
                     ],
-                    &[requested_reviewer.clone()]
+                    std::slice::from_ref(&requested_reviewer)
                 ),
                 vec![GithubReview::Completed {
                     reviewer: requested_reviewer,

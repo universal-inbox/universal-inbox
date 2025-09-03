@@ -680,9 +680,11 @@ impl TaskService {
 
         let integration_provider_kind = third_party_task_service.get_integration_provider_kind();
         let integration_connection_service = self.integration_connection_service.read().await;
-        let min_sync_interval_in_minutes = (!force_sync)
-            .then_some(self.min_sync_tasks_interval_in_minutes)
-            .unwrap_or_default();
+        let min_sync_interval_in_minutes = if !force_sync {
+            self.min_sync_tasks_interval_in_minutes
+        } else {
+            Default::default()
+        };
         let Some(integration_connection) = integration_connection_service
             .get_integration_connection_to_sync(
                 executor,

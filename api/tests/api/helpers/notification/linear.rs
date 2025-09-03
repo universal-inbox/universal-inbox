@@ -84,7 +84,7 @@ pub fn mock_linear_issue_notification_subscribers_query(
     user_id: String,
     issue_id: String,
     subscriber_ids: Vec<String>,
-) -> Mock {
+) -> Mock<'_> {
     let expected_subscribers_request_body =
         NotificationSubscribersQuery::build_query(notification_subscribers_query::Variables {
             id: notification_id,
@@ -121,7 +121,7 @@ pub fn mock_linear_issue_notification_subscribers_query(
 pub fn mock_linear_project_notification_subscribers_query(
     linear_mock_server: &MockServer,
     notification_id: String,
-) -> Mock {
+) -> Mock<'_> {
     let expected_subscribers_request_body =
         NotificationSubscribersQuery::build_query(notification_subscribers_query::Variables {
             id: notification_id,
@@ -149,7 +149,7 @@ pub fn mock_linear_update_issue_subscribers_query(
     subscriber_ids: Vec<String>,
     successful_response: bool,
     errors: Option<Vec<Error>>,
-) -> Mock {
+) -> Mock<'_> {
     let expected_update_request_body =
         IssueUpdateSubscribers::build_query(issue_update_subscribers::Variables {
             id: issue_id,
@@ -179,7 +179,7 @@ pub fn mock_linear_archive_notification_query(
     notification_id: String,
     successful_response: bool,
     errors: Option<Vec<Error>>,
-) -> Mock {
+) -> Mock<'_> {
     let expected_request_body = NotificationArchive::build_query(notification_archive::Variables {
         id: notification_id,
     });
@@ -210,7 +210,7 @@ pub fn mock_linear_update_notification_snoozed_until_at_query(
     linear_mock_server: &MockServer,
     notification_id: String,
     snoozed_until_at: DateTime<Utc>,
-) -> Mock {
+) -> Mock<'_> {
     let expected_update_request_body = NotificationUpdateSnoozedUntilAt::build_query(
         notification_update_snoozed_until_at::Variables {
             id: notification_id,
@@ -259,7 +259,7 @@ pub fn mock_linear_update_issue_state_query(
     state_id: Uuid,
     successful_response: bool,
     errors: Option<Vec<Error>>,
-) -> Mock {
+) -> Mock<'_> {
     let expected_update_request_body =
         IssueUpdateState::build_query(issue_update_state::Variables {
             id: issue_id.to_string(),

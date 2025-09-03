@@ -102,10 +102,7 @@ fn InternalSyncedTaskPage(task_id: ReadOnlySignal<Option<TaskId>>) -> Element {
     use_effect(move || {
         if let Some(index) = UI_MODEL.read().selected_task_index {
             if let Some((_, selected_task)) = SORTED_SYNCED_TASKS().get(index) {
-                if task_id
-                    .peek()
-                    .map_or(true, |id| selected_task.task.id != id)
-                {
+                if *task_id.peek() != Some(selected_task.task.id) {
                     let route = Route::SyncedTaskPage {
                         task_id: selected_task.task.id,
                     };
