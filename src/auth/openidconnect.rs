@@ -2,27 +2,31 @@ use anyhow::{anyhow, Context, Result};
 use openidconnect::{
     core::{
         CoreAuthDisplay, CoreAuthPrompt, CoreAuthenticationFlow, CoreClient, CoreErrorResponseType,
-        CoreGenderClaim, CoreJsonWebKey, CoreJsonWebKeyType, CoreJsonWebKeyUse,
-        CoreJweContentEncryptionAlgorithm, CoreJwsSigningAlgorithm, CoreProviderMetadata,
-        CoreRevocableToken, CoreTokenType,
+        CoreGenderClaim, CoreJsonWebKey, CoreJweContentEncryptionAlgorithm,
+        CoreJwsSigningAlgorithm, CoreProviderMetadata, CoreRevocableToken,
+        CoreRevocationErrorResponse, CoreTokenIntrospectionResponse, CoreTokenType,
     },
-    reqwest::async_http_client,
+    reqwest,
     url::Url,
     AccessToken, AccessTokenHash, AuthorizationCode, ClientId, ClientSecret, CsrfToken,
-    EmptyAdditionalClaims, EmptyExtraTokenFields, IdToken, IdTokenClaims, IdTokenFields, IssuerUrl,
-    Nonce, OAuth2TokenResponse, PkceCodeChallenge, PkceCodeVerifier, RedirectUrl,
-    RevocationErrorResponseType, StandardErrorResponse, StandardTokenIntrospectionResponse,
-    StandardTokenResponse, TokenResponse,
+    EmptyAdditionalClaims, EmptyExtraTokenFields, EndpointMaybeSet, EndpointNotSet, EndpointSet,
+    IdToken, IdTokenClaims, IdTokenFields, IssuerUrl, Nonce, OAuth2TokenResponse,
+    PkceCodeChallenge, PkceCodeVerifier, RedirectUrl, StandardErrorResponse, StandardTokenResponse,
+    TokenResponse,
 };
 
-pub type OpenidConnectClient = openidconnect::Client<
+pub type OpenidConnectClient<
+    HasAuthUrl = EndpointSet,
+    HasDeviceAuthUrl = EndpointNotSet,
+    HasIntrospectionUrl = EndpointNotSet,
+    HasRevocationUrl = EndpointNotSet,
+    HasTokenUrl = EndpointMaybeSet,
+    HasUserInfoUrl = EndpointMaybeSet,
+> = openidconnect::Client<
     EmptyAdditionalClaims,
     CoreAuthDisplay,
     CoreGenderClaim,
     CoreJweContentEncryptionAlgorithm,
-    CoreJwsSigningAlgorithm,
-    CoreJsonWebKeyType,
-    CoreJsonWebKeyUse,
     CoreJsonWebKey,
     CoreAuthPrompt,
     StandardErrorResponse<CoreErrorResponseType>,
@@ -33,18 +37,23 @@ pub type OpenidConnectClient = openidconnect::Client<
             CoreGenderClaim,
             CoreJweContentEncryptionAlgorithm,
             CoreJwsSigningAlgorithm,
-            CoreJsonWebKeyType,
         >,
         CoreTokenType,
     >,
-    CoreTokenType,
-    StandardTokenIntrospectionResponse<EmptyExtraTokenFields, CoreTokenType>,
+    CoreTokenIntrospectionResponse,
     CoreRevocableToken,
-    StandardErrorResponse<RevocationErrorResponseType>,
+    CoreRevocationErrorResponse,
+    HasAuthUrl,
+    HasDeviceAuthUrl,
+    HasIntrospectionUrl,
+    HasRevocationUrl,
+    HasTokenUrl,
+    HasUserInfoUrl,
 >;
 
 pub struct OpenidConnectProvider {
     pub client: OpenidConnectClient,
+    pub http_client: reqwest::Client,
 }
 
 impl OpenidConnectProvider {
@@ -54,6 +63,23 @@ impl OpenidConnectProvider {
         client_secret: Option<ClientSecret>,
         redirect_url: RedirectUrl,
     ) -> Result<OpenidConnectProvider> {
+        let http_client = {
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                reqwest::ClientBuilder::new()
+                    // Following redirects opens the client up to SSRF vulnerabilities.
+                    .redirect(reqwest::redirect::Policy::none())
+                    .build()
+                    .context("Failed to build HTTP client")?
+            }
+            #[cfg(target_arch = "wasm32")]
+            {
+                reqwest::ClientBuilder::new()
+                    .build()
+                    .context("Failed to build HTTP client")?
+            }
+        };
+
         // Issuer URL must strictly be equal to the one found in the auth provider
         // metadata. For now clearly the trailing slash added by Url.to_string().
         let issuer_url_string = issuer_url.as_str().trim_end_matches('/').to_string();
@@ -61,7 +87,7 @@ impl OpenidConnectProvider {
         let provider_metadata = CoreProviderMetadata::discover_async(
             IssuerUrl::new(issuer_url_string)
                 .context("Failed to build OpenID Connect issuer URL")?,
-            async_http_client,
+            &http_client,
         )
         .await
         .context("Failed to discover OpenID Connect provider metadata")?;
@@ -72,7 +98,10 @@ impl OpenidConnectProvider {
                 // Set the URL the user will be redirected to after the authorization process.
                 .set_redirect_uri(redirect_url);
 
-        Ok(OpenidConnectProvider { client })
+        Ok(OpenidConnectProvider {
+            client,
+            http_client,
+        })
     }
 
     pub fn build_authorization_code_pkce_flow_auth_url(
@@ -116,15 +145,16 @@ impl OpenidConnectProvider {
             CoreGenderClaim,
             CoreJweContentEncryptionAlgorithm,
             CoreJwsSigningAlgorithm,
-            CoreJsonWebKeyType,
         >,
     )> {
-        let mut token_request = self.client.exchange_code(auth_code);
+        let mut token_request = self.client.exchange_code(auth_code).context(
+            "Failed to build OpenID Connect access token request in exchange of the auth code",
+        )?;
         if let Some(pkce_code_verifier) = pkce_code_verifier {
             token_request = token_request.set_pkce_verifier(pkce_code_verifier);
         }
         let token_response = token_request
-            .request_async(async_http_client)
+            .request_async(&self.http_client)
             .await
             .map_err(|err| {
                 anyhow!(
@@ -145,9 +175,12 @@ impl OpenidConnectProvider {
         if let Some(expected_access_token_hash) = claims.access_token_hash() {
             let actual_access_token_hash = AccessTokenHash::from_token(
                 access_token,
-                &id_token
+                id_token
                     .signing_alg()
                     .context("OpenID connect auth ID token is not signed")?,
+                id_token
+                    .signing_key(&self.client.id_token_verifier())
+                    .context("OpenID connect auth ID token has no signing key")?,
             )
             .context("Failed to hash access token")?;
             if actual_access_token_hash != *expected_access_token_hash {
@@ -165,7 +198,6 @@ impl OpenidConnectProvider {
             CoreGenderClaim,
             CoreJweContentEncryptionAlgorithm,
             CoreJwsSigningAlgorithm,
-            CoreJsonWebKeyType,
         >,
         nonce: &'a Nonce,
     ) -> Result<&'a IdTokenClaims<EmptyAdditionalClaims, CoreGenderClaim>> {

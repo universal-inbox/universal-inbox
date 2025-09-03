@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use anyhow::{anyhow, Context};
 
@@ -1149,7 +1149,7 @@ impl SlackService {
     convert = r#"{ format!("{}__{}__{}__{}", slack_base_url, _user_id, channel, message) }"#,
     ty = "cached::AsyncRedisCache<String, SlackHistoryMessage>",
     map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `fetch_message`: {:?}", e))"##,
-    create = r##" { build_redis_cache("slack:fetch_message", 60, false).await }"##,
+    create = r##" { build_redis_cache("slack:fetch_message", Duration::from_secs(60), false).await }"##,
     with_cached_flag = true
 )]
 async fn cached_fetch_message(
@@ -1206,7 +1206,7 @@ async fn cached_fetch_message(
     convert = r#"{ format!("{}__{}__{}__{}__{}", slack_base_url, _user_id, channel, root_message, current_message) }"#,
     ty = "cached::AsyncRedisCache<String, Vec<SlackHistoryMessage>>",
     map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `fetch_thread`: {:?}", e))"##,
-    create = r##" { build_redis_cache("slack:fetch_thread", 60, false).await }"##,
+    create = r##" { build_redis_cache("slack:fetch_thread", Duration::from_secs(60), false).await }"##,
     with_cached_flag = true
 )]
 async fn cached_fetch_thread(
@@ -1253,7 +1253,7 @@ async fn cached_fetch_thread(
     convert = r#"{ format!("{}__{}", slack_base_url, channel) }"#,
     ty = "cached::AsyncRedisCache<String, SlackChannelInfo>",
     map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `fetch_channel`: {:?}", e))"##,
-    create = r##" { build_redis_cache("slack:fetch_channel", 24 * 60 * 60, false).await }"##,
+    create = r##" { build_redis_cache("slack:fetch_channel", Duration::from_secs(24 * 60 * 60), false).await }"##,
     with_cached_flag = true
 )]
 async fn cached_fetch_channel(
@@ -1289,7 +1289,7 @@ async fn cached_fetch_channel(
     convert = r#"{ format!("{}__{}__{}", slack_base_url, _user_id, user) }"#,
     ty = "cached::AsyncRedisCache<String, SlackUser>",
     map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `fetch_user`: {:?}", e))"##,
-    create = r##" { build_redis_cache("slack:fetch_user", 24 * 60 * 60, false).await }"##,
+    create = r##" { build_redis_cache("slack:fetch_user", Duration::from_secs(24 * 60 * 60), false).await }"##,
     with_cached_flag = true
 )]
 async fn cached_fetch_user(
@@ -1325,7 +1325,7 @@ async fn cached_fetch_user(
     convert = r#"{ format!("{}", slack_base_url) }"#,
     ty = "cached::AsyncRedisCache<String, Vec<SlackUserGroup>>",
     map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `list_usergroups`: {:?}", e))"##,
-    create = r##" { build_redis_cache("slack:list_usergroups", 12 * 60 * 60, false).await }"##,
+    create = r##" { build_redis_cache("slack:list_usergroups", Duration::from_secs(12 * 60 * 60), false).await }"##,
     with_cached_flag = true
 )]
 async fn cached_list_usergroups(
@@ -1359,7 +1359,7 @@ async fn cached_list_usergroups(
     convert = r#"{ format!("{}__{}", slack_base_url, usergroup_id) }"#,
     ty = "cached::AsyncRedisCache<String, Vec<SlackUserId>>",
     map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `list_users_in_usergroup`: {:?}", e))"##,
-    create = r##" { build_redis_cache("slack:list_users_in_usergroup", 12 * 60 * 60, false).await }"##,
+    create = r##" { build_redis_cache("slack:list_users_in_usergroup", Duration::from_secs(12 * 60 * 60), false).await }"##,
     with_cached_flag = true
 )]
 async fn cached_list_users_in_usergroup(
@@ -1396,7 +1396,7 @@ async fn cached_list_users_in_usergroup(
     convert = r#"{ format!("{}__{}", slack_base_url, bot) }"#,
     ty = "cached::AsyncRedisCache<String, SlackBotInfo>",
     map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `fetch_bot`: {:?}", e))"##,
-    create = r##" { build_redis_cache("slack:fetch_bot", 24 * 60 * 60, false).await }"##,
+    create = r##" { build_redis_cache("slack:fetch_bot", Duration::from_secs(24 * 60 * 60), false).await }"##,
     with_cached_flag = true
 )]
 async fn cached_fetch_bot(
@@ -1431,7 +1431,7 @@ async fn cached_fetch_bot(
     convert = r#"{ format!("{}__{}", slack_base_url, team) }"#,
     ty = "cached::AsyncRedisCache<String, SlackTeamInfo>",
     map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `fetch_team`: {:?}", e))"##,
-    create = r##" { build_redis_cache("slack:fetch_team", 24 * 60 * 60, false).await }"##,
+    create = r##" { build_redis_cache("slack:fetch_team", Duration::from_secs(24 * 60 * 60), false).await }"##,
     with_cached_flag = true
 )]
 async fn cached_fetch_team(
@@ -1466,7 +1466,7 @@ async fn cached_fetch_team(
     convert = r#"{ format!("{}", slack_base_url) }"#,
     ty = "cached::AsyncRedisCache<String, HashMap<SlackEmojiName, SlackEmojiRef>>",
     map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `list_emojis`: {:?}", e))"##,
-    create = r##" { build_redis_cache("slack:list_emojis", 24 * 60 * 60, false).await }"##,
+    create = r##" { build_redis_cache("slack:list_emojis", Duration::from_secs(24 * 60 * 60), false).await }"##,
     with_cached_flag = true
 )]
 async fn cached_list_emojis(
@@ -1500,7 +1500,7 @@ async fn cached_list_emojis(
     convert = r#"{ format!("{}__{}__{}", slack_base_url, channel, message) }"#,
     ty = "cached::AsyncRedisCache<String, Url>",
     map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `get_chat_permalink`: {:?}", e))"##,
-    create = r##" { build_redis_cache("slack:get_chat_permalink", 7 * 24 * 60 * 60, true).await }"##,
+    create = r##" { build_redis_cache("slack:get_chat_permalink", Duration::from_secs(7 * 24 * 60 * 60), true).await }"##,
     with_cached_flag = true
 )]
 async fn cached_get_chat_permalink(

@@ -17,7 +17,7 @@ cfg_if! {
     if #[cfg(feature = "console_log")] {
         fn init_log() {
             console_log::init_with_level(LOG_LEVEL).expect("error initializing log");
-            info!("Log level set to {}", LOG_LEVEL.to_string());
+            info!("Log level set to {}", LOG_LEVEL);
         }
     } else {
         fn init_log() {}

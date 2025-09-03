@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use anyhow::anyhow;
 use dioxus::prelude::FormValue;
 use email_address::EmailAddress;
-use secrecy::Secret;
+use secrecy::SecretBox;
 
 use universal_inbox::user::{Credentials, Password, RegisterUserParameters, Username};
 
@@ -35,7 +35,7 @@ impl TryFrom<FormValues> for Credentials {
 
         Ok(Self {
             email,
-            password: Secret::new(password),
+            password: SecretBox::new(Box::new(password)),
         })
     }
 }
@@ -66,7 +66,7 @@ impl TryFrom<FormValues> for EmailAddress {
     }
 }
 
-impl TryFrom<FormValues> for Secret<Password> {
+impl TryFrom<FormValues> for SecretBox<Password> {
     type Error = anyhow::Error;
 
     fn try_from(form_values: FormValues) -> Result<Self, Self::Error> {
@@ -80,7 +80,7 @@ impl TryFrom<FormValues> for Secret<Password> {
             .ok_or_else(|| anyhow!("password is required"))?
             .parse()?;
 
-        Ok(Secret::new(password))
+        Ok(SecretBox::new(Box::new(password)))
     }
 }
 

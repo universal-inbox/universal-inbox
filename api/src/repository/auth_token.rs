@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
-use secrecy::{ExposeSecret, Secret};
+use secrecy::{ExposeSecret, SecretBox};
 use sqlx::{Postgres, QueryBuilder, Transaction};
 
 use universal_inbox::{
@@ -157,7 +157,7 @@ impl From<&AuthenticationTokenRow> for AuthenticationToken {
             created_at: DateTime::from_naive_utc_and_offset(row.created_at, Utc),
             updated_at: DateTime::from_naive_utc_and_offset(row.updated_at, Utc),
             user_id: row.user_id.into(),
-            jwt_token: Secret::new(JWTToken(row.jwt_token.clone())),
+            jwt_token: SecretBox::new(Box::new(JWTToken(row.jwt_token.clone()))),
             expire_at: row
                 .expire_at
                 .map(|expire_at| DateTime::from_naive_utc_and_offset(expire_at, Utc)),

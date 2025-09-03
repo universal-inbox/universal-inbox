@@ -1,5 +1,5 @@
 use core::fmt;
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use anyhow::{anyhow, Context};
 use apalis::prelude::*;
@@ -1213,7 +1213,7 @@ impl IntegrationConnectionService {
     convert = r#"{ format!("{}{}", provider_kind, provider_user_id) }"#,
     ty = "cached::AsyncRedisCache<String, Option<IntegrationConnectionConfig>>",
     map_error = r##"|e| UniversalInboxError::Unexpected(anyhow!("Failed to cache Slack `is_known_provider_user_id`: {:?}", e))"##,
-    create = r##" { build_redis_cache("slack:is_known_provider_user_id", 6 * 60 * 60, false).await }"##
+    create = r##" { build_redis_cache("slack:is_known_provider_user_id", Duration::from_secs(6 * 60 * 60), false).await }"##
 )]
 async fn cached_get_integration_connection_config_for_provider_user_id(
     repository: Arc<Repository>,

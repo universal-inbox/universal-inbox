@@ -1,7 +1,7 @@
 use std::fmt;
 
 use chrono::{DateTime, Utc};
-use secrecy::Secret;
+use secrecy::SecretBox;
 use serde::{Deserialize, Serialize};
 use universal_inbox::{auth::AuthIdToken, user::Username};
 use webauthn_rs::prelude::*;
@@ -49,7 +49,7 @@ pub struct PasskeyUserAuth {
 
 #[derive(Debug, Clone)]
 pub struct LocalUserAuth {
-    pub password_hash: Secret<PasswordHash>,
+    pub password_hash: SecretBox<PasswordHash>,
     pub password_reset_at: Option<DateTime<Utc>>,
     pub password_reset_sent_at: Option<DateTime<Utc>>,
 }

@@ -54,20 +54,20 @@ chrono = { version = "0.4.0", default-features = false, features = [
 ] }
 clap = { version = "4.1.0", features = ["derive"] }
 email_address = { version = "0.2" }
-emojis = { version = "0.6.0" }
+emojis = { version = "0.7.0" }
 enum_derive = { version = "0.1.0" }
 http = { version = "1.1.0" }
-itertools = { version = "0.13.0" }
+itertools = { version = "0.14.0" }
 lazy_static = { version = "1.4.0" }
 log = { version = "0.4.0" }
 macro-attr = { version = "0.2.0" }
-openidconnect = { version = "3.5.0" }
+openidconnect = { version = "4.0" }
 pretty_assertions = { version = "1.3.0" }
 regex = { version = "1.10.0" }
 reqwest = { version = "0.12", features = ["json", "cookies"] }
-rrule = { version = "0.13.0", features = ["serde"] }
-rstest = { version = "0.23.0" }
-secrecy = { version = "0.8.0", features = ["serde"] }
+rrule = { version = "0.14.0", features = ["serde"] }
+rstest = { version = "0.26.0" }
+secrecy = { version = "0.10.0", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 serde_urlencoded = { version = "0.7.0" }
@@ -75,11 +75,11 @@ serde_with = { version = "3.8.0" }
 slack-blocks-render = { version = "0.4.1" }
 slack-morphism = { version = "2.10.1" }
 strum = { version = "0.27", features = ["derive"] }
-thiserror = { version = "1.0" }
+thiserror = { version = "2.0" }
 tracing = { version = "0.1.0", features = ["log"] }
 url = { version = "2.5.0" }
 uuid = { version = "1.0", features = ["v4"] }
-validator = { version = "0.19.0", features = ["derive"] }
+validator = { version = "0.20.0", features = ["derive"] }
 vec1 = { version = "1.12.0", features = ["serde"] }
 webauthn-rs = { version = "0.5.1" }
 webauthn-rs-proto = { version = "0.5.1" }
@@ -101,6 +101,3 @@ inherits = "dev"
 inherits = "dev"
 
 [patch.crates-io]
-# Depends on Apalis with Redis 0.29. Remove when Apalis >0.6.4 is released
-apalis = { git = "https://github.com/geofmureithi/apalis", rev = "c9f4c631585faaa411e20d3f0e483ace4aa63a50" }
-apalis-redis = { git = "https://github.com/geofmureithi/apalis", rev = "c9f4c631585faaa411e20d3f0e483ace4aa63a50", package = "apalis-redis" }

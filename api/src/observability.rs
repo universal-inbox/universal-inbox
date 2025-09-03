@@ -1,5 +1,6 @@
 use std::collections::HashMap;
-use std::{future::Future, str::FromStr, time::Duration};
+use std::str::FromStr;
+use std::{future::Future, time::Duration};
 
 use actix_http::body::MessageBody;
 use actix_jwt_authc::Authenticated;
@@ -9,6 +10,8 @@ use actix_web::{
 };
 use opentelemetry::{trace::TracerProvider as _, KeyValue};
 use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
+use opentelemetry_otlp::tonic_types::metadata::MetadataMap;
+use opentelemetry_otlp::tonic_types::transport::ClientTlsConfig;
 use opentelemetry_otlp::{
     LogExporter, SpanExporter, WithExportConfig, WithHttpConfig, WithTonicConfig,
 };
@@ -18,8 +21,7 @@ use opentelemetry_sdk::{
     Resource,
 };
 use tokio::task::JoinHandle;
-use tonic::metadata::{AsciiMetadataKey, MetadataMap};
-use tonic::transport::ClientTlsConfig;
+use tonic::metadata::AsciiMetadataKey;
 use tracing::{subscriber::set_global_default, Instrument, Span, Subscriber};
 use tracing_actix_web::{DefaultRootSpanBuilder, RootSpanBuilder};
 use tracing_log::LogTracer;

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use anyhow::Context;
 use cached::AsyncRedisCache;
@@ -77,7 +77,7 @@ impl Cache {
 
 pub async fn build_redis_cache<T>(
     prefix: &str,
-    ttl_in_seconds: u64,
+    ttl_in_seconds: Duration,
     refresh: bool,
 ) -> AsyncRedisCache<String, T>
 where

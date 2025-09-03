@@ -3,7 +3,7 @@ use std::{collections::HashMap, env};
 use anyhow::Context;
 use config::{Config, ConfigError, Environment, File};
 use openidconnect::{ClientId, ClientSecret, IntrospectionUrl, IssuerUrl};
-use secrecy::{ExposeSecret, Secret};
+use secrecy::{zeroize::Zeroize, CloneableSecret, ExposeSecret, SecretBox};
 use serde::{Deserialize, Deserializer};
 use serde_with::{serde_as, DisplayFromStr};
 use url::Url;
@@ -182,12 +182,33 @@ pub struct IntegrationSettings {
     pub is_enabled: bool,
 }
 
+#[derive(Debug, Clone)]
+pub struct SmtpPassword(pub String);
+
+impl Zeroize for SmtpPassword {
+    fn zeroize(&mut self) {
+        self.0.zeroize();
+    }
+}
+
+impl CloneableSecret for SmtpPassword {}
+
+impl<'de> serde::Deserialize<'de> for SmtpPassword {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Ok(SmtpPassword(s))
+    }
+}
+
 #[derive(Deserialize, Clone, Debug)]
 pub struct EmailSettings {
     pub smtp_server: String,
     pub smtp_port: u16,
     pub smtp_username: String,
-    pub smtp_password: Secret<String>,
+    pub smtp_password: SecretBox<SmtpPassword>,
     pub from_header: String,
     pub reply_to_header: String,
 }
@@ -197,7 +218,7 @@ impl EmailSettings {
         format!(
             "smtp://{}:{}@{}:{}",
             self.smtp_username,
-            self.smtp_password.expose_secret(),
+            self.smtp_password.expose_secret().0,
             self.smtp_server,
             self.smtp_port,
         )
@@ -205,7 +226,7 @@ impl EmailSettings {
 
     pub fn safe_connection_string(&self) -> String {
         self.connection_string()
-            .replace(self.smtp_password.expose_secret(), "********")
+            .replace(&self.smtp_password.expose_secret().0, "********")
     }
 }
 

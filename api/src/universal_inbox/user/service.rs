@@ -6,15 +6,14 @@ use chrono::Utc;
 use email_address::EmailAddress;
 use openidconnect::{
     core::{
-        CoreGenderClaim, CoreIdToken, CoreJsonWebKeyType, CoreJweContentEncryptionAlgorithm,
-        CoreJwsSigningAlgorithm, CoreUserInfoClaims,
+        CoreGenderClaim, CoreIdToken, CoreJweContentEncryptionAlgorithm, CoreJwsSigningAlgorithm,
+        CoreUserInfoClaims,
     },
-    reqwest::async_http_client,
     AccessToken, AuthorizationCode, CsrfToken, EmptyAdditionalClaims, EndSessionUrl, IdToken,
     LogoutRequest, Nonce, PostLogoutRedirectUrl, ProviderMetadataWithLogout, RedirectUrl,
     SubjectIdentifier, TokenIntrospectionResponse,
 };
-use secrecy::{ExposeSecret, Secret};
+use secrecy::{ExposeSecret, SecretBox};
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
@@ -156,13 +155,12 @@ impl UserService {
         let client = oidc_provider
             .client
             .clone()
-            .set_introspection_uri(pkce_flow_settings.introspection_url.clone());
+            .set_introspection_url(pkce_flow_settings.introspection_url.clone());
 
         let introspection_result = client
             .introspect(access_token)
-            .context("Introspection configuration error")?
             .set_token_type_hint("access_token")
-            .request_async(async_http_client)
+            .request_async(&oidc_provider.http_client)
             .await
             .context("Introspection request error")?;
 
@@ -193,7 +191,6 @@ impl UserService {
             CoreGenderClaim,
             CoreJweContentEncryptionAlgorithm,
             CoreJwsSigningAlgorithm,
-            CoreJsonWebKeyType,
         >,
     ) -> Result<User, UniversalInboxError> {
         let mut oidc_provider = self
@@ -266,7 +263,7 @@ impl UserService {
                         )),
                     )
                     .context("UserInfo configuration error")?
-                    .request_async(async_http_client)
+                    .request_async(&oidc_provider.http_client)
                     .await
                     .context("UserInfo request error")?;
 
@@ -316,9 +313,10 @@ impl UserService {
             AuthenticationSettings::OpenIDConnect(oidc_settings) => {
                 match &oidc_settings.oidc_flow_settings {
                     OIDCFlowSettings::AuthorizationCodePKCEFlow { .. } => {
+                        let oidc_provider = self.get_openid_connect_provider(oidc_settings).await?;
                         let provider_metadata = ProviderMetadataWithLogout::discover_async(
                             oidc_settings.oidc_issuer_url.clone(),
-                            async_http_client,
+                            &oidc_provider.http_client,
                         )
                         .await
                         .context("metadata provider error")?;
@@ -390,7 +388,6 @@ impl UserService {
                 CoreGenderClaim,
                 CoreJweContentEncryptionAlgorithm,
                 CoreJwsSigningAlgorithm,
-                CoreJsonWebKeyType,
             >,
         ),
         UniversalInboxError,
@@ -450,12 +447,12 @@ impl UserService {
         credentials: Credentials,
     ) -> Result<User, UniversalInboxError> {
         // Use a default password hash to prevent timing attacks
-        let mut expected_password_hash = Secret::new(PasswordHash(
+        let mut expected_password_hash = SecretBox::new(Box::new(PasswordHash(
             "$argon2id$v=19$m=20000,t=2,p=1$\
                  gZiV/M1gPc22ElAH/Jh1Hw$\
                  CWOrkoo7oJBQ/iyh7uJ0LO2aLEfrHwTWllSAxT0zRno"
                 .to_string(),
-        ));
+        )));
         let mut result_user_id = None;
 
         if let Some((UserAuth::Local(local_user_auth), user_id)) = self
@@ -482,8 +479,8 @@ impl UserService {
 
     pub fn get_new_password_hash(
         &self,
-        password: Secret<Password>,
-    ) -> Result<Secret<PasswordHash>, UniversalInboxError> {
+        password: SecretBox<Password>,
+    ) -> Result<SecretBox<PasswordHash>, UniversalInboxError> {
         let salt = SaltString::generate(&mut rand::thread_rng());
         let Some(AuthenticationSettings::Local(local_auth_settings)) = &self
             .application_settings
@@ -509,13 +506,13 @@ impl UserService {
             .context("Failed to build Argon2 parameters")?,
         )
         .hash_password(password.expose_secret().0.as_bytes(), &salt)
-        .map(|hash| Secret::new(PasswordHash(hash.to_string())))
+        .map(|hash| SecretBox::new(Box::new(PasswordHash(hash.to_string()))))
         .context("Failed to hash password")?)
     }
 
     fn verify_password_hash(
-        expected_password_hash: Secret<PasswordHash>,
-        password_candidate: Secret<Password>,
+        expected_password_hash: SecretBox<PasswordHash>,
+        password_candidate: SecretBox<Password>,
     ) -> Result<(), UniversalInboxError> {
         let expected_password_hash =
             argon2::PasswordHash::new(expected_password_hash.expose_secret().0.as_str())
@@ -687,7 +684,7 @@ impl UserService {
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
         password_reset_token: PasswordResetToken,
-        new_password: Secret<Password>,
+        new_password: SecretBox<Password>,
     ) -> Result<(), UniversalInboxError> {
         let new_password_hash = self.get_new_password_hash(new_password)?;
         let updated_user = self

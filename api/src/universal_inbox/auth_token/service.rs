@@ -3,7 +3,7 @@ use std::sync::Arc;
 use anyhow::Context;
 use chrono::{DateTime, TimeDelta, Utc};
 use jsonwebtoken::{EncodingKey, Header};
-use secrecy::Secret;
+use secrecy::SecretBox;
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
@@ -75,14 +75,14 @@ impl AuthenticationTokenService {
             jti: Uuid::new_v4().to_string(),
         };
 
-        let jwt_token = Secret::new(JWTToken(
+        let jwt_token = SecretBox::new(Box::new(JWTToken(
             jsonwebtoken::encode(
                 &Header::new(JWT_SIGNING_ALGO),
                 &claims,
                 &self.jwt_encoding_key,
             )
             .context("Failed to encode JSON web token")?,
-        ));
+        )));
         let auth_token =
             AuthenticationToken::new(user_id, jwt_token, Some(expire_at), is_session_token);
         if store {
