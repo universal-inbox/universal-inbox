@@ -2,7 +2,7 @@ use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use email_address::EmailAddress;
-use secrecy::{ExposeSecret, Secret};
+use secrecy::{ExposeSecret, SecretBox};
 use sqlx::{types::Json, Postgres, QueryBuilder, Transaction};
 use uuid::Uuid;
 use webauthn_rs::prelude::*;
@@ -99,7 +99,7 @@ pub trait UserRepository {
         &self,
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
-        password_hash: Secret<PasswordHash>,
+        password_hash: SecretBox<PasswordHash>,
         password_reset_token: Option<PasswordResetToken>,
     ) -> Result<UpdateStatus<User>, UniversalInboxError>;
 
@@ -806,7 +806,7 @@ impl UserRepository for Repository {
         &self,
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
-        password_hash: Secret<PasswordHash>,
+        password_hash: SecretBox<PasswordHash>,
         password_reset_token: Option<PasswordResetToken>,
     ) -> Result<UpdateStatus<User>, UniversalInboxError> {
         let mut query_builder = QueryBuilder::new("UPDATE user_auth SET");
@@ -1217,9 +1217,9 @@ impl TryFrom<&UserAuthRow> for UserAuth {
     fn try_from(row: &UserAuthRow) -> Result<Self, Self::Error> {
         let auth = match row.kind {
             PgUserAuthKind::Local => UserAuth::Local(Box::new(LocalUserAuth {
-                password_hash: Secret::new(PasswordHash(row.password_hash.clone().context(
+                password_hash: SecretBox::new(Box::new(PasswordHash(row.password_hash.clone().context(
                     "Expected to find password hash in storage with local authentication",
-                )?)),
+                )?))),
                 password_reset_at: row
                     .password_reset_at
                     .map(|naive| DateTime::from_naive_utc_and_offset(naive, Utc)),
@@ -1301,9 +1301,9 @@ impl TryFrom<&UserAndUserAuthRow> for UserAuth {
     fn try_from(row: &UserAndUserAuthRow) -> Result<Self, Self::Error> {
         let auth = match row.user_auth_row.kind {
             PgUserAuthKind::Local => UserAuth::Local(Box::new(LocalUserAuth {
-                password_hash: Secret::new(PasswordHash(row.user_auth_row.password_hash.clone().context(
+                password_hash: SecretBox::new(Box::new(PasswordHash(row.user_auth_row.password_hash.clone().context(
                     "Expected to find password hash in storage with local authentication",
-                )?)),
+                )?))),
                 password_reset_at: row.user_auth_row
                     .password_reset_at
                     .map(|naive| DateTime::from_naive_utc_and_offset(naive, Utc)),

@@ -48,7 +48,13 @@
       as="fetch"
       crossorigin="use-credentials"
     />
-    <link data-integrity="none" data-trunk rel="rust" data-wasm-opt="z" />
+    <link
+      data-integrity="none"
+      data-trunk
+      rel="rust"
+      data-wasm-opt="z"
+      data-wasm-opt-params="--enable-bulk-memory --all-features"
+    />
   </head>
 
   <body class="h-full">

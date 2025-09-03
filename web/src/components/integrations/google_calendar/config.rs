@@ -25,7 +25,7 @@ pub fn GoogleCalendarProviderConfiguration(
                     class: "relative inline-block",
                     input {
                         r#type: "checkbox",
-                        class: "switch switch-soft switch-outline switch-sm peer",
+                        class: "switch switch-primary switch-outline switch-sm peer",
                         oninput: move |event| {
                             on_config_change.call(IntegrationConnectionConfig::GoogleCalendar(GoogleCalendarConfig {
                                 sync_event_details_enabled: event.value() == "true",
@@ -34,10 +34,10 @@ pub fn GoogleCalendarProviderConfiguration(
                         checked: config().sync_event_details_enabled
                     }
                     span {
-                        class: "icon-[tabler--check] text-primary-content absolute start-1 top-1 hidden size-4 peer-checked:block"
+                        class: "icon-[tabler--check] text-primary absolute start-1 top-1 hidden size-4 peer-checked:block"
                     }
                     span {
-                        class: "icon-[tabler--x] text-neutral-content absolute end-1 top-1 block size-4 peer-checked:hidden"
+                        class: "icon-[tabler--x] text-neutral absolute end-1 top-1 block size-4 peer-checked:hidden"
                     }
                 }
             }

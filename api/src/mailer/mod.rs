@@ -9,7 +9,7 @@ use lettre::{
     AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor,
 };
 use mailgen::{themes::DefaultTheme, Action, Branding, Email, EmailBuilder, Greeting, Mailgen};
-use secrecy::{ExposeSecret, Secret};
+use secrecy::{ExposeSecret, SecretBox};
 use serde::Serialize;
 use tracing::info;
 use url::Url;
@@ -108,11 +108,11 @@ impl SmtpMailer {
         smtp_server: String,
         smtp_port: u16,
         smtp_username: String,
-        smtp_password: Secret<String>,
+        smtp_password: SecretBox<crate::configuration::SmtpPassword>,
         from_header: Mailbox,
         reply_to_header: Mailbox,
     ) -> Result<Self, UniversalInboxError> {
-        let creds = Credentials::new(smtp_username, smtp_password.expose_secret().to_string());
+        let creds = Credentials::new(smtp_username, smtp_password.expose_secret().0.clone());
 
         let mailer = AsyncSmtpTransport::<Tokio1Executor>::relay(&smtp_server)
             .with_context(|| format!("Failed to connect to SMTP server {smtp_server}"))?

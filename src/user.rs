@@ -3,7 +3,7 @@ use std::{fmt, str::FromStr};
 use anyhow::anyhow;
 use chrono::{DateTime, Timelike, Utc};
 use email_address::EmailAddress;
-use secrecy::{CloneableSecret, DebugSecret, Secret, SerializableSecret, Zeroize};
+use secrecy::{zeroize::Zeroize, CloneableSecret, SecretBox, SerializableSecret};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use uuid::Uuid;
@@ -69,7 +69,6 @@ impl Zeroize for PasswordHash {
     }
 }
 impl CloneableSecret for PasswordHash {}
-impl DebugSecret for PasswordHash {}
 
 #[derive(Deserialize, Serialize, Validate)]
 pub struct RegisterUserParameters {
@@ -89,7 +88,7 @@ impl RegisterUserParameters {
 #[derive(Deserialize, Serialize)]
 pub struct Credentials {
     pub email: EmailAddress,
-    pub password: Secret<Password>,
+    pub password: SecretBox<Password>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -102,7 +101,6 @@ impl Zeroize for Password {
     }
 }
 impl CloneableSecret for Password {}
-impl DebugSecret for Password {}
 impl SerializableSecret for Password {}
 
 impl FromStr for Password {

@@ -1,7 +1,7 @@
 use std::{fmt, str::FromStr};
 
 use chrono::{DateTime, Utc};
-use secrecy::{CloneableSecret, DebugSecret, ExposeSecret, Secret, SerializableSecret, Zeroize};
+use secrecy::{zeroize::Zeroize, CloneableSecret, ExposeSecret, SecretBox, SerializableSecret};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -13,7 +13,7 @@ pub struct AuthenticationToken {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub user_id: UserId,
-    pub jwt_token: Secret<JWTToken>,
+    pub jwt_token: SecretBox<JWTToken>,
     pub expire_at: Option<DateTime<Utc>>,
     pub is_revoked: bool,
     pub is_session_token: bool,
@@ -22,7 +22,7 @@ pub struct AuthenticationToken {
 impl AuthenticationToken {
     pub fn new(
         user_id: UserId,
-        jwt_token: Secret<JWTToken>,
+        jwt_token: SecretBox<JWTToken>,
         expire_at: Option<DateTime<Utc>>,
         is_session_token: bool,
     ) -> Self {
@@ -100,7 +100,6 @@ impl Zeroize for JWTToken {
 }
 
 impl CloneableSecret for JWTToken {}
-impl DebugSecret for JWTToken {}
 impl SerializableSecret for JWTToken {}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -143,7 +142,7 @@ mod tests {
             assert_eq!(
                 TruncatedAuthenticationToken::new(AuthenticationToken::new(
                     UserId(Uuid::new_v4()),
-                    Secret::new(JWTToken("long_value".to_string())),
+                    SecretBox::new(Box::new(JWTToken("long_value".to_string()))),
                     Some(Utc::now()),
                     false,
                 ))

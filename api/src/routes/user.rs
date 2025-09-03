@@ -8,7 +8,7 @@ use anyhow::{anyhow, Context};
 use chrono::{TimeDelta, Utc};
 use email_address::EmailAddress;
 use redis::AsyncCommands;
-use secrecy::{ExposeSecret, Secret};
+use secrecy::{ExposeSecret, SecretBox};
 use serde_json::json;
 use tokio::sync::RwLock;
 use validator::Validate;
@@ -335,7 +335,7 @@ pub async fn send_password_reset_email(
 pub async fn reset_password(
     user_service: web::Data<Arc<UserService>>,
     path_info: web::Path<(UserId, PasswordResetToken)>,
-    password: web::Json<Secret<Password>>,
+    password: web::Json<SecretBox<Password>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     let (user_id, password_reset_token) = path_info.into_inner();
     let service = user_service.clone();
@@ -457,7 +457,7 @@ pub async fn start_passkey_registration(
     cache
         .connection_manager
         .clone()
-        .set(
+        .set::<_, _, ()>(
             format!("{}::{}", PASSKEY_REGISTRATION_STATE_SESSION_KEY, user_id),
             registration_state_to_store,
         )
@@ -568,7 +568,7 @@ pub async fn start_passkey_authentication(
     cache
         .connection_manager
         .clone()
-        .set(
+        .set::<_, _, ()>(
             format!("{}::{}", PASSKEY_AUTHENTICATION_STATE_SESSION_KEY, user_id),
             authentication_state_to_store,
         )

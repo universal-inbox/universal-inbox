@@ -27,7 +27,7 @@ pub fn TodoistProviderConfiguration(
                     class: "relative inline-block",
                     input {
                         r#type: "checkbox",
-                        class: "switch switch-soft switch-outline switch-sm peer",
+                        class: "switch switch-primary switch-outline peer",
                         oninput: move |event| {
                             on_config_change.call(IntegrationConnectionConfig::Todoist(TodoistConfig {
                                 sync_tasks_enabled: event.value() == "true",
@@ -37,10 +37,10 @@ pub fn TodoistProviderConfiguration(
                         checked: config().sync_tasks_enabled
                     }
                     span {
-                        class: "icon-[tabler--check] text-primary-content absolute start-1 top-1 hidden size-4 peer-checked:block"
+                        class: "icon-[tabler--check] text-primary absolute start-1 top-1 hidden size-4 peer-checked:block"
                     }
                     span {
-                        class: "icon-[tabler--x] text-neutral-content absolute end-1 top-1 block size-4 peer-checked:hidden"
+                        class: "icon-[tabler--x] text-neutral absolute end-1 top-1 block size-4 peer-checked:hidden"
                     }
                 }
             }
@@ -57,7 +57,7 @@ pub fn TodoistProviderConfiguration(
                     class: "relative inline-block",
                     input {
                         r#type: "checkbox",
-                        class: "switch switch-soft switch-outline switch-sm peer",
+                        class: "switch switch-primary switch-outline peer",
                         oninput: move |event| {
                             on_config_change.call(IntegrationConnectionConfig::Todoist(TodoistConfig {
                                 create_notification_from_inbox_task: event.value() == "true",
@@ -67,10 +67,10 @@ pub fn TodoistProviderConfiguration(
                         checked: config().create_notification_from_inbox_task
                     }
                     span {
-                        class: "icon-[tabler--check] text-primary-content absolute start-1 top-1 hidden size-4 peer-checked:block"
+                        class: "icon-[tabler--check] text-primary absolute start-1 top-1 hidden size-4 peer-checked:block"
                     }
                     span {
-                        class: "icon-[tabler--x] text-neutral-content absolute end-1 top-1 block size-4 peer-checked:hidden"
+                        class: "icon-[tabler--x] text-neutral absolute end-1 top-1 block size-4 peer-checked:hidden"
                     }
                 }
             }

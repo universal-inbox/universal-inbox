@@ -6,7 +6,7 @@
     "@rspack/core": "^1.1.6",
     "@tailwindcss/typography": "^0.5",
     "flatpickr": "^4.6.13",
-    "flyonui": "https://gitpkg.now.sh/dax/flyonui?150675eab13ace62b4c3760d674a0419f397ba42",
+    "flyonui": "^2.4.0",
     "notyf": "^3.10.0",
     "tailwindcss": "^4.0.17",
     "typescript": "5.3.3"

@@ -3,7 +3,7 @@ use std::{env, fmt::Debug, fs, sync::Arc};
 use anyhow::Context;
 use chrono::{Timelike, Utc};
 use graphql_client::Response;
-use secrecy::Secret;
+use secrecy::SecretBox;
 use slack_morphism::{
     api::{
         SlackApiConversationsHistoryResponse, SlackApiConversationsInfoResponse,
@@ -759,8 +759,9 @@ async fn generate_user(
         updated_at: Utc::now().with_nanosecond(0).unwrap(),
     };
     let user_auth = UserAuth::Local(Box::new(LocalUserAuth {
-        password_hash: user_service
-            .get_new_password_hash(Secret::new(Password(DEFAULT_PASSWORD.to_string())))?,
+        password_hash: user_service.get_new_password_hash(SecretBox::new(Box::new(Password(
+            DEFAULT_PASSWORD.to_string(),
+        ))))?,
         password_reset_at: None,
         password_reset_sent_at: None,
     }));

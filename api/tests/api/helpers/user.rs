@@ -1,6 +1,6 @@
 use email_address::EmailAddress;
 use reqwest::Client;
-use secrecy::Secret;
+use secrecy::SecretBox;
 
 use universal_inbox::user::{
     Credentials, EmailValidationToken, Password, PasswordResetToken, RegisterUserParameters, User,
@@ -25,7 +25,7 @@ pub async fn register_user_response(
         .json(&RegisterUserParameters {
             credentials: Credentials {
                 email,
-                password: Secret::new(Password(password.to_string())),
+                password: SecretBox::new(Box::new(Password(password.to_string()))),
             },
         })
         .send()
@@ -78,7 +78,7 @@ pub async fn login_user_response(
         .post(format!("{}users/me", app.api_address))
         .json(&Credentials {
             email,
-            password: Secret::new(Password(password.to_string())),
+            password: SecretBox::new(Box::new(Password(password.to_string()))),
         })
         .send()
         .await
@@ -131,7 +131,7 @@ pub async fn create_user(app: &TestedApp, email: EmailAddress, password: &str) -
             User::new(None, None, email),
             UserAuth::Local(Box::new(LocalUserAuth {
                 password_hash: service
-                    .get_new_password_hash(Secret::new(password.parse().unwrap()))
+                    .get_new_password_hash(SecretBox::new(Box::new(password.parse().unwrap())))
                     .unwrap(),
                 password_reset_at: None,
                 password_reset_sent_at: None,

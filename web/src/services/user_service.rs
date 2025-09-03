@@ -5,7 +5,7 @@ use email_address::EmailAddress;
 use futures_util::StreamExt;
 use log::error;
 use reqwest::Method;
-use secrecy::Secret;
+use secrecy::SecretBox;
 use url::Url;
 use webauthn_rs_proto::*;
 
@@ -32,7 +32,7 @@ pub enum UserCommand {
     ResendVerificationEmail,
     VerifyEmail(UserId, EmailValidationToken),
     SendPasswordResetEmail(EmailAddress),
-    ResetPassword(UserId, PasswordResetToken, Secret<Password>),
+    ResetPassword(UserId, PasswordResetToken, SecretBox<Password>),
     RegisterPasskey(Username),
     LoginPasskey(Username),
 }
