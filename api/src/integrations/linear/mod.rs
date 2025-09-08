@@ -1,5 +1,5 @@
 use std::collections::{hash_map::Entry, HashMap};
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
@@ -20,10 +20,7 @@ use graphql::{
 };
 use graphql_client::{GraphQLQuery, Response};
 use http::{HeaderMap, HeaderValue};
-use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, Extension};
-use reqwest_tracing::{
-    DisableOtelPropagation, OtelPathNames, SpanBackendWithUrl, TracingMiddleware,
-};
+
 use serde_json::json;
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
@@ -65,12 +62,11 @@ use crate::{
         oauth2::AccessToken,
         task::ThirdPartyTaskService,
         third_party::ThirdPartyItemSourceService,
-        APP_USER_AGENT,
     },
     universal_inbox::{
         integration_connection::service::IntegrationConnectionService, UniversalInboxError,
     },
-    utils::graphql::assert_no_error_in_graphql_response,
+    utils::{api::ApiClient, graphql::assert_no_error_in_graphql_response},
 };
 
 pub mod graphql;
@@ -80,6 +76,7 @@ pub struct LinearService {
     linear_graphql_url: String,
     linear_graphql_path: String,
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
+    max_retry_duration: Duration,
 }
 
 static LINEAR_GRAPHQL_URL: &str = "https://api.linear.app/graphql";
@@ -89,6 +86,7 @@ impl LinearService {
     pub fn new(
         linear_graphql_url: Option<String>,
         integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
+        max_retry_duration: Duration,
     ) -> Result<LinearService, UniversalInboxError> {
         let linear_graphql_url =
             linear_graphql_url.unwrap_or_else(|| LINEAR_GRAPHQL_URL.to_string());
@@ -101,6 +99,7 @@ impl LinearService {
             linear_graphql_url,
             linear_graphql_path,
             integration_connection_service,
+            max_retry_duration,
         })
     }
 
@@ -254,26 +253,18 @@ impl LinearService {
     fn build_linear_client(
         &self,
         access_token: &AccessToken,
-    ) -> Result<ClientWithMiddleware, UniversalInboxError> {
+    ) -> Result<ApiClient, UniversalInboxError> {
         let mut headers = HeaderMap::new();
 
         let mut auth_header_value: HeaderValue = format!("Bearer {access_token}").parse().unwrap();
         auth_header_value.set_sensitive(true);
         headers.insert("Authorization", auth_header_value);
 
-        let reqwest_client = reqwest::Client::builder()
-            .default_headers(headers)
-            .user_agent(APP_USER_AGENT)
-            .build()
-            .context("Cannot build Linear client")?;
-        Ok(ClientBuilder::new(reqwest_client)
-            .with_init(Extension(
-                OtelPathNames::known_paths([&self.linear_graphql_path])
-                    .context("Cannot build Otel path names")?,
-            ))
-            .with_init(Extension(DisableOtelPropagation))
-            .with(TracingMiddleware::<SpanBackendWithUrl>::new())
-            .build())
+        ApiClient::build(
+            headers,
+            [&self.linear_graphql_path],
+            self.max_retry_duration,
+        )
     }
 
     pub async fn query_notifications(
@@ -282,20 +273,11 @@ impl LinearService {
     ) -> Result<notifications_query::ResponseData, UniversalInboxError> {
         let request_body = NotificationsQuery::build_query(notifications_query::Variables {});
 
-        let response = self
+        let notifications_response: Response<notifications_query::ResponseData> = self
             .build_linear_client(access_token)?
-            .post(&self.linear_graphql_url)
-            .json(&request_body)
-            .send()
+            .post(&self.linear_graphql_url, Some(&request_body))
             .await
-            .context("Cannot fetch notifications from Linear API")?
-            .text()
-            .await
-            .context("Failed to fetch notifications response from Linear API")?;
-
-        let notifications_response: Response<notifications_query::ResponseData> =
-            serde_json::from_str(&response)
-                .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
+            .context("Cannot fetch notifications from Linear API")?;
 
         assert_no_error_in_graphql_response(&notifications_response, LINEAR_GRAPHQL_API_NAME)?;
 
@@ -314,20 +296,11 @@ impl LinearService {
                 id: notification_id,
             });
 
-        let response = self
+        let notification_response: Response<notification_subscribers_query::ResponseData> = self
             .build_linear_client(access_token)?
-            .post(&self.linear_graphql_url)
-            .json(&request_body)
-            .send()
+            .post(&self.linear_graphql_url, Some(&request_body))
             .await
-            .context("Cannot fetch notification subscribers from Linear API")?
-            .text()
-            .await
-            .context("Failed to fetch notification subscribers response from Linear API")?;
-
-        let notification_response: Response<notification_subscribers_query::ResponseData> =
-            serde_json::from_str(&response)
-                .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
+            .context("Cannot fetch notification subscribers from Linear API")?;
 
         assert_no_error_in_graphql_response(&notification_response, LINEAR_GRAPHQL_API_NAME)?;
 
@@ -345,20 +318,11 @@ impl LinearService {
             id: notification_id,
         });
 
-        let response = self
+        let archive_response: Response<notification_archive::ResponseData> = self
             .build_linear_client(access_token)?
-            .post(&self.linear_graphql_url)
-            .json(&request_body)
-            .send()
+            .post(&self.linear_graphql_url, Some(&request_body))
             .await
-            .context("Cannot delete notification from Linear API")?
-            .text()
-            .await
-            .context("Failed to fetch notification archive response from Linear API")?;
-
-        let archive_response: Response<notification_archive::ResponseData> =
-            serde_json::from_str(&response)
-                .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
+            .context("Cannot delete notification from Linear API")?;
 
         assert_no_error_in_graphql_response(&archive_response, LINEAR_GRAPHQL_API_NAME)?;
 
@@ -387,20 +351,11 @@ impl LinearService {
                 subscriber_ids,
             });
 
-        let response = self
+        let update_response: Response<issue_update_subscribers::ResponseData> = self
             .build_linear_client(access_token)?
-            .post(&self.linear_graphql_url)
-            .json(&request_body)
-            .send()
+            .post(&self.linear_graphql_url, Some(&request_body))
             .await
-            .context("Cannot update issue subscribers from Linear API")?
-            .text()
-            .await
-            .context("Failed to fetch issue update subscribers response from Linear API")?;
-
-        let update_response: Response<issue_update_subscribers::ResponseData> =
-            serde_json::from_str(&response)
-                .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
+            .context("Cannot update issue subscribers from Linear API")?;
 
         assert_no_error_in_graphql_response(&update_response, LINEAR_GRAPHQL_API_NAME)?;
 
@@ -430,20 +385,11 @@ impl LinearService {
             },
         );
 
-        let response = self
+        let update_response: Response<notification_update_snoozed_until_at::ResponseData> = self
             .build_linear_client(access_token)?
-            .post(&self.linear_graphql_url)
-            .json(&request_body)
-            .send()
+            .post(&self.linear_graphql_url, Some(&request_body))
             .await
-            .context("Cannot snooze issue notification from Linear API")?
-            .text()
-            .await
-            .context("Failed to fetch notification update snooze response from Linear API")?;
-
-        let update_response: Response<notification_update_snoozed_until_at::ResponseData> =
-            serde_json::from_str(&response)
-                .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
+            .context("Cannot snooze issue notification from Linear API")?;
 
         assert_no_error_in_graphql_response(&update_response, LINEAR_GRAPHQL_API_NAME)?;
 
@@ -466,20 +412,11 @@ impl LinearService {
     ) -> Result<assigned_issues_query::ResponseData, UniversalInboxError> {
         let request_body = AssignedIssuesQuery::build_query(assigned_issues_query::Variables {});
 
-        let response = self
+        let assigned_issues_response: Response<assigned_issues_query::ResponseData> = self
             .build_linear_client(access_token)?
-            .post(&self.linear_graphql_url)
-            .json(&request_body)
-            .send()
+            .post(&self.linear_graphql_url, Some(&request_body))
             .await
-            .context("Cannot fetch assigned issues from Linear API")?
-            .text()
-            .await
-            .context("Failed to fetch assigned issues response from Linear API")?;
-
-        let assigned_issues_response: Response<assigned_issues_query::ResponseData> =
-            serde_json::from_str(&response)
-                .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
+            .context("Cannot fetch assigned issues from Linear API")?;
 
         assert_no_error_in_graphql_response(&assigned_issues_response, LINEAR_GRAPHQL_API_NAME)?;
 
@@ -499,20 +436,11 @@ impl LinearService {
             state_id,
         });
 
-        let response = self
+        let update_response: Response<issue_update_state::ResponseData> = self
             .build_linear_client(access_token)?
-            .post(&self.linear_graphql_url)
-            .json(&request_body)
-            .send()
+            .post(&self.linear_graphql_url, Some(&request_body))
             .await
-            .context("Cannot update issue state from Linear API")?
-            .text()
-            .await
-            .context("Failed to fetch issue update state response from Linear API")?;
-
-        let update_response: Response<issue_update_state::ResponseData> =
-            serde_json::from_str(&response)
-                .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
+            .context("Cannot update issue state from Linear API")?;
 
         assert_no_error_in_graphql_response(&update_response, LINEAR_GRAPHQL_API_NAME)?;
 

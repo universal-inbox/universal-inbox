@@ -56,6 +56,17 @@ impl SlackStarItem {
         }
     }
 
+    pub fn team_id(&self) -> SlackTeamId {
+        match self {
+            SlackStarItem::SlackMessage(message) => message.team.id.clone(),
+            SlackStarItem::SlackFile(file) => file.team.id.clone(),
+            SlackStarItem::SlackFileComment(comment) => comment.team.id.clone(),
+            SlackStarItem::SlackChannel(channel) => channel.team.id.clone(),
+            SlackStarItem::SlackIm(im) => im.team.id.clone(),
+            SlackStarItem::SlackGroup(group) => group.team.id.clone(),
+        }
+    }
+
     pub fn render_title(&self) -> String {
         match self {
             SlackStarItem::SlackMessage(message) => message.render_title(),
@@ -219,6 +230,13 @@ impl SlackReactionItem {
         match self {
             SlackReactionItem::SlackMessage(message) => message.message.origin.ts.to_string(),
             SlackReactionItem::SlackFile(file) => file.id.as_ref().unwrap().to_string(), // Can use unwrap because new SlackReaction all have an `id` value
+        }
+    }
+
+    pub fn team_id(&self) -> SlackTeamId {
+        match self {
+            SlackReactionItem::SlackMessage(message) => message.team.id.clone(),
+            SlackReactionItem::SlackFile(file) => file.team.id.clone(),
         }
     }
 

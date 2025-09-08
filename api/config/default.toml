@@ -105,12 +105,18 @@ kind = "Github"
 nango_key = "github"
 page_size = 50
 required_oauth_scopes = ["notifications", "read:discussion", "read:org", "repo"]
+# Rate limiting configuration
+api_max_retry_duration_http_seconds = 30
+api_max_retry_duration_worker_seconds = 600
 
 [integrations.linear]
 name = "Linear"
 kind = "Linear"
 nango_key = "linear"
 required_oauth_scopes = ["read", "write"]
+# Rate limiting configuration
+api_max_retry_duration_http_seconds = 30
+api_max_retry_duration_worker_seconds = 600
 
 [integrations.google_mail]
 name = "Google Mail"
@@ -119,18 +125,27 @@ nango_key = "google-mail"
 page_size = 500
 required_oauth_scopes = ["https://www.googleapis.com/auth/gmail.modify"]
 warning_message = "Google Mail integration is not yet public, it requires your email address to be whitelisted and you will see a warning message from Google while connecting. If you still want to connect it, please send the Google email address you want to use to the <a href='mailto:support@universal-inbox.com' title='Contact support'>support</a>"
+# Rate limiting configuration
+api_max_retry_duration_http_seconds = 30
+api_max_retry_duration_worker_seconds = 600
 
 [integrations.google_calendar]
 name = "Google Calendar"
 kind = "GoogleCalendar"
 nango_key = "google-calendar"
 required_oauth_scopes = ["https://www.googleapis.com/auth/calendar"]
+# Rate limiting configuration
+api_max_retry_duration_http_seconds = 30
+api_max_retry_duration_worker_seconds = 600
 
 [integrations.todoist]
 name = "Todoist"
 kind = "Todoist"
 nango_key = "todoist"
 required_oauth_scopes = ["data:read_write", "data:delete"]
+# Rate limiting configuration
+api_max_retry_duration_http_seconds = 30
+api_max_retry_duration_worker_seconds = 600
 
 [integrations.slack]
 name = "Slack"

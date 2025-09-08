@@ -631,7 +631,7 @@ async fn test_sync_all_notifications_asynchronously_in_error(
 
     let github_notifications_mock = app.app.github_mock_server.mock(|when, then| {
         when.any_request();
-        then.status(500);
+        then.status(400);
     });
 
     let unauthenticated_client = reqwest::Client::new();

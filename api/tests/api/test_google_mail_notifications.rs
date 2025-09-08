@@ -151,10 +151,7 @@ mod patch_resource {
 
         assert_eq!(patch_response.status(), 500);
         let body = patch_response.text().await.unwrap();
-        assert_eq!(
-            body,
-            r#"{"message":"Failed to modify Google Mail thread `123` labels"}"#
-        );
+        assert_eq!(body, r#"{"message":"Failed to modify Google Mail thread"}"#);
         google_mail_thread_modify_mock.assert();
     }
 

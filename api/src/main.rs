@@ -24,6 +24,7 @@ use universal_inbox_api::{
         init_subscriber,
     },
     utils::passkey::build_webauthn,
+    ExecutionContext,
 };
 
 #[tokio::main]
@@ -37,6 +38,12 @@ async fn main() -> std::io::Result<()> {
     let cli = commands::Cli::parse();
 
     let settings = Settings::new().expect("Cannot load Universal Inbox configuration");
+
+    // Determine execution context based on the command
+    let execution_context = match &cli.command {
+        commands::Commands::Serve { .. } => ExecutionContext::Http,
+        _ => ExecutionContext::Worker, // All other commands (sync operations, workers, etc.)
+    };
     let (log_env_filter, dep_log_level_filter) = cli.log_level(&settings);
     if let Some(tracing_settings) = &settings.application.observability.tracing {
         let service_name = cli.service_name();
@@ -161,6 +168,7 @@ async fn main() -> std::io::Result<()> {
         nango_service,
         mailer,
         webauthn,
+        execution_context,
     )
     .await;
 

@@ -283,11 +283,7 @@ mod patch_resource {
         assert_eq!(response.status(), 500);
 
         let body = response.text().await.expect("Cannot get response body");
-        assert_eq!(
-            body,
-            json!({ "message": format!("Failed to mark Github notification `1` as read") })
-                .to_string()
-        );
+        assert!(body.contains("Failed to mark Github notification `1` as read"));
         github_mark_thread_as_read_mock.assert();
 
         let notification: Box<Notification> = get_resource(

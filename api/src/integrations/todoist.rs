@@ -11,12 +11,8 @@ use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use cached::proc_macro::cached;
 use chrono::{DateTime, Timelike, Utc};
-use http::{HeaderMap, HeaderValue, StatusCode};
+use http::{HeaderMap, HeaderValue};
 use regex::RegexBuilder;
-use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, Extension};
-use reqwest_tracing::{
-    DisableOtelPropagation, OtelPathNames, SpanBackendWithUrl, TracingMiddleware,
-};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::{Postgres, Transaction};
@@ -61,6 +57,7 @@ use crate::{
     universal_inbox::{
         integration_connection::service::IntegrationConnectionService, UniversalInboxError,
     },
+    utils::api::{ApiClient, ApiClientError},
 };
 
 #[derive(Clone)]
@@ -69,10 +66,10 @@ pub struct TodoistService {
     pub todoist_sync_base_path: String,
     pub projects_cache_index: Arc<AtomicU64>,
     pub integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
+    pub max_retry_duration: Duration,
 }
 
 static TODOIST_SYNC_BASE_URL: &str = "https://api.todoist.com/sync/v9";
-static APP_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 #[serde(tag = "type")]
@@ -197,6 +194,7 @@ impl TodoistService {
     pub fn new(
         todoist_sync_base_url: Option<String>,
         integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
+        max_retry_duration: Duration,
     ) -> Result<TodoistService, UniversalInboxError> {
         let todoist_sync_base_url =
             todoist_sync_base_url.unwrap_or_else(|| TODOIST_SYNC_BASE_URL.to_string());
@@ -214,6 +212,7 @@ impl TodoistService {
             },
             projects_cache_index: Arc::new(AtomicU64::new(0)),
             integration_connection_service,
+            max_retry_duration,
         })
     }
 
@@ -271,29 +270,21 @@ impl TodoistService {
     fn build_todoist_client(
         &self,
         access_token: &AccessToken,
-    ) -> Result<ClientWithMiddleware, UniversalInboxError> {
+    ) -> Result<ApiClient, UniversalInboxError> {
         let mut headers = HeaderMap::new();
 
         let mut auth_header_value: HeaderValue = format!("Bearer {access_token}").parse().unwrap();
         auth_header_value.set_sensitive(true);
         headers.insert("Authorization", auth_header_value);
 
-        let reqwest_client = reqwest::Client::builder()
-            .default_headers(headers)
-            .user_agent(APP_USER_AGENT)
-            .build()
-            .context("Cannot build Todoist client")?;
-        Ok(ClientBuilder::new(reqwest_client)
-            .with_init(Extension(
-                OtelPathNames::known_paths([
-                    format!("{}/sync", self.todoist_sync_base_path),
-                    format!("{}/items/get", self.todoist_sync_base_path),
-                ])
-                .context("Cannot build Otel path names")?,
-            ))
-            .with_init(Extension(DisableOtelPropagation))
-            .with(TracingMiddleware::<SpanBackendWithUrl>::new())
-            .build())
+        ApiClient::build(
+            headers,
+            [
+                format!("{}/sync", self.todoist_sync_base_path),
+                format!("{}/items/get", self.todoist_sync_base_path),
+            ],
+            self.max_retry_duration,
+        )
     }
 
     pub async fn sync_resources(
@@ -302,28 +293,19 @@ impl TodoistService {
         access_token: &AccessToken,
         sync_token: Option<SyncToken>,
     ) -> Result<TodoistSyncResponse, UniversalInboxError> {
-        let response = self
+        Ok(self
             .build_todoist_client(access_token)?
-            .post(format!("{}/sync", self.todoist_sync_base_url))
-            .json(&json!({
-                "sync_token": sync_token
-                    .map(|sync_token| sync_token.0)
-                    .unwrap_or_else(|| "*".to_string()),
-                "resource_types": [resource_name]
-            }))
-            .send()
+            .post(
+                format!("{}/sync", self.todoist_sync_base_url),
+                Some(&json!({
+                    "sync_token": sync_token
+                        .map(|sync_token| sync_token.0)
+                        .unwrap_or_else(|| "*".to_string()),
+                    "resource_types": [resource_name]
+                })),
+            )
             .await
-            .context(format!("Cannot sync {resource_name} from Todoist API"))?
-            .error_for_status()
-            .context(format!("Cannot sync {resource_name} from Todoist API"))?
-            .text()
-            .await
-            .context(format!(
-                "Failed to fetch {resource_name} response from Todoist API"
-            ))?;
-
-        serde_json::from_str(&response)
-            .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))
+            .context("Failed to sync Todoist resources")?)
     }
 
     pub async fn sync_items(
@@ -339,31 +321,24 @@ impl TodoistService {
         id: &str,
         access_token: &AccessToken,
     ) -> Result<Option<TodoistItem>, UniversalInboxError> {
-        let response = self
+        match self
             .build_todoist_client(access_token)?
-            .post(format!("{}/items/get", self.todoist_sync_base_url))
-            .form(&[("item_id", id), ("all_data", "false")])
-            .send()
+            .post_form::<TodoistItemInfoResponse, _, _>(
+                format!("{}/items/get", self.todoist_sync_base_url),
+                &[("item_id", id), ("all_data", "false")],
+            )
             .await
-            .context(format!("Cannot get item {id} from Todoist API"))?;
-
-        if response.status() == StatusCode::NOT_FOUND {
-            return Ok(None);
+        {
+            Ok(item_info) => Ok(Some(item_info.item)),
+            Err(ApiClientError::NetworkError(err))
+                if err.status() == Some(reqwest::StatusCode::NOT_FOUND) =>
+            {
+                Ok(None)
+            }
+            Err(err) => Err(UniversalInboxError::Unexpected(anyhow!(
+                "Cannot get item {id} from Todoist API: {err}"
+            ))),
         }
-
-        let body = response
-            .error_for_status()
-            .context(format!("Cannot get item {id} from Todoist API"))?
-            .text()
-            .await
-            .context(format!(
-                "Failed to fetch item {id} response from Todoist API"
-            ))?;
-
-        let item_info: TodoistItemInfoResponse = serde_json::from_str(&body)
-            .map_err(|err| UniversalInboxError::from_json_serde_error(err, body.clone()))?;
-
-        Ok(Some(item_info.item))
     }
 
     pub async fn send_sync_commands(
@@ -373,23 +348,15 @@ impl TodoistService {
     ) -> Result<TodoistSyncStatusResponse, UniversalInboxError> {
         let body = json!({ "commands": commands });
 
-        let response = self
+        let sync_response: TodoistSyncStatusResponse = self
             .build_todoist_client(access_token)?
-            .post(format!("{}/sync", self.todoist_sync_base_url))
-            .json(&body)
-            .send()
-            .await
-            .with_context(|| format!("Cannot send commands {commands:?} to the Todoist API"))?
-            .text()
+            .post(format!("{}/sync", self.todoist_sync_base_url), Some(&body))
             .await
             .with_context(|| {
                 format!(
                     "Failed to fetch response from Todoist API while sending commands {commands:?}"
                 )
             })?;
-
-        let sync_response: TodoistSyncStatusResponse = serde_json::from_str(&response)
-            .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
 
         // It could be simpler as the first value is actually the `command_id` but httpmock
         // does not allow to use a request value into the mocked response
