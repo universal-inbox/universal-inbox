@@ -973,7 +973,7 @@ async fn test_sync_all_tasks_asynchronously_in_error(
 
     let todoist_mock = app.app.todoist_mock_server.mock(|when, then| {
         when.any_request();
-        then.status(500);
+        then.status(400); // Using 400 to simulate an error that will not be retried by the ApiClient
     });
 
     let unauthenticated_client = reqwest::Client::new();

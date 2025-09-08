@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env};
+use std::{collections::HashMap, env, time::Duration};
 
 use anyhow::Context;
 use config::{Config, ConfigError, Environment, File};
@@ -12,7 +12,10 @@ use universal_inbox::integration_connection::{
     provider::IntegrationProviderKind, NangoProviderKey, NangoPublicKey,
 };
 
-use crate::universal_inbox::{user::model::UserAuthKind, UniversalInboxError};
+use crate::{
+    universal_inbox::{user::model::UserAuthKind, UniversalInboxError},
+    ExecutionContext,
+};
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct Settings {
@@ -180,6 +183,8 @@ pub struct IntegrationSettings {
     pub warning_message: Option<String>,
     #[serde(default = "yes")]
     pub is_enabled: bool,
+    pub api_max_retry_duration_http_seconds: Option<u64>,
+    pub api_max_retry_duration_worker_seconds: Option<u64>,
 }
 
 #[derive(Debug, Clone)]
@@ -329,6 +334,26 @@ impl Settings {
                 .values()
                 .map(|config| (config.kind, config.nango_key.clone())),
         )
+    }
+
+    pub fn get_integration_max_retry_duration(
+        &self,
+        context: ExecutionContext,
+        integration_name: &str,
+    ) -> Duration {
+        let config = self.integrations.get(integration_name);
+        match context {
+            ExecutionContext::Http => Duration::from_secs(
+                config
+                    .and_then(|config| config.api_max_retry_duration_http_seconds)
+                    .unwrap_or(30), // Default to 30 seconds for HTTP
+            ),
+            ExecutionContext::Worker => Duration::from_secs(
+                config
+                    .and_then(|config| config.api_max_retry_duration_worker_seconds)
+                    .unwrap_or(600), // Default to 600 seconds for workers
+            ),
+        }
     }
 }
 

@@ -60,7 +60,8 @@ pub async fn handle_slack_message_push_event(
                 .await?
             {
                 let slack_api_token =
-                    SlackApiToken::new(SlackApiTokenValue(access_token.to_string()));
+                    SlackApiToken::new(SlackApiTokenValue(access_token.to_string()))
+                        .with_team_id(team_id.clone());
                 for usergroup_id in references.usergroups.keys() {
                     let usergroup_users = slack_service
                         .list_users_in_usergroup(usergroup_id, &slack_api_token)

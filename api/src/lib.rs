@@ -335,6 +335,12 @@ pub async fn run_worker(
         })
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum ExecutionContext {
+    Http,
+    Worker,
+}
+
 #[allow(clippy::too_many_arguments)] // ignore for now, to revisit later
 pub async fn build_services(
     pool: Arc<PgPool>,
@@ -348,6 +354,7 @@ pub async fn build_services(
     nango_service: NangoService,
     mailer: Arc<RwLock<dyn Mailer + Send + Sync>>,
     webauthn: Arc<Webauthn>,
+    execution_context: ExecutionContext,
 ) -> (
     Arc<RwLock<NotificationService>>,
     Arc<RwLock<TaskService>>,
@@ -383,8 +390,12 @@ pub async fn build_services(
     )));
 
     let todoist_service = Arc::new(
-        TodoistService::new(todoist_address, integration_connection_service.clone())
-            .expect("Failed to create new TodoistService"),
+        TodoistService::new(
+            todoist_address,
+            integration_connection_service.clone(),
+            settings.get_integration_max_retry_duration(execution_context, "todoist"),
+        )
+        .expect("Failed to create new TodoistService"),
     );
     // tag: New notification integration
     let github_settings = settings
@@ -396,18 +407,24 @@ pub async fn build_services(
             github_address,
             github_settings.page_size.unwrap_or(100),
             integration_connection_service.clone(),
+            settings.get_integration_max_retry_duration(execution_context, "github"),
         )
         .expect("Failed to create new GithubService"),
     );
     let linear_service = Arc::new(
-        LinearService::new(linear_graphql_url, integration_connection_service.clone())
-            .expect("Failed to create new LinearService"),
+        LinearService::new(
+            linear_graphql_url,
+            integration_connection_service.clone(),
+            settings.get_integration_max_retry_duration(execution_context, "linear"),
+        )
+        .expect("Failed to create new LinearService"),
     );
 
     let google_calendar_service = Arc::new(
         GoogleCalendarService::new(
             google_calendar_base_url,
             Arc::downgrade(&integration_connection_service),
+            settings.get_integration_max_retry_duration(execution_context, "google_calendar"),
         )
         .expect("Failed to create new GoogleCalendarService"),
     );
@@ -423,6 +440,7 @@ pub async fn build_services(
             Arc::downgrade(&integration_connection_service),
             Weak::new(),
             google_calendar_service.clone(),
+            settings.get_integration_max_retry_duration(execution_context, "google_mail"),
         )
         .expect("Failed to create new GoogleMailService"),
     ));

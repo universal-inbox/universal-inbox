@@ -225,6 +225,7 @@ pub async fn tested_app(
         nango_service,
         mailer_stub.clone(),
         webauthn,
+        universal_inbox_api::ExecutionContext::Http,
     )
     .await;
 
@@ -366,6 +367,7 @@ pub async fn tested_app_with_local_auth(
         nango_service,
         mailer_stub.clone(),
         webauthn,
+        universal_inbox_api::ExecutionContext::Http,
     )
     .await;
 

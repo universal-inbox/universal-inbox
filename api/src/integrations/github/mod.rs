@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
@@ -7,10 +7,6 @@ use futures::stream::{self, TryStreamExt};
 use graphql_client::{GraphQLQuery, Response};
 use http::{HeaderMap, HeaderValue};
 use notification::RawGithubNotification;
-use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, Extension};
-use reqwest_tracing::{
-    DisableOtelPropagation, OtelPathNames, SpanBackendWithUrl, TracingMiddleware,
-};
 use serde_json::json;
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
@@ -39,12 +35,14 @@ use crate::{
         notification::ThirdPartyNotificationSourceService,
         oauth2::AccessToken,
         third_party::ThirdPartyItemSourceService,
-        APP_USER_AGENT,
     },
     universal_inbox::{
         integration_connection::service::IntegrationConnectionService, UniversalInboxError,
     },
-    utils::graphql::assert_no_error_in_graphql_response,
+    utils::{
+        api::{ApiClient, ApiClientError},
+        graphql::assert_no_error_in_graphql_response,
+    },
 };
 
 pub mod graphql;
@@ -57,6 +55,7 @@ pub struct GithubService {
     github_graphql_url: String,
     page_size: usize,
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
+    max_retry_duration: Duration,
 }
 
 static GITHUB_BASE_URL: &str = "https://api.github.com";
@@ -67,6 +66,7 @@ impl GithubService {
         github_base_url: Option<String>,
         page_size: usize,
         integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
+        max_retry_duration: Duration,
     ) -> Result<GithubService, UniversalInboxError> {
         let github_base_url = github_base_url.unwrap_or_else(|| GITHUB_BASE_URL.to_string());
         let github_base_path = Url::parse(&github_base_url)
@@ -85,6 +85,7 @@ impl GithubService {
             github_graphql_url,
             page_size,
             integration_connection_service,
+            max_retry_duration,
         })
     }
 
@@ -151,7 +152,7 @@ impl GithubService {
     fn build_github_rest_client(
         &self,
         access_token: &AccessToken,
-    ) -> Result<ClientWithMiddleware, UniversalInboxError> {
+    ) -> Result<ApiClient, UniversalInboxError> {
         let mut headers = HeaderMap::new();
         headers.insert(
             "Accept",
@@ -164,7 +165,7 @@ impl GithubService {
     fn build_github_graphql_client(
         &self,
         access_token: &AccessToken,
-    ) -> Result<ClientWithMiddleware, UniversalInboxError> {
+    ) -> Result<ApiClient, UniversalInboxError> {
         let mut headers = HeaderMap::new();
         headers.insert(
             "Accept",
@@ -178,35 +179,27 @@ impl GithubService {
         &self,
         access_token: &AccessToken,
         mut headers: HeaderMap,
-    ) -> Result<ClientWithMiddleware, UniversalInboxError> {
+    ) -> Result<ApiClient, UniversalInboxError> {
         let mut auth_header_value: HeaderValue = format!("Bearer {access_token}").parse().unwrap();
         auth_header_value.set_sensitive(true);
         headers.insert("Authorization", auth_header_value);
 
-        let reqwest_client = reqwest::Client::builder()
-            .default_headers(headers)
-            .user_agent(APP_USER_AGENT)
-            .build()
-            .context("Cannot build Github client")?;
-        Ok(ClientBuilder::new(reqwest_client)
-            .with_init(Extension(
-                OtelPathNames::known_paths([
-                    format!(
-                        "{}/notifications/threads/{{thread_id}}/subscription",
-                        self.github_base_path
-                    ),
-                    format!(
-                        "{}/notifications/threads/{{thread_id}}",
-                        self.github_base_path
-                    ),
-                    format!("{}/notifications", self.github_base_path),
-                    format!("{}/graphql", self.github_base_path),
-                ])
-                .context("Cannot build Otel path names")?,
-            ))
-            .with_init(Extension(DisableOtelPropagation))
-            .with(TracingMiddleware::<SpanBackendWithUrl>::new())
-            .build())
+        ApiClient::build(
+            headers,
+            [
+                format!("{}/notifications", self.github_base_path),
+                format!(
+                    "{}/notifications/threads/{{thread_id}}/subscription",
+                    self.github_base_path
+                ),
+                format!(
+                    "{}/notifications/threads/{{thread_id}}",
+                    self.github_base_path
+                ),
+                format!("{}/graphql", self.github_base_path),
+            ],
+            self.max_retry_duration,
+        )
     }
 
     pub async fn fetch_notifications(
@@ -219,18 +212,11 @@ impl GithubService {
             "{}/notifications?page={page}&per_page={per_page}",
             self.github_base_url
         );
-        let response = self
+        let notifications: Vec<RawGithubNotification> = self
             .build_github_rest_client(access_token)?
-            .get(&url)
-            .send()
+            .get(url)
             .await
-            .context("Cannot fetch notifications from Github API")?
-            .text()
-            .await
-            .context("Failed to fetch notifications response from Github API")?;
-
-        let notifications: Vec<RawGithubNotification> = serde_json::from_str(&response)
-            .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
+            .context("Cannot fetch notifications from Github API")?;
 
         Ok(notifications)
     }
@@ -240,25 +226,23 @@ impl GithubService {
         thread_id: &str,
         access_token: &AccessToken,
     ) -> Result<(), UniversalInboxError> {
-        let response = self
+        match self
             .build_github_rest_client(access_token)?
-            .patch(format!(
-                "{}/notifications/threads/{thread_id}",
-                self.github_base_url
-            ))
-            .send()
+            .patch_no_response(
+                format!("{}/notifications/threads/{thread_id}", self.github_base_url),
+                None::<&String>,
+            )
             .await
-            .with_context(|| format!("Failed to mark Github notification `{thread_id}` as read"))?;
-
-        match response.error_for_status() {
-            Ok(_) => Ok(()),
-            Err(err) if err.status() == Some(reqwest::StatusCode::NOT_FOUND) => Ok(()),
-            Err(error) => {
-                tracing::error!("An error occurred when trying to mark Github notification `{thread_id}` as read: {}", error);
-                Err(UniversalInboxError::Unexpected(anyhow!(
-                    "Failed to mark Github notification `{thread_id}` as read"
-                )))
+        {
+            Ok(()) => Ok(()),
+            Err(ApiClientError::NetworkError(err))
+                if err.status() == Some(reqwest::StatusCode::NOT_FOUND) =>
+            {
+                Ok(())
             }
+            Err(err) => Err(UniversalInboxError::Unexpected(anyhow!(
+                "Failed to mark Github notification `{thread_id}` as read: {err}"
+            ))),
         }
     }
 
@@ -267,28 +251,26 @@ impl GithubService {
         thread_id: &str,
         access_token: &AccessToken,
     ) -> Result<(), UniversalInboxError> {
-        let response = self
+        match self
             .build_github_rest_client(access_token)?
-            .put(format!(
-                "{}/notifications/threads/{thread_id}/subscription",
-                self.github_base_url
-            ))
-            .body(r#"{"ignored": true}"#)
-            .send()
+            .put_no_response(
+                format!(
+                    "{}/notifications/threads/{thread_id}/subscription",
+                    self.github_base_url
+                ),
+                Some(&json!({ "ignored": true })),
+            )
             .await
-            .with_context(|| {
-                format!("Failed to unsubscribe from Github notification `{thread_id}`")
-            })?;
-
-        match response.error_for_status() {
+        {
             Ok(_) => Ok(()),
-            Err(err) if err.status() == Some(reqwest::StatusCode::NOT_FOUND) => Ok(()),
-            Err(error) => {
-                tracing::error!("An error occurred when trying to unsubscribe from Github notification `{thread_id}`: {}", error);
-                Err(UniversalInboxError::Unexpected(anyhow!(
-                    "Failed to unsubscribe from Github notification `{thread_id}`"
-                )))
+            Err(ApiClientError::NetworkError(err))
+                if err.status() == Some(reqwest::StatusCode::NOT_FOUND) =>
+            {
+                Ok(())
             }
+            Err(err) => Err(UniversalInboxError::Unexpected(anyhow!(
+                "Failed to unsubscribe from Github notification `{thread_id}`: {err}"
+            ))),
         }
     }
 
@@ -305,20 +287,11 @@ impl GithubService {
             pr_number,
         });
 
-        let response = self
-            .build_github_graphql_client(access_token)?
-            .post(&self.github_graphql_url)
-            .json(&request_body)
-            .send()
-            .await
-            .context("Cannot fetch pull request from Github graphql API")?
-            .text()
-            .await
-            .context("Failed to fetch pull request response from Github graphql API")?;
-
         let pull_request_response: graphql_client::Response<pull_request_query::ResponseData> =
-            serde_json::from_str(&response)
-                .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
+            self.build_github_graphql_client(access_token)?
+                .post(&self.github_graphql_url, Some(&request_body))
+                .await
+                .context("Cannot fetch pull request from Github graphql API")?;
 
         assert_no_error_in_graphql_response(&pull_request_response, GITHUB_GRAPHQL_API_NAME)?;
 
@@ -340,20 +313,11 @@ impl GithubService {
             discussion_number,
         });
 
-        let response = self
+        let discussion_response: graphql_client::Response<discussion_query::ResponseData> = self
             .build_github_graphql_client(access_token)?
-            .post(&self.github_graphql_url)
-            .json(&request_body)
-            .send()
+            .post(&self.github_graphql_url, Some(&request_body))
             .await
-            .context("Cannot fetch discussion from Github graphql API")?
-            .text()
-            .await
-            .context("Failed to fetch discussion response from Github graphql API")?;
-
-        let discussion_response: graphql_client::Response<discussion_query::ResponseData> =
-            serde_json::from_str(&response)
-                .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
+            .context("Cannot fetch discussion from Github graphql API")?;
 
         assert_no_error_in_graphql_response(&discussion_response, GITHUB_GRAPHQL_API_NAME)?;
 

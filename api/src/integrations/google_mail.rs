@@ -1,6 +1,7 @@
 use std::{
     io::BufReader,
     sync::{Arc, Weak},
+    time::Duration,
 };
 
 use anyhow::{anyhow, Context};
@@ -9,10 +10,7 @@ use chrono::{DateTime, Timelike, Utc};
 use http::{HeaderMap, HeaderValue};
 use ical::IcalParser;
 use itertools::Itertools;
-use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, Extension};
-use reqwest_tracing::{
-    DisableOtelPropagation, OtelPathNames, SpanBackendWithUrl, TracingMiddleware,
-};
+
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use serde_with::serde_as;
@@ -50,12 +48,13 @@ use universal_inbox::{
 use crate::{
     integrations::{
         google_calendar::GoogleCalendarService, notification::ThirdPartyNotificationSourceService,
-        oauth2::AccessToken, third_party::ThirdPartyItemSourceService, APP_USER_AGENT,
+        oauth2::AccessToken, third_party::ThirdPartyItemSourceService,
     },
     universal_inbox::{
         integration_connection::service::IntegrationConnectionService,
         notification::service::NotificationService, UniversalInboxError,
     },
+    utils::api::ApiClient,
 };
 
 #[derive(Clone)]
@@ -66,6 +65,7 @@ pub struct GoogleMailService {
     integration_connection_service: Weak<RwLock<IntegrationConnectionService>>,
     notification_service: Weak<RwLock<NotificationService>>,
     google_calendar_service: Arc<GoogleCalendarService>,
+    max_retry_duration: Duration,
 }
 
 static DEFAULT_SUBJECT: &str = "No subject";
@@ -188,6 +188,7 @@ impl GoogleMailService {
         integration_connection_service: Weak<RwLock<IntegrationConnectionService>>,
         notification_service: Weak<RwLock<NotificationService>>,
         google_calendar_service: Arc<GoogleCalendarService>,
+        max_retry_duration: Duration,
     ) -> Result<GoogleMailService, UniversalInboxError> {
         let google_mail_base_url =
             google_mail_base_url.unwrap_or_else(|| GOOGLE_MAIL_BASE_URL.to_string());
@@ -206,6 +207,7 @@ impl GoogleMailService {
             integration_connection_service,
             notification_service,
             google_calendar_service,
+            max_retry_duration,
         })
     }
 
@@ -296,44 +298,34 @@ impl GoogleMailService {
     fn build_google_mail_client(
         &self,
         access_token: &AccessToken,
-    ) -> Result<ClientWithMiddleware, UniversalInboxError> {
+    ) -> Result<ApiClient, UniversalInboxError> {
         let mut headers = HeaderMap::new();
 
         let mut auth_header_value: HeaderValue = format!("Bearer {access_token}").parse().unwrap();
         auth_header_value.set_sensitive(true);
         headers.insert("Authorization", auth_header_value);
 
-        let reqwest_client = reqwest::Client::builder()
-            .default_headers(headers)
-            .user_agent(APP_USER_AGENT)
-            .build()
-            .context("Failed to build Google mail client")?;
-        // Tips: The reqwest_retry crate may help with rate limit errors
-        // https://docs.rs/reqwest-retry/0.3.0/reqwest_retry/trait.RetryableStrategy.html
-        Ok(ClientBuilder::new(reqwest_client)
-            .with_init(Extension(
-                OtelPathNames::known_paths([
-                    format!("{}/users/me/profile", self.google_mail_base_path),
-                    format!(
-                        "{}/users/me/threads/{{thread_id}}/modify",
-                        self.google_mail_base_path
-                    ),
-                    format!(
-                        "{}/users/me/threads/{{thread_id}}",
-                        self.google_mail_base_path
-                    ),
-                    format!("{}/users/me/threads*", self.google_mail_base_path),
-                    format!("{}/users/me/labels", self.google_mail_base_path),
-                    format!(
-                        "{}/users/me/messages/{{message_id}}/attachments/{{attachment_id}}",
-                        self.google_mail_base_path
-                    ),
-                ])
-                .context("Cannot build Otel path names")?,
-            ))
-            .with_init(Extension(DisableOtelPropagation))
-            .with(TracingMiddleware::<SpanBackendWithUrl>::new())
-            .build())
+        ApiClient::build(
+            headers,
+            [
+                format!("{}/users/me/profile", self.google_mail_base_path),
+                format!(
+                    "{}/users/me/threads/{{thread_id}}/modify",
+                    self.google_mail_base_path
+                ),
+                format!(
+                    "{}/users/me/threads/{{thread_id}}",
+                    self.google_mail_base_path
+                ),
+                format!("{}/users/me/threads*", self.google_mail_base_path),
+                format!("{}/users/me/labels", self.google_mail_base_path),
+                format!(
+                    "{}/users/me/messages/{{message_id}}/attachments/{{attachment_id}}",
+                    self.google_mail_base_path
+                ),
+            ],
+            self.max_retry_duration,
+        )
     }
 
     pub async fn get_user_profile(
@@ -342,18 +334,11 @@ impl GoogleMailService {
     ) -> Result<GoogleMailUserProfile, UniversalInboxError> {
         let url = format!("{}/users/me/profile", self.google_mail_base_url);
 
-        let response = self
+        let user_profile = self
             .build_google_mail_client(access_token)?
             .get(&url)
-            .send()
             .await
-            .context("Cannot fetch user profile from GoogleMail API".to_string())?
-            .text()
-            .await
-            .context("Failed to fetch user profile response from GoogleMail API".to_string())?;
-
-        let user_profile: GoogleMailUserProfile = serde_json::from_str(&response)
-            .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
+            .context("Failed to get Google Mail user profile")?;
 
         Ok(user_profile)
     }
@@ -368,22 +353,11 @@ impl GoogleMailService {
             self.google_mail_base_url,
         );
 
-        let response = self
+        let thread = self
             .build_google_mail_client(access_token)?
             .get(&url)
-            .send()
             .await
-            .context(format!(
-                "Cannot fetch thread {thread_id} from GoogleMail API"
-            ))?
-            .text()
-            .await
-            .context(format!(
-                "Failed to fetch thread {thread_id} response from GoogleMail API"
-            ))?;
-
-        let thread: RawGoogleMailThread = serde_json::from_str(&response)
-            .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
+            .context("Failed to get Google Mail thread")?;
 
         Ok(thread)
     }
@@ -407,18 +381,11 @@ impl GoogleMailService {
                 .unwrap_or_default()
         );
 
-        let response = self
+        let thread_list = self
             .build_google_mail_client(access_token)?
             .get(&url)
-            .send()
             .await
-            .context("Cannot fetch threads from GoogleMail API")?
-            .text()
-            .await
-            .context("Failed to fetch threads response from GoogleMail API")?;
-
-        let thread_list: GoogleMailThreadList = serde_json::from_str(&response)
-            .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
+            .context("Failed to list Google Mail threads")?;
 
         Ok(thread_list)
     }
@@ -434,18 +401,11 @@ impl GoogleMailService {
             self.google_mail_base_url,
         );
 
-        let response = self
+        let attachment: GoogleMailMessageBody = self
             .build_google_mail_client(access_token)?
             .get(&url)
-            .send()
             .await
-            .context("Cannot fetch attachment from GoogleMail API")?
-            .text()
-            .await
-            .context("Failed to fetch attachment response from GoogleMail API")?;
-
-        let attachment: GoogleMailMessageBody = serde_json::from_str(&response)
-            .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
+            .context("Cannot fetch attachment from GoogleMail API")?;
 
         Ok(attachment)
     }
@@ -466,26 +426,11 @@ impl GoogleMailService {
             "removeLabelIds": label_ids_to_remove
         });
 
-        let response = self
-            .build_google_mail_client(access_token)?
-            .post(&url)
-            .json(&body)
-            .send()
+        self.build_google_mail_client(access_token)?
+            .post_no_response(&url, Some(&body))
             .await
-            .context(format!(
-                "Cannot modify thread {thread_id} from GoogleMail API"
-            ))?;
-
-        match response.error_for_status() {
-            Ok(_) => Ok(()),
-            Err(err) if err.status() == Some(reqwest::StatusCode::NOT_FOUND) => Ok(()),
-            Err(error) => {
-                tracing::error!("An error occurred when trying to modify Google Mail thread `{thread_id}` labels: {}", error);
-                Err(UniversalInboxError::Unexpected(anyhow!(
-                    "Failed to modify Google Mail thread `{thread_id}` labels"
-                )))
-            }
-        }
+            .context("Failed to modify Google Mail thread")?;
+        Ok(())
     }
 
     async fn archive_thread(
@@ -509,18 +454,11 @@ impl GoogleMailService {
     ) -> Result<GoogleMailLabelList, UniversalInboxError> {
         let url = format!("{}/users/me/labels", self.google_mail_base_url);
 
-        let response = self
+        let labels: GoogleMailLabelList = self
             .build_google_mail_client(access_token)?
             .get(&url)
-            .send()
             .await
-            .context("Cannot fetch labels from GoogleMail API")?
-            .text()
-            .await
-            .context("Failed to fetch labels response from GoogleMail API")?;
-
-        let labels: GoogleMailLabelList = serde_json::from_str(&response)
-            .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
+            .context("Cannot fetch labels from GoogleMail API")?;
 
         Ok(labels)
     }
@@ -1053,9 +991,11 @@ mod tests {
                     GoogleCalendarService::new(
                         Some("https://calendar.googleapis.com/calendar/v3".to_string()),
                         Weak::new(),
+                        Duration::from_secs(5),
                     )
                     .unwrap(),
                 ),
+                Duration::from_secs(0),
             )
             .unwrap()
         }

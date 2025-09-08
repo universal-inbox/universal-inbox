@@ -1,13 +1,10 @@
-use std::sync::Weak;
+use std::{sync::Weak, time::Duration};
 
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use chrono::{DateTime, Timelike, Utc};
 use http::{HeaderMap, HeaderValue};
-use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, Extension};
-use reqwest_tracing::{
-    DisableOtelPropagation, OtelPathNames, SpanBackendWithUrl, TracingMiddleware,
-};
+
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use sqlx::{Postgres, Transaction};
@@ -32,10 +29,11 @@ use wiremock::{
 };
 
 use crate::{
-    integrations::{oauth2::AccessToken, APP_USER_AGENT},
+    integrations::oauth2::AccessToken,
     universal_inbox::{
         integration_connection::service::IntegrationConnectionService, UniversalInboxError,
     },
+    utils::api::ApiClient,
 };
 
 use super::notification::ThirdPartyNotificationSourceService;
@@ -47,12 +45,14 @@ pub struct GoogleCalendarService {
     google_calendar_base_url: String,
     google_calendar_base_path: String,
     integration_connection_service: Weak<RwLock<IntegrationConnectionService>>,
+    max_retry_duration: Duration,
 }
 
 impl GoogleCalendarService {
     pub fn new(
         google_calendar_base_url: Option<String>,
         integration_connection_service: Weak<RwLock<IntegrationConnectionService>>,
+        max_retry_duration: Duration,
     ) -> Result<GoogleCalendarService, UniversalInboxError> {
         let google_calendar_base_url =
             google_calendar_base_url.unwrap_or_else(|| GOOGLE_CALENDAR_BASE_URL.to_string());
@@ -68,6 +68,7 @@ impl GoogleCalendarService {
                 google_calendar_base_path
             },
             integration_connection_service,
+            max_retry_duration,
         })
     }
 
@@ -82,29 +83,21 @@ impl GoogleCalendarService {
     fn build_google_calendar_client(
         &self,
         access_token: &AccessToken,
-    ) -> Result<ClientWithMiddleware, UniversalInboxError> {
+    ) -> Result<ApiClient, UniversalInboxError> {
         let mut headers = HeaderMap::new();
 
         let mut auth_header_value: HeaderValue = format!("Bearer {access_token}").parse().unwrap();
         auth_header_value.set_sensitive(true);
         headers.insert("Authorization", auth_header_value);
 
-        let reqwest_client = reqwest::Client::builder()
-            .default_headers(headers)
-            .user_agent(APP_USER_AGENT)
-            .build()
-            .context("Failed to build Google calendar client")?;
-        Ok(ClientBuilder::new(reqwest_client)
-            .with_init(Extension(
-                OtelPathNames::known_paths([format!(
-                    "{}/calendars/{{calendar_id}}/events/{{event_id}}",
-                    self.google_calendar_base_path
-                )])
-                .context("Cannot build Otel path names")?,
-            ))
-            .with_init(Extension(DisableOtelPropagation))
-            .with(TracingMiddleware::<SpanBackendWithUrl>::new())
-            .build())
+        ApiClient::build(
+            headers,
+            [format!(
+                "{}/calendars/{{calendar_id}}/events/{{event_id}}",
+                self.google_calendar_base_path
+            )],
+            self.max_retry_duration,
+        )
     }
 
     pub async fn get_event(
@@ -113,26 +106,18 @@ impl GoogleCalendarService {
         ical_uid: &str,
         access_token: &AccessToken,
     ) -> Result<GoogleCalendarEvent, UniversalInboxError> {
-        let client = self.build_google_calendar_client(access_token)?;
         let url = format!(
             "{}/calendars/{}/events?iCalUID={}&maxResults=1",
             self.google_calendar_base_url, calendar_id, ical_uid
         );
-        let response = client
+
+        let events_list: GoogleCalendarEventsList = self
+            .build_google_calendar_client(access_token)?
             .get(&url)
-            .send()
             .await
             .context(format!(
                 "Cannot fetch Google Calendar event ical_uid={ical_uid} in calendar {calendar_id}"
-            ))?
-            .text()
-            .await
-            .context(format!(
-                "Failed to fetch Google Calendar event ical_uid={ical_uid} in calendar {calendar_id}"
             ))?;
-
-        let events_list: GoogleCalendarEventsList = serde_json::from_str(&response)
-            .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
 
         Ok(events_list.items.into_iter().next().ok_or_else(|| {
             anyhow!(
@@ -147,22 +132,15 @@ impl GoogleCalendarService {
         event_id: &str,
         access_token: &AccessToken,
     ) -> Result<(), UniversalInboxError> {
-        let client = self.build_google_calendar_client(access_token)?;
         let url = format!(
             "{}/calendars/{}/events/{}",
             self.google_calendar_base_url, calendar_id, event_id
         );
-        client
-            .delete(&url)
-            .send()
+        self.build_google_calendar_client(access_token)?
+            .delete_no_response(&url)
             .await
             .context(format!(
                 "Cannot delete Google Calendar event {event_id} in calendar {calendar_id}"
-            ))?
-            .text()
-            .await
-            .context(format!(
-                "Failed to delete Google Calendar event {event_id} in calendar {calendar_id}"
             ))?;
 
         Ok(())
@@ -209,7 +187,6 @@ impl GoogleCalendarService {
             }
         };
 
-        let client = self.build_google_calendar_client(&access_token)?;
         let url = format!(
             "{}/calendars/primary/events/{}",
             self.google_calendar_base_url, event.id
@@ -237,29 +214,14 @@ impl GoogleCalendarService {
             "attendees": attendees
         });
 
-        let response = client
-            .patch(&url)
-            .json(&patch_body)
-            .send()
+        let updated_event: GoogleCalendarEvent = self
+            .build_google_calendar_client(&access_token)?
+            .patch(&url, Some(&patch_body))
             .await
             .context(format!(
                 "Cannot answer Google Calendar event {} invitation",
                 event.id
-            ))?
-            .error_for_status()
-            .context(format!(
-                "Failed to answer Google Calendar event {} invitation",
-                event.id
-            ))?
-            .text()
-            .await
-            .context(format!(
-                "Failed to read response from Google Calendar event {} invitation",
-                event.id
             ))?;
-
-        let updated_event: GoogleCalendarEvent = serde_json::from_str(&response)
-            .map_err(|err| UniversalInboxError::from_json_serde_error(err, response))?;
 
         Ok(updated_event)
     }
@@ -441,6 +403,7 @@ mod tests {
             GoogleCalendarService::new(
                 Some("https://calendar.googleapis.com/calendar/v3".to_string()),
                 Weak::new(),
+                Duration::from_secs(5),
             )
             .unwrap()
         }
