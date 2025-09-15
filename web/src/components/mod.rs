@@ -11,6 +11,7 @@ use crate::{
 
 pub mod authentication_tokens_card;
 pub mod datepicker;
+pub mod delete_all_confirmation_modal;
 pub mod floating_label_inputs;
 pub mod flyonui;
 pub mod footer;

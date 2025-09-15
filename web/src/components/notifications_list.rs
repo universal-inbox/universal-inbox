@@ -20,6 +20,7 @@ use universal_inbox::{
 
 use crate::{
     components::{
+        delete_all_confirmation_modal::DeleteAllConfirmationModal,
         flyonui::tooltip::{Tooltip, TooltipPlacement},
         integrations::{
             api::web_page::notification_list_item::WebPageNotificationListItem,
@@ -42,6 +43,7 @@ use crate::{
     icons::UILogo,
     model::UI_MODEL,
     services::{
+        flyonui::open_flyonui_modal,
         integration_connection_service::TASK_SERVICE_INTEGRATION_CONNECTION,
         notification_service::{
             NotificationCommand, NotificationFilters, NotificationSourceKindFilter,
@@ -114,7 +116,14 @@ pub fn NotificationsList(
                 }
 
                 div {
-                    class: "flex items-center flex-1 justify-end",
+                    class: "flex items-center flex-1 justify-end gap-2",
+                    if !notifications().content.is_empty() {
+                        DeleteAllButton {
+                            on_click: move |_| {
+                                open_flyonui_modal("#delete-all-confirmation-modal");
+                            }
+                        }
+                    }
                     NotificationListOrdering {
                         notification_list_order: notification_filters().sort_by,
                         on_change: move |new_order| {
@@ -215,6 +224,12 @@ pub fn NotificationsList(
                     },
                 }
             }
+
+        DeleteAllConfirmationModal {
+            on_confirm: move |_| {
+                notification_service.send(NotificationCommand::DeleteAll);
+            }
+        }
     }
 }
 
@@ -690,7 +705,7 @@ pub fn NotificationListOrdering(
     rsx! {
         Tooltip {
             text: "Sort by updated date",
-            placement: TooltipPlacement::Left,
+            placement: TooltipPlacement::Right,
 
             label {
                 class: "swap swap-flip",
@@ -707,6 +722,22 @@ pub fn NotificationListOrdering(
                 }
                 span { class: "swap-on icon-[tabler--chevron-down] lg:size-5 max-lg:size-6" }
                 span { class: "swap-off icon-[tabler--chevron-up] lg:size-5 max-lg:size-6" }
+            }
+        }
+    }
+}
+
+#[component]
+pub fn DeleteAllButton(on_click: EventHandler<()>) -> Element {
+    rsx! {
+        Tooltip {
+            text: "Delete all notifications",
+            placement: TooltipPlacement::Left,
+
+            button {
+                class: "btn btn-circle btn-error lg:btn-xs max-lg:btn-lg",
+                onclick: move |_| on_click.call(()),
+                Icon { class: "w-4 h-4", icon: BsTrash }
             }
         }
     }

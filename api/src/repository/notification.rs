@@ -87,6 +87,14 @@ pub trait NotificationRepository {
         notification_kind: Option<NotificationSourceKind>,
         patch: &NotificationPatch,
     ) -> Result<Vec<UpdateStatus<Notification>>, UniversalInboxError>;
+    async fn update_notifications(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        status: Vec<NotificationStatus>,
+        from_sources: Vec<NotificationSourceKind>,
+        patch: &NotificationPatch,
+        user_id: UserId,
+    ) -> Result<Vec<Notification>, UniversalInboxError>;
     async fn delete_notifications(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -1191,6 +1199,114 @@ impl NotificationRepository for Repository {
             })
             .collect();
         Ok(update_statuses)
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            status = status.iter().map(|s| s.to_string()).collect::<Vec<String>>().join(","),
+            from_sources,
+            user.id = user_id.to_string()
+        ),
+        err
+    )]
+    async fn update_notifications(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        status: Vec<NotificationStatus>,
+        from_sources: Vec<NotificationSourceKind>,
+        patch: &NotificationPatch,
+        user_id: UserId,
+    ) -> Result<Vec<Notification>, UniversalInboxError> {
+        let Some(new_status) = patch.status else {
+            return Ok(vec![]);
+        };
+        let mut query_builder = QueryBuilder::new("UPDATE notification SET");
+        query_builder
+            .push(" status = ")
+            .push_bind(new_status.to_string())
+            .push("::notification_status");
+        query_builder.push(
+            r#"
+                FROM
+                  notification as n
+                INNER JOIN third_party_item as source_item
+                  ON n.source_item_id = source_item.id
+                LEFT JOIN third_party_item AS nested_source_item
+                  ON source_item.source_item_id = nested_source_item.id
+                WHERE
+             "#,
+        );
+
+        let mut separated = query_builder.separated(" AND ");
+        separated.push(" notification.id = n.id ");
+        separated.push("notification.user_id = ");
+        separated.push_bind_unseparated(user_id.0);
+
+        let status_str: Vec<String> = status.into_iter().map(|s| s.to_string()).collect();
+        if !status_str.is_empty() {
+            separated.push(" notification.status::TEXT = ANY(");
+            separated.push_bind_unseparated(&status_str);
+            separated.push_unseparated(")");
+        }
+
+        let sources: Vec<String> = from_sources.into_iter().map(|s| s.to_string()).collect();
+        if !sources.is_empty() {
+            separated.push(" notification.kind::TEXT = ANY(");
+            separated.push_bind_unseparated(&sources);
+            separated.push_unseparated(")");
+        }
+        separated
+            .push(" notification.user_id = ")
+            .push_bind_unseparated(user_id.0);
+
+        query_builder.push(
+            r#"
+                RETURNING
+                  notification.id as notification__id,
+                  notification.title as notification__title,
+                  notification.status as notification__status,
+                  notification.created_at as notification__created_at,
+                  notification.updated_at as notification__updated_at,
+                  notification.last_read_at as notification__last_read_at,
+                  notification.snoozed_until as notification__snoozed_until,
+                  notification.task_id as notification__task_id,
+                  notification.user_id as notification__user_id,
+                  notification.kind as notification__kind,
+                  source_item.id as notification__source_item__id,
+                  source_item.source_id as notification__source_item__source_id,
+                  source_item.data as notification__source_item__data,
+                  source_item.created_at as notification__source_item__created_at,
+                  source_item.updated_at as notification__source_item__updated_at,
+                  source_item.user_id as notification__source_item__user_id,
+                  source_item.integration_connection_id as notification__source_item__integration_connection_id,
+                  nested_source_item.id as notification__source_item__si__id,
+                  nested_source_item.source_id as notification__source_item__si__source_id,
+                  nested_source_item.data as notification__source_item__si__data,
+                  nested_source_item.created_at as notification__source_item__si__created_at,
+                  nested_source_item.updated_at as notification__source_item__si__updated_at,
+                  nested_source_item.user_id as notification__source_item__si__user_id,
+                  nested_source_item.integration_connection_id as notification__source_item__si__integration_connection_id
+            "#,
+        );
+
+        let rows = query_builder
+            .build_query_as::<NotificationRow>()
+            .fetch_all(&mut **executor)
+            .await
+            .map_err(|err| {
+                let message =
+                    format!("Failed to update stale notification status from storage: {err}");
+                UniversalInboxError::DatabaseError {
+                    source: err,
+                    message,
+                }
+            })?;
+
+        rows.iter()
+            .map(|r| r.try_into())
+            .collect::<Result<Vec<Notification>, UniversalInboxError>>()
     }
 
     #[tracing::instrument(

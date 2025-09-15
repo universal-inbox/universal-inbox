@@ -8,7 +8,10 @@ use url::Url;
 
 use universal_inbox::{
     notification::{
-        service::{InvitationPatch, NotificationPatch, SyncNotificationsParameters},
+        service::{
+            InvitationPatch, NotificationPatch, PatchNotificationsRequest,
+            SyncNotificationsParameters,
+        },
         Notification, NotificationId, NotificationListOrder, NotificationSourceKind,
         NotificationStatus, NotificationSyncSourceKind, NotificationWithTask,
     },
@@ -31,6 +34,7 @@ pub enum NotificationCommand {
     Refresh,
     Sync(Option<NotificationSyncSourceKind>),
     DeleteFromNotification(NotificationWithTask),
+    DeleteAll,
     Unsubscribe(NotificationId),
     Snooze(NotificationId),
     CompleteTaskFromNotification(NotificationWithTask),
@@ -118,6 +122,16 @@ pub async fn notification_service(
                     )
                     .await;
                 }
+            }
+            Some(NotificationCommand::DeleteAll) => {
+                delete_all_notifications(
+                    &api_base_url,
+                    notifications_page,
+                    notification_filters,
+                    ui_model,
+                    &toast_service,
+                )
+                .await;
             }
             Some(NotificationCommand::Unsubscribe(notification_id)) => {
                 notifications_page
@@ -357,6 +371,53 @@ where
         .with_nanosecond(0)
         .unwrap()
         .into()
+}
+
+async fn delete_all_notifications(
+    api_base_url: &Url,
+    mut notifications_page: Signal<Page<NotificationWithTask>>,
+    notification_filters: Signal<NotificationFilters>,
+    ui_model: Signal<UniversalInboxUIModel>,
+    toast_service: &Coroutine<ToastCommand>,
+) {
+    // Get current filter parameters to match what's currently visible
+    let source_filters = notification_filters().selected();
+
+    let patch_request = PatchNotificationsRequest {
+        status: vec![NotificationStatus::Unread, NotificationStatus::Read],
+        sources: source_filters,
+        patch: NotificationPatch {
+            status: Some(NotificationStatus::Deleted),
+            snoozed_until: None,
+            task_id: None,
+        },
+    };
+
+    // Clear the UI immediately for better UX
+    notifications_page.write().content.clear();
+
+    let result: Result<serde_json::Value> = call_api_and_notify(
+        Method::PATCH,
+        api_base_url,
+        "notifications",
+        Some(patch_request),
+        Some(ui_model),
+        toast_service,
+        "Deleting all notifications...",
+        "All notifications have been deleted",
+    )
+    .await;
+
+    if result.is_ok() {
+        // Refresh to make sure UI is in sync
+        refresh_notifications(
+            api_base_url,
+            notifications_page,
+            notification_filters,
+            ui_model,
+        )
+        .await;
+    }
 }
 
 async fn patch_invitation(

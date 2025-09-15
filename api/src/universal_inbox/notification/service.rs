@@ -4,9 +4,14 @@ use std::{
 };
 
 use anyhow::{anyhow, Context};
+use apalis::prelude::Storage;
 use apalis_redis::RedisStorage;
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
+use tokio_retry::{
+    strategy::{jitter, ExponentialBackoff},
+    Retry,
+};
 use tracing::{debug, error, info};
 
 use universal_inbox::{
@@ -98,6 +103,176 @@ impl NotificationService {
     pub async fn begin(&self) -> Result<Transaction<'_, Postgres>, UniversalInboxError> {
         self.repository.begin().await
     }
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            notification_id = notification.id.to_string(),
+            patch,
+            apply_task_side_effects,
+            user.id = for_user_id.to_string()
+        ),
+        err
+    )]
+    pub async fn apply_notification_side_effects(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        notification: &mut Notification,
+        patch: &NotificationPatch,
+        apply_task_side_effects: bool,
+        for_user_id: UserId,
+    ) -> Result<(), UniversalInboxError> {
+        debug!(
+            "Applying {} side effects for updated notification from third party item {}",
+            notification.kind, notification.source_item.id
+        );
+        // tag: New notification integration
+        match notification.kind {
+            NotificationSourceKind::Github => {
+                self.apply_updated_notification_side_effect(
+                    executor,
+                    self.github_service.clone(),
+                    patch,
+                    &mut notification.source_item,
+                    for_user_id,
+                )
+                .await?;
+            }
+            NotificationSourceKind::Linear => {
+                self.apply_updated_notification_side_effect(
+                    executor,
+                    self.linear_service.clone(),
+                    patch,
+                    &mut notification.source_item,
+                    for_user_id,
+                )
+                .await?
+            }
+            NotificationSourceKind::GoogleCalendar => {
+                // Google Calendar events are derived from Google Mail threads
+                if let Some(ref mut source_item) = notification.source_item.source_item {
+                    if source_item.kind() == ThirdPartyItemKind::GoogleMailThread {
+                        self.apply_updated_notification_side_effect(
+                            executor,
+                            (*self.google_mail_service.read().await).clone().into(),
+                            patch,
+                            source_item,
+                            for_user_id,
+                        )
+                        .await?
+                    }
+                }
+
+                self.apply_updated_notification_side_effect(
+                    executor,
+                    self.google_calendar_service.clone(),
+                    patch,
+                    &mut notification.source_item,
+                    for_user_id,
+                )
+                .await?
+            }
+            NotificationSourceKind::GoogleMail => {
+                self.apply_updated_notification_side_effect(
+                    executor,
+                    (*self.google_mail_service.read().await).clone().into(),
+                    patch,
+                    &mut notification.source_item,
+                    for_user_id,
+                )
+                .await?
+            }
+            NotificationSourceKind::Slack => match notification.source_item.data {
+                ThirdPartyItemData::SlackReaction(_) => {
+                    self.apply_updated_notification_side_effect::<SlackReaction, SlackService>(
+                        executor,
+                        self.slack_service.clone(),
+                        patch,
+                        &mut notification.source_item,
+                        for_user_id,
+                    )
+                    .await?
+                }
+                ThirdPartyItemData::SlackStar(_) => {
+                    self.apply_updated_notification_side_effect::<SlackStar, SlackService>(
+                        executor,
+                        self.slack_service.clone(),
+                        patch,
+                        &mut notification.source_item,
+                        for_user_id,
+                    )
+                    .await?
+                }
+                ThirdPartyItemData::SlackThread(_) => {
+                    self.apply_updated_notification_side_effect::<SlackThread, SlackService>(
+                        executor,
+                        self.slack_service.clone(),
+                        patch,
+                        &mut notification.source_item,
+                        for_user_id,
+                    )
+                    .await?
+                }
+                _ => {
+                    return Err(UniversalInboxError::Unexpected(anyhow!(
+                        "Unsupported Slack notification data type for third party item {}",
+                        notification.source_item.id
+                    )))
+                }
+            },
+            NotificationSourceKind::Todoist => {
+                if let Some(NotificationStatus::Deleted) = patch.status {
+                    if let Some(task_id) = notification.task_id {
+                        if apply_task_side_effects {
+                            self.task_service
+                                .upgrade()
+                                .context("Unable to access task_service from notification_service")?
+                                .read()
+                                .await
+                                .patch_task(
+                                    executor,
+                                    task_id,
+                                    &TaskPatch {
+                                        status: Some(TaskStatus::Deleted),
+                                        ..Default::default()
+                                    },
+                                    for_user_id,
+                                )
+                                .await?;
+                        }
+                    } else {
+                        return Err(UniversalInboxError::Unexpected(anyhow!(
+                            "Todoist notification {} is expected to be linked to a task",
+                            notification.id
+                        )));
+                    }
+                    // Other actions than delete or snoozing is not supported
+                } else if patch.snoozed_until.is_none() {
+                    return Err(UniversalInboxError::UnsupportedAction(format!(
+                        "Cannot update the status of Todoist notification {}, update task's project",
+                        notification.id
+                    )));
+                }
+            }
+            NotificationSourceKind::API => {
+                // API notifications do not have side effects
+            }
+        };
+
+        if let Some(task_id) = patch.task_id {
+            if apply_task_side_effects {
+                self.task_service
+                    .upgrade()
+                    .context("Unable to access task_service from notification_service")?
+                    .read()
+                    .await
+                    .link_notification_with_task(executor, notification, task_id, for_user_id)
+                    .await?;
+            }
+        }
+
+        Ok(())
+    }
 
     #[tracing::instrument(
         level = "debug",
@@ -122,11 +297,6 @@ impl NotificationService {
         U: ThirdPartyNotificationSourceService<T> + NotificationSource + Send + Sync,
         <T as TryFrom<ThirdPartyItem>>::Error: Send + Sync,
     {
-        debug!(
-            "Applying {} side effects for updated notification from third party item {}",
-            notification_source_service.get_notification_source_kind(),
-            source_item.id
-        );
         match patch.status {
             Some(NotificationStatus::Deleted) => {
                 if source_item.kind() == ThirdPartyItemKind::SlackThread {
@@ -591,153 +761,14 @@ impl NotificationService {
                 updated: true,
                 result: Some(ref mut notification),
             } => {
-                // tag: New notification integration
-                match notification.kind {
-                    NotificationSourceKind::Github => {
-                        self.apply_updated_notification_side_effect(
-                            executor,
-                            self.github_service.clone(),
-                            patch,
-                            &mut notification.source_item,
-                            for_user_id,
-                        )
-                        .await?;
-                    }
-                    NotificationSourceKind::Linear => {
-                        self.apply_updated_notification_side_effect(
-                            executor,
-                            self.linear_service.clone(),
-                            patch,
-                            &mut notification.source_item,
-                            for_user_id,
-                        )
-                        .await?
-                    }
-                    NotificationSourceKind::GoogleCalendar => {
-                        // Google Calendar events are derived from Google Mail threads
-                        if let Some(ref mut source_item) = notification.source_item.source_item {
-                            if source_item.kind() == ThirdPartyItemKind::GoogleMailThread {
-                                self.apply_updated_notification_side_effect(
-                                    executor,
-                                    (*self.google_mail_service.read().await).clone().into(),
-                                    patch,
-                                    source_item,
-                                    for_user_id,
-                                )
-                                .await?
-                            }
-                        }
-
-                        self.apply_updated_notification_side_effect(
-                            executor,
-                            self.google_calendar_service.clone(),
-                            patch,
-                            &mut notification.source_item,
-                            for_user_id,
-                        )
-                        .await?
-                    }
-                    NotificationSourceKind::GoogleMail => {
-                        self.apply_updated_notification_side_effect(
-                            executor,
-                            (*self.google_mail_service.read().await).clone().into(),
-                            patch,
-                            &mut notification.source_item,
-                            for_user_id,
-                        )
-                        .await?
-                    }
-                    NotificationSourceKind::Slack => match notification.source_item.data {
-                        ThirdPartyItemData::SlackReaction(_) => self
-                            .apply_updated_notification_side_effect::<SlackReaction, SlackService>(
-                                executor,
-                                self.slack_service.clone(),
-                                patch,
-                                &mut notification.source_item,
-                                for_user_id,
-                            )
-                            .await?,
-                        ThirdPartyItemData::SlackStar(_) => {
-                            self.apply_updated_notification_side_effect::<SlackStar, SlackService>(
-                                executor,
-                                self.slack_service.clone(),
-                                patch,
-                                &mut notification.source_item,
-                                for_user_id,
-                            )
-                            .await?
-                        }
-                        ThirdPartyItemData::SlackThread(_) => self
-                            .apply_updated_notification_side_effect::<SlackThread, SlackService>(
-                                executor,
-                                self.slack_service.clone(),
-                                patch,
-                                &mut notification.source_item,
-                                for_user_id,
-                            )
-                            .await?,
-                        _ => {
-                            return Err(UniversalInboxError::Unexpected(anyhow!(
-                                "Unsupported Slack notification data type for third party item {}",
-                                notification.source_item.id
-                            )))
-                        }
-                    },
-                    NotificationSourceKind::Todoist => {
-                        if let Some(NotificationStatus::Deleted) = patch.status {
-                            if let Some(task_id) = notification.task_id {
-                                if apply_task_side_effects {
-                                    self.task_service
-                                        .upgrade()
-                                        .context(
-                                            "Unable to access task_service from notification_service",
-                                    )?
-                                    .read()
-                                    .await
-                                    .patch_task(
-                                        executor,
-                                        task_id,
-                                        &TaskPatch {
-                                            status: Some(TaskStatus::Deleted),
-                                            ..Default::default()
-                                        },
-                                        for_user_id,
-                                    )
-                                    .await?;
-                                }
-                            } else {
-                                return Err(UniversalInboxError::Unexpected(anyhow!(
-                                    "Todoist notification {notification_id} is expected to be linked to a task"
-                                )));
-                            }
-                            // Other actions than delete or snoozing is not supported
-                        } else if patch.snoozed_until.is_none() {
-                            return Err(UniversalInboxError::UnsupportedAction(format!(
-                                "Cannot update the status of Todoist notification {notification_id}, update task's project"
-                            )));
-                        }
-                    }
-                    NotificationSourceKind::API => {
-                        // API notifications do not have side effects
-                    }
-                };
-
-                if let Some(task_id) = patch.task_id {
-                    if apply_task_side_effects {
-                        self.task_service
-                            .upgrade()
-                            .context("Unable to access task_service from notification_service")?
-                            .read()
-                            .await
-                            .link_notification_with_task(
-                                executor,
-                                notification,
-                                task_id,
-                                for_user_id,
-                            )
-                            .await?;
-                    }
-                }
+                self.apply_notification_side_effects(
+                    executor,
+                    notification,
+                    patch,
+                    apply_task_side_effects,
+                    for_user_id,
+                )
+                .await?;
             }
             UpdateStatus {
                 updated: false,
@@ -779,6 +810,53 @@ impl NotificationService {
         self.repository
             .update_notifications_for_task(executor, task_id, notification_kind, patch)
             .await
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            status = status.iter().map(|s| s.to_string()).collect::<Vec<String>>().join(","),
+            from_sources,
+            patch,
+            user.id = user_id.to_string()
+        ),
+        err
+    )]
+    pub async fn patch_notifications_bulk(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        status: Vec<NotificationStatus>,
+        from_sources: Vec<NotificationSourceKind>,
+        patch: &NotificationPatch,
+        user_id: UserId,
+        job_storage: &mut RedisStorage<UniversalInboxJob>,
+    ) -> Result<Vec<Notification>, UniversalInboxError> {
+        let updated_notifications = self
+            .repository
+            .update_notifications(executor, status, from_sources, patch, user_id)
+            .await?;
+
+        // Queue async side effects processing for each updated notification
+        for notification in &updated_notifications {
+            Retry::spawn(
+                ExponentialBackoff::from_millis(10).map(jitter).take(10),
+                || async {
+                    job_storage
+                        .clone()
+                        .push(UniversalInboxJob::ProcessNotificationSideEffects {
+                            notification_id: notification.id,
+                            patch: patch.clone(),
+                            user_id,
+                        })
+                        .await
+                },
+            )
+            .await
+            .context("Failed to enqueue job to process notification side effects")?;
+        }
+
+        Ok(updated_notifications)
     }
 
     #[tracing::instrument(
