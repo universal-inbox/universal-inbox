@@ -22,6 +22,7 @@ pub mod markdown;
 pub mod nav_bar;
 pub mod notification_preview;
 pub mod notifications_list;
+pub mod resizable_panel;
 pub mod spinner;
 pub mod task_link_modal;
 pub mod task_planning_modal;

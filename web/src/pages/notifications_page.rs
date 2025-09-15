@@ -12,6 +12,7 @@ use universal_inbox::{
 use crate::{
     components::{
         notification_preview::NotificationPreview, notifications_list::NotificationsList,
+        resizable_panel::ResizablePanel,
     },
     icons::UILogo,
     keyboard_manager::{KeyboardHandler, KEYBOARD_MANAGER},
@@ -121,7 +122,7 @@ fn InternalNotificationPage(notification_id: ReadOnlySignal<Option<NotificationI
                 }
             } else {
                 div {
-                    class: "h-full lg:basis-2/3 max-lg:w-full max-lg:absolute",
+                    class: "h-full flex-1 max-lg:w-full max-lg:absolute",
 
                     NotificationsList {
                         notifications,
@@ -131,10 +132,7 @@ fn InternalNotificationPage(notification_id: ReadOnlySignal<Option<NotificationI
 
                 if let Some(index) = UI_MODEL.read().selected_notification_index {
                     if let Some(notification) = NOTIFICATIONS_PAGE().content.get(index) {
-                        div {
-                            id: "notification-preview",
-                            class: "h-full lg:basis-1/3 max-lg:w-full max-lg:absolute lg:max-w-sm xl:max-w-md 2xl:max-w-xl px-2 py-2 flex flex-row bg-base-100 z-auto",
-
+                        ResizablePanel {
                             NotificationPreview {
                                 notification: notification.clone(),
                                 notifications_count: notifications().content.len(),

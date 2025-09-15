@@ -16,6 +16,7 @@
 - Collapse read Google mails
 - Add third party API call rate limiter
 - Disable mandatory email verification
+- Make notification and task details panel resizable
 
 ### Fixed
 
