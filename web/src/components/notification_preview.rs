@@ -62,14 +62,16 @@ pub fn NotificationPreview(
 
     let mut latest_shown_notification_id = use_signal(|| None::<NotificationId>);
     use_effect(move || {
-        // reset selected_preview_pane when showing another notification
+        // reset selected_preview_pane and preview_cards_expanded when showing another notification
         let mut latest_shown_notification_id = latest_shown_notification_id.write();
         if *latest_shown_notification_id != Some(notification().id) {
-            ui_model.write().selected_preview_pane = if has_notification_details_preview {
+            let mut ui_model = ui_model.write();
+            ui_model.selected_preview_pane = if has_notification_details_preview {
                 PreviewPane::Notification
             } else {
                 PreviewPane::Task
             };
+            ui_model.preview_cards_expanded = false;
             *latest_shown_notification_id = Some(notification().id);
         }
     });
