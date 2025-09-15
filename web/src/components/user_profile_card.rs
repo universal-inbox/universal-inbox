@@ -1,15 +1,21 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
+use dioxus_free_icons::{
+    icons::bs_icons::{BsCheck, BsExclamationTriangle},
+    Icon,
+};
 use gravatar_rs::Generator;
 
 use crate::{
-    components::loading::Loading, model::DEFAULT_USER_AVATAR,
-    services::user_service::CONNECTED_USER,
+    components::loading::Loading,
+    model::DEFAULT_USER_AVATAR,
+    services::user_service::{UserCommand, CONNECTED_USER},
 };
 
 #[component]
 pub fn UserProfileCard() -> Element {
+    let user_service = use_coroutine_handle::<UserCommand>();
     let Some(user) = CONNECTED_USER.read().clone() else {
         return rsx! {
             div {
@@ -30,8 +36,8 @@ pub fn UserProfileCard() -> Element {
     };
     let user_name = format!(
         "{} {}",
-        user.first_name.unwrap_or_default(),
-        user.last_name.unwrap_or_default()
+        user.first_name.as_ref().unwrap_or(&String::default()),
+        user.last_name.as_ref().unwrap_or(&String::default())
     );
 
     rsx! {
@@ -62,8 +68,34 @@ pub fn UserProfileCard() -> Element {
 
                         if let Some(ref email) = user.email {
                             div {
-                                class: "text-lg font-semibold",
-                                "{email}"
+                                class: "flex flex-col gap-1",
+                                div {
+                                    class: "text-lg font-semibold",
+                                    "{email}"
+                                }
+                                div {
+                                    class: "flex items-center gap-2",
+                                    if user.is_email_validated() {
+                                        span {
+                                            class: "badge badge-success badge-success gap-1",
+                                            Icon { class: "min-w-5 h-5", icon: BsCheck }
+                                            span { "Email verified" }
+                                        }
+                                    } else {
+                                        span {
+                                            class: "badge badge-warning badge-soft gap-1",
+                                            Icon { class: "min-w-5 h-5", icon: BsExclamationTriangle }
+                                            span { "Email not verified" }
+                                        }
+                                        button {
+                                            class: "btn btn-sm btn-primary ml-2",
+                                            onclick: move |_| {
+                                                user_service.send(UserCommand::ResendVerificationEmail);
+                                            },
+                                            "Resend Verification"
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

@@ -21,6 +21,7 @@
 - Convert calendar event times to event's timezone
 - Display calendar event descriptions as HTML
 - Prevent application freeze when third party API is slow
+- Disable Linear issues to tasks synchronization by default
 
 ## 2025-05-03
 

@@ -9,8 +9,7 @@ use universal_inbox::{
 use crate::{
     auth::AuthPage,
     layouts::{
-        authenticated::AuthenticatedLayout, email_validated::EmailValidatedLayout,
-        fullpage::FullpageLayout, nav_bar::NavBarLayout,
+        authenticated::AuthenticatedLayout, fullpage::FullpageLayout, nav_bar::NavBarLayout,
     },
     pages::{
         email_verification_page::EmailVerificationPage,
@@ -52,21 +51,19 @@ pub enum Route {
       #[end_layout]
       #[route("/auth-oidc-callback?:query")]
       AuthPage { query: String },
-      #[layout(EmailValidatedLayout)]
-        #[layout(NavBarLayout)]
-          #[route("/")]
-          NotificationsPage {},
-          #[route("/notifications/:notification_id")]
-          NotificationPage { notification_id: NotificationId },
-          #[route("/synced-tasks")]
-          SyncedTasksPage {},
-          #[route("/synced-task/:task_id")]
-          SyncedTaskPage { task_id: TaskId },
-          #[route("/settings")]
-          SettingsPage {},
-          #[route("/profile")]
-          UserProfilePage {},
-        #[end_layout]
+      #[layout(NavBarLayout)]
+        #[route("/")]
+        NotificationsPage {},
+        #[route("/notifications/:notification_id")]
+        NotificationPage { notification_id: NotificationId },
+        #[route("/synced-tasks")]
+        SyncedTasksPage {},
+        #[route("/synced-task/:task_id")]
+        SyncedTaskPage { task_id: TaskId },
+        #[route("/settings")]
+        SettingsPage {},
+        #[route("/profile")]
+        UserProfilePage {},
       #[end_layout]
     #[end_layout]
     #[route("/:..route")]
