@@ -33,21 +33,11 @@ impl LinearConfig {
     }
 }
 
-#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone, Default)]
 pub struct LinearSyncTaskConfig {
     pub enabled: bool,
     pub target_project: Option<ProjectSummary>,
     pub default_due_at: Option<PresetDueDate>,
-}
-
-impl Default for LinearSyncTaskConfig {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            target_project: None,
-            default_due_at: None,
-        }
-    }
 }
 
 impl LinearSyncTaskConfig {

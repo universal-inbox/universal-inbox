@@ -15,6 +15,7 @@
 - Make Universal Inbox UI mobile friendly
 - Collapse read Google mails
 - Add third party API call rate limiter
+- Disable mandatory email verification
 
 ### Fixed
 
