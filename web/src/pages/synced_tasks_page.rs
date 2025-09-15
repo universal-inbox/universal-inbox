@@ -13,7 +13,9 @@ use universal_inbox::{
 };
 
 use crate::{
-    components::{task_preview::TaskPreview, tasks_list::TasksList},
+    components::{
+        resizable_panel::ResizablePanel, task_preview::TaskPreview, tasks_list::TasksList,
+    },
     images::UI_LOGO_SYMBOL_TRANSPARENT,
     keyboard_manager::{KeyboardHandler, KEYBOARD_MANAGER},
     model::UI_MODEL,
@@ -141,17 +143,14 @@ fn InternalSyncedTaskPage(task_id: ReadOnlySignal<Option<TaskId>>) -> Element {
                 }
             } else {
                 div {
-                    class: "h-full lg:basis-2/3 max-lg:w-full max-lg:absolute",
+                    class: "h-full flex-1 max-lg:w-full max-lg:absolute",
 
                     TasksList { tasks: SORTED_SYNCED_TASKS.signal() }
                 }
 
                 if let Some(index) = UI_MODEL.read().selected_task_index {
                     if let Some((_, task)) = SORTED_SYNCED_TASKS().get(index) {
-                        div {
-                            id: "task-preview",
-                            class: "h-full lg:basis-1/3 max-lg:w-full max-lg:absolute lg:max-w-sm xl:max-w-md 2xl:max-w-xl px-2 py-2 flex flex-row bg-base-100 z-10",
-
+                        ResizablePanel {
                             TaskPreview {
                                 task: task.task.clone(),
                                 expand_details: UI_MODEL.read().preview_cards_expanded,

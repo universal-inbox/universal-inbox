@@ -3,6 +3,7 @@ pub mod authentication_token_service;
 pub mod flyonui;
 pub mod headway;
 pub mod integration_connection_service;
+pub mod local_storage;
 pub mod nango;
 pub mod notification_service;
 pub mod task_service;

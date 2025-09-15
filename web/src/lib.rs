@@ -47,6 +47,7 @@ mod model;
 mod pages;
 mod route;
 mod services;
+mod settings;
 mod theme;
 mod utils;
 
