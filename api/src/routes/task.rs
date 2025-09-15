@@ -95,7 +95,7 @@ pub async fn list_tasks(
 
 #[derive(Debug, Deserialize)]
 pub struct SearchTaskRequest {
-    matches: String,
+    matches: Option<String>,
 }
 
 pub async fn search_tasks(
@@ -109,13 +109,23 @@ pub async fn search_tasks(
         .parse::<UserId>()
         .context("Wrong user ID format")?;
 
+    let Some(matches) = &search_task_request.matches else {
+        return Ok(HttpResponse::Ok()
+            .content_type("application/json")
+            .insert_header(header::CacheControl(vec![
+                CacheDirective::Private,
+                CacheDirective::MaxAge(600u32),
+            ]))
+            .body("[]"));
+    };
+
     let service = task_service.read().await;
     let mut transaction = service
         .begin()
         .await
         .context("Failed to create new transaction while listing tasks")?;
     let tasks: Vec<TaskSummary> = service
-        .search_tasks(&mut transaction, &search_task_request.matches, user_id)
+        .search_tasks(&mut transaction, matches, user_id)
         .await?;
 
     Ok(HttpResponse::Ok()
@@ -266,7 +276,7 @@ pub async fn patch_task(
 
 #[derive(Debug, Deserialize)]
 pub struct SearchProjectRequest {
-    matches: String,
+    matches: Option<String>,
 }
 
 pub async fn search_projects(
@@ -280,13 +290,23 @@ pub async fn search_projects(
         .parse::<UserId>()
         .context("Wrong user ID format")?;
 
+    let Some(matches) = &search_project_request.matches else {
+        return Ok(HttpResponse::Ok()
+            .content_type("application/json")
+            .insert_header(header::CacheControl(vec![
+                CacheDirective::Private,
+                CacheDirective::MaxAge(600u32),
+            ]))
+            .body("[]"));
+    };
+
     let service = task_service.read().await;
     let mut transaction = service
         .begin()
         .await
         .context("Failed to create new transaction while listing tasks")?;
     let task_projects: Vec<ProjectSummary> = service
-        .search_projects(&mut transaction, &search_project_request.matches, user_id)
+        .search_projects(&mut transaction, matches, user_id)
         .await?;
 
     Ok(HttpResponse::Ok()
