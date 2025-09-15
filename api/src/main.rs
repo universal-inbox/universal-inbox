@@ -139,7 +139,7 @@ async fn main() -> std::io::Result<()> {
     );
 
     if settings.application.dry_run {
-        warn!("⚠️ Starting server in DRY RUN mode, write calls to integrations will be mocked ⚠️");
+        warn!("Starting server in DRY RUN mode, write calls to integrations will be mocked");
     };
     let github_mock_server = get_github_mock_server(&settings).await;
     let linear_graphql_mock_server = get_linear_mock_server(&settings).await;

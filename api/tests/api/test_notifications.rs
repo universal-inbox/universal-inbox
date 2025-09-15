@@ -1,8 +1,10 @@
 use chrono::{TimeDelta, TimeZone, Timelike, Utc};
 use graphql_client::Response;
 use http::StatusCode;
+use httpmock::Method::PATCH;
 use rstest::*;
 use serde_json::json;
+use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
 use universal_inbox::{
@@ -33,7 +35,10 @@ use crate::helpers::{
         },
         list_notifications, update_notification,
     },
-    rest::{get_resource, get_resource_response, patch_resource, patch_resource_response},
+    rest::{
+        get_resource, get_resource_response, patch_resource, patch_resource_collection,
+        patch_resource_response,
+    },
     settings,
 };
 
@@ -420,6 +425,124 @@ mod get_notification {
             json!({ "message": format!("Cannot find notification {unknown_notification_id}") })
                 .to_string()
         );
+    }
+}
+
+mod patch_notifications_bulk {
+    use apalis::prelude::Storage;
+    use universal_inbox::notification::service::PatchNotificationsRequest;
+
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_patch_notifications_bulk_delete_all(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        github_notification: Box<GithubNotification>,
+        nango_github_connection: Box<NangoConnection>,
+    ) {
+        let mut app = authenticated_app.await;
+        let github_integration_connection = create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            &settings.oauth2.nango_secret_key,
+            IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+            &settings,
+            nango_github_connection,
+            None,
+            None,
+        )
+        .await;
+        let github_mark_thread_as_read_mock = app.app.github_mock_server.mock(|when, then| {
+            when.method(PATCH)
+                .path("/notifications/threads/1")
+                .header("accept", "application/vnd.github.v3+json")
+                .header("authorization", "Bearer github_test_access_token");
+            then.status(205);
+        });
+        let github_mark_thread_as_read_mock2 = app.app.github_mock_server.mock(|when, then| {
+            when.method(PATCH)
+                .path("/notifications/threads/2")
+                .header("accept", "application/vnd.github.v3+json")
+                .header("authorization", "Bearer github_test_access_token");
+            then.status(205);
+        });
+
+        // Create multiple notifications
+        let notification1 = create_notification_from_github_notification(
+            &app.app,
+            &github_notification,
+            app.user.id,
+            github_integration_connection.id,
+        )
+        .await;
+
+        let mut github_notification2 = *github_notification.clone();
+        github_notification2.id = "2".to_string();
+        let notification2 = create_notification_from_github_notification(
+            &app.app,
+            &Box::new(github_notification2),
+            app.user.id,
+            github_integration_connection.id,
+        )
+        .await;
+
+        // Verify both notifications exist and are unread
+        assert_eq!(notification1.status, NotificationStatus::Unread);
+        assert_eq!(notification2.status, NotificationStatus::Unread);
+
+        // Perform bulk patch to delete all notifications
+        let patch_request = PatchNotificationsRequest {
+            status: vec![NotificationStatus::Unread, NotificationStatus::Read],
+            sources: vec![NotificationSourceKind::Github],
+            patch: NotificationPatch {
+                status: Some(NotificationStatus::Deleted),
+                snoozed_until: None,
+                task_id: None,
+            },
+        };
+
+        let result: Vec<Notification> = patch_resource_collection(
+            &app.client,
+            &app.app.api_address,
+            "notifications",
+            &patch_request,
+        )
+        .await;
+
+        assert_eq!(result.len(), 2);
+
+        // Verify notifications are now deleted in the database
+        let result = list_notifications(
+            &app.client,
+            &app.app.api_address,
+            vec![NotificationStatus::Deleted],
+            false,
+            None,
+            Some(NotificationSourceKind::Github),
+            false,
+        )
+        .await;
+
+        assert_eq!(result.len(), 2);
+        assert!(result.iter().any(|elt| elt.id == notification1.id));
+        assert!(result.iter().any(|elt| elt.id == notification2.id));
+
+        // Wait a bit to ensure the job is processed
+        sleep(Duration::from_millis(1000)).await;
+
+        let job_count = app
+            .app
+            .redis_storage
+            .len()
+            .await
+            .expect("Failed to get job count");
+        assert_eq!(job_count, 0);
+
+        github_mark_thread_as_read_mock.assert();
+        github_mark_thread_as_read_mock2.assert();
     }
 }
 

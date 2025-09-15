@@ -7,6 +7,11 @@ use tokio::sync::RwLock;
 use tracing::{error, info};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
+use universal_inbox::{
+    notification::{service::NotificationPatch, NotificationId},
+    user::UserId,
+};
+
 use crate::{
     integrations::slack::SlackService,
     universal_inbox::{
@@ -25,6 +30,11 @@ pub enum UniversalInboxJob {
     SyncNotifications(sync::SyncNotificationsJob),
     SyncTasks(sync::SyncTasksJob),
     SlackPushEventCallback(slack::SlackPushEventCallbackJob),
+    ProcessNotificationSideEffects {
+        notification_id: NotificationId,
+        patch: NotificationPatch,
+        user_id: UserId,
+    },
 }
 
 impl UniversalInboxJob {
@@ -33,6 +43,7 @@ impl UniversalInboxJob {
             Self::SyncNotifications(_) => "SyncNotifications",
             Self::SyncTasks(_) => "SyncTasks",
             Self::SlackPushEventCallback(_) => "SlackPushEventCallback",
+            Self::ProcessNotificationSideEffects { .. } => "ProcessNotificationSideEffects",
         }
     }
 }
@@ -86,6 +97,19 @@ pub async fn handle_universal_inbox_job(
             )
             .await
         }
+        UniversalInboxJob::ProcessNotificationSideEffects {
+            notification_id,
+            patch,
+            user_id,
+        } => {
+            handle_process_notification_side_effects(
+                notification_id,
+                patch,
+                user_id,
+                notification_service,
+            )
+            .await
+        }
     };
 
     match result {
@@ -103,4 +127,43 @@ pub async fn handle_universal_inbox_job(
             Err(err)
         }
     }
+}
+
+#[tracing::instrument(
+    level = "debug",
+    skip(notification_service),
+    fields(
+        notification_id = notification_id.to_string(),
+        user.id = user_id.to_string()
+    ),
+    err
+)]
+async fn handle_process_notification_side_effects(
+    notification_id: NotificationId,
+    patch: NotificationPatch,
+    user_id: UserId,
+    notification_service: Data<Arc<RwLock<NotificationService>>>,
+) -> Result<(), UniversalInboxError> {
+    let service = notification_service.read().await;
+    let mut transaction = service.begin().await?;
+
+    let mut notification = service
+        .get_notification(&mut transaction, notification_id, user_id)
+        .await?
+        .ok_or_else(|| {
+            UniversalInboxError::ItemNotFound(format!(
+                "Notification with ID {} not found for user {}",
+                notification_id, user_id
+            ))
+        })?;
+    // Apply side effects by calling patch_notification with side effects enabled
+    service
+        .apply_notification_side_effects(&mut transaction, &mut notification, &patch, true, user_id)
+        .await?;
+
+    transaction
+        .commit()
+        .await
+        .map_err(|e| UniversalInboxError::from(anyhow::Error::from(e)))?;
+    Ok(())
 }

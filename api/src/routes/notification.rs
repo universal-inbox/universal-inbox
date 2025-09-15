@@ -12,7 +12,10 @@ use tokio::sync::RwLock;
 
 use universal_inbox::{
     notification::{
-        service::{InvitationPatch, NotificationPatch, SyncNotificationsParameters},
+        service::{
+            InvitationPatch, NotificationPatch, PatchNotificationsRequest,
+            SyncNotificationsParameters,
+        },
         NotificationId, NotificationListOrder, NotificationSourceKind, NotificationStatus,
         NotificationWithTask,
     },
@@ -37,7 +40,8 @@ pub fn scope() -> Scope {
         .service(
             web::resource("")
                 .name("notifications")
-                .route(web::get().to(list_notifications)),
+                .route(web::get().to(list_notifications))
+                .route(web::patch().to(patch_notifications)),
         )
         .service(
             web::resource("/{notification_id}")
@@ -227,6 +231,46 @@ pub async fn sync_notifications(
             .context("Failed to commit while triggering notifications sync")?;
         Ok(HttpResponse::Created().finish())
     }
+}
+
+pub async fn patch_notifications(
+    patch_request: web::Json<PatchNotificationsRequest>,
+    notification_service: web::Data<Arc<RwLock<NotificationService>>>,
+    authenticated: Authenticated<Claims>,
+    job_storage: web::Data<RedisStorage<UniversalInboxJob>>,
+) -> Result<HttpResponse, UniversalInboxError> {
+    let user_id = authenticated
+        .claims
+        .sub
+        .parse::<UserId>()
+        .context("Wrong user ID format")?;
+    let request = patch_request.into_inner();
+    let service = notification_service.read().await;
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while patching notifications")?;
+
+    let updated_notifications = service
+        .patch_notifications_bulk(
+            &mut transaction,
+            request.status,
+            request.sources,
+            &request.patch,
+            user_id,
+            &mut job_storage.as_ref().clone(),
+        )
+        .await?;
+
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit while patching notifications")?;
+
+    Ok(HttpResponse::Ok().content_type("application/json").body(
+        serde_json::to_string(&updated_notifications)
+            .context("Cannot serialize updated notifications result")?,
+    ))
 }
 
 pub async fn patch_notification(

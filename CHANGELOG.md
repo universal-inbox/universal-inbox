@@ -9,6 +9,7 @@
 - Display cancelled calendar events
 - Display calendar events recurrence
 - Add Universal Inbox "Web Page" notification type (browser extension)
+- Add button to delete all notifications
 
 ### Changed
 
