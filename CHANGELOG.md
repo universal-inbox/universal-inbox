@@ -19,6 +19,7 @@
 - Add third party API call rate limiter
 - Disable mandatory email verification
 - Make notification and task details panel resizable
+- Display notifications elasped time since last update
 
 ### Fixed
 

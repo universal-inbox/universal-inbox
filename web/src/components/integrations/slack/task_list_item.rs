@@ -1,6 +1,5 @@
 #![allow(non_snake_case)]
 
-use chrono::{DateTime, Local};
 use dioxus::prelude::*;
 use dioxus_free_icons::{icons::bs_icons::BsSlack, Icon};
 
@@ -15,17 +14,21 @@ use universal_inbox::{
     HasHtmlUrl,
 };
 
-use crate::components::{
-    integrations::slack::{
-        icons::SlackNotificationIcon,
-        notification_list_item::{
-            SlackChannelListItemDetails, SlackFileCommentListItemDetails, SlackFileListItemDetails,
-            SlackGroupListItemDetails, SlackImListItemDetails, SlackMessageListItemDetails,
+use crate::{
+    components::{
+        integrations::slack::{
+            icons::SlackNotificationIcon,
+            notification_list_item::{
+                SlackChannelListItemDetails, SlackFileCommentListItemDetails,
+                SlackFileListItemDetails, SlackGroupListItemDetails, SlackImListItemDetails,
+                SlackMessageListItemDetails,
+            },
         },
+        list::{ListContext, ListItem},
+        notifications_list::TaskHint,
+        tasks_list::get_task_list_item_action_buttons,
     },
-    list::{ListContext, ListItem},
-    notifications_list::TaskHint,
-    tasks_list::get_task_list_item_action_buttons,
+    utils::format_elapsed_time,
 };
 
 #[component]
@@ -35,11 +38,7 @@ pub fn SlackStarTaskListItem(
     is_selected: ReadOnlySignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
-    let task_updated_at = use_memo(move || {
-        Into::<DateTime<Local>>::into(task().updated_at)
-            .format("%Y-%m-%d %H:%M")
-            .to_string()
-    });
+    let task_updated_at = use_memo(move || format_elapsed_time(task().updated_at));
     let list_context = use_context::<Memo<ListContext>>();
     let link = task().get_html_url();
 
@@ -77,11 +76,7 @@ pub fn SlackReactionTaskListItem(
     is_selected: ReadOnlySignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
-    let task_updated_at = use_memo(move || {
-        Into::<DateTime<Local>>::into(task().updated_at)
-            .format("%Y-%m-%d %H:%M")
-            .to_string()
-    });
+    let task_updated_at = use_memo(move || format_elapsed_time(task().updated_at));
     let list_context = use_context::<Memo<ListContext>>();
     let reaction_emoji =
         replace_emoji_code_with_emoji(&slack_reaction().name.0).unwrap_or("👀".to_string());

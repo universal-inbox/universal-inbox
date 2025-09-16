@@ -1,8 +1,6 @@
 #![allow(non_snake_case)]
 
-use chrono::{DateTime, Local};
 use dioxus::prelude::*;
-
 use dioxus_free_icons::{icons::bs_icons::BsLink45deg, Icon};
 
 use universal_inbox::{
@@ -15,6 +13,7 @@ use crate::{
         notifications_list::get_notification_list_item_action_buttons,
     },
     icons::UniversalInbox,
+    utils::format_elapsed_time,
 };
 
 #[component]
@@ -24,11 +23,7 @@ pub fn WebPageNotificationListItem(
     is_selected: ReadOnlySignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
-    let notification_updated_at = use_memo(move || {
-        Into::<DateTime<Local>>::into(notification().updated_at)
-            .format("%Y-%m-%d %H:%M")
-            .to_string()
-    });
+    let notification_updated_at = use_memo(move || format_elapsed_time(notification().updated_at));
     let list_context = use_context::<Memo<ListContext>>();
     let link = notification().get_html_url();
     let subicon = if web_page().favicon.is_some() {
