@@ -1,6 +1,5 @@
 #![allow(non_snake_case)]
 
-use chrono::{DateTime, Local};
 use dioxus::prelude::*;
 
 use universal_inbox::{
@@ -9,15 +8,18 @@ use universal_inbox::{
     HasHtmlUrl,
 };
 
-use crate::components::{
-    integrations::linear::{
-        get_notification_type_label,
-        icons::{Linear, LinearIssueIcon, LinearProjectIcon},
-        list_item::LinearIssueListItemSubtitle,
+use crate::{
+    components::{
+        integrations::linear::{
+            get_notification_type_label,
+            icons::{Linear, LinearIssueIcon, LinearProjectIcon},
+            list_item::LinearIssueListItemSubtitle,
+        },
+        list::{ListContext, ListItem},
+        notifications_list::{get_notification_list_item_action_buttons, TaskHint},
+        Tag, TagDisplay, UserWithAvatar,
     },
-    list::{ListContext, ListItem},
-    notifications_list::{get_notification_list_item_action_buttons, TaskHint},
-    Tag, TagDisplay, UserWithAvatar,
+    utils::format_elapsed_time,
 };
 
 #[component]
@@ -59,11 +61,7 @@ pub fn LinearIssueNotificationListItem(
     is_selected: ReadOnlySignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
-    let notification_updated_at = use_memo(move || {
-        Into::<DateTime<Local>>::into(notification().updated_at)
-            .format("%Y-%m-%d %H:%M")
-            .to_string()
-    });
+    let notification_updated_at = use_memo(move || format_elapsed_time(notification().updated_at));
     let list_context = use_context::<Memo<ListContext>>();
     let link = notification().get_html_url();
 
@@ -113,11 +111,7 @@ pub fn LinearProjectNotificationListItem(
     is_selected: ReadOnlySignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
-    let notification_updated_at = use_memo(move || {
-        Into::<DateTime<Local>>::into(notification().updated_at)
-            .format("%Y-%m-%d %H:%M")
-            .to_string()
-    });
+    let notification_updated_at = use_memo(move || format_elapsed_time(notification().updated_at));
     let list_context = use_context::<Memo<ListContext>>();
     let link = notification().get_html_url();
 

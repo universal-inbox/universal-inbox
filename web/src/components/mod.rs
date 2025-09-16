@@ -6,7 +6,8 @@ use dioxus_free_icons::{icons::bs_icons::BsPersonCircle, Icon};
 use url::Url;
 
 use crate::{
-    components::flyonui::collapse::Collapse, utils::compute_text_color_from_background_color,
+    components::flyonui::collapse::Collapse,
+    utils::{compute_text_color_from_background_color, format_elapsed_time},
 };
 
 pub mod authentication_tokens_card;
@@ -289,8 +290,7 @@ pub fn MessageHeader(
     sent_at: ReadOnlySignal<Option<DateTime<Utc>>>,
     date_class: Option<String>,
 ) -> Element {
-    let sent_at =
-        use_memo(move || sent_at().map(|sent_at| sent_at.format("%Y-%m-%d %H:%M:%S").to_string()));
+    let sent_at = use_memo(move || sent_at().map(format_elapsed_time));
     let date_class = date_class.unwrap_or_else(|| "text-neutral-content/75".to_string());
 
     rsx! {
@@ -299,7 +299,7 @@ pub fn MessageHeader(
 
             UserWithAvatar { user_name, avatar_url, display_name }
             if let Some(sent_at) = sent_at() {
-                span { class: "{date_class}", "at {sent_at}" }
+                span { class: "{date_class}", "{sent_at}" }
             }
         }
     }

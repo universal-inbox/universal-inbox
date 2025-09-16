@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Context, Result};
+use chrono::{DateTime, Local, Utc};
 use gloo_timers::future::TimeoutFuture;
 use gloo_utils::errors::JsError;
 use url::Url;
@@ -214,4 +215,91 @@ pub fn scroll_element_into_view_by_class(
     }
 
     Ok(())
+}
+
+pub fn format_elapsed_time(updated_at: DateTime<Utc>) -> String {
+    let now = Local::now().with_timezone(&Utc);
+    let duration = now.signed_duration_since(updated_at);
+
+    let total_seconds = duration.num_seconds();
+
+    if total_seconds < 0 {
+        return "now".to_string();
+    }
+
+    if total_seconds < 60 {
+        if total_seconds == 1 {
+            "1 second ago".to_string()
+        } else {
+            format!("{} seconds ago", total_seconds)
+        }
+    } else if total_seconds < 3600 {
+        let minutes = total_seconds / 60;
+        if minutes == 1 {
+            "1 minute ago".to_string()
+        } else {
+            format!("{} minutes ago", minutes)
+        }
+    } else if total_seconds < 86400 {
+        let hours = total_seconds / 3600;
+        if hours == 1 {
+            "1 hour ago".to_string()
+        } else {
+            format!("{} hours ago", hours)
+        }
+    } else if total_seconds < 2592000 {
+        let days = total_seconds / 86400;
+        if days == 1 {
+            "1 day ago".to_string()
+        } else {
+            format!("{} days ago", days)
+        }
+    } else if total_seconds < 31536000 {
+        let months = total_seconds / 2592000;
+        if months == 1 {
+            "1 month ago".to_string()
+        } else {
+            format!("{} months ago", months)
+        }
+    } else {
+        let years = total_seconds / 31536000;
+        if years == 1 {
+            "1 year ago".to_string()
+        } else {
+            format!("{} years ago", years)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::{Duration, Utc};
+
+    #[test]
+    fn test_format_elapsed_time() {
+        let now = Utc::now();
+
+        assert_eq!(format_elapsed_time(now), "now");
+        assert_eq!(
+            format_elapsed_time(now - Duration::seconds(30)),
+            "30 seconds ago"
+        );
+        assert_eq!(
+            format_elapsed_time(now - Duration::seconds(1)),
+            "1 second ago"
+        );
+        assert_eq!(
+            format_elapsed_time(now - Duration::minutes(5)),
+            "5 minutes ago"
+        );
+        assert_eq!(
+            format_elapsed_time(now - Duration::minutes(1)),
+            "1 minute ago"
+        );
+        assert_eq!(format_elapsed_time(now - Duration::hours(2)), "2 hours ago");
+        assert_eq!(format_elapsed_time(now - Duration::hours(1)), "1 hour ago");
+        assert_eq!(format_elapsed_time(now - Duration::days(3)), "3 days ago");
+        assert_eq!(format_elapsed_time(now - Duration::days(1)), "1 day ago");
+    }
 }

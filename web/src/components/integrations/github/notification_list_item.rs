@@ -1,6 +1,5 @@
 #![allow(non_snake_case)]
 
-use chrono::{DateTime, Local};
 use dioxus::prelude::*;
 
 use dioxus_free_icons::{icons::bs_icons::BsChatTextFill, Icon};
@@ -13,14 +12,17 @@ use universal_inbox::{
     HasHtmlUrl,
 };
 
-use crate::components::{
-    integrations::github::{
-        icons::{Github, GithubNotificationIcon},
-        preview::pull_request::ChecksGithubPullRequest,
-        GithubActorDisplay,
+use crate::{
+    components::{
+        integrations::github::{
+            icons::{Github, GithubNotificationIcon},
+            preview::pull_request::ChecksGithubPullRequest,
+            GithubActorDisplay,
+        },
+        list::{ListContext, ListItem},
+        notifications_list::{get_notification_list_item_action_buttons, TaskHint},
     },
-    list::{ListContext, ListItem},
-    notifications_list::{get_notification_list_item_action_buttons, TaskHint},
+    utils::format_elapsed_time,
 };
 
 #[component]
@@ -73,11 +75,7 @@ pub fn DefaultGithubNotificationListItem(
     is_selected: ReadOnlySignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
-    let notification_updated_at = use_memo(move || {
-        Into::<DateTime<Local>>::into(notification().updated_at)
-            .format("%Y-%m-%d %H:%M")
-            .to_string()
-    });
+    let notification_updated_at = use_memo(move || format_elapsed_time(notification().updated_at));
     let list_context = use_context::<Memo<ListContext>>();
     let link = notification().get_html_url();
 
@@ -120,11 +118,7 @@ pub fn GithubPullRequestNotificationListItem(
     is_selected: ReadOnlySignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
-    let notification_updated_at = use_memo(move || {
-        Into::<DateTime<Local>>::into(notification().updated_at)
-            .format("%Y-%m-%d %H:%M")
-            .to_string()
-    });
+    let notification_updated_at = use_memo(move || format_elapsed_time(notification().updated_at));
     let list_context = use_context::<Memo<ListContext>>();
     let link = notification().get_html_url();
 
@@ -187,11 +181,7 @@ pub fn GithubDiscussionNotificationListItem(
     is_selected: ReadOnlySignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
-    let notification_updated_at = use_memo(move || {
-        Into::<DateTime<Local>>::into(notification().updated_at)
-            .format("%Y-%m-%d %H:%M")
-            .to_string()
-    });
+    let notification_updated_at = use_memo(move || format_elapsed_time(notification().updated_at));
     let list_context = use_context::<Memo<ListContext>>();
     let link = notification().get_html_url();
 

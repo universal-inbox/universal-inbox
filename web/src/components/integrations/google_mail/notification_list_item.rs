@@ -2,9 +2,7 @@
 
 use std::collections::HashSet;
 
-use chrono::{DateTime, Local};
 use dioxus::prelude::*;
-
 use dioxus_free_icons::{
     icons::bs_icons::{BsExclamationCircle, BsStar},
     Icon,
@@ -17,10 +15,13 @@ use universal_inbox::{
     HasHtmlUrl,
 };
 
-use crate::components::{
-    integrations::google_mail::icons::{GoogleMail, Mail},
-    list::{ListContext, ListItem},
-    notifications_list::{get_notification_list_item_action_buttons, TaskHint},
+use crate::{
+    components::{
+        integrations::google_mail::icons::{GoogleMail, Mail},
+        list::{ListContext, ListItem},
+        notifications_list::{get_notification_list_item_action_buttons, TaskHint},
+    },
+    utils::format_elapsed_time,
 };
 
 #[component]
@@ -30,11 +31,7 @@ pub fn GoogleMailThreadListItem(
     is_selected: ReadOnlySignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
-    let notification_updated_at = use_memo(move || {
-        Into::<DateTime<Local>>::into(notification().updated_at)
-            .format("%Y-%m-%d %H:%M")
-            .to_string()
-    });
+    let notification_updated_at = use_memo(move || format_elapsed_time(notification().updated_at));
     let list_context = use_context::<Memo<ListContext>>();
     let is_starred = google_mail_thread().is_tagged_with(GOOGLE_MAIL_STARRED_LABEL, None);
     let is_important = google_mail_thread().is_tagged_with(GOOGLE_MAIL_IMPORTANT_LABEL, None);

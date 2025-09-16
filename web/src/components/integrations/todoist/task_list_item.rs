@@ -1,20 +1,22 @@
 #![allow(non_snake_case)]
 
-use chrono::{DateTime, Local};
 use dioxus::prelude::*;
-
 use dioxus_free_icons::{icons::bs_icons::BsCardChecklist, Icon};
+
 use universal_inbox::{
     task::Task,
     third_party::integrations::todoist::{TodoistItem, TodoistItemPriority},
     HasHtmlUrl,
 };
 
-use crate::components::{
-    integrations::todoist::{icons::Todoist, list_item::TodoistListItemSubtitle},
-    list::{ListContext, ListItem},
-    tasks_list::get_task_list_item_action_buttons,
-    Tag, TagDisplay,
+use crate::{
+    components::{
+        integrations::todoist::{icons::Todoist, list_item::TodoistListItemSubtitle},
+        list::{ListContext, ListItem},
+        tasks_list::get_task_list_item_action_buttons,
+        Tag, TagDisplay,
+    },
+    utils::format_elapsed_time,
 };
 
 #[component]
@@ -24,11 +26,7 @@ pub fn TodoistTaskListItem(
     is_selected: ReadOnlySignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
-    let task_updated_at = use_memo(move || {
-        Into::<DateTime<Local>>::into(task().updated_at)
-            .format("%Y-%m-%d %H:%M")
-            .to_string()
-    });
+    let task_updated_at = use_memo(move || format_elapsed_time(task().updated_at));
     let list_context = use_context::<Memo<ListContext>>();
     let task_icon_style = match todoist_item().priority {
         TodoistItemPriority::P1 => "",

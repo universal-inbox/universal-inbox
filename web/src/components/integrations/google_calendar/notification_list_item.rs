@@ -1,8 +1,6 @@
 #![allow(non_snake_case)]
 
-use chrono::{DateTime, Local};
 use dioxus::prelude::*;
-
 use dioxus_free_icons::{
     icons::bs_icons::{
         BsArrowRepeat, BsCalendar2Event, BsCheckCircleFill, BsPersonCheck, BsPersonDash, BsPersonX,
@@ -10,6 +8,7 @@ use dioxus_free_icons::{
     },
     Icon,
 };
+
 use universal_inbox::{
     notification::NotificationWithTask,
     third_party::integrations::google_calendar::{
@@ -27,6 +26,7 @@ use crate::{
         },
     },
     services::notification_service::NotificationCommand,
+    utils::format_elapsed_time,
 };
 
 #[component]
@@ -36,11 +36,7 @@ pub fn GoogleCalendarEventListItem(
     is_selected: ReadOnlySignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
-    let notification_updated_at = use_memo(move || {
-        Into::<DateTime<Local>>::into(notification().updated_at)
-            .format("%Y-%m-%d %H:%M")
-            .to_string()
-    });
+    let notification_updated_at = use_memo(move || format_elapsed_time(notification().updated_at));
     let list_context = use_context::<Memo<ListContext>>();
     let status_icon = match (
         google_calendar_event().status,

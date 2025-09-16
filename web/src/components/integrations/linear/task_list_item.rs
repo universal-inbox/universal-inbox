@@ -1,19 +1,21 @@
 #![allow(non_snake_case)]
 
-use chrono::{DateTime, Local};
 use dioxus::prelude::*;
 
 use universal_inbox::{task::Task, third_party::integrations::linear::LinearIssue, HasHtmlUrl};
 
-use crate::components::{
-    integrations::linear::{
-        icons::{Linear, LinearIssueIcon},
-        list_item::LinearIssueListItemSubtitle,
+use crate::{
+    components::{
+        integrations::linear::{
+            icons::{Linear, LinearIssueIcon},
+            list_item::LinearIssueListItemSubtitle,
+        },
+        list::{ListContext, ListItem},
+        notifications_list::TaskHint,
+        tasks_list::get_task_list_item_action_buttons,
+        UserWithAvatar,
     },
-    list::{ListContext, ListItem},
-    notifications_list::TaskHint,
-    tasks_list::get_task_list_item_action_buttons,
-    UserWithAvatar,
+    utils::format_elapsed_time,
 };
 
 #[component]
@@ -23,11 +25,7 @@ pub fn LinearTaskListItem(
     is_selected: ReadOnlySignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
-    let task_updated_at = use_memo(move || {
-        Into::<DateTime<Local>>::into(task().updated_at)
-            .format("%Y-%m-%d %H:%M")
-            .to_string()
-    });
+    let task_updated_at = use_memo(move || format_elapsed_time(task().updated_at));
     let list_context = use_context::<Memo<ListContext>>();
     let link = task().get_html_url();
 
