@@ -10,6 +10,7 @@
 - Display calendar events recurrence
 - Add Universal Inbox "Web Page" notification type (browser extension)
 - Add button to delete all notifications
+- Allow the notifications details panel to be moved to the bottom of the screen
 
 ### Changed
 

@@ -8,12 +8,23 @@ pub struct UserSettings {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UISettings {
     pub details_panel_width: f64,
+    pub details_panel_height: f64,
+    pub details_panel_position: PanelPosition,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub enum PanelPosition {
+    #[default]
+    Right,
+    Bottom,
 }
 
 impl Default for UISettings {
     fn default() -> Self {
         Self {
             details_panel_width: 33.333, // Start with 1/3 width (33.333%)
+            details_panel_height: 40.0,  // Start with 40% height
+            details_panel_position: PanelPosition::default(),
         }
     }
 }

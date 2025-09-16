@@ -88,6 +88,7 @@ pub fn NotificationsList(
 
     rsx! {
         div {
+            id: "notifications-list",
             class: "flex flex-col h-full",
             div {
                 class: "flex w-full p-2 gap-2 text-sm text-base-content/50",

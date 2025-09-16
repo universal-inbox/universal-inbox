@@ -1,6 +1,9 @@
 use dioxus::prelude::*;
 
-use crate::{services::local_storage::LocalStorageService, settings::UserSettings};
+use crate::{
+    services::local_storage::LocalStorageService,
+    settings::{PanelPosition, UserSettings},
+};
 
 pub static UI_MODEL: GlobalSignal<UniversalInboxUIModel> = Signal::global(|| {
     let settings = LocalStorageService::load_settings();
@@ -23,6 +26,8 @@ pub struct UniversalInboxUIModel {
     pub is_syncing_tasks: bool,
     pub preview_cards_expanded: bool,
     details_panel_width: f64,
+    details_panel_height: f64,
+    details_panel_position: PanelPosition,
 }
 
 impl Default for UniversalInboxUIModel {
@@ -47,6 +52,8 @@ impl UniversalInboxUIModel {
             is_syncing_tasks: false,
             preview_cards_expanded: false,
             details_panel_width: settings.ui.details_panel_width,
+            details_panel_height: settings.ui.details_panel_height,
+            details_panel_position: settings.ui.details_panel_position.clone(),
         }
     }
 
@@ -70,6 +77,41 @@ impl UniversalInboxUIModel {
 
     pub fn get_details_panel_width(&self) -> f64 {
         self.details_panel_width
+    }
+
+    pub fn set_details_panel_height(&mut self, height: f64) {
+        let clamped_height = height.clamp(20.0, 80.0);
+        self.details_panel_height = clamped_height;
+
+        // Save to local storage
+        LocalStorageService::update_ui_setting(|ui_settings| {
+            ui_settings.details_panel_height = clamped_height;
+        });
+    }
+
+    pub fn get_details_panel_height(&self) -> f64 {
+        self.details_panel_height
+    }
+
+    pub fn set_details_panel_position(&mut self, position: PanelPosition) {
+        self.details_panel_position = position.clone();
+
+        // Save to local storage
+        LocalStorageService::update_ui_setting(|ui_settings| {
+            ui_settings.details_panel_position = position;
+        });
+    }
+
+    pub fn get_details_panel_position(&self) -> &PanelPosition {
+        &self.details_panel_position
+    }
+
+    pub fn toggle_details_panel_position(&mut self) {
+        let new_position = match self.details_panel_position {
+            PanelPosition::Right => PanelPosition::Bottom,
+            PanelPosition::Bottom => PanelPosition::Right,
+        };
+        self.set_details_panel_position(new_position);
     }
 }
 

@@ -188,3 +188,30 @@ pub fn get_screen_width() -> Result<usize> {
         .as_f64()
         .unwrap_or_default() as usize)
 }
+
+pub fn scroll_element_into_view_by_class(
+    container_id: &str,
+    child_class: &str,
+    child_index: usize,
+) -> Result<()> {
+    let window = web_sys::window().context("Unable to load `window`")?;
+    let document = window.document().context("Unable to load `document`")?;
+
+    // Get the container element
+    let container = document
+        .get_element_by_id(container_id)
+        .context(format!("Container element `{container_id}` not found"))?;
+
+    // Get all elements with the specified class within the container
+    let elements = container
+        .query_selector_all(&format!(".{}", child_class))
+        .map_err(|err| JsError::try_from(err).unwrap())?;
+
+    if let Some(target_element) = elements.get(child_index as u32) {
+        if let Some(element) = target_element.dyn_ref::<Element>() {
+            element.scroll_into_view_with_bool(true);
+        }
+    }
+
+    Ok(())
+}

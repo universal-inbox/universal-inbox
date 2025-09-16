@@ -24,7 +24,11 @@ use crate::{
         flyonui::has_flyonui_modal_opened,
         task_service::{TaskCommand, SYNCED_TASKS_PAGE},
     },
-    utils::{get_screen_width, open_link, scroll_element, scroll_element_by_page},
+    settings::PanelPosition,
+    utils::{
+        get_screen_width, open_link, scroll_element, scroll_element_by_page,
+        scroll_element_into_view_by_class,
+    },
 };
 
 static KEYBOARD_HANDLER: SyncTasksPageKeyboardHandler = SyncTasksPageKeyboardHandler {};
@@ -120,10 +124,20 @@ fn InternalSyncedTaskPage(task_id: ReadOnlySignal<Option<TaskId>>) -> Element {
         KEYBOARD_MANAGER.write().active_keyboard_handler = None;
     });
 
+    let panel_position = UI_MODEL.read().get_details_panel_position().clone();
+    let layout_class = match panel_position {
+        PanelPosition::Right => {
+            "h-full mx-auto flex flex-row lg:px-4 lg:divide-x divide-base-content/25 relative"
+        }
+        PanelPosition::Bottom => {
+            "h-full mx-auto flex flex-col lg:px-4 lg:divide-y divide-base-content/25 relative"
+        }
+    };
+
     rsx! {
         div {
             id: "tasks-page",
-            class: "h-full mx-auto flex flex-row lg:px-4 lg:divide-x divide-base-content/25 relative",
+            class: "{layout_class}",
             onmounted: move |_| {
                 KEYBOARD_MANAGER.write().active_keyboard_handler = Some(&KEYBOARD_HANDLER);
             },
@@ -143,7 +157,10 @@ fn InternalSyncedTaskPage(task_id: ReadOnlySignal<Option<TaskId>>) -> Element {
                 }
             } else {
                 div {
-                    class: "h-full flex-1 max-lg:w-full max-lg:absolute",
+                    class: match panel_position {
+                        PanelPosition::Right => "h-full flex-1 max-lg:w-full max-lg:absolute",
+                        PanelPosition::Bottom => "flex-1 max-lg:w-full max-lg:absolute overflow-y-auto",
+                    },
 
                     TasksList { tasks: SORTED_SYNCED_TASKS.signal() }
                 }
@@ -185,16 +202,24 @@ impl KeyboardHandler for SyncTasksPageKeyboardHandler {
             "ArrowDown" => {
                 if let Some(index) = selected_task_index {
                     if index < (list_length - 1) {
+                        let new_index = index + 1;
                         let mut ui_model = UI_MODEL.write();
-                        ui_model.selected_task_index = Some(index + 1);
+                        ui_model.selected_task_index = Some(new_index);
+                        drop(ui_model);
+                        let _ =
+                            scroll_element_into_view_by_class("tasks_list", "row-hover", new_index);
                     }
                 }
             }
             "ArrowUp" => {
                 if let Some(index) = selected_task_index {
                     if index > 0 {
+                        let new_index = index - 1;
                         let mut ui_model = UI_MODEL.write();
-                        ui_model.selected_task_index = Some(index - 1);
+                        ui_model.selected_task_index = Some(new_index);
+                        drop(ui_model);
+                        let _ =
+                            scroll_element_into_view_by_class("tasks_list", "row-hover", new_index);
                     }
                 }
             }
