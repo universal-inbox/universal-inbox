@@ -41,7 +41,7 @@ pub fn TasksList(tasks: ReadOnlySignal<SortedGroups<String, TaskWithOrder>>) -> 
         div {
             class: "h-full overflow-y-auto scroll-y-auto px-2 snap-y snap-mandatory",
             List {
-                id: "tasks_list",
+                id: "tasks-list",
                 show_shortcut: UI_MODEL.read().is_help_enabled,
 
                 for (i, (group, task)) in tasks.read().iter().enumerate() {
