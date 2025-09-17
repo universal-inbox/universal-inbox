@@ -223,7 +223,7 @@ pub fn format_elapsed_time(updated_at: DateTime<Utc>) -> String {
 
     let total_seconds = duration.num_seconds();
 
-    if total_seconds < 0 {
+    if total_seconds < 1 {
         return "now".to_string();
     }
 
@@ -275,8 +275,9 @@ pub fn format_elapsed_time(updated_at: DateTime<Utc>) -> String {
 mod tests {
     use super::*;
     use chrono::{Duration, Utc};
+    use wasm_bindgen_test::*;
 
-    #[test]
+    #[wasm_bindgen_test]
     fn test_format_elapsed_time() {
         let now = Utc::now();
 

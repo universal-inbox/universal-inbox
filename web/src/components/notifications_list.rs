@@ -15,7 +15,7 @@ use universal_inbox::{
     notification::{NotificationListOrder, NotificationWithTask},
     task::{Task, TaskId, TaskPlanning, TaskPriority},
     third_party::item::ThirdPartyItemData,
-    HasHtmlUrl, Page, PageToken,
+    HasHtmlUrl, Page,
 };
 
 use crate::{
@@ -35,7 +35,7 @@ use crate::{
             },
             todoist::notification_list_item::TodoistNotificationListItem,
         },
-        list::{List, ListItemActionButton},
+        list::{List, ListItemActionButton, ListPaginationButtons},
         task_link_modal::TaskLinkModal,
         task_planning_modal::TaskPlanningModal,
     },
@@ -510,151 +510,6 @@ pub fn TaskHint(task: ReadOnlySignal<Option<Task>>) -> Element {
                 href: "{html_url}",
                 target: "_blank",
                 Icon { class: "w-4 h-4", icon: BsBookmarkCheck }
-            }
-        }
-    }
-}
-
-#[component]
-pub fn ListPaginationButtons(
-    current_page: Signal<usize>,
-    page: ReadOnlySignal<Page<NotificationWithTask>>,
-    on_select: EventHandler<PageToken>,
-) -> Element {
-    if page().pages_count == 0 {
-        return rsx! {};
-    }
-
-    let previous_button_style = if page().pages_count == 1 || current_page() == 1 {
-        "btn-disabled"
-    } else {
-        ""
-    };
-    let previous_pages_style = if current_page() > 3 {
-        "visible"
-    } else {
-        "hidden"
-    };
-    let previous_page_style = if current_page() > 2 {
-        "visible"
-    } else {
-        "hidden"
-    };
-    let current_page_style = if current_page() > 1 && current_page() < page().pages_count {
-        "visible"
-    } else {
-        "hidden"
-    };
-    let next_page_style = if current_page() < (page().pages_count - 1) {
-        "visible"
-    } else {
-        "hidden"
-    };
-    let next_pages_style = if page().pages_count > 4 && current_page() < (page().pages_count - 2) {
-        "visible"
-    } else {
-        "hidden"
-    };
-    let last_page_style = if page().pages_count > 1 {
-        "visible"
-    } else {
-        "hidden"
-    };
-    let next_button_style = if page().pages_count == 1 || current_page() == page().pages_count {
-        "btn-disabled"
-    } else {
-        ""
-    };
-
-    rsx! {
-        nav {
-            class: "join",
-
-            button {
-                "type": "button",
-                class: "btn btn-text lg:btn-xs max-lg:btn-lg btn-circle join-item {previous_button_style}",
-                "aria-label": "Previous page",
-                onclick: move |_| {
-                    current_page -= 1;
-                    on_select.call(page().previous_page_token.unwrap_or_default());
-                },
-                span { class: "icon-[tabler--chevron-left] size-5 rtl:rotate-180" }
-            }
-            button {
-                "type": "button",
-                class: "btn btn-text lg:btn-xs max-lg:btn-lg join-item btn-circle aria-[current='page']:text-bg-soft-primary",
-                "aria-current": if current_page() == 1 { "page" },
-                onclick: move |_| {
-                    current_page.set(1);
-                    on_select.call(PageToken::Offset(0));
-                },
-                "1"
-            }
-
-            button {
-                "type": "button",
-                class: "btn btn-text lg:btn-xs max-lg:btn-lg join-item btn-circle {previous_pages_style}",
-                onclick: move |_| {
-                    current_page -= 2;
-                    on_select.call(PageToken::Offset((current_page() - 1) * page().per_page));
-                },
-                "..."
-            }
-
-            button {
-                "type": "button",
-                class: "btn btn-text lg:btn-xs max-lg:btn-lg join-item btn-circle {previous_page_style}",
-                onclick: move |_| {
-                    current_page -= 1;
-                    on_select.call(page().previous_page_token.unwrap_or_default());
-                },
-                "{current_page() - 1}"
-            }
-            button {
-                "type": "button",
-                class: "btn btn-text lg:btn-xs max-lg:btn-lg join-item btn-circle aria-[current='page']:text-bg-soft-primary {current_page_style}",
-                "aria-current": "page",
-                "{current_page()}"
-            }
-            button {
-                "type": "button",
-                class: "btn btn-text lg:btn-xs max-lg:btn-lg join-item btn-circle {next_page_style}",
-                onclick: move |_| {
-                    current_page += 1;
-                    on_select.call(page().next_page_token.unwrap_or_default());
-                },
-                "{current_page() + 1}"
-            }
-
-            button {
-                "type": "button",
-                class: "btn btn-text lg:btn-xs max-lg:btn-lg join-item btn-circle {next_pages_style}",
-                onclick: move |_| {
-                    current_page += 2;
-                    on_select.call(PageToken::Offset((current_page() - 1) * page().per_page));
-                },
-                "..."
-            }
-
-            button {
-                "type": "button",
-                class: "btn btn-text lg:btn-xs max-lg:btn-lg join-item btn-circle aria-[current='page']:text-bg-soft-primary {last_page_style}",
-                "aria-current": if current_page() == page().pages_count { "page" },
-                onclick: move |_| {
-                    current_page.set(page().pages_count);
-                    on_select.call(PageToken::Offset((current_page() - 1) * page().per_page));
-                },
-                "{page().pages_count}"
-            }
-            button {
-                "type": "button",
-                class: "btn btn-text lg:btn-xs max-lg:btn-lg btn-circle join-item {next_button_style}",
-                "aria-label": "Next page",
-                onclick: move |_| {
-                    current_page += 1;
-                    on_select.call(page().next_page_token.unwrap_or_default());
-                },
-                span { class: "icon-[tabler--chevron-right] size-5 rtl:rotate-180" }
             }
         }
     }
