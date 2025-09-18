@@ -250,6 +250,15 @@ impl KeyboardHandler for NotificationsPageKeyboardHandler {
                     notification_service.send(NotificationCommand::Snooze(notification.id))
                 }
             }
+            "t" => {
+                if let Some(notification) = selected_notification {
+                    notification_service.send(
+                        NotificationCommand::CreateTaskWithDetaultsFromNotification(
+                            notification.clone(),
+                        ),
+                    )
+                }
+            }
             "y" => {
                 if let Some(notification) = selected_notification {
                     notification_service

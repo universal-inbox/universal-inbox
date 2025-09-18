@@ -59,6 +59,7 @@ mod patch_task {
 
     use super::*;
     use pretty_assertions::assert_eq;
+    use universal_inbox::task::{PresetDueDate, ProjectSummary};
 
     #[rstest]
     #[tokio::test]
@@ -464,15 +465,190 @@ mod patch_task {
             &app.client,
             &app.app.api_address,
             notification.id,
-            &TaskCreation {
+            Some(TaskCreation {
                 title: todoist_item.content.clone(),
                 body,
                 project_name: Some("Project2".to_string()),
                 due_at,
                 priority: todoist_item.priority.into(),
-            },
+            }),
         )
         .await;
+
+        todoist_projects_mock.assert();
+        todoist_item_add_mock.assert();
+        todoist_get_item_mock.assert();
+        github_mark_thread_as_read_mock.assert();
+
+        let new_task_id = notification_with_task
+            .as_ref()
+            .unwrap()
+            .task
+            .as_ref()
+            .unwrap()
+            .id;
+        assert_eq!(
+            notification_with_task,
+            Some(NotificationWithTask::build(
+                &Notification {
+                    status: NotificationStatus::Deleted,
+                    ..*notification
+                },
+                Some(Task {
+                    id: new_task_id,
+                    updated_at: notification_with_task
+                        .as_ref()
+                        .unwrap()
+                        .task
+                        .as_ref()
+                        .unwrap()
+                        .updated_at,
+                    ..(*TodoistService::build_task_with_project_name(
+                        &todoist_item,
+                        project,
+                        &ThirdPartyItem {
+                            id: notification_with_task
+                                .as_ref()
+                                .unwrap()
+                                .task
+                                .as_ref()
+                                .unwrap()
+                                .source_item
+                                .id,
+                            source_id: todoist_item.id.clone(),
+                            created_at: notification_with_task
+                                .as_ref()
+                                .unwrap()
+                                .task
+                                .as_ref()
+                                .unwrap()
+                                .source_item
+                                .created_at,
+                            updated_at: notification_with_task
+                                .as_ref()
+                                .unwrap()
+                                .task
+                                .as_ref()
+                                .unwrap()
+                                .source_item
+                                .updated_at,
+                            user_id: app.user.id,
+                            data: ThirdPartyItemData::TodoistItem(todoist_item.clone()),
+                            integration_connection_id: todoist_integration_connection.id,
+                            source_item: None,
+                        },
+                        app.user.id
+                    )
+                    .await)
+                        .into()
+                })
+            ))
+        );
+
+        let deleted_notification: Box<Notification> = get_resource(
+            &app.client,
+            &app.app.api_address,
+            "notifications",
+            notification.id.into(),
+        )
+        .await;
+        assert_eq!(deleted_notification.status, NotificationStatus::Deleted);
+        assert_eq!(deleted_notification.task_id, Some(new_task_id));
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_create_todoist_task_with_defaults_from_notification(
+        settings: Settings,
+        #[future] authenticated_app: AuthenticatedApp,
+        github_notification: Box<GithubNotification>,
+        sync_todoist_projects_response: TodoistSyncResponse,
+        todoist_item: Box<TodoistItem>,
+        nango_todoist_connection: Box<NangoConnection>,
+        nango_github_connection: Box<NangoConnection>,
+    ) {
+        let app = authenticated_app.await;
+
+        let github_integration_connection = create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            &settings.oauth2.nango_secret_key,
+            IntegrationConnectionConfig::Github(GithubConfig::enabled()),
+            &settings,
+            nango_github_connection,
+            None,
+            None,
+        )
+        .await;
+
+        let notification = create_notification_from_github_notification(
+            &app.app,
+            &github_notification,
+            app.user.id,
+            github_integration_connection.id,
+        )
+        .await;
+
+        // Existing project in sync_todoist_projects_response
+        let project = "Project2".to_string();
+        let project_id = "2222".to_string();
+        let todoist_item = Box::new(TodoistItem {
+            project_id: project_id.clone(),
+            ..(*todoist_item).clone()
+        });
+        let body = Some(format!(
+            "- [{}]({})",
+            notification.title,
+            notification.get_html_url().as_ref()
+        ));
+        let todoist_integration_connection = create_and_mock_integration_connection(
+            &app.app,
+            app.user.id,
+            &settings.oauth2.nango_secret_key,
+            IntegrationConnectionConfig::Todoist(TodoistConfig {
+                default_project: Some(ProjectSummary {
+                    source_id: project_id.clone().into(),
+                    name: project.clone(),
+                }),
+                default_due_at: Some(PresetDueDate::Today),
+                default_priority: Some(TaskPriority::from(todoist_item.priority)),
+                ..TodoistConfig::enabled()
+            }),
+            &settings,
+            nango_todoist_connection,
+            None,
+            None,
+        )
+        .await;
+
+        let github_mark_thread_as_read_mock = app.app.github_mock_server.mock(|when, then| {
+            when.method(PATCH)
+                .path("/notifications/threads/1")
+                .header("accept", "application/vnd.github.v3+json")
+                .header("authorization", "Bearer github_test_access_token");
+            then.status(205);
+        });
+        let todoist_projects_mock = mock_todoist_sync_resources_service(
+            &app.app.todoist_mock_server,
+            "projects",
+            &sync_todoist_projects_response,
+            None,
+        );
+        let todoist_item_add_mock = mock_todoist_item_add_service(
+            &app.app.todoist_mock_server,
+            &todoist_item.id,
+            notification.title.clone(),
+            body.clone(),
+            Some(project_id.clone()),
+            Some((&Into::<DueDate>::into(PresetDueDate::Today)).into()),
+            todoist_item.priority,
+        );
+        let todoist_get_item_mock =
+            mock_todoist_get_item_service(&app.app.todoist_mock_server, todoist_item.clone());
+
+        let notification_with_task =
+            create_task_from_notification(&app.client, &app.app.api_address, notification.id, None)
+                .await;
 
         todoist_projects_mock.assert();
         todoist_item_add_mock.assert();

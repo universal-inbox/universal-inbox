@@ -4,7 +4,8 @@ use dioxus::prelude::*;
 use dioxus_free_icons::{
     icons::{
         bs_icons::{
-            BsBellSlash, BsBookmarkCheck, BsCalendar2Check, BsClockHistory, BsLink45deg, BsTrash,
+            BsBellSlash, BsBookmarkCheck, BsCalendar2Check, BsClockHistory, BsLightning,
+            BsLink45deg, BsTrash,
         },
         md_action_icons::{MdAddTask, MdCheckCircleOutline},
     },
@@ -395,6 +396,22 @@ pub fn get_notification_list_item_action_buttons(
 
             buttons.push(rsx! {
                 ListItemActionButton {
+                    title: "Create task with defaults",
+                    shortcut: "t",
+                    disabled_label: (!context().is_task_actions_enabled)
+                        .then_some("No task management service connected".to_string()),
+                    show_shortcut,
+                    button_class: button_class.clone(),
+                    container_class: container_class.clone(),
+                    onclick: move |_| {
+                        context().notification_service.send(NotificationCommand::CreateTaskWithDetaultsFromNotification(notification()));
+                    },
+                    Icon { class: "w-5 h-5", icon: BsLightning }
+                }
+            });
+
+            buttons.push(rsx! {
+                ListItemActionButton {
                     title: "Link to task",
                     shortcut: "l",
                     disabled_label: (!context().is_task_actions_enabled)
@@ -467,6 +484,21 @@ pub fn get_notification_list_item_action_buttons(
                     container_class: container_class.clone(),
                     data_overlay: "#task-planning-modal",
                     Icon { class: "w-5 h-5", icon: BsCalendar2Check }
+                }
+            },
+            rsx! {
+                ListItemActionButton {
+                    title: "Create task with defaults",
+                    shortcut: "t",
+                    disabled_label: (!context().is_task_actions_enabled)
+                        .then_some("No task management service connected".to_string()),
+                    show_shortcut,
+                    button_class: button_class.clone(),
+                    container_class: container_class.clone(),
+                    onclick: move |_| {
+                        context().notification_service.send(NotificationCommand::CreateTaskWithDetaultsFromNotification(notification()));
+                    },
+                    Icon { class: "w-5 h-5", icon: BsLightning }
                 }
             },
         ]

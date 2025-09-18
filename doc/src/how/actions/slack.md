@@ -58,6 +58,7 @@ Use this when you need to defer handling a message until later.
 #### Create Task
 
 - **Keyboard Shortcut**: `p`
+- **Keyboard Shortcut (with default task parameters)**: `t`
 - **Effect in Universal Inbox**: Links notification to a newly created task and remove the notification from your inbox
 - **Effect in Slack**: Remove the "saved for later" status from the message or remove the reaction. It does not mark the message as read.
 - **Effect in Task Manager**: Creates a new task with a link to the Slack message

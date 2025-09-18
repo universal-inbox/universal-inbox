@@ -24,6 +24,7 @@ Shortcut | Action | Description |
 `u` | Unsubscribe | Silence notification and future updates |
 `s` | Snooze | Postpone notification for later handling |
 `p` | Create task | Convert notification into a task |
+`t` | Create task with defaults | Convert notification into a task using default parameters |
 `l` | Link to task | Link notification to existing task |
 `Enter` | View notification source | Open notification in source tool |
 

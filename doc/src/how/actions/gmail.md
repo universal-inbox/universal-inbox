@@ -44,6 +44,7 @@ Use this when you need to defer handling an email until later.
 #### Create Task
 
 - **Keyboard Shortcut**: `p`
+- **Keyboard Shortcut (with default task parameters)**: `t`
 - **Effect in Universal Inbox**: Links notification to a newly created task and remove the notification from your inbox
 - **Effect in Google Mail**: Mark the thread as read and archived
 - **Effect in Task Manager**: Creates a new task with a link to the Google Mail thread

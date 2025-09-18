@@ -68,6 +68,8 @@ To use the task management features below, you must first connect a task managem
 {:.icon-text}
 ![create task button](images/create-task-button.png =30x30) Convert to Task: Transform your notification into an actionable task in your task management tool. After clicking this button, you can customize the task details (title, project, due date, priority) before creation.
 
+{:.icon-text}
+![create task with defaults button](images/create-task-with-defaults-button.png =30x30) Convert to Task with default settings: Transform your notification into an actionable task in your task management tool. Default task details are automatically set from Todoist settings.
 
 #### Link to Task
 

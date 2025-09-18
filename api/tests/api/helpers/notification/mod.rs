@@ -191,21 +191,20 @@ pub async fn create_task_from_notification_response(
     client: &Client,
     api_address: &str,
     notification_id: NotificationId,
-    task_creation: &TaskCreation,
+    task_creation: Option<TaskCreation>,
 ) -> Response {
-    client
-        .post(format!("{api_address}notifications/{notification_id}/task"))
-        .json(task_creation)
-        .send()
-        .await
-        .expect("Failed to execute request")
+    let mut request = client.post(format!("{api_address}notifications/{notification_id}/task"));
+    if let Some(task_creation) = task_creation {
+        request = request.json(&task_creation);
+    }
+    request.send().await.expect("Failed to execute request")
 }
 
 pub async fn create_task_from_notification(
     client: &Client,
     api_address: &str,
     notification_id: NotificationId,
-    task_creation: &TaskCreation,
+    task_creation: Option<TaskCreation>,
 ) -> Option<NotificationWithTask> {
     create_task_from_notification_response(client, api_address, notification_id, task_creation)
         .await

@@ -21,6 +21,8 @@ Connecting Todoist with Universal Inbox enables you to:
 This option is particularly useful if you use Todoist's quick-add features or email forwarding to create tasks that need further sorting or organization.
 ```
 
+- **Default tasks settings**: This allows you to create a Todoist task from a notification with a single click or key stroke without the need to enter parameters each time.
+
 ## Available Actions
 
 With the Todoist integration, you can:

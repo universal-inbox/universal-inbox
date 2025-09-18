@@ -39,6 +39,7 @@ pub enum NotificationCommand {
     Snooze(NotificationId),
     CompleteTaskFromNotification(NotificationWithTask),
     PlanTask(NotificationWithTask, TaskId, TaskPlanning),
+    CreateTaskWithDetaultsFromNotification(NotificationWithTask),
     CreateTaskFromNotification(NotificationWithTask, TaskCreation),
     LinkNotificationWithTask(NotificationId, TaskId),
     AcceptInvitation(NotificationId),
@@ -192,6 +193,23 @@ pub async fn notification_service(
                     .remove_element(|notif| notif.id != notification.id);
 
                 task_service.send(TaskCommand::Plan(task_id, parameters));
+            }
+            Some(NotificationCommand::CreateTaskWithDetaultsFromNotification(ref notification)) => {
+                notifications_page
+                    .write()
+                    .remove_element(|notif| notif.id != notification.id);
+
+                let _result: Result<Option<NotificationWithTask>> = call_api_and_notify(
+                    Method::POST,
+                    &api_base_url,
+                    &format!("notifications/{}/task", notification.id),
+                    None::<TaskCreation>,
+                    Some(ui_model),
+                    &toast_service,
+                    "Creating task with default settings from notification...",
+                    "Task successfully created",
+                )
+                .await;
             }
             Some(NotificationCommand::CreateTaskFromNotification(ref notification, parameters)) => {
                 notifications_page

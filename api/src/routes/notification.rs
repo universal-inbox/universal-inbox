@@ -334,7 +334,7 @@ pub async fn patch_notification(
 
 pub async fn create_task_from_notification(
     path: web::Path<NotificationId>,
-    task_creation: web::Json<TaskCreation>,
+    task_creation: Option<web::Json<TaskCreation>>,
     notification_service: web::Data<Arc<RwLock<NotificationService>>>,
     authenticated: Authenticated<Claims>,
 ) -> Result<HttpResponse, UniversalInboxError> {
@@ -344,7 +344,7 @@ pub async fn create_task_from_notification(
         .parse::<UserId>()
         .context("Wrong user ID format")?;
     let notification_id = path.into_inner();
-    let task_creation = task_creation.into_inner();
+    let task_creation = task_creation.map(|tc| tc.into_inner());
     let service = notification_service.read().await;
     let mut transaction = service
         .begin()
@@ -355,7 +355,7 @@ pub async fn create_task_from_notification(
         .create_task_from_notification(
             &mut transaction,
             notification_id,
-            &task_creation,
+            task_creation,
             true,
             user_id,
         )
