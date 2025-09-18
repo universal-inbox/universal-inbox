@@ -1,7 +1,7 @@
 #![allow(clippy::too_many_arguments)]
 use chrono::{TimeZone, Timelike, Utc};
 use http::StatusCode;
-use httpmock::Method::{PATCH, PUT};
+use httpmock::Method::{DELETE, PUT};
 use rstest::*;
 use serde_json::json;
 use uuid::Uuid;
@@ -68,8 +68,8 @@ mod patch_resource {
         )
         .await;
 
-        let github_mark_thread_as_read_mock = app.app.github_mock_server.mock(|when, then| {
-            when.method(PATCH)
+        let github_mark_thread_as_done_mock = app.app.github_mock_server.mock(|when, then| {
+            when.method(DELETE)
                 .path("/notifications/threads/1")
                 .header("accept", "application/vnd.github.v3+json")
                 .header("authorization", "Bearer github_test_access_token");
@@ -152,7 +152,7 @@ mod patch_resource {
                 ..*expected_notification
             })
         );
-        github_mark_thread_as_read_mock.assert();
+        github_mark_thread_as_done_mock.assert();
 
         let task: Box<Task> = get_resource(
             &app.client,
@@ -186,8 +186,8 @@ mod patch_resource {
         )
         .await;
 
-        let github_mark_thread_as_read_mock = app.app.github_mock_server.mock(|when, then| {
-            when.method(PATCH)
+        let github_mark_thread_as_done_mock = app.app.github_mock_server.mock(|when, then| {
+            when.method(DELETE)
                 .path("/notifications/threads/1")
                 .header("accept", "application/vnd.github.v3+json")
                 .header("authorization", "Bearer github_test_access_token");
@@ -229,7 +229,7 @@ mod patch_resource {
                 ..*expected_notification
             })
         );
-        github_mark_thread_as_read_mock.assert();
+        github_mark_thread_as_done_mock.assert();
         github_unsubscribed_mock.assert();
     }
 
@@ -254,8 +254,8 @@ mod patch_resource {
         )
         .await;
 
-        let github_mark_thread_as_read_mock = app.app.github_mock_server.mock(|when, then| {
-            when.method(PATCH)
+        let github_mark_thread_as_done_mock = app.app.github_mock_server.mock(|when, then| {
+            when.method(DELETE)
                 .path("/notifications/threads/1")
                 .header("accept", "application/vnd.github.v3+json")
                 .header("authorization", "Bearer github_test_access_token");
@@ -283,8 +283,8 @@ mod patch_resource {
         assert_eq!(response.status(), 500);
 
         let body = response.text().await.expect("Cannot get response body");
-        assert!(body.contains("Failed to mark Github notification `1` as read"));
-        github_mark_thread_as_read_mock.assert();
+        assert!(body.contains("Failed to mark Github notification `1` as done"));
+        github_mark_thread_as_done_mock.assert();
 
         let notification: Box<Notification> = get_resource(
             &app.client,

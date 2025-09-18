@@ -1,6 +1,5 @@
-use chrono::NaiveDate;
-use chrono::{TimeZone, Timelike, Utc};
-use httpmock::Method::PATCH;
+use chrono::{NaiveDate, TimeZone, Timelike, Utc};
+use httpmock::Method::DELETE;
 use rstest::*;
 use uuid::Uuid;
 
@@ -436,8 +435,8 @@ mod patch_task {
         )
         .await;
 
-        let github_mark_thread_as_read_mock = app.app.github_mock_server.mock(|when, then| {
-            when.method(PATCH)
+        let github_mark_thread_as_done_mock = app.app.github_mock_server.mock(|when, then| {
+            when.method(DELETE)
                 .path("/notifications/threads/1")
                 .header("accept", "application/vnd.github.v3+json")
                 .header("authorization", "Bearer github_test_access_token");
@@ -478,7 +477,7 @@ mod patch_task {
         todoist_projects_mock.assert();
         todoist_item_add_mock.assert();
         todoist_get_item_mock.assert();
-        github_mark_thread_as_read_mock.assert();
+        github_mark_thread_as_done_mock.assert();
 
         let new_task_id = notification_with_task
             .as_ref()
@@ -621,8 +620,8 @@ mod patch_task {
         )
         .await;
 
-        let github_mark_thread_as_read_mock = app.app.github_mock_server.mock(|when, then| {
-            when.method(PATCH)
+        let github_mark_thread_as_done_mock = app.app.github_mock_server.mock(|when, then| {
+            when.method(DELETE)
                 .path("/notifications/threads/1")
                 .header("accept", "application/vnd.github.v3+json")
                 .header("authorization", "Bearer github_test_access_token");
@@ -653,7 +652,7 @@ mod patch_task {
         todoist_projects_mock.assert();
         todoist_item_add_mock.assert();
         todoist_get_item_mock.assert();
-        github_mark_thread_as_read_mock.assert();
+        github_mark_thread_as_done_mock.assert();
 
         let new_task_id = notification_with_task
             .as_ref()

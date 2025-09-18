@@ -1,7 +1,7 @@
 use chrono::{TimeDelta, TimeZone, Timelike, Utc};
 use graphql_client::Response;
 use http::StatusCode;
-use httpmock::Method::PATCH;
+use httpmock::Method::DELETE;
 use rstest::*;
 use serde_json::json;
 use tokio::time::{sleep, Duration};
@@ -455,15 +455,15 @@ mod patch_notifications_bulk {
             None,
         )
         .await;
-        let github_mark_thread_as_read_mock = app.app.github_mock_server.mock(|when, then| {
-            when.method(PATCH)
+        let github_mark_thread_as_done_mock = app.app.github_mock_server.mock(|when, then| {
+            when.method(DELETE)
                 .path("/notifications/threads/1")
                 .header("accept", "application/vnd.github.v3+json")
                 .header("authorization", "Bearer github_test_access_token");
             then.status(205);
         });
-        let github_mark_thread_as_read_mock2 = app.app.github_mock_server.mock(|when, then| {
-            when.method(PATCH)
+        let github_mark_thread_as_done_mock2 = app.app.github_mock_server.mock(|when, then| {
+            when.method(DELETE)
                 .path("/notifications/threads/2")
                 .header("accept", "application/vnd.github.v3+json")
                 .header("authorization", "Bearer github_test_access_token");
@@ -541,8 +541,8 @@ mod patch_notifications_bulk {
             .expect("Failed to get job count");
         assert_eq!(job_count, 0);
 
-        github_mark_thread_as_read_mock.assert();
-        github_mark_thread_as_read_mock2.assert();
+        github_mark_thread_as_done_mock.assert();
+        github_mark_thread_as_done_mock2.assert();
     }
 }
 

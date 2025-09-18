@@ -221,17 +221,17 @@ impl GithubService {
         Ok(notifications)
     }
 
-    pub async fn mark_thread_as_read(
+    pub async fn mark_thread_as_done(
         &self,
         thread_id: &str,
         access_token: &AccessToken,
     ) -> Result<(), UniversalInboxError> {
         match self
             .build_github_rest_client(access_token)?
-            .patch_no_response(
-                format!("{}/notifications/threads/{thread_id}", self.github_base_url),
-                None::<&String>,
-            )
+            .delete_no_response(format!(
+                "{}/notifications/threads/{thread_id}",
+                self.github_base_url
+            ))
             .await
         {
             Ok(()) => Ok(()),
@@ -241,7 +241,7 @@ impl GithubService {
                 Ok(())
             }
             Err(err) => Err(UniversalInboxError::Unexpected(anyhow!(
-                "Failed to mark Github notification `{thread_id}` as read: {err}"
+                "Failed to mark Github notification `{thread_id}` as done: {err}"
             ))),
         }
     }
@@ -517,7 +517,7 @@ impl ThirdPartyNotificationSourceService<GithubNotification> for GithubService {
             .await?
             .ok_or_else(|| anyhow!("Cannot delete Github notification without an access token"))?;
 
-        self.mark_thread_as_read(&source_item.source_id, &access_token)
+        self.mark_thread_as_done(&source_item.source_id, &access_token)
             .await
     }
 
@@ -544,7 +544,7 @@ impl ThirdPartyNotificationSourceService<GithubNotification> for GithubService {
                 anyhow!("Cannot unsubscribe from Github notifications without an access token")
             })?;
 
-        self.mark_thread_as_read(&source_item.source_id, &access_token)
+        self.mark_thread_as_done(&source_item.source_id, &access_token)
             .await?;
         self.unsubscribe_from_thread(&source_item.source_id, &access_token)
             .await
