@@ -313,7 +313,7 @@ pub async fn search_projects(
         .content_type("application/json")
         .insert_header(header::CacheControl(vec![
             CacheDirective::Private,
-            CacheDirective::MaxAge(600u32),
+            CacheDirective::MaxAge(10u32),
         ]))
         .body(serde_json::to_string(&task_projects).context("Cannot serialize task projects")?))
 }

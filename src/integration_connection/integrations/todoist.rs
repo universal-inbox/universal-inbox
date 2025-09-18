@@ -2,6 +2,8 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
+use crate::task::{PresetDueDate, ProjectSummary, TaskPriority};
+
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct TodoistContext {
     pub items_sync_token: SyncToken,
@@ -33,6 +35,9 @@ impl From<String> for SyncToken {
 pub struct TodoistConfig {
     pub sync_tasks_enabled: bool,
     pub create_notification_from_inbox_task: bool,
+    pub default_project: Option<ProjectSummary>,
+    pub default_due_at: Option<PresetDueDate>,
+    pub default_priority: Option<TaskPriority>,
 }
 
 impl Default for TodoistConfig {
@@ -40,6 +45,9 @@ impl Default for TodoistConfig {
         Self {
             sync_tasks_enabled: true,
             create_notification_from_inbox_task: false,
+            default_project: None,
+            default_due_at: None,
+            default_priority: None,
         }
     }
 }
@@ -49,6 +57,9 @@ impl TodoistConfig {
         Self {
             sync_tasks_enabled: true,
             create_notification_from_inbox_task: true,
+            default_project: None,
+            default_due_at: None,
+            default_priority: None,
         }
     }
 
@@ -56,6 +67,9 @@ impl TodoistConfig {
         Self {
             sync_tasks_enabled: false,
             create_notification_from_inbox_task: false,
+            default_project: None,
+            default_due_at: None,
+            default_priority: None,
         }
     }
 }

@@ -50,6 +50,7 @@ Use this when you need to defer handling a notification until later.
 #### Create Task
 
 - **Keyboard Shortcut**: `p`
+- **Keyboard Shortcut (with default task parameters)**: `t`
 - **Effect in Universal Inbox**: Links notification to a newly created task and remove the notification from your inbox
 - **Effect in Linear**: Delete all the notifications of the issue or project
 - **Effect in Task Manager**: Creates a new task with a link to the Linear issue or project

@@ -15,7 +15,11 @@ use tokio_retry::{
 use tracing::{debug, error, info};
 
 use universal_inbox::{
-    integration_connection::provider::IntegrationProvider,
+    integration_connection::{
+        integrations::todoist::TodoistConfig,
+        provider::{IntegrationProvider, IntegrationProviderKind},
+        IntegrationConnection,
+    },
     notification::{
         service::{InvitationPatch, NotificationPatch},
         Notification, NotificationId, NotificationListOrder, NotificationSource,
@@ -874,7 +878,7 @@ impl NotificationService {
         &self,
         executor: &mut Transaction<'_, Postgres>,
         notification_id: NotificationId,
-        task_creation: &TaskCreation,
+        task_creation: Option<TaskCreation>,
         apply_notification_side_effects: bool,
         for_user_id: UserId,
     ) -> Result<Option<NotificationWithTask>, UniversalInboxError> {
@@ -884,13 +888,56 @@ impl NotificationService {
             .ok_or_else(|| {
                 anyhow!("Cannot create task from unknown notification {notification_id}")
             })?;
+
+        let task_creation = if let Some(task_creation) = task_creation {
+            task_creation
+        } else {
+            debug!("No task creation details provided, using default values from Todoist integration connection config");
+            let Some(IntegrationConnection {
+                provider:
+                    IntegrationProvider::Todoist {
+                        config:
+                            TodoistConfig {
+                                default_project,
+                                default_due_at,
+                                default_priority,
+                                ..
+                            },
+                        ..
+                    },
+                ..
+            }) = self
+                .integration_connection_service
+                .read()
+                .await
+                .get_validated_integration_connection_per_kind(
+                    executor,
+                    IntegrationProviderKind::Todoist,
+                    for_user_id,
+                )
+                .await?
+            else {
+                return Err(UniversalInboxError::Unexpected(anyhow!(
+                        "Cannot create task from notification {notification_id} as no Todoist integration is connected for user {for_user_id}"
+                    )));
+            };
+
+            TaskCreation {
+                title: notification.title.clone(),
+                body: None,
+                project_name: default_project.map(|p| p.name),
+                due_at: default_due_at.map(|d| d.into()),
+                priority: default_priority.unwrap_or_default(),
+            }
+        };
+
         let task = self
             .task_service
             .upgrade()
             .context("Unable to access task_service from notification_service")?
             .read()
             .await
-            .create_task_from_notification(executor, task_creation, &notification)
+            .create_task_from_notification(executor, &task_creation, &notification)
             .await?;
 
         let delete_patch = NotificationPatch {

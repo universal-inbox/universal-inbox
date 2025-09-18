@@ -51,6 +51,7 @@ Use this when you need to defer handling a notification until later.
 #### Create Task
 
 - **Keyboard Shortcut**: `p`
+- **Keyboard Shortcut (with default task parameters)**: `t`
 - **Effect in Universal Inbox**: Links notification to a newly created task and remove the notification from your inbox
 - **Effect in GitHub**: Mark the notification as read
 - **Effect in Task Manager**: Creates a new task with a link to the GitHub item

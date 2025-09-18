@@ -52,6 +52,7 @@ Use this when you need to defer handling an invitation until later.
 #### Create Task
 
 - **Keyboard Shortcut**: `p`
+- **Keyboard Shortcut (with default task parameters)**: `t`
 - **Effect in Universal Inbox**: Links notification to a newly created task and remove the notification from your inbox
 - **Effect in Google Calendar**: No change in Google Calendar
 - **Effect in Task Manager**: Creates a new task with a link to the calendar event
