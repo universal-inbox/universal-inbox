@@ -1,8 +1,7 @@
+use email_address::EmailAddress;
 use serde::{Deserialize, Serialize};
 
-use crate::third_party::integrations::google_mail::{
-    EmailAddress, GoogleMailLabel, GOOGLE_MAIL_STARRED_LABEL,
-};
+use crate::third_party::integrations::google_mail::{GoogleMailLabel, GOOGLE_MAIL_STARRED_LABEL};
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct GoogleMailConfig {

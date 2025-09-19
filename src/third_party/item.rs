@@ -18,6 +18,7 @@ use crate::{
         api::WebPage,
         github::GithubNotification,
         google_calendar::GoogleCalendarEvent,
+        google_drive::GoogleDriveComment,
         google_mail::GoogleMailThread,
         linear::{LinearIssue, LinearNotification, LinearWorkflowState, LinearWorkflowStateType},
         slack::{SlackReaction, SlackReactionState, SlackStar, SlackStarState, SlackThread},
@@ -62,6 +63,7 @@ impl HasHtmlUrl for ThirdPartyItem {
             ThirdPartyItemData::GithubNotification(ref notification) => notification.get_html_url(),
             ThirdPartyItemData::GoogleMailThread(ref thread) => thread.get_html_url(),
             ThirdPartyItemData::GoogleCalendarEvent(ref event) => event.get_html_url(),
+            ThirdPartyItemData::GoogleDriveComment(ref comment) => comment.get_html_url(),
             ThirdPartyItemData::WebPage(ref url) => url.get_html_url(),
         }
     }
@@ -81,6 +83,7 @@ pub enum ThirdPartyItemData {
     GithubNotification(Box<GithubNotification>),
     GoogleMailThread(Box<GoogleMailThread>),
     GoogleCalendarEvent(Box<GoogleCalendarEvent>),
+    GoogleDriveComment(Box<GoogleDriveComment>),
     WebPage(Box<WebPage>),
 }
 
@@ -96,6 +99,7 @@ impl ThirdPartyItemData {
             ThirdPartyItemData::GithubNotification(_) => ThirdPartyItemKind::GithubNotification,
             ThirdPartyItemData::GoogleMailThread(_) => ThirdPartyItemKind::GoogleMailThread,
             ThirdPartyItemData::GoogleCalendarEvent(_) => ThirdPartyItemKind::GoogleCalendarEvent,
+            ThirdPartyItemData::GoogleDriveComment(_) => ThirdPartyItemKind::GoogleDriveComment,
             ThirdPartyItemData::WebPage(_) => ThirdPartyItemKind::WebPage,
         }
     }
@@ -113,6 +117,7 @@ macro_attr! {
         GithubNotification,
         GoogleMailThread,
         GoogleCalendarEvent,
+        GoogleDriveComment,
         WebPage,
     }
 }
@@ -134,6 +139,7 @@ impl IntegrationProviderSource for ThirdPartyItem {
             ThirdPartyItemData::GithubNotification(_) => IntegrationProviderKind::Github,
             ThirdPartyItemData::GoogleMailThread(_) => IntegrationProviderKind::GoogleMail,
             ThirdPartyItemData::GoogleCalendarEvent(_) => IntegrationProviderKind::GoogleCalendar,
+            ThirdPartyItemData::GoogleDriveComment(_) => IntegrationProviderKind::GoogleDrive,
             ThirdPartyItemData::WebPage(_) => IntegrationProviderKind::API,
         }
     }
@@ -156,6 +162,9 @@ impl ThirdPartyItemSource for ThirdPartyItem {
             ThirdPartyItemData::GoogleMailThread(_) => ThirdPartyItemSourceKind::GoogleMailThread,
             ThirdPartyItemData::GoogleCalendarEvent(_) => {
                 ThirdPartyItemSourceKind::GoogleCalendarEvent
+            }
+            ThirdPartyItemData::GoogleDriveComment(_) => {
+                ThirdPartyItemSourceKind::GoogleDriveComment
             }
             ThirdPartyItemData::WebPage(_) => ThirdPartyItemSourceKind::WebPage,
         }
@@ -245,6 +254,8 @@ pub trait ThirdPartyItemFromSource {
         user_id: UserId,
         integration_connection_id: IntegrationConnectionId,
     ) -> ThirdPartyItem;
+
+    fn source_id(&self) -> String;
 }
 
 macro_attr! {
@@ -269,6 +280,7 @@ macro_attr! {
         GithubNotification,
         GoogleMailThread,
         GoogleCalendarEvent,
+        GoogleDriveComment,
         WebPage,
     }
 }

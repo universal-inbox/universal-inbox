@@ -12,7 +12,8 @@ use universal_inbox::{
 use crate::{
     components::integrations::{
         github::icons::Github, google_calendar::icons::GoogleCalendar,
-        google_mail::icons::GoogleMail, linear::icons::Linear, todoist::icons::Todoist,
+        google_drive::icons::GoogleDrive, google_mail::icons::GoogleMail, linear::icons::Linear,
+        todoist::icons::Todoist,
     },
     icons::UniversalInbox,
 };
@@ -31,23 +32,6 @@ pub fn Notion(class: Option<String>) -> Element {
         img {
             class: class.unwrap_or_default(),
             src: "{NOTION_LOGO}",
-        }
-    }
-}
-
-#[component]
-pub fn GoogleDocs(class: Option<String>) -> Element {
-    rsx! {
-        svg {
-            xmlns: "http://www.w3.org/2000/svg",
-            class: class.unwrap_or_default(),
-            role: "img",
-            "viewBox": "0 0 24 24",
-            fill: "currentColor",
-            title { "Google Docs" }
-            path {
-                d: "M14.727 6.727H14V0H4.91c-.905 0-1.637.732-1.637 1.636v20.728c0 .904.732 1.636 1.636 1.636h14.182c.904 0 1.636-.732 1.636-1.636V6.727h-6zm-.545 10.455H7.09v-1.364h7.09v1.364zm2.727-3.273H7.091v-1.364h9.818v1.364zm0-3.273H7.091V9.273h9.818v1.363zM14.727 6h6l-6-6v6z"
-            }
         }
     }
 }
@@ -89,8 +73,8 @@ pub fn IntegrationProviderIcon(class: String, provider_kind: IntegrationProvider
         IntegrationProviderKind::Github => rsx! { Github { class } },
         IntegrationProviderKind::Linear => rsx! { Linear { class } },
         IntegrationProviderKind::GoogleCalendar => rsx! { GoogleCalendar { class } },
-        IntegrationProviderKind::GoogleDocs => rsx! { GoogleDocs { class } },
         IntegrationProviderKind::GoogleMail => rsx! { GoogleMail { class } },
+        IntegrationProviderKind::GoogleDrive => rsx! { GoogleDrive { class } },
         IntegrationProviderKind::Notion => rsx! { Notion { class } },
         IntegrationProviderKind::Slack => rsx! { Icon { class, icon: BsSlack } },
         IntegrationProviderKind::Todoist => rsx! { Todoist { class } },
@@ -106,6 +90,7 @@ pub fn NotificationIcon(kind: NotificationSourceKind) -> Element {
         NotificationSourceKind::Github => rsx! { Github { class: "h-5 w-5" } },
         NotificationSourceKind::Linear => rsx! { Linear { class: "h-5 w-5" } },
         NotificationSourceKind::GoogleCalendar => rsx! { GoogleCalendar { class: "h-8 w-8" } },
+        NotificationSourceKind::GoogleDrive => rsx! { GoogleDrive { class: "h-5 w-5" } },
         NotificationSourceKind::GoogleMail => rsx! { GoogleMail { class: "h-5 w-5" } },
         NotificationSourceKind::Todoist => rsx! { Todoist { class: "h-5 w-5" } },
         NotificationSourceKind::Slack => rsx! { Icon { class: "h-5 w-5", icon: BsSlack } },

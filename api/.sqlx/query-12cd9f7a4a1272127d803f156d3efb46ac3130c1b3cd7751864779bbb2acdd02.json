@@ -43,7 +43,8 @@
                 "GoogleMail",
                 "Slack",
                 "GoogleCalendar",
-                "API"
+                "API",
+                "GoogleDrive"
               ]
             }
           }

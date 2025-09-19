@@ -20,6 +20,7 @@ static APP_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_P
 pub mod api;
 pub mod github;
 pub mod google_calendar;
+pub mod google_drive;
 pub mod google_mail;
 pub mod linear;
 pub mod oauth2;
@@ -35,6 +36,7 @@ pub mod third_party {
             &self,
             executor: &mut Transaction<'_, Postgres>,
             user_id: UserId,
+            last_sync_completed_at: Option<DateTime<Utc>>,
         ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError>;
 
         fn is_sync_incremental(&self) -> bool;

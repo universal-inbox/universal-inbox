@@ -88,14 +88,30 @@ impl NangoConnection {
             "todoist" => Ok(vec![]),
             "google-calendar" => {
                 if let Some(scope) = self.credentials.raw["scope"].as_str() {
-                    Ok(vec![scope.to_string()])
+                    Ok(scope
+                        .split(' ')
+                        .map(|s| s.to_string())
+                        .collect::<Vec<String>>())
                 } else {
                     Ok(vec![])
                 }
             }
             "google-mail" => {
                 if let Some(scope) = self.credentials.raw["scope"].as_str() {
-                    Ok(vec![scope.to_string()])
+                    Ok(scope
+                        .split(' ')
+                        .map(|s| s.to_string())
+                        .collect::<Vec<String>>())
+                } else {
+                    Ok(vec![])
+                }
+            }
+            "google-drive" => {
+                if let Some(scope) = self.credentials.raw["scope"].as_str() {
+                    Ok(scope
+                        .split(' ')
+                        .map(|s| s.to_string())
+                        .collect::<Vec<String>>())
                 } else {
                     Ok(vec![])
                 }

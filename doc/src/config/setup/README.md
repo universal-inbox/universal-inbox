@@ -39,4 +39,5 @@ For detailed setup instructions for each tool, select the appropriate guide:
 - [Slack](slack.md)
 - [Google Mail](gmail.md)
 - [Google Calendar](gcal.md)
+- [Google Drive](gdrive.md)
 - [Todoist](todoist.md)

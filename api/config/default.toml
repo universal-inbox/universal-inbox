@@ -138,6 +138,17 @@ required_oauth_scopes = ["https://www.googleapis.com/auth/calendar"]
 api_max_retry_duration_http_seconds = 30
 api_max_retry_duration_worker_seconds = 600
 
+[integrations.google_drive]
+name = "Google Drive"
+kind = "GoogleDrive"
+nango_key = "google-drive"
+page_size = 100
+required_oauth_scopes = ["https://www.googleapis.com/auth/drive.readonly", "https://www.googleapis.com/auth/drive.metadata.readonly"]
+warning_message = "Google Drive integration is not yet public, it requires your email address to be whitelisted and you will see a warning message from Google while connecting. If you still want to connect it, please send the Google email address you want to use to the <a href='mailto:support@universal-inbox.com' title='Contact support'>support</a>"
+# Rate limiting configuration
+api_max_retry_duration_http_seconds = 30
+api_max_retry_duration_worker_seconds = 600
+
 [integrations.todoist]
 name = "Todoist"
 kind = "Todoist"

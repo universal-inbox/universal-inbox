@@ -1,7 +1,6 @@
-use std::fmt;
-
 use anyhow::anyhow;
 use chrono::{DateTime, Timelike, Utc};
+use email_address::EmailAddress;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_with::serde_as;
 use typed_id::TypedId;
@@ -21,28 +20,6 @@ pub const GOOGLE_MAIL_INBOX_LABEL: &str = "INBOX";
 pub const GOOGLE_MAIL_STARRED_LABEL: &str = "STARRED";
 pub const GOOGLE_MAIL_IMPORTANT_LABEL: &str = "IMPORTANT";
 pub const DEFAULT_GOOGLE_MAIL_HTML_URL: &str = "https://mail.google.com";
-
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Hash)]
-#[serde(transparent)]
-pub struct EmailAddress(pub String);
-
-impl fmt::Display for EmailAddress {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl From<EmailAddress> for String {
-    fn from(email_address: EmailAddress) -> Self {
-        email_address.0
-    }
-}
-
-impl From<String> for EmailAddress {
-    fn from(email_address: String) -> Self {
-        Self(email_address)
-    }
-}
 
 #[serde_as]
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
@@ -198,7 +175,7 @@ impl ThirdPartyItemFromSource for GoogleMailThread {
     ) -> ThirdPartyItem {
         ThirdPartyItem {
             id: Uuid::new_v4().into(),
-            source_id: self.id.clone(),
+            source_id: self.source_id(),
             data: ThirdPartyItemData::GoogleMailThread(Box::new(self.clone())),
             created_at: Utc::now().with_nanosecond(0).unwrap(),
             updated_at: Utc::now().with_nanosecond(0).unwrap(),
@@ -206,6 +183,10 @@ impl ThirdPartyItemFromSource for GoogleMailThread {
             integration_connection_id,
             source_item: None,
         }
+    }
+
+    fn source_id(&self) -> String {
+        self.id.clone()
     }
 }
 
@@ -343,6 +324,8 @@ mod tests {
     use rstest::*;
 
     mod de_serialization {
+        use std::str::FromStr;
+
         use super::*;
         use pretty_assertions::assert_eq;
         use serde_json::json;
@@ -381,7 +364,7 @@ mod tests {
                 serde_json::to_string(&GoogleMailThread {
                     id: "18a909f8178".to_string(),
                     history_id: "1234".to_string(),
-                    user_email_address: "test@example.com".to_string().into(),
+                    user_email_address: EmailAddress::from_str("test@example.com").unwrap(),
                     messages: vec![GoogleMailMessage {
                         id: "18a909f8178".to_string(),
                         thread_id: "18a909f8178".to_string(),
@@ -440,7 +423,7 @@ mod tests {
                 GoogleMailThread {
                     id: "18a909f8178".to_string(),
                     history_id: "1234".to_string(),
-                    user_email_address: "test@example.com".to_string().into(),
+                    user_email_address: EmailAddress::from_str("test@example.com").unwrap(),
                     messages: vec![GoogleMailMessage {
                         id: "18a909f8178".to_string(),
                         thread_id: "18a909f8178".to_string(),

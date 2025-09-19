@@ -470,6 +470,7 @@ impl ThirdPartyItemSourceService<LinearNotification> for LinearService {
         &self,
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
+        _last_sync_completed_at: Option<DateTime<Utc>>,
     ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError> {
         let (access_token, integration_connection) = self
             .integration_connection_service
@@ -754,6 +755,7 @@ impl ThirdPartyItemSourceService<LinearIssue> for LinearService {
         &self,
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
+        _last_sync_completed_at: Option<DateTime<Utc>>,
     ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError> {
         let (access_token, integration_connection) = self
             .integration_connection_service

@@ -555,7 +555,7 @@ impl ThirdPartyItemFromSource for GoogleCalendarEvent {
     ) -> ThirdPartyItem {
         ThirdPartyItem {
             id: Uuid::new_v4().into(),
-            source_id: self.id.to_string(),
+            source_id: self.source_id(),
             data: ThirdPartyItemData::GoogleCalendarEvent(Box::new(self.clone())),
             created_at: Utc::now().with_nanosecond(0).unwrap(),
             updated_at: Utc::now().with_nanosecond(0).unwrap(),
@@ -563,6 +563,10 @@ impl ThirdPartyItemFromSource for GoogleCalendarEvent {
             integration_connection_id,
             source_item: None,
         }
+    }
+
+    fn source_id(&self) -> String {
+        self.id.to_string()
     }
 }
 

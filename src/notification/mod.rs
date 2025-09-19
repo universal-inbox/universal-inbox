@@ -185,7 +185,8 @@ macro_attr! {
     pub enum NotificationSyncSourceKind {
         Github,
         Linear,
-        GoogleMail
+        GoogleMail,
+        GoogleDrive
     }
 }
 
@@ -199,6 +200,7 @@ macro_attr! {
         Linear,
         GoogleMail,
         GoogleCalendar,
+        GoogleDrive,
         Slack,
         API,
     }
@@ -213,6 +215,7 @@ impl TryFrom<ThirdPartyItemSourceKind> for NotificationSourceKind {
             ThirdPartyItemSourceKind::GithubNotification => Ok(Self::Github),
             ThirdPartyItemSourceKind::LinearNotification => Ok(Self::Linear),
             ThirdPartyItemSourceKind::GoogleMailThread => Ok(Self::GoogleMail),
+            ThirdPartyItemSourceKind::GoogleDriveComment => Ok(Self::GoogleDrive),
             ThirdPartyItemSourceKind::SlackReaction | ThirdPartyItemSourceKind::SlackStar => {
                 Ok(Self::Slack)
             }
@@ -233,6 +236,7 @@ impl TryFrom<IntegrationProviderKind> for NotificationSyncSourceKind {
             IntegrationProviderKind::Github => Ok(Self::Github),
             IntegrationProviderKind::Linear => Ok(Self::Linear),
             IntegrationProviderKind::GoogleMail => Ok(Self::GoogleMail),
+            IntegrationProviderKind::GoogleDrive => Ok(Self::GoogleDrive),
             _ => Err(anyhow!(
                 "IntegrationProviderKind {provider_kind} is not a valid NotificationSyncSourceKind"
             )),
@@ -247,6 +251,7 @@ impl From<NotificationSyncSourceKind> for IntegrationProviderKind {
             NotificationSyncSourceKind::Github => IntegrationProviderKind::Github,
             NotificationSyncSourceKind::Linear => IntegrationProviderKind::Linear,
             NotificationSyncSourceKind::GoogleMail => IntegrationProviderKind::GoogleMail,
+            NotificationSyncSourceKind::GoogleDrive => IntegrationProviderKind::GoogleDrive,
         }
     }
 }
@@ -261,6 +266,7 @@ impl TryFrom<IntegrationProviderKind> for NotificationSourceKind {
             IntegrationProviderKind::Linear => Ok(Self::Linear),
             IntegrationProviderKind::GoogleMail => Ok(Self::GoogleMail),
             IntegrationProviderKind::GoogleCalendar => Ok(Self::GoogleCalendar),
+            IntegrationProviderKind::GoogleDrive => Ok(Self::GoogleDrive),
             IntegrationProviderKind::Todoist => Ok(Self::Todoist),
             IntegrationProviderKind::Slack => Ok(Self::Slack),
             _ => Err(()),
@@ -276,6 +282,7 @@ impl From<NotificationSourceKind> for IntegrationProviderKind {
             NotificationSourceKind::Linear => Self::Linear,
             NotificationSourceKind::GoogleMail => Self::GoogleMail,
             NotificationSourceKind::GoogleCalendar => Self::GoogleCalendar,
+            NotificationSourceKind::GoogleDrive => Self::GoogleDrive,
             NotificationSourceKind::Todoist => Self::Todoist,
             NotificationSourceKind::Slack => Self::Slack,
             NotificationSourceKind::API => Self::API,

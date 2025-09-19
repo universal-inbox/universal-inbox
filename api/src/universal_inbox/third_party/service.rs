@@ -4,6 +4,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Context};
+use chrono::{DateTime, Utc};
 use log::debug;
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
@@ -258,6 +259,7 @@ impl ThirdPartyItemService {
         executor: &mut Transaction<'_, Postgres>,
         third_party_service: Arc<U>,
         user_id: UserId,
+        last_sync_completed_at: Option<DateTime<Utc>>,
     ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError>
     where
         T: TryFrom<ThirdPartyItem> + Debug,
@@ -265,7 +267,9 @@ impl ThirdPartyItemService {
         <T as TryFrom<ThirdPartyItem>>::Error: Send + Sync,
     {
         let kind = third_party_service.get_third_party_item_source_kind();
-        let items = third_party_service.fetch_items(executor, user_id).await?;
+        let items = third_party_service
+            .fetch_items(executor, user_id, last_sync_completed_at)
+            .await?;
         let mut upserted_third_party_items = vec![];
 
         debug!("Syncing {kind} third party items for user {user_id}");

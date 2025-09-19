@@ -20,7 +20,8 @@
                 "Slack",
                 "TickTick",
                 "GoogleCalendar",
-                "API"
+                "API",
+                "GoogleDrive"
               ]
             }
           }

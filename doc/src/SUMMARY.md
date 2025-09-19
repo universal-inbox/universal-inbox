@@ -18,6 +18,7 @@
   - [Slack](config/setup/slack.md)
   - [Todoist](config/setup/todoist.md)
   - [Google Calendar](config/setup/gcal.md)
+  - [Google Drive](config/setup/gdrive.md)
 
 # How does it work?
 
@@ -30,6 +31,7 @@
   - [Slack](how/actions/slack.md)
   - [Todoist](how/actions/todoist.md)
   - [Google Calendar](how/actions/gcal.md)
+  - [Google Drive](how/actions/gdrive.md)
 
 # Misc
 

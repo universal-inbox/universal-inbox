@@ -89,7 +89,7 @@ impl ThirdPartyItemFromSource for GithubNotification {
     ) -> ThirdPartyItem {
         ThirdPartyItem {
             id: Uuid::new_v4().into(),
-            source_id: self.id.clone(),
+            source_id: self.source_id(),
             data: ThirdPartyItemData::GithubNotification(Box::new(self.clone())),
             created_at: Utc::now().with_nanosecond(0).unwrap(),
             updated_at: Utc::now().with_nanosecond(0).unwrap(),
@@ -97,6 +97,10 @@ impl ThirdPartyItemFromSource for GithubNotification {
             integration_connection_id,
             source_item: None,
         }
+    }
+
+    fn source_id(&self) -> String {
+        self.id.clone()
     }
 }
 

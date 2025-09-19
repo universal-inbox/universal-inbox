@@ -250,6 +250,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
     assert!(integration_connection
         .last_tasks_sync_completed_at
         .is_some());
+    assert!(integration_connection.last_tasks_sync_failed_at.is_none());
     assert!(integration_connection
         .last_tasks_sync_failure_message
         .is_none());

@@ -139,18 +139,22 @@ impl ThirdPartyItemFromSource for LinearNotification {
         user_id: UserId,
         integration_connection_id: IntegrationConnectionId,
     ) -> ThirdPartyItem {
+        ThirdPartyItem {
+            id: Uuid::new_v4().into(),
+            source_id: self.source_id(),
+            data: ThirdPartyItemData::LinearNotification(Box::new(self.clone())),
+            created_at: Utc::now().with_nanosecond(0).unwrap(),
+            updated_at: Utc::now().with_nanosecond(0).unwrap(),
+            user_id,
+            integration_connection_id,
+            source_item: None,
+        }
+    }
+
+    fn source_id(&self) -> String {
         match &self {
             LinearNotification::IssueNotification { id, .. }
-            | LinearNotification::ProjectNotification { id, .. } => ThirdPartyItem {
-                id: Uuid::new_v4().into(),
-                source_id: id.to_string(),
-                data: ThirdPartyItemData::LinearNotification(Box::new(self.clone())),
-                created_at: Utc::now().with_nanosecond(0).unwrap(),
-                updated_at: Utc::now().with_nanosecond(0).unwrap(),
-                user_id,
-                integration_connection_id,
-                source_item: None,
-            },
+            | LinearNotification::ProjectNotification { id, .. } => id.to_string(),
         }
     }
 }
@@ -446,7 +450,7 @@ impl ThirdPartyItemFromSource for LinearIssue {
     ) -> ThirdPartyItem {
         ThirdPartyItem {
             id: Uuid::new_v4().into(),
-            source_id: self.id.to_string(),
+            source_id: self.source_id(),
             data: ThirdPartyItemData::LinearIssue(Box::new(self.clone())),
             created_at: Utc::now().with_nanosecond(0).unwrap(),
             updated_at: Utc::now().with_nanosecond(0).unwrap(),
@@ -454,5 +458,9 @@ impl ThirdPartyItemFromSource for LinearIssue {
             integration_connection_id,
             source_item: None,
         }
+    }
+
+    fn source_id(&self) -> String {
+        self.id.to_string()
     }
 }

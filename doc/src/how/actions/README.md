@@ -10,6 +10,7 @@ This section provides detailed information about the actions available for each 
 - [Linear](linear.md)
 - [Google Mail](gmail.md)
 - [Google Calendar](gcal.md)
+- [Google Drive](gdrive.md)
 - [Slack](slack.md)
 - [Todoist](todoist.md)
 

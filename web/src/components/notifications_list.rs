@@ -27,6 +27,7 @@ use crate::{
             api::web_page::notification_list_item::WebPageNotificationListItem,
             github::notification_list_item::GithubNotificationListItem,
             google_calendar::notification_list_item::GoogleCalendarEventListItem,
+            google_drive::notification_list_item::GoogleDriveCommentListItem,
             google_mail::notification_list_item::GoogleMailThreadListItem,
             icons::IntegrationProviderIcon,
             linear::notification_list_item::LinearNotificationListItem,
@@ -262,6 +263,14 @@ fn NotificationListItem(
             GoogleCalendarEventListItem {
                 notification,
                 google_calendar_event: *google_calendar_event,
+                is_selected,
+                on_select,
+            }
+        },
+        ThirdPartyItemData::GoogleDriveComment(google_drive_comment) => rsx! {
+            GoogleDriveCommentListItem {
+                notification,
+                google_drive_comment: *google_drive_comment,
                 is_selected,
                 on_select,
             }

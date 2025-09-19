@@ -13,7 +13,7 @@ use universal_inbox::{
         IntegrationConnection, IntegrationConnectionCreation, IntegrationConnectionStatus,
     },
     notification::Notification,
-    third_party::integrations::google_mail::{EmailAddress, GoogleMailLabel, GoogleMailThread},
+    third_party::integrations::google_mail::{GoogleMailLabel, GoogleMailThread},
 };
 
 use universal_inbox_api::{
@@ -487,6 +487,10 @@ mod disconnect_integration_connections {
 }
 
 mod update_integration_connection_config {
+    use std::str::FromStr;
+
+    use email_address::EmailAddress;
+
     use crate::helpers::notification::google_mail::create_notification_from_google_mail_thread;
 
     use super::*;
@@ -513,7 +517,7 @@ mod update_integration_connection_config {
             IntegrationConnectionStatus::Validated,
             Some(IntegrationConnectionContext::GoogleMail(
                 GoogleMailContext {
-                    user_email_address: EmailAddress("test@example.com".to_string()),
+                    user_email_address: EmailAddress::from_str("test@example.com").unwrap(),
                     labels: vec![],
                 },
             )),

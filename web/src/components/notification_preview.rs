@@ -22,6 +22,7 @@ use crate::{
                 GithubNotificationDefaultPreview,
             },
             google_calendar::preview::GoogleCalendarEventPreview,
+            google_drive::preview::GoogleDriveCommentPreview,
             google_mail::preview::GoogleMailThreadPreview,
             icons::{NotificationIcon, TaskIcon},
             linear::preview::LinearNotificationPreview,
@@ -339,6 +340,13 @@ fn NotificationDetailsPreview(
             GoogleCalendarEventPreview {
                 notification,
                 google_calendar_event: *google_calendar_event,
+                expand_details
+            }
+        },
+        ThirdPartyItemData::GoogleDriveComment(google_drive_comment) => rsx! {
+            GoogleDriveCommentPreview {
+                notification,
+                google_drive_comment: *google_drive_comment,
                 expand_details
             }
         },

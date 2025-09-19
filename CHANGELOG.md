@@ -12,6 +12,7 @@
 - Add button to delete all notifications
 - Allow the notifications details panel to be moved to the bottom of the screen
 - Add a new way to turn notifications into a task with default parameters
+- Add Google Drive integration
 
 ### Changed
 

@@ -1,6 +1,9 @@
 #![allow(clippy::too_many_arguments)]
 
+use std::str::FromStr;
+
 use chrono::{TimeZone, Timelike, Utc};
+use email_address::EmailAddress;
 use pretty_assertions::assert_eq;
 use rrule::Frequency;
 use rstest::*;
@@ -24,7 +27,7 @@ use universal_inbox::{
         integrations::{
             google_calendar::GoogleCalendarEvent,
             google_mail::{
-                EmailAddress, GoogleMailMessageBody, GoogleMailMessageHeader, GoogleMailThread,
+                GoogleMailMessageBody, GoogleMailMessageHeader, GoogleMailThread,
                 GOOGLE_MAIL_INBOX_LABEL, GOOGLE_MAIL_UNREAD_LABEL,
             },
             todoist::TodoistItem,
@@ -92,7 +95,8 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     nango_todoist_connection: Box<NangoConnection>,
 ) {
     let app = authenticated_app.await;
-    let user_email_address = EmailAddress(google_mail_user_profile.email_address.clone());
+    let user_email_address =
+        EmailAddress::from_str(&google_mail_user_profile.email_address).unwrap();
     let google_mail_threads_list = GoogleMailThreadList {
         threads: Some(vec![
             GoogleMailThreadMinimal {
@@ -339,7 +343,8 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
     let app = authenticated_app.await;
     let google_mail_config = GoogleMailConfig::enabled();
     let synced_label_id = google_mail_config.synced_label.id.clone();
-    let user_email_address = EmailAddress(google_mail_user_profile.email_address.clone());
+    let user_email_address =
+        EmailAddress::from_str(&google_mail_user_profile.email_address).unwrap();
 
     // First message is already known by Universal Inbox and marked as unsubscribed
     google_mail_thread_get_456.messages[0].label_ids = None; // Read & archived
