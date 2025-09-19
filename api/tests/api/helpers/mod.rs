@@ -52,6 +52,7 @@ pub struct TestedApp {
     pub linear_mock_server: MockServer,
     pub google_calendar_mock_server: MockServer,
     pub google_mail_mock_server: MockServer,
+    pub google_drive_mock_server: MockServer,
     pub slack_mock_server: MockServer,
     pub todoist_mock_server: MockServer,
     pub oidc_issuer_mock_server: Option<MockServer>,
@@ -168,6 +169,8 @@ pub async fn tested_app(
     let google_calendar_mock_server_url = &google_calendar_mock_server.base_url();
     let google_mail_mock_server = MockServer::start();
     let google_mail_mock_server_url = &google_mail_mock_server.base_url();
+    let google_drive_mock_server = MockServer::start();
+    let google_drive_mock_server_url = &google_drive_mock_server.base_url();
     let slack_mock_server = MockServer::start();
     let slack_mock_server_url = &slack_mock_server.base_url();
     let todoist_mock_server = MockServer::start();
@@ -219,6 +222,7 @@ pub async fn tested_app(
         Some(github_mock_server_url.to_string()),
         Some(linear_mock_server_url.to_string()),
         Some(google_mail_mock_server_url.to_string()),
+        Some(google_drive_mock_server_url.to_string()),
         Some(google_calendar_mock_server_url.to_string()),
         Some(slack_mock_server_url.to_string()),
         Some(todoist_mock_server_url.to_string()),
@@ -278,6 +282,7 @@ pub async fn tested_app(
         linear_mock_server,
         google_calendar_mock_server,
         google_mail_mock_server,
+        google_drive_mock_server,
         slack_mock_server,
         todoist_mock_server,
         oidc_issuer_mock_server: Some(oidc_issuer_mock_server),
@@ -315,6 +320,8 @@ pub async fn tested_app_with_local_auth(
     let linear_mock_server_url = &linear_mock_server.base_url();
     let google_mail_mock_server = MockServer::start();
     let google_mail_mock_server_url = &google_mail_mock_server.base_url();
+    let google_drive_mock_server = MockServer::start();
+    let google_drive_mock_server_url = &google_drive_mock_server.base_url();
     let google_calendar_mock_server = MockServer::start();
     let google_calendar_mock_server_url = &google_calendar_mock_server.base_url();
     let slack_mock_server = MockServer::start();
@@ -361,6 +368,7 @@ pub async fn tested_app_with_local_auth(
         Some(github_mock_server_url.to_string()),
         Some(linear_mock_server_url.to_string()),
         Some(google_mail_mock_server_url.to_string()),
+        Some(google_drive_mock_server_url.to_string()),
         Some(google_calendar_mock_server_url.to_string()),
         Some(slack_mock_server_url.to_string()),
         Some(todoist_mock_server_url.to_string()),
@@ -420,6 +428,7 @@ pub async fn tested_app_with_local_auth(
         linear_mock_server,
         google_calendar_mock_server,
         google_mail_mock_server,
+        google_drive_mock_server,
         slack_mock_server,
         todoist_mock_server,
         oidc_issuer_mock_server: None,

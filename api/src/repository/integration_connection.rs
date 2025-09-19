@@ -166,11 +166,13 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.last_notifications_sync_scheduled_at,
                   integration_connection.last_notifications_sync_started_at,
                   integration_connection.last_notifications_sync_completed_at,
+                  integration_connection.last_notifications_sync_failed_at,
                   integration_connection.last_notifications_sync_failure_message,
                   integration_connection.notifications_sync_failures,
                   integration_connection.last_tasks_sync_scheduled_at,
                   integration_connection.last_tasks_sync_started_at,
                   integration_connection.last_tasks_sync_completed_at,
+                  integration_connection.last_tasks_sync_failed_at,
                   integration_connection.last_tasks_sync_failure_message,
                   integration_connection.tasks_sync_failures,
                   integration_connection_config.config as "config: Json<IntegrationConnectionConfig>",
@@ -228,11 +230,13 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.last_notifications_sync_scheduled_at,
                   integration_connection.last_notifications_sync_started_at,
                   integration_connection.last_notifications_sync_completed_at,
+                  integration_connection.last_notifications_sync_failed_at,
                   integration_connection.last_notifications_sync_failure_message,
                   integration_connection.notifications_sync_failures,
                   integration_connection.last_tasks_sync_scheduled_at,
                   integration_connection.last_tasks_sync_started_at,
                   integration_connection.last_tasks_sync_completed_at,
+                  integration_connection.last_tasks_sync_failed_at,
                   integration_connection.last_tasks_sync_failure_message,
                   integration_connection.tasks_sync_failures,
                   integration_connection_config.config as config,
@@ -319,11 +323,13 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.last_notifications_sync_scheduled_at,
                   integration_connection.last_notifications_sync_started_at,
                   integration_connection.last_notifications_sync_completed_at,
+                  integration_connection.last_notifications_sync_failed_at,
                   integration_connection.last_notifications_sync_failure_message,
                   integration_connection.notifications_sync_failures,
                   integration_connection.last_tasks_sync_scheduled_at,
                   integration_connection.last_tasks_sync_started_at,
                   integration_connection.last_tasks_sync_completed_at,
+                  integration_connection.last_tasks_sync_failed_at,
                   integration_connection.last_tasks_sync_failure_message,
                   integration_connection.tasks_sync_failures,
                   integration_connection_config.config as "config: Json<IntegrationConnectionConfig>",
@@ -382,11 +388,13 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.last_notifications_sync_scheduled_at,
                   integration_connection.last_notifications_sync_started_at,
                   integration_connection.last_notifications_sync_completed_at,
+                  integration_connection.last_notifications_sync_failed_at,
                   integration_connection.last_notifications_sync_failure_message,
                   integration_connection.notifications_sync_failures,
                   integration_connection.last_tasks_sync_scheduled_at,
                   integration_connection.last_tasks_sync_started_at,
                   integration_connection.last_tasks_sync_completed_at,
+                  integration_connection.last_tasks_sync_failed_at,
                   integration_connection.last_tasks_sync_failure_message,
                   integration_connection.tasks_sync_failures,
                   integration_connection_config.config as "config: Json<IntegrationConnectionConfig>",
@@ -444,11 +452,13 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.last_notifications_sync_scheduled_at,
                   integration_connection.last_notifications_sync_started_at,
                   integration_connection.last_notifications_sync_completed_at,
+                  integration_connection.last_notifications_sync_failed_at,
                   integration_connection.last_notifications_sync_failure_message,
                   integration_connection.notifications_sync_failures,
                   integration_connection.last_tasks_sync_scheduled_at,
                   integration_connection.last_tasks_sync_started_at,
                   integration_connection.last_tasks_sync_completed_at,
+                  integration_connection.last_tasks_sync_failed_at,
                   integration_connection.last_tasks_sync_failure_message,
                   integration_connection.tasks_sync_failures,
                   integration_connection_config.config as "config: Json<IntegrationConnectionConfig>",
@@ -538,11 +548,13 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.last_notifications_sync_scheduled_at,
                   integration_connection.last_notifications_sync_started_at,
                   integration_connection.last_notifications_sync_completed_at,
+                  integration_connection.last_notifications_sync_failed_at,
                   integration_connection.last_notifications_sync_failure_message,
                   integration_connection.notifications_sync_failures,
                   integration_connection.last_tasks_sync_scheduled_at,
                   integration_connection.last_tasks_sync_started_at,
                   integration_connection.last_tasks_sync_completed_at,
+                  integration_connection.last_tasks_sync_failed_at,
                   integration_connection.last_tasks_sync_failure_message,
                   integration_connection.tasks_sync_failures,
                   integration_connection_config.config as config,
@@ -629,13 +641,11 @@ impl IntegrationConnectionRepository for Repository {
                 separated
                     .push(" last_notifications_sync_scheduled_at = ")
                     .push_bind_unseparated(Utc::now());
-                separated.push(" last_notifications_sync_completed_at = NULL ");
             }
             IntegrationConnectionSyncStatusUpdate::NotificationsSyncStarted => {
                 separated
                     .push(" last_notifications_sync_started_at = ")
                     .push_bind_unseparated(Utc::now());
-                separated.push(" last_notifications_sync_completed_at = NULL ");
             }
             IntegrationConnectionSyncStatusUpdate::NotificationsSyncCompleted => {
                 separated
@@ -643,10 +653,11 @@ impl IntegrationConnectionRepository for Repository {
                     .push_bind_unseparated(Utc::now());
                 separated.push(" notifications_sync_failures = 0");
                 separated.push(" last_notifications_sync_failure_message = NULL");
+                separated.push(" last_notifications_sync_failed_at = NULL");
             }
             IntegrationConnectionSyncStatusUpdate::NotificationsSyncFailed(failure_message) => {
                 separated
-                    .push(" last_notifications_sync_completed_at = ")
+                    .push(" last_notifications_sync_failed_at = ")
                     .push_bind_unseparated(Utc::now());
                 separated.push(" notifications_sync_failures = notifications_sync_failures + 1");
                 separated
@@ -660,13 +671,11 @@ impl IntegrationConnectionRepository for Repository {
                 separated
                     .push(" last_tasks_sync_scheduled_at = ")
                     .push_bind_unseparated(Utc::now());
-                separated.push(" last_tasks_sync_completed_at = NULL ");
             }
             IntegrationConnectionSyncStatusUpdate::TasksSyncStarted => {
                 separated
                     .push(" last_tasks_sync_started_at = ")
                     .push_bind_unseparated(Utc::now());
-                separated.push(" last_tasks_sync_completed_at = NULL ");
             }
             IntegrationConnectionSyncStatusUpdate::TasksSyncCompleted => {
                 separated
@@ -674,10 +683,11 @@ impl IntegrationConnectionRepository for Repository {
                     .push_bind_unseparated(Utc::now());
                 separated.push(" tasks_sync_failures = 0");
                 separated.push(" last_tasks_sync_failure_message = NULL");
+                separated.push(" last_tasks_sync_failed_at = NULL");
             }
             IntegrationConnectionSyncStatusUpdate::TasksSyncFailed(failure_message) => {
                 separated
-                    .push(" last_tasks_sync_completed_at = ")
+                    .push(" last_tasks_sync_failed_at = ")
                     .push_bind_unseparated(Utc::now());
                 separated.push(" tasks_sync_failures = tasks_sync_failures + 1");
                 separated
@@ -721,11 +731,13 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.last_notifications_sync_scheduled_at,
                   integration_connection.last_notifications_sync_started_at,
                   integration_connection.last_notifications_sync_completed_at,
+                  integration_connection.last_notifications_sync_failed_at,
                   integration_connection.last_notifications_sync_failure_message,
                   integration_connection.notifications_sync_failures,
                   integration_connection.last_tasks_sync_scheduled_at,
                   integration_connection.last_tasks_sync_started_at,
                   integration_connection.last_tasks_sync_completed_at,
+                  integration_connection.last_tasks_sync_failed_at,
                   integration_connection.last_tasks_sync_failure_message,
                   integration_connection.tasks_sync_failures,
                   integration_connection_config.config as config,
@@ -801,11 +813,13 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.last_notifications_sync_scheduled_at,
                   integration_connection.last_notifications_sync_started_at,
                   integration_connection.last_notifications_sync_completed_at,
+                  integration_connection.last_notifications_sync_failed_at,
                   integration_connection.last_notifications_sync_failure_message,
                   integration_connection.notifications_sync_failures,
                   integration_connection.last_tasks_sync_scheduled_at,
                   integration_connection.last_tasks_sync_started_at,
                   integration_connection.last_tasks_sync_completed_at,
+                  integration_connection.last_tasks_sync_failed_at,
                   integration_connection.last_tasks_sync_failure_message,
                   integration_connection.tasks_sync_failures,
                   integration_connection_config.config as config,
@@ -875,11 +889,13 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.last_notifications_sync_scheduled_at,
                   integration_connection.last_notifications_sync_started_at,
                   integration_connection.last_notifications_sync_completed_at,
+                  integration_connection.last_notifications_sync_failed_at,
                   integration_connection.last_notifications_sync_failure_message,
                   integration_connection.notifications_sync_failures,
                   integration_connection.last_tasks_sync_scheduled_at,
                   integration_connection.last_tasks_sync_started_at,
                   integration_connection.last_tasks_sync_completed_at,
+                  integration_connection.last_tasks_sync_failed_at,
                   integration_connection.last_tasks_sync_failure_message,
                   integration_connection.tasks_sync_failures,
                   integration_connection_config.config,
@@ -1107,11 +1123,13 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.last_notifications_sync_scheduled_at,
                   integration_connection.last_notifications_sync_started_at,
                   integration_connection.last_notifications_sync_completed_at,
+                  integration_connection.last_notifications_sync_failed_at,
                   integration_connection.last_notifications_sync_failure_message,
                   integration_connection.notifications_sync_failures,
                   integration_connection.last_tasks_sync_scheduled_at,
                   integration_connection.last_tasks_sync_started_at,
                   integration_connection.last_tasks_sync_completed_at,
+                  integration_connection.last_tasks_sync_failed_at,
                   integration_connection.last_tasks_sync_failure_message,
                   integration_connection.tasks_sync_failures,
                   integration_connection_config.config as config,
@@ -1184,11 +1202,13 @@ impl IntegrationConnectionRepository for Repository {
                   integration_connection.last_notifications_sync_scheduled_at,
                   integration_connection.last_notifications_sync_started_at,
                   integration_connection.last_notifications_sync_completed_at,
+                  integration_connection.last_notifications_sync_failed_at,
                   integration_connection.last_notifications_sync_failure_message,
                   integration_connection.notifications_sync_failures,
                   integration_connection.last_tasks_sync_scheduled_at,
                   integration_connection.last_tasks_sync_started_at,
                   integration_connection.last_tasks_sync_completed_at,
+                  integration_connection.last_tasks_sync_failed_at,
                   integration_connection.last_tasks_sync_failure_message,
                   integration_connection.tasks_sync_failures,
                   integration_connection_config.config as config,
@@ -1249,11 +1269,13 @@ pub struct IntegrationConnectionRow {
     last_notifications_sync_scheduled_at: Option<NaiveDateTime>,
     last_notifications_sync_started_at: Option<NaiveDateTime>,
     last_notifications_sync_completed_at: Option<NaiveDateTime>,
+    last_notifications_sync_failed_at: Option<NaiveDateTime>,
     last_notifications_sync_failure_message: Option<String>,
     notifications_sync_failures: i32,
     last_tasks_sync_scheduled_at: Option<NaiveDateTime>,
     last_tasks_sync_started_at: Option<NaiveDateTime>,
     last_tasks_sync_completed_at: Option<NaiveDateTime>,
+    last_tasks_sync_failed_at: Option<NaiveDateTime>,
     last_tasks_sync_failure_message: Option<String>,
     tasks_sync_failures: i32,
     config: Json<IntegrationConnectionConfig>,
@@ -1313,6 +1335,9 @@ impl TryFrom<&IntegrationConnectionRow> for IntegrationConnection {
             last_notifications_sync_completed_at: row
                 .last_notifications_sync_completed_at
                 .map(|completed_at| DateTime::from_naive_utc_and_offset(completed_at, Utc)),
+            last_notifications_sync_failed_at: row
+                .last_notifications_sync_failed_at
+                .map(|failed_at| DateTime::from_naive_utc_and_offset(failed_at, Utc)),
             last_notifications_sync_failure_message: row
                 .last_notifications_sync_failure_message
                 .clone(),
@@ -1326,6 +1351,9 @@ impl TryFrom<&IntegrationConnectionRow> for IntegrationConnection {
             last_tasks_sync_completed_at: row
                 .last_tasks_sync_completed_at
                 .map(|completed_at| DateTime::from_naive_utc_and_offset(completed_at, Utc)),
+            last_tasks_sync_failed_at: row
+                .last_tasks_sync_failed_at
+                .map(|failed_at| DateTime::from_naive_utc_and_offset(failed_at, Utc)),
             last_tasks_sync_failure_message: row.last_tasks_sync_failure_message.clone(),
             tasks_sync_failures: row.tasks_sync_failures as u32,
             provider: IntegrationProvider::new(

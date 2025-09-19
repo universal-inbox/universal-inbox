@@ -41,6 +41,7 @@ impl ThirdPartyItemSourceService<WebPage> for APIService {
         &self,
         _executor: &mut Transaction<'_, Postgres>,
         _user_id: UserId,
+        _last_sync_completed_at: Option<DateTime<Utc>>,
     ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError> {
         Ok(vec![])
     }

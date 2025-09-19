@@ -1,0 +1,32 @@
+{
+  "id": "AAAABUiR-5ub_7yjYZKluDfg8a8AAANV",
+  "file_name": "Project Proposal - Q4 2025.docx",
+  "file_id": "1AbCdEfGhIjKlMnOpQrStUvWxYz",
+  "file_mime_type": "application/vnd.google-apps.document",
+  "content": "The API specification section needs more details about error handling.",
+  "html_content": "<p>The API specification section needs more details about <strong>error handling</strong>.</p>",
+  "quoted_file_content": "## API Specification\n\nThis section describes the REST API endpoints.",
+  "author": {
+    "display_name": "John Doe",
+    "email_address": "john.doe@example.com",
+    "photo_link": "https://lh3.googleusercontent.com/a/default-user=s64"
+  },
+  "created_time": "2025-09-27T14:22:00.000Z",
+  "modified_time": "2025-09-28T08:45:00.000Z",
+  "resolved": true,
+  "replies": [
+    {
+      "kind": "drive#reply",
+      "id": "AAAABUiR-5ub_7yjYZKluDfg8a8AAANW",
+      "content": "Good point! I've added a comprehensive error handling section. Please review.",
+      "html_content": "<p>Good point! I've added a comprehensive error handling section. Please review.</p>",
+      "author": {
+        "display_name": "Jane Doe",
+        "email_address": "jane.doe@example.com",
+        "photo_link": "https://lh3.googleusercontent.com/a/default-user=s64"
+      },
+      "created_time": "2025-09-28T08:45:00.000Z",
+      "modified_time": "2025-09-28T08:45:00.000Z"
+    }
+  ]
+}

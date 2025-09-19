@@ -1,5 +1,6 @@
 use std::{
     io::BufReader,
+    str::FromStr,
     sync::{Arc, Weak},
     time::Duration,
 };
@@ -7,6 +8,7 @@ use std::{
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use chrono::{DateTime, Timelike, Utc};
+use email_address::EmailAddress;
 use http::{HeaderMap, HeaderValue};
 use ical::IcalParser;
 use itertools::Itertools;
@@ -36,8 +38,8 @@ use universal_inbox::{
     notification::{Notification, NotificationSource, NotificationSourceKind, NotificationStatus},
     third_party::{
         integrations::google_mail::{
-            EmailAddress, GoogleMailLabel, GoogleMailMessage, GoogleMailMessageBody,
-            GoogleMailThread, MessageSelection, GOOGLE_MAIL_INBOX_LABEL, GOOGLE_MAIL_UNREAD_LABEL,
+            GoogleMailLabel, GoogleMailMessage, GoogleMailMessageBody, GoogleMailThread,
+            MessageSelection, GOOGLE_MAIL_INBOX_LABEL, GOOGLE_MAIL_UNREAD_LABEL,
         },
         item::{ThirdPartyItem, ThirdPartyItemFromSource, ThirdPartyItemSourceKind},
     },
@@ -641,6 +643,7 @@ impl ThirdPartyItemSourceService<GoogleMailThread> for GoogleMailService {
         &self,
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
+        _last_sync_completed_at: Option<DateTime<Utc>>,
     ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError> {
         let (access_token, integration_connection) = self
             .integration_connection_service
@@ -672,7 +675,7 @@ impl ThirdPartyItemSourceService<GoogleMailThread> for GoogleMailService {
             _ => {
                 let GoogleMailUserProfile { email_address, .. } =
                     self.get_user_profile(&access_token).await?;
-                email_address.into()
+                EmailAddress::from_str(&email_address).context("Invalid email address")?
             }
         };
 
@@ -753,9 +756,9 @@ impl ThirdPartyItemSourceService<GoogleMailThread> for GoogleMailService {
                         google_mail_thread.messages.iter().skip(i).any(|msg| {
                             msg.payload.headers.iter().any(|header| {
                                 header.name == *"To"
-                                    && header
-                                        .value
-                                        .contains(&google_mail_thread.user_email_address.0)
+                                    && header.value.contains(
+                                        &google_mail_thread.user_email_address.to_string(),
+                                    )
                             })
                         });
                     if has_directly_addressed_messages {
@@ -970,6 +973,8 @@ mod tests {
     use rstest::*;
 
     mod notification_conversion {
+        use std::str::FromStr;
+
         use super::*;
         use chrono::TimeZone;
         use pretty_assertions::assert_eq;
@@ -1006,7 +1011,7 @@ mod tests {
             let google_mail_thread = GoogleMailThread {
                 id: "18a909f8178".to_string(),
                 history_id: "1234".to_string(),
-                user_email_address: "test@example.com".to_string().into(),
+                user_email_address: EmailAddress::from_str("test@example.com").unwrap(),
                 messages: vec![
                     GoogleMailMessage {
                         id: "18a909f8178".to_string(),
@@ -1090,7 +1095,7 @@ mod tests {
             let google_mail_thread = GoogleMailThread {
                 id: "18a909f8178".to_string(),
                 history_id: "1234".to_string(),
-                user_email_address: "test@example.com".to_string().into(),
+                user_email_address: EmailAddress::from_str("test@example.com").unwrap(),
                 messages: vec![
                     GoogleMailMessage {
                         id: "18a909f8178".to_string(),
@@ -1161,7 +1166,7 @@ mod tests {
             let google_mail_thread = GoogleMailThread {
                 id: "18a909f8178".to_string(),
                 history_id: "1234".to_string(),
-                user_email_address: "test@example.com".to_string().into(),
+                user_email_address: EmailAddress::from_str("test@example.com").unwrap(),
                 messages: vec![
                     GoogleMailMessage {
                         id: "18a909f8178".to_string(),
@@ -1222,7 +1227,7 @@ mod tests {
             let google_mail_thread = GoogleMailThread {
                 id: "18a909f8178".to_string(),
                 history_id: "1234".to_string(),
-                user_email_address: "test@example.com".to_string().into(),
+                user_email_address: EmailAddress::from_str("test@example.com").unwrap(),
                 messages: vec![
                     GoogleMailMessage {
                         id: "18a909f8178".to_string(),
@@ -1286,7 +1291,7 @@ mod tests {
             let google_mail_thread = GoogleMailThread {
                 id: "18a909f8178".to_string(),
                 history_id: "1234".to_string(),
-                user_email_address: "test@example.com".to_string().into(),
+                user_email_address: EmailAddress::from_str("test@example.com").unwrap(),
                 messages: vec![
                     GoogleMailMessage {
                         id: "18a909f8178".to_string(),
@@ -1353,7 +1358,7 @@ mod tests {
             let google_mail_thread = GoogleMailThread {
                 id: "18a909f8178".to_string(),
                 history_id: "1234".to_string(),
-                user_email_address: "test@example.com".to_string().into(),
+                user_email_address: EmailAddress::from_str("test@example.com").unwrap(),
                 messages: vec![
                     GoogleMailMessage {
                         id: "18a909f8178".to_string(),

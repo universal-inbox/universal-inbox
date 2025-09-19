@@ -277,6 +277,11 @@ pub fn nango_google_mail_connection() -> Box<NangoConnection> {
 }
 
 #[fixture]
+pub fn nango_google_drive_connection() -> Box<NangoConnection> {
+    load_json_fixture_file("google_drive/nango_google_drive_connection.json")
+}
+
+#[fixture]
 pub fn nango_slack_connection() -> Box<NangoConnection> {
     load_json_fixture_file("nango_slack_connection.json")
 }

@@ -5,6 +5,7 @@ use std::{
 
 use anyhow::{anyhow, Context};
 use apalis_redis::RedisStorage;
+use chrono::{DateTime, Utc};
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info};
@@ -641,6 +642,7 @@ impl TaskService {
             executor: &mut Transaction<'_, Postgres>,
             third_party_task_service: Arc<U>,
             user_id: UserId,
+            last_tasks_sync_completed_at: Option<DateTime<Utc>>,
         ) -> Result<Vec<TaskCreationResult>, UniversalInboxError>
         where
             T: TryFrom<ThirdPartyItem> + Debug,
@@ -658,7 +660,12 @@ impl TaskService {
                 .context("Unable to access third_party_item_service from task_service")?
                 .read()
                 .await
-                .sync_items(executor, third_party_task_service.clone(), user_id)
+                .sync_items(
+                    executor,
+                    third_party_task_service.clone(),
+                    user_id,
+                    last_tasks_sync_completed_at,
+                )
                 .await?;
 
             let mut task_creation_results = vec![];
@@ -709,26 +716,33 @@ impl TaskService {
             .start_tasks_sync_status(executor, integration_provider_kind, user_id)
             .await?;
 
-        let task_creation_results =
-            match sync_third_party_tasks(self, executor, third_party_task_service, user_id).await {
-                Err(e) => {
-                    integration_connection_service
-                        .error_tasks_sync_status(
-                            executor,
-                            integration_provider_kind,
-                            format!("Failed to fetch tasks from {integration_provider_kind}"),
-                            user_id,
-                        )
-                        .await?;
-                    return Err(UniversalInboxError::Recoverable(e.into()));
-                }
-                Ok(task_creation_results) => {
-                    integration_connection_service
-                        .complete_tasks_sync_status(executor, integration_provider_kind, user_id)
-                        .await?;
-                    task_creation_results
-                }
-            };
+        let task_creation_results = match sync_third_party_tasks(
+            self,
+            executor,
+            third_party_task_service,
+            user_id,
+            integration_connection.last_tasks_sync_completed_at,
+        )
+        .await
+        {
+            Err(e) => {
+                integration_connection_service
+                    .error_tasks_sync_status(
+                        executor,
+                        integration_provider_kind,
+                        format!("Failed to fetch tasks from {integration_provider_kind}"),
+                        user_id,
+                    )
+                    .await?;
+                return Err(UniversalInboxError::Recoverable(e.into()));
+            }
+            Ok(task_creation_results) => {
+                integration_connection_service
+                    .complete_tasks_sync_status(executor, integration_provider_kind, user_id)
+                    .await?;
+                task_creation_results
+            }
+        };
 
         info!(
             "Successfully synced {} {integration_provider_kind} tasks for user {user_id}",

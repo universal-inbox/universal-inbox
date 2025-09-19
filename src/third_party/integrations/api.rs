@@ -51,13 +51,9 @@ impl ThirdPartyItemFromSource for WebPage {
         user_id: UserId,
         integration_connection_id: IntegrationConnectionId,
     ) -> ThirdPartyItem {
-        let mut hasher = DefaultHasher::new();
-        self.url.hash(&mut hasher);
-        let url_hash = hasher.finish();
-
         ThirdPartyItem {
             id: Uuid::new_v4().into(),
-            source_id: format!("{:x}", url_hash),
+            source_id: self.source_id(),
             data: ThirdPartyItemData::WebPage(Box::new(self.clone())),
             created_at: Utc::now().with_nanosecond(0).unwrap(),
             updated_at: Utc::now().with_nanosecond(0).unwrap(),
@@ -65,6 +61,13 @@ impl ThirdPartyItemFromSource for WebPage {
             integration_connection_id,
             source_item: None,
         }
+    }
+
+    fn source_id(&self) -> String {
+        let mut hasher = DefaultHasher::new();
+        self.url.hash(&mut hasher);
+        let url_hash = hasher.finish();
+        format!("{:x}", url_hash)
     }
 }
 

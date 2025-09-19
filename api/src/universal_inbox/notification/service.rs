@@ -6,6 +6,7 @@ use std::{
 use anyhow::{anyhow, Context};
 use apalis::prelude::Storage;
 use apalis_redis::RedisStorage;
+use chrono::{DateTime, Utc};
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
 use tokio_retry::{
@@ -38,7 +39,7 @@ use universal_inbox::{
 use crate::{
     integrations::{
         github::GithubService, google_calendar::GoogleCalendarService,
-        google_mail::GoogleMailService, linear::LinearService,
+        google_drive::GoogleDriveService, google_mail::GoogleMailService, linear::LinearService,
         notification::ThirdPartyNotificationSourceService, slack::SlackService,
         third_party::ThirdPartyItemSourceService,
     },
@@ -61,6 +62,7 @@ pub struct NotificationService {
     pub github_service: Arc<GithubService>,
     pub linear_service: Arc<LinearService>,
     pub google_calendar_service: Arc<GoogleCalendarService>,
+    pub google_drive_service: Arc<RwLock<GoogleDriveService>>,
     pub google_mail_service: Arc<RwLock<GoogleMailService>>,
     pub slack_service: Arc<SlackService>,
     pub(super) task_service: Weak<RwLock<TaskService>>,
@@ -77,6 +79,7 @@ impl NotificationService {
         github_service: Arc<GithubService>,
         linear_service: Arc<LinearService>,
         google_calendar_service: Arc<GoogleCalendarService>,
+        google_drive_service: Arc<RwLock<GoogleDriveService>>,
         google_mail_service: Arc<RwLock<GoogleMailService>>,
         slack_service: Arc<SlackService>,
         task_service: Weak<RwLock<TaskService>>,
@@ -90,6 +93,7 @@ impl NotificationService {
             github_service,
             linear_service,
             google_calendar_service,
+            google_drive_service,
             google_mail_service,
             slack_service,
             task_service,
@@ -170,6 +174,16 @@ impl NotificationService {
                 self.apply_updated_notification_side_effect(
                     executor,
                     self.google_calendar_service.clone(),
+                    patch,
+                    &mut notification.source_item,
+                    for_user_id,
+                )
+                .await?
+            }
+            NotificationSourceKind::GoogleDrive => {
+                self.apply_updated_notification_side_effect(
+                    executor,
+                    (*self.google_drive_service.read().await).clone().into(),
                     patch,
                     &mut notification.source_item,
                     for_user_id,
@@ -601,6 +615,15 @@ impl NotificationService {
                 )
                 .await
             }
+            NotificationSyncSourceKind::GoogleDrive => {
+                self.sync_third_party_notifications(
+                    executor,
+                    (*self.google_drive_service.read().await).clone().into(),
+                    user_id,
+                    force_sync,
+                )
+                .await
+            }
             NotificationSyncSourceKind::GoogleMail => {
                 self.sync_third_party_notifications(
                     executor,
@@ -671,6 +694,13 @@ impl NotificationService {
                 force_sync,
             )
             .await?;
+        let notifications_from_google_drive = self
+            .sync_notifications_with_transaction(
+                NotificationSyncSourceKind::GoogleDrive,
+                user_id,
+                force_sync,
+            )
+            .await?;
         let notifications_from_google_mail = self
             .sync_notifications_with_transaction(
                 NotificationSyncSourceKind::GoogleMail,
@@ -678,9 +708,11 @@ impl NotificationService {
                 force_sync,
             )
             .await?;
+
         Ok(notifications_from_github
             .into_iter()
             .chain(notifications_from_linear.into_iter())
+            .chain(notifications_from_google_drive.into_iter())
             .chain(notifications_from_google_mail.into_iter())
             .collect())
     }
@@ -1023,6 +1055,7 @@ impl NotificationService {
             executor: &mut Transaction<'_, Postgres>,
             third_party_notification_service: Arc<U>,
             user_id: UserId,
+            last_notifications_sync_completed_at: Option<DateTime<Utc>>,
         ) -> Result<Vec<Notification>, UniversalInboxError>
         where
             T: TryFrom<ThirdPartyItem> + Debug,
@@ -1039,7 +1072,12 @@ impl NotificationService {
                 .context("Unable to access third_party_item_service from notification_service")?
                 .read()
                 .await
-                .sync_items(executor, third_party_notification_service.clone(), user_id)
+                .sync_items(
+                    executor,
+                    third_party_notification_service.clone(),
+                    user_id,
+                    last_notifications_sync_completed_at,
+                )
                 .await?;
 
             let mut notification_creation_results = vec![];
@@ -1115,6 +1153,7 @@ impl NotificationService {
             executor,
             third_party_notification_service,
             user_id,
+            integration_connection.last_notifications_sync_completed_at,
         )
         .await
         {

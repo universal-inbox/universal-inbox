@@ -59,8 +59,8 @@ use webauthn_rs::prelude::*;
 use crate::{
     configuration::Settings,
     integrations::{
-        github::GithubService, google_mail::GoogleMailService, linear::LinearService,
-        oauth2::NangoService, todoist::TodoistService,
+        github::GithubService, google_drive::GoogleDriveService, google_mail::GoogleMailService,
+        linear::LinearService, oauth2::NangoService, todoist::TodoistService,
     },
     jobs::handle_universal_inbox_job,
     observability::AuthenticatedRootSpanBuilder,
@@ -348,6 +348,7 @@ pub async fn build_services(
     github_address: Option<String>,
     linear_graphql_url: Option<String>,
     google_mail_base_url: Option<String>,
+    google_drive_base_url: Option<String>,
     google_calendar_base_url: Option<String>,
     slack_base_url: Option<String>,
     todoist_address: Option<String>,
@@ -444,6 +445,22 @@ pub async fn build_services(
         )
         .expect("Failed to create new GoogleMailService"),
     ));
+
+    let google_drive_settings = settings
+        .integrations
+        .get("google_drive")
+        .expect("Missing Google Drive settings");
+    let google_drive_service = Arc::new(RwLock::new(
+        GoogleDriveService::new(
+            google_drive_base_url,
+            google_drive_settings.page_size.unwrap_or(100),
+            Arc::downgrade(&integration_connection_service),
+            Weak::new(), // notification_service - will be set later
+            settings.get_integration_max_retry_duration(execution_context, "google_drive"),
+        )
+        .expect("Failed to create new GoogleDriveService"),
+    ));
+
     let slack_service = Arc::new(SlackService::new(
         slack_base_url,
         integration_connection_service.clone(),
@@ -467,6 +484,7 @@ pub async fn build_services(
         github_service.clone(),
         linear_service.clone(),
         google_calendar_service.clone(),
+        google_drive_service.clone(),
         google_mail_service.clone(),
         slack_service.clone(),
         Weak::new(),
@@ -479,6 +497,10 @@ pub async fn build_services(
     )));
 
     google_mail_service
+        .write()
+        .await
+        .set_notification_service(Arc::downgrade(&notification_service));
+    google_drive_service
         .write()
         .await
         .set_notification_service(Arc::downgrade(&notification_service));

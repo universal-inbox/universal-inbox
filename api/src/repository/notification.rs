@@ -1377,6 +1377,7 @@ enum PgNotificationSourceKind {
     Todoist,
     Linear,
     GoogleMail,
+    GoogleDrive,
     GoogleCalendar,
     Slack,
     #[allow(clippy::upper_case_acronyms)]

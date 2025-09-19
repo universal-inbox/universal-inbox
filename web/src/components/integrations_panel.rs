@@ -27,6 +27,7 @@ use crate::{
     components::integrations::{
         github::config::GithubProviderConfiguration,
         google_calendar::config::GoogleCalendarProviderConfiguration,
+        google_drive::config::GoogleDriveProviderConfiguration,
         google_mail::config::GoogleMailProviderConfiguration, icons::IntegrationProviderIcon,
         linear::config::LinearProviderConfiguration, slack::config::SlackProviderConfiguration,
         todoist::config::TodoistProviderConfiguration,
@@ -457,6 +458,12 @@ pub fn IntegrationConnectionProviderConfiguration(
                 on_config_change: move |c| on_config_change.call(c),
                 config: config.clone(),
                 context: context.clone(),
+            }
+        },
+        IntegrationProvider::GoogleDrive { config, .. } => rsx! {
+            GoogleDriveProviderConfiguration {
+                on_config_change: move |c| on_config_change.call(c),
+                config: config.clone(),
             }
         },
         IntegrationProvider::Github { config } => rsx! {

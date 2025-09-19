@@ -1,0 +1,31 @@
+{
+  "kind": "drive#fileList",
+  "nextPageToken": "next_token",
+  "incompleteSearch": false,
+  "files": [
+    {
+      "kind": "drive#file",
+      "id": "1AbCdEfGhIjKlMnOpQrStUvWxYz",
+      "name": "Project Proposal - Q4 2025.docx",
+      "mimeType": "application/vnd.google-apps.document",
+      "modifiedTime": "2025-09-28T11:15:00.000Z",
+      "createdTime": "2025-09-25T08:30:00.000Z",
+      "webViewLink": "https://docs.google.com/document/d/1AbCdEfGhIjKlMnOpQrStUvWxYz/edit",
+      "owners": [
+        {
+          "displayName": "Project Manager",
+          "emailAddress": "pm@example.com"
+        }
+      ]
+    },
+    {
+      "kind": "drive#file",
+      "id": "1XyZaBcDeFgHiJkLmNoPqRs",
+      "name": "Technical Specification.gdoc",
+      "mimeType": "application/vnd.google-apps.document",
+      "modifiedTime": "2025-09-28T08:45:00.000Z",
+      "createdTime": "2025-09-20T10:00:00.000Z",
+      "webViewLink": "https://docs.google.com/document/d/1XyZaBcDeFgHiJkLmNoPqRs/edit"
+    }
+  ]
+}

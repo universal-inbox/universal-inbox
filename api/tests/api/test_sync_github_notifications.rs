@@ -230,6 +230,9 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         .last_notifications_sync_completed_at
         .is_some());
     assert!(integration_connection
+        .last_notifications_sync_failed_at
+        .is_none());
+    assert!(integration_connection
         .last_notifications_sync_failure_message
         .is_none());
     assert_eq!(integration_connection.notifications_sync_failures, 0);
@@ -677,6 +680,9 @@ async fn test_sync_all_notifications_asynchronously_in_error(
         .is_some());
     assert!(integration_connection
         .last_notifications_sync_completed_at
+        .is_none());
+    assert!(integration_connection
+        .last_notifications_sync_failed_at
         .is_some());
     assert_eq!(
         integration_connection
@@ -887,6 +893,9 @@ async fn test_sync_discussion_notification_with_error(
         .is_some());
     assert!(integration_connection
         .last_notifications_sync_completed_at
+        .is_none());
+    assert!(integration_connection
+        .last_notifications_sync_failed_at
         .is_some());
     assert_eq!(
         integration_connection

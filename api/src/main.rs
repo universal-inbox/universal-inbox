@@ -15,8 +15,8 @@ use universal_inbox_api::{
     configuration::Settings,
     integrations::{
         github::GithubService, google_calendar::GoogleCalendarService,
-        google_mail::GoogleMailService, linear::LinearService, oauth2::NangoService,
-        slack::SlackService, todoist::TodoistService,
+        google_drive::GoogleDriveService, google_mail::GoogleMailService, linear::LinearService,
+        oauth2::NangoService, slack::SlackService, todoist::TodoistService,
     },
     mailer::SmtpMailer,
     observability::{
@@ -144,6 +144,7 @@ async fn main() -> std::io::Result<()> {
     let github_mock_server = get_github_mock_server(&settings).await;
     let linear_graphql_mock_server = get_linear_mock_server(&settings).await;
     let google_mail_mock_server = get_google_mail_mock_server(&settings).await;
+    let google_drive_mock_server = get_google_drive_mock_server(&settings).await;
     let google_calendar_mock_server = get_google_calendar_mock_server(&settings).await;
     let slack_mock_server = get_slack_mock_server(&settings).await;
     let todoist_mock_server = get_todoist_mock_server(&settings).await;
@@ -162,6 +163,7 @@ async fn main() -> std::io::Result<()> {
         github_mock_server.map(|mock| mock.uri()),
         linear_graphql_mock_server.map(|mock| mock.uri()),
         google_mail_mock_server.map(|mock| mock.uri()),
+        google_drive_mock_server.map(|mock| mock.uri()),
         google_calendar_mock_server.map(|mock| mock.uri()),
         slack_mock_server.map(|mock| mock.uri()),
         todoist_mock_server.map(|mock| mock.uri()),
@@ -217,6 +219,16 @@ async fn get_google_mail_mock_server(settings: &Settings) -> Option<MockServer> 
     if settings.application.dry_run {
         let mock_server = wiremock::MockServer::start().await;
         GoogleMailService::mock_all(&mock_server).await;
+        Some(mock_server)
+    } else {
+        None
+    }
+}
+
+async fn get_google_drive_mock_server(settings: &Settings) -> Option<MockServer> {
+    if settings.application.dry_run {
+        let mock_server = wiremock::MockServer::start().await;
+        GoogleDriveService::mock_all(&mock_server).await;
         Some(mock_server)
     } else {
         None

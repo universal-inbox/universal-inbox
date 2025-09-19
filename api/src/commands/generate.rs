@@ -1,7 +1,8 @@
-use std::{env, fmt::Debug, fs, sync::Arc};
+use std::{env, fmt::Debug, fs, str::FromStr, sync::Arc};
 
 use anyhow::Context;
 use chrono::{Timelike, Utc};
+use email_address::EmailAddress;
 use graphql_client::Response;
 use secrecy::SecretBox;
 use slack_morphism::{
@@ -32,7 +33,8 @@ use universal_inbox::{
         integrations::{
             github::GithubNotification,
             google_calendar::GoogleCalendarEvent,
-            google_mail::{EmailAddress, GoogleMailThread},
+            google_drive::GoogleDriveComment,
+            google_mail::GoogleMailThread,
             linear::{LinearIssue, LinearNotification},
             slack::{
                 SlackMessageDetails, SlackMessageSenderDetails, SlackReaction, SlackReactionItem,
@@ -152,6 +154,16 @@ pub async fn generate_testing_user(
         &settings,
         user.id,
         &google_mail_integration_connection,
+    )
+    .await?;
+
+    generate_google_drive_notifications(
+        &mut transaction,
+        integration_connection_service.clone(),
+        notification_service.clone(),
+        third_party_item_service.clone(),
+        &settings,
+        user.id,
     )
     .await?;
 
@@ -541,7 +553,8 @@ fn google_mail_thread() -> Result<GoogleMailThread, UniversalInboxError> {
         load_json_fixture_file("google_mail_thread_get_123.json")?;
     let google_mail_user_profile: GoogleMailUserProfile =
         load_json_fixture_file("google_mail_user_profile.json")?;
-    let user_email_address: EmailAddress = google_mail_user_profile.email_address.into();
+    let user_email_address = EmailAddress::from_str(&google_mail_user_profile.email_address)
+        .context("Unable to parse email address from google mail user profile")?;
 
     Ok(raw_google_mail_thread_get_123.into_google_mail_thread(user_email_address))
 }
@@ -692,6 +705,55 @@ async fn generate_todoist_notifications(
             user_id,
         )
         .await?;
+
+    Ok(integration_connection)
+}
+
+async fn generate_google_drive_notifications(
+    executor: &mut Transaction<'_, Postgres>,
+    integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
+    notification_service: Arc<RwLock<NotificationService>>,
+    third_party_item_service: Arc<RwLock<ThirdPartyItemService>>,
+    settings: &Settings,
+    user_id: UserId,
+) -> Result<IntegrationConnection, UniversalInboxError> {
+    info!("Generating Google Drive comment notifications");
+    let integration_connection = create_integration_connection(
+        executor,
+        integration_connection_service,
+        IntegrationProviderKind::GoogleDrive,
+        settings
+            .integrations
+            .get("google_drive")
+            .unwrap()
+            .required_oauth_scopes
+            .clone(),
+        user_id,
+        None,
+    )
+    .await?;
+
+    let google_drive_comment: GoogleDriveComment =
+        load_json_fixture_file("google_drive/google_drive_comment_123.json")?;
+    let google_drive_service = (*notification_service
+        .read()
+        .await
+        .google_drive_service
+        .read()
+        .await)
+        .clone()
+        .into();
+    create_notification_from_source_item(
+        executor,
+        google_drive_comment.id.to_string(),
+        ThirdPartyItemData::GoogleDriveComment(Box::new(google_drive_comment.clone())),
+        user_id,
+        integration_connection.id,
+        google_drive_service,
+        notification_service,
+        third_party_item_service,
+    )
+    .await?;
 
     Ok(integration_connection)
 }

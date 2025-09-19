@@ -8,6 +8,7 @@ use crate::{
         integrations::{
             github::GithubConfig,
             google_calendar::GoogleCalendarConfig,
+            google_drive::{GoogleDriveConfig, GoogleDriveContext},
             google_mail::{GoogleMailConfig, GoogleMailContext},
             linear::LinearConfig,
             slack::{
@@ -33,7 +34,10 @@ pub enum IntegrationProvider {
     GoogleCalendar {
         config: GoogleCalendarConfig,
     },
-    GoogleDocs,
+    GoogleDrive {
+        context: Option<GoogleDriveContext>,
+        config: GoogleDriveConfig,
+    },
     GoogleMail {
         context: Option<GoogleMailContext>,
         config: GoogleMailConfig,
@@ -62,7 +66,18 @@ impl IntegrationProvider {
             IntegrationConnectionConfig::GoogleCalendar(config) => {
                 Ok(Self::GoogleCalendar { config })
             }
-            IntegrationConnectionConfig::GoogleDocs => Ok(Self::GoogleDocs),
+            IntegrationConnectionConfig::GoogleDrive(config) => Ok(Self::GoogleDrive {
+                context: context
+                    .map(|c| {
+                        if let IntegrationConnectionContext::GoogleDrive(c) = c {
+                            Ok(c)
+                        } else {
+                            Err(anyhow!("Unexpect context for Google Drive provider: {c:?}"))
+                        }
+                    })
+                    .transpose()?,
+                config,
+            }),
             IntegrationConnectionConfig::GoogleMail(config) => Ok(Self::GoogleMail {
                 context: context
                     .map(|c| {
@@ -110,7 +125,7 @@ impl IntegrationProvider {
             IntegrationProvider::Github { .. } => false,
             IntegrationProvider::Linear { .. } => false,
             IntegrationProvider::GoogleCalendar { .. } => false,
-            IntegrationProvider::GoogleDocs => false,
+            IntegrationProvider::GoogleDrive { context, .. } => context.is_none(),
             IntegrationProvider::GoogleMail { context, .. } => context.is_none(),
             IntegrationProvider::Notion => false,
             IntegrationProvider::Slack { context, .. } => context.is_none(),
@@ -133,7 +148,7 @@ impl IntegrationProvider {
             IntegrationProvider::Github { .. } => IntegrationProviderKind::Github,
             IntegrationProvider::Linear { .. } => IntegrationProviderKind::Linear,
             IntegrationProvider::GoogleCalendar { .. } => IntegrationProviderKind::GoogleCalendar,
-            IntegrationProvider::GoogleDocs => IntegrationProviderKind::GoogleDocs,
+            IntegrationProvider::GoogleDrive { .. } => IntegrationProviderKind::GoogleDrive,
             IntegrationProvider::GoogleMail { .. } => IntegrationProviderKind::GoogleMail,
             IntegrationProvider::Notion => IntegrationProviderKind::Notion,
             IntegrationProvider::Slack { .. } => IntegrationProviderKind::Slack,
@@ -154,7 +169,9 @@ impl IntegrationProvider {
             IntegrationProvider::GoogleCalendar { config } => {
                 IntegrationConnectionConfig::GoogleCalendar(config.clone())
             }
-            IntegrationProvider::GoogleDocs => IntegrationConnectionConfig::GoogleDocs,
+            IntegrationProvider::GoogleDrive { config, .. } => {
+                IntegrationConnectionConfig::GoogleDrive(config.clone())
+            }
             IntegrationProvider::GoogleMail { config, .. } => {
                 IntegrationConnectionConfig::GoogleMail(config.clone())
             }
@@ -174,6 +191,7 @@ impl IntegrationProvider {
         match self {
             IntegrationProvider::Github { config } => config.sync_notifications_enabled,
             IntegrationProvider::Linear { config } => config.sync_notifications_enabled,
+            IntegrationProvider::GoogleDrive { config, .. } => config.sync_notifications_enabled,
             IntegrationProvider::GoogleMail { config, .. } => config.sync_notifications_enabled,
             IntegrationProvider::Slack { .. } => false, // Slack notifications are not synced but received via the webhook
             _ => false,
@@ -276,6 +294,7 @@ impl IntegrationProvider {
 #[serde(tag = "type", content = "content")]
 pub enum IntegrationConnectionContext {
     Todoist(TodoistContext),
+    GoogleDrive(GoogleDriveContext),
     GoogleMail(GoogleMailContext),
     Slack(SlackContext),
 }
@@ -291,7 +310,7 @@ macro_attr! {
         Github,
         Linear,
         GoogleCalendar,
-        GoogleDocs,
+        GoogleDrive,
         GoogleMail,
         Notion,
         Slack,
@@ -310,9 +329,9 @@ impl IntegrationProviderKind {
     pub fn is_notification_service(&self) -> bool {
         *self == IntegrationProviderKind::Github
             || *self == IntegrationProviderKind::Linear
+            || *self == IntegrationProviderKind::GoogleDrive
             || *self == IntegrationProviderKind::GoogleMail
             || *self == IntegrationProviderKind::Notion
-            || *self == IntegrationProviderKind::GoogleDocs
             || *self == IntegrationProviderKind::Slack
             || *self == IntegrationProviderKind::API
     }
@@ -328,7 +347,9 @@ impl IntegrationProviderKind {
             IntegrationProviderKind::GoogleCalendar => {
                 IntegrationConnectionConfig::GoogleCalendar(Default::default())
             }
-            IntegrationProviderKind::GoogleDocs => IntegrationConnectionConfig::GoogleDocs,
+            IntegrationProviderKind::GoogleDrive => {
+                IntegrationConnectionConfig::GoogleDrive(Default::default())
+            }
             IntegrationProviderKind::GoogleMail => {
                 IntegrationConnectionConfig::GoogleMail(Default::default())
             }

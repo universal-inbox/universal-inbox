@@ -1,0 +1,43 @@
+{
+  "id": "AAAABUiR-5ub_7yjYZKluDfg8a8AAANM",
+  "file_name": "Project Proposal - Q4 2025.docx",
+  "file_id": "1AbCdEfGhIjKlMnOpQrStUvWxYz",
+  "file_mime_type": "application/vnd.google-apps.document",
+  "content": "I think we should revise the timeline for this project. The Q4 deadline seems too aggressive given the scope.",
+  "html_content": "<p>I think we should revise the timeline for this project. The Q4 deadline seems too <strong>aggressive</strong> given the scope.</p>",
+  "quoted_file_content": "Project Timeline: Complete implementation by December 31, 2025",
+  "author": {
+    "display_name": "Jane Doe",
+    "email_address": "jane.doe@example.com",
+    "photo_link": "https://lh3.googleusercontent.com/a/default-user=s64"
+  },
+  "created_time": "2025-09-28T09:15:00.000Z",
+  "modified_time": "2025-09-28T09:15:00.000Z",
+  "resolved": false,
+  "replies": [
+    {
+      "id": "AAAABUiR-5ub_7yjYZKluDfg8a8AAANT",
+      "content": "I agree with your assessment. Should we push it to Q1 2026?",
+      "html_content": "<p>I agree with your assessment. Should we push it to <em>Q1 2026</em>?</p>",
+      "author": {
+        "display_name": "Alice",
+        "email_address": "alice@example.com",
+        "photo_link": "https://lh3.googleusercontent.com/a/default-user=s64"
+      },
+      "created_time": "2025-09-28T10:30:00.000Z",
+      "modified_time": "2025-09-28T10:30:00.000Z"
+    },
+    {
+      "id": "AAAABUiR-5ub_7yjYZKluDfg8a8AAANU",
+      "content": "@jane.smith@example.com Let's schedule a meeting to discuss the revised timeline.",
+      "html_content": "<p><span>@jane.smith@example.com</span> Let's schedule a meeting to discuss the revised timeline.</p>",
+      "author": {
+        "display_name": "Bob",
+        "email_address": "bob@example.com",
+        "photo_link": null
+      },
+      "created_time": "2025-09-28T11:00:00.000Z",
+      "modified_time": "2025-09-28T11:00:00.000Z"
+    }
+  ]
+}
