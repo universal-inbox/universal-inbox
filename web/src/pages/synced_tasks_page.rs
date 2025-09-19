@@ -15,8 +15,8 @@ use universal_inbox::{
 use crate::{
     components::{
         resizable_panel::ResizablePanel, task_preview::TaskPreview, tasks_list::TasksList,
+        welcome_hero::WelcomeHero,
     },
-    images::UI_LOGO_SYMBOL_TRANSPARENT,
     keyboard_manager::{KeyboardHandler, KEYBOARD_MANAGER},
     model::UI_MODEL,
     route::Route,
@@ -143,18 +143,7 @@ fn InternalSyncedTaskPage(task_id: ReadOnlySignal<Option<TaskId>>) -> Element {
             },
 
             if SORTED_SYNCED_TASKS().is_empty() {
-                div {
-                    class: "relative w-full h-full flex justify-center items-center",
-                    img {
-                        class: "h-full opacity-30 dark:opacity-10",
-                        src: "{UI_LOGO_SYMBOL_TRANSPARENT}",
-                        alt: "No synchronized tasks"
-                    }
-                    div {
-                        class: "flex flex-col items-center absolute object-center top-2/3 transform translate-y-1/4",
-                        p { class: "text-gray-500 font-semibold", "Congrats! You have completed all synchronized tasks 🎉" }
-                    }
-                }
+                WelcomeHero { inbox_zero_message: "Your synchronized tasks will appear here when they arrive." }
             } else {
                 div {
                     class: match panel_position {

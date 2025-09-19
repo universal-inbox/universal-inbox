@@ -41,6 +41,7 @@ json_value_merge = "2.0.1"
 lazy_static = { workspace = true }
 log = { workspace = true }
 openidconnect = { workspace = true }
+rand = { version = "0.9" }
 regex = { workspace = true }
 reqwest = { workspace = true }
 rrule = { workspace = true }

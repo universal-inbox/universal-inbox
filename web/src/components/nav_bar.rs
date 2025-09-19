@@ -69,7 +69,7 @@ pub fn NavBar() -> Element {
 
     rsx! {
         div {
-            class: "navbar shadow-lg z-10 p-2",
+            class: "navbar shadow-lg z-10 p-2 backdrop-blur-md border-b border-base-content/5",
 
             div {
                 class: "sm:navbar-start max-sm:flex max-sm:grow items-center gap-8",

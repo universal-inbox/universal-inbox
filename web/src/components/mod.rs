@@ -33,6 +33,7 @@ pub mod tasks_list;
 pub mod toast_zone;
 pub mod universal_inbox_title;
 pub mod user_profile_card;
+pub mod welcome_hero;
 
 #[component]
 fn CollapseCardWithIcon(
