@@ -12,9 +12,8 @@ use universal_inbox::{
 use crate::{
     components::{
         notification_preview::NotificationPreview, notifications_list::NotificationsList,
-        resizable_panel::ResizablePanel,
+        resizable_panel::ResizablePanel, welcome_hero::WelcomeHero,
     },
-    icons::UILogo,
     keyboard_manager::{KeyboardHandler, KEYBOARD_MANAGER},
     model::{PreviewPane, UI_MODEL},
     route::Route,
@@ -122,18 +121,7 @@ fn InternalNotificationPage(notification_id: ReadOnlySignal<Option<NotificationI
             },
 
             if NOTIFICATIONS_PAGE.read().content.is_empty() && !NOTIFICATION_FILTERS().is_filtered() {
-                div {
-                    class: "relative w-full h-full flex flex-col justify-center items-center",
-                    UILogo {
-                        class: "opacity-30 dark:opacity-10 w-96 h-96",
-                        alt: "No notifications"
-                    }
-                    div {
-                        class: "flex flex-col items-center",
-                        p { class: "text-gray-500 font-semibold", "Congrats! You have reached inbox zero 🎉" }
-                        p { class: "text-base-content/50", "You don't have any new notifications." }
-                    }
-                }
+                WelcomeHero { inbox_zero_message: "Your notifications will appear here when they arrive." }
             } else {
                 div {
                     class: match panel_position {

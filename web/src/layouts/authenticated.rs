@@ -42,7 +42,6 @@ pub fn AuthenticatedApp() -> Element {
     let integration_connection_service = use_coroutine_handle::<IntegrationConnectionCommand>();
     let notification_service = use_coroutine_handle::<NotificationCommand>();
     let task_service = use_coroutine_handle::<TaskCommand>();
-    let nav = use_navigator();
 
     use_future(move || async move {
         if UI_MODEL.read().authentication_state == AuthenticationState::Authenticated {
@@ -68,14 +67,8 @@ pub fn AuthenticatedApp() -> Element {
         }
     });
 
-    if let Some(integration_connections) = INTEGRATION_CONNECTIONS.read().as_ref() {
-        if integration_connections.is_empty() && history().current_route() != *"/settings" {
-            nav.push(Route::SettingsPage {});
-            needs_update();
-            rsx! {}
-        } else {
-            rsx! { Outlet::<Route> {} }
-        }
+    if INTEGRATION_CONNECTIONS.read().as_ref().is_some() {
+        rsx! { Outlet::<Route> {} }
     } else {
         rsx! { Loading { label: "Loading Universal Inbox..." } }
     }
