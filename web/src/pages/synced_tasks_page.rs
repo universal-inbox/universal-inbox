@@ -187,8 +187,14 @@ impl KeyboardHandler for SyncTasksPageKeyboardHandler {
         let selected_task = selected_task_index.and_then(|index| sorted_tasks.get(index));
         let mut handled = true;
 
-        match event.key().as_ref() {
-            "ArrowDown" => {
+        match (
+            event.key().as_ref(),
+            event.ctrl_key(),
+            event.meta_key(),
+            event.alt_key(),
+            event.shift_key(),
+        ) {
+            ("ArrowDown", false, false, false, false) => {
                 if let Some(index) = selected_task_index {
                     if index < (list_length - 1) {
                         let new_index = index + 1;
@@ -200,7 +206,7 @@ impl KeyboardHandler for SyncTasksPageKeyboardHandler {
                     }
                 }
             }
-            "ArrowUp" => {
+            ("ArrowUp", false, false, false, false) => {
                 if let Some(index) = selected_task_index {
                     if index > 0 {
                         let new_index = index - 1;
@@ -212,29 +218,31 @@ impl KeyboardHandler for SyncTasksPageKeyboardHandler {
                     }
                 }
             }
-            "c" => {
+            ("c", false, false, false, false) => {
                 if let Some((_, TaskWithOrder { task, .. })) = selected_task {
                     task_service.send(TaskCommand::Complete(task.id))
                 }
             }
-            "j" => {
+            ("j", false, false, false, false) => {
                 let _ = scroll_element("task-preview", 100.0);
             }
-            "k" => {
+            ("k", false, false, false, false) => {
                 let _ = scroll_element("task-preview", -100.0);
             }
-            " " => {
+            (" ", false, false, false, false) => {
                 let _ = scroll_element_by_page("task-preview");
             }
-            "e" => {
+            ("e", false, false, false, false) => {
                 UI_MODEL.write().toggle_preview_cards();
             }
-            "Enter" => {
+            ("Enter", false, false, false, false) => {
                 if let Some((_, TaskWithOrder { task, .. })) = selected_task {
                     let _ = open_link(task.get_html_url().as_str());
                 }
             }
-            "h" | "?" => UI_MODEL.write().toggle_help(),
+            ("h", false, false, false, false) | ("?", false, false, false, false) => {
+                UI_MODEL.write().toggle_help()
+            }
             _ => handled = false,
         }
 

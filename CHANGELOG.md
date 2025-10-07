@@ -29,6 +29,7 @@
 - Display calendar event descriptions as HTML
 - Prevent application freeze when third party API is slow
 - Disable Linear issues to tasks synchronization by default
+- Ignore keyboard shortcut with modifiers (Ctrl, Alt, ...) pressed
 
 ## 2025-05-03
 

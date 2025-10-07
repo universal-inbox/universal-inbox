@@ -167,8 +167,14 @@ impl KeyboardHandler for NotificationsPageKeyboardHandler {
             selected_notification_index.and_then(|index| notifications_page.content.get(index));
         let mut handled = true;
 
-        match event.key().as_ref() {
-            "ArrowDown" => {
+        match (
+            event.key().as_ref(),
+            event.ctrl_key(),
+            event.meta_key(),
+            event.alt_key(),
+            event.shift_key(),
+        ) {
+            ("ArrowDown", false, false, false, false) => {
                 if let Some(index) = selected_notification_index {
                     if index < (list_length - 1) {
                         let new_index = index + 1;
@@ -183,7 +189,7 @@ impl KeyboardHandler for NotificationsPageKeyboardHandler {
                     }
                 }
             }
-            "ArrowUp" => {
+            ("ArrowUp", false, false, false, false) => {
                 if let Some(index) = selected_notification_index {
                     if index > 0 {
                         let new_index = index - 1;
@@ -198,7 +204,7 @@ impl KeyboardHandler for NotificationsPageKeyboardHandler {
                     }
                 }
             }
-            "ArrowRight"
+            ("ArrowRight", false, false, false, false)
                 if UI_MODEL.peek().selected_preview_pane == PreviewPane::Notification
                     && selected_notification
                         .map(|notif| notif.task.is_some())
@@ -206,7 +212,7 @@ impl KeyboardHandler for NotificationsPageKeyboardHandler {
             {
                 UI_MODEL.write().selected_preview_pane = PreviewPane::Task;
             }
-            "ArrowLeft"
+            ("ArrowLeft", false, false, false, false)
                 if UI_MODEL.peek().selected_preview_pane == PreviewPane::Task
                     && !selected_notification
                         .map(|notif| notif.is_built_from_task())
@@ -214,31 +220,31 @@ impl KeyboardHandler for NotificationsPageKeyboardHandler {
             {
                 UI_MODEL.write().selected_preview_pane = PreviewPane::Notification;
             }
-            "d" => {
+            ("d", false, false, false, false) => {
                 if let Some(notification) = selected_notification {
                     notification_service.send(NotificationCommand::DeleteFromNotification(
                         notification.clone(),
                     ))
                 }
             }
-            "c" => {
+            ("c", false, false, false, false) => {
                 if let Some(notification) = selected_notification {
                     notification_service.send(NotificationCommand::CompleteTaskFromNotification(
                         notification.clone(),
                     ))
                 }
             }
-            "u" => {
+            ("u", false, false, false, false) => {
                 if let Some(notification) = selected_notification {
                     notification_service.send(NotificationCommand::Unsubscribe(notification.id))
                 }
             }
-            "s" => {
+            ("s", false, false, false, false) => {
                 if let Some(notification) = selected_notification {
                     notification_service.send(NotificationCommand::Snooze(notification.id))
                 }
             }
-            "t" => {
+            ("t", false, false, false, false) => {
                 if let Some(notification) = selected_notification {
                     notification_service.send(
                         NotificationCommand::CreateTaskWithDetaultsFromNotification(
@@ -247,53 +253,55 @@ impl KeyboardHandler for NotificationsPageKeyboardHandler {
                     )
                 }
             }
-            "y" => {
+            ("y", false, false, false, false) => {
                 if let Some(notification) = selected_notification {
                     notification_service
                         .send(NotificationCommand::AcceptInvitation(notification.id))
                 }
             }
-            "n" => {
+            ("n", false, false, false, false) => {
                 if let Some(notification) = selected_notification {
                     notification_service
                         .send(NotificationCommand::DeclineInvitation(notification.id))
                 }
             }
-            "m" => {
+            ("m", false, false, false, false) => {
                 if let Some(notification) = selected_notification {
                     notification_service.send(NotificationCommand::TentativelyAcceptInvitation(
                         notification.id,
                     ))
                 }
             }
-            "p" => {
+            ("p", false, false, false, false) => {
                 if UI_MODEL.peek().is_task_actions_enabled {
                     open_flyonui_modal("#task-planning-modal");
                 }
             }
-            "l" => {
+            ("l", false, false, false, false) => {
                 if UI_MODEL.peek().is_task_actions_enabled {
                     open_flyonui_modal("#task-linking-modal");
                 }
             }
-            "j" => {
+            ("j", false, false, false, false) => {
                 let _ = scroll_element("notification-preview-details", 100.0);
             }
-            "k" => {
+            ("k", false, false, false, false) => {
                 let _ = scroll_element("notification-preview-details", -100.0);
             }
-            " " => {
+            (" ", false, false, false, false) => {
                 let _ = scroll_element_by_page("notification-preview-details");
             }
-            "e" => {
+            ("e", false, false, false, false) => {
                 UI_MODEL.write().toggle_preview_cards();
             }
-            "Enter" => {
+            ("Enter", false, false, false, false) => {
                 if let Some(notification) = selected_notification {
                     let _ = open_link(notification.get_html_url().as_str());
                 }
             }
-            "h" | "?" => UI_MODEL.write().toggle_help(),
+            ("h", false, false, false, false) | ("?", false, false, false, false) => {
+                UI_MODEL.write().toggle_help()
+            }
             _ => handled = false,
         }
 
