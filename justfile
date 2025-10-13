@@ -149,6 +149,14 @@ run-nango-db: create-docker-network
 
 run-nango-server: create-docker-network
     #!/usr/bin/env bash
+
+    arch=$(uname -m)
+    if [ "$arch" = "aarch64" ]; then
+        image="dax42/nango-server:0.32.10"
+    else:
+        image="nangohq/nango-server:0.32.10"
+    fi
+    
     docker run \
         -e TELEMETRY=false \
         -e SERVER_PORT=3003 \
@@ -166,10 +174,9 @@ run-nango-server: create-docker-network
         -e NANGO_DB_SSL=false \
         --network universal-inbox \
         --rm \
-        --platform linux/amd64 \
         -p 3003:3003 \
         --name nango-server \
-        nangohq/nango-server:hosted-02c1ee2bcbd92741057582169c95c4157ba98262
+        "$image"
 
 run-all:
     process-compose \
