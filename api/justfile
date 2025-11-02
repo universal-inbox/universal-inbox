@@ -32,8 +32,8 @@ test-coverage:
     cargo llvm-cov nextest --all-features --lcov --output-path lcov.info --profile ci
 
 ## Run recipes
-run:
-    watchexec --stop-timeout 10 --debounce 500 --exts toml,rs --restart --watch src cargo run --color always -- serve --embed-async-workers
+run *command="serve --embed-async-workers":
+    cargo run --color always -- {{ command }}
 
 run-api:
     watchexec --stop-timeout 10 --debounce 500 --exts toml,rs --restart --watch src cargo run --color always -- serve
