@@ -153,9 +153,10 @@ run-nango-server: create-docker-network
     arch=$(uname -m)
     if [ "$arch" = "aarch64" ]; then
         image="dax42/nango-server:0.32.10"
-    else:
+    else
         image="nangohq/nango-server:0.32.10"
     fi
+    echo "Using image: $image"
     
     docker run \
         -e TELEMETRY=false \

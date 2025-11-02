@@ -10,3 +10,5 @@ devbox.d
 .devbox
 lcov.info
 docker/cache
+.env
+docs
