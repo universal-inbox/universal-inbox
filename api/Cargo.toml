@@ -53,6 +53,7 @@ format_serde_error = { version = "0.3.0", default-features = false, features = [
 ] }
 futures = "0.3.0"
 graphql_client = "0.14.0"
+hex = "0.4.3"
 http = { workspace = true }
 hyper-rustls = { version = "0.27.0", features = ["rustls-native-certs", "http2"] } # synced with slack-morphism
 ical = "0.11.0"

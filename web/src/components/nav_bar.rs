@@ -20,6 +20,7 @@ use crate::{
     model::{DEFAULT_USER_AVATAR, UI_MODEL, VERSION},
     route::Route,
     services::{
+        crisp::init_crisp,
         flyonui::{forget_flyonui_dropdown_element, init_flyonui_dropdown_element},
         headway::init_headway,
         notification_service::NOTIFICATIONS_PAGE,
@@ -31,21 +32,22 @@ use crate::{
 
 pub fn NavBar() -> Element {
     let user_service = use_coroutine_handle::<UserCommand>();
-    let connected_user = CONNECTED_USER.read();
-    let user_avatar = connected_user
-        .as_ref()
-        .map(|user| {
-            if let Some(ref email) = user.email {
-                Generator::default()
-                    .set_image_size(150)
-                    .set_rating("g")
-                    .set_default_image("mp")
-                    .generate(email.as_str())
-            } else {
-                DEFAULT_USER_AVATAR.to_string()
-            }
-        })
-        .unwrap_or_else(|| DEFAULT_USER_AVATAR.to_string());
+    let user_avatar = use_memo(|| {
+        CONNECTED_USER()
+            .as_ref()
+            .map(|user| {
+                if let Some(ref email) = user.email {
+                    Generator::default()
+                        .set_image_size(150)
+                        .set_rating("g")
+                        .set_default_image("mp")
+                        .generate(email.as_str())
+                } else {
+                    DEFAULT_USER_AVATAR.to_string()
+                }
+            })
+            .unwrap_or_else(|| DEFAULT_USER_AVATAR.to_string())
+    });
 
     let show_changelog = APP_CONFIG
         .read()
@@ -64,6 +66,31 @@ pub fn NavBar() -> Element {
     use_effect(move || {
         if show_changelog {
             init_headway();
+        }
+        if let Some(chat_support_website_id) = &APP_CONFIG
+            .read()
+            .as_ref()
+            .and_then(|config| config.chat_support_website_id.clone())
+        {
+            let user_email = CONNECTED_USER()
+                .as_ref()
+                .and_then(|user| user.email.as_ref().map(|email| email.to_string()));
+            let user_email_signature = CONNECTED_USER().as_ref().and_then(|user| {
+                user.chat_support_email_signature
+                    .as_ref()
+                    .map(|signature| signature.to_string())
+            });
+            let user_full_name = CONNECTED_USER().as_ref().and_then(|user| user.full_name());
+            let user_id = CONNECTED_USER().as_ref().map(|user| user.id.to_string());
+
+            init_crisp(
+                chat_support_website_id,
+                user_email.as_deref(),
+                user_email_signature.as_deref(),
+                user_full_name.as_deref(),
+                Some(&user_avatar()),
+                user_id.as_deref(),
+            );
         }
     });
 
@@ -144,7 +171,7 @@ pub fn NavBar() -> Element {
 
                             img {
                                 class: "rounded-full",
-                                src: "{user_avatar}",
+                                src: "{user_avatar()}",
                             }
                         }
                     }

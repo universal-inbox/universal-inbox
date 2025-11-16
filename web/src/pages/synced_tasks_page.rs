@@ -20,10 +20,7 @@ use crate::{
     keyboard_manager::{KeyboardHandler, KEYBOARD_MANAGER},
     model::UI_MODEL,
     route::Route,
-    services::{
-        flyonui::has_flyonui_modal_opened,
-        task_service::{TaskCommand, SYNCED_TASKS_PAGE},
-    },
+    services::task_service::{TaskCommand, SYNCED_TASKS_PAGE},
     settings::PanelPosition,
     utils::{
         get_screen_width, open_link, scroll_element, scroll_element_by_page,
@@ -177,9 +174,6 @@ struct SyncTasksPageKeyboardHandler {}
 
 impl KeyboardHandler for SyncTasksPageKeyboardHandler {
     fn handle_keydown(&self, event: &KeyboardEvent) -> bool {
-        if has_flyonui_modal_opened() {
-            return false;
-        }
         let task_service = use_coroutine_handle::<TaskCommand>();
         let sorted_tasks = SORTED_SYNCED_TASKS();
         let list_length = sorted_tasks.len();

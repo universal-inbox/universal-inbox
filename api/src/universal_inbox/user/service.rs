@@ -75,7 +75,26 @@ impl UserService {
         executor: &mut Transaction<'_, Postgres>,
         id: UserId,
     ) -> Result<Option<User>, UniversalInboxError> {
-        self.repository.get_user(executor, id).await
+        let user_result = self.repository.get_user(executor, id).await?;
+        if let Some(
+            user @ User {
+                email: Some(email),
+                email_validated_at: Some(_),
+                ..
+            },
+        ) = &user_result
+        {
+            if let Some(chat_support_settings) = &self.application_settings.chat_support {
+                let chat_support_email_signature =
+                    Some(chat_support_settings.sign_email(email.as_str()));
+                return Ok(Some(User {
+                    chat_support_email_signature,
+                    ..user.clone()
+                }));
+            }
+        }
+
+        Ok(user_result)
     }
 
     pub async fn get_user_by_email(

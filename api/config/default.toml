@@ -84,6 +84,10 @@ dependencies_log_level = "error"
 # [application.observability.tracing.otlp_exporter_headers]
 # api-key = "12345"
 
+# [application.chat_support]
+# website_id = "CRISP_WEBSITE_ID"
+# identity_verification_secret_key = "CRISP_SECRET_KEY"
+
 [database]
 host = "127.0.0.1"
 port = 5432

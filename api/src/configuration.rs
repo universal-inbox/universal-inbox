@@ -2,7 +2,9 @@ use std::{collections::HashMap, env, time::Duration};
 
 use anyhow::Context;
 use config::{Config, ConfigError, Environment, File};
+use hex;
 use openidconnect::{ClientId, ClientSecret, IntrospectionUrl, IssuerUrl};
+use ring::hmac;
 use secrecy::{zeroize::Zeroize, CloneableSecret, ExposeSecret, SecretBox};
 use serde::{Deserialize, Deserializer};
 use serde_with::{serde_as, DisplayFromStr};
@@ -45,6 +47,7 @@ pub struct ApplicationSettings {
     pub show_changelog: bool,
     pub version: Option<String>,
     pub dry_run: bool,
+    pub chat_support: Option<ChatSupportSettings>,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -216,6 +219,23 @@ pub struct EmailSettings {
     pub smtp_password: SecretBox<SmtpPassword>,
     pub from_header: String,
     pub reply_to_header: String,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct ChatSupportSettings {
+    pub website_id: String,
+    pub identity_verification_secret_key: String,
+}
+
+impl ChatSupportSettings {
+    pub fn sign_email(&self, email: &str) -> String {
+        let key = hmac::Key::new(
+            hmac::HMAC_SHA256,
+            self.identity_verification_secret_key.as_bytes(),
+        );
+        let signature = hmac::sign(&key, email.as_bytes());
+        hex::encode(signature.as_ref())
+    }
 }
 
 impl EmailSettings {
@@ -534,5 +554,23 @@ mod tests {
         let result =
             security_settings.get_authentication_settings(UserAuthKind::OIDCAuthorizationCodePKCE);
         assert!(matches!(result, Some(oidc_auth_settings)));
+    }
+
+    mod sign_email {
+        use super::*;
+
+        #[test]
+        fn test_sign_email() {
+            let chat_support_settings = ChatSupportSettings {
+                website_id: "test_website".to_string(),
+                identity_verification_secret_key: "0fd72e0ff53b274293029fd1f3f40c92".to_string(),
+            };
+
+            let signature = chat_support_settings.sign_email("user@gmail.com");
+            assert_eq!(
+                signature,
+                "cd7cc422ea97c82d844b2373fdcd6259c9ee6e135af65ab6fe6ca85e3f07abb1"
+            );
+        }
     }
 }

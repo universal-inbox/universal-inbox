@@ -4,6 +4,8 @@ use dioxus::prelude::*;
 
 use web_sys::KeyboardEvent;
 
+use crate::services::{crisp::is_crisp_chat_opened, flyonui::has_flyonui_modal_opened};
+
 #[derive(Clone)]
 pub struct KeyboardManager<'a> {
     pub active_keyboard_handler: Option<&'a dyn KeyboardHandler>,
@@ -23,6 +25,12 @@ pub trait KeyboardHandler {
 
 impl KeyboardHandler for KeyboardManager<'_> {
     fn handle_keydown(&self, event: &KeyboardEvent) -> bool {
+        if has_flyonui_modal_opened() {
+            return false;
+        }
+        if is_crisp_chat_opened() {
+            return false;
+        }
         if let Some(handler) = &self.active_keyboard_handler {
             handler.handle_keydown(event)
         } else {

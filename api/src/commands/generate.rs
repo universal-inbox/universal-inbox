@@ -816,6 +816,7 @@ async fn generate_user(
         email: Some(format!("test+{}@test.com", id).parse().unwrap()),
         email_validated_at: Some(Utc::now().with_nanosecond(0).unwrap()),
         email_validation_sent_at: Some(Utc::now().with_nanosecond(0).unwrap()),
+        chat_support_email_signature: None,
         is_testing: true,
         created_at: Utc::now().with_nanosecond(0).unwrap(),
         updated_at: Utc::now().with_nanosecond(0).unwrap(),

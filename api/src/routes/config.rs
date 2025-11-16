@@ -90,6 +90,16 @@ pub async fn front_config(
         integration_providers,
         support_href: settings.application.support_href.clone(),
         show_changelog: settings.application.show_changelog,
+        chat_support_website_id: settings
+            .application
+            .chat_support
+            .as_ref()
+            .map(|chat_support| chat_support.website_id.clone()),
+        chat_support_user_email_signature: settings
+            .application
+            .chat_support
+            .as_ref()
+            .map(|chat_support| chat_support.identity_verification_secret_key.clone()),
     };
 
     Ok(HttpResponse::Ok()

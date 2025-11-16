@@ -18,7 +18,7 @@ use crate::{
     model::{PreviewPane, UI_MODEL},
     route::Route,
     services::{
-        flyonui::{has_flyonui_modal_opened, open_flyonui_modal},
+        flyonui::open_flyonui_modal,
         notification_service::{NotificationCommand, NOTIFICATIONS_PAGE, NOTIFICATION_FILTERS},
     },
     settings::PanelPosition,
@@ -156,9 +156,6 @@ struct NotificationsPageKeyboardHandler {}
 
 impl KeyboardHandler for NotificationsPageKeyboardHandler {
     fn handle_keydown(&self, event: &KeyboardEvent) -> bool {
-        if has_flyonui_modal_opened() {
-            return false;
-        }
         let notification_service = use_coroutine_handle::<NotificationCommand>();
         let notifications_page = NOTIFICATIONS_PAGE();
         let list_length = notifications_page.content.len();

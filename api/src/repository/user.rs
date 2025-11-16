@@ -1174,6 +1174,7 @@ impl TryFrom<&UserRow> for User {
             email_validation_sent_at: row
                 .email_validation_sent_at
                 .map(|naive| DateTime::from_naive_utc_and_offset(naive, Utc)),
+            chat_support_email_signature: None,
             is_testing: row.is_testing,
             created_at: DateTime::from_naive_utc_and_offset(row.created_at, Utc),
             updated_at: DateTime::from_naive_utc_and_offset(row.updated_at, Utc),
@@ -1288,6 +1289,7 @@ impl TryFrom<&UserAndUserAuthRow> for User {
                 .user_row
                 .email_validation_sent_at
                 .map(|naive| DateTime::from_naive_utc_and_offset(naive, Utc)),
+            chat_support_email_signature: None,
             is_testing: row.user_row.is_testing,
             created_at: DateTime::from_naive_utc_and_offset(row.user_row.created_at, Utc),
             updated_at: DateTime::from_naive_utc_and_offset(row.user_row.updated_at, Utc),
