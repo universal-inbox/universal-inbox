@@ -24,13 +24,16 @@ use universal_inbox::{
 };
 
 use crate::{
-    components::integrations::{
-        github::config::GithubProviderConfiguration,
-        google_calendar::config::GoogleCalendarProviderConfiguration,
-        google_drive::config::GoogleDriveProviderConfiguration,
-        google_mail::config::GoogleMailProviderConfiguration, icons::IntegrationProviderIcon,
-        linear::config::LinearProviderConfiguration, slack::config::SlackProviderConfiguration,
-        todoist::config::TodoistProviderConfiguration,
+    components::{
+        integrations::{
+            github::config::GithubProviderConfiguration,
+            google_calendar::config::GoogleCalendarProviderConfiguration,
+            google_drive::config::GoogleDriveProviderConfiguration,
+            google_mail::config::GoogleMailProviderConfiguration, icons::IntegrationProviderIcon,
+            linear::config::LinearProviderConfiguration, slack::config::SlackProviderConfiguration,
+            todoist::config::TodoistProviderConfiguration,
+        },
+        markdown::Markdown,
     },
     model::UniversalInboxUIModel,
 };
@@ -379,6 +382,16 @@ pub fn IntegrationSettings(
                     }
                     if notifications_sync_message.is_none() && tasks_sync_message.is_none() {
                         span { }
+                    }
+                }
+
+                if let Some(warning_message) = &config().warning_message {
+                    div {
+                        class: "alert rounded-md! alert-soft alert-warning shadow-lg text-sm flex gap-2",
+                        role: "alert",
+
+                        Icon { class: "min-w-5 h-5", icon: BsExclamationTriangle }
+                        Markdown { text: "{warning_message}" }
                     }
                 }
 
