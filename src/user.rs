@@ -18,6 +18,7 @@ pub struct User {
     pub email: Option<EmailAddress>,
     pub email_validated_at: Option<DateTime<Utc>>,
     pub email_validation_sent_at: Option<DateTime<Utc>>,
+    pub chat_support_email_signature: Option<String>,
     pub is_testing: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -32,6 +33,7 @@ impl User {
             email: Some(email),
             email_validated_at: None,
             email_validation_sent_at: None,
+            chat_support_email_signature: None,
             is_testing: false,
             created_at: Utc::now().with_nanosecond(0).unwrap(),
             updated_at: Utc::now().with_nanosecond(0).unwrap(),
@@ -46,6 +48,7 @@ impl User {
             email: None,
             email_validated_at: None,
             email_validation_sent_at: None,
+            chat_support_email_signature: None,
             is_testing: false,
             created_at: Utc::now().with_nanosecond(0).unwrap(),
             updated_at: Utc::now().with_nanosecond(0).unwrap(),
@@ -56,6 +59,15 @@ impl User {
         self.is_testing
             || self.email_validation_sent_at.is_none()
             || self.email_validated_at.is_some()
+    }
+
+    pub fn full_name(&self) -> Option<String> {
+        match (&self.first_name, &self.last_name) {
+            (Some(first_name), Some(last_name)) => Some(format!("{} {}", first_name, last_name)),
+            (Some(first_name), None) => Some(first_name.clone()),
+            (None, Some(last_name)) => Some(last_name.clone()),
+            (None, None) => None,
+        }
     }
 }
 

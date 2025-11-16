@@ -21,6 +21,8 @@ pub struct AppConfig {
     pub integration_providers: HashMap<IntegrationProviderKind, IntegrationProviderStaticConfig>,
     pub support_href: Option<String>,
     pub show_changelog: bool,
+    pub chat_support_website_id: Option<String>,
+    pub chat_support_user_email_signature: Option<String>,
 }
 
 pub static APP_CONFIG: GlobalSignal<Option<AppConfig>> = Signal::global(|| None);
@@ -51,6 +53,8 @@ pub async fn get_app_config() -> Result<AppConfig> {
         integration_providers: front_config.integration_providers,
         support_href: front_config.support_href,
         show_changelog: front_config.show_changelog,
+        chat_support_website_id: front_config.chat_support_website_id,
+        chat_support_user_email_signature: front_config.chat_support_user_email_signature,
     };
     Ok(app_config)
 }

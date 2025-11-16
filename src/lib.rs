@@ -31,6 +31,8 @@ pub struct FrontConfig {
     pub integration_providers: HashMap<IntegrationProviderKind, IntegrationProviderStaticConfig>,
     pub support_href: Option<String>,
     pub show_changelog: bool,
+    pub chat_support_website_id: Option<String>,
+    pub chat_support_user_email_signature: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
@@ -136,7 +138,7 @@ impl Default for PageToken {
 impl PageToken {
     pub fn to_url_parameter(&self) -> Result<String> {
         let json = serde_json::to_string(self)?;
-        Ok(encode_base64(&json))
+        Ok(encode_base64(json.as_bytes()))
     }
 
     pub fn from_url_parameter(data: &str) -> Result<Self> {
