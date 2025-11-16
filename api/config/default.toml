@@ -124,7 +124,7 @@ kind = "GoogleMail"
 nango_key = "google-mail"
 page_size = 500
 required_oauth_scopes = ["https://www.googleapis.com/auth/gmail.modify"]
-warning_message = "Google Mail integration is not yet public, it requires your email address to be whitelisted and you will see a warning message from Google while connecting. If you still want to connect it, please send the Google email address you want to use to the <a href='mailto:support@universal-inbox.com' title='Contact support'>support</a>"
+warning_message = "Google Mail integration is not yet public, it requires your email address to be whitelisted and you will see a warning message from Google while connecting. If you still want to connect it, please send the Google email address you want to use to the [support](mailto:support@universal-inbox.com)."
 # Rate limiting configuration
 api_max_retry_duration_http_seconds = 30
 api_max_retry_duration_worker_seconds = 600
@@ -144,7 +144,7 @@ kind = "GoogleDrive"
 nango_key = "google-drive"
 page_size = 100
 required_oauth_scopes = ["https://www.googleapis.com/auth/drive.readonly", "https://www.googleapis.com/auth/drive.metadata.readonly"]
-warning_message = "Google Drive integration is not yet public, it requires your email address to be whitelisted and you will see a warning message from Google while connecting. If you still want to connect it, please send the Google email address you want to use to the <a href='mailto:support@universal-inbox.com' title='Contact support'>support</a>"
+warning_message = "Google Drive integration is not yet public, it requires your email address to be whitelisted and you will see a warning message from Google while connecting. If you still want to connect it, please send the Google email address you want to use to the [support](mailto:support@universal-inbox.com)."
 # Rate limiting configuration
 api_max_retry_duration_http_seconds = 30
 api_max_retry_duration_worker_seconds = 600
