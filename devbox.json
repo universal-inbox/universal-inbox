@@ -29,7 +29,6 @@
         "cargo-binstall": "latest",
         "openssl.dev": "",
         "cargo-machete": "latest",
-        "sqlfluff": "latest",
         "docker-compose": "latest",
         "wasm-bindgen-cli": "0.2.100",
         "caddy": "latest",
