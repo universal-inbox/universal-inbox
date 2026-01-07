@@ -10,12 +10,14 @@ use crate::{
     services::toast_service::{ToastCommand, TOASTS},
 };
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Toast {
     pub id: Uuid,
     pub message: String,
     pub kind: ToastKind,
     pub timeout: Option<u128>,
+    pub created_at: f64,  // Timestamp from js_sys::Date::now()
+    pub dismissing: bool, // Flag to trigger dismissal animation
 }
 
 impl Default for Toast {
@@ -25,6 +27,8 @@ impl Default for Toast {
             message: Default::default(),
             kind: Default::default(),
             timeout: Default::default(),
+            created_at: Date::now(),
+            dismissing: false,
         }
     }
 }
@@ -52,6 +56,7 @@ pub fn ToastZone() -> Element {
                     message: toast.message.clone(),
                     kind: toast.kind,
                     timeout: toast.timeout,
+                    dismissing: toast.dismissing,
                     on_close: move |_| {
                         toast_service.send(ToastCommand::Close(id))
                     }
@@ -66,6 +71,7 @@ fn ToastElement(
     message: ReadOnlySignal<String>,
     kind: ReadOnlySignal<ToastKind>,
     timeout: ReadOnlySignal<Option<Option<u128>>>,
+    dismissing: ReadOnlySignal<bool>,
     on_undo: Option<EventHandler>,
     on_close: EventHandler,
 ) -> Element {
@@ -95,6 +101,15 @@ fn ToastElement(
         TimeoutFuture::new(300).await;
         on_close.call(());
         // }
+    });
+
+    // Handle auto-dismiss when dismissing flag is set
+    let _ = use_resource(move || async move {
+        if dismissing() {
+            *dismiss.write() = "notyf__toast--disappear";
+            TimeoutFuture::new(300).await;
+            on_close.call(());
+        }
     });
 
     rsx! {
