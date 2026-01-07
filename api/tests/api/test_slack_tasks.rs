@@ -257,9 +257,10 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
     }
     todoist_tasks_mock.assert();
     todoist_projects_mock.assert();
-    slack_stars_add_mock.assert();
     if let Some(slack_stars_remove_mock) = slack_stars_remove_mock {
         slack_stars_remove_mock.assert();
+    } else {
+        slack_stars_add_mock.assert();
     }
 
     let updated_task: Box<Task> = get_resource(
@@ -440,8 +441,6 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
         &app.app.todoist_mock_server,
         &exiting_task.sink_item.as_ref().unwrap().source_id,
     );
-    let slack_star_add_mock =
-        mock_slack_stars_add(&app.app.slack_mock_server, "C05XXX", "1707686216.825719");
     let slack_star_remove_mock =
         mock_slack_stars_remove(&app.app.slack_mock_server, "C05XXX", "1707686216.825719");
 
@@ -458,7 +457,6 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
     .await;
 
     todoist_mock.assert();
-    slack_star_add_mock.assert();
     slack_star_remove_mock.assert();
 
     assert!(patched_task.completed_at.is_some());
