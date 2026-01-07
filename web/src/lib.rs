@@ -21,7 +21,7 @@ use services::{
     integration_connection_service::{integration_connnection_service, INTEGRATION_CONNECTIONS},
     notification_service::{notification_service, NOTIFICATIONS_PAGE, NOTIFICATION_FILTERS},
     task_service::task_service,
-    toast_service::{toast_service, TOASTS},
+    toast_service::{toast_service, TOASTS, VIEWPORT_WIDTH},
     user_service::{user_service, CONNECTED_USER},
 };
 use theme::{toggle_dark_mode, IS_DARK_MODE};
@@ -110,6 +110,36 @@ pub fn App() -> Element {
             UI_MODEL.signal(),
             toast_service_handle,
         )
+    });
+
+    // Initialize viewport width and set up resize listener
+    use_effect(move || {
+        // Set initial viewport width
+        if let Some(window) = web_sys::window() {
+            *VIEWPORT_WIDTH.write() = window
+                .inner_width()
+                .ok()
+                .and_then(|w| w.as_f64())
+                .unwrap_or(1024.0);
+
+            // Set up resize listener
+            let closure = Closure::wrap(Box::new(move || {
+                if let Some(window) = web_sys::window() {
+                    if let Some(width) = window.inner_width().ok().and_then(|w| w.as_f64()) {
+                        *VIEWPORT_WIDTH.write() = width;
+                    }
+                }
+            }) as Box<dyn FnMut()>);
+
+            if let Err(e) =
+                window.add_event_listener_with_callback("resize", closure.as_ref().unchecked_ref())
+            {
+                debug!("Failed to add resize event listener: {:?}", e);
+            }
+
+            // Keep closure alive
+            closure.forget();
+        }
     });
 
     use_future(move || async move {
