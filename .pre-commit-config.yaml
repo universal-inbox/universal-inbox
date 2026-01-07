@@ -24,12 +24,6 @@ repos:
         pass_filenames: false
         entry: just check-unused-dependencies
         stages: [pre-commit]
-      - id: cargo-machete
-        name: Format SQL
-        language: system
-        entry: just format-sql
-        file: \.sql$
-        stages: [pre-commit]
       - id: todo
         name: Check TODO in the code
         language: system
