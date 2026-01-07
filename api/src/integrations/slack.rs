@@ -1015,17 +1015,6 @@ impl SlackService {
             .with_team_id(slack_star_item.team_id());
 
         let slack_star_ids = slack_star_item.ids();
-        // ⚠️ For some reason, the star must be added before being removed
-        // Maybe because it does not exists as a `star` but as `saved for later` in the Slack API
-        // Nonetheless, the `stars.remove` method actually remove the `saved for later` from the message
-        self.stars_add(
-            &slack_api_token,
-            slack_star_ids.channel_id.clone(),
-            slack_star_ids.message_id.clone(),
-            slack_star_ids.file_id.clone(),
-            slack_star_ids.file_comment_id.clone(),
-        )
-        .await?;
         self.stars_remove(
             &slack_api_token,
             slack_star_ids.channel_id.clone(),

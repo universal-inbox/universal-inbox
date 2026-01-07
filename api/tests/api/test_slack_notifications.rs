@@ -18,8 +18,7 @@ use crate::helpers::{
     auth::{authenticated_app, AuthenticatedApp},
     integration_connection::{create_and_mock_integration_connection, nango_slack_connection},
     notification::slack::{
-        create_notification_from_slack_star, mock_slack_stars_add, mock_slack_stars_remove,
-        slack_star_added,
+        create_notification_from_slack_star, mock_slack_stars_remove, slack_star_added,
     },
     rest::{get_resource, patch_resource, patch_resource_response},
     settings,
@@ -50,8 +49,6 @@ mod patch_resource_slack_star {
         )
         .await;
 
-        let slack_stars_add_mock =
-            mock_slack_stars_add(&app.app.slack_mock_server, "C05XXX", "1707686216.825719");
         let slack_stars_remove_mock =
             mock_slack_stars_remove(&app.app.slack_mock_server, "C05XXX", "1707686216.825719");
 
@@ -82,7 +79,6 @@ mod patch_resource_slack_star {
                 ..*expected_notification
             })
         );
-        slack_stars_add_mock.assert();
         slack_stars_remove_mock.assert();
     }
 
@@ -107,8 +103,6 @@ mod patch_resource_slack_star {
         )
         .await;
 
-        let slack_stars_add_mock =
-            mock_slack_stars_add(&app.app.slack_mock_server, "C05XXX", "1707686216.825719");
         let slack_stars_remove_mock =
             mock_slack_stars_remove(&app.app.slack_mock_server, "C05XXX", "1707686216.825719");
         let expected_notification = create_notification_from_slack_star(
@@ -138,7 +132,6 @@ mod patch_resource_slack_star {
                 ..*expected_notification
             })
         );
-        slack_stars_add_mock.assert();
         slack_stars_remove_mock.assert();
     }
 
@@ -165,7 +158,7 @@ mod patch_resource_slack_star {
 
         let slack_stars_add_mock = app.app.slack_mock_server.mock(|when, then| {
             when.method(POST)
-                .path("/stars.add")
+                .path("/stars.remove")
                 .header("authorization", "Bearer slack_test_user_access_token")
                 .json_body(json!({"channel": "C05XXX", "timestamp": "1707686216.825719"}));
             then.status(200)
@@ -201,7 +194,7 @@ mod patch_resource_slack_star {
             .expect("Cannot get response body");
         assert_eq!(
             body,
-            json!({ "message": "Failed to add Slack star" }).to_string()
+            json!({ "message": "Failed to remove Slack star" }).to_string()
         );
         slack_stars_add_mock.assert();
 
