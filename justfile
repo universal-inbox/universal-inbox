@@ -84,7 +84,8 @@ check-format:
 lint-dockerfile:
     hadolint Dockerfile
 
-check-commit: format lint-dockerfile check-unused-dependencies check-all test-all
+check-commit:
+    prek run
 
 ## Test recipes
 test test-filter="" $RUST_LOG="info":

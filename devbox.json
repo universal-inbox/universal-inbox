@@ -2,7 +2,6 @@
     "packages": {
         "sqlx-cli": "0.8.6",
         "trunk": "latest",
-        "pre-commit": "latest",
         "rustup": "latest",
         "cargo-audit": "latest",
         "cargo-nextest": "latest",
@@ -37,7 +36,8 @@
         "mdbook": "latest",
         "mdbook-admonish": "latest",
         "mdbook-linkcheck": "latest",
-        "jq": "latest"
+        "jq": "latest",
+        "prek": "latest"
     },
     "shell": {
         "init_hook": [
