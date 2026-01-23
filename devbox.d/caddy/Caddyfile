@@ -1,0 +1,17 @@
+# See https://caddyserver.com/docs/caddyfile for more details
+{
+	http_port 8800
+	https_port 443
+	local_certs
+	grace_period 2s
+}
+
+https://dev.universal-inbox.com {
+	log
+	reverse_proxy :8080
+}
+
+https://oauth-dev.universal-inbox.com {
+	log
+	reverse_proxy :3003
+}

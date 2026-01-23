@@ -37,13 +37,14 @@
         "mdbook-admonish": "latest",
         "mdbook-linkcheck": "latest",
         "jq": "latest",
-        "prek": "latest"
+        "prek": "latest",
+        "sccache": "latest"
     },
     "shell": {
         "init_hook": [
             "just init-db",
             "just install-rust-toolchain",
-            "just install-rust-tools"
+            "just install-tools"
         ]
     },
     "env": {

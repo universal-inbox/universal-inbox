@@ -1241,6 +1241,15 @@
               "default": true
             }
           ]
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "dev",
+              "path": "/nix/store/xaw3qbm7fhxc6dxq4fll4y8xjd9wxhwy-openssl-3.0.9-dev",
+              "default": true
+            }
+          ]
         }
       }
     },
@@ -1502,50 +1511,50 @@
       }
     },
     "process-compose@latest": {
-      "last_modified": "2025-07-28T17:09:23Z",
-      "resolved": "github:NixOS/nixpkgs/648f70160c03151bc2121d179291337ad6bc564b#process-compose",
+      "last_modified": "2026-01-09T13:41:53Z",
+      "resolved": "github:NixOS/nixpkgs/5f02c91314c8ba4afe83b256b023756412218535#process-compose",
       "source": "devbox-search",
-      "version": "1.64.1",
+      "version": "1.87.0",
       "systems": {
         "aarch64-darwin": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/1f768ii5k8l0w31g4xijjpiwn86jxymf-process-compose-1.64.1",
+              "path": "/nix/store/yj2qa0ihrfzzl72y5cdpql78f4h2hr7c-process-compose-1.87.0",
               "default": true
             }
           ],
-          "store_path": "/nix/store/1f768ii5k8l0w31g4xijjpiwn86jxymf-process-compose-1.64.1"
+          "store_path": "/nix/store/yj2qa0ihrfzzl72y5cdpql78f4h2hr7c-process-compose-1.87.0"
         },
         "aarch64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/32mrcqg3xv6xcbsxw95p1kscp29w177i-process-compose-1.64.1",
+              "path": "/nix/store/dkinqcq89rv5abwzk62gz0w9r5prcbv4-process-compose-1.87.0",
               "default": true
             }
           ],
-          "store_path": "/nix/store/32mrcqg3xv6xcbsxw95p1kscp29w177i-process-compose-1.64.1"
+          "store_path": "/nix/store/dkinqcq89rv5abwzk62gz0w9r5prcbv4-process-compose-1.87.0"
         },
         "x86_64-darwin": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/k96b8z7wbqs0gaqm2kfvmjwn9zamyifb-process-compose-1.64.1",
+              "path": "/nix/store/g8j1m4xvi0yzsffv1dwcnj40495xl8pj-process-compose-1.87.0",
               "default": true
             }
           ],
-          "store_path": "/nix/store/k96b8z7wbqs0gaqm2kfvmjwn9zamyifb-process-compose-1.64.1"
+          "store_path": "/nix/store/g8j1m4xvi0yzsffv1dwcnj40495xl8pj-process-compose-1.87.0"
         },
         "x86_64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/9sfly6wnq2jh51s0zazcahnqd5bv49f4-process-compose-1.64.1",
+              "path": "/nix/store/m16s2sl2ps18y4dkhx056jckri4zfbl1-process-compose-1.87.0",
               "default": true
             }
           ],
-          "store_path": "/nix/store/9sfly6wnq2jh51s0zazcahnqd5bv49f4-process-compose-1.64.1"
+          "store_path": "/nix/store/m16s2sl2ps18y4dkhx056jckri4zfbl1-process-compose-1.87.0"
         }
       }
     },
@@ -1644,6 +1653,54 @@
             }
           ],
           "store_path": "/nix/store/4z7n3dky3wmx7130rid6c67ra1ipqhn1-rustup-1.28.2"
+        }
+      }
+    },
+    "sccache@latest": {
+      "last_modified": "2026-01-14T12:51:35Z",
+      "resolved": "github:NixOS/nixpkgs/13868c071cc73a5e9f610c47d7bb08e5da64fdd5#sccache",
+      "source": "devbox-search",
+      "version": "0.13.0",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/1sxg8v0flv1xvd31n8majq0hb7irvwz8-sccache-0.13.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/1sxg8v0flv1xvd31n8majq0hb7irvwz8-sccache-0.13.0"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/x95zvf7zcinmcpafzhqwa2h9z4cl62fw-sccache-0.13.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/x95zvf7zcinmcpafzhqwa2h9z4cl62fw-sccache-0.13.0"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/n3bxycmzymmrb333vsc637lhjavdrg66-sccache-0.13.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/n3bxycmzymmrb333vsc637lhjavdrg66-sccache-0.13.0"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/2zvrnpmvgzblxc4jd8i6h620jxhmp0d7-sccache-0.13.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/2zvrnpmvgzblxc4jd8i6h620jxhmp0d7-sccache-0.13.0"
         }
       }
     },
