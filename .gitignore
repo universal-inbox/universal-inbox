@@ -6,9 +6,9 @@ web/dist
 node_modules
 .DS_Store
 lcov.info
-devbox.d
 .devbox
 lcov.info
 docker/cache
 .env
 docs
+.process-compose-override.yaml

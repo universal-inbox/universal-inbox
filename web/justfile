@@ -15,10 +15,10 @@ build-assets: bundle-js build-tailwind bundle-fonts
 build-tailwind output-dir="public":
     mkdir -p {{ output-dir }}/css
     cp node_modules/flatpickr/dist/flatpickr.min.css {{ output-dir }}/css/
-    npx @tailwindcss/cli -i css/universal-inbox.css -o {{ output-dir }}/css/universal-inbox.min.css --minify
+    npx --yes @tailwindcss/cli -i css/universal-inbox.css -o {{ output-dir }}/css/universal-inbox.min.css --minify
 
 bundle-js:
-    npx rspack build
+    npx --yes rspack build
 
 bundle-fonts output-dir="public":
     mkdir -p {{ output-dir }}
@@ -43,14 +43,16 @@ test-ci: install build-assets
 
 ## Run recipes
 run: clear-dev-assets build-assets
-    dx serve --verbose
+    #!/bin/bash
+
+    dx serve --port ${DX_SERVE_PORT:-8080} --verbose
 
 run-tailwind output-dir="public":
     cp node_modules/flatpickr/dist/flatpickr.min.css {{ output-dir }}/css/
-    npx @tailwindcss/cli -i css/universal-inbox.css -o public/css/universal-inbox.min.css --minify --watch
+    npx --yes @tailwindcss/cli -i css/universal-inbox.css -o public/css/universal-inbox.min.css --minify --watch
 
 run-bundle-js:
-    npx rspack build --watch
+    npx --yes rspack build --watch
 
 run-trunk:
     trunk serve --features trunk

@@ -1,0 +1,46 @@
+[post-create]
+copy = "wt step copy-ignored"
+clean_data = "rm -rf .devbox/virtenv/redis .devbox/virtenv/postgresql_17/data"
+init_db = "just init-db"
+fix_permissions = "chmod -R og-rwx .devbox/virtenv/postgresql_17"
+env = """
+cat >> .local_envrc << EOF
+export PGPORT={{ ('db-' ~ branch) | hash_port }}
+export REDIS_PORT={{ ('redis-' ~ branch) | hash_port }}
+export DX_SERVE_PORT={{ ('web-' ~ branch) | hash_port }}
+export NANGO_PORT={{ ('nango-' ~ branch) | hash_port }}
+export NANGO_CONTAINER_NAME="nango-{{ ('nango-' ~ branch) | sanitize_db }}"
+export NANGO_DB_PORT={{ ('nango-db-' ~ branch) | hash_port }}
+export NANGO_DB_CONTAINER_NAME="nango-db-{{ ('nango-db-' ~ branch) | sanitize_db }}"
+export NANGO_DB_VOLUME_NAME="nango-db-{{ ('nango-db-' ~ branch) | sanitize_db }}"
+export API_PORT={{ ('api-' ~ branch) | hash_port }}
+export PROCESS_COMPOSE_PORT={{ ('pc-' ~ branch) | hash_port }}
+
+export DATABASE_URL="postgres://postgres:password@127.0.0.1:{{ ('db-' ~ branch) | hash_port }}/universal-inbox"
+export UNIVERSAL_INBOX__DATABASE__PORT={{ ('db-' ~ branch) | hash_port }}
+export UNIVERSAL_INBOX__REDIS__PORT={{ ('redis-' ~ branch) | hash_port }}
+export UNIVERSAL_INBOX__APPLICATION__FRONT_BASE_URL=http://localhost:{{ ('web-' ~ branch) | hash_port }}
+export UNIVERSAL_INBOX__OAUTH2__NANGO_BASE_URL=http://localhost:{{ ('nango-' ~ branch) | hash_port }}
+export UNIVERSAL_INBOX__APPLICATION__LISTEN_PORT={{ ('api-' ~ branch) | hash_port }}
+
+# default PGHOST can became too long
+export PGHOST=/tmp
+EOF
+"""
+setup = "direnv allow"
+web_install = "cd web && npm install"
+
+[post-remove]
+clean_docker = """
+docker rm -f "nango-db-{{ ('nango-db-' ~ branch) | sanitize_db }}"
+docker volume rm -f "nango-db-{{ ('nango-db-' ~ branch) | sanitize_db }}"
+docker rm -f "nango-{{ ('nango-' ~ branch) | sanitize_db }}"
+"""
+
+[pre-commit]
+check = "just check-commit"
+
+[list]
+url = "http://localhost:{{ ('web-' ~ branch) | hash_port }}"
+api_url = "http://localhost:{{ ('api-' ~ branch) | hash_port }}"
+db_url = "postgres://postgres:password@127.0.0.1:{{ ('db-' ~ branch) | hash_port }}/universal-inbox"

@@ -18,6 +18,16 @@ check-db:
     cargo sqlx prepare -- --bin universal-inbox-api
     cargo check --tests
 
+ensure-db:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    db_name=$(echo "$DATABASE_URL" | sed -E 's|.*/([^?]+).*|\1|')
+    db_url_without_db=$(echo "$DATABASE_URL" | sed -E 's|/[^/]+$||')/postgres
+    if ! psql "$db_url_without_db" -lqt | cut -d \| -f 1 | grep -qw "$db_name"; then
+        echo "Creating database '$db_name'..."
+        sqlx database setup || true
+    fi
+
 migrate-db:
     sqlx database setup
 
@@ -32,13 +42,13 @@ test-coverage:
     cargo llvm-cov nextest --all-features --lcov --output-path lcov.info --profile ci
 
 ## Run recipes
-run *command="serve --embed-async-workers":
+run *command="serve --embed-async-workers": ensure-db
     cargo run --color always -- {{ command }}
 
-run-api:
+run-api: ensure-db
     watchexec --stop-timeout 10 --debounce 500 --exts toml,rs --restart --watch src cargo run --color always -- serve
 
-run-workers:
+run-workers: ensure-db
     watchexec --stop-timeout 10 --debounce 500 --exts toml,rs --restart --watch src cargo run --color always -- start-workers
 
 sync-tasks $RUST_LOG="info":

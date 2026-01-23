@@ -1,7 +1,7 @@
 [[hooks]]
 stage = "pre_build"
 command = "sh"
-command_arguments = ["-c", "npx rspack"]
+command_arguments = ["-c", "npx --yes rspack"]
 
 [[hooks]]
 stage = "build"
