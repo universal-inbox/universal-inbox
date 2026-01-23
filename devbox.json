@@ -37,7 +37,8 @@
         "mdbook-admonish": "latest",
         "mdbook-linkcheck": "latest",
         "jq": "latest",
-        "prek": "latest"
+        "prek": "latest",
+        "sccache": "latest"
     },
     "shell": {
         "init_hook": [

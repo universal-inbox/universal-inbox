@@ -1,0 +1,7 @@
+[post-create]
+copy = "wt step copy-ignored"
+setup = "direnv allow"
+build = "just build-all"
+
+[pre-commit]
+"check" = "just check-commit"

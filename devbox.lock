@@ -1647,6 +1647,54 @@
         }
       }
     },
+    "sccache@latest": {
+      "last_modified": "2026-01-14T12:51:35Z",
+      "resolved": "github:NixOS/nixpkgs/13868c071cc73a5e9f610c47d7bb08e5da64fdd5#sccache",
+      "source": "devbox-search",
+      "version": "0.13.0",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/1sxg8v0flv1xvd31n8majq0hb7irvwz8-sccache-0.13.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/1sxg8v0flv1xvd31n8majq0hb7irvwz8-sccache-0.13.0"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/x95zvf7zcinmcpafzhqwa2h9z4cl62fw-sccache-0.13.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/x95zvf7zcinmcpafzhqwa2h9z4cl62fw-sccache-0.13.0"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/n3bxycmzymmrb333vsc637lhjavdrg66-sccache-0.13.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/n3bxycmzymmrb333vsc637lhjavdrg66-sccache-0.13.0"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/2zvrnpmvgzblxc4jd8i6h620jxhmp0d7-sccache-0.13.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/2zvrnpmvgzblxc4jd8i6h620jxhmp0d7-sccache-0.13.0"
+        }
+      }
+    },
     "sqlx-cli@0.8.6": {
       "last_modified": "2025-07-28T17:09:23Z",
       "resolved": "github:NixOS/nixpkgs/648f70160c03151bc2121d179291337ad6bc564b#sqlx-cli",
