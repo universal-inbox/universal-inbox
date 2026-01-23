@@ -34,9 +34,5 @@ repos:
         name: Lint Dockerfile
         language: system
         entry: just lint-dockerfile
-        file: Dockerfile$
+        files: Dockerfile$
         stages: [pre-commit]
-  - repo: https://github.com/crate-ci/committed
-    rev: v1.0.5
-    hooks:
-      - id: committed
