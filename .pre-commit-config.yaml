@@ -34,5 +34,6 @@ repos:
         name: Lint Dockerfile
         language: system
         entry: just lint-dockerfile
+        pass_filenames: false
         files: Dockerfile$
         stages: [pre-commit]
