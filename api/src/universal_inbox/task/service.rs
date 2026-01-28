@@ -216,6 +216,32 @@ impl TaskService {
                 old: old_task,
             } => {
                 let task_source_item = &new_task.source_item;
+
+                if new_task.sink_item.is_none() {
+                    if new_task.kind == TaskSourceKind::Todoist {
+                        debug!(
+                            "No side effect to apply for {} task {} with no sink item",
+                            new_task.kind, new_task.id
+                        );
+                        return Ok(());
+                    }
+
+                    debug!(
+                        "Creating new sink item for {} task {} as it's missing",
+                        new_task.kind, new_task.id
+                    );
+
+                    self.third_party_item_service
+                        .upgrade()
+                        .context("Unable to access third_party_item_service from task_service")?
+                        .read()
+                        .await
+                        .create_sink_item_from_task(executor, new_task, false)
+                        .await?;
+
+                    return Ok(());
+                }
+
                 let task_sink_item = new_task.sink_item.as_ref().ok_or_else(|| {
                     UniversalInboxError::Unexpected(anyhow!(
                         "Task {} has no sink item, cannot apply side effect",

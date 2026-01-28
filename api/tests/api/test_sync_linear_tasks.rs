@@ -17,14 +17,15 @@ use universal_inbox::{
         IntegrationConnectionStatus,
     },
     task::{
-        DueDate, PresetDueDate, ProjectSummary, TaskCreationResult, TaskSourceKind, TaskStatus,
+        DueDate, PresetDueDate, ProjectSummary, TaskCreationConfig, TaskCreationResult,
+        TaskPriority, TaskSourceKind, TaskStatus,
     },
     third_party::{
         integrations::{
             linear::LinearIssue,
             todoist::{TodoistItem, TodoistItemPriority},
         },
-        item::{ThirdPartyItemData, ThirdPartyItemKind},
+        item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemKind},
     },
     HasHtmlUrl,
 };
@@ -34,11 +35,13 @@ use universal_inbox_api::{
     integrations::{
         linear::graphql::assigned_issues_query,
         oauth2::NangoConnection,
+        task::ThirdPartyTaskService,
         todoist::{
             TodoistCommandStatus, TodoistSyncCommandItemCompleteArgs, TodoistSyncResponse,
             TodoistSyncStatusResponse,
         },
     },
+    repository::{task::TaskRepository, third_party::ThirdPartyItemRepository},
 };
 
 use crate::helpers::{
@@ -74,7 +77,7 @@ async fn test_sync_tasks_should_create_new_task(
     nango_todoist_connection: Box<NangoConnection>,
 ) {
     let app = authenticated_app.await;
-    create_and_mock_integration_connection(
+    let _todoist_integration_connection = create_and_mock_integration_connection(
         &app.app,
         app.user.id,
         &settings.oauth2.nango_secret_key,
@@ -563,6 +566,179 @@ async fn test_sync_tasks_should_complete_existing_task_and_recreate_sink_task_if
 
     linear_assigned_issues_mock.assert();
     todoist_complete_item_mock.assert();
+    todoist_item_add_mock.assert();
+    todoist_get_item_mock.assert();
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_sync_tasks_should_create_sink_item_if_missing_when_updating_task(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    sync_linear_tasks_response: Response<assigned_issues_query::ResponseData>,
+    sync_todoist_projects_response: TodoistSyncResponse,
+    todoist_item: Box<TodoistItem>,
+    nango_linear_connection: Box<NangoConnection>,
+    nango_todoist_connection: Box<NangoConnection>,
+) {
+    let app = authenticated_app.await;
+    let _todoist_integration_connection = create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        &settings.oauth2.nango_secret_key,
+        IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
+        &settings,
+        nango_todoist_connection,
+        None,
+        None,
+    )
+    .await;
+    let project = ProjectSummary {
+        name: "Project2".to_string(),
+        source_id: "2222".into(),
+    };
+    let linear_integration_connection = create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        &settings.oauth2.nango_secret_key,
+        IntegrationConnectionConfig::Linear(LinearConfig {
+            sync_notifications_enabled: true,
+            sync_task_config: LinearSyncTaskConfig {
+                enabled: true,
+                target_project: Some(project.clone()),
+                default_due_at: None,
+            },
+        }),
+        &settings,
+        nango_linear_connection,
+        None,
+        None,
+    )
+    .await;
+
+    let linear_issues: Vec<LinearIssue> = sync_linear_tasks_response
+        .data
+        .clone()
+        .unwrap()
+        .try_into()
+        .unwrap();
+    let linear_issue: &LinearIssue = &linear_issues[0];
+
+    let mut transaction = app.app.repository.begin().await.unwrap();
+    let source_third_party_item = ThirdPartyItem::new(
+        linear_issue.id.to_string(),
+        ThirdPartyItemData::LinearIssue(Box::new(linear_issue.clone())),
+        app.user.id,
+        linear_integration_connection.id,
+    );
+    let source_third_party_item = app
+        .app
+        .repository
+        .create_or_update_third_party_item(&mut transaction, Box::new(source_third_party_item))
+        .await
+        .unwrap()
+        .value();
+
+    let task_request = app
+        .app
+        .task_service
+        .read()
+        .await
+        .linear_service
+        .third_party_item_into_task(
+            &mut transaction,
+            linear_issue,
+            &source_third_party_item,
+            Some(TaskCreationConfig {
+                project_name: Some(project.name.clone()),
+                due_at: Some(PresetDueDate::Today.into()),
+                priority: TaskPriority::default(),
+            }),
+            app.user.id,
+        )
+        .await
+        .unwrap();
+
+    let upsert_task = app
+        .app
+        .repository
+        .create_or_update_task(&mut transaction, task_request)
+        .await
+        .unwrap();
+
+    let existing_task = upsert_task.value();
+    assert!(
+        existing_task.sink_item.is_none(),
+        "Task should have no sink_item"
+    );
+    transaction.commit().await.unwrap();
+
+    sleep(Duration::from_secs(1)).await;
+
+    let source_linear_issue = sync_linear_tasks_response
+        .data
+        .clone()
+        .unwrap()
+        .issues
+        .nodes[0]
+        .clone();
+    let single_sync_linear_tasks_response = Response {
+        data: Some(assigned_issues_query::ResponseData {
+            issues: assigned_issues_query::AssignedIssuesQueryIssues {
+                nodes: vec![source_linear_issue],
+            },
+        }),
+        errors: None,
+        extensions: None,
+    };
+    let linear_assigned_issues_mock = mock_linear_assigned_issues_query(
+        &app.app.linear_mock_server,
+        &single_sync_linear_tasks_response,
+    );
+
+    mock_todoist_sync_resources_service(
+        &app.app.todoist_mock_server,
+        "projects",
+        &sync_todoist_projects_response,
+        None,
+    );
+
+    let new_todoist_item_id = "new_todoist_id".to_string();
+    let todoist_item_add_mock = mock_todoist_item_add_service(
+        &app.app.todoist_mock_server,
+        &new_todoist_item_id,
+        existing_task.title.clone(),
+        Some(existing_task.body.clone()),
+        Some("2222".to_string()),
+        Some((&Into::<DueDate>::into(PresetDueDate::Today)).into()),
+        TodoistItemPriority::P1,
+    );
+    let todoist_get_item_mock = mock_todoist_get_item_service(
+        &app.app.todoist_mock_server,
+        Box::new(TodoistItem {
+            id: new_todoist_item_id.clone(),
+            ..*todoist_item.clone()
+        }),
+    );
+
+    let task_creation_results: Vec<TaskCreationResult> = sync_tasks(
+        &app.client,
+        &app.app.api_address,
+        Some(TaskSourceKind::Linear),
+        false,
+    )
+    .await;
+
+    assert_eq!(task_creation_results.len(), 1);
+    let task = &task_creation_results[0].task;
+    assert_eq!(task.id, existing_task.id);
+    assert!(task.sink_item.is_some(), "Task should now have a sink_item");
+    assert_eq!(
+        task.sink_item.as_ref().unwrap().source_id,
+        new_todoist_item_id
+    );
+
+    linear_assigned_issues_mock.assert();
     todoist_item_add_mock.assert();
     todoist_get_item_mock.assert();
 }
