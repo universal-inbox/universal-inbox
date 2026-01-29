@@ -27,17 +27,16 @@ COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/.cargo web/.cargo
 # Create fake index.html for Trunk build to succeed without the real index.html
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/package.json web/package.json
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/package-lock.json web/package-lock.json
-COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/scripts/npm-post-install.sh web/scripts/npm-post-install.sh
 RUN devbox run -- just web/install
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" --from=planner /app/recipe.json recipe.json
 # Only dependencies will be compiled as cargo chef has modfied main.rs and lib.rs to be empty
 RUN devbox run -- \
-    cargo chef cook \
-    --release \
-    -p universal-inbox-web \
-    --recipe-path recipe.json \
-    --target wasm32-unknown-unknown \
-    --no-build \
+  cargo chef cook \
+  --release \
+  -p universal-inbox-web \
+  --recipe-path recipe.json \
+  --target wasm32-unknown-unknown \
+  --no-build \
   && devbox run -- just web/build-release
 
 FROM base as dep-api-builder
@@ -45,11 +44,11 @@ COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" api/justfile api/justfile
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" --from=planner /app/recipe.json recipe.json
 # Only dependencies will be compiled as cargo chef has modfied main.rs and lib.rs to be empty
 RUN devbox run -- \
-    cargo chef cook \
-    --release \
-    -p universal-inbox-api \
-    --recipe-path recipe.json \
-    --no-build \
+  cargo chef cook \
+  --release \
+  -p universal-inbox-api \
+  --recipe-path recipe.json \
+  --no-build \
   && devbox run -- just api/build-release
 
 FROM dep-web-builder as release-web-builder
