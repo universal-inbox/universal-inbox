@@ -28,7 +28,7 @@ pub fn GoogleDriveCommentPreview(
         *show_all_replies.write() = expand_details();
     });
     let link = notification().get_html_url();
-    let document_icon_style = if google_drive_comment().resolved {
+    let document_icon_style = if google_drive_comment().resolved.unwrap_or(false) {
         "text-green-500"
     } else {
         "text-blue-500"

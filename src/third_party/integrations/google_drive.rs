@@ -26,7 +26,8 @@ pub struct GoogleDriveComment {
     pub author: GoogleDriveCommentAuthor,
     pub created_time: DateTime<Utc>,
     pub modified_time: DateTime<Utc>,
-    pub resolved: bool,
+    #[serde(default)]
+    pub resolved: Option<bool>,
     pub replies: Vec<GoogleDriveCommentReply>,
 }
 
@@ -203,7 +204,7 @@ mod tests {
             author: comment_author,
             created_time: Utc.with_ymd_and_hms(2025, 9, 28, 9, 0, 0).unwrap(),
             modified_time: Utc.with_ymd_and_hms(2025, 9, 28, 9, 30, 0).unwrap(),
-            resolved: false,
+            resolved: Some(false),
             replies: vec![comment_reply],
         }
     }
@@ -303,7 +304,7 @@ mod tests {
             },
             created_time: Utc::now(),
             modified_time: Utc::now(),
-            resolved: false,
+            resolved: Some(false),
             replies: vec![GoogleDriveCommentReply {
                 id: "reply_123".to_string(),
                 content: "This is a reply".to_string(),
@@ -351,7 +352,7 @@ mod tests {
             },
             created_time: Utc::now(),
             modified_time: Utc::now(),
-            resolved: false,
+            resolved: Some(false),
             replies: vec![],
         };
 
@@ -381,7 +382,7 @@ mod tests {
             },
             created_time: Utc::now(),
             modified_time: Utc::now(),
-            resolved: false,
+            resolved: Some(false),
             replies: vec![
                 GoogleDriveCommentReply {
                     id: "reply_123".to_string(),
@@ -434,7 +435,7 @@ mod tests {
             },
             created_time: Utc::now(),
             modified_time: Utc::now(),
-            resolved: false,
+            resolved: Some(false),
             replies: vec![],
         };
 
@@ -474,7 +475,7 @@ mod tests {
             },
             created_time: Utc::now(),
             modified_time: Utc::now(),
-            resolved: false,
+            resolved: Some(false),
             replies: vec![
                 GoogleDriveCommentReply {
                     id: "reply_123".to_string(),
@@ -537,7 +538,7 @@ mod tests {
             },
             created_time: Utc::now(),
             modified_time: Utc::now(),
-            resolved: false,
+            resolved: Some(false),
             replies: vec![GoogleDriveCommentReply {
                 id: "reply_123".to_string(),
                 content: "Hey @test@example.com, please review this".to_string(),

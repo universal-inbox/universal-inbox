@@ -103,7 +103,8 @@ pub struct RawGoogleDriveComment {
     pub created_time: DateTime<Utc>,
     #[serde(rename = "modifiedTime")]
     pub modified_time: DateTime<Utc>,
-    pub resolved: bool,
+    #[serde(default)]
+    pub resolved: Option<bool>,
     pub replies: Option<Vec<RawGoogleDriveCommentReply>>,
 }
 
@@ -683,7 +684,7 @@ mod tests {
             },
             created_time: Utc.with_ymd_and_hms(2025, 9, 28, 9, 0, 0).unwrap(),
             modified_time: Utc.with_ymd_and_hms(2025, 9, 28, 9, 30, 0).unwrap(),
-            resolved: false,
+            resolved: Some(false),
             replies: Some(vec![RawGoogleDriveCommentReply {
                 id: "reply_123".to_string(),
                 content: "Test reply".to_string(),
@@ -758,7 +759,7 @@ mod tests {
                 author: comment_author,
                 created_time: Utc.with_ymd_and_hms(2025, 9, 28, 9, 0, 0).unwrap(),
                 modified_time: Utc.with_ymd_and_hms(2025, 9, 28, 9, 30, 0).unwrap(),
-                resolved: false,
+                resolved: Some(false),
                 replies: vec![comment_reply],
             }
         }
