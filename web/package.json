@@ -12,10 +12,7 @@
     "typescript": "5.3.3"
   },
   "dependencies": {
-    "@nangohq/frontend": "https://gitpkg.now.sh/dax/nango/packages/frontend?8cf26502",
+    "@nangohq/frontend": "git+https://github.com/dax/nango-frontend.git",
     "crisp-sdk-web": "^1.0.26"
-  },
-  "scripts": {
-    "postinstall": "./scripts/npm-post-install.sh"
   }
 }
