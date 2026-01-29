@@ -31,7 +31,7 @@ pub fn GoogleDriveCommentListItem(
 ) -> Element {
     let notification_updated_at = use_memo(move || format_elapsed_time(notification().updated_at));
     let list_context = use_context::<Memo<ListContext>>();
-    let is_resolved = google_drive_comment().resolved;
+    let is_resolved = google_drive_comment().resolved.unwrap_or(false);
     let icon_style = if is_resolved {
         "text-green-500"
     } else {
