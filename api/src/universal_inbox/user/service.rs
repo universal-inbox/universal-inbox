@@ -16,7 +16,7 @@ use openidconnect::{
 use secrecy::{ExposeSecret, SecretBox};
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use url::Url;
 use uuid::Uuid;
 use webauthn_rs::prelude::*;
@@ -563,6 +563,15 @@ impl UserService {
         user_id: UserId,
         dry_run: bool,
     ) -> Result<(), UniversalInboxError> {
+        // Skip sending verification email for test accounts
+        let user = self.repository.get_user(executor, user_id).await?;
+        if let Some(user) = user {
+            if user.is_testing {
+                debug!("Skipping verification email for test account {user_id}");
+                return Ok(());
+            }
+        }
+
         let email_validation_token: EmailValidationToken = Uuid::new_v4().into();
         let updated_user = self
             .repository
@@ -645,6 +654,18 @@ impl UserService {
         email_address: EmailAddress,
         dry_run: bool,
     ) -> Result<(), UniversalInboxError> {
+        // Skip sending password reset email for test accounts
+        let user = self
+            .repository
+            .get_user_by_email(executor, &email_address)
+            .await?;
+        if let Some(user) = user {
+            if user.is_testing {
+                debug!("Skipping password reset email for test account {email_address}");
+                return Ok(());
+            }
+        }
+
         let password_reset_token: PasswordResetToken = Uuid::new_v4().into();
         let updated_user = self
             .repository

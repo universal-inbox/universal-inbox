@@ -130,6 +130,15 @@ impl NotificationService {
         apply_task_side_effects: bool,
         for_user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
+        // Skip side effects for test accounts
+        let user = self.user_service.get_user(executor, for_user_id).await?;
+        if let Some(user) = user {
+            if user.is_testing {
+                debug!("Skipping notification side effects for test account {for_user_id}");
+                return Ok(());
+            }
+        }
+
         debug!(
             "Applying {} side effects for updated notification from third party item {}",
             notification.kind, notification.source_item.id
