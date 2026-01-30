@@ -24,6 +24,8 @@ reply_to_header = "support <support@example.com>"
 
 [application.security]
 csp_extra_connect_src = []
+# Optional: block registration/authentication from specific email domains with custom messages
+# email_domain_blacklist = { "blocked-domain.com" = "Registration is not allowed from this domain", "example.org" = "Please use your company email address" }
 
 # [[application.security.authentication]]
 # type = "OpenIDConnect"
