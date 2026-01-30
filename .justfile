@@ -1,9 +1,17 @@
-import? 'justfile.local'
+import ".common-rust.justfile"
+
+import? '.justfile.local'
 
 export NANGO_POSTGRES_PASSWORD := "nango"
 export NANGO_POSTGRES_USER := "nango"
 export NANGO_POSTGRES_DB := "nango"
 
+mod web
+mod api
+mod docker
+mod doc
+
+[private]
 default:
     @just --choose
 
@@ -49,35 +57,9 @@ install-tools:
   fi
 
 ## Build recipes
-clean:
-    cargo clean
-
-build:
-    cargo build
-
-build-all: build
-    just web/build
-    just api/build
-
-build-release:
-    cargo build --release
-
 build-release-all: build-release
-    just web/build-release
-    just api/build-release
-
-build-container:
-    just docker/build
-
-publish-container:
-    just docker/publish
-
-build-doc:
-    just doc/install
-    just doc/build
-
-run-doc:
-    just doc/run
+    just web build-release
+    just api build-release
 
 ## Dev recipes
 run-db:
@@ -86,67 +68,27 @@ run-db:
     process-compose \
         -f .devbox/virtenv/redis/process-compose.yaml \
         -f process-compose-pg.yaml \
-        -p ${PROCESS_COMPOSE_PORT:-9999}
-
-check:
-    cargo clippy --tests -- -D warnings
+    -p ${PROCESS_COMPOSE_PORT:-9999}
 
 check-all: check
-    just web/check
-    just api/check
+    just web check
+    just api check
 
-check-unused-dependencies:
-    cargo machete --with-metadata Cargo.toml web/Cargo.toml api/Cargo.toml
-
-format:
+format-all:
     cargo fmt --all
-
-check-format:
-    cargo fmt --all --check
 
 lint-dockerfile:
     hadolint Dockerfile
 
-check-commit:
-    prek run
+@check-commit:
+    env SKIP= prek run -a
 
 ## Test recipes
-test test-filter="" $RUST_LOG="info":
-    cargo nextest run {{test-filter}}
-
 test-all: test
-    just web/test
-    just api/test
-
-test-ci:
-    cargo nextest run --profile ci
-
-test-coverage:
-    cargo llvm-cov nextest --all-features --lcov --output-path lcov.info --profile ci
+    just web test
+    just api test
 
 ## Run recipes
-migrate-db:
-    just api/migrate-db
-
-run-api:
-    just api/run-api
-
-run-workers:
-    just api/run-workers
-
-clear-cache:
-    just api/clear-cache
-
-run-web:
-    just web/run
-
-sync-notifications:
-    just api/sync-notifications
-
-sync-tasks:
-    just api/sync-tasks
-
-
 @create-docker-network:
     #!/usr/bin/env bash
     docker network ls | awk '{print $2}' | grep -q '^universal-inbox$' \

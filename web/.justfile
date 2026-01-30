@@ -1,5 +1,9 @@
 set fallback
+set allow-duplicate-recipes
 
+import "../.common-rust.justfile"
+
+[private]    
 default:
     @just --choose
 
