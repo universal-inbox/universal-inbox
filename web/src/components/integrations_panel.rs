@@ -386,12 +386,14 @@ pub fn IntegrationSettings(
                 }
 
                 if let Some(warning_message) = &config().warning_message {
-                    div {
-                        class: "alert rounded-md! alert-soft alert-warning shadow-lg text-sm flex gap-2",
-                        role: "alert",
+                    if !warning_message.is_empty() {
+                        div {
+                            class: "alert rounded-md! alert-soft alert-warning shadow-lg text-sm flex gap-2",
+                            role: "alert",
 
-                        Icon { class: "min-w-5 h-5", icon: BsExclamationTriangle }
-                        Markdown { text: "{warning_message}" }
+                            Icon { class: "min-w-5 h-5", icon: BsExclamationTriangle }
+                            Markdown { text: "{warning_message}" }
+                        }
                     }
                 }
 
