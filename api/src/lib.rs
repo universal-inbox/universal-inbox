@@ -383,6 +383,7 @@ pub async fn build_services(
         repository.clone(),
         nango_service,
         settings.nango_provider_keys(),
+        settings.required_oauth_scopes(),
         user_service.clone(),
         settings
             .application

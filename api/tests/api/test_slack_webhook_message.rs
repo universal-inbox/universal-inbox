@@ -327,6 +327,7 @@ mod job {
             None,
             Some("U01".to_string()),
             None,
+            None,
         )
         .await;
         add_user_ref_in_message(&mut message_event, "U01");
@@ -377,6 +378,7 @@ mod job {
             IntegrationConnectionStatus::Validated,
             None,
             Some("U01".to_string()),
+            None,
             None,
         )
         .await;
@@ -434,10 +436,10 @@ mod job {
             "slack_list_users_in_usergroup_response.json",
         );
 
-        nango_slack_connection.credentials.raw = json!({
-            "authed_user": { "id": "U02", "access_token": "slack_other_user_access_token" },
-            "team": { "id": "T01" }
-        });
+        nango_slack_connection.credentials.raw["authed_user"]["id"] = json!("U02");
+        nango_slack_connection.credentials.raw["authed_user"]["access_token"] =
+            json!("slack_other_user_access_token");
+        nango_slack_connection.credentials.raw["team"]["id"] = json!("T01");
         let (client_u02, user_u02) =
             create_user_and_login(&app, "john@doe.net".parse().unwrap(), "password").await;
         create_and_mock_integration_connection(
@@ -454,10 +456,10 @@ mod job {
         )
         .await;
 
-        nango_slack_connection.credentials.raw = json!({
-            "authed_user": { "id": "U01", "access_token": "slack_test_user_access_token" },
-            "team": { "id": "T01" }
-        });
+        nango_slack_connection.credentials.raw["authed_user"]["id"] = json!("U01");
+        nango_slack_connection.credentials.raw["authed_user"]["access_token"] =
+            json!("slack_test_user_access_token");
+        nango_slack_connection.credentials.raw["team"]["id"] = json!("T01");
         let (client_u01, user_u01) =
             create_user_and_login(&app, "jane@doe.net".parse().unwrap(), "password").await;
         create_and_mock_integration_connection(
@@ -639,10 +641,10 @@ mod job {
             add_user_ref_in_message(&mut message_event, "U01");
             None
         };
-        nango_slack_connection.credentials.raw = json!({
-            "authed_user": { "id": "U01", "access_token": "slack_test_user_access_token" },
-            "team": { "id": "T01" }
-        });
+        nango_slack_connection.credentials.raw["authed_user"]["id"] = json!("U01");
+        nango_slack_connection.credentials.raw["authed_user"]["access_token"] =
+            json!("slack_test_user_access_token");
+        nango_slack_connection.credentials.raw["team"]["id"] = json!("T01");
         create_and_mock_integration_connection(
             &app.app,
             app.user.id,

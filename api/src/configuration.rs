@@ -356,6 +356,14 @@ impl Settings {
         )
     }
 
+    pub fn required_oauth_scopes(&self) -> HashMap<IntegrationProviderKind, Vec<String>> {
+        HashMap::from_iter(
+            self.integrations
+                .values()
+                .map(|config| (config.kind, config.required_oauth_scopes.clone())),
+        )
+    }
+
     pub fn get_integration_max_retry_duration(
         &self,
         context: ExecutionContext,

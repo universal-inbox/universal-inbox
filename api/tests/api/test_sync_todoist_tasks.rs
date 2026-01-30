@@ -758,6 +758,7 @@ async fn test_sync_tasks_with_no_validated_integration_connections(
         None,
         None,
         None,
+        None,
     )
     .await;
     let todoist_mock = app.app.todoist_mock_server.mock(|when, then| {

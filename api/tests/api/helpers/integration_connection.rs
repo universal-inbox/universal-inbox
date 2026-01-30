@@ -104,6 +104,7 @@ pub fn mock_nango_delete_connection_service<'a>(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn create_integration_connection(
     app: &TestedApp,
     user_id: UserId,
@@ -112,6 +113,7 @@ pub async fn create_integration_connection(
     context: Option<IntegrationConnectionContext>,
     provider_user_id: Option<String>,
     initial_sync_failures: Option<u32>,
+    registered_oauth_scopes: Option<Vec<String>>,
 ) -> Box<IntegrationConnection> {
     let mut transaction = app.repository.begin().await.unwrap();
     let mut new_integration_connection =
@@ -143,7 +145,7 @@ pub async fn create_integration_connection(
             integration_connection.id,
             status,
             None,
-            None,
+            registered_oauth_scopes,
             user_id,
         )
         .await
@@ -233,6 +235,7 @@ pub async fn create_and_mock_integration_connection(
     context: Option<IntegrationConnectionContext>,
 ) -> Box<IntegrationConnection> {
     let provider_kind = config.kind();
+    let registered_oauth_scopes = nango_connection.get_registered_oauth_scopes().ok();
     let integration_connection = create_integration_connection(
         app,
         user_id,
@@ -241,6 +244,7 @@ pub async fn create_and_mock_integration_connection(
         context,
         nango_connection.get_provider_user_id(),
         initial_sync_failures,
+        registered_oauth_scopes,
     )
     .await;
     let nango_provider_keys = settings.nango_provider_keys();

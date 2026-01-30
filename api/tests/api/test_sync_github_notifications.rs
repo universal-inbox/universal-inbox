@@ -554,6 +554,7 @@ async fn test_sync_all_notifications_with_no_validated_integration_connections(
         None,
         None,
         None,
+        None,
     )
     .await;
 
