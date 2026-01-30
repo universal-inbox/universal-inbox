@@ -1943,6 +1943,54 @@
           "store_path": "/nix/store/xwk6hmik8y44dbcp0wk9vm1717r58yjj-watchexec-2.3.2"
         }
       }
+    },
+    "zellij@latest": {
+      "last_modified": "2026-01-23T17:20:52Z",
+      "resolved": "github:NixOS/nixpkgs/a1bab9e494f5f4939442a57a58d0449a109593fe#zellij",
+      "source": "devbox-search",
+      "version": "0.43.1",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/f9mmj00zbjk5a93vj6wfn9qfy7lq30sk-zellij-0.43.1",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/f9mmj00zbjk5a93vj6wfn9qfy7lq30sk-zellij-0.43.1"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/kran1xai66wfqsfh5ibbjq5hrsiq4680-zellij-0.43.1",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/kran1xai66wfqsfh5ibbjq5hrsiq4680-zellij-0.43.1"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/9dji3zx5bk1yd7wx3ffcm9diniwvp5h8-zellij-0.43.1",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/9dji3zx5bk1yd7wx3ffcm9diniwvp5h8-zellij-0.43.1"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/26xwikpmjb9623i6pw4k816wwr1p82lz-zellij-0.43.1",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/26xwikpmjb9623i6pw4k816wwr1p82lz-zellij-0.43.1"
+        }
+      }
     }
   }
 }

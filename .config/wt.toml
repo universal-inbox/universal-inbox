@@ -25,10 +25,24 @@ export UNIVERSAL_INBOX__APPLICATION__LISTEN_PORT={{ ('api-' ~ branch) | hash_por
 
 # default PGHOST can became too long
 export PGHOST=/tmp
+
+export WORKTRUNK_ZELLIJ_SESSION="{{ branch | sanitize_db }}"
 EOF
 """
 setup = "direnv allow"
 web_install = "cd web && npm install"
+term = "zellij attach -b {{ branch | sanitize_db }} options --default-layout .config/wt-zellij-layout.kdl"
+
+[post-switch]
+term = """
+SESSION_NAME="{{ branch | sanitize_db }}"
+if [ -n "$ZELLIJ" ]; then
+    zellij pipe --plugin https://github.com/mostafaqanbaryan/zellij-switch/releases/download/0.2.1/zellij-switch.wasm -- "--session ${SESSION_NAME}"
+fi
+"""
+
+[pre-remove]
+stop_services = "direnv exec . process-compose down -p ${PROCESS_COMPOSE_PORT:-9999}"
 
 [post-remove]
 clean_docker = """
@@ -36,6 +50,7 @@ docker rm -f "nango-db-{{ ('nango-db-' ~ branch) | sanitize_db }}"
 docker volume rm -f "nango-db-{{ ('nango-db-' ~ branch) | sanitize_db }}"
 docker rm -f "nango-{{ ('nango-' ~ branch) | sanitize_db }}"
 """
+clean_term = "zellij list-sessions -s | grep -q {{ branch | sanitize_db }} && zellij kill-session {{ branch | sanitize_db }} || true"
 
 [pre-commit]
 check = "just check-commit"
