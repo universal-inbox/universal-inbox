@@ -154,8 +154,14 @@ fn CommentDisplay(
     let avatar_url: Option<Url> = author()
         .photo_link
         .and_then(|link| link.parse::<Url>().ok());
-    let cleaned_html_content =
-        use_memo(move || html_content().as_ref().map(|html| ammonia::clean(html)));
+    let cleaned_html_content = use_memo(move || {
+        html_content().as_ref().map(|html| {
+            ammonia::Builder::default()
+                .set_tag_attribute_value("a", "target", "_blank")
+                .clean(html)
+                .to_string()
+        })
+    });
 
     rsx! {
         div {

@@ -22,6 +22,7 @@
 - Disable mandatory email verification
 - Make notification and task details panel resizable
 - Display notifications elasped time since last update
+- Open links from notifications preview in a new tab
 
 ### Fixed
 
