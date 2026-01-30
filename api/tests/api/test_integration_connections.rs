@@ -228,10 +228,22 @@ mod verify_integration_connections {
         assert_eq!(
             result.registered_oauth_scopes,
             vec![
+                "channels:history".to_string(),
+                "channels:read".to_string(),
+                "emoji:read".to_string(),
+                "groups:history".to_string(),
+                "groups:read".to_string(),
+                "im:history".to_string(),
+                "im:read".to_string(),
+                "mpim:history".to_string(),
+                "mpim:read".to_string(),
+                "reactions:read".to_string(),
+                "reactions:write".to_string(),
                 "stars:read".to_string(),
                 "stars:write".to_string(),
-                "channel:read".to_string(),
-                "channel:history".to_string()
+                "team:read".to_string(),
+                "usergroups:read".to_string(),
+                "users:read".to_string()
             ]
         );
         nango_mock.assert();
@@ -408,6 +420,7 @@ mod disconnect_integration_connections {
             None,
             None,
             None,
+            None,
         )
         .await;
         let nango_provider_keys = settings.nango_provider_keys();
@@ -450,6 +463,7 @@ mod disconnect_integration_connections {
             app.user.id,
             IntegrationConnectionConfig::Github(GithubConfig::enabled()),
             IntegrationConnectionStatus::Validated,
+            None,
             None,
             None,
             None,
@@ -523,6 +537,7 @@ mod update_integration_connection_config {
             )),
             None,
             None,
+            None,
         )
         .await;
         let integration_connection2 = create_integration_connection(
@@ -532,6 +547,7 @@ mod update_integration_connection_config {
                 sync_notifications_enabled: true,
             }),
             IntegrationConnectionStatus::Validated,
+            None,
             None,
             None,
             None,
@@ -636,6 +652,7 @@ mod update_integration_connection_config {
                 },
             }),
             IntegrationConnectionStatus::Validated,
+            None,
             None,
             None,
             None,

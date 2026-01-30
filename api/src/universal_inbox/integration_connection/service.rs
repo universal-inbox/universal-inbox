@@ -47,6 +47,7 @@ pub struct IntegrationConnectionService {
     repository: Arc<Repository>,
     nango_service: NangoService,
     nango_provider_keys: HashMap<IntegrationProviderKind, NangoProviderKey>,
+    required_oauth_scopes: HashMap<IntegrationProviderKind, Vec<String>>,
     user_service: Arc<UserService>,
     min_sync_notifications_interval_in_minutes: i64,
     min_sync_tasks_interval_in_minutes: i64,
@@ -74,6 +75,7 @@ impl IntegrationConnectionService {
         repository: Arc<Repository>,
         nango_service: NangoService,
         nango_provider_keys: HashMap<IntegrationProviderKind, NangoProviderKey>,
+        required_oauth_scopes: HashMap<IntegrationProviderKind, Vec<String>>,
         user_service: Arc<UserService>,
         min_sync_notifications_interval_in_minutes: i64,
         min_sync_tasks_interval_in_minutes: i64,
@@ -82,6 +84,7 @@ impl IntegrationConnectionService {
             repository,
             nango_service,
             nango_provider_keys,
+            required_oauth_scopes,
             user_service,
             min_sync_notifications_interval_in_minutes,
             min_sync_tasks_interval_in_minutes,
@@ -613,17 +616,23 @@ impl IntegrationConnectionService {
             .await
     }
 
-    /// This function randomly search for a validated Slack integration connection to access
-    /// Slack API endpoint not related to a specific user.
+    /// This function searches for a validated Slack integration connection with up-to-date
+    /// registered OAuth scopes to access Slack API endpoints not related to a specific user.
     #[tracing::instrument(level = "debug", skip(self, executor), err)]
     pub async fn find_slack_access_token(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         context: IntegrationConnectionContext,
     ) -> Result<Option<(AccessToken, IntegrationConnection)>, UniversalInboxError> {
+        let required_scopes = self
+            .required_oauth_scopes
+            .get(&IntegrationProviderKind::Slack)
+            .map(|scopes| scopes.as_slice())
+            .unwrap_or(&[]);
+
         let integration_connection = self
             .repository
-            .get_integration_connection_per_context(executor, context)
+            .get_integration_connection_per_context(executor, context, required_scopes)
             .await?;
 
         let Some(integration_connection) = integration_connection else {

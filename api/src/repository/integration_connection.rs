@@ -72,6 +72,7 @@ pub trait IntegrationConnectionRepository {
         &self,
         executor: &mut Transaction<'_, Postgres>,
         context: IntegrationConnectionContext,
+        required_oauth_scopes: &[String],
     ) -> Result<Option<IntegrationConnection>, UniversalInboxError>;
 
     async fn update_integration_connection_status(
@@ -425,11 +426,12 @@ impl IntegrationConnectionRepository for Repository {
             .collect::<Result<Vec<IntegrationConnection>, UniversalInboxError>>()
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields(context), err)]
+    #[tracing::instrument(level = "debug", skip_all, fields(context, required_oauth_scopes), err)]
     async fn get_integration_connection_per_context(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         context: IntegrationConnectionContext,
+        required_oauth_scopes: &[String],
     ) -> Result<Option<IntegrationConnection>, UniversalInboxError> {
         let IntegrationConnectionContext::Slack(ref slack_context) = context else {
             return Err(UniversalInboxError::UnsupportedAction(format!(
@@ -471,9 +473,11 @@ impl IntegrationConnectionRepository for Repository {
                     integration_connection.context->'content'->>'team_id' = $1
                     AND integration_connection.provider_kind::TEXT = 'Slack'
                     AND integration_connection.status::TEXT = 'Validated'
+                    AND integration_connection.registered_oauth_scopes::jsonb @> $2::jsonb
                 LIMIT 1
             "#,
-            slack_context.team_id.to_string()
+            slack_context.team_id.to_string(),
+            Json(required_oauth_scopes) as _
         )
             .fetch_optional(&mut **executor)
             .await

@@ -23,7 +23,7 @@
       },
       "authed_user": {
         "id": "U05XXX",
-        "scope": "stars:read,stars:write,channel:read,channel:history",
+        "scope": "channels:history,channels:read,emoji:read,groups:history,groups:read,im:history,im:read,mpim:history,mpim:read,reactions:read,reactions:write,stars:read,stars:write,team:read,usergroups:read,users:read",
         "access_token": "slack_test_user_access_token",
         "token_type": "user"
       },
