@@ -103,6 +103,163 @@ mod register_user {
     }
 }
 
+mod email_domain_blacklist {
+    use super::*;
+    use crate::helpers::{
+        auth::{
+            mock_oidc_introspection, mock_oidc_keys, mock_oidc_openid_configuration,
+            mock_oidc_user_info,
+        },
+        tested_app_with_domain_blacklist,
+    };
+    use openidconnect::AccessToken;
+    use pretty_assertions::assert_eq;
+    use universal_inbox::auth::SessionAuthValidationParameters;
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_register_user_with_blacklisted_domain(
+        #[future] tested_app_with_domain_blacklist: TestedApp,
+    ) {
+        let app = tested_app_with_domain_blacklist.await;
+
+        let client = reqwest::Client::builder()
+            .cookie_store(true)
+            .build()
+            .unwrap();
+
+        let response = register_user_response(
+            &client,
+            &app,
+            "user@blocked.com".parse().unwrap(),
+            "Very-harD-pasSword-5",
+        )
+        .await;
+
+        assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+        let body: HashMap<String, String> = response.json().await.unwrap();
+        assert_eq!(
+            body.get("message").unwrap(),
+            "Forbidden access: Registration is not allowed from this domain"
+        );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_register_user_with_allowed_domain(
+        #[future] tested_app_with_domain_blacklist: TestedApp,
+    ) {
+        let app = tested_app_with_domain_blacklist.await;
+
+        let (_client, user) = register_user(
+            &app,
+            "user@allowed.com".parse().unwrap(),
+            "Very-harD-pasSword-5",
+        )
+        .await;
+
+        assert_eq!(user.email, Some("user@allowed.com".parse().unwrap()));
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_register_user_blacklist_case_insensitive(
+        #[future] tested_app_with_domain_blacklist: TestedApp,
+    ) {
+        let app = tested_app_with_domain_blacklist.await;
+
+        let client = reqwest::Client::builder()
+            .cookie_store(true)
+            .build()
+            .unwrap();
+
+        let response = register_user_response(
+            &client,
+            &app,
+            "user@BLOCKED.COM".parse().unwrap(),
+            "Very-harD-pasSword-5",
+        )
+        .await;
+
+        assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+        let body: HashMap<String, String> = response.json().await.unwrap();
+        assert_eq!(
+            body.get("message").unwrap(),
+            "Forbidden access: Registration is not allowed from this domain"
+        );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_oidc_authenticate_with_blacklisted_domain(
+        #[future] tested_app_with_domain_blacklist: TestedApp,
+    ) {
+        use chrono::{TimeDelta, Utc};
+        use openidconnect::{
+            core::{CoreHmacKey, CoreIdToken, CoreIdTokenClaims, CoreJwsSigningAlgorithm},
+            Audience, EmptyAdditionalClaims, EndUserEmail, IssuerUrl, StandardClaims,
+            SubjectIdentifier,
+        };
+
+        let app = tested_app_with_domain_blacklist.await;
+
+        // Set up OIDC mocks with a blacklisted domain email
+        app.oidc_issuer_mock_server.as_ref().unwrap().reset().await;
+        mock_oidc_openid_configuration(&app);
+        mock_oidc_keys(&app);
+        mock_oidc_introspection(&app, "1234", true);
+        mock_oidc_user_info(&app, "1234", "John", "Doe", "user@blocked.com");
+
+        let client = reqwest::Client::builder()
+            .cookie_store(true)
+            .build()
+            .unwrap();
+
+        // Create an ID token
+        let signing_key = CoreHmacKey::new("secret".as_bytes());
+        let oidc_issuer_mock_server_url = app
+            .oidc_issuer_mock_server
+            .as_ref()
+            .map(|s| s.base_url())
+            .unwrap();
+        let id_token = CoreIdToken::new(
+            CoreIdTokenClaims::new(
+                IssuerUrl::new(oidc_issuer_mock_server_url.to_string()).unwrap(),
+                vec![Audience::new("user@blocked.com-client-id-123".to_string())],
+                Utc::now() + TimeDelta::try_seconds(120).unwrap(),
+                Utc::now(),
+                StandardClaims::new(SubjectIdentifier::new("John-Doe".to_string()))
+                    .set_email(Some(EndUserEmail::new("user@blocked.com".to_string()))),
+                EmptyAdditionalClaims {},
+            ),
+            &signing_key,
+            CoreJwsSigningAlgorithm::HmacSha256,
+            None,
+            None,
+        )
+        .unwrap();
+
+        // Try to authenticate via OIDC
+        let response = client
+            .post(format!("{}auth/session", app.api_address))
+            .json(&SessionAuthValidationParameters {
+                auth_id_token: id_token.to_string().into(),
+                access_token: AccessToken::new("fake_token".to_string()),
+            })
+            .send()
+            .await
+            .unwrap();
+
+        // Should be forbidden due to blacklisted domain
+        assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+        let body: HashMap<String, String> = response.json().await.unwrap();
+        assert_eq!(
+            body.get("message").unwrap(),
+            "Forbidden access: Registration is not allowed from this domain"
+        );
+    }
+}
+
 mod login_user {
     use std::time::SystemTime;
 

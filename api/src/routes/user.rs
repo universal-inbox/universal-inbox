@@ -24,6 +24,7 @@ use universal_inbox::{
 };
 
 use crate::{
+    configuration::Settings,
     routes::auth::USER_AUTH_KIND_SESSION_KEY,
     universal_inbox::{
         auth_token::service::AuthenticationTokenService,
@@ -132,6 +133,7 @@ pub async fn get_user(
 pub async fn register_user(
     user_service: web::Data<Arc<UserService>>,
     auth_token_service: web::Data<Arc<RwLock<AuthenticationTokenService>>>,
+    settings: web::Data<Settings>,
     register_user_parameters: web::Json<RegisterUserParameters>,
     session: Session,
 ) -> Result<HttpResponse, UniversalInboxError> {
@@ -144,6 +146,21 @@ pub async fn register_user(
     register_user_parameters
         .validate()
         .map_err(UniversalInboxError::InvalidParameters)?;
+
+    let email_domain = register_user_parameters
+        .credentials
+        .email
+        .domain()
+        .to_lowercase();
+
+    if let Some(rejection_message) = settings
+        .application
+        .security
+        .email_domain_blacklist
+        .get(&email_domain)
+    {
+        return Err(UniversalInboxError::Forbidden(rejection_message.clone()));
+    }
 
     let user = user_service
         .register_user(
