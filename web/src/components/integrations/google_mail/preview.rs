@@ -141,7 +141,12 @@ fn GoogleMailThreadMessage(message: ReadOnlySignal<GoogleMailMessage>) -> Elemen
         headers
             .push(rsx! { span { class: "text-neutral-content/75", "Date:" }, span { "{date}" } });
     }
-    let message_body = use_memo(move || ammonia::clean(&message().render_content_as_html()));
+    let message_body = use_memo(move || {
+        ammonia::Builder::default()
+            .set_tag_attribute_value("a", "target", "_blank")
+            .clean(&message().render_content_as_html())
+            .to_string()
+    });
 
     rsx! {
         CardWithHeaders {

@@ -76,10 +76,12 @@ pub fn GoogleCalendarEventPreview(
     let recurrence_details = use_memo(move || format_recurrence_details(&google_calendar_event()));
 
     let sanitized_description = use_memo(move || {
-        google_calendar_event()
-            .description
-            .as_ref()
-            .map(|desc| ammonia::clean(desc))
+        google_calendar_event().description.as_ref().map(|desc| {
+            ammonia::Builder::default()
+                .set_tag_attribute_value("a", "target", "_blank")
+                .clean(desc)
+                .to_string()
+        })
     });
 
     let accepted_style = if is_accepted() {

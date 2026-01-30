@@ -23,7 +23,13 @@ pub fn markdown_to_html(text: &str) -> String {
     markdown_opts.extension.shortcodes = true;
     markdown_opts.render.escape = true;
 
-    md2html(text, &markdown_opts)
+    let html = md2html(text, &markdown_opts);
+
+    // Add target="_blank" and rel="noopener noreferrer" to all links
+    let link_re = Regex::new(r#"<a ([^>]*href=)"#).unwrap();
+    link_re
+        .replace_all(&html, r#"<a target="_blank" rel="noopener noreferrer" $1"#)
+        .to_string()
 }
 
 #[component]
@@ -177,6 +183,37 @@ mod markdown_to_html_tests {
             );
         }
     }
+
+    mod links {
+        use super::*;
+        use pretty_assertions::assert_eq;
+
+        #[wasm_bindgen_test]
+        fn test_markdown_to_html_link_has_target_blank() {
+            assert_eq!(
+                markdown_to_html("[Example](https://example.com)"),
+                r#"<p><a target="_blank" rel="noopener noreferrer" href="https://example.com">Example</a></p>
+"#
+                    .to_string()
+            );
+        }
+
+        #[wasm_bindgen_test]
+        fn test_markdown_to_html_multiple_links() {
+            let result = markdown_to_html("[One](https://one.com) and [Two](https://two.com)");
+            assert!(result.contains(r#"target="_blank""#));
+            assert!(result.contains(r#"rel="noopener noreferrer""#));
+            // Count occurrences - should have 2 of each
+            assert_eq!(result.matches(r#"target="_blank""#).count(), 2);
+        }
+
+        #[wasm_bindgen_test]
+        fn test_markdown_to_html_autolink() {
+            let result = markdown_to_html("<https://example.com>");
+            assert!(result.contains(r#"target="_blank""#));
+            assert!(result.contains(r#"rel="noopener noreferrer""#));
+        }
+    }
 }
 
 #[cfg(test)]
@@ -205,5 +242,12 @@ mod markdown_to_html_with_slack_references_tests {
 "#
                 .to_string()
         );
+    }
+
+    #[wasm_bindgen_test]
+    fn test_markdown_to_html_with_slack_references_link_has_target_blank() {
+        let result = markdown_to_html_with_slack_references("[Link](https://example.com)");
+        assert!(result.contains(r#"target="_blank""#));
+        assert!(result.contains(r#"rel="noopener noreferrer""#));
     }
 }
