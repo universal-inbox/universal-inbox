@@ -1,0 +1,124 @@
+# -*- mode: just-ts; -*-
+
+tag := `git rev-parse HEAD`
+
+deploy-koyeb tag=tag:
+    #!/bin/sh
+
+    set -Eeuo pipefail
+
+    echo "🚀 Deploying Universal Inbox on Koyeb (dax42/universal-inbox:{{ tag }})"
+    koyeb services update ui-prod-87c239d/ui-prod-api \
+        --docker dax42/universal-inbox:{{ tag }}
+    koyeb services update ui-prod-87c239d/ui-prod-workers \
+        --docker dax42/universal-inbox:{{ tag }}
+
+deploy-alan tag=tag:
+    #!/bin/sh
+
+    set -Eeuo pipefail
+
+    docker pull dax42/universal-inbox:latest
+    cd ~/Dev/Alan/alan-apps/infra/src/stacks/main/qovery-env-universal-inbox--prod/universal-inbox-docker
+    echo "🏗️ Building Universal Inbox container for Alan"
+    direnv exec . alan docker build -d . -p -t {{ tag }}
+
+    echo "🔄 Updating Universal Inbox Qovery services"
+    qovery container update \
+        --project universal-inbox \
+        --environment universal-inbox--prod \
+        --container universal-inbox--prod--universal-inbox-http \
+        --tag {{ tag }}
+    qovery container update \
+        --project universal-inbox \
+        --environment universal-inbox--prod \
+        --container universal-inbox--prod--universal-inbox-worker \
+        --tag {{ tag}}
+
+    echo "🚀 Redeploying Universal Inbox Qovery services"
+    qovery environment redeploy \
+        --project universal-inbox \
+        --environment universal-inbox--prod \
+        -w
+
+    cd -
+
+clean-test-db:
+    #!/bin/sh
+
+    set -Eeuo pipefail
+
+    echo "🧹 Cleaning test database"
+    for db in $(psql "$DATABASE_URL" -l | awk '{print $1}' | grep '-' | grep -v universal-inbox | grep '^[a-z0-9]'); do
+      echo "🧹 Cleaning test database '$db'"
+      psql "$DATABASE_URL" -c "DROP DATABASE \"$db\";"
+    done
+
+restore-db-backup backup-dir:
+    #!/bin/sh
+
+    set -Eeuo pipefail
+
+    dropdb --if-exists -U postgres universal-inbox
+    createdb -U postgres universal-inbox
+    pg_restore -O -d $DATABASE_URL -F d {{ backup-dir}}
+
+backup-db backup-dir:
+    #!/bin/sh
+
+    set -Eeuo pipefail
+
+    pg_dump -d $DATABASE_URL -F d -f {{ backup-dir }}
+
+plakar-backup-prod-db:
+    #!/bin/sh
+
+    set -Eeuo pipefail
+
+    pg_dump -Ft --no-acl --no-owner \
+      -d postgres://universal-inbox@universal-inbox--prod--db.internal.universal-inbox.eu/universal-inbox \
+    | plakar \
+      at @universal-inbox-backups-store \
+      backup stdin:universal-inbox--prod--db.pgdump
+
+plakar-restore-prod-db dest_db=env('DATABASE_URL'):
+    #!/bin/sh
+
+    set -Eeuo pipefail
+
+    plakar \
+      at @universal-inbox-backups-store \
+      restore -latest -to stdout:- universal-inbox--prod--db.pgdump \ # -latest to come to plakar >1.0.3
+    | pg_restore -Ft --no-owner -c -d {{ dest_db }}
+
+publish-with-depot tag=tag:
+    #!/usr/bin/env bash
+
+    cd docker
+    depot build \
+      --push \
+      --platform linux/amd64,linux/arm64 \
+      --label version={{ tag }} \
+      --build-arg VERSION={{ tag}} \
+      -t dax42/universal-inbox:{{ tag}} \
+      -t dax42/universal-inbox:latest \
+      --label service="universal-inbox" \
+      --file ../Dockerfile \
+      ..
+    echo "🚀 Docker image dax42/universal-inbox published with tag {{ tag}}"
+    cd ..
+
+publish-and-deploy tag=tag: && (deploy-koyeb tag) (deploy-alan tag)
+    just docker publish {{ tag }}
+
+connect-to-db env="prod":
+    #!/bin/sh
+
+    set -Eeuo pipefail
+
+    infisical run --projectId 739496db-b812-4a83-b3f7-c7ada128eba8 --env={{ env }} --path /universal-inbox/ --recursive -- bash -c '
+      export DATABASE_URL="postgres://$UNIVERSAL_INBOX__DATABASE__USERNAME@universal-inbox--{{ env }}--db.internal.universal-inbox.eu/$UNIVERSAL_INBOX__DATABASE__NAME?sslmode=require"
+      echo "🔗 Connecting to database at $DATABASE_URL"
+      export PGPASSWORD="$UNIVERSAL_INBOX__DATABASE__PASSWORD"
+      pgcli "$DATABASE_URL"
+    '

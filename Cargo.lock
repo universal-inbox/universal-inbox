@@ -483,9 +483,9 @@ checksum = "b0674a1ddeecb70197781e945de4b3b8ffb61fa939a5597bcf48503737663100"
 
 [[package]]
 name = "apalis"
-version = "0.7.3"
+version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ea07a005e05b1672920818822ebace7a59bdf4b3176390d7be661e2b4027c42"
+checksum = "504d52557a16b7b202941660f339c9182910d498cac40f93d15f6b31e6bef290"
 dependencies = [
  "apalis-core",
  "futures",
@@ -499,9 +499,9 @@ dependencies = [
 
 [[package]]
 name = "apalis-core"
-version = "0.7.3"
+version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b67ac401df19b3a77f26700cb0af838217353f74bc7365ac50c61561f767a5ec"
+checksum = "3948d2051795c769e6a44a46549879af39d5e8e4fb113e0011cf99f7cd21b657"
 dependencies = [
  "futures",
  "futures-timer",
@@ -515,9 +515,9 @@ dependencies = [
 
 [[package]]
 name = "apalis-redis"
-version = "0.7.3"
+version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fda85a8351d7fd9214ce6e02242c49bf2b122ca5c9f7651d9bf3a41e3f6c34ac"
+checksum = "871367e3dfff2accda824ccc6e4f46f8f155c865065a450c466a7f2835541d55"
 dependencies = [
  "apalis-core",
  "chrono",
@@ -1357,7 +1357,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "117725a109d387c937a1533ce01b450cbde6b88abceea8473c4d7a85853cda3c"
 dependencies = [
  "lazy_static",
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -3622,7 +3622,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.6.0",
+ "socket2 0.5.10",
  "system-configuration",
  "tokio",
  "tower-service",
@@ -4069,7 +4069,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07033963ba89ebaf1584d767badaa2e8fcec21aedea6b8c0346d487d49c28667"
 dependencies = [
  "cfg-if",
- "windows-targets 0.53.3",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -5386,7 +5386,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash 2.1.1",
  "rustls",
- "socket2 0.6.0",
+ "socket2 0.5.10",
  "thiserror 2.0.16",
  "tokio",
  "tracing",
@@ -5423,7 +5423,7 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2 0.6.0",
+ "socket2 0.5.10",
  "tracing",
  "windows-sys 0.60.2",
 ]
@@ -8426,7 +8426,7 @@ version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0978bf7171b3d90bac376700cb56d606feb40f251a475a5d6634613564460b22"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]

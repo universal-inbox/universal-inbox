@@ -1,7 +1,8 @@
 set fallback
 
-tag := `git rev-parse HEAD`
+tag := `git rev-parse HEAD || echo none`
 
+[private]
 default:
     @just --choose
 
