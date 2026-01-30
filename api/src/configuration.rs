@@ -54,6 +54,11 @@ pub struct ApplicationSettings {
 pub struct SecuritySettings {
     pub csp_extra_connect_src: Vec<String>,
     pub authentication: Vec<AuthenticationSettings>,
+    /// Map of email domains to rejection messages.
+    /// If a user tries to register/authenticate with an email from a blacklisted domain,
+    /// access will be rejected with the corresponding message.
+    #[serde(default)]
+    pub email_domain_blacklist: HashMap<String, String>,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -458,6 +463,7 @@ mod tests {
         let security_settings = SecuritySettings {
             csp_extra_connect_src: vec![],
             authentication: vec![local_auth_settings],
+            email_domain_blacklist: HashMap::new(),
         };
 
         let result = security_settings.get_authentication_settings(UserAuthKind::Local);
@@ -490,6 +496,7 @@ mod tests {
         let security_settings = SecuritySettings {
             csp_extra_connect_src: vec![],
             authentication: vec![oidc_auth_settings],
+            email_domain_blacklist: HashMap::new(),
         };
 
         let result =
@@ -514,6 +521,7 @@ mod tests {
         let security_settings = SecuritySettings {
             csp_extra_connect_src: vec![],
             authentication: vec![oidc_auth_settings],
+            email_domain_blacklist: HashMap::new(),
         };
 
         let result = security_settings
@@ -554,6 +562,7 @@ mod tests {
         let security_settings = SecuritySettings {
             csp_extra_connect_src: vec![],
             authentication: vec![local_auth_settings, oidc_auth_settings],
+            email_domain_blacklist: HashMap::new(),
         };
 
         let result = security_settings.get_authentication_settings(UserAuthKind::Local);

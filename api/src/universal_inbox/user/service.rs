@@ -294,11 +294,22 @@ impl UserService {
                     .family_name()
                     .and_then(|name| name.get(None))
                     .map(|name| name.to_string());
-                let email = user_infos
+                let email: EmailAddress = user_infos
                     .email()
                     .context("No email found in user info")?
                     .parse()
                     .context("Invalid email address")?;
+
+                // Check if the email domain is blacklisted
+                let domain = email.domain().to_lowercase();
+                if let Some(rejection_message) = self
+                    .application_settings
+                    .security
+                    .email_domain_blacklist
+                    .get(&domain)
+                {
+                    return Err(UniversalInboxError::Forbidden(rejection_message.clone()));
+                }
 
                 self.repository
                     .create_user(executor, User::new(first_name, last_name, email), user_auth)
