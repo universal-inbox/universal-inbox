@@ -1,0 +1,34 @@
+fail_fast: true
+repos:
+  - repo: local
+    hooks:
+      - id: clippy
+        name: Check Rust code
+        language: system
+        pass_filenames: false
+        entry: just check
+        files: \.rs$
+        stages: [pre-commit]
+        priority: 10
+
+  - repo: local
+    hooks:
+      - id: cargo-machete
+        name: Detect unused Rust dependencies
+        language: system
+        pass_filenames: false
+        entry: just check-unused-dependencies
+        stages: [pre-commit]
+        priority: 10
+
+  - repo: local
+    hooks:
+      - id: test
+        name: Test Rust code
+        language: system
+        pass_filenames: false
+        entry: just test
+        files: \.rs$
+        stages: [pre-commit]
+        priority: 20
+        

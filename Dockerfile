@@ -6,7 +6,12 @@ ENV DOCKER_BUILD=true
 WORKDIR /app
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" devbox.json devbox.json
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" devbox.lock devbox.lock
-COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" justfile justfile
+COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" .common-rust.justfile .common-rust.justfile
+COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" .justfile .justfile
+COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/.justfile web/.justfile
+COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" api/.justfile api/.justfile
+COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" doc/.justfile doc/.justfile
+COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" docker/.justfile docker/.justfile
 RUN chown -R "${DEVBOX_USER}:${DEVBOX_USER}" /app \
   && devbox run -- echo "Installed Packages."
 
@@ -21,13 +26,14 @@ FROM rust:1.89.0-bookworm as tools
 RUN cargo install sqlx-cli --version 0.8.6
 
 FROM base as dep-web-builder
-COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/justfile web/justfile
+COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" .common-rust.justfile .common-rust.justfile
+COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/.justfile web/.justfile
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/index-empty.html web/index.html
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/.cargo web/.cargo
 # Create fake index.html for Trunk build to succeed without the real index.html
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/package.json web/package.json
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/package-lock.json web/package-lock.json
-RUN devbox run -- just web/install
+RUN devbox run -- just web install
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" --from=planner /app/recipe.json recipe.json
 # Only dependencies will be compiled as cargo chef has modfied main.rs and lib.rs to be empty
 RUN devbox run -- \
@@ -37,10 +43,11 @@ RUN devbox run -- \
   --recipe-path recipe.json \
   --target wasm32-unknown-unknown \
   --no-build \
-  && devbox run -- just web/build-release
+  && devbox run -- just web build-release
 
 FROM base as dep-api-builder
-COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" api/justfile api/justfile
+COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" .common-rust.justfile .common-rust.justfile
+COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" api/.justfile api/.justfile
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" --from=planner /app/recipe.json recipe.json
 # Only dependencies will be compiled as cargo chef has modfied main.rs and lib.rs to be empty
 RUN devbox run -- \
@@ -49,7 +56,7 @@ RUN devbox run -- \
   -p universal-inbox-api \
   --recipe-path recipe.json \
   --no-build \
-  && devbox run -- just api/build-release
+  && devbox run -- just api build-release
 
 FROM dep-web-builder as release-web-builder
 ARG VERSION
@@ -58,8 +65,8 @@ COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" Cargo.toml Cargo.lock ./
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web/Cargo.toml web/Cargo.toml
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" src src
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" web web
-RUN devbox run -- just web/build-assets \
-  && devbox run -- just web/build-release
+RUN devbox run -- just web build-assets \
+  && devbox run -- just web build-release
 
 FROM dep-api-builder as release-api-builder
 ARG VERSION
@@ -68,7 +75,7 @@ COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" Cargo.toml Cargo.lock ./
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" api/Cargo.toml api/Cargo.toml
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" src src
 COPY --chown="${DEVBOX_USER}:${DEVBOX_USER}" api api
-RUN devbox run -- just api/build-release
+RUN devbox run -- just api build-release
 
 FROM debian:testing-slim AS runtime
 ARG VERSION

@@ -1,0 +1,12 @@
+fail_fast: true
+repos:
+  - repo: local
+    hooks:
+      - id: test
+        name: Test mdbook
+        language: system
+        pass_filenames: false
+        entry: just test
+        files: \.md$
+        stages: [pre-commit]
+        priority: 20

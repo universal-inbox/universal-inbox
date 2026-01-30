@@ -5,31 +5,26 @@ repos:
       - id: fmt
         name: Format Rust code
         description: Format files with cargo fmt
-        entry: just format
+        entry: just format-all
         language: system
         files: \.rs$
         pass_filenames: false
         args: []
         stages: [pre-commit]
-      - id: clippy
-        name: Check Rust code
-        language: system
-        pass_filenames: false
-        entry: just check-all
-        files: \.rs$
-        stages: [pre-commit]
-      - id: cargo-machete
-        name: Detect unused Rust dependencies
-        language: system
-        pass_filenames: false
-        entry: just check-unused-dependencies
-        stages: [pre-commit]
+        priority: 0
+
+  - repo: local
+    hooks:
       - id: todo
         name: Check TODO in the code
         language: system
         pass_filenames: false
         entry: bash -c 'rg TODO && false || true'
         stages: [pre-commit]
+        priority: 10
+
+  - repo: local
+    hooks:
       - id: hadolint
         name: Lint Dockerfile
         language: system
@@ -37,3 +32,36 @@ repos:
         pass_filenames: false
         files: Dockerfile$
         stages: [pre-commit]
+        priority: 10
+        
+  - repo: local
+    hooks:
+      - id: clippy
+        name: Check Rust code
+        language: system
+        pass_filenames: false
+        entry: just check
+        files: \.rs$
+        stages: [pre-commit]
+        priority: 10
+
+  - repo: local
+    hooks:
+      - id: cargo-machete
+        name: Detect unused Rust dependencies
+        language: system
+        pass_filenames: false
+        entry: just check-unused-dependencies
+        stages: [pre-commit]
+        priority: 10
+
+  - repo: local
+    hooks:
+      - id: test
+        name: Test Rust code
+        language: system
+        pass_filenames: false
+        entry: just test
+        files: \.rs$
+        stages: [pre-commit]
+        priority: 20

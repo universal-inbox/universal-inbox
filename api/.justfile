@@ -1,19 +1,13 @@
 set fallback
+set allow-duplicate-recipes
 
+import "../.common-rust.justfile"
+
+[private]
 default:
     @just --choose
 
-## Build recipes
-build:
-    cargo build
-
-build-release:
-    cargo build --release
-
 ## Dev recipes
-check:
-    cargo clippy --tests -- -D warnings
-
 check-db:
     cargo sqlx prepare -- --bin universal-inbox-api
     cargo check --tests
@@ -30,16 +24,6 @@ ensure-db:
 
 migrate-db:
     sqlx database setup
-
-## Test recipes
-test test-filter="" $RUST_LOG="info":
-    cargo nextest run --color always {{test-filter}}
-
-test-ci:
-    cargo nextest run --profile ci
-
-test-coverage:
-    cargo llvm-cov nextest --all-features --lcov --output-path lcov.info --profile ci
 
 ## Run recipes
 run *command="serve --embed-async-workers": ensure-db
