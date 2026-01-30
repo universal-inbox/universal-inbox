@@ -1214,6 +1214,15 @@ impl TaskService {
         third_party_item: &ThirdPartyItem,
         for_user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
+        // Skip side effects for test accounts
+        let user = self.user_service.get_user(executor, for_user_id).await?;
+        if let Some(user) = user {
+            if user.is_testing {
+                debug!("Skipping task side effects for test account {for_user_id}");
+                return Ok(());
+            }
+        }
+
         match third_party_item.get_third_party_item_source_kind() {
             ThirdPartyItemSourceKind::Todoist => {
                 self.apply_updated_task_side_effect(

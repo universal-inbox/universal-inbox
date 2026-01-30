@@ -29,7 +29,7 @@ use crate::{
         task::ThirdPartyTaskSourceService, third_party::ThirdPartyItemSourceService,
         todoist::TodoistService,
     },
-    repository::{third_party::ThirdPartyItemRepository, Repository},
+    repository::{third_party::ThirdPartyItemRepository, user::UserRepository, Repository},
     universal_inbox::{
         integration_connection::service::IntegrationConnectionService,
         notification::service::NotificationService, task::service::TaskService,
@@ -266,6 +266,15 @@ impl ThirdPartyItemService {
         U: ThirdPartyItemSourceService<T> + Send + Sync,
         <T as TryFrom<ThirdPartyItem>>::Error: Send + Sync,
     {
+        // Skip syncing items from external sources for test accounts
+        let user = self.repository.get_user(executor, user_id).await?;
+        if let Some(user) = user {
+            if user.is_testing {
+                debug!("Skipping sync for test account {user_id}");
+                return Ok(vec![]);
+            }
+        }
+
         let kind = third_party_service.get_third_party_item_source_kind();
         let items = third_party_service
             .fetch_items(executor, user_id, last_sync_completed_at)
