@@ -49,3 +49,6 @@ generate-jwt-key-pair:
 
 generate-jwt-token user-email:
     cargo run -- generate-jwt-token {{user-email}}
+
+generate-user:
+    cargo run -- test generate-user
