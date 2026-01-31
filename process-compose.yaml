@@ -2,7 +2,7 @@ version: "0.6"
 
 processes:
   ui-api:
-    command: "just run-api"
+    command: "just api run-api"
     depends_on:
       postgresql:
         condition: process_started
@@ -10,10 +10,11 @@ processes:
         condition: process_started
     availability:
       restart: no
+    disabled: true
     namespace: "universal-inbox"
 
   ui-workers:
-    command: "just run-workers"
+    command: "just api run-workers"
     depends_on:
       postgresql:
         condition: process_started
@@ -21,30 +22,34 @@ processes:
         condition: process_started
     availability:
       restart: no
+    disabled: true
     namespace: "universal-inbox"
 
   ui-web:
-    command: "just run-web"
+    command: "just web run"
     availability:
       restart: no
-    disabled: false
     is_tty: true
+    disabled: true
     namespace: "universal-inbox"
 
   build-tailwind:
-    command: "just web/run-tailwind"
+    command: "just web run-tailwind"
     is_tty: true
+    disabled: true
     namespace: "universal-inbox"
 
   bundle-js:
-    command: "just web/run-bundle-js"
+    command: "just web run-bundle-js"
     is_tty: true
+    disabled: true
     namespace: "universal-inbox"
 
   nango-db:
     command: "just run-nango-db"
     shutdown:
       command: "docker stop nango-db"
+    disabled: true
     namespace: "nango"
 
   nango-server:
@@ -54,6 +59,7 @@ processes:
     depends_on:
       nango-db:
         condition: process_started
+    disabled: true
     namespace: "nango"
 
   caddy:

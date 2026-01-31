@@ -65,7 +65,7 @@ devbox shell
 Start PostgreSQL (it will also start Redis):
 
 ```bash
-just run-db
+just run
 ```
 
 Prepare the database:
@@ -116,10 +116,8 @@ user_profile_url = "https://oidc.service/users/me"
 
 ### Start the application
 
-(`just run-db` must be stopped as both will start PostgreSQL and Redis):
-
 ```bash
-just run-all
+just run
 ```
 
 It will start the following services:

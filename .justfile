@@ -62,14 +62,6 @@ build-release-all: build-release
     just api build-release
 
 ## Dev recipes
-run-db:
-    #!/usr/bin/env bash
-
-    process-compose \
-        -f .devbox/virtenv/redis/process-compose.yaml \
-        -f process-compose-pg.yaml \
-    -p ${PROCESS_COMPOSE_PORT:-9999}
-
 check-all: check
     just web check
     just api check
@@ -142,7 +134,7 @@ run-nango-server: create-docker-network
         --name ${NANGO_CONTAINER_NAME:-nango-server} \
         "$image"
 
-run-all:
+run:
     #!/usr/bin/env bash
 
     process-compose \
@@ -150,3 +142,33 @@ run-all:
         -f process-compose-pg.yaml \
         -f process-compose.yaml \
         -p ${PROCESS_COMPOSE_PORT:-9999}
+
+@start service:
+    process-compose -p ${PROCESS_COMPOSE_PORT:-9999} process start {{ service }}
+
+@stop service:
+    process-compose -p ${PROCESS_COMPOSE_PORT:-9999} process stop {{ service }}
+
+@logs service:
+    process-compose -p ${PROCESS_COMPOSE_PORT:-9999} process logs -n 100 -f {{ service }}
+
+status:
+    #!/usr/bin/env bash
+    PC_PORT=${PROCESS_COMPOSE_PORT:-9999}
+    echo "╭──────────────────────────────────────────────────────────────╮"
+    echo "│                    Service Status                            │"
+    echo "╰──────────────────────────────────────────────────────────────╯"
+    echo ""
+    for service in postgresql redis nango-db nango-server ui-api ui-workers ui-web; do
+        json=$(process-compose -p $PC_PORT process get -o json "$service" 2>/dev/null)
+        status=$(echo "$json" | jq -r '.[0].status // "Unknown"')
+        is_running=$(echo "$json" | jq -r '.[0].is_running // false')
+        if [ "$is_running" = "true" ]; then
+            icon="✅"
+        elif [ "$status" = "Disabled" ]; then
+            icon="⏸️ "
+        else
+            icon="❌"
+        fi
+        printf "%s %-15s %s\n" "$icon" "$service" "$status"
+    done

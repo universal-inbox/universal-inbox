@@ -260,7 +260,7 @@ layout {
     
     tab name="Processes" {
         pane command="direnv" {
-            args "exec" "." "just" "run-db"
+            args "exec" "." "just" "run"
         }
     }
     tab name="Opencode" {

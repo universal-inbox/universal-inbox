@@ -47,7 +47,11 @@ test-ci: install build-assets
 
 ## Run recipes
 run: clear-dev-assets build-assets
-    #!/bin/bash
+    #!/usr/bin/env bash
+
+    # Update Dioxus.toml proxy to use the correct API port
+    API_URL="http://localhost:${API_PORT:-8000}/api/"
+    sed -i.bak "s|backend = \"http://localhost:[0-9]*/api/\"|backend = \"${API_URL}\"|" Dioxus.toml
 
     dx serve --port ${DX_SERVE_PORT:-8080} --verbose
 
