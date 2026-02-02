@@ -83,6 +83,7 @@ pub mod mailer;
 pub mod observability;
 pub mod repository;
 pub mod routes;
+pub mod subscription;
 pub mod universal_inbox;
 pub mod utils;
 
