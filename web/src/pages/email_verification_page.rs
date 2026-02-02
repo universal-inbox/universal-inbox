@@ -37,7 +37,7 @@ pub fn EmailVerificationPage(
     } else if CONNECTED_USER
         .read()
         .as_ref()
-        .map(|user| user.is_email_validated())
+        .map(|user_context| user_context.user.is_email_validated())
         .unwrap_or_default()
     {
         nav.push(Route::NotificationsPage {});

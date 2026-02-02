@@ -22,6 +22,7 @@ use services::{
     },
     integration_connection_service::{INTEGRATION_CONNECTIONS, integration_connnection_service},
     notification_service::{NOTIFICATION_FILTERS, NOTIFICATIONS_PAGE, notification_service},
+    subscription_service::subscription_service,
     task_service::task_service,
     toast_service::{TOASTS, VIEWPORT_WIDTH, toast_service},
     user_service::{CONNECTED_USER, user_service},
@@ -114,9 +115,11 @@ pub fn App() -> Element {
         )
     });
 
-    // Initialize viewport width and set up resize listener
+    let _subscription_service_handle = use_coroutine(move |rx| {
+        subscription_service(rx, api_base_url(), UI_MODEL.signal(), toast_service_handle)
+    });
+
     use_effect(move || {
-        // Set initial viewport width
         if let Some(window) = web_sys::window() {
             *VIEWPORT_WIDTH.write() = window
                 .inner_width()

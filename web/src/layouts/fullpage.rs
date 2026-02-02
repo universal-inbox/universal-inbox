@@ -32,8 +32,8 @@ pub fn FullpageLayout() -> Element {
             let user_avatar = Some(
                 CONNECTED_USER()
                     .as_ref()
-                    .map(|user| {
-                        if let Some(ref email) = user.email {
+                    .map(|user_context| {
+                        if let Some(ref email) = user_context.user.email {
                             Generator::default()
                                 .set_image_size(150)
                                 .set_rating("g")
@@ -45,16 +45,26 @@ pub fn FullpageLayout() -> Element {
                     })
                     .unwrap_or_else(|| DEFAULT_USER_AVATAR.to_string()),
             );
-            let user_email = CONNECTED_USER()
-                .as_ref()
-                .and_then(|user| user.email.as_ref().map(|email| email.to_string()));
-            let user_email_signature = CONNECTED_USER().as_ref().and_then(|user| {
-                user.chat_support_email_signature
+            let user_email = CONNECTED_USER().as_ref().and_then(|user_context| {
+                user_context
+                    .user
+                    .email
+                    .as_ref()
+                    .map(|email| email.to_string())
+            });
+            let user_email_signature = CONNECTED_USER().as_ref().and_then(|user_context| {
+                user_context
+                    .user
+                    .chat_support_email_signature
                     .as_ref()
                     .map(|signature| signature.to_string())
             });
-            let user_full_name = CONNECTED_USER().as_ref().and_then(|user| user.full_name());
-            let user_id = CONNECTED_USER().as_ref().map(|user| user.id.to_string());
+            let user_full_name = CONNECTED_USER()
+                .as_ref()
+                .and_then(|user_context| user_context.user.full_name());
+            let user_id = CONNECTED_USER()
+                .as_ref()
+                .map(|user_context| user_context.user.id.to_string());
 
             init_crisp(
                 chat_support_website_id,

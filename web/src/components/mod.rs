@@ -26,6 +26,7 @@ pub mod notification_preview;
 pub mod notifications_list;
 pub mod resizable_panel;
 pub mod spinner;
+pub mod subscription_card;
 pub mod task_link_modal;
 pub mod task_planning_modal;
 pub mod task_preview;
