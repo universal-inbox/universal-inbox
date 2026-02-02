@@ -23,9 +23,10 @@ use webauthn_rs::prelude::*;
 
 use universal_inbox::{
     auth::openidconnect::OpenidConnectProvider,
+    subscription::SubscriptionInfo,
     user::{
         Credentials, EmailValidationToken, Password, PasswordHash, PasswordResetToken, User,
-        UserId, UserPatch, Username,
+        UserContext, UserId, UserPatch, Username,
     },
 };
 
@@ -38,6 +39,7 @@ use crate::{
     observability::spawn_blocking_with_tracing,
     repository::Repository,
     repository::user::UserRepository,
+    subscription::service::SubscriptionService,
     universal_inbox::{
         UniversalInboxError, UpdateStatus,
         user::model::{AuthUserId, OpenIdConnectUserAuth, PasskeyUserAuth, UserAuth, UserAuthKind},
@@ -49,6 +51,7 @@ pub struct UserService {
     application_settings: ApplicationSettings,
     mailer: Arc<RwLock<dyn Mailer + Send + Sync>>,
     webauthn: Arc<Webauthn>,
+    subscription_service: Arc<SubscriptionService>,
 }
 
 impl UserService {
@@ -57,12 +60,14 @@ impl UserService {
         application_settings: ApplicationSettings,
         mailer: Arc<RwLock<dyn Mailer + Send + Sync>>,
         webauthn: Arc<Webauthn>,
+        subscription_service: Arc<SubscriptionService>,
     ) -> UserService {
         UserService {
             repository,
             application_settings,
             mailer,
             webauthn,
+            subscription_service,
         }
     }
 
@@ -94,6 +99,32 @@ impl UserService {
         }
 
         Ok(user_result)
+    }
+
+    pub async fn get_user_context(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        id: UserId,
+    ) -> Result<Option<UserContext>, UniversalInboxError> {
+        let user = self.get_user(executor, id).await?;
+        match user {
+            Some(user) => {
+                let subscription_info = self
+                    .subscription_service
+                    .get_subscription_status(executor, id)
+                    .await?;
+                Ok(Some(UserContext::new(user, subscription_info)))
+            }
+            None => Ok(None),
+        }
+    }
+
+    pub fn build_user_context(
+        &self,
+        user: User,
+        subscription_info: SubscriptionInfo,
+    ) -> UserContext {
+        UserContext::new(user, subscription_info)
     }
 
     pub async fn get_user_by_email(
@@ -364,9 +395,17 @@ impl UserService {
                     return Err(UniversalInboxError::Forbidden(rejection_message.clone()));
                 }
 
-                self.repository
+                let new_user = self
+                    .repository
                     .create_user(executor, User::new(first_name, last_name, email), user_auth)
+                    .await?;
+
+                self.subscription_service
+                    .start_trial(executor, new_user.id)
                     .await
+                    .context("Failed to start trial for new OIDC user")?;
+
+                Ok(new_user)
             }
         }
     }
@@ -518,6 +557,10 @@ impl UserService {
             .repository
             .create_user(executor, user, user_auth)
             .await?;
+        self.subscription_service
+            .start_trial(executor, new_user.id)
+            .await
+            .context("Failed to start trial for new user")?;
         self.send_verification_email(executor, new_user.id, false)
             .await?;
         Ok(new_user)
@@ -875,6 +918,11 @@ impl UserService {
             .repository
             .create_user(executor, user, user_auth)
             .await?;
+
+        self.subscription_service
+            .start_trial(executor, new_user.id)
+            .await
+            .context("Failed to start trial for new passkey user")?;
 
         Ok(new_user)
     }

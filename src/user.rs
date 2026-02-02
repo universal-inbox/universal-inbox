@@ -9,6 +9,8 @@ use serde_with::serde_as;
 use uuid::Uuid;
 use validator::Validate;
 
+use crate::subscription::SubscriptionInfo;
+
 #[serde_as]
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct User {
@@ -68,6 +70,19 @@ impl User {
             (None, Some(last_name)) => Some(last_name.clone()),
             (None, None) => None,
         }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct UserContext {
+    #[serde(flatten)]
+    pub user: User,
+    pub subscription: SubscriptionInfo,
+}
+
+impl UserContext {
+    pub fn new(user: User, subscription: SubscriptionInfo) -> Self {
+        Self { user, subscription }
     }
 }
 

@@ -17,6 +17,7 @@ use crate::{
     configuration::Settings,
     integrations::slack::SlackService,
     run_server, run_worker,
+    subscription::service::SubscriptionService,
     universal_inbox::{
         UniversalInboxError, auth_token::service::AuthenticationTokenService,
         integration_connection::service::IntegrationConnectionService,
@@ -204,6 +205,7 @@ impl Cli {
         auth_token_service: Arc<RwLock<AuthenticationTokenService>>,
         third_party_item_service: Arc<RwLock<ThirdPartyItemService>>,
         slack_service: Arc<SlackService>,
+        subscription_service: Arc<SubscriptionService>,
     ) -> Result<(), UniversalInboxError> {
         match &self.command {
             Commands::SyncNotifications { source, user_id } => {
@@ -270,6 +272,7 @@ impl Cli {
                     integration_connection_service.clone(),
                     auth_token_service,
                     third_party_item_service.clone(),
+                    subscription_service.clone(),
                 )
                 .await
                 .expect("Failed to start HTTP server");
@@ -283,6 +286,7 @@ impl Cli {
                         integration_connection_service,
                         third_party_item_service,
                         slack_service,
+                        subscription_service,
                     )
                     .await;
 
@@ -317,6 +321,7 @@ impl Cli {
                     integration_connection_service,
                     third_party_item_service,
                     slack_service,
+                    subscription_service,
                 )
                 .await;
 

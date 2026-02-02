@@ -84,6 +84,75 @@ pub struct UserSubscription {
     pub updated_at: DateTime<Utc>,
 }
 
+/// Summary of user subscription status for API responses
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SubscriptionInfo {
+    pub status: SubscriptionStatus,
+    pub trial_ends_at: Option<DateTime<Utc>>,
+    pub subscription_ends_at: Option<DateTime<Utc>>,
+    pub billing_interval: Option<BillingInterval>,
+    pub days_remaining: Option<i64>,
+    pub is_read_only: bool,
+}
+
+impl SubscriptionInfo {
+    pub fn from_subscription(subscription: &UserSubscription) -> Self {
+        let days_remaining = Self::compute_days_remaining(subscription);
+        Self {
+            status: subscription.subscription_status,
+            trial_ends_at: subscription.trial_ends_at,
+            subscription_ends_at: subscription.subscription_ends_at,
+            billing_interval: subscription.billing_interval,
+            days_remaining,
+            is_read_only: subscription.is_read_only(),
+        }
+    }
+
+    pub fn unlimited() -> Self {
+        Self {
+            status: SubscriptionStatus::Unlimited,
+            trial_ends_at: None,
+            subscription_ends_at: None,
+            billing_interval: None,
+            days_remaining: None,
+            is_read_only: false,
+        }
+    }
+
+    fn compute_days_remaining(subscription: &UserSubscription) -> Option<i64> {
+        let now = Utc::now();
+        match subscription.subscription_status {
+            SubscriptionStatus::Trialing => subscription
+                .trial_ends_at
+                .map(|end| (end - now).num_days().max(0)),
+            SubscriptionStatus::Active | SubscriptionStatus::Canceled => subscription
+                .subscription_ends_at
+                .map(|end| (end - now).num_days().max(0)),
+            SubscriptionStatus::PastDue
+            | SubscriptionStatus::Expired
+            | SubscriptionStatus::Unlimited => None,
+        }
+    }
+
+    pub fn is_active(&self) -> bool {
+        matches!(
+            self.status,
+            SubscriptionStatus::Active
+                | SubscriptionStatus::Trialing
+                | SubscriptionStatus::Unlimited
+        )
+    }
+
+    pub fn is_read_only(&self) -> bool {
+        matches!(
+            self.status,
+            SubscriptionStatus::Expired
+                | SubscriptionStatus::Canceled
+                | SubscriptionStatus::PastDue
+        )
+    }
+}
+
 impl UserSubscription {
     pub fn new_trial(user_id: UserId, trial_ends_at: DateTime<Utc>) -> Self {
         let now = Utc::now();

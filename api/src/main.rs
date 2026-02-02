@@ -156,6 +156,7 @@ async fn main() -> std::io::Result<()> {
         auth_token_service,
         third_party_item_service,
         slack_service,
+        subscription_service,
     ) = build_services(
         pool,
         &settings,
@@ -183,6 +184,7 @@ async fn main() -> std::io::Result<()> {
             auth_token_service,
             third_party_item_service,
             slack_service,
+            subscription_service,
         )
         .await
     {
