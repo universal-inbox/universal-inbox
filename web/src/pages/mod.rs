@@ -8,5 +8,6 @@ pub mod password_reset_page;
 pub mod password_update_page;
 pub mod settings_page;
 pub mod signup_page;
+pub mod subscription_settings_page;
 pub mod synced_tasks_page;
 pub mod user_profile_page;

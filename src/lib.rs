@@ -35,6 +35,7 @@ pub struct FrontConfig {
     pub chat_support_website_id: Option<String>,
     pub chat_support_user_email_signature: Option<String>,
     pub version: Option<String>,
+    pub stripe_enabled: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
