@@ -27,6 +27,18 @@ pub trait SubscriptionRepository {
         user_id: UserId,
     ) -> Result<Option<UserSubscription>, UniversalInboxError>;
 
+    async fn get_subscription_by_stripe_customer_id(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        stripe_customer_id: &str,
+    ) -> Result<Option<UserSubscription>, UniversalInboxError>;
+
+    async fn get_subscription_by_subscription_id(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        subscription_id: &str,
+    ) -> Result<Option<UserSubscription>, UniversalInboxError>;
+
     async fn create_subscription(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -44,6 +56,11 @@ pub trait SubscriptionRepository {
         executor: &mut Transaction<'_, Postgres>,
         id: SubscriptionId,
     ) -> Result<bool, UniversalInboxError>;
+
+    async fn list_subscriptions_with_stripe_subscription(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+    ) -> Result<Vec<UserSubscription>, UniversalInboxError>;
 }
 
 #[derive(Debug)]
@@ -149,6 +166,98 @@ impl SubscriptionRepository for SubscriptionRepositoryImpl {
         .map_err(|err| {
             let message =
                 format!("Failed to fetch subscription for user {user_id} from storage: {err}");
+            UniversalInboxError::DatabaseError {
+                source: err,
+                message,
+            }
+        })?;
+
+        row.map(|r| r.try_into()).transpose()
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(stripe_customer_id = %stripe_customer_id),
+        err
+    )]
+    async fn get_subscription_by_stripe_customer_id(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        stripe_customer_id: &str,
+    ) -> Result<Option<UserSubscription>, UniversalInboxError> {
+        let row = sqlx::query_as!(
+            UserSubscriptionRow,
+            r#"
+                SELECT
+                    id,
+                    user_id,
+                    stripe_customer_id,
+                    subscription_status as "subscription_status: _",
+                    subscription_id,
+                    trial_started_at,
+                    trial_ends_at,
+                    subscription_ends_at,
+                    billing_interval,
+                    created_at,
+                    updated_at
+                FROM user_subscription
+                WHERE stripe_customer_id = $1
+            "#,
+            stripe_customer_id
+        )
+        .fetch_optional(&mut **executor)
+        .await
+        .map_err(|err| {
+            let message = format!(
+                "Failed to fetch subscription for Stripe customer {stripe_customer_id} from storage: {err}"
+            );
+            UniversalInboxError::DatabaseError {
+                source: err,
+                message,
+            }
+        })?;
+
+        row.map(|r| r.try_into()).transpose()
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(subscription_id = %subscription_id),
+        err
+    )]
+    async fn get_subscription_by_subscription_id(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        subscription_id: &str,
+    ) -> Result<Option<UserSubscription>, UniversalInboxError> {
+        let row = sqlx::query_as!(
+            UserSubscriptionRow,
+            r#"
+                SELECT
+                    id,
+                    user_id,
+                    stripe_customer_id,
+                    subscription_status as "subscription_status: _",
+                    subscription_id,
+                    trial_started_at,
+                    trial_ends_at,
+                    subscription_ends_at,
+                    billing_interval,
+                    created_at,
+                    updated_at
+                FROM user_subscription
+                WHERE subscription_id = $1
+            "#,
+            subscription_id
+        )
+        .fetch_optional(&mut **executor)
+        .await
+        .map_err(|err| {
+            let message = format!(
+                "Failed to fetch subscription for Stripe subscription {subscription_id} from storage: {err}"
+            );
             UniversalInboxError::DatabaseError {
                 source: err,
                 message,
@@ -336,6 +445,45 @@ impl SubscriptionRepository for SubscriptionRepositoryImpl {
             })?;
 
         Ok(result.rows_affected() == 1)
+    }
+
+    #[tracing::instrument(level = "debug", skip_all, err)]
+    async fn list_subscriptions_with_stripe_subscription(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+    ) -> Result<Vec<UserSubscription>, UniversalInboxError> {
+        let rows = sqlx::query_as!(
+            UserSubscriptionRow,
+            r#"
+                SELECT
+                    id,
+                    user_id,
+                    stripe_customer_id,
+                    subscription_status as "subscription_status: _",
+                    subscription_id,
+                    trial_started_at,
+                    trial_ends_at,
+                    subscription_ends_at,
+                    billing_interval,
+                    created_at,
+                    updated_at
+                FROM user_subscription
+                WHERE subscription_id IS NOT NULL
+            "#
+        )
+        .fetch_all(&mut **executor)
+        .await
+        .map_err(|err| {
+            let message = format!(
+                "Failed to fetch subscriptions with Stripe subscription from storage: {err}"
+            );
+            UniversalInboxError::DatabaseError {
+                source: err,
+                message,
+            }
+        })?;
+
+        rows.into_iter().map(|r| r.try_into()).collect()
     }
 }
 

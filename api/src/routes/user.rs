@@ -19,9 +19,11 @@ use universal_inbox::{
     auth::auth_token::{AuthenticationToken, TruncatedAuthenticationToken},
     user::{
         Credentials, EmailValidationToken, Password, PasswordResetToken, RegisterUserParameters,
-        User, UserId, UserPatch, Username,
+        User, UserContext, UserId, UserPatch, Username,
     },
 };
+
+use crate::subscription::service::SubscriptionService;
 
 use crate::{
     configuration::Settings,
@@ -119,10 +121,10 @@ pub async fn get_user(
         .await
         .context("Failed to create new transaction while fetching user")?;
 
-    match service.get_user(&mut transaction, user_id).await? {
-        Some(user) => Ok(HttpResponse::Ok()
+    match service.get_user_context(&mut transaction, user_id).await? {
+        Some(user_context) => Ok(HttpResponse::Ok()
             .content_type("application/json")
-            .body(serde_json::to_string(&user).context("Cannot serialize user")?)),
+            .body(serde_json::to_string(&user_context).context("Cannot serialize user context")?)),
         None => Ok(HttpResponse::NotFound()
             .content_type("application/json")
             .body(BoxBody::new(
@@ -180,6 +182,7 @@ pub async fn patch_user(
 
 pub async fn register_user(
     user_service: web::Data<Arc<UserService>>,
+    subscription_service: web::Data<Arc<SubscriptionService>>,
     auth_token_service: web::Data<Arc<RwLock<AuthenticationTokenService>>>,
     settings: web::Data<Settings>,
     register_user_parameters: web::Json<RegisterUserParameters>,
@@ -251,6 +254,11 @@ pub async fn register_user(
         .insert(USER_AUTH_KIND_SESSION_KEY, UserAuthKind::Local)
         .context("Failed to insert authentication type into the session")?;
 
+    let subscription_info = subscription_service
+        .get_subscription_status(&mut transaction, user.id)
+        .await?;
+    let user_context = user_service.build_user_context(user, subscription_info);
+
     transaction
         .commit()
         .await
@@ -258,15 +266,16 @@ pub async fn register_user(
 
     Ok(HttpResponse::Ok()
         .content_type("application/json")
-        .body(serde_json::to_string(&user).context("Cannot serialize user")?))
+        .body(serde_json::to_string(&user_context).context("Cannot serialize user context")?))
 }
 
 pub async fn login_user(
     user_service: web::Data<Arc<UserService>>,
+    subscription_service: web::Data<Arc<SubscriptionService>>,
     auth_token_service: web::Data<Arc<RwLock<AuthenticationTokenService>>>,
     credentials: web::Json<Credentials>,
     session: Session,
-) -> Result<web::Json<User>, UniversalInboxError> {
+) -> Result<web::Json<UserContext>, UniversalInboxError> {
     let service = user_service.clone();
     let mut transaction = service
         .begin()
@@ -299,12 +308,17 @@ pub async fn login_user(
         .insert(USER_AUTH_KIND_SESSION_KEY, UserAuthKind::Local)
         .context("Failed to insert authentication type into the session")?;
 
+    let subscription_info = subscription_service
+        .get_subscription_status(&mut transaction, user.id)
+        .await?;
+    let user_context = service.build_user_context(user, subscription_info);
+
     transaction
         .commit()
         .await
         .context("Failed to commit while logging in user")?;
 
-    Ok(web::Json(user))
+    Ok(web::Json(user_context))
 }
 
 pub async fn send_verification_email(
@@ -539,11 +553,12 @@ pub async fn start_passkey_registration(
 
 pub async fn finish_passkey_registration(
     user_service: web::Data<Arc<UserService>>,
+    subscription_service: web::Data<Arc<SubscriptionService>>,
     auth_token_service: web::Data<Arc<RwLock<AuthenticationTokenService>>>,
     session: Session,
     cache: web::Data<Cache>,
     register_credentials: web::Json<RegisterPublicKeyCredential>,
-) -> Result<web::Json<User>, UniversalInboxError> {
+) -> Result<web::Json<UserContext>, UniversalInboxError> {
     let service = user_service.clone();
     let mut transaction = service
         .begin()
@@ -594,12 +609,17 @@ pub async fn finish_passkey_registration(
         .insert(USER_AUTH_KIND_SESSION_KEY, UserAuthKind::Passkey)
         .context("Failed to insert authentication type into the session")?;
 
+    let subscription_info = subscription_service
+        .get_subscription_status(&mut transaction, new_user.id)
+        .await?;
+    let user_context = service.build_user_context(new_user, subscription_info);
+
     transaction
         .commit()
         .await
         .context("Failed to commit while finishing Passkey registration")?;
 
-    Ok(web::Json(new_user))
+    Ok(web::Json(user_context))
 }
 
 #[allow(dependency_on_unit_never_type_fallback)]
@@ -650,11 +670,12 @@ pub async fn start_passkey_authentication(
 
 pub async fn finish_passkey_authentication(
     user_service: web::Data<Arc<UserService>>,
+    subscription_service: web::Data<Arc<SubscriptionService>>,
     auth_token_service: web::Data<Arc<RwLock<AuthenticationTokenService>>>,
     session: Session,
     cache: web::Data<Cache>,
     credentials: web::Json<PublicKeyCredential>,
-) -> Result<web::Json<User>, UniversalInboxError> {
+) -> Result<web::Json<UserContext>, UniversalInboxError> {
     let service = user_service.clone();
     let mut transaction = service
         .begin()
@@ -704,10 +725,15 @@ pub async fn finish_passkey_authentication(
         .insert(USER_AUTH_KIND_SESSION_KEY, UserAuthKind::Passkey)
         .context("Failed to insert authentication type into the session")?;
 
+    let subscription_info = subscription_service
+        .get_subscription_status(&mut transaction, user.id)
+        .await?;
+    let user_context = service.build_user_context(user, subscription_info);
+
     transaction
         .commit()
         .await
         .context("Failed to commit while finishing Passkey authentication")?;
 
-    Ok(web::Json(user))
+    Ok(web::Json(user_context))
 }

@@ -9,8 +9,11 @@ use universal_inbox::{
     notification::NotificationSyncSourceKind, task::TaskSyncSourceKind, user::UserId,
 };
 
-use crate::universal_inbox::{
-    UniversalInboxError, notification::service::NotificationService, task::service::TaskService,
+use crate::{
+    subscription::service::SubscriptionService,
+    universal_inbox::{
+        UniversalInboxError, notification::service::NotificationService, task::service::TaskService,
+    },
 };
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -86,5 +89,18 @@ pub async fn handle_sync_tasks(
             .await?;
     }
 
+    Ok(())
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SyncSubscriptionsJob;
+
+pub async fn handle_sync_subscriptions(
+    _event: SyncSubscriptionsJob,
+    subscription_service: Data<Arc<SubscriptionService>>,
+) -> Result<(), UniversalInboxError> {
+    subscription_service
+        .sync_all_subscriptions_from_stripe()
+        .await?;
     Ok(())
 }
