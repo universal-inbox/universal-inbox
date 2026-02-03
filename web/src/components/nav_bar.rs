@@ -7,13 +7,14 @@ use dioxus_free_icons::{
     Icon,
     icons::{
         bs_icons::{
-            BsBell, BsBook, BsBookmarkCheck, BsBoxArrowInLeft, BsCreditCard, BsGear, BsInbox,
-            BsMoon, BsPerson, BsQuestionLg, BsSun,
+            BsBell, BsBook, BsBookmarkCheck, BsBoxArrowInLeft, BsCreditCard, BsGear, BsHourglass,
+            BsInbox, BsMoon, BsPerson, BsQuestionLg, BsSun,
         },
         go_icons::GoMarkGithub,
     },
 };
 use gravatar_rs::Generator;
+use universal_inbox::subscription::SubscriptionStatus;
 
 use crate::{
     config::APP_CONFIG,
@@ -154,6 +155,8 @@ pub fn NavBar() -> Element {
 
             div {
                 class: "sm:navbar-end items-center gap-2",
+
+                SubscriptionStatusBadge {}
 
                 NavBarUtils {
                     class: "max-sm:hidden",
@@ -308,6 +311,53 @@ fn NavBarUtils(show_changelog: bool, in_menu: bool, class: Option<String>) -> El
                     Icon { class: "w-5 h-5", icon: BsGear }
                     p { "Settings" }
                 }
+            }
+        }
+    }
+}
+
+#[component]
+fn SubscriptionStatusBadge() -> Element {
+    let Some(user_context) = CONNECTED_USER.read().clone() else {
+        return rsx! {};
+    };
+
+    let subscription = &user_context.subscription;
+
+    let (badge_class, badge_text) = match subscription.status {
+        SubscriptionStatus::Trialing => {
+            let days = subscription.days_remaining.unwrap_or(0);
+            (
+                "badge-warning badge-soft".to_string(),
+                format!(
+                    "Trial: {} day{} left",
+                    days,
+                    if days == 1 { "" } else { "s" }
+                ),
+            )
+        }
+        SubscriptionStatus::Active => ("badge-success badge-soft".to_string(), "Pro".to_string()),
+        SubscriptionStatus::PastDue => (
+            "badge-warning badge-soft".to_string(),
+            "Payment Due".to_string(),
+        ),
+        SubscriptionStatus::Canceled | SubscriptionStatus::Expired => {
+            ("badge-error badge-soft".to_string(), "Expired".to_string())
+        }
+        SubscriptionStatus::Unlimited => return rsx! {},
+    };
+
+    rsx! {
+        Link {
+            class: "btn btn-text btn-sm px-0",
+            to: Route::SubscriptionSettingsPage {},
+            title: "Subscription settings",
+            span {
+                class: "badge {badge_class} gap-1",
+                if subscription.status == SubscriptionStatus::Trialing {
+                    Icon { class: "w-3.5 h-3.5", icon: BsHourglass }
+                }
+                span { "{badge_text}" }
             }
         }
     }
