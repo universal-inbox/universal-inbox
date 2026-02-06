@@ -36,7 +36,7 @@ use crate::{
         task_preview::TaskDetailsPreview,
     },
     model::{PreviewPane, UniversalInboxUIModel},
-    services::notification_service::NotificationCommand,
+    services::{notification_service::NotificationCommand, user_service::CONNECTED_USER},
 };
 
 #[component]
@@ -46,8 +46,14 @@ pub fn NotificationPreview(
     notifications_count: ReadSignal<usize>,
 ) -> Element {
     let notification_service = use_coroutine_handle::<NotificationCommand>();
+    let is_read_only = CONNECTED_USER
+        .read()
+        .as_ref()
+        .map(|ctx| ctx.subscription.is_read_only)
+        .unwrap_or(false);
     let context = use_memo(move || NotificationListContext {
         is_task_actions_enabled: ui_model.read().is_task_actions_enabled,
+        is_read_only,
         notification_service,
     });
     use_context_provider(move || context);
