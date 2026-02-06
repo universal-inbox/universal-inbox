@@ -633,6 +633,9 @@ pub struct SlackThread {
     pub channel: SlackChannelInfo,
     pub team: SlackTeamInfo,
     pub references: Option<SlackReferences>,
+    /// The Slack user ID of the current user (from IntegrationConnection.provider_user_id)
+    #[serde(default)]
+    pub user_slack_id: Option<String>,
 }
 
 impl SlackThread {
@@ -670,6 +673,24 @@ impl SlackThread {
     pub fn render_title(&self) -> String {
         self.first_unread_message()
             .render_title(self.references.clone())
+    }
+
+    /// Check if the last message in the thread was sent by the current user
+    pub fn is_last_message_from_user(&self) -> bool {
+        let Some(ref user_slack_id) = self.user_slack_id else {
+            return false;
+        };
+
+        let last_message = self.messages.last();
+
+        // Check if the sender is a user (not a bot) and matches the current user
+        match &last_message.sender {
+            SlackMessageSender {
+                user: Some(sender_user_id),
+                ..
+            } => sender_user_id.to_string() == *user_slack_id,
+            _ => false,
+        }
     }
 }
 
@@ -1141,6 +1162,7 @@ Here is a [link](https://www.universal-inbox.com)"#
                 team: team_response.team.clone(),
                 references: None,
                 sender_profiles: Default::default(),
+                user_slack_id: None,
             })
         }
 

@@ -260,6 +260,8 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         &google_drive_comment_123,
         &google_drive_comment_456,
         app.user.id,
+        user_email_address.as_ref(),
+        "Jane Doe",
     );
     google_drive_get_user_info_mock.assert_hits(1);
     google_drive_files_list_mock.assert();
@@ -284,11 +286,17 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         updated_notification.source_item.source_id,
         existing_notification.source_item.source_id
     );
-    assert_eq!(updated_notification.status, NotificationStatus::Unread);
+    // The last reply on this comment is from the user (jane.doe@example.com),
+    // so the notification should be marked as Deleted (user already responded)
+    assert_eq!(updated_notification.status, NotificationStatus::Deleted);
     assert_eq!(updated_notification.last_read_at, None);
     assert_eq!(
         updated_notification.source_item.data,
-        ThirdPartyItemData::GoogleDriveComment(Box::new(google_drive_comment_456))
+        ThirdPartyItemData::GoogleDriveComment(Box::new(GoogleDriveComment {
+            user_email_address: Some(user_email_address.to_string()),
+            user_display_name: Some("Jane Doe".to_string()),
+            ..google_drive_comment_456
+        }))
     );
     // `snoozed_until` and `task_id` should not be reset
     assert_eq!(

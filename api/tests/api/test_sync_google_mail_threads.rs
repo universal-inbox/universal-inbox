@@ -1037,3 +1037,139 @@ async fn test_sync_notifications_should_create_a_new_google_calendar_notificatio
         ThirdPartyItemData::GoogleMailThread(Box::new(google_mail_thread_with_invitation_reply))
     );
 }
+
+#[rstest]
+#[case(true, NotificationStatus::Deleted)]
+#[case(false, NotificationStatus::Unread)]
+#[tokio::test]
+async fn test_sync_notifications_should_mark_notification_as_deleted_when_user_replied(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    mut google_mail_thread_get_456: GoogleMailThread,
+    google_mail_user_profile: GoogleMailUserProfile,
+    google_mail_labels_list: GoogleMailLabelList,
+    nango_google_mail_connection: Box<NangoConnection>,
+    #[case] last_message_from_user: bool,
+    #[case] expected_notification_status: NotificationStatus,
+) {
+    // When a GoogleMailThread has new unread messages and the last message is from the user,
+    // the notification should be marked as Deleted (user already responded).
+    // Otherwise, it should be marked as Unread.
+    let app = authenticated_app.await;
+    let google_mail_config = GoogleMailConfig::enabled();
+    let synced_label_id = google_mail_config.synced_label.id.clone();
+    let user_email_address =
+        EmailAddress::from_str(&google_mail_user_profile.email_address).unwrap();
+
+    // Set thread as unread (required for testing the user-replied logic)
+    google_mail_thread_get_456.messages[1].label_ids = Some(vec![
+        GOOGLE_MAIL_INBOX_LABEL.to_string(),
+        synced_label_id.clone(),
+        GOOGLE_MAIL_UNREAD_LABEL.to_string(),
+    ]);
+
+    // Set the "From" header of the last message based on test case
+    google_mail_thread_get_456.messages[1].payload.headers = vec![
+        GoogleMailMessageHeader {
+            name: "Date".to_string(),
+            value: "Wed, 13 Sep 2023 22:27:16 +0200".to_string(),
+        },
+        GoogleMailMessageHeader {
+            name: "Subject".to_string(),
+            value: "Re: test 456".to_string(),
+        },
+        GoogleMailMessageHeader {
+            name: "From".to_string(),
+            value: if last_message_from_user {
+                format!("User Name <{user_email_address}>")
+            } else {
+                "External Sender <external@example.com>".to_string()
+            },
+        },
+        GoogleMailMessageHeader {
+            name: "To".to_string(),
+            value: "other@example.com".to_string(),
+        },
+    ];
+
+    let google_mail_integration_connection = create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        &settings.oauth2.nango_secret_key,
+        IntegrationConnectionConfig::GoogleMail(google_mail_config.clone()),
+        &settings,
+        nango_google_mail_connection,
+        None,
+        None,
+    )
+    .await;
+
+    let google_mail_threads_list = GoogleMailThreadList {
+        threads: Some(vec![GoogleMailThreadMinimal {
+            id: google_mail_thread_get_456.id.clone(),
+            snippet: google_mail_thread_get_456.messages[0].snippet.clone(),
+            history_id: google_mail_thread_get_456.history_id.clone(),
+        }]),
+        result_size_estimate: 1,
+        next_page_token: None,
+    };
+
+    let google_mail_get_user_profile_mock = mock_google_mail_get_user_profile_service(
+        &app.app.google_mail_mock_server,
+        &google_mail_user_profile,
+    );
+    let google_mail_labels_list_mock = mock_google_mail_labels_list_service(
+        &app.app.google_mail_mock_server,
+        &google_mail_labels_list,
+    );
+    let google_mail_threads_list_mock = mock_google_mail_threads_list_service(
+        &app.app.google_mail_mock_server,
+        None,
+        settings
+            .integrations
+            .get("google_mail")
+            .unwrap()
+            .page_size
+            .unwrap(),
+        Some(vec![synced_label_id.clone()]),
+        &google_mail_threads_list,
+    );
+    let raw_google_mail_thread_get_456 = google_mail_thread_get_456.clone().into();
+    let google_mail_thread_get_456_mock = mock_google_mail_thread_get_service(
+        &app.app.google_mail_mock_server,
+        "456",
+        &raw_google_mail_thread_get_456,
+    );
+
+    let notifications: Vec<Notification> = sync_notifications(
+        &app.client,
+        &app.app.api_address,
+        Some(NotificationSourceKind::GoogleMail),
+        false,
+    )
+    .await;
+
+    assert_eq!(notifications.len(), 1);
+    google_mail_get_user_profile_mock.assert_hits(1);
+    google_mail_labels_list_mock.assert_hits(1);
+    google_mail_threads_list_mock.assert();
+    google_mail_thread_get_456_mock.assert();
+
+    let synced_notification: Box<Notification> = get_resource(
+        &app.client,
+        &app.app.api_address,
+        "notifications",
+        notifications[0].id.into(),
+    )
+    .await;
+    assert_eq!(synced_notification.kind, NotificationSourceKind::GoogleMail);
+    assert_eq!(
+        synced_notification.status, expected_notification_status,
+        "Expected notification status to be {:?} when last_message_from_user={}, but got {:?}",
+        expected_notification_status, last_message_from_user, synced_notification.status
+    );
+    assert_eq!(
+        synced_notification.source_item.integration_connection_id,
+        google_mail_integration_connection.id
+    );
+}

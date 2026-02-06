@@ -849,7 +849,12 @@ impl ThirdPartyNotificationSourceService<GoogleMailThread> for GoogleMailService
         } else {
             let thread_is_unread = source.is_tagged_with(GOOGLE_MAIL_UNREAD_LABEL, None);
             if thread_is_unread {
-                NotificationStatus::Unread
+                // If the user sent the last message, mark as Deleted (user already responded)
+                if source.is_last_message_from_user() {
+                    NotificationStatus::Deleted
+                } else {
+                    NotificationStatus::Unread
+                }
             } else {
                 NotificationStatus::Read
             }
