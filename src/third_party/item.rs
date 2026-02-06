@@ -336,6 +336,7 @@ mod tests {
             team: team_response.team.clone(),
             references: None,
             sender_profiles: Default::default(),
+            user_slack_id: None,
         };
 
         ThirdPartyItem::new(

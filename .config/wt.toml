@@ -42,8 +42,7 @@ term = """
 SESSION_NAME="$(echo {{ branch | sanitize_db }} | cut -c -30)"
 
 if ! zellij list-sessions -s | grep -v EXITED | grep -q "^${SESSION_NAME}\b"; then
-    echo ${SESSION_NAME} $(pwd) > /tmp/log
-    zellij attach -b ${SESSION_NAME} options --default-layout .config/wt-zellij-layout.kdl >& /tmp/log2
+    zellij attach -b ${SESSION_NAME} options --default-layout .config/wt-zellij-layout.kdl
 fi
 
 if [ -n "$ZELLIJ" ]; then

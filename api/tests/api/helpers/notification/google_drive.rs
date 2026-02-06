@@ -167,6 +167,8 @@ pub fn assert_sync_notifications(
     google_drive_comment_123: &GoogleDriveComment,
     google_drive_comment_456: &GoogleDriveComment,
     expected_user_id: UserId,
+    user_email_address: &str,
+    user_display_name: &str,
 ) {
     for notification in notifications.iter() {
         assert_eq!(notification.user_id, expected_user_id);
@@ -187,19 +189,23 @@ pub fn assert_sync_notifications(
                 assert_eq!(notification.last_read_at, None);
                 assert_eq!(
                     notification.source_item.data,
-                    ThirdPartyItemData::GoogleDriveComment(Box::new(
-                        google_drive_comment_123.clone()
-                    ))
+                    ThirdPartyItemData::GoogleDriveComment(Box::new(GoogleDriveComment {
+                        user_email_address: Some(user_email_address.to_string()),
+                        user_display_name: Some(user_display_name.to_string()),
+                        ..google_drive_comment_123.clone()
+                    }))
                 );
             }
             // This notification should be updated
+            // The last reply on this comment is from the user (jane.doe@example.com),
+            // so the notification should be marked as Deleted (user already responded)
             "1AbCdEfGhIjKlMnOpQrStUvWxYz#AAAABUiR-5ub_7yjYZKluDfg8a8AAANV" => {
                 assert_eq!(
                     notification.title,
                     "Comment on Project Proposal - Q4 2025.docx".to_string()
                 );
                 assert_eq!(notification.kind, NotificationSourceKind::GoogleDrive);
-                assert_eq!(notification.status, NotificationStatus::Unread);
+                assert_eq!(notification.status, NotificationStatus::Deleted);
                 assert_eq!(
                     notification.get_html_url(),
                     "https://docs.google.com/document/d/1AbCdEfGhIjKlMnOpQrStUvWxYz/edit?disco=AAAABUiR-5ub_7yjYZKluDfg8a8AAANV"
@@ -209,9 +215,11 @@ pub fn assert_sync_notifications(
                 assert_eq!(notification.last_read_at, None);
                 assert_eq!(
                     notification.source_item.data,
-                    ThirdPartyItemData::GoogleDriveComment(Box::new(
-                        google_drive_comment_456.clone()
-                    ))
+                    ThirdPartyItemData::GoogleDriveComment(Box::new(GoogleDriveComment {
+                        user_email_address: Some(user_email_address.to_string()),
+                        user_display_name: Some(user_display_name.to_string()),
+                        ..google_drive_comment_456.clone()
+                    }))
                 );
             }
             _ => {
