@@ -913,6 +913,7 @@ impl SlackService {
             channel,
             team,
             references: Some(references),
+            user_slack_id: integration_connection.provider_user_id.clone(),
         };
 
         Ok(Some(
@@ -1665,6 +1666,9 @@ impl ThirdPartyNotificationSourceService<SlackThread> for SlackService {
         let last_message = &source.messages.last();
         let status = if !source.subscribed {
             NotificationStatus::Unsubscribed
+        } else if source.is_last_message_from_user() {
+            // If the user sent the last message, mark as Deleted (user already responded)
+            NotificationStatus::Deleted
         } else {
             match &source.last_read {
                 Some(last_read) if *last_read == last_message.origin.ts => {
