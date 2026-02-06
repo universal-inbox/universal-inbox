@@ -165,6 +165,15 @@ impl GoogleMailThread {
             });
         }
     }
+
+    /// Check if the last message in the thread was sent by the user
+    pub fn is_last_message_from_user(&self) -> bool {
+        self.messages
+            .last()
+            .and_then(|message| message.get_header("From"))
+            .map(|from_header| from_header.contains(&self.user_email_address.to_string()))
+            .unwrap_or(false)
+    }
 }
 
 impl ThirdPartyItemFromSource for GoogleMailThread {

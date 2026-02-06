@@ -497,6 +497,7 @@ pub fn slack_thread() -> Result<Box<SlackThread>, UniversalInboxError> {
         team: team_response.team.clone(),
         references: None,
         sender_profiles: Default::default(),
+        user_slack_id: None,
     }))
 }
 

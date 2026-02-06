@@ -125,6 +125,7 @@ pub fn slack_thread() -> Box<SlackThread> {
         team: team_response.team.clone(),
         references: None,
         sender_profiles: Default::default(),
+        user_slack_id: None,
     })
 }
 

@@ -186,6 +186,8 @@ impl RawGoogleDriveComment {
             modified_time: self.modified_time,
             resolved: self.resolved,
             replies,
+            user_email_address: None,
+            user_display_name: None,
         }
     }
 }
@@ -479,11 +481,13 @@ impl ThirdPartyItemSourceService<GoogleDriveComment> for GoogleDriveService {
                 .await?;
 
             for raw_comment in raw_comments {
-                let comment = raw_comment.into_google_drive_comment(
+                let mut comment = raw_comment.into_google_drive_comment(
                     file.name.clone(),
                     file.id.clone(),
                     file.mime_type.clone(),
                 );
+                comment.user_email_address = Some(user_email.to_string());
+                comment.user_display_name = Some(display_name.clone());
 
                 let existing_notification = self
                     .notification_service
@@ -541,10 +545,17 @@ impl ThirdPartyNotificationSourceService<GoogleDriveComment> for GoogleDriveServ
     ) -> Result<Box<Notification>, UniversalInboxError> {
         let title = format!("Comment on {}", source.file_name);
 
+        // If the user sent the last reply, mark as Deleted (user already responded)
+        let status = if source.is_last_reply_from_user() {
+            NotificationStatus::Deleted
+        } else {
+            NotificationStatus::Unread
+        };
+
         Ok(Box::new(Notification {
             id: NotificationId(Uuid::new_v4()),
             title,
-            status: NotificationStatus::Unread,
+            status,
             created_at: source.created_time,
             updated_at: source.modified_time,
             last_read_at: None,
@@ -761,6 +772,8 @@ mod tests {
                 modified_time: Utc.with_ymd_and_hms(2025, 9, 28, 9, 30, 0).unwrap(),
                 resolved: Some(false),
                 replies: vec![comment_reply],
+                user_email_address: None,
+                user_display_name: None,
             }
         }
 
