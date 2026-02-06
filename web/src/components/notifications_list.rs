@@ -50,12 +50,14 @@ use crate::{
         notification_service::{
             NotificationCommand, NotificationFilters, NotificationSourceKindFilter,
         },
+        user_service::CONNECTED_USER,
     },
 };
 
 #[derive(Clone, PartialEq)]
 pub struct NotificationListContext {
     pub is_task_actions_enabled: bool,
+    pub is_read_only: bool,
     pub notification_service: Coroutine<NotificationCommand>,
 }
 
@@ -66,8 +68,14 @@ pub fn NotificationsList(
 ) -> Element {
     let api_base_url = use_memo(move || get_api_base_url().unwrap());
     let notification_service = use_coroutine_handle::<NotificationCommand>();
+    let is_read_only = CONNECTED_USER
+        .read()
+        .as_ref()
+        .map(|ctx| ctx.subscription.is_read_only)
+        .unwrap_or(false);
     let context = use_memo(move || NotificationListContext {
         is_task_actions_enabled: UI_MODEL.read().is_task_actions_enabled,
+        is_read_only,
         notification_service,
     });
     use_context_provider(move || context);
@@ -317,6 +325,20 @@ fn NotificationListItem(
     }
 }
 
+fn get_action_disabled_label(
+    is_read_only: bool,
+    is_task_actions_enabled: bool,
+    requires_task_service: bool,
+) -> Option<Option<String>> {
+    if is_read_only {
+        Some(Some("Subscribe to perform this action".to_string()))
+    } else if requires_task_service && !is_task_actions_enabled {
+        Some(Some("No task management service connected".to_string()))
+    } else {
+        None
+    }
+}
+
 pub fn get_notification_list_item_action_buttons(
     notification: ReadSignal<NotificationWithTask>,
     show_shortcut: bool,
@@ -324,12 +346,15 @@ pub fn get_notification_list_item_action_buttons(
     container_class: Option<String>,
 ) -> Vec<Element> {
     let context = use_context::<Memo<NotificationListContext>>();
+    let is_read_only = context().is_read_only;
+    let is_task_actions_enabled = context().is_task_actions_enabled;
 
     if !notification().is_built_from_task() {
         let mut buttons = vec![rsx! {
             ListItemActionButton {
                 title: "Delete notification",
                 shortcut: "d",
+                disabled_label: get_action_disabled_label(is_read_only, is_task_actions_enabled, false),
                 show_shortcut,
                 button_class: button_class.clone(),
                 container_class: container_class.clone(),
@@ -346,8 +371,7 @@ pub fn get_notification_list_item_action_buttons(
                 ListItemActionButton {
                     title: "Complete task",
                     shortcut: "c",
-                    disabled_label: (!context().is_task_actions_enabled)
-                        .then_some("No task management service connected".to_string()),
+                    disabled_label: get_action_disabled_label(is_read_only, is_task_actions_enabled, true),
                     show_shortcut,
                     button_class: button_class.clone(),
                     container_class: container_class.clone(),
@@ -364,6 +388,7 @@ pub fn get_notification_list_item_action_buttons(
             ListItemActionButton {
                 title: "Unsubscribe from the notification",
                 shortcut: "u",
+                disabled_label: get_action_disabled_label(is_read_only, is_task_actions_enabled, false),
                 show_shortcut,
                 button_class: button_class.clone(),
                 container_class: container_class.clone(),
@@ -378,6 +403,7 @@ pub fn get_notification_list_item_action_buttons(
             ListItemActionButton {
                 title: "Snooze notification",
                 shortcut: "s",
+                disabled_label: get_action_disabled_label(is_read_only, is_task_actions_enabled, false),
                 show_shortcut,
                 button_class: button_class.clone(),
                 container_class: container_class.clone(),
@@ -393,8 +419,7 @@ pub fn get_notification_list_item_action_buttons(
                 ListItemActionButton {
                     title: "Create task",
                     shortcut: "p",
-                    disabled_label: (!context().is_task_actions_enabled)
-                        .then_some("No task management service connected".to_string()),
+                    disabled_label: get_action_disabled_label(is_read_only, is_task_actions_enabled, true),
                     show_shortcut,
                     button_class: button_class.clone(),
                     container_class: container_class.clone(),
@@ -407,8 +432,7 @@ pub fn get_notification_list_item_action_buttons(
                 ListItemActionButton {
                     title: "Create task with defaults",
                     shortcut: "t",
-                    disabled_label: (!context().is_task_actions_enabled)
-                        .then_some("No task management service connected".to_string()),
+                    disabled_label: get_action_disabled_label(is_read_only, is_task_actions_enabled, true),
                     show_shortcut,
                     button_class: button_class.clone(),
                     container_class: container_class.clone(),
@@ -423,8 +447,7 @@ pub fn get_notification_list_item_action_buttons(
                 ListItemActionButton {
                     title: "Link to task",
                     shortcut: "l",
-                    disabled_label: (!context().is_task_actions_enabled)
-                        .then_some("No task management service connected".to_string()),
+                    disabled_label: get_action_disabled_label(is_read_only, is_task_actions_enabled, true),
                     show_shortcut,
                     button_class: button_class.clone(),
                     container_class: container_class.clone(),
@@ -441,8 +464,7 @@ pub fn get_notification_list_item_action_buttons(
                 ListItemActionButton {
                     title: "Delete task",
                     shortcut: "d",
-                    disabled_label: (!context().is_task_actions_enabled)
-                        .then_some("No task management service connected".to_string()),
+                    disabled_label: get_action_disabled_label(is_read_only, is_task_actions_enabled, true),
                     show_shortcut,
                     button_class: button_class.clone(),
                     container_class: container_class.clone(),
@@ -457,8 +479,7 @@ pub fn get_notification_list_item_action_buttons(
                 ListItemActionButton {
                     title: "Complete task",
                     shortcut: "c",
-                    disabled_label: (!context().is_task_actions_enabled)
-                        .then_some("No task management service connected".to_string()),
+                    disabled_label: get_action_disabled_label(is_read_only, is_task_actions_enabled, true),
                     show_shortcut,
                     button_class: button_class.clone(),
                     container_class: container_class.clone(),
@@ -473,6 +494,7 @@ pub fn get_notification_list_item_action_buttons(
                 ListItemActionButton {
                     title: "Snooze notification",
                     shortcut: "s",
+                    disabled_label: get_action_disabled_label(is_read_only, is_task_actions_enabled, false),
                     show_shortcut,
                     button_class: button_class.clone(),
                     container_class: container_class.clone(),
@@ -486,8 +508,7 @@ pub fn get_notification_list_item_action_buttons(
                 ListItemActionButton {
                     title: "Plan task",
                     shortcut: "p",
-                    disabled_label: (!context().is_task_actions_enabled)
-                        .then_some("No task management service connected".to_string()),
+                    disabled_label: get_action_disabled_label(is_read_only, is_task_actions_enabled, true),
                     show_shortcut,
                     button_class: button_class.clone(),
                     container_class: container_class.clone(),
@@ -499,8 +520,7 @@ pub fn get_notification_list_item_action_buttons(
                 ListItemActionButton {
                     title: "Create task with defaults",
                     shortcut: "t",
-                    disabled_label: (!context().is_task_actions_enabled)
-                        .then_some("No task management service connected".to_string()),
+                    disabled_label: get_action_disabled_label(is_read_only, is_task_actions_enabled, true),
                     show_shortcut,
                     button_class: button_class.clone(),
                     container_class: container_class.clone(),
