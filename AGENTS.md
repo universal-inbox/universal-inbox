@@ -61,6 +61,25 @@ universal-inbox/
 
 ## Code Conventions
 
+### Business Logic Placement
+**All business logic MUST live in service methods** (`api/src/universal_inbox/`), never in API route handlers (`api/src/routes/`) or async job handlers (`api/src/jobs/`).
+
+**Route handlers** should be thin wrappers that:
+1. Extract/validate user identity from JWT claims
+2. Parse and validate request parameters
+3. Create a database transaction via `service.begin()`
+4. **Delegate to a service method** for all business logic
+5. Commit the transaction
+6. Format and return the HTTP response
+
+**Job handlers** should be thin orchestration layers that:
+1. Receive job data from the Apalis queue
+2. Acquire service instances
+3. **Delegate to service methods** for all business logic
+4. Return the result to the job queue
+
+**Services** (`api/src/universal_inbox/[domain]/service.rs`) own all business logic: validation, side effects, sync orchestration, cross-service coordination, and domain rules.
+
 ### Import Organization
 Always use this three-section pattern with blank lines between groups:
 ```rust
