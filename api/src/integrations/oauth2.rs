@@ -3,7 +3,10 @@ use std::fmt;
 use anyhow::{Context, anyhow};
 use chrono::{DateTime, Utc};
 use http::{HeaderMap, HeaderValue};
-use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, Extension};
+use reqwest_middleware::{
+    ClientBuilder, ClientWithMiddleware, Extension,
+    reqwest::{self, StatusCode},
+};
 use reqwest_tracing::{
     DisableOtelPropagation, OtelPathNames, SpanBackendWithUrl, TracingMiddleware,
 };
@@ -188,7 +191,7 @@ impl NangoService {
             .await
             .context(format!("Cannot fetch connection {connection_id} for provider {provider_config_key} from Nango API"))?;
 
-        if response.status() == reqwest::StatusCode::BAD_REQUEST {
+        if response.status() == StatusCode::BAD_REQUEST {
             warn!(
                 "Nango API returned 400 Bad Request: {}",
                 response
@@ -227,9 +230,7 @@ impl NangoService {
 
         let status_code = response.status();
         // We consider the connection already deleted even when receiving a BAD_REQUEST response
-        if status_code != reqwest::StatusCode::BAD_REQUEST
-            && status_code != reqwest::StatusCode::NO_CONTENT
-        {
+        if status_code != StatusCode::BAD_REQUEST && status_code != StatusCode::NO_CONTENT {
             return Err(UniversalInboxError::Unexpected(anyhow!(
                 "Failed to delete connection {connection_id} for provider {provider_config_key} from Nango API: unexpected response status code {status_code}"
             )));
