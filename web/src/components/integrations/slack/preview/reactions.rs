@@ -6,8 +6,8 @@ use slack_morphism::prelude::*;
 
 #[component]
 pub fn SlackReactions(
-    reactions: ReadOnlySignal<Vec<SlackReaction>>,
-    slack_references: ReadOnlySignal<SlackReferences>,
+    reactions: ReadSignal<Vec<SlackReaction>>,
+    slack_references: ReadSignal<SlackReferences>,
 ) -> Element {
     if reactions().is_empty() {
         return rsx! {};
@@ -35,8 +35,8 @@ pub fn SlackReactions(
 
 #[component]
 pub fn SlackEmojiDisplay(
-    emoji_name: ReadOnlySignal<String>,
-    slack_references: ReadOnlySignal<SlackReferences>,
+    emoji_name: ReadSignal<String>,
+    slack_references: ReadSignal<SlackReferences>,
 ) -> Element {
     let emoji =
         use_memo(move || render_emoji(&SlackEmojiName(emoji_name()), &slack_references(), "h-5"));

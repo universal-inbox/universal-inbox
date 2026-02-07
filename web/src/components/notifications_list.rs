@@ -61,7 +61,7 @@ pub struct NotificationListContext {
 
 #[component]
 pub fn NotificationsList(
-    notifications: ReadOnlySignal<Page<NotificationWithTask>>,
+    notifications: ReadSignal<Page<NotificationWithTask>>,
     notification_filters: Signal<NotificationFilters>,
 ) -> Element {
     let api_base_url = use_memo(move || get_api_base_url().unwrap());
@@ -238,8 +238,8 @@ pub fn NotificationsList(
 
 #[component]
 fn NotificationListItem(
-    notification: ReadOnlySignal<NotificationWithTask>,
-    is_selected: ReadOnlySignal<bool>,
+    notification: ReadSignal<NotificationWithTask>,
+    is_selected: ReadSignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
     match notification().source_item.data {
@@ -318,7 +318,7 @@ fn NotificationListItem(
 }
 
 pub fn get_notification_list_item_action_buttons(
-    notification: ReadOnlySignal<NotificationWithTask>,
+    notification: ReadSignal<NotificationWithTask>,
     show_shortcut: bool,
     button_class: Option<String>,
     container_class: Option<String>,
@@ -515,7 +515,7 @@ pub fn get_notification_list_item_action_buttons(
 }
 
 #[component]
-pub fn TaskHint(task: ReadOnlySignal<Option<Task>>) -> Element {
+pub fn TaskHint(task: ReadSignal<Option<Task>>) -> Element {
     let Some(task) = task() else {
         return rsx! {};
     };
@@ -558,7 +558,7 @@ pub fn TaskHint(task: ReadOnlySignal<Option<Task>>) -> Element {
 
 #[component]
 pub fn NotificationSourceKindFilters(
-    notification_source_kind_filters: ReadOnlySignal<Vec<NotificationSourceKindFilter>>,
+    notification_source_kind_filters: ReadSignal<Vec<NotificationSourceKindFilter>>,
     on_select: EventHandler<NotificationSourceKindFilter>,
 ) -> Element {
     rsx! {
@@ -574,7 +574,7 @@ pub fn NotificationSourceKindFilters(
 
 #[component]
 pub fn NotificationSourceKindFilterButton(
-    filter: ReadOnlySignal<NotificationSourceKindFilter>,
+    filter: ReadSignal<NotificationSourceKindFilter>,
     on_select: EventHandler<NotificationSourceKindFilter>,
 ) -> Element {
     let style = use_memo(move || {
@@ -596,7 +596,7 @@ pub fn NotificationSourceKindFilterButton(
 
 #[component]
 pub fn NotificationListOrdering(
-    notification_list_order: ReadOnlySignal<NotificationListOrder>,
+    notification_list_order: ReadSignal<NotificationListOrder>,
     on_change: EventHandler<NotificationListOrder>,
 ) -> Element {
     rsx! {

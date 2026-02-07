@@ -9,7 +9,7 @@ use dioxus_free_icons::{
 use universal_inbox::third_party::integrations::todoist::TodoistItem;
 
 #[component]
-pub fn TodoistListItemSubtitle(todoist_item: ReadOnlySignal<TodoistItem>) -> Element {
+pub fn TodoistListItemSubtitle(todoist_item: ReadSignal<TodoistItem>) -> Element {
     rsx! {
         if let Some(due) = todoist_item().due {
             div {

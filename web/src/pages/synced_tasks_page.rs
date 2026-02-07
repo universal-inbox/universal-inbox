@@ -2,6 +2,7 @@
 
 use std::cmp::Ordering;
 
+use dioxus::prelude::dioxus_core::use_drop;
 use dioxus::prelude::*;
 use log::debug;
 use sorted_groups::SortedGroups;
@@ -67,8 +68,8 @@ pub fn SyncedTasksPage() -> Element {
 }
 
 #[component]
-fn InternalSyncedTaskPage(task_id: ReadOnlySignal<Option<TaskId>>) -> Element {
-    let tasks = Into::<ReadOnlySignal<Page<Task>>>::into(SYNCED_TASKS_PAGE.signal());
+fn InternalSyncedTaskPage(task_id: ReadSignal<Option<TaskId>>) -> Element {
+    let tasks = Into::<ReadSignal<Page<Task>>>::into(SYNCED_TASKS_PAGE.signal());
     let nav = use_navigator();
     debug!("Rendering synced tasks page for task {:?}", task_id(),);
 

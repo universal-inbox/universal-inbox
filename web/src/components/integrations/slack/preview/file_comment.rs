@@ -9,8 +9,8 @@ use crate::components::{integrations::slack::SlackTeamDisplay, markdown::SlackMa
 
 #[component]
 pub fn SlackFileCommentPreview(
-    slack_file_comment: ReadOnlySignal<SlackFileCommentDetails>,
-    title: ReadOnlySignal<String>,
+    slack_file_comment: ReadSignal<SlackFileCommentDetails>,
+    title: ReadSignal<String>,
     icon: Option<Element>,
 ) -> Element {
     let channel_name = slack_file_comment()

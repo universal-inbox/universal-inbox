@@ -33,8 +33,8 @@ use crate::components::{
 
 #[component]
 pub fn GithubPullRequestPreview(
-    github_pull_request: ReadOnlySignal<GithubPullRequest>,
-    expand_details: ReadOnlySignal<bool>,
+    github_pull_request: ReadSignal<GithubPullRequest>,
+    expand_details: ReadSignal<bool>,
 ) -> Element {
     rsx! {
         div {
@@ -73,8 +73,8 @@ impl From<GithubLabel> for Tag {
 
 #[component]
 fn GithubPullRequestDetails(
-    github_pull_request: ReadOnlySignal<GithubPullRequest>,
-    expand_details: ReadOnlySignal<bool>,
+    github_pull_request: ReadSignal<GithubPullRequest>,
+    expand_details: ReadSignal<bool>,
 ) -> Element {
     let show_base_and_head_repositories = match (
         &github_pull_request().head_repository,
@@ -255,10 +255,10 @@ fn GithubPullRequestDetails(
 
 #[component]
 pub fn ChecksGithubPullRequest(
-    latest_commit: ReadOnlySignal<GithubCommitChecks>,
+    latest_commit: ReadSignal<GithubCommitChecks>,
     with_details: Option<bool>,
     icon_size: Option<String>,
-    expand_details: ReadOnlySignal<bool>,
+    expand_details: ReadSignal<bool>,
 ) -> Element {
     let with_details = with_details.unwrap_or_default();
     let checks_progress =
@@ -316,7 +316,7 @@ pub fn ChecksGithubPullRequest(
 }
 
 #[component]
-fn ChecksGithubPullRequestDetails(latest_commit: ReadOnlySignal<GithubCommitChecks>) -> Element {
+fn ChecksGithubPullRequestDetails(latest_commit: ReadSignal<GithubCommitChecks>) -> Element {
     let Some(check_suites) = &latest_commit().check_suites else {
         return rsx! {};
     };
@@ -343,7 +343,7 @@ fn ChecksGithubPullRequestDetails(latest_commit: ReadOnlySignal<GithubCommitChec
 
 #[component]
 fn GithubCheckRunLine(
-    check_run: ReadOnlySignal<GithubCheckRun>,
+    check_run: ReadSignal<GithubCheckRun>,
     workflow: Option<GithubWorkflow>,
     app: Option<GithubCheckSuiteApp>,
 ) -> Element {
@@ -486,8 +486,8 @@ fn compute_pull_request_checks_progress(
 
 #[component]
 fn ReviewsGithubPullRequest(
-    github_pull_request: ReadOnlySignal<GithubPullRequest>,
-    expand_details: ReadOnlySignal<bool>,
+    github_pull_request: ReadSignal<GithubPullRequest>,
+    expand_details: ReadSignal<bool>,
 ) -> Element {
     let reviews_state = github_pull_request()
         .review_decision
@@ -526,8 +526,8 @@ fn ReviewsGithubPullRequest(
 
 #[component]
 fn ReviewsGithubPullRequestDetails(
-    github_pull_request: ReadOnlySignal<GithubPullRequest>,
-    expand_details: ReadOnlySignal<bool>,
+    github_pull_request: ReadSignal<GithubPullRequest>,
+    expand_details: ReadSignal<bool>,
 ) -> Element {
     let reviews = compute_pull_request_reviews(
         github_pull_request().reviews.as_ref(),
@@ -551,7 +551,7 @@ fn ReviewsGithubPullRequestDetails(
 }
 
 #[component]
-fn GithubReviewLine(review: GithubReview, expand_details: ReadOnlySignal<bool>) -> Element {
+fn GithubReviewLine(review: GithubReview, expand_details: ReadSignal<bool>) -> Element {
     let id = use_memo(|| Uuid::new_v4().to_string())();
     let (reviewer, review_body, review_status_icon) = match review {
         GithubReview::Requested { reviewer } => (
@@ -707,7 +707,7 @@ pub fn compute_pull_request_reviews(
 }
 
 #[component]
-pub fn GithubCommentList(comments: ReadOnlySignal<Vec<GithubIssueComment>>) -> Element {
+pub fn GithubCommentList(comments: ReadSignal<Vec<GithubIssueComment>>) -> Element {
     rsx! {
         div {
             class: "flex flex-col gap-2",

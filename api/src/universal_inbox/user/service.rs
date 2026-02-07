@@ -510,7 +510,7 @@ impl UserService {
         &self,
         password: SecretBox<Password>,
     ) -> Result<SecretBox<PasswordHash>, UniversalInboxError> {
-        let salt = SaltString::generate(&mut rand::thread_rng());
+        let salt = SaltString::generate(&mut argon2::password_hash::rand_core::OsRng);
         let Some(AuthenticationSettings::Local(local_auth_settings)) = &self
             .application_settings
             .security

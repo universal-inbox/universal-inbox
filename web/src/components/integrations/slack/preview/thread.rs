@@ -16,9 +16,9 @@ use crate::components::{
 
 #[component]
 pub fn SlackThreadPreview(
-    slack_thread: ReadOnlySignal<SlackThread>,
-    title: ReadOnlySignal<String>,
-    expand_details: ReadOnlySignal<bool>,
+    slack_thread: ReadSignal<SlackThread>,
+    title: ReadSignal<String>,
+    expand_details: ReadSignal<bool>,
 ) -> Element {
     let channel_name = slack_thread()
         .channel
@@ -51,11 +51,11 @@ pub fn SlackThreadPreview(
 
 #[component]
 fn SlackThreadDisplay(
-    slack_thread: ReadOnlySignal<SlackThread>,
-    expand_details: ReadOnlySignal<bool>,
+    slack_thread: ReadSignal<SlackThread>,
+    expand_details: ReadSignal<bool>,
 ) -> Element {
     let mut show_all = use_signal(|| false);
-    let _ = use_resource(move || async move {
+    let _resource = use_resource(move || async move {
         *show_all.write() = expand_details();
     });
     let messages = slack_thread().messages;
@@ -142,8 +142,8 @@ fn SlackThreadDisplay(
 
 #[component]
 fn SlackThreadMessageDisplay(
-    message: ReadOnlySignal<SlackHistoryMessage>,
-    slack_thread: ReadOnlySignal<SlackThread>,
+    message: ReadSignal<SlackHistoryMessage>,
+    slack_thread: ReadSignal<SlackThread>,
 ) -> Element {
     let posted_at = message().origin.ts.to_date_time_opt();
     let sender = message()

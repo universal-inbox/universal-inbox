@@ -24,8 +24,8 @@ use crate::{
 
 #[component]
 pub fn TodoistTaskPreview(
-    task: ReadOnlySignal<Task>,
-    todoist_item: ReadOnlySignal<TodoistItem>,
+    task: ReadSignal<Task>,
+    todoist_item: ReadSignal<TodoistItem>,
 ) -> Element {
     let link = task().get_html_url();
     let project_link = task().get_html_project_url();

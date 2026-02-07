@@ -11,8 +11,8 @@ use crate::components::floating_label_inputs::FloatingLabelSelect;
 
 #[component]
 pub fn GoogleMailProviderConfiguration(
-    config: ReadOnlySignal<GoogleMailConfig>,
-    context: ReadOnlySignal<Option<Option<GoogleMailContext>>>,
+    config: ReadSignal<GoogleMailConfig>,
+    context: ReadSignal<Option<Option<GoogleMailContext>>>,
     on_config_change: EventHandler<IntegrationConnectionConfig>,
 ) -> Element {
     let mut selected_label_id = use_signal(|| None);

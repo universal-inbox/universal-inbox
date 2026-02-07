@@ -28,9 +28,9 @@ use crate::{
 
 #[component]
 pub fn LinearIssuePreview(
-    linear_issue: ReadOnlySignal<LinearIssue>,
-    linear_notification: ReadOnlySignal<Option<LinearNotification>>,
-    expand_details: ReadOnlySignal<bool>,
+    linear_issue: ReadSignal<LinearIssue>,
+    linear_notification: ReadSignal<Option<LinearNotification>>,
+    expand_details: ReadSignal<bool>,
 ) -> Element {
     rsx! {
         div {
@@ -56,9 +56,9 @@ pub fn LinearIssuePreview(
 
 #[component]
 fn LinearIssueDetails(
-    linear_issue: ReadOnlySignal<LinearIssue>,
-    linear_notification: ReadOnlySignal<Option<LinearNotification>>,
-    expand_details: ReadOnlySignal<bool>,
+    linear_issue: ReadSignal<LinearIssue>,
+    linear_notification: ReadSignal<Option<LinearNotification>>,
+    expand_details: ReadSignal<bool>,
 ) -> Element {
     let issue_priority_style = match linear_issue().priority {
         LinearIssuePriority::Low => PRIORITY_LOW_COLOR_CLASS,
@@ -201,9 +201,9 @@ fn LinearIssueDetails(
 
 #[component]
 pub fn LinearProjectCard(
-    linear_project: ReadOnlySignal<LinearProject>,
-    linear_notification: ReadOnlySignal<Option<LinearNotification>>,
-    expand_details: ReadOnlySignal<bool>,
+    linear_project: ReadSignal<LinearProject>,
+    linear_notification: ReadSignal<Option<LinearNotification>>,
+    expand_details: ReadSignal<bool>,
 ) -> Element {
     rsx! {
         CollapseCard {
@@ -244,7 +244,7 @@ pub fn LinearProjectCard(
 
 #[component]
 fn LinearCommentDisplay(
-    linear_comment: ReadOnlySignal<LinearComment>,
+    linear_comment: ReadSignal<LinearComment>,
     class: Option<String>,
 ) -> Element {
     let class = class.unwrap_or_default();

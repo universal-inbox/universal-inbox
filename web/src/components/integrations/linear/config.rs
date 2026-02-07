@@ -21,7 +21,7 @@ use crate::{
 
 #[component]
 pub fn LinearProviderConfiguration(
-    config: ReadOnlySignal<LinearConfig>,
+    config: ReadSignal<LinearConfig>,
     ui_model: Signal<UniversalInboxUIModel>,
     on_config_change: EventHandler<IntegrationConnectionConfig>,
 ) -> Element {

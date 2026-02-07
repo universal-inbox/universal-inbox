@@ -1,7 +1,7 @@
 #![allow(non_snake_case)]
 
+use dioxus::prelude::dioxus_core::needs_update;
 use dioxus::prelude::*;
-use dioxus_router::prelude::use_navigator;
 
 use universal_inbox::user::{EmailValidationToken, UserId};
 
@@ -20,7 +20,7 @@ pub fn EmailVerificationPage(
     let user_service = use_coroutine_handle::<UserCommand>();
     let nav = use_navigator();
 
-    let _ = use_resource(move || {
+    let _resource = use_resource(move || {
         to_owned![user_id];
         to_owned![email_validation_token];
         to_owned![user_service];

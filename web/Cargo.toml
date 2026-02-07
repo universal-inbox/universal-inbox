@@ -22,8 +22,8 @@ comrak = { version = "0.50.0", default-features = false, features = [
 ] }
 console_error_panic_hook = "0.1"
 console_log = { version = "1.0", features = ["color"], optional = true }
-dioxus = { version = "0.6", features = ["document", "web", "router"] }
-dioxus-free-icons = { version = "0.9", features = [
+dioxus = { version = "0.7", features = ["document", "web", "router"] }
+dioxus-free-icons = { version = "0.10", features = [
   "bootstrap",
   "material-design-icons-action",
   "material-design-icons-communication",
@@ -58,7 +58,7 @@ universal-inbox = { path = ".." }
 url = { workspace = true }
 uuid = { workspace = true, features = ["js"] }
 wasm-bindgen-futures = "0.4"
-wasm-bindgen = "=0.2.100"
+wasm-bindgen = "=0.2.108"
 webauthn-rs-proto = { workspace = true, features = ["wasm"] }
 
 [dependencies.web-sys]

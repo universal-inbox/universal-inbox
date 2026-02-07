@@ -21,9 +21,9 @@ use crate::components::{
 
 #[component]
 pub fn LinearProjectPreview(
-    linear_project: ReadOnlySignal<LinearProject>,
-    linear_notification: ReadOnlySignal<Option<LinearNotification>>,
-    expand_details: ReadOnlySignal<bool>,
+    linear_project: ReadSignal<LinearProject>,
+    linear_notification: ReadSignal<Option<LinearNotification>>,
+    expand_details: ReadSignal<bool>,
 ) -> Element {
     rsx! {
         div {
@@ -54,9 +54,9 @@ pub fn LinearProjectPreview(
 
 #[component]
 pub fn LinearProjectDetails(
-    linear_project: ReadOnlySignal<LinearProject>,
-    linear_notification: ReadOnlySignal<Option<LinearNotification>>,
-    expand_details: ReadOnlySignal<bool>,
+    linear_project: ReadSignal<LinearProject>,
+    linear_notification: ReadSignal<Option<LinearNotification>>,
+    expand_details: ReadSignal<bool>,
     dark_bg: Option<bool>,
 ) -> Element {
     let (card_style, header_style, prose_style) = if dark_bg.unwrap_or_default() {
@@ -147,7 +147,7 @@ pub fn LinearProjectDetails(
 
 #[component]
 fn LinearProjectUpdateDetails(
-    project_update: ReadOnlySignal<LinearProjectUpdate>,
+    project_update: ReadSignal<LinearProjectUpdate>,
     dark_bg: Option<bool>,
 ) -> Element {
     let (card_style, header_style, prose_style) = if dark_bg.unwrap_or_default() {

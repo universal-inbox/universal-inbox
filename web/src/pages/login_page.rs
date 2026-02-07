@@ -1,5 +1,6 @@
 #![allow(non_snake_case)]
 
+use dioxus::prelude::dioxus_core::needs_update;
 use dioxus::prelude::*;
 use email_address::EmailAddress;
 use log::error;
@@ -69,6 +70,7 @@ pub fn LoginPage() -> Element {
                 form {
                     class: "flex flex-col justify-center gap-4 px-10",
                     onsubmit: move |evt| {
+                        evt.prevent_default();
                         match FormValues(evt.values()).try_into() {
                             Ok(credentials) => {
                                 user_service.send(UserCommand::Login(credentials));

@@ -4,6 +4,8 @@
 extern crate lazy_static;
 
 use cfg_if::cfg_if;
+use dioxus::prelude::dioxus_core::Runtime;
+use dioxus::prelude::dioxus_router::RouterConfig;
 use dioxus::prelude::*;
 use gloo_utils::errors::JsError;
 use keyboard_manager::{KeyboardHandler, KeyboardManager};
@@ -173,9 +175,9 @@ pub fn App() -> Element {
             let head = rsx! {};
         } else {
             let head = rsx! {
-                document::Stylesheet { href: asset!("./public/css/flatpickr.min.css") }
-                document::Stylesheet { href: asset!("./public/css/universal-inbox.min.css") }
-                document::Link { rel: "icon", href: asset!("./images/favicon.ico") }
+                document::Stylesheet { href: asset!("/public/css/flatpickr.min.css") }
+                document::Stylesheet { href: asset!("/public/css/universal-inbox.min.css") }
+                document::Link { rel: "icon", href: asset!("/images/favicon.ico") }
             };
         }
     }
@@ -191,11 +193,11 @@ pub fn App() -> Element {
     }
 }
 
-fn setup_key_bindings(keyboard_manager: ReadOnlySignal<KeyboardManager>) -> Option<()> {
+fn setup_key_bindings(keyboard_manager: ReadSignal<KeyboardManager>) -> Option<()> {
     let window = web_sys::window()?;
     let document = window.document()?;
-    let runtime = Runtime::current().unwrap();
-    let scope_id = current_scope_id().unwrap();
+    let runtime = Runtime::current();
+    let scope_id = runtime.current_scope_id();
 
     let handler = Closure::wrap(Box::new(move |evt: KeyboardEvent| {
         runtime.spawn(scope_id, async move {

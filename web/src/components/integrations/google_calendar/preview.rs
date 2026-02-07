@@ -30,9 +30,9 @@ use crate::{
 
 #[component]
 pub fn GoogleCalendarEventPreview(
-    notification: ReadOnlySignal<NotificationWithTask>,
-    google_calendar_event: ReadOnlySignal<GoogleCalendarEvent>,
-    expand_details: ReadOnlySignal<bool>,
+    notification: ReadSignal<NotificationWithTask>,
+    google_calendar_event: ReadSignal<GoogleCalendarEvent>,
+    expand_details: ReadSignal<bool>,
 ) -> Element {
     let notification_service = use_coroutine_handle::<NotificationCommand>();
     let link = notification().get_html_url();
@@ -249,7 +249,7 @@ pub fn GoogleCalendarEventPreview(
 }
 
 #[component]
-fn CalendarEventAttendeeRow(attendee: ReadOnlySignal<EventAttendee>) -> Element {
+fn CalendarEventAttendeeRow(attendee: ReadSignal<EventAttendee>) -> Element {
     let display_name = attendee().display_name.unwrap_or_else(|| attendee().email);
     let response_status_icon = match attendee().response_status {
         GoogleCalendarEventAttendeeResponseStatus::Accepted => {

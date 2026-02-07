@@ -19,7 +19,7 @@ pub mod pull_request;
 
 #[component]
 pub fn GithubNotificationDefaultPreview(
-    notification: ReadOnlySignal<NotificationWithTask>,
+    notification: ReadSignal<NotificationWithTask>,
     github_notification: GithubNotification,
 ) -> Element {
     let github_notification_id = github_notification.extract_id();

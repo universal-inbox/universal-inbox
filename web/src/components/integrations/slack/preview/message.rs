@@ -15,8 +15,8 @@ use crate::components::{
 
 #[component]
 pub fn SlackMessagePreview(
-    slack_message: ReadOnlySignal<SlackMessageDetails>,
-    title: ReadOnlySignal<String>,
+    slack_message: ReadSignal<SlackMessageDetails>,
+    title: ReadSignal<String>,
     icon: Option<Element>,
 ) -> Element {
     let channel_name = slack_message()
@@ -60,7 +60,7 @@ pub fn SlackMessagePreview(
 }
 
 #[component]
-fn SlackMessageDisplay(slack_message: ReadOnlySignal<SlackMessageDetails>) -> Element {
+fn SlackMessageDisplay(slack_message: ReadSignal<SlackMessageDetails>) -> Element {
     let posted_at = slack_message().message.origin.ts.to_date_time_opt();
     let text = slack_message().render_content();
     let (user_name, avatar_url) = get_sender_name_and_avatar(&slack_message().sender);

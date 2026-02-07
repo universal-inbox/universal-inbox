@@ -21,9 +21,9 @@ use crate::{
 
 #[component]
 pub fn TodoistTaskListItem(
-    task: ReadOnlySignal<Task>,
-    todoist_item: ReadOnlySignal<TodoistItem>,
-    is_selected: ReadOnlySignal<bool>,
+    task: ReadSignal<Task>,
+    todoist_item: ReadSignal<TodoistItem>,
+    is_selected: ReadSignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
     let task_updated_at = use_memo(move || format_elapsed_time(task().updated_at));
