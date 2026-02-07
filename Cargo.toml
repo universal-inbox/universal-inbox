@@ -24,9 +24,9 @@ clap = { workspace = true }
 email_address = { workspace = true }
 emojis = { workspace = true }
 enum_derive = { workspace = true }
-git-url-parse = "0.4.0"
+git-url-parse = "0.4.5"
 macro-attr = { workspace = true }
-num_enum = "0.7.0"
+num_enum = "0.7.5"
 openidconnect = { workspace = true }
 regex = { workspace = true }
 rrule = { workspace = true }
@@ -39,7 +39,7 @@ slack-blocks-render = { workspace = true }
 slack-morphism = { workspace = true }
 strum = { workspace = true }
 typed_id = { version = "0.1.0", features = ["serde"] }
-unicode-segmentation = "1.11.0"
+unicode-segmentation = "1.12.0"
 url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true, features = ["serde"] }
 validator = { workspace = true }
@@ -67,22 +67,22 @@ regex = { version = "1.10.0" }
 reqwest = { version = "0.12", features = ["json", "cookies"] }
 rrule = { version = "0.14.0", features = ["serde"] }
 rstest = { version = "0.26.0" }
-secrecy = { version = "0.10.0", features = ["serde"] }
+secrecy = { version = "0.10.3", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 serde_urlencoded = { version = "0.7.0" }
 serde_with = { version = "3.8.0" }
-slack-blocks-render = { version = "0.4.1" }
-slack-morphism = { version = "2.10.1" }
-strum = { version = "0.27", features = ["derive"] }
+slack-blocks-render = { version = "0.4.2" }
+slack-morphism = { version = "2.17.0" }
+strum = { version = "0.27.1", features = ["derive"] }
 thiserror = { version = "2.0" }
 tracing = { version = "0.1.0", features = ["log"] }
 url = { version = "2.5.0" }
 uuid = { version = "1.0", features = ["v4"] }
 validator = { version = "0.20.0", features = ["derive"] }
 vec1 = { version = "1.12.0", features = ["serde"] }
-webauthn-rs = { version = "0.5.1" }
-webauthn-rs-proto = { version = "0.5.1" }
+webauthn-rs = { version = "0.5.4" }
+webauthn-rs-proto = { version = "0.5.4" }
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }

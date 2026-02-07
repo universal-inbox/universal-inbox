@@ -236,7 +236,7 @@ impl GithubService {
         {
             Ok(()) => Ok(()),
             Err(ApiClientError::NetworkError(err))
-                if err.status() == Some(reqwest::StatusCode::NOT_FOUND) =>
+                if err.status() == Some(reqwest_middleware::reqwest::StatusCode::NOT_FOUND) =>
             {
                 Ok(())
             }
@@ -264,7 +264,7 @@ impl GithubService {
         {
             Ok(_) => Ok(()),
             Err(ApiClientError::NetworkError(err))
-                if err.status() == Some(reqwest::StatusCode::NOT_FOUND) =>
+                if err.status() == Some(reqwest_middleware::reqwest::StatusCode::NOT_FOUND) =>
             {
                 Ok(())
             }

@@ -331,7 +331,7 @@ impl TodoistService {
         {
             Ok(item_info) => Ok(Some(item_info.item)),
             Err(ApiClientError::NetworkError(err))
-                if err.status() == Some(reqwest::StatusCode::NOT_FOUND) =>
+                if err.status() == Some(reqwest_middleware::reqwest::StatusCode::NOT_FOUND) =>
             {
                 Ok(None)
             }

@@ -3,10 +3,13 @@ use std::{sync::Arc, time::Duration};
 use anyhow::Context;
 use format_serde_error::SerdeError;
 use http::HeaderMap;
-use reqwest::{self, IntoUrl, Response};
 use reqwest_middleware::{
     ClientBuilder, ClientWithMiddleware, Error as MiddlewareError, Extension,
 };
+// Use the reqwest version re-exported by reqwest-middleware (reqwest 0.13)
+// to ensure type compatibility with the middleware client.
+// The workspace `reqwest` dep is 0.12, used by openidconnect, opentelemetry, etc.
+use reqwest_middleware::reqwest::{IntoUrl, Response, StatusCode};
 use reqwest_retry::{
     Jitter, RetryTransientMiddleware, Retryable, RetryableStrategy, default_on_request_failure,
     default_on_request_success, policies::ExponentialBackoff,
@@ -24,7 +27,7 @@ pub static APP_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CAR
 #[derive(Error, Debug)]
 pub enum ApiClientError {
     #[error("Network error: {0}")]
-    NetworkError(#[from] reqwest::Error),
+    NetworkError(#[from] reqwest_middleware::reqwest::Error),
 
     #[error("Rate limit exceeded: {message}")]
     RateLimitError { message: String },
@@ -61,7 +64,7 @@ pub struct DefaultRateLimitDetector;
 
 impl RateLimitDetector for DefaultRateLimitDetector {
     fn is_rate_limit_response(&self, response: &Response) -> bool {
-        response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS
+        response.status() == StatusCode::TOO_MANY_REQUESTS
     }
 }
 
@@ -70,10 +73,7 @@ struct RateLimitRetryableStrategy {
 }
 
 impl RetryableStrategy for RateLimitRetryableStrategy {
-    fn handle(
-        &self,
-        res: &Result<reqwest::Response, reqwest_middleware::Error>,
-    ) -> Option<Retryable> {
+    fn handle(&self, res: &Result<Response, reqwest_middleware::Error>) -> Option<Retryable> {
         match res {
             Ok(success) if self.rate_limit_detector.is_rate_limit_response(success) => {
                 Some(Retryable::Transient)
@@ -120,7 +120,7 @@ impl ApiClient {
         Path: Into<String>,
     {
         let mut client_builder = ClientBuilder::new(
-            reqwest::Client::builder()
+            reqwest_middleware::reqwest::Client::builder()
                 .default_headers(default_headers)
                 .user_agent(APP_USER_AGENT)
                 .build()
