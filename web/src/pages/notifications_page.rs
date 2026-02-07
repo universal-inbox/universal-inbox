@@ -1,5 +1,6 @@
 #![allow(non_snake_case)]
 
+use dioxus::prelude::dioxus_core::use_drop;
 use dioxus::prelude::*;
 use log::debug;
 use web_sys::KeyboardEvent;
@@ -56,9 +57,9 @@ pub fn NotificationsPage() -> Element {
 }
 
 #[component]
-fn InternalNotificationPage(notification_id: ReadOnlySignal<Option<NotificationId>>) -> Element {
+fn InternalNotificationPage(notification_id: ReadSignal<Option<NotificationId>>) -> Element {
     let notifications =
-        Into::<ReadOnlySignal<Page<NotificationWithTask>>>::into(NOTIFICATIONS_PAGE.signal());
+        Into::<ReadSignal<Page<NotificationWithTask>>>::into(NOTIFICATIONS_PAGE.signal());
     let nav = use_navigator();
     debug!(
         "Rendering notifications page for notification {:?}",

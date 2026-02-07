@@ -1,5 +1,6 @@
 #![allow(non_snake_case)]
 
+use dioxus::prelude::dioxus_core::needs_update;
 use dioxus::prelude::*;
 use log::error;
 use universal_inbox::FrontAuthenticationConfig;
@@ -55,6 +56,7 @@ pub fn PasskeySignupPage() -> Element {
         form {
             class: "flex flex-col justify-center gap-4 px-10 pb-8",
             onsubmit: move |evt| {
+                evt.prevent_default();
                 match FormValues(evt.values()).try_into() {
                     Ok(username) => {
                         user_service.send(UserCommand::RegisterPasskey(username));

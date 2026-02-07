@@ -162,8 +162,8 @@ pub fn IntegrationsPanel(
 pub fn IntegrationSettings(
     ui_model: Signal<UniversalInboxUIModel>,
     kind: IntegrationProviderKind,
-    config: ReadOnlySignal<IntegrationProviderStaticConfig>,
-    connection: ReadOnlySignal<Option<Option<IntegrationConnection>>>,
+    config: ReadSignal<IntegrationProviderStaticConfig>,
+    connection: ReadSignal<Option<Option<IntegrationConnection>>>,
     on_connect: EventHandler<Option<IntegrationConnection>>,
     on_disconnect: EventHandler<IntegrationConnection>,
     on_reconnect: EventHandler<IntegrationConnection>,

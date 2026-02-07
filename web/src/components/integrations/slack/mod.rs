@@ -16,7 +16,7 @@ pub mod task_list_item;
 
 #[component]
 pub fn SlackMessageActorDisplay(
-    sender: ReadOnlySignal<SlackMessageSenderDetails>,
+    sender: ReadSignal<SlackMessageSenderDetails>,
     display_name: Option<bool>,
     class: Option<String>,
 ) -> Element {
@@ -27,10 +27,7 @@ pub fn SlackMessageActorDisplay(
 }
 
 #[component]
-pub fn SlackUserDisplay(
-    user: ReadOnlySignal<SlackUserProfile>,
-    display_name: Option<bool>,
-) -> Element {
+pub fn SlackUserDisplay(user: ReadSignal<SlackUserProfile>, display_name: Option<bool>) -> Element {
     let display_name = display_name.unwrap_or_default();
     let (user_name, avatar_url) = get_user_name_and_avatar(&user());
 
@@ -38,7 +35,7 @@ pub fn SlackUserDisplay(
 }
 
 #[component]
-pub fn SlackTeamDisplay(team: ReadOnlySignal<SlackTeamInfo>) -> Element {
+pub fn SlackTeamDisplay(team: ReadSignal<SlackTeamInfo>) -> Element {
     let (team_name, avatar_url) = get_team_name_and_avatar(&team());
 
     rsx! { UserWithAvatar { user_name: team_name, avatar_url } }

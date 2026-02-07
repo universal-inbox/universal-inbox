@@ -30,10 +30,7 @@ pub fn Linear(class: Option<String>) -> Element {
 }
 
 #[component]
-pub fn LinearIssueIcon(
-    linear_issue: ReadOnlySignal<LinearIssue>,
-    class: Option<String>,
-) -> Element {
+pub fn LinearIssueIcon(linear_issue: ReadSignal<LinearIssue>, class: Option<String>) -> Element {
     let class = class.unwrap_or_default();
 
     let (icon, color_style) = match linear_issue().state.r#type {
@@ -185,7 +182,7 @@ pub fn LinearIssueStartedIcon(class: Option<String>) -> Element {
 
 #[component]
 pub fn LinearProjectIcon(
-    linear_project: ReadOnlySignal<LinearProject>,
+    linear_project: ReadSignal<LinearProject>,
     class: Option<String>,
 ) -> Element {
     let class = class.unwrap_or_default();

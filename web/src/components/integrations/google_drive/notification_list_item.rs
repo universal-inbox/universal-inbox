@@ -24,9 +24,9 @@ use crate::{
 
 #[component]
 pub fn GoogleDriveCommentListItem(
-    notification: ReadOnlySignal<NotificationWithTask>,
-    google_drive_comment: ReadOnlySignal<GoogleDriveComment>,
-    is_selected: ReadOnlySignal<bool>,
+    notification: ReadSignal<NotificationWithTask>,
+    google_drive_comment: ReadSignal<GoogleDriveComment>,
+    is_selected: ReadSignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
     let notification_updated_at = use_memo(move || format_elapsed_time(notification().updated_at));
@@ -95,7 +95,7 @@ pub fn GoogleDriveCommentListItem(
 }
 
 #[component]
-fn GoogleDriveCommentSubtitle(google_drive_comment: ReadOnlySignal<GoogleDriveComment>) -> Element {
+fn GoogleDriveCommentSubtitle(google_drive_comment: ReadSignal<GoogleDriveComment>) -> Element {
     let author_name = &google_drive_comment().author.display_name;
     let file_name = &google_drive_comment().file_name;
 

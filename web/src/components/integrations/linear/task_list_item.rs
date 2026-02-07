@@ -20,9 +20,9 @@ use crate::{
 
 #[component]
 pub fn LinearTaskListItem(
-    task: ReadOnlySignal<Task>,
-    linear_issue: ReadOnlySignal<LinearIssue>,
-    is_selected: ReadOnlySignal<bool>,
+    task: ReadSignal<Task>,
+    linear_issue: ReadSignal<LinearIssue>,
+    is_selected: ReadSignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
     let task_updated_at = use_memo(move || format_elapsed_time(task().updated_at));

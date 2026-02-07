@@ -21,9 +21,9 @@ use crate::{
 
 #[component]
 pub fn TodoistNotificationListItem(
-    notification: ReadOnlySignal<NotificationWithTask>,
-    todoist_item: ReadOnlySignal<TodoistItem>,
-    is_selected: ReadOnlySignal<bool>,
+    notification: ReadSignal<NotificationWithTask>,
+    todoist_item: ReadSignal<TodoistItem>,
+    is_selected: ReadSignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
     let notification_updated_at = use_memo(move || format_elapsed_time(notification().updated_at));

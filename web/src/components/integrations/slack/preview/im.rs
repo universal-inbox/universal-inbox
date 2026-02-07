@@ -9,8 +9,8 @@ use crate::components::{integrations::slack::SlackTeamDisplay, markdown::SlackMa
 
 #[component]
 pub fn SlackImPreview(
-    slack_im: ReadOnlySignal<SlackImDetails>,
-    title: ReadOnlySignal<String>,
+    slack_im: ReadSignal<SlackImDetails>,
+    title: ReadSignal<String>,
     icon: Option<Element>,
 ) -> Element {
     let channel_name = slack_im()

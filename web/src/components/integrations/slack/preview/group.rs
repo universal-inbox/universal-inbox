@@ -9,8 +9,8 @@ use crate::components::{integrations::slack::SlackTeamDisplay, markdown::SlackMa
 
 #[component]
 pub fn SlackGroupPreview(
-    slack_group: ReadOnlySignal<SlackGroupDetails>,
-    title: ReadOnlySignal<String>,
+    slack_group: ReadSignal<SlackGroupDetails>,
+    title: ReadSignal<String>,
     icon: Option<Element>,
 ) -> Element {
     let channel_name = slack_group()

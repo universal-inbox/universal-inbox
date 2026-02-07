@@ -28,7 +28,7 @@ pub struct TaskListContext {
 }
 
 #[component]
-pub fn TasksList(tasks: ReadOnlySignal<SortedGroups<String, TaskWithOrder>>) -> Element {
+pub fn TasksList(tasks: ReadSignal<SortedGroups<String, TaskWithOrder>>) -> Element {
     let task_service = use_coroutine_handle::<TaskCommand>();
     let context = use_memo(move || TaskListContext {
         is_task_actions_enabled: UI_MODEL.read().is_task_actions_enabled,
@@ -72,8 +72,8 @@ pub fn TasksList(tasks: ReadOnlySignal<SortedGroups<String, TaskWithOrder>>) -> 
 
 #[component]
 fn TaskListItem(
-    task: ReadOnlySignal<Task>,
-    is_selected: ReadOnlySignal<bool>,
+    task: ReadSignal<Task>,
+    is_selected: ReadSignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
     match task().source_item.data {
@@ -114,7 +114,7 @@ fn TaskListItem(
 }
 
 pub fn get_task_list_item_action_buttons(
-    task: ReadOnlySignal<Task>,
+    task: ReadSignal<Task>,
     show_shortcut: bool,
     button_class: Option<String>,
     container_class: Option<String>,

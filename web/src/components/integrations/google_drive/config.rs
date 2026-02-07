@@ -8,7 +8,7 @@ use universal_inbox::integration_connection::{
 
 #[component]
 pub fn GoogleDriveProviderConfiguration(
-    config: ReadOnlySignal<GoogleDriveConfig>,
+    config: ReadSignal<GoogleDriveConfig>,
     on_config_change: EventHandler<IntegrationConnectionConfig>,
 ) -> Element {
     rsx! {

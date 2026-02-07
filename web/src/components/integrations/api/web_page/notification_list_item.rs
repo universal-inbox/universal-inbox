@@ -18,9 +18,9 @@ use crate::{
 
 #[component]
 pub fn WebPageNotificationListItem(
-    notification: ReadOnlySignal<NotificationWithTask>,
-    web_page: ReadOnlySignal<WebPage>,
-    is_selected: ReadOnlySignal<bool>,
+    notification: ReadSignal<NotificationWithTask>,
+    web_page: ReadSignal<WebPage>,
+    is_selected: ReadSignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
     let notification_updated_at = use_memo(move || format_elapsed_time(notification().updated_at));
@@ -61,7 +61,7 @@ pub fn WebPageNotificationListItem(
 }
 
 #[component]
-pub fn WebPageListItemSubtitle(web_page: ReadOnlySignal<WebPage>) -> Element {
+pub fn WebPageListItemSubtitle(web_page: ReadSignal<WebPage>) -> Element {
     rsx! {
         div {
             class: "flex items-center text-xs text-base-content/50 gap-1",

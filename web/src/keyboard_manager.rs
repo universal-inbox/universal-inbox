@@ -7,11 +7,11 @@ use web_sys::KeyboardEvent;
 use crate::services::{crisp::is_crisp_chat_opened, flyonui::has_flyonui_modal_opened};
 
 #[derive(Clone)]
-pub struct KeyboardManager<'a> {
-    pub active_keyboard_handler: Option<&'a dyn KeyboardHandler>,
+pub struct KeyboardManager {
+    pub active_keyboard_handler: Option<&'static dyn KeyboardHandler>,
 }
 
-impl KeyboardManager<'_> {
+impl KeyboardManager {
     pub fn new() -> Self {
         Self {
             active_keyboard_handler: None,
@@ -23,7 +23,7 @@ pub trait KeyboardHandler {
     fn handle_keydown(&self, event: &KeyboardEvent) -> bool;
 }
 
-impl KeyboardHandler for KeyboardManager<'_> {
+impl KeyboardHandler for KeyboardManager {
     fn handle_keydown(&self, event: &KeyboardEvent) -> bool {
         if has_flyonui_modal_opened() {
             return false;

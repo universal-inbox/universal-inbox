@@ -12,8 +12,8 @@ use crate::components::{
 
 #[component]
 pub fn GithubDiscussionPreview(
-    github_discussion: ReadOnlySignal<GithubDiscussion>,
-    expand_details: ReadOnlySignal<bool>,
+    github_discussion: ReadSignal<GithubDiscussion>,
+    expand_details: ReadSignal<bool>,
 ) -> Element {
     rsx! {
         div {
@@ -43,8 +43,8 @@ pub fn GithubDiscussionPreview(
 
 #[component]
 fn GithubDiscussionDetails(
-    github_discussion: ReadOnlySignal<GithubDiscussion>,
-    expand_details: ReadOnlySignal<bool>,
+    github_discussion: ReadSignal<GithubDiscussion>,
+    expand_details: ReadSignal<bool>,
 ) -> Element {
     rsx! {
         div {
