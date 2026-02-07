@@ -1,5 +1,6 @@
 #![allow(non_snake_case)]
 
+use dioxus::prelude::dioxus_core::use_drop;
 use dioxus::prelude::*;
 use dioxus::web::WebEventExt;
 
@@ -8,7 +9,7 @@ use crate::services::flyonui::{forget_flyonui_collapse_element, init_flyonui_col
 #[component]
 pub fn Collapse(
     id: String,
-    opened: ReadOnlySignal<Option<bool>>,
+    opened: ReadSignal<Option<bool>>,
     header: Element,
     children: Element,
 ) -> Element {

@@ -39,8 +39,8 @@ pub mod welcome_hero;
 fn CollapseCardWithIcon(
     id: String,
     icon: Element,
-    title: ReadOnlySignal<String>,
-    opened: ReadOnlySignal<Option<bool>>,
+    title: ReadSignal<String>,
+    opened: ReadSignal<Option<bool>>,
     children: Element,
 ) -> Element {
     rsx! {
@@ -55,11 +55,11 @@ fn CollapseCardWithIcon(
 
 #[component]
 fn CollapseCard(
-    id: ReadOnlySignal<String>,
+    id: ReadSignal<String>,
     header: Element,
     children: Element,
     class: Option<String>,
-    opened: ReadOnlySignal<Option<bool>>,
+    opened: ReadSignal<Option<bool>>,
 ) -> Element {
     let card_style = class.unwrap_or("bg-base-200".to_string());
 
@@ -288,7 +288,7 @@ pub fn MessageHeader(
     user_name: Option<String>,
     avatar_url: Option<Option<Url>>,
     display_name: Option<bool>,
-    sent_at: ReadOnlySignal<Option<DateTime<Utc>>>,
+    sent_at: ReadSignal<Option<DateTime<Utc>>>,
     date_class: Option<String>,
 ) -> Element {
     let sent_at = use_memo(move || sent_at().map(format_elapsed_time));

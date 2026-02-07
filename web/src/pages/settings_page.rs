@@ -22,7 +22,7 @@ pub fn SettingsPage() -> Element {
 
     debug!("Rendering settings page");
 
-    let _ = use_resource(move || {
+    let _resource = use_resource(move || {
         to_owned![integration_connection_service];
 
         async move {

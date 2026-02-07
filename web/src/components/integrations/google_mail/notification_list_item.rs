@@ -26,9 +26,9 @@ use crate::{
 
 #[component]
 pub fn GoogleMailThreadListItem(
-    notification: ReadOnlySignal<NotificationWithTask>,
-    google_mail_thread: ReadOnlySignal<GoogleMailThread>,
-    is_selected: ReadOnlySignal<bool>,
+    notification: ReadSignal<NotificationWithTask>,
+    google_mail_thread: ReadSignal<GoogleMailThread>,
+    is_selected: ReadSignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
     let notification_updated_at = use_memo(move || format_elapsed_time(notification().updated_at));
@@ -75,7 +75,7 @@ pub fn GoogleMailThreadListItem(
 }
 
 #[component]
-fn GoogleMailThreadSubtitle(google_mail_thread: ReadOnlySignal<GoogleMailThread>) -> Element {
+fn GoogleMailThreadSubtitle(google_mail_thread: ReadSignal<GoogleMailThread>) -> Element {
     let from_address = google_mail_thread().get_message_header(MessageSelection::First, "From");
     let interlocutors_count = google_mail_thread()
         .messages

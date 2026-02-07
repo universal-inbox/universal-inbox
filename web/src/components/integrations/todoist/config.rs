@@ -18,7 +18,7 @@ use crate::{
 
 #[component]
 pub fn TodoistProviderConfiguration(
-    config: ReadOnlySignal<TodoistConfig>,
+    config: ReadSignal<TodoistConfig>,
     on_config_change: EventHandler<IntegrationConnectionConfig>,
 ) -> Element {
     let mut default_priority = use_signal(|| Some(TaskPriority::P4));

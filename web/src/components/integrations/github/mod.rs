@@ -15,10 +15,7 @@ pub mod notification_list_item;
 pub mod preview;
 
 #[component]
-pub fn GithubActorDisplay(
-    actor: ReadOnlySignal<GithubActor>,
-    display_name: Option<bool>,
-) -> Element {
+pub fn GithubActorDisplay(actor: ReadSignal<GithubActor>, display_name: Option<bool>) -> Element {
     let display_name = display_name.unwrap_or_default();
     let (actor_display_name, actor_avatar_url) = get_github_actor_name_and_url(actor());
 

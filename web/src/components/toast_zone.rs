@@ -68,10 +68,10 @@ pub fn ToastZone() -> Element {
 
 #[component]
 fn ToastElement(
-    message: ReadOnlySignal<String>,
-    kind: ReadOnlySignal<ToastKind>,
-    timeout: ReadOnlySignal<Option<Option<u128>>>,
-    dismissing: ReadOnlySignal<bool>,
+    message: ReadSignal<String>,
+    kind: ReadSignal<ToastKind>,
+    timeout: ReadSignal<Option<Option<u128>>>,
+    dismissing: ReadSignal<bool>,
     on_undo: Option<EventHandler>,
     on_close: EventHandler,
 ) -> Element {
@@ -84,7 +84,7 @@ fn ToastElement(
         ToastKind::Failure => "notyf__toast--error bg-error",
     })();
 
-    let _ = use_resource(move || async move {
+    let _resource = use_resource(move || async move {
         // BUG: Due to a bug in Dioxus 0.5.1 (https://github.com/DioxusLabs/dioxus/issues/2235)
         // reading the `timeout` signal makes the future to be dropped before the end of the loop.
         // So hardcoding the timeout for now.
@@ -104,7 +104,7 @@ fn ToastElement(
     });
 
     // Handle auto-dismiss when dismissing flag is set
-    let _ = use_resource(move || async move {
+    let _resource = use_resource(move || async move {
         if dismissing() {
             *dismiss.write() = "notyf__toast--disappear";
             TimeoutFuture::new(300).await;

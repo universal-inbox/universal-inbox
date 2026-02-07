@@ -42,8 +42,8 @@ use crate::{
 #[component]
 pub fn NotificationPreview(
     ui_model: Signal<UniversalInboxUIModel>,
-    notification: ReadOnlySignal<NotificationWithTask>,
-    notifications_count: ReadOnlySignal<usize>,
+    notification: ReadSignal<NotificationWithTask>,
+    notifications_count: ReadSignal<usize>,
 ) -> Element {
     let notification_service = use_coroutine_handle::<NotificationCommand>();
     let context = use_memo(move || NotificationListContext {
@@ -250,8 +250,8 @@ pub fn NotificationPreview(
 
 #[component]
 fn NotificationDetailsPreview(
-    notification: ReadOnlySignal<NotificationWithTask>,
-    expand_details: ReadOnlySignal<bool>,
+    notification: ReadSignal<NotificationWithTask>,
+    expand_details: ReadSignal<bool>,
 ) -> Element {
     match notification().source_item.data {
         ThirdPartyItemData::GithubNotification(github_notification) => {

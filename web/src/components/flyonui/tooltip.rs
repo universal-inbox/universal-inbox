@@ -2,6 +2,7 @@
 
 use std::fmt;
 
+use dioxus::prelude::dioxus_core::use_drop;
 use dioxus::prelude::*;
 use dioxus::web::WebEventExt;
 
@@ -9,11 +10,11 @@ use crate::services::flyonui::{forget_flyonui_tooltip_element, init_flyonui_tool
 
 #[component]
 pub fn Tooltip(
-    text: ReadOnlySignal<String>,
-    class: ReadOnlySignal<Option<String>>,
-    tooltip_class: ReadOnlySignal<Option<String>>,
+    text: ReadSignal<String>,
+    class: ReadSignal<Option<String>>,
+    tooltip_class: ReadSignal<Option<String>>,
     placement: Option<TooltipPlacement>,
-    disabled: ReadOnlySignal<Option<bool>>,
+    disabled: ReadSignal<Option<bool>>,
     children: Element,
 ) -> Element {
     let placement_class = placement.unwrap_or(TooltipPlacement::Left).to_string();

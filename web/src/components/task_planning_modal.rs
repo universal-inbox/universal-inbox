@@ -1,8 +1,7 @@
 #![allow(non_snake_case)]
 
-use std::collections::HashMap;
-
 use chrono::{NaiveDate, Utc};
+use dioxus::prelude::dioxus_core::use_drop;
 use dioxus::prelude::*;
 use dioxus::web::WebEventExt;
 use log::error;
@@ -37,7 +36,7 @@ use crate::{
 #[component]
 pub fn TaskPlanningModal(
     api_base_url: Url,
-    notification_to_plan: ReadOnlySignal<NotificationWithTask>,
+    notification_to_plan: ReadSignal<NotificationWithTask>,
     task_service_integration_connection: Signal<LoadState<Option<IntegrationConnection>>>,
     ui_model: Signal<UniversalInboxUIModel>,
     on_task_planning: EventHandler<(TaskPlanning, TaskId)>,
@@ -140,6 +139,7 @@ pub fn TaskPlanningModal(
                         class: "flex flex-col",
                         method: "dialog",
                         onsubmit: move |evt| {
+                            evt.prevent_default();
                             if let Some(task) = task_to_plan() {
                                 if let Some(task_planning_parameters) = validate_planning_form(
                                     &evt.data.values(), project()
@@ -250,42 +250,36 @@ pub fn TaskPlanningModal(
     }
 }
 
+fn get_form_text<'a>(values: &'a [(String, FormValue)], name: &str) -> Option<&'a str> {
+    values.iter().find_map(|(k, v)| {
+        if k == name {
+            match v {
+                FormValue::Text(s) => Some(s.as_str()),
+                _ => None,
+            }
+        } else {
+            None
+        }
+    })
+}
+
 fn validate_planning_form(
-    values: &HashMap<String, FormValue>,
+    values: &[(String, FormValue)],
     selected_project: Option<String>,
 ) -> Option<TaskPlanning> {
-    let due_at = values["task-due_at-input"]
-        .clone()
-        .to_vec()
-        .first()
-        .map_or(Ok(None), |value| {
-            if value.is_empty() {
-                Ok(None)
-            } else {
-                value.parse::<DueDate>().map(Some)
-            }
-        });
-    let priority = values["task-priority-input"]
-        .clone()
-        .to_vec()
-        .first()
-        .map_or(
-            Err("Task priority value is required".to_string()),
-            |value| value.parse::<TaskPriority>(),
-        );
+    let due_at = get_form_text(values, "task-due_at-input").map_or(Ok(None), |value| {
+        if value.is_empty() {
+            Ok(None)
+        } else {
+            value.parse::<DueDate>().map(Some)
+        }
+    });
+    let priority = get_form_text(values, "task-priority-input").map_or(
+        Err("Task priority value is required".to_string()),
+        |value| value.parse::<TaskPriority>(),
+    );
 
     // Buggy because of https://github.com/themeselection/flyonui/issues/86
-    // let project_name = values["project-search-input"]
-    //     .clone()
-    //     .to_vec()
-    //     .first()
-    //     .map_or(Err("Task project is required"), |value| {
-    //         if value.is_empty() {
-    //             Err("Task project is required")
-    //         } else {
-    //             Ok(value.to_string())
-    //         }
-    //     });
     // workaround:
     let project_name = selected_project.ok_or("Task project is required");
 
@@ -301,47 +295,26 @@ fn validate_planning_form(
 }
 
 fn validate_creation_form(
-    values: &HashMap<String, FormValue>,
+    values: &[(String, FormValue)],
     selected_project: Option<String>,
 ) -> Option<TaskCreation> {
-    let title_input = values["task-title-input"].clone().to_vec();
-    let title = title_input
-        .first()
-        .ok_or("Task title is required".to_string());
+    let title = get_form_text(values, "task-title-input")
+        .ok_or_else(|| "Task title is required".to_string());
 
-    let due_at = values["task-due_at-input"]
-        .clone()
-        .to_vec()
-        .first()
-        .map_or(Ok(None), |value| {
-            if value.is_empty() {
-                Ok(None)
-            } else {
-                value.parse::<DueDate>().map(Some)
-            }
-        });
+    let due_at = get_form_text(values, "task-due_at-input").map_or(Ok(None), |value| {
+        if value.is_empty() {
+            Ok(None)
+        } else {
+            value.parse::<DueDate>().map(Some)
+        }
+    });
 
-    let priority = values["task-priority-input"]
-        .clone()
-        .to_vec()
-        .first()
-        .map_or(
-            Err("Task priority value is required".to_string()),
-            |value| value.parse::<TaskPriority>(),
-        );
+    let priority = get_form_text(values, "task-priority-input").map_or(
+        Err("Task priority value is required".to_string()),
+        |value| value.parse::<TaskPriority>(),
+    );
 
     // Buggy because of https://github.com/themeselection/flyonui/issues/86
-    // let project_name = values["project-search-input"]
-    //     .clone()
-    //     .to_vec()
-    //     .first()
-    //     .map_or(Err("Task project is required"), |value| {
-    //         if value.is_empty() {
-    //             Err("Task project is required")
-    //         } else {
-    //             Ok(value.to_string())
-    //         }
-    //     });
     // workaround:
     let project_name = selected_project.ok_or("Task project is required");
 

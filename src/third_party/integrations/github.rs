@@ -15,6 +15,70 @@ use crate::{
     user::UserId,
 };
 
+/// Custom serde module for `GitUrl` that can deserialize from either:
+/// - A plain string (e.g. from GitHub API: `"git:github.com/foo/bar.git"`)
+/// - A struct (e.g. from our own serialization: `{"scheme": "git", ...}`)
+///
+/// Serialization always uses the struct format (from git-url-parse's serde feature).
+mod git_url_serde {
+    use git_url_parse::GitUrl;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
+
+    pub fn serialize<S: Serializer>(url: &GitUrl, serializer: S) -> Result<S::Ok, S::Error> {
+        url.serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<GitUrl, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum GitUrlOrString {
+            Struct(GitUrl),
+            String(String),
+        }
+
+        match GitUrlOrString::deserialize(deserializer)? {
+            GitUrlOrString::Struct(url) => Ok(url),
+            GitUrlOrString::String(s) => {
+                GitUrl::parse(&s).map_err(|e| de::Error::custom(format!("invalid git URL: {e}")))
+            }
+        }
+    }
+
+    pub mod option {
+        use git_url_parse::GitUrl;
+        use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+        pub fn serialize<S: Serializer>(
+            url: &Option<GitUrl>,
+            serializer: S,
+        ) -> Result<S::Ok, S::Error> {
+            url.serialize(serializer)
+        }
+
+        pub fn deserialize<'de, D: Deserializer<'de>>(
+            deserializer: D,
+        ) -> Result<Option<GitUrl>, D::Error> {
+            #[derive(Deserialize)]
+            #[serde(untagged)]
+            enum GitUrlOrString {
+                Struct(GitUrl),
+                String(String),
+            }
+
+            let opt: Option<GitUrlOrString> = Option::deserialize(deserializer)?;
+            match opt {
+                None => Ok(None),
+                Some(GitUrlOrString::Struct(url)) => Ok(Some(url)),
+                Some(GitUrlOrString::String(s)) => {
+                    let url = GitUrl::parse(&s)
+                        .map_err(|e| serde::de::Error::custom(format!("invalid git URL: {e}")))?;
+                    Ok(Some(url))
+                }
+            }
+        }
+    }
+}
+
 #[serde_as]
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct GithubNotification {
@@ -270,7 +334,7 @@ pub struct GithubRepository {
     #[serde_as(as = "DisplayFromStr")]
     pub git_tags_url: Url,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[serde_as(as = "Option<DisplayFromStr>")]
+    #[serde(with = "git_url_serde::option")]
     pub git_url: Option<GitUrl>,
     #[serde_as(as = "DisplayFromStr")]
     pub issue_comment_url: Url,
@@ -296,7 +360,7 @@ pub struct GithubRepository {
     #[serde_as(as = "DisplayFromStr")]
     pub releases_url: Url,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[serde_as(as = "Option<DisplayFromStr>")]
+    #[serde(with = "git_url_serde::option")]
     pub ssh_url: Option<GitUrl>,
     #[serde_as(as = "DisplayFromStr")]
     pub stargazers_url: Url,
@@ -414,7 +478,7 @@ pub struct GithubRepositoryTemplate {
     pub git_refs_url: Url,
     #[serde_as(as = "DisplayFromStr")]
     pub git_tags_url: Url,
-    #[serde_as(as = "DisplayFromStr")]
+    #[serde(with = "git_url_serde")]
     pub git_url: GitUrl,
     #[serde_as(as = "DisplayFromStr")]
     pub issue_comment_url: Url,
@@ -438,7 +502,7 @@ pub struct GithubRepositoryTemplate {
     pub pulls_urls: Url,
     #[serde_as(as = "DisplayFromStr")]
     pub releases_url: Url,
-    #[serde_as(as = "DisplayFromStr")]
+    #[serde(with = "git_url_serde")]
     pub ssh_url: GitUrl,
     #[serde_as(as = "DisplayFromStr")]
     pub stargazers_url: Url,

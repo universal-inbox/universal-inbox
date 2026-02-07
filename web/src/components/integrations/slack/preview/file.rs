@@ -9,8 +9,8 @@ use crate::components::{integrations::slack::SlackTeamDisplay, markdown::SlackMa
 
 #[component]
 pub fn SlackFilePreview(
-    slack_file: ReadOnlySignal<SlackFileDetails>,
-    title: ReadOnlySignal<String>,
+    slack_file: ReadSignal<SlackFileDetails>,
+    title: ReadSignal<String>,
     icon: Option<Element>,
 ) -> Element {
     let channel_name = slack_file()

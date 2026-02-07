@@ -24,7 +24,7 @@ clap = { workspace = true }
 email_address = { workspace = true }
 emojis = { workspace = true }
 enum_derive = { workspace = true }
-git-url-parse = "0.4.5"
+git-url-parse = { version = "0.6.0", features = ["serde"] }
 macro-attr = { workspace = true }
 num_enum = "0.7.5"
 openidconnect = { workspace = true }
@@ -54,7 +54,7 @@ chrono = { version = "0.4.0", default-features = false, features = [
 ] }
 clap = { version = "4.1.0", features = ["derive"] }
 email_address = { version = "0.2" }
-emojis = { version = "0.7.0" }
+emojis = { version = "0.8.0" }
 enum_derive = { version = "0.1.0" }
 http = { version = "1.1.0" }
 itertools = { version = "0.14.0" }

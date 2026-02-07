@@ -33,9 +33,9 @@ use crate::{
 
 #[component]
 pub fn SlackStarTaskListItem(
-    task: ReadOnlySignal<Task>,
-    slack_star: ReadOnlySignal<SlackStar>,
-    is_selected: ReadOnlySignal<bool>,
+    task: ReadSignal<Task>,
+    slack_star: ReadSignal<SlackStar>,
+    is_selected: ReadSignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
     let task_updated_at = use_memo(move || format_elapsed_time(task().updated_at));
@@ -71,9 +71,9 @@ pub fn SlackStarTaskListItem(
 
 #[component]
 pub fn SlackReactionTaskListItem(
-    task: ReadOnlySignal<Task>,
-    slack_reaction: ReadOnlySignal<SlackReaction>,
-    is_selected: ReadOnlySignal<bool>,
+    task: ReadSignal<Task>,
+    slack_reaction: ReadSignal<SlackReaction>,
+    is_selected: ReadSignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
     let task_updated_at = use_memo(move || format_elapsed_time(task().updated_at));
@@ -110,7 +110,7 @@ pub fn SlackReactionTaskListItem(
 }
 
 #[component]
-pub fn SlackStarTaskSubtitle(slack_star: ReadOnlySignal<SlackStar>) -> Element {
+pub fn SlackStarTaskSubtitle(slack_star: ReadSignal<SlackStar>) -> Element {
     let subtitle = match slack_star().item {
         SlackStarItem::SlackMessage(item) => channel_str(&item.channel),
         SlackStarItem::SlackFile(item) => channel_str(&item.channel),
@@ -129,7 +129,7 @@ pub fn SlackStarTaskSubtitle(slack_star: ReadOnlySignal<SlackStar>) -> Element {
 }
 
 #[component]
-pub fn SlackReactionTaskSubtitle(slack_reaction: ReadOnlySignal<SlackReaction>) -> Element {
+pub fn SlackReactionTaskSubtitle(slack_reaction: ReadSignal<SlackReaction>) -> Element {
     let subtitle = match slack_reaction().item {
         SlackReactionItem::SlackMessage(SlackMessageDetails { channel, .. })
         | SlackReactionItem::SlackFile(SlackFileDetails { channel, .. }) => {
@@ -150,7 +150,7 @@ pub fn SlackReactionTaskSubtitle(slack_reaction: ReadOnlySignal<SlackReaction>) 
 }
 
 #[component]
-fn SlackStarTaskListItemDetails(slack_star: ReadOnlySignal<SlackStar>) -> Element {
+fn SlackStarTaskListItemDetails(slack_star: ReadSignal<SlackStar>) -> Element {
     match slack_star().item {
         SlackStarItem::SlackMessage(slack_message) => rsx! {
             SlackMessageListItemDetails { slack_message: *slack_message }
@@ -174,7 +174,7 @@ fn SlackStarTaskListItemDetails(slack_star: ReadOnlySignal<SlackStar>) -> Elemen
 }
 
 #[component]
-fn SlackReactionTaskListItemDetails(slack_reaction: ReadOnlySignal<SlackReaction>) -> Element {
+fn SlackReactionTaskListItemDetails(slack_reaction: ReadSignal<SlackReaction>) -> Element {
     match slack_reaction().item {
         SlackReactionItem::SlackMessage(slack_message) => rsx! {
             SlackMessageListItemDetails { slack_message }

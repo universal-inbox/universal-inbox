@@ -31,9 +31,9 @@ use crate::{
 
 #[component]
 pub fn GoogleCalendarEventListItem(
-    notification: ReadOnlySignal<NotificationWithTask>,
-    google_calendar_event: ReadOnlySignal<GoogleCalendarEvent>,
-    is_selected: ReadOnlySignal<bool>,
+    notification: ReadSignal<NotificationWithTask>,
+    google_calendar_event: ReadSignal<GoogleCalendarEvent>,
+    is_selected: ReadSignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
     let notification_updated_at = use_memo(move || format_elapsed_time(notification().updated_at));
@@ -89,9 +89,7 @@ pub fn GoogleCalendarEventListItem(
 }
 
 #[component]
-fn GoogleCalendarEventSubtitle(
-    google_calendar_event: ReadOnlySignal<GoogleCalendarEvent>,
-) -> Element {
+fn GoogleCalendarEventSubtitle(google_calendar_event: ReadSignal<GoogleCalendarEvent>) -> Element {
     let organizer = google_calendar_event().organizer.email;
     let date_label = use_memo(move || compute_date_label(google_calendar_event(), "%a %b %e, %Y"));
 
@@ -108,7 +106,7 @@ fn GoogleCalendarEventSubtitle(
 }
 
 fn get_google_calendar_notification_list_item_action_buttons(
-    notification: ReadOnlySignal<NotificationWithTask>,
+    notification: ReadSignal<NotificationWithTask>,
     show_shortcut: bool,
 ) -> Vec<Element> {
     let context = use_context::<Memo<NotificationListContext>>();
