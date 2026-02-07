@@ -1,9 +1,10 @@
 use chrono::{DateTime, NaiveDate, Utc};
 use graphql_client::{Error, GraphQLQuery, Response};
-use httpmock::{Method::POST, Mock, MockServer};
 use rstest::*;
 use url::Url;
 use uuid::Uuid;
+use wiremock::matchers::{body_json, header, method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use universal_inbox::{
     HasHtmlUrl,
@@ -62,41 +63,43 @@ pub async fn create_notification_from_linear_notification(
     .await
 }
 
-pub fn mock_linear_notifications_query<'a>(
-    linear_mock_server: &'a MockServer,
-    result: &'a Response<notifications_query::ResponseData>,
-) -> Mock<'a> {
+pub async fn mock_linear_notifications_query(
+    linear_mock_server: &MockServer,
+    result: &Response<notifications_query::ResponseData>,
+) {
     let expected_request_body = NotificationsQuery::build_query(notifications_query::Variables {});
-    linear_mock_server.mock(|when, then| {
-        when.method(POST)
-            .path("/")
-            .json_body_obj(&expected_request_body)
-            .header("authorization", "Bearer linear_test_access_token");
-        then.status(200)
-            .header("content-type", "application/json")
-            .json_body_obj(result);
-    })
+    Mock::given(method("POST"))
+        .and(path("/"))
+        .and(body_json(&expected_request_body))
+        .and(header("authorization", "Bearer linear_test_access_token"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_json(result),
+        )
+        .mount(linear_mock_server)
+        .await;
 }
 
-pub fn mock_linear_issue_notification_subscribers_query(
+pub async fn mock_linear_issue_notification_subscribers_query(
     linear_mock_server: &MockServer,
     notification_id: String,
     user_id: String,
     issue_id: String,
     subscriber_ids: Vec<String>,
-) -> Mock<'_> {
+) {
     let expected_subscribers_request_body =
         NotificationSubscribersQuery::build_query(notification_subscribers_query::Variables {
             id: notification_id,
         });
-    linear_mock_server.mock(|when, then| {
-            when.method(POST)
-                .path("/")
-                .json_body_obj(&expected_subscribers_request_body)
-                .header("authorization", "Bearer linear_test_access_token");
-            then.status(200)
-                .header("content-type", "application/json")
-                .json_body_obj(&Response {
+    Mock::given(method("POST"))
+        .and(path("/"))
+        .and(body_json(&expected_subscribers_request_body))
+        .and(header("authorization", "Bearer linear_test_access_token"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_json(&Response {
                     data: Some(notification_subscribers_query::ResponseData {
                         notification: NotificationSubscribersQueryNotification::IssueNotification(NotificationSubscribersQueryNotificationOnIssueNotification  {
                             user: NotificationSubscribersQueryNotificationOnIssueNotificationUser {
@@ -114,174 +117,188 @@ pub fn mock_linear_issue_notification_subscribers_query(
                     }),
                     errors: Some(vec![]),
                     extensions: None,
-                });
-        })
+                }),
+        )
+        .mount(linear_mock_server)
+        .await;
 }
 
-pub fn mock_linear_project_notification_subscribers_query(
+pub async fn mock_linear_project_notification_subscribers_query(
     linear_mock_server: &MockServer,
     notification_id: String,
-) -> Mock<'_> {
+) {
     let expected_subscribers_request_body =
         NotificationSubscribersQuery::build_query(notification_subscribers_query::Variables {
             id: notification_id,
         });
-    linear_mock_server.mock(|when, then| {
-        when.method(POST)
-            .path("/")
-            .json_body_obj(&expected_subscribers_request_body)
-            .header("authorization", "Bearer linear_test_access_token");
-        then.status(200)
-            .header("content-type", "application/json")
-            .json_body_obj(&Response {
-                data: Some(notification_subscribers_query::ResponseData {
-                    notification: NotificationSubscribersQueryNotification::ProjectNotification,
+    Mock::given(method("POST"))
+        .and(path("/"))
+        .and(body_json(&expected_subscribers_request_body))
+        .and(header("authorization", "Bearer linear_test_access_token"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_json(&Response {
+                    data: Some(notification_subscribers_query::ResponseData {
+                        notification: NotificationSubscribersQueryNotification::ProjectNotification,
+                    }),
+                    errors: Some(vec![]),
+                    extensions: None,
                 }),
-                errors: Some(vec![]),
-                extensions: None,
-            });
-    })
+        )
+        .mount(linear_mock_server)
+        .await;
 }
 
-pub fn mock_linear_update_issue_subscribers_query(
+pub async fn mock_linear_update_issue_subscribers_query(
     linear_mock_server: &MockServer,
     issue_id: String,
     subscriber_ids: Vec<String>,
     successful_response: bool,
     errors: Option<Vec<Error>>,
-) -> Mock<'_> {
+) {
     let expected_update_request_body =
         IssueUpdateSubscribers::build_query(issue_update_subscribers::Variables {
             id: issue_id,
             subscriber_ids,
         });
-    linear_mock_server.mock(|when, then| {
-        when.method(POST)
-            .path("/")
-            .json_body_obj(&expected_update_request_body)
-            .header("authorization", "Bearer linear_test_access_token");
-        then.status(200)
-            .header("content-type", "application/json")
-            .json_body_obj(&Response {
-                data: Some(issue_update_subscribers::ResponseData {
-                    issue_update: IssueUpdateSubscribersIssueUpdate {
-                        success: successful_response,
-                    },
+    Mock::given(method("POST"))
+        .and(path("/"))
+        .and(body_json(&expected_update_request_body))
+        .and(header("authorization", "Bearer linear_test_access_token"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_json(&Response {
+                    data: Some(issue_update_subscribers::ResponseData {
+                        issue_update: IssueUpdateSubscribersIssueUpdate {
+                            success: successful_response,
+                        },
+                    }),
+                    errors,
+                    extensions: None,
                 }),
-                errors,
-                extensions: None,
-            });
-    })
+        )
+        .mount(linear_mock_server)
+        .await;
 }
 
-pub fn mock_linear_archive_notification_query(
+pub async fn mock_linear_archive_notification_query(
     linear_mock_server: &MockServer,
     notification_id: String,
     successful_response: bool,
     errors: Option<Vec<Error>>,
-) -> Mock<'_> {
+) {
     let expected_request_body = NotificationArchive::build_query(notification_archive::Variables {
         id: notification_id,
     });
-    linear_mock_server.mock(|when, then| {
-        when.method(POST)
-            .path("/")
-            .json_body_obj(&expected_request_body)
-            .header("authorization", "Bearer linear_test_access_token");
-        then.status(200)
-            .header("content-type", "application/json")
-            .json_body_obj(&Response {
-                data: if errors.is_none() {
-                    Some(notification_archive::ResponseData {
-                        notification_archive_all: NotificationArchiveNotificationArchiveAll {
-                            success: successful_response,
-                        },
-                    })
-                } else {
-                    None
-                },
-                errors,
-                extensions: None,
-            });
-    })
+    Mock::given(method("POST"))
+        .and(path("/"))
+        .and(body_json(&expected_request_body))
+        .and(header("authorization", "Bearer linear_test_access_token"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_json(&Response {
+                    data: if errors.is_none() {
+                        Some(notification_archive::ResponseData {
+                            notification_archive_all: NotificationArchiveNotificationArchiveAll {
+                                success: successful_response,
+                            },
+                        })
+                    } else {
+                        None
+                    },
+                    errors,
+                    extensions: None,
+                }),
+        )
+        .mount(linear_mock_server)
+        .await;
 }
 
-pub fn mock_linear_update_notification_snoozed_until_at_query(
+pub async fn mock_linear_update_notification_snoozed_until_at_query(
     linear_mock_server: &MockServer,
     notification_id: String,
     snoozed_until_at: DateTime<Utc>,
-) -> Mock<'_> {
+) {
     let expected_update_request_body = NotificationUpdateSnoozedUntilAt::build_query(
         notification_update_snoozed_until_at::Variables {
             id: notification_id,
             snoozed_until_at,
         },
     );
-    linear_mock_server.mock(|when, then| {
-        when.method(POST)
-            .path("/")
-            .json_body_obj(&expected_update_request_body)
-            .header("authorization", "Bearer linear_test_access_token");
-        then.status(200)
-            .header("content-type", "application/json")
-            .json_body_obj(&Response {
-                data: Some(notification_update_snoozed_until_at::ResponseData {
-                    notification_update: NotificationUpdateSnoozedUntilAtNotificationUpdate {
-                        success: true,
-                    },
+    Mock::given(method("POST"))
+        .and(path("/"))
+        .and(body_json(&expected_update_request_body))
+        .and(header("authorization", "Bearer linear_test_access_token"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_json(&Response {
+                    data: Some(notification_update_snoozed_until_at::ResponseData {
+                        notification_update: NotificationUpdateSnoozedUntilAtNotificationUpdate {
+                            success: true,
+                        },
+                    }),
+                    errors: None,
+                    extensions: None,
                 }),
-                errors: None,
-                extensions: None,
-            });
-    })
+        )
+        .mount(linear_mock_server)
+        .await;
 }
 
-pub fn mock_linear_assigned_issues_query<'a>(
-    linear_mock_server: &'a MockServer,
-    result: &'a Response<assigned_issues_query::ResponseData>,
-) -> Mock<'a> {
+pub async fn mock_linear_assigned_issues_query(
+    linear_mock_server: &MockServer,
+    result: &Response<assigned_issues_query::ResponseData>,
+) {
     let expected_request_body =
         AssignedIssuesQuery::build_query(assigned_issues_query::Variables {});
-    linear_mock_server.mock(|when, then| {
-        when.method(POST)
-            .path("/")
-            .json_body_obj(&expected_request_body)
-            .header("authorization", "Bearer linear_test_access_token");
-        then.status(200)
-            .header("content-type", "application/json")
-            .json_body_obj(result);
-    })
+    Mock::given(method("POST"))
+        .and(path("/"))
+        .and(body_json(&expected_request_body))
+        .and(header("authorization", "Bearer linear_test_access_token"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_json(result),
+        )
+        .mount(linear_mock_server)
+        .await;
 }
 
-pub fn mock_linear_update_issue_state_query(
+pub async fn mock_linear_update_issue_state_query(
     linear_mock_server: &MockServer,
     issue_id: Uuid,
     state_id: Uuid,
     successful_response: bool,
     errors: Option<Vec<Error>>,
-) -> Mock<'_> {
+) {
     let expected_update_request_body =
         IssueUpdateState::build_query(issue_update_state::Variables {
             id: issue_id.to_string(),
             state_id: state_id.to_string(),
         });
-    linear_mock_server.mock(|when, then| {
-        when.method(POST)
-            .path("/")
-            .json_body_obj(&expected_update_request_body)
-            .header("authorization", "Bearer linear_test_access_token");
-        then.status(200)
-            .header("content-type", "application/json")
-            .json_body_obj(&Response {
-                data: Some(issue_update_state::ResponseData {
-                    issue_update: IssueUpdateStateIssueUpdate {
-                        success: successful_response,
-                    },
+    Mock::given(method("POST"))
+        .and(path("/"))
+        .and(body_json(&expected_update_request_body))
+        .and(header("authorization", "Bearer linear_test_access_token"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_json(&Response {
+                    data: Some(issue_update_state::ResponseData {
+                        issue_update: IssueUpdateStateIssueUpdate {
+                            success: successful_response,
+                        },
+                    }),
+                    errors,
+                    extensions: None,
                 }),
-                errors,
-                extensions: None,
-            });
-    })
+        )
+        .mount(linear_mock_server)
+        .await;
 }
 
 pub fn assert_sync_notifications(

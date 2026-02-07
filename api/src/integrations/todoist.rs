@@ -358,8 +358,6 @@ impl TodoistService {
                 )
             })?;
 
-        // It could be simpler as the first value is actually the `command_id` but httpmock
-        // does not allow to use a request value into the mocked response
         let command_result = sync_response.sync_status.values().next();
         match command_result {
             Some(TodoistCommandStatus::Ok(_)) => Ok(sync_response),

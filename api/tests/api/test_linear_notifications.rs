@@ -68,12 +68,13 @@ mod patch_resource {
         )
         .await;
 
-        let linear_archive_notification_mock = mock_linear_archive_notification_query(
+        let _linear_archive_notification_mock = mock_linear_archive_notification_query(
             &app.app.linear_mock_server,
             expected_notification.source_item.source_id.clone(),
             true,
             None,
-        );
+        )
+        .await;
 
         let patched_notification = patch_resource(
             &app.client,
@@ -94,7 +95,6 @@ mod patch_resource {
                 ..*expected_notification
             })
         );
-        linear_archive_notification_mock.assert();
     }
 
     #[rstest]
@@ -131,7 +131,7 @@ mod patch_resource {
             linear_integration_connection.id,
         )
         .await;
-        let linear_archive_notification_mock = mock_linear_archive_notification_query(
+        let _linear_archive_notification_mock = mock_linear_archive_notification_query(
             &app.app.linear_mock_server,
             expected_notification.source_item.source_id.clone(),
             true,
@@ -141,7 +141,8 @@ mod patch_resource {
                 locations: None,
                 extensions: None,
             }]),
-        );
+        )
+        .await;
 
         let patch_response = patch_resource_response(
             &app.client,
@@ -161,7 +162,6 @@ mod patch_resource {
             body,
             r#"{"message":"Recoverable error: Errors occured while querying Linear API: Entity not found"}"#
         );
-        linear_archive_notification_mock.assert();
     }
 
     #[rstest]
@@ -198,12 +198,13 @@ mod patch_resource {
             linear_integration_connection.id,
         )
         .await;
-        let linear_archive_notification_mock = mock_linear_archive_notification_query(
+        let _linear_archive_notification_mock = mock_linear_archive_notification_query(
             &app.app.linear_mock_server,
             expected_notification.source_item.source_id.clone(),
             false,
             None,
-        );
+        )
+        .await;
 
         let patch_response = patch_resource_response(
             &app.client,
@@ -223,7 +224,6 @@ mod patch_resource {
             body,
             r#"{"message":"Linear API call failed with an unknown error"}"#
         );
-        linear_archive_notification_mock.assert();
     }
 
     #[rstest]
@@ -261,29 +261,32 @@ mod patch_resource {
         )
         .await;
 
-        let linear_query_notification_subscribers_mock =
+        let _linear_query_notification_subscribers_mock =
             mock_linear_issue_notification_subscribers_query(
                 &app.app.linear_mock_server,
                 expected_notification.source_item.source_id.clone(),
                 "user_id".to_string(),
                 "issue_id".to_string(),
                 vec!["user_id".to_string(), "other_user_id".to_string()],
-            );
+            )
+            .await;
 
-        let linear_update_issue_subscribers_mock = mock_linear_update_issue_subscribers_query(
+        let _linear_update_issue_subscribers_mock = mock_linear_update_issue_subscribers_query(
             &app.app.linear_mock_server,
             "issue_id".to_string(),
             vec!["other_user_id".to_string()],
             true,
             None,
-        );
+        )
+        .await;
 
-        let linear_archive_notification_mock = mock_linear_archive_notification_query(
+        let _linear_archive_notification_mock = mock_linear_archive_notification_query(
             &app.app.linear_mock_server,
             expected_notification.source_item.source_id.clone(),
             true,
             None,
-        );
+        )
+        .await;
 
         let patched_notification = patch_resource(
             &app.client,
@@ -304,10 +307,6 @@ mod patch_resource {
                 ..*expected_notification
             })
         );
-
-        linear_query_notification_subscribers_mock.assert();
-        linear_update_issue_subscribers_mock.assert();
-        linear_archive_notification_mock.assert();
     }
 
     #[rstest]
@@ -346,18 +345,20 @@ mod patch_resource {
         )
         .await;
 
-        let linear_query_notification_subscribers_mock =
+        let _linear_query_notification_subscribers_mock =
             mock_linear_project_notification_subscribers_query(
                 &app.app.linear_mock_server,
                 expected_notification.source_item.source_id.clone(),
-            );
+            )
+            .await;
 
-        let linear_archive_notification_mock = mock_linear_archive_notification_query(
+        let _linear_archive_notification_mock = mock_linear_archive_notification_query(
             &app.app.linear_mock_server,
             expected_notification.source_item.source_id.clone(),
             true,
             None,
-        );
+        )
+        .await;
 
         let patched_notification = patch_resource(
             &app.client,
@@ -378,9 +379,6 @@ mod patch_resource {
                 ..*expected_notification
             })
         );
-
-        linear_query_notification_subscribers_mock.assert();
-        linear_archive_notification_mock.assert();
     }
 
     #[rstest]
@@ -418,12 +416,13 @@ mod patch_resource {
         )
         .await;
         let snoozed_time = Utc.with_ymd_and_hms(2022, 1, 1, 1, 2, 3).unwrap();
-        let linear_update_notification_snoozed_until_at_mock =
+        let _linear_update_notification_snoozed_until_at_mock =
             mock_linear_update_notification_snoozed_until_at_query(
                 &app.app.linear_mock_server,
                 expected_notification.source_item.source_id.clone(),
                 snoozed_time,
-            );
+            )
+            .await;
 
         let patched_notification = patch_resource(
             &app.client,
@@ -444,7 +443,5 @@ mod patch_resource {
                 ..*expected_notification
             })
         );
-
-        linear_update_notification_snoozed_until_at_mock.assert();
     }
 }

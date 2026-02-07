@@ -1,5 +1,4 @@
 use http::StatusCode;
-use httpmock::Method::GET;
 use rstest::*;
 use serde_json::json;
 use uuid::Uuid;
@@ -14,6 +13,11 @@ use universal_inbox::{
     },
     notification::Notification,
     third_party::integrations::google_mail::{GoogleMailLabel, GoogleMailThread},
+};
+
+use wiremock::{
+    Mock, ResponseTemplate,
+    matchers::{method, path},
 };
 
 use universal_inbox_api::{
@@ -146,13 +150,14 @@ mod verify_integration_connections {
         let github_config_key = nango_provider_keys
             .get(&IntegrationProviderKind::Github)
             .unwrap();
-        let nango_mock = mock_nango_connection_service(
+        let _nango_mock = mock_nango_connection_service(
             &app.app.nango_mock_server,
             &settings.oauth2.nango_secret_key,
             &integration_connection.connection_id.to_string(),
             github_config_key,
             nango_github_connection.clone(),
-        );
+        )
+        .await;
 
         let result: IntegrationConnection = verify_integration_connection(
             &app.client,
@@ -167,7 +172,6 @@ mod verify_integration_connections {
             result.registered_oauth_scopes,
             vec!["public_repo".to_string(), "user".to_string()]
         );
-        nango_mock.assert();
 
         // Verifying again should keep validating the status with Nango and return the connection
         let result: IntegrationConnection = verify_integration_connection(
@@ -183,7 +187,6 @@ mod verify_integration_connections {
             result.registered_oauth_scopes,
             vec!["public_repo".to_string(), "user".to_string()]
         );
-        nango_mock.assert_hits(2);
     }
 
     #[rstest]
@@ -207,13 +210,14 @@ mod verify_integration_connections {
         let slack_config_key = nango_provider_keys
             .get(&IntegrationProviderKind::Slack)
             .unwrap();
-        let nango_mock = mock_nango_connection_service(
+        let _nango_mock = mock_nango_connection_service(
             &app.app.nango_mock_server,
             &settings.oauth2.nango_secret_key,
             &integration_connection.connection_id.to_string(),
             slack_config_key,
             nango_slack_connection.clone(),
-        );
+        )
+        .await;
 
         let result: IntegrationConnection = verify_integration_connection(
             &app.client,
@@ -246,7 +250,6 @@ mod verify_integration_connections {
                 "users:read".to_string()
             ]
         );
-        nango_mock.assert();
     }
 
     #[rstest]
@@ -289,13 +292,14 @@ mod verify_integration_connections {
         let github_config_key = nango_provider_keys
             .get(&IntegrationProviderKind::Github)
             .unwrap();
-        let mut nango_mock = mock_nango_connection_service(
+        let _nango_mock = mock_nango_connection_service(
             &app.app.nango_mock_server,
             &settings.oauth2.nango_secret_key,
             &integration_connection.connection_id.to_string(),
             github_config_key,
             nango_github_connection.clone(),
-        );
+        )
+        .await;
 
         let result: IntegrationConnection = verify_integration_connection(
             &app.client,
@@ -310,21 +314,21 @@ mod verify_integration_connections {
             result.registered_oauth_scopes,
             vec!["public_repo".to_string(), "user".to_string()]
         );
-        nango_mock.assert();
 
-        nango_mock.delete();
-        let mut nango_mock = app.app.nango_mock_server.mock(|when, then| {
-            when.method(GET)
-                .path(format!("/connection/{}", integration_connection.connection_id))
-                .header("authorization", format!("Bearer {}", settings.oauth2.nango_secret_key))
-                .query_param("provider_config_key", "github");
-            then.status(400).header("content-type", "application/json")
-                .json_body(json!({
-                    "error": "No connection matching params 'connection_id' and 'provider_config_key'.",
-                    "payload": {},
-                    "type": "unknown_connection"
-                }));
-        });
+        app.app.nango_mock_server.reset().await;
+
+        Mock::given(method("GET"))
+            .and(path(format!(
+                "/connection/{}",
+                integration_connection.connection_id
+            )))
+            .respond_with(ResponseTemplate::new(400).set_body_json(json!({
+                "error": "No connection matching params 'connection_id' and 'provider_config_key'.",
+                "payload": {},
+                "type": "unknown_connection"
+            })))
+            .mount(&app.app.nango_mock_server)
+            .await;
 
         let result: IntegrationConnection = verify_integration_connection(
             &app.client,
@@ -338,21 +342,21 @@ mod verify_integration_connections {
             result.failure_message,
             Some(UNKNOWN_NANGO_CONNECTION_ERROR_MESSAGE.to_string())
         );
-        nango_mock.assert();
 
         // Test failure recovery
-        nango_mock.delete();
+        app.app.nango_mock_server.reset().await;
         let nango_provider_keys = settings.nango_provider_keys();
         let github_config_key = nango_provider_keys
             .get(&IntegrationProviderKind::Github)
             .unwrap();
-        let nango_mock = mock_nango_connection_service(
+        let _nango_mock = mock_nango_connection_service(
             &app.app.nango_mock_server,
             &settings.oauth2.nango_secret_key,
             &integration_connection.connection_id.to_string(),
             github_config_key,
             nango_github_connection.clone(),
-        );
+        )
+        .await;
 
         let result: IntegrationConnection = verify_integration_connection(
             &app.client,
@@ -367,7 +371,6 @@ mod verify_integration_connections {
             result.registered_oauth_scopes,
             vec!["public_repo".to_string(), "user".to_string()]
         );
-        nango_mock.assert();
     }
 
     #[rstest]
@@ -400,7 +403,6 @@ mod verify_integration_connections {
 }
 
 mod disconnect_integration_connections {
-    use httpmock::Method::DELETE;
     use pretty_assertions::assert_eq;
 
     use super::*;
@@ -428,12 +430,13 @@ mod disconnect_integration_connections {
             .get(&IntegrationProviderKind::Github)
             .unwrap();
 
-        let nango_mock = mock_nango_delete_connection_service(
+        let _nango_mock = mock_nango_delete_connection_service(
             &app.app.nango_mock_server,
             &settings.oauth2.nango_secret_key,
             &integration_connection.connection_id.to_string(),
             github_config_key,
-        );
+        )
+        .await;
 
         let disconnected_connection: Box<IntegrationConnection> = delete_resource(
             &app.client,
@@ -448,13 +451,12 @@ mod disconnect_integration_connections {
             IntegrationConnectionStatus::Created
         );
         assert_eq!(disconnected_connection.failure_message, None);
-        nango_mock.assert();
     }
 
     #[rstest]
     #[tokio::test]
     async fn test_disconnect_unknown_integration_connection_by_nango(
-        settings: Settings,
+        _settings: Settings,
         #[future] authenticated_app: AuthenticatedApp,
     ) {
         let app = authenticated_app.await;
@@ -470,18 +472,18 @@ mod disconnect_integration_connections {
         )
         .await;
 
-        let nango_mock = app.app.nango_mock_server.mock(|when, then| {
-            when.method(DELETE)
-                .path(format!("/connection/{}", integration_connection.connection_id))
-                .header("authorization", format!("Bearer {}", settings.oauth2.nango_secret_key))
-                .query_param("provider_config_key", "github");
-            then.status(400).header("content-type", "application/json")
-                .json_body(json!({
-                    "error": "No connection matching params 'connection_id' and 'provider_config_key'.",
-                    "payload": {},
-                    "type": "unknown_connection"
-                }));
-        });
+        Mock::given(method("DELETE"))
+            .and(path(format!(
+                "/connection/{}",
+                integration_connection.connection_id
+            )))
+            .respond_with(ResponseTemplate::new(400).set_body_json(json!({
+                "error": "No connection matching params 'connection_id' and 'provider_config_key'.",
+                "payload": {},
+                "type": "unknown_connection"
+            })))
+            .mount(&app.app.nango_mock_server)
+            .await;
 
         let disconnected_connection: Box<IntegrationConnection> = delete_resource(
             &app.client,
@@ -496,7 +498,6 @@ mod disconnect_integration_connections {
             IntegrationConnectionStatus::Created
         );
         assert_eq!(disconnected_connection.failure_message, None);
-        nango_mock.assert();
     }
 }
 

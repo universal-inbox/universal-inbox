@@ -1,8 +1,9 @@
 use chrono::{DateTime, Utc};
-use httpmock::{Method::GET, Mock, MockServer, prelude::HttpMockRequest};
 use pretty_assertions::assert_eq;
 use rstest::*;
 use url::Url;
+use wiremock::matchers::{header, method, path, query_param};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use universal_inbox::{
     HasHtmlUrl,
@@ -20,7 +21,8 @@ use universal_inbox_api::integrations::google_drive::{
 };
 
 use crate::helpers::{
-    TestedApp, load_json_fixture_file, notification::create_notification_from_source_item,
+    QueryParamAbsent, TestedApp, load_json_fixture_file,
+    notification::create_notification_from_source_item,
 };
 
 pub async fn create_notification_from_google_drive_comment(
@@ -48,98 +50,100 @@ pub async fn create_notification_from_google_drive_comment(
     .await
 }
 
-pub fn mock_google_drive_get_user_info_service<'a>(
-    google_drive_mock_server: &'a MockServer,
-    result: &'a GoogleDriveAboutResponse,
-) -> Mock<'a> {
-    google_drive_mock_server.mock(|when, then| {
-        when.method(GET)
-            .path("/about")
-            .query_param("fields", "user(emailAddress,displayName)")
-            .header("authorization", "Bearer google_drive_test_access_token");
-        then.status(200)
-            .header("content-type", "application/json")
-            .json_body_obj(result);
-    })
+pub async fn mock_google_drive_get_user_info_service(
+    google_drive_mock_server: &MockServer,
+    result: &GoogleDriveAboutResponse,
+) {
+    Mock::given(method("GET"))
+        .and(path("/about"))
+        .and(query_param("fields", "user(emailAddress,displayName)"))
+        .and(header(
+            "authorization",
+            "Bearer google_drive_test_access_token",
+        ))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_json(result),
+        )
+        .mount(google_drive_mock_server)
+        .await;
 }
 
-pub fn mock_google_drive_files_list_service<'a>(
-    google_drive_mock_server: &'a MockServer,
-    page_token: Option<&'a str>,
+pub async fn mock_google_drive_files_list_service(
+    google_drive_mock_server: &MockServer,
+    page_token: Option<&str>,
     per_page: usize,
     modified_time: DateTime<Utc>,
-    result: &'a GoogleDriveFileList,
-) -> Mock<'a> {
-    google_drive_mock_server.mock(|when, then| {
-        let when = when
-            .method(GET)
-            .path("/files")
-            .header("authorization", "Bearer google_drive_test_access_token")
-            .query_param("includeItemsFromAllDrives", "true")
-            .query_param("supportsAllDrives", "true")
-            .query_param(
-                "fields",
-                "files(id,name,modifiedTime,mimeType),nextPageToken,incompleteSearch",
-            )
-            .query_param("pageSize", per_page.to_string())
-            .query_param(
-                "q",
-                format!(
-                    r#"modifiedTime>"{}""#,
-                    &modified_time.format("%Y-%m-%dT%H:%M:%SZ")
-                ),
-            );
+    result: &GoogleDriveFileList,
+) {
+    let mut mock_builder = Mock::given(method("GET"))
+        .and(path("/files"))
+        .and(header(
+            "authorization",
+            "Bearer google_drive_test_access_token",
+        ))
+        .and(query_param("includeItemsFromAllDrives", "true"))
+        .and(query_param("supportsAllDrives", "true"))
+        .and(query_param(
+            "fields",
+            "files(id,name,modifiedTime,mimeType),nextPageToken,incompleteSearch",
+        ))
+        .and(query_param("pageSize", per_page.to_string()))
+        .and(query_param(
+            "q",
+            format!(
+                r#"modifiedTime>"{}""#,
+                &modified_time.format("%Y-%m-%dT%H:%M:%SZ")
+            ),
+        ));
 
-        if let Some(page_token) = page_token {
-            when.query_param("pageToken", page_token.to_string());
-        } else {
-            when.matches(|req: &HttpMockRequest| {
-                req.query_params
-                    .as_ref()
-                    .map(|param| !param.iter().any(|(name, _)| name == "pageToken"))
-                    .unwrap_or(true)
-            });
-        }
+    if let Some(page_token) = page_token {
+        mock_builder = mock_builder.and(query_param("pageToken", page_token.to_string()));
+    } else {
+        mock_builder = mock_builder.and(QueryParamAbsent("pageToken".to_string()));
+    }
 
-        then.status(200)
-            .header("content-type", "application/json")
-            .json_body_obj(result);
-    })
+    mock_builder
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_json(result),
+        )
+        .mount(google_drive_mock_server)
+        .await;
 }
 
-pub fn mock_google_drive_comments_list_service<'a>(
-    google_drive_mock_server: &'a MockServer,
-    page_token: Option<&'a str>,
+pub async fn mock_google_drive_comments_list_service(
+    google_drive_mock_server: &MockServer,
+    page_token: Option<&str>,
     per_page: usize,
     file_id: &str,
-    result: &'a GoogleDriveCommentList,
-) -> Mock<'a> {
-    google_drive_mock_server.mock(|when, then| {
-        let when = when
-            .method(GET)
-            .path(format!("/files/{}/comments", file_id))
-            .header("authorization", "Bearer google_drive_test_access_token")
-            .query_param("pageSize", per_page.to_string())
-            .query_param(
-                "fields",
-                "comments(id,content,htmlContent,quotedFileContent,author,createdTime,modifiedTime,resolved,replies),nextPageToken",
-            );
+    result: &GoogleDriveCommentList,
+) {
+    let mut mock_builder = Mock::given(method("GET"))
+        .and(path(format!("/files/{}/comments", file_id)))
+        .and(header("authorization", "Bearer google_drive_test_access_token"))
+        .and(query_param("pageSize", per_page.to_string()))
+        .and(query_param(
+            "fields",
+            "comments(id,content,htmlContent,quotedFileContent,author,createdTime,modifiedTime,resolved,replies),nextPageToken",
+        ));
 
-        if let Some(page_token) = page_token {
-            when.query_param("pageToken", page_token.to_string());
-        } else {
-            when.matches(|req: &HttpMockRequest| {
-                req.query_params
-                    .as_ref()
-                    .map(|param| !param.iter().any(|(name, _)| name == "pageToken"))
-                    .unwrap_or(true)
-            });
-        }
+    if let Some(page_token) = page_token {
+        mock_builder = mock_builder.and(query_param("pageToken", page_token.to_string()));
+    } else {
+        mock_builder = mock_builder.and(QueryParamAbsent("pageToken".to_string()));
+    }
 
-        then.status(200)
-            .header("content-type", "application/json")
-            .json_body_obj(result);
-    })
+    mock_builder
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_json(result),
+        )
+        .mount(google_drive_mock_server)
+        .await;
 }
 
 #[fixture]

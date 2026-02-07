@@ -32,10 +32,10 @@ mod authenticate_session {
     async fn test_authenticate_session_creation(#[future] tested_app: TestedApp) {
         let app = tested_app.await;
 
-        mock_oidc_openid_configuration(&app);
-        mock_oidc_keys(&app);
-        mock_oidc_introspection(&app, "1234", true);
-        mock_oidc_user_info(&app, "1234", "John", "Doe", "test@example.com");
+        mock_oidc_openid_configuration(&app).await;
+        mock_oidc_keys(&app).await;
+        mock_oidc_introspection(&app, "1234", true).await;
+        mock_oidc_user_info(&app, "1234", "John", "Doe", "test@example.com").await;
 
         let client = reqwest::Client::builder()
             .cookie_store(true)
@@ -109,9 +109,9 @@ mod authenticate_session {
     ) {
         let app = tested_app.await;
 
-        mock_oidc_openid_configuration(&app);
-        mock_oidc_keys(&app);
-        mock_oidc_introspection(&app, "1234", false);
+        mock_oidc_openid_configuration(&app).await;
+        mock_oidc_keys(&app).await;
+        mock_oidc_introspection(&app, "1234", false).await;
 
         let response = reqwest::Client::new()
             .post(format!("{}auth/session", app.api_address))
@@ -134,8 +134,7 @@ mod close_session {
     #[tokio::test]
     async fn test_close_session(settings: Settings, #[future] authenticated_app: AuthenticatedApp) {
         let app = authenticated_app.await;
-        let oidc_issuer_mock_server_url =
-            app.app.oidc_issuer_mock_server.as_ref().unwrap().base_url();
+        let oidc_issuer_mock_server_url = app.app.oidc_issuer_mock_server.as_ref().unwrap().uri();
 
         let response = logout_user_response(&app.client, &app.app.api_address).await;
 
