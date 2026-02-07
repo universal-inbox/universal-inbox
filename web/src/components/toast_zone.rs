@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::{
     components::spinner::Spinner,
-    services::toast_service::{ToastCommand, TOASTS},
+    services::toast_service::{TOASTS, ToastCommand},
 };
 
 #[derive(Clone, PartialEq, Debug)]

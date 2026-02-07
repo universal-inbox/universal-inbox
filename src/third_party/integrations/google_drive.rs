@@ -6,10 +6,10 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::{
+    HasHtmlUrl,
     integration_connection::IntegrationConnectionId,
     third_party::item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemFromSource},
     user::UserId,
-    HasHtmlUrl,
 };
 
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
@@ -57,17 +57,17 @@ pub struct GoogleDriveCommentReply {
 impl GoogleDriveComment {
     /// Check if the last reply in the comment was sent by the current user
     pub fn is_last_reply_from_user(&self) -> bool {
-        let (Some(ref user_email), Some(ref user_display_name)) =
+        let (Some(user_email), Some(user_display_name)) =
             (&self.user_email_address, &self.user_display_name)
         else {
             return false;
         };
 
         if let Some(latest_reply) = self.replies.last() {
-            if let Some(ref latest_reply_author_email) = latest_reply.author.email_address {
-                if latest_reply_author_email == user_email {
-                    return true;
-                }
+            if let Some(ref latest_reply_author_email) = latest_reply.author.email_address
+                && latest_reply_author_email == user_email
+            {
+                return true;
             }
             // Relying on weak display name match as email is not always available
             // https://issuetracker.google.com/issues/219879781
@@ -89,10 +89,10 @@ impl GoogleDriveComment {
         // without being the latest author
         if !self.replies.is_empty() {
             let latest_reply = self.replies[self.replies.len() - 1].clone();
-            if let Some(ref latest_reply_author_email) = latest_reply.author.email_address {
-                if latest_reply_author_email == user_email {
-                    return false;
-                }
+            if let Some(ref latest_reply_author_email) = latest_reply.author.email_address
+                && latest_reply_author_email == user_email
+            {
+                return false;
             }
             if latest_reply.author.display_name == user_display_name {
                 return false;
@@ -100,10 +100,11 @@ impl GoogleDriveComment {
         }
 
         let is_new = after_time.is_none_or(|t| self.modified_time > t);
-        if let Some(ref author_email) = self.author.email_address {
-            if is_new && author_email == user_email {
-                return !self.replies.is_empty();
-            }
+        if let Some(ref author_email) = self.author.email_address
+            && is_new
+            && author_email == user_email
+        {
+            return !self.replies.is_empty();
         }
         // Relying on weak display name match as email is not always available
         // https://issuetracker.google.com/issues/219879781
@@ -117,10 +118,11 @@ impl GoogleDriveComment {
 
         for reply in &self.replies {
             let is_new = after_time.is_none_or(|t| reply.modified_time > t);
-            if let Some(ref reply_author_email) = reply.author.email_address {
-                if is_new && reply_author_email == user_email {
-                    return true;
-                }
+            if let Some(ref reply_author_email) = reply.author.email_address
+                && is_new
+                && reply_author_email == user_email
+            {
+                return true;
             }
 
             // Relying on weak display name match as email is not always available

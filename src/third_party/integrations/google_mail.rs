@@ -8,11 +8,11 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::{
+    HasHtmlUrl,
     integration_connection::IntegrationConnectionId,
     third_party::item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemFromSource},
     user::UserId,
     utils::base64::decode_base64,
-    HasHtmlUrl,
 };
 
 pub const GOOGLE_MAIL_UNREAD_LABEL: &str = "UNREAD";
@@ -308,14 +308,13 @@ impl GoogleMailMessagePayload {
         &self,
         mime_type: &str,
     ) -> Option<GoogleMailMessageAttachmentId> {
-        if self.mime_type == mime_type {
-            if let Some(attachment_id) = self
+        if self.mime_type == mime_type
+            && let Some(attachment_id) = self
                 .body
                 .as_ref()
                 .and_then(|body| body.attachment_id.as_ref())
-            {
-                return Some(attachment_id.clone());
-            }
+        {
+            return Some(attachment_id.clone());
         }
 
         self.parts.as_ref().and_then(|parts| {

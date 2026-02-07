@@ -4,11 +4,11 @@ use std::{collections::HashMap, default::Default};
 
 use dioxus::prelude::*;
 use dioxus_free_icons::{
+    Icon,
     icons::bs_icons::{
         BsArrowUpRightSquare, BsChatTextFill, BsCheckCircleFill, BsClock, BsPauseCircleFill,
         BsQuestionCircleFill, BsSkipForwardCircleFill, BsXCircleFill,
     },
-    Icon,
 };
 use itertools::Itertools;
 
@@ -23,12 +23,12 @@ use universal_inbox::third_party::integrations::github::{
 use uuid::Uuid;
 
 use crate::components::{
-    flyonui::collapse::Collapse,
-    integrations::github::{
-        get_github_actor_name_and_url, icons::GithubPullRequestIcon, GithubActorDisplay,
-    },
     CardWithHeaders, CollapseCardWithIcon, MessageHeader, SmallCard, Tag, TagsInCard,
     UserWithAvatar,
+    flyonui::collapse::Collapse,
+    integrations::github::{
+        GithubActorDisplay, get_github_actor_name_and_url, icons::GithubPullRequestIcon,
+    },
 };
 
 #[component]
@@ -466,10 +466,10 @@ fn compute_pull_request_checks_progress(
                     progress.checks_count += 1;
                     if check_run.status == GithubCheckStatusState::Completed {
                         progress.completed_checks_count += 1;
-                        if let Some(conclusion) = &check_run.conclusion {
-                            if *conclusion != GithubCheckConclusionState::Success {
-                                progress.failed_checks_count += 1;
-                            }
+                        if let Some(conclusion) = &check_run.conclusion
+                            && *conclusion != GithubCheckConclusionState::Success
+                        {
+                            progress.failed_checks_count += 1;
                         }
                     }
                 }

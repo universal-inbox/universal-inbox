@@ -12,10 +12,10 @@ use universal_inbox::integration_connection::{
 };
 
 use crate::universal_inbox::{
-    integration_connection::service::IntegrationConnectionService,
-    notification::{service::NotificationService, NotificationEventService},
-    task::{service::TaskService, TaskEventService},
     UniversalInboxError,
+    integration_connection::service::IntegrationConnectionService,
+    notification::{NotificationEventService, service::NotificationService},
+    task::{TaskEventService, service::TaskService},
 };
 
 pub async fn handle_slack_star_push_event(

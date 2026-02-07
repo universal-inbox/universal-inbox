@@ -3,18 +3,19 @@ use std::collections::HashMap;
 use graphql_client::Response;
 use pretty_assertions::assert_ne;
 use rstest::*;
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 use uuid::Uuid;
 
 use universal_inbox::{
+    HasHtmlUrl,
     integration_connection::{
+        IntegrationConnectionStatus,
         config::IntegrationConnectionConfig,
         integrations::{
             linear::{LinearConfig, LinearSyncTaskConfig},
             todoist::{SyncToken, TodoistConfig},
         },
         provider::IntegrationProviderKind,
-        IntegrationConnectionStatus,
     },
     task::{
         DueDate, PresetDueDate, ProjectSummary, TaskCreationConfig, TaskCreationResult,
@@ -27,7 +28,6 @@ use universal_inbox::{
         },
         item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemKind},
     },
-    HasHtmlUrl,
 };
 
 use universal_inbox_api::{
@@ -45,7 +45,7 @@ use universal_inbox_api::{
 };
 
 use crate::helpers::{
-    auth::{authenticated_app, AuthenticatedApp},
+    auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
         create_and_mock_integration_connection, get_integration_connection_per_provider,
         nango_linear_connection, nango_todoist_connection,
@@ -57,10 +57,10 @@ use crate::helpers::{
         linear::create_linear_task,
         sync_tasks,
         todoist::{
-            mock_todoist_complete_item_service, mock_todoist_get_item_service,
-            mock_todoist_item_add_service, mock_todoist_sync_resources_service,
-            mock_todoist_sync_service, sync_todoist_projects_response, todoist_item,
-            TodoistSyncPartialCommand,
+            TodoistSyncPartialCommand, mock_todoist_complete_item_service,
+            mock_todoist_get_item_service, mock_todoist_item_add_service,
+            mock_todoist_sync_resources_service, mock_todoist_sync_service,
+            sync_todoist_projects_response, todoist_item,
         },
     },
 };
@@ -190,13 +190,17 @@ async fn test_sync_tasks_should_create_new_task(
     .await
     .unwrap();
     assert!(integration_connection.last_tasks_sync_started_at.is_some());
-    assert!(integration_connection
-        .last_tasks_sync_completed_at
-        .is_some());
+    assert!(
+        integration_connection
+            .last_tasks_sync_completed_at
+            .is_some()
+    );
     assert!(integration_connection.last_tasks_sync_failed_at.is_none());
-    assert!(integration_connection
-        .last_tasks_sync_failure_message
-        .is_none());
+    assert!(
+        integration_connection
+            .last_tasks_sync_failure_message
+            .is_none()
+    );
     assert_eq!(integration_connection.tasks_sync_failures, 0);
     assert_eq!(
         integration_connection.status,

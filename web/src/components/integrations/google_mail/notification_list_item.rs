@@ -4,22 +4,22 @@ use std::collections::HashSet;
 
 use dioxus::prelude::*;
 use dioxus_free_icons::{
-    icons::bs_icons::{BsExclamationCircle, BsStar},
     Icon,
+    icons::bs_icons::{BsExclamationCircle, BsStar},
 };
 use universal_inbox::{
+    HasHtmlUrl,
     notification::NotificationWithTask,
     third_party::integrations::google_mail::{
-        GoogleMailThread, MessageSelection, GOOGLE_MAIL_IMPORTANT_LABEL, GOOGLE_MAIL_STARRED_LABEL,
+        GOOGLE_MAIL_IMPORTANT_LABEL, GOOGLE_MAIL_STARRED_LABEL, GoogleMailThread, MessageSelection,
     },
-    HasHtmlUrl,
 };
 
 use crate::{
     components::{
         integrations::google_mail::icons::{GoogleMail, Mail},
         list::{ListContext, ListItem},
-        notifications_list::{get_notification_list_item_action_buttons, TaskHint},
+        notifications_list::{TaskHint, get_notification_list_item_action_buttons},
     },
     utils::format_elapsed_time,
 };

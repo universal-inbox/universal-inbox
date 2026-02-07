@@ -6,11 +6,11 @@ use reqwest::Method;
 use url::Url;
 
 use universal_inbox::{
-    task::{
-        service::{SyncTasksParameters, TaskPatch},
-        Task, TaskCreationResult, TaskId, TaskPlanning, TaskStatus, TaskSyncSourceKind,
-    },
     Page,
+    task::{
+        Task, TaskCreationResult, TaskId, TaskPlanning, TaskStatus, TaskSyncSourceKind,
+        service::{SyncTasksParameters, TaskPatch},
+    },
 };
 
 use crate::{

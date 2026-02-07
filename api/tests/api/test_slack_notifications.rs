@@ -8,14 +8,14 @@ use universal_inbox::{
     integration_connection::{
         config::IntegrationConnectionConfig, integrations::slack::SlackConfig,
     },
-    notification::{service::NotificationPatch, Notification, NotificationStatus},
+    notification::{Notification, NotificationStatus, service::NotificationPatch},
     third_party::integrations::slack::SlackStar,
 };
 
 use universal_inbox_api::{configuration::Settings, integrations::oauth2::NangoConnection};
 
 use crate::helpers::{
-    auth::{authenticated_app, AuthenticatedApp},
+    auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{create_and_mock_integration_connection, nango_slack_connection},
     notification::slack::{
         create_notification_from_slack_star, mock_slack_stars_remove, slack_star_added,

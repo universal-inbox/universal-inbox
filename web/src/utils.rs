@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use chrono::{DateTime, Local, Utc};
 use gloo_timers::future::TimeoutFuture;
 use gloo_utils::errors::JsError;
@@ -208,10 +208,10 @@ pub fn scroll_element_into_view_by_class(
         .query_selector_all(&format!(".{}", child_class))
         .map_err(|err| JsError::try_from(err).unwrap())?;
 
-    if let Some(target_element) = elements.get(child_index as u32) {
-        if let Some(element) = target_element.dyn_ref::<Element>() {
-            element.scroll_into_view_with_bool(true);
-        }
+    if let Some(target_element) = elements.get(child_index as u32)
+        && let Some(element) = target_element.dyn_ref::<Element>()
+    {
+        element.scroll_into_view_with_bool(true);
     }
 
     Ok(())

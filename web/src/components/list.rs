@@ -3,7 +3,7 @@
 use std::fmt::Display;
 
 use dioxus::prelude::*;
-use dioxus_free_icons::{icons::bs_icons::BsArrowUpRightSquare, Icon};
+use dioxus_free_icons::{Icon, icons::bs_icons::BsArrowUpRightSquare};
 use serde::{Deserialize, Serialize};
 use url::Url;
 

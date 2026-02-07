@@ -10,16 +10,16 @@ use uuid::Uuid;
 
 use universal_inbox::{
     integration_connection::{
+        IntegrationConnection,
         config::IntegrationConnectionConfig,
         integrations::{
             google_drive::{GoogleDriveConfig, GoogleDriveContext},
             todoist::TodoistConfig,
         },
         provider::IntegrationProvider,
-        IntegrationConnection,
     },
     notification::{
-        service::NotificationPatch, Notification, NotificationSourceKind, NotificationStatus,
+        Notification, NotificationSourceKind, NotificationStatus, service::NotificationPatch,
     },
     third_party::{
         integrations::{google_drive::GoogleDriveComment, todoist::TodoistItem},
@@ -40,7 +40,7 @@ use universal_inbox_api::{
 };
 
 use crate::helpers::{
-    auth::{authenticated_app, AuthenticatedApp},
+    auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
         create_and_mock_integration_connection, get_integration_connection,
         nango_google_drive_connection, nango_todoist_connection,
@@ -415,7 +415,7 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
 
     google_drive_files_list.next_page_token = None;
     google_drive_files_list.files = Some(vec![
-        google_drive_files_list.files.as_ref().unwrap()[0].clone()
+        google_drive_files_list.files.as_ref().unwrap()[0].clone(),
     ]);
     let google_drive_files_list_mock = mock_google_drive_files_list_service(
         &app.app.google_drive_mock_server,

@@ -3,7 +3,7 @@ use rstest::*;
 
 use universal_inbox_api::configuration::Settings;
 
-use crate::helpers::{settings, tested_app, TestedApp};
+use crate::helpers::{TestedApp, settings, tested_app};
 
 mod content_security_policy {
     use super::*;

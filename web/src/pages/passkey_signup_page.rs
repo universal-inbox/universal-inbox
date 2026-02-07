@@ -13,7 +13,7 @@ use crate::{
     form::FormValues,
     icons::PASSKEY_LOGO,
     route::Route,
-    services::user_service::{UserCommand, CONNECTED_USER},
+    services::user_service::{CONNECTED_USER, UserCommand},
 };
 
 pub fn PasskeySignupPage() -> Element {

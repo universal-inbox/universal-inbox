@@ -5,7 +5,7 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use async_trait::async_trait;
 use chrono::{DateTime, Timelike, Utc};
 use email_address::EmailAddress;
@@ -22,24 +22,24 @@ use tracing::{debug, warn};
 use url::Url;
 use uuid::Uuid;
 use wiremock::{
-    matchers::{method, path, path_regex},
     Mock, MockServer, ResponseTemplate,
+    matchers::{method, path, path_regex},
 };
 
 use universal_inbox::{
     integration_connection::{
+        IntegrationConnection, IntegrationConnectionId,
         integrations::google_mail::{GoogleMailConfig, GoogleMailContext},
         provider::{
             IntegrationConnectionContext, IntegrationProvider, IntegrationProviderKind,
             IntegrationProviderSource,
         },
-        IntegrationConnection, IntegrationConnectionId,
     },
     notification::{Notification, NotificationSource, NotificationSourceKind, NotificationStatus},
     third_party::{
         integrations::google_mail::{
-            GoogleMailLabel, GoogleMailMessage, GoogleMailMessageBody, GoogleMailThread,
-            MessageSelection, GOOGLE_MAIL_INBOX_LABEL, GOOGLE_MAIL_UNREAD_LABEL,
+            GOOGLE_MAIL_INBOX_LABEL, GOOGLE_MAIL_UNREAD_LABEL, GoogleMailLabel, GoogleMailMessage,
+            GoogleMailMessageBody, GoogleMailThread, MessageSelection,
         },
         item::{ThirdPartyItem, ThirdPartyItemFromSource, ThirdPartyItemSourceKind},
     },
@@ -53,8 +53,8 @@ use crate::{
         oauth2::AccessToken, third_party::ThirdPartyItemSourceService,
     },
     universal_inbox::{
-        integration_connection::service::IntegrationConnectionService,
-        notification::service::NotificationService, UniversalInboxError,
+        UniversalInboxError, integration_connection::service::IntegrationConnectionService,
+        notification::service::NotificationService,
     },
     utils::api::ApiClient,
 };
@@ -489,34 +489,33 @@ impl GoogleMailService {
         integration_connection_id: IntegrationConnectionId,
         access_token: &AccessToken,
     ) -> Option<ThirdPartyItem> {
-        if let Some(message) = google_mail_thread.messages.first() {
-            if let Some(ref attachment_id) = message
+        if let Some(message) = google_mail_thread.messages.first()
+            && let Some(ref attachment_id) = message
                 .payload
                 .find_attachment_id_for_mime_type("text/calendar")
-            {
-                let mut derived_third_party_item = self
-                    .derive_third_party_item_from_google_mail_invitation(
-                        executor,
-                        &message.id,
-                        attachment_id,
-                        user_id,
-                        access_token,
-                    )
-                    .await
-                    .inspect_err(|err| {
-                        warn!(
-                            "Failed to derive Google Mail invitation from thread `{}`: {err:?}",
-                            google_mail_thread.id
-                        );
-                    })
-                    .ok()??;
-                derived_third_party_item.source_item = Some(Box::new(
-                    google_mail_thread
-                        .clone()
-                        .into_third_party_item(user_id, integration_connection_id),
-                ));
-                return Some(derived_third_party_item);
-            }
+        {
+            let mut derived_third_party_item = self
+                .derive_third_party_item_from_google_mail_invitation(
+                    executor,
+                    &message.id,
+                    attachment_id,
+                    user_id,
+                    access_token,
+                )
+                .await
+                .inspect_err(|err| {
+                    warn!(
+                        "Failed to derive Google Mail invitation from thread `{}`: {err:?}",
+                        google_mail_thread.id
+                    );
+                })
+                .ok()??;
+            derived_third_party_item.source_item = Some(Box::new(
+                google_mail_thread
+                    .clone()
+                    .into_third_party_item(user_id, integration_connection_id),
+            ));
+            return Some(derived_third_party_item);
         }
 
         None
@@ -984,10 +983,10 @@ mod tests {
         use chrono::TimeZone;
         use pretty_assertions::assert_eq;
         use universal_inbox::{
-            third_party::integrations::google_mail::{
-                GoogleMailMessageHeader, GoogleMailMessagePayload, GOOGLE_MAIL_STARRED_LABEL,
-            },
             HasHtmlUrl,
+            third_party::integrations::google_mail::{
+                GOOGLE_MAIL_STARRED_LABEL, GoogleMailMessageHeader, GoogleMailMessagePayload,
+            },
         };
 
         #[fixture]

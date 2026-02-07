@@ -2,34 +2,35 @@ use std::sync::Arc;
 
 use actix_http::body::BoxBody;
 use actix_jwt_authc::{Authenticated, MaybeAuthenticated};
-use actix_web::{web, HttpResponse, Scope};
+use actix_web::{HttpResponse, Scope, web};
 use anyhow::Context;
 use apalis_redis::RedisStorage;
 use serde::Deserialize;
 use serde_json::json;
-use serde_with::{formats::CommaSeparator, serde_as, StringWithSeparator};
+use serde_with::{StringWithSeparator, formats::CommaSeparator, serde_as};
 use tokio::sync::RwLock;
 
 use universal_inbox::{
+    Page, PageToken,
     notification::{
+        NotificationId, NotificationListOrder, NotificationSourceKind, NotificationStatus,
+        NotificationWithTask,
         service::{
             InvitationPatch, NotificationPatch, PatchNotificationsRequest,
             SyncNotificationsParameters,
         },
-        NotificationId, NotificationListOrder, NotificationSourceKind, NotificationStatus,
-        NotificationWithTask,
     },
     task::{TaskCreation, TaskId},
     user::UserId,
     utils::base64::decode_base64,
-    Page, PageToken,
 };
 
 use crate::{
     jobs::UniversalInboxJob,
     universal_inbox::{
+        UniversalInboxError, UpdateStatus,
         integration_connection::service::IntegrationConnectionService,
-        notification::service::NotificationService, UniversalInboxError, UpdateStatus,
+        notification::service::NotificationService,
     },
     utils::jwt::Claims,
 };

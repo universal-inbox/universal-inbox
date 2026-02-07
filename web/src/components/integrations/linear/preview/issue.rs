@@ -2,8 +2,8 @@
 
 use dioxus::prelude::*;
 use dioxus_free_icons::{
-    icons::bs_icons::{BsArrowUpRightSquare, BsCalendar2Check, BsFlag},
     Icon,
+    icons::bs_icons::{BsArrowUpRightSquare, BsCalendar2Check, BsFlag},
 };
 
 use universal_inbox::third_party::integrations::linear::{
@@ -12,13 +12,13 @@ use universal_inbox::third_party::integrations::linear::{
 
 use crate::{
     components::{
+        CollapseCard, MessageHeader, SmallCard, Tag, TagDisplay, TagsInCard, UserWithAvatar,
         integrations::linear::{
             get_notification_type_label,
             icons::{LinearIssueIcon, LinearProjectIcon, LinearProjectMilestoneIcon},
             preview::project::LinearProjectDetails,
         },
         markdown::Markdown,
-        CollapseCard, MessageHeader, SmallCard, Tag, TagDisplay, TagsInCard, UserWithAvatar,
     },
     theme::{
         PRIORITY_HIGH_COLOR_CLASS, PRIORITY_LOW_COLOR_CLASS, PRIORITY_NORMAL_COLOR_CLASS,

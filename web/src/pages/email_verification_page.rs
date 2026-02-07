@@ -9,7 +9,7 @@ use crate::{
     components::loading::Loading,
     model::{AuthenticationState, UI_MODEL},
     route::Route,
-    services::user_service::{UserCommand, CONNECTED_USER},
+    services::user_service::{CONNECTED_USER, UserCommand},
 };
 
 #[component]

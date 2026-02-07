@@ -3,29 +3,14 @@
 use std::{fmt::Display, marker::PhantomData, str::FromStr};
 
 use dioxus::prelude::*;
-use dioxus_free_icons::{icons::bs_icons::BsCalendarEvent, Icon};
+use dioxus_free_icons::{Icon, icons::bs_icons::BsCalendarEvent};
 use log::error;
-use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 use web_sys::HtmlInputElement;
 
 use crate::{
     components::floating_label_inputs::FloatingLabelInputText, utils::wait_for_element_by_id,
 };
-
-#[derive(Serialize, Deserialize)]
-struct DatepickerOptions {
-    pub autohide: bool,
-    #[serde(rename = "todayBtn")]
-    pub today_button: bool,
-    #[serde(rename = "todayBtnMode")]
-    pub today_button_mode: u8,
-    #[serde(rename = "todayHighlight")]
-    pub today_highlight: bool,
-    pub format: String,
-    #[serde(rename = "buttonClass")]
-    pub button_class: String,
-}
 
 #[wasm_bindgen(module = "/public/js/index.js")]
 extern "C" {

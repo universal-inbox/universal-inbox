@@ -5,7 +5,7 @@ use chrono::{DateTime, Timelike, Utc};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use slack_blocks_render::{
-    render_blocks_as_markdown, text::render_blocks_as_text, SlackReferences,
+    SlackReferences, render_blocks_as_markdown, text::render_blocks_as_text,
 };
 use slack_morphism::prelude::*;
 use url::Url;
@@ -13,11 +13,11 @@ use uuid::Uuid;
 use vec1::Vec1;
 
 use crate::{
+    HasHtmlUrl,
     integration_connection::IntegrationConnectionId,
     third_party::item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemFromSource},
     user::UserId,
     utils::{emoji::replace_emoji_code_in_string_with_emoji, truncate::truncate_with_ellipse},
-    HasHtmlUrl,
 };
 
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
@@ -357,56 +357,56 @@ pub trait SlackMessageRender {
 
 impl SlackMessageRender for SlackHistoryMessage {
     fn render_content(&self, references: Option<SlackReferences>, as_markdown: bool) -> String {
-        if let Some(blocks) = &self.content.blocks {
-            if !blocks.is_empty() {
-                return if as_markdown {
-                    render_blocks_as_markdown(
-                        blocks.clone(),
-                        references.clone().unwrap_or_default(),
-                        Some("@".to_string()),
-                    )
-                } else {
-                    render_blocks_as_text(blocks.clone(), references.clone().unwrap_or_default())
-                };
-            }
+        if let Some(blocks) = &self.content.blocks
+            && !blocks.is_empty()
+        {
+            return if as_markdown {
+                render_blocks_as_markdown(
+                    blocks.clone(),
+                    references.clone().unwrap_or_default(),
+                    Some("@".to_string()),
+                )
+            } else {
+                render_blocks_as_text(blocks.clone(), references.clone().unwrap_or_default())
+            };
         }
 
-        if let Some(attachments) = &self.content.attachments {
-            if !attachments.is_empty() {
-                let str_blocks = attachments
-                    .iter()
-                    .filter_map(|a| {
-                        if let Some(blocks) = a.blocks.as_ref() {
-                            return if as_markdown {
-                                Some(render_blocks_as_markdown(
-                                    blocks.clone(),
-                                    references.clone().unwrap_or_default(),
-                                    Some("@".to_string()),
-                                ))
-                            } else {
-                                Some(render_blocks_as_text(
-                                    blocks.clone(),
-                                    references.clone().unwrap_or_default(),
-                                ))
-                            };
+        if let Some(attachments) = &self.content.attachments
+            && !attachments.is_empty()
+        {
+            let str_blocks = attachments
+                .iter()
+                .filter_map(|a| {
+                    if let Some(blocks) = a.blocks.as_ref() {
+                        return if as_markdown {
+                            Some(render_blocks_as_markdown(
+                                blocks.clone(),
+                                references.clone().unwrap_or_default(),
+                                Some("@".to_string()),
+                            ))
+                        } else {
+                            Some(render_blocks_as_text(
+                                blocks.clone(),
+                                references.clone().unwrap_or_default(),
+                            ))
+                        };
+                    }
+
+                    if let Some(text) = a.text.as_ref() {
+                        let sanitized_text = sanitize_slack_markdown(text);
+                        if let Some(title) = a.title.as_ref() {
+                            return Some(format!("{}\n\n{}", title, sanitized_text));
                         }
 
-                        if let Some(text) = a.text.as_ref() {
-                            let sanitized_text = sanitize_slack_markdown(text);
-                            if let Some(title) = a.title.as_ref() {
-                                return Some(format!("{}\n\n{}", title, sanitized_text));
-                            }
+                        return Some(sanitized_text);
+                    }
 
-                            return Some(sanitized_text);
-                        }
+                    None
+                })
+                .collect::<Vec<String>>();
 
-                        None
-                    })
-                    .collect::<Vec<String>>();
-
-                if !str_blocks.is_empty() {
-                    return str_blocks.join("\n");
-                }
+            if !str_blocks.is_empty() {
+                return str_blocks.join("\n");
             }
         }
 
@@ -419,12 +419,11 @@ impl SlackMessageRender for SlackHistoryMessage {
     }
 
     fn render_title(&self, references: Option<SlackReferences>) -> String {
-        if let Some(attachments) = &self.content.attachments {
-            if let Some(first_attachment) = attachments.first() {
-                if let Some(title) = first_attachment.title.as_ref() {
-                    return title.clone();
-                }
-            }
+        if let Some(attachments) = &self.content.attachments
+            && let Some(first_attachment) = attachments.first()
+            && let Some(title) = first_attachment.title.as_ref()
+        {
+            return title.clone();
         }
 
         truncate_with_ellipse(&self.render_content(references, false), 120, "...", true)
@@ -470,12 +469,11 @@ impl SlackMessageDetails {
     }
 
     pub fn render_title(&self) -> String {
-        if let Some(attachments) = &self.message.content.attachments {
-            if let Some(first_attachment) = attachments.first() {
-                if let Some(title) = first_attachment.title.as_ref() {
-                    return title.clone();
-                }
-            }
+        if let Some(attachments) = &self.message.content.attachments
+            && let Some(first_attachment) = attachments.first()
+            && let Some(title) = first_attachment.title.as_ref()
+        {
+            return title.clone();
         }
 
         truncate_with_ellipse(
@@ -789,11 +787,11 @@ mod test_sanitize_slack_markdown {
 mod test_message_details {
     use rstest::*;
     use slack_morphism::{
+        SlackMessageAttachment,
         api::{
             SlackApiConversationsHistoryResponse, SlackApiConversationsInfoResponse,
             SlackApiTeamInfoResponse, SlackApiUsersInfoResponse,
         },
-        SlackMessageAttachment,
     };
 
     use crate::test_helpers::load_json_fixture_file;

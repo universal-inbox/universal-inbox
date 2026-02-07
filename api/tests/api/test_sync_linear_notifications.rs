@@ -5,13 +5,13 @@ use uuid::Uuid;
 
 use universal_inbox::{
     integration_connection::{
+        IntegrationConnectionStatus,
         config::IntegrationConnectionConfig,
         integrations::{linear::LinearConfig, todoist::TodoistConfig},
         provider::IntegrationProviderKind,
-        IntegrationConnectionStatus,
     },
     notification::{
-        service::NotificationPatch, Notification, NotificationSourceKind, NotificationStatus,
+        Notification, NotificationSourceKind, NotificationStatus, service::NotificationPatch,
     },
     third_party::{
         integrations::{
@@ -30,7 +30,7 @@ use universal_inbox_api::{
 };
 
 use crate::helpers::{
-    auth::{authenticated_app, AuthenticatedApp},
+    auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
         create_and_mock_integration_connection, get_integration_connection_per_provider,
         nango_linear_connection, nango_todoist_connection,
@@ -233,18 +233,26 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     )
     .await
     .unwrap();
-    assert!(integration_connection
-        .last_notifications_sync_started_at
-        .is_some());
-    assert!(integration_connection
-        .last_notifications_sync_completed_at
-        .is_some());
-    assert!(integration_connection
-        .last_notifications_sync_failed_at
-        .is_none());
-    assert!(integration_connection
-        .last_notifications_sync_failure_message
-        .is_none());
+    assert!(
+        integration_connection
+            .last_notifications_sync_started_at
+            .is_some()
+    );
+    assert!(
+        integration_connection
+            .last_notifications_sync_completed_at
+            .is_some()
+    );
+    assert!(
+        integration_connection
+            .last_notifications_sync_failed_at
+            .is_none()
+    );
+    assert!(
+        integration_connection
+            .last_notifications_sync_failure_message
+            .is_none()
+    );
     assert_eq!(integration_connection.notifications_sync_failures, 0);
     assert_eq!(
         integration_connection.status,

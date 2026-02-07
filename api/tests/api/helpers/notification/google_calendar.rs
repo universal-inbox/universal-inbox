@@ -23,7 +23,7 @@ use universal_inbox_api::{
     repository::third_party::ThirdPartyItemRepository,
 };
 
-use crate::helpers::{load_json_fixture_file, TestedApp};
+use crate::helpers::{TestedApp, load_json_fixture_file};
 
 pub async fn create_notification_from_google_calendar_event(
     app: &TestedApp,

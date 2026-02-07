@@ -2,8 +2,8 @@
 
 use dioxus::prelude::*;
 use dioxus_free_icons::{
-    icons::bs_icons::{BsArrowRight, BsArrowUpRightSquare, BsCalendar2Event},
     Icon,
+    icons::bs_icons::{BsArrowRight, BsArrowUpRightSquare, BsCalendar2Event},
 };
 
 use universal_inbox::third_party::integrations::linear::{
@@ -11,12 +11,12 @@ use universal_inbox::third_party::integrations::linear::{
 };
 
 use crate::components::{
+    CardWithHeaders, CollapseCard, MessageHeader, SmallCard, Tag, TagDisplay, UserWithAvatar,
     integrations::linear::{
         get_notification_type_label,
         icons::{LinearProjectHealtIcon, LinearProjectIcon},
     },
     markdown::Markdown,
-    CardWithHeaders, CollapseCard, MessageHeader, SmallCard, Tag, TagDisplay, UserWithAvatar,
 };
 
 #[component]

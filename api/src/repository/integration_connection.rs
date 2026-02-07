@@ -1,15 +1,15 @@
 use anyhow::anyhow;
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
-use sqlx::{types::Json, Postgres, QueryBuilder, Transaction};
+use sqlx::{Postgres, QueryBuilder, Transaction, types::Json};
 use tracing::debug;
 use uuid::Uuid;
 
 use universal_inbox::{
     integration_connection::{
+        IntegrationConnection, IntegrationConnectionId, IntegrationConnectionStatus,
         config::IntegrationConnectionConfig,
         provider::{IntegrationConnectionContext, IntegrationProvider, IntegrationProviderKind},
-        IntegrationConnection, IntegrationConnectionId, IntegrationConnectionStatus,
     },
     user::UserId,
 };

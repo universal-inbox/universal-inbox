@@ -21,19 +21,20 @@ use actix_jwt_authc::{
     AuthenticateMiddlewareFactory, AuthenticateMiddlewareSettings, JWTSessionKey,
 };
 use actix_session::{
+    SessionMiddleware,
     config::{CookieContentSecurity, PersistentSession},
     storage::CookieSessionStore,
-    SessionMiddleware,
 };
 use actix_web::{
+    App, HttpServer, Result as ActixResult,
     cookie::{
-        time::{Duration, OffsetDateTime},
         Cookie, Key, SameSite,
+        time::{Duration, OffsetDateTime},
     },
     dev::{Server, Service, ServiceResponse},
     http::{self, header},
     middleware::{self, ErrorHandlerResponse, ErrorHandlers},
-    web, App, HttpServer, Result as ActixResult,
+    web,
 };
 use actix_web_lab::web::spa;
 use anyhow::Context;
@@ -43,7 +44,7 @@ use apalis::{
 };
 use apalis_redis::RedisStorage;
 use configuration::AuthenticationSettings;
-use csp::{Directive, Source, Sources, CSP};
+use csp::{CSP, Directive, Source, Sources};
 use futures::channel::mpsc;
 use integrations::{api::APIService, google_calendar::GoogleCalendarService, slack::SlackService};
 use jobs::UniversalInboxJob;
@@ -51,7 +52,7 @@ use jsonwebtoken::{Algorithm, Validation};
 use mailer::Mailer;
 use sqlx::PgPool;
 use tokio::sync::RwLock;
-use tracing::{error, event, info, Level, Span};
+use tracing::{Level, Span, error, event, info};
 use tracing_actix_web::TracingLogger;
 use utils::cache::Cache;
 use webauthn_rs::prelude::*;
@@ -66,13 +67,12 @@ use crate::{
     observability::AuthenticatedRootSpanBuilder,
     repository::Repository,
     universal_inbox::{
-        auth_token::service::AuthenticationTokenService,
+        UniversalInboxError, auth_token::service::AuthenticationTokenService,
         integration_connection::service::IntegrationConnectionService,
         notification::service::NotificationService, task::service::TaskService,
         third_party::service::ThirdPartyItemService, user::service::UserService,
-        UniversalInboxError,
     },
-    utils::jwt::{Claims, JWTBase64EncodedSigningKeys, JWTSigningKeys, JWT_SESSION_KEY},
+    utils::jwt::{Claims, JWT_SESSION_KEY, JWTBase64EncodedSigningKeys, JWTSigningKeys},
 };
 
 pub mod commands;

@@ -10,12 +10,12 @@ use url::Url;
 use webauthn_rs_proto::*;
 
 use universal_inbox::{
+    SuccessResponse,
     auth::CloseSessionResponse,
     user::{
         Credentials, EmailValidationToken, Password, PasswordResetToken, RegisterUserParameters,
         User, UserId, Username,
     },
-    SuccessResponse,
 };
 
 use crate::{

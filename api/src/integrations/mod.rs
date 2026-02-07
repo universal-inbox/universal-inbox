@@ -5,8 +5,8 @@ use sqlx::{Postgres, Transaction};
 use universal_inbox::{
     notification::{Notification, NotificationSource},
     task::{
-        service::TaskPatch, CreateOrUpdateTaskRequest, ProjectSummary, TaskCreation,
-        TaskCreationConfig,
+        CreateOrUpdateTaskRequest, ProjectSummary, TaskCreation, TaskCreationConfig,
+        service::TaskPatch,
     },
     third_party::item::{ThirdPartyItem, ThirdPartyItemSourceKind},
     user::UserId,

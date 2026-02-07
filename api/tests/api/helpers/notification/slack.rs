@@ -6,7 +6,7 @@ use httpmock::{
     Mock, MockServer,
 };
 use rstest::*;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use slack_blocks_render::SlackReferences;
 use slack_morphism::prelude::*;
 
@@ -25,8 +25,8 @@ use universal_inbox::{
 use universal_inbox_api::integrations::slack::SlackService;
 
 use crate::helpers::{
-    fixture_path, load_json_fixture_file, notification::create_notification_from_source_item,
-    TestedApp,
+    TestedApp, fixture_path, load_json_fixture_file,
+    notification::create_notification_from_source_item,
 };
 
 #[fixture]

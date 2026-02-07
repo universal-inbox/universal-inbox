@@ -1,7 +1,7 @@
 use std::{fmt, str::FromStr};
 
 use chrono::{DateTime, Utc};
-use secrecy::{zeroize::Zeroize, CloneableSecret, ExposeSecret, SecretBox, SerializableSecret};
+use secrecy::{CloneableSecret, ExposeSecret, SecretBox, SerializableSecret, zeroize::Zeroize};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 

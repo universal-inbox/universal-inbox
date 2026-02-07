@@ -6,8 +6,8 @@ use reqwest::Method;
 use url::Url;
 
 use universal_inbox::{
-    integration_connection::{provider::IntegrationProviderKind, NangoPublicKey},
     FrontAuthenticationConfig, FrontConfig, IntegrationProviderStaticConfig,
+    integration_connection::{NangoPublicKey, provider::IntegrationProviderKind},
 };
 
 use crate::{services::api::call_api, utils::current_origin};

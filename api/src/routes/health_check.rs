@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use actix_web::{body::BoxBody, web, HttpResponse};
+use actix_web::{HttpResponse, body::BoxBody, web};
 use anyhow::Context;
 use redis::AsyncCommands;
 use serde_json::json;
@@ -8,7 +8,7 @@ use tokio::sync::RwLock;
 
 use crate::{
     universal_inbox::{
-        integration_connection::service::IntegrationConnectionService, UniversalInboxError,
+        UniversalInboxError, integration_connection::service::IntegrationConnectionService,
     },
     utils::cache::Cache,
 };

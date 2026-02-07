@@ -3,21 +3,21 @@
 use dioxus::prelude::*;
 
 use universal_inbox::{
+    HasHtmlUrl,
     notification::NotificationWithTask,
     third_party::integrations::linear::{LinearIssue, LinearNotification, LinearProject},
-    HasHtmlUrl,
 };
 
 use crate::{
     components::{
+        Tag, TagDisplay, UserWithAvatar,
         integrations::linear::{
             get_notification_type_label,
             icons::{Linear, LinearIssueIcon, LinearProjectIcon},
             list_item::LinearIssueListItemSubtitle,
         },
         list::{ListContext, ListItem},
-        notifications_list::{get_notification_list_item_action_buttons, TaskHint},
-        Tag, TagDisplay, UserWithAvatar,
+        notifications_list::{TaskHint, get_notification_list_item_action_buttons},
     },
     utils::format_elapsed_time,
 };
