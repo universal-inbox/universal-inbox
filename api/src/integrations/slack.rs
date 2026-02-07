@@ -1,12 +1,12 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 
 use async_trait::async_trait;
-use cached::{proc_macro::io_cached, Return};
+use cached::{Return, proc_macro::io_cached};
 use chrono::{DateTime, Timelike, Utc};
 use serde_json::json;
-use slack_blocks_render::{find_slack_references_in_blocks, SlackReferences};
+use slack_blocks_render::{SlackReferences, find_slack_references_in_blocks};
 use slack_morphism::{
     errors::{SlackClientApiError, SlackClientError},
     prelude::*,
@@ -18,16 +18,17 @@ use url::Url;
 use uuid::Uuid;
 use vec1::Vec1;
 use wiremock::{
-    matchers::{method, path},
     Mock, MockServer, ResponseTemplate,
+    matchers::{method, path},
 };
 
 use universal_inbox::{
+    HasHtmlUrl,
     integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
     notification::{Notification, NotificationSource, NotificationSourceKind, NotificationStatus},
     task::{
-        integrations::todoist::TODOIST_INBOX_PROJECT, service::TaskPatch,
         CreateOrUpdateTaskRequest, TaskCreationConfig, TaskSource, TaskSourceKind, TaskStatus,
+        integrations::todoist::TODOIST_INBOX_PROJECT, service::TaskPatch,
     },
     third_party::{
         integrations::slack::{
@@ -40,7 +41,6 @@ use universal_inbox::{
     },
     user::UserId,
     utils::{default_value::DefaultValue, truncate::truncate_with_ellipse},
-    HasHtmlUrl,
 };
 
 use crate::{
@@ -48,7 +48,7 @@ use crate::{
         notification::ThirdPartyNotificationSourceService, task::ThirdPartyTaskService,
     },
     universal_inbox::{
-        integration_connection::service::IntegrationConnectionService, UniversalInboxError,
+        UniversalInboxError, integration_connection::service::IntegrationConnectionService,
     },
     utils::cache::build_redis_cache,
 };

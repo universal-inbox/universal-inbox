@@ -1,17 +1,17 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
-use dioxus_free_icons::{icons::bs_icons::BsSlack, Icon};
+use dioxus_free_icons::{Icon, icons::bs_icons::BsSlack};
 
 use slack_morphism::SlackChannelInfo;
 use universal_inbox::{
+    HasHtmlUrl,
     task::Task,
     third_party::integrations::slack::{
         SlackFileDetails, SlackMessageDetails, SlackReaction, SlackReactionItem, SlackStar,
         SlackStarItem,
     },
     utils::emoji::replace_emoji_code_with_emoji,
-    HasHtmlUrl,
 };
 
 use crate::{

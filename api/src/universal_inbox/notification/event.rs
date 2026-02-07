@@ -18,8 +18,8 @@ use universal_inbox::{
 use crate::{
     integrations::slack::SlackService,
     universal_inbox::{
-        notification::{service::NotificationService, NotificationEventService},
         UniversalInboxError,
+        notification::{NotificationEventService, service::NotificationService},
     },
 };
 
@@ -57,16 +57,14 @@ impl NotificationEventService<SlackPushEventCallback> for NotificationService {
             data: ThirdPartyItemData::SlackThread(existing_slack_thread),
             ..
         }) = existing_third_party_item
-        {
-            if let ThirdPartyItem {
+            && let ThirdPartyItem {
                 data: ThirdPartyItemData::SlackThread(ref mut slack_thread),
                 ..
             } = third_party_item
-            {
-                // If the existing thread is not subscribed, we want to keep it that way
-                if !existing_slack_thread.subscribed {
-                    slack_thread.subscribed = false;
-                }
+        {
+            // If the existing thread is not subscribed, we want to keep it that way
+            if !existing_slack_thread.subscribed {
+                slack_thread.subscribed = false;
             }
         }
 

@@ -1,7 +1,7 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
-use dioxus_free_icons::{icons::bs_icons::BsBookmarkFill, Icon};
+use dioxus_free_icons::{Icon, icons::bs_icons::BsBookmarkFill};
 
 #[component]
 pub fn SlackNotificationIcon(class: Option<String>) -> Element {

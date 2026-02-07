@@ -2,22 +2,22 @@
 
 use dioxus::prelude::*;
 use dioxus_free_icons::{
-    icons::bs_icons::{BsChatSquareText, BsCheckCircle},
     Icon,
+    icons::bs_icons::{BsChatSquareText, BsCheckCircle},
 };
 use url::Url;
 
 use universal_inbox::{
-    notification::NotificationWithTask,
-    third_party::integrations::google_drive::GoogleDriveComment, HasHtmlUrl,
+    HasHtmlUrl, notification::NotificationWithTask,
+    third_party::integrations::google_drive::GoogleDriveComment,
 };
 
 use crate::{
     components::{
+        UserWithAvatar,
         integrations::google_drive::icons::{GoogleDrive, GoogleDriveFile},
         list::{ListContext, ListItem},
-        notifications_list::{get_notification_list_item_action_buttons, TaskHint},
-        UserWithAvatar,
+        notifications_list::{TaskHint, get_notification_list_item_action_buttons},
     },
     utils::format_elapsed_time,
 };

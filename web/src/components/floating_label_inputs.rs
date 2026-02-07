@@ -294,13 +294,11 @@ where
                 },
                 class: "{input_style} hidden",
                 onchange: move |_| {
-                    if let Some(element) = mounted_element() {
-                        if let Some(on_select) = &props.on_select {
-                            if let Ok(selected_remote_value) = serde_wasm_bindgen::from_value::<T>(get_flyonui_selected_remote_value(&element)) {
+                    if let Some(element) = mounted_element()
+                        && let Some(on_select) = &props.on_select
+                            && let Ok(selected_remote_value) = serde_wasm_bindgen::from_value::<T>(get_flyonui_selected_remote_value(&element)) {
                                 on_select.call(Some(selected_remote_value));
                             }
-                        }
-                    }
                 },
                 disabled: props.disabled.unwrap_or_default(),
             }

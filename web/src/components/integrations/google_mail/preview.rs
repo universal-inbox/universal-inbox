@@ -3,17 +3,17 @@
 use std::collections::HashSet;
 
 use dioxus::prelude::*;
-use dioxus_free_icons::{icons::bs_icons::BsArrowUpRightSquare, Icon};
+use dioxus_free_icons::{Icon, icons::bs_icons::BsArrowUpRightSquare};
 
 use universal_inbox::{
+    HasHtmlUrl,
     notification::NotificationWithTask,
     third_party::integrations::google_mail::{
-        GoogleMailMessage, GoogleMailThread, GOOGLE_MAIL_IMPORTANT_LABEL, GOOGLE_MAIL_STARRED_LABEL,
+        GOOGLE_MAIL_IMPORTANT_LABEL, GOOGLE_MAIL_STARRED_LABEL, GoogleMailMessage, GoogleMailThread,
     },
-    HasHtmlUrl,
 };
 
-use crate::components::{integrations::google_mail::icons::Mail, CardWithHeaders, Tag, TagsInCard};
+use crate::components::{CardWithHeaders, Tag, TagsInCard, integrations::google_mail::icons::Mail};
 
 #[component]
 pub fn GoogleMailThreadPreview(

@@ -3,7 +3,7 @@ use std::{fmt, str::FromStr};
 use anyhow::anyhow;
 use chrono::{DateTime, Timelike, Utc};
 use email_address::EmailAddress;
-use secrecy::{zeroize::Zeroize, CloneableSecret, SecretBox, SerializableSecret};
+use secrecy::{CloneableSecret, SecretBox, SerializableSecret, zeroize::Zeroize};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use uuid::Uuid;

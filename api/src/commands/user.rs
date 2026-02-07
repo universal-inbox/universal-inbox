@@ -7,16 +7,16 @@ use log::{error, info};
 use secrecy::ExposeSecret;
 use tabled::{
     builder::Builder,
-    settings::{object::Rows, style::Style, Color},
+    settings::{Color, object::Rows, style::Style},
 };
 use tokio::sync::RwLock;
 
 use universal_inbox::user::UserId;
 
 use crate::universal_inbox::{
+    UniversalInboxError,
     auth_token::service::AuthenticationTokenService,
     user::{model::UserAuth, service::UserService},
-    UniversalInboxError,
 };
 
 #[tracing::instrument(

@@ -5,10 +5,10 @@ use std::{future::Future, time::Duration};
 use actix_http::body::MessageBody;
 use actix_jwt_authc::Authenticated;
 use actix_web::{
-    dev::{ServiceRequest, ServiceResponse},
     HttpMessage,
+    dev::{ServiceRequest, ServiceResponse},
 };
-use opentelemetry::{trace::TracerProvider as _, KeyValue};
+use opentelemetry::{KeyValue, trace::TracerProvider as _};
 use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
 use opentelemetry_otlp::tonic_types::metadata::MetadataMap;
 use opentelemetry_otlp::tonic_types::transport::ClientTlsConfig;
@@ -16,19 +16,19 @@ use opentelemetry_otlp::{
     LogExporter, SpanExporter, WithExportConfig, WithHttpConfig, WithTonicConfig,
 };
 use opentelemetry_sdk::{
+    Resource,
     logs::SdkLoggerProvider,
     trace::{RandomIdGenerator, Sampler, SdkTracerProvider},
-    Resource,
 };
 use tokio::task::JoinHandle;
 use tonic::metadata::AsciiMetadataKey;
-use tracing::{subscriber::set_global_default, Instrument, Span, Subscriber};
+use tracing::{Instrument, Span, Subscriber, subscriber::set_global_default};
 use tracing_actix_web::{DefaultRootSpanBuilder, RootSpanBuilder};
 use tracing_log::LogTracer;
 use tracing_opentelemetry::OpenTelemetryLayer;
 use tracing_subscriber::{
-    layer::{Layered, SubscriberExt},
     EnvFilter, Registry,
+    layer::{Layered, SubscriberExt},
 };
 
 use universal_inbox::user::UserId;

@@ -1,8 +1,8 @@
 #![allow(non_snake_case)]
 use dioxus::prelude::*;
 use dioxus_free_icons::{
-    icons::bs_icons::{BsArrowUpRightSquare, BsLink45deg},
     Icon,
+    icons::bs_icons::{BsArrowUpRightSquare, BsLink45deg},
 };
 
 use universal_inbox::{

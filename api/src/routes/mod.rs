@@ -8,10 +8,10 @@ pub mod third_party;
 pub mod user;
 pub mod webhook;
 
-use actix_http::{body::BoxBody, header::TryIntoHeaderValue, StatusCode};
+use actix_http::{StatusCode, body::BoxBody, header::TryIntoHeaderValue};
 use actix_web::{
-    http::header::{self, ContentType},
     HttpResponse, ResponseError,
+    http::header::{self, ContentType},
 };
 use serde_json::json;
 

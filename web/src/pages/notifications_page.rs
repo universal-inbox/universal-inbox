@@ -5,8 +5,8 @@ use log::debug;
 use web_sys::KeyboardEvent;
 
 use universal_inbox::{
-    notification::{NotificationId, NotificationWithTask},
     HasHtmlUrl, Page,
+    notification::{NotificationId, NotificationWithTask},
 };
 
 use crate::{
@@ -14,12 +14,12 @@ use crate::{
         notification_preview::NotificationPreview, notifications_list::NotificationsList,
         resizable_panel::ResizablePanel, welcome_hero::WelcomeHero,
     },
-    keyboard_manager::{KeyboardHandler, KEYBOARD_MANAGER},
+    keyboard_manager::{KEYBOARD_MANAGER, KeyboardHandler},
     model::{PreviewPane, UI_MODEL},
     route::Route,
     services::{
         flyonui::open_flyonui_modal,
-        notification_service::{NotificationCommand, NOTIFICATIONS_PAGE, NOTIFICATION_FILTERS},
+        notification_service::{NOTIFICATION_FILTERS, NOTIFICATIONS_PAGE, NotificationCommand},
     },
     settings::PanelPosition,
     utils::{
@@ -71,10 +71,9 @@ fn InternalNotificationPage(notification_id: ReadOnlySignal<Option<NotificationI
                 .content
                 .iter()
                 .position(|n| n.id == notification_id)
+                && UI_MODEL.peek().selected_notification_index != Some(notification_index)
             {
-                if UI_MODEL.peek().selected_notification_index != Some(notification_index) {
-                    UI_MODEL.write().selected_notification_index = Some(notification_index);
-                }
+                UI_MODEL.write().selected_notification_index = Some(notification_index);
             }
         } else if UI_MODEL.peek().selected_notification_index.is_some()
             && get_screen_width().unwrap_or_default() < 1024
@@ -85,13 +84,13 @@ fn InternalNotificationPage(notification_id: ReadOnlySignal<Option<NotificationI
 
     use_effect(move || {
         if let Some(index) = UI_MODEL.read().selected_notification_index {
-            if let Some(selected_notification) = notifications().content.get(index) {
-                if *notification_id.peek() != Some(selected_notification.id) {
-                    let route = Route::NotificationPage {
-                        notification_id: selected_notification.id,
-                    };
-                    nav.push(route);
-                }
+            if let Some(selected_notification) = notifications().content.get(index)
+                && *notification_id.peek() != Some(selected_notification.id)
+            {
+                let route = Route::NotificationPage {
+                    notification_id: selected_notification.id,
+                };
+                nav.push(route);
             }
         } else if notification_id.peek().is_some() {
             nav.push(Route::NotificationsPage {});
@@ -172,33 +171,33 @@ impl KeyboardHandler for NotificationsPageKeyboardHandler {
             event.shift_key(),
         ) {
             ("ArrowDown", false, false, false, false) => {
-                if let Some(index) = selected_notification_index {
-                    if index < (list_length - 1) {
-                        let new_index = index + 1;
-                        let mut ui_model = UI_MODEL.write();
-                        ui_model.selected_notification_index = Some(new_index);
-                        drop(ui_model);
-                        let _ = scroll_element_into_view_by_class(
-                            "notifications-list",
-                            "row-hover",
-                            new_index,
-                        );
-                    }
+                if let Some(index) = selected_notification_index
+                    && index < (list_length - 1)
+                {
+                    let new_index = index + 1;
+                    let mut ui_model = UI_MODEL.write();
+                    ui_model.selected_notification_index = Some(new_index);
+                    drop(ui_model);
+                    let _ = scroll_element_into_view_by_class(
+                        "notifications-list",
+                        "row-hover",
+                        new_index,
+                    );
                 }
             }
             ("ArrowUp", false, false, false, false) => {
-                if let Some(index) = selected_notification_index {
-                    if index > 0 {
-                        let new_index = index - 1;
-                        let mut ui_model = UI_MODEL.write();
-                        ui_model.selected_notification_index = Some(new_index);
-                        drop(ui_model);
-                        let _ = scroll_element_into_view_by_class(
-                            "notifications-list",
-                            "row-hover",
-                            new_index,
-                        );
-                    }
+                if let Some(index) = selected_notification_index
+                    && index > 0
+                {
+                    let new_index = index - 1;
+                    let mut ui_model = UI_MODEL.write();
+                    ui_model.selected_notification_index = Some(new_index);
+                    drop(ui_model);
+                    let _ = scroll_element_into_view_by_class(
+                        "notifications-list",
+                        "row-hover",
+                        new_index,
+                    );
                 }
             }
             ("ArrowRight", false, false, false, false)

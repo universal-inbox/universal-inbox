@@ -66,8 +66,8 @@ pub fn GoogleMailProviderConfiguration(
                     required: true,
                     default_value: selected_label_id(),
                     on_select: move |label_id| {
-                        if let Some(Some(context)) = context() {
-                            if let Some(label_id) = label_id {
+                        if let Some(Some(context)) = context()
+                            && let Some(label_id) = label_id {
                                 let label = context
                                     .labels
                                     .iter()
@@ -79,7 +79,6 @@ pub fn GoogleMailProviderConfiguration(
                                     }));
                                 }
                             }
-                        }
                     },
 
                     if let Some(Some(context)) = context() {

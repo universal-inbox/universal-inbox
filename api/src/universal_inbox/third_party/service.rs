@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, Weak},
 };
 
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use chrono::{DateTime, Utc};
 use log::debug;
 use sqlx::{Postgres, Transaction};
@@ -11,7 +11,7 @@ use tokio::sync::RwLock;
 
 use universal_inbox::{
     integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
-    task::{service::TaskPatch, Task, TaskCreation},
+    task::{Task, TaskCreation, service::TaskPatch},
     third_party::{
         integrations::slack::{SlackReaction, SlackStar},
         item::{
@@ -29,11 +29,11 @@ use crate::{
         task::ThirdPartyTaskSourceService, third_party::ThirdPartyItemSourceService,
         todoist::TodoistService,
     },
-    repository::{third_party::ThirdPartyItemRepository, user::UserRepository, Repository},
+    repository::{Repository, third_party::ThirdPartyItemRepository, user::UserRepository},
     universal_inbox::{
+        UniversalInboxError, UpsertStatus,
         integration_connection::service::IntegrationConnectionService,
         notification::service::NotificationService, task::service::TaskService,
-        UniversalInboxError, UpsertStatus,
     },
 };
 
@@ -268,11 +268,11 @@ impl ThirdPartyItemService {
     {
         // Skip syncing items from external sources for test accounts
         let user = self.repository.get_user(executor, user_id).await?;
-        if let Some(user) = user {
-            if user.is_testing {
-                debug!("Skipping sync for test account {user_id}");
-                return Ok(vec![]);
-            }
+        if let Some(user) = user
+            && user.is_testing
+        {
+            debug!("Skipping sync for test account {user_id}");
+            return Ok(vec![]);
         }
 
         let kind = third_party_service.get_third_party_item_source_kind();
@@ -312,7 +312,9 @@ impl ThirdPartyItemService {
                     .await?;
                 let third_party_items_to_mark_as_done_count =
                     third_party_items_to_mark_as_done.len();
-                debug!("Marking {third_party_items_to_mark_as_done_count} stale third party items as done",);
+                debug!(
+                    "Marking {third_party_items_to_mark_as_done_count} stale third party items as done",
+                );
 
                 for item in third_party_items_to_mark_as_done.into_iter() {
                     let upsert_result = self
@@ -423,16 +425,16 @@ impl ThirdPartyItemService {
             priority: task.priority,
         };
 
-        if let Some(sink_item) = &task.sink_item {
-            if !overwrite_existing_sink_item {
-                debug!(
-                    "Task {} already has a {} sink item for {}, returning it",
-                    task.id,
-                    sink_item.kind(),
-                    sink_item.source_id
-                );
-                return Ok(Box::new(sink_item.clone()));
-            }
+        if let Some(sink_item) = &task.sink_item
+            && !overwrite_existing_sink_item
+        {
+            debug!(
+                "Task {} already has a {} sink item for {}, returning it",
+                task.id,
+                sink_item.kind(),
+                sink_item.source_id
+            );
+            return Ok(Box::new(sink_item.clone()));
         };
 
         let third_party_task = third_party_task_service

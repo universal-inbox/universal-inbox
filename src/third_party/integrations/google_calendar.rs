@@ -9,10 +9,10 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::{
+    HasHtmlUrl,
     integration_connection::IntegrationConnectionId,
     third_party::item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemFromSource},
     user::UserId,
-    HasHtmlUrl,
 };
 
 pub const DEFAULT_GOOGLE_CALENDAR_HTML_URL: &str = "https://calendar.google.com";

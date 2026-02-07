@@ -6,7 +6,7 @@ use universal_inbox::{
     integration_connection::{
         config::IntegrationConnectionConfig, integrations::linear::LinearConfig,
     },
-    notification::{service::NotificationPatch, Notification, NotificationStatus},
+    notification::{Notification, NotificationStatus, service::NotificationPatch},
     third_party::integrations::linear::LinearNotification,
 };
 
@@ -16,7 +16,7 @@ use universal_inbox_api::{
 };
 
 use crate::helpers::{
-    auth::{authenticated_app, AuthenticatedApp},
+    auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{create_and_mock_integration_connection, nango_linear_connection},
     notification::linear::{
         mock_linear_archive_notification_query, mock_linear_issue_notification_subscribers_query,

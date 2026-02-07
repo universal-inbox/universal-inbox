@@ -3,7 +3,7 @@
 use sorted_groups::SortedGroups;
 
 use dioxus::prelude::*;
-use dioxus_free_icons::{icons::md_action_icons::MdCheckCircleOutline, Icon};
+use dioxus_free_icons::{Icon, icons::md_action_icons::MdCheckCircleOutline};
 
 use universal_inbox::{task::Task, third_party::item::ThirdPartyItemData};
 

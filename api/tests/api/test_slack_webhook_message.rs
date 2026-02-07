@@ -7,9 +7,9 @@ use slack_morphism::prelude::*;
 
 use universal_inbox::{
     integration_connection::{
-        config::IntegrationConnectionConfig, integrations::slack::SlackConfig,
-        integrations::slack::SlackContext, provider::IntegrationConnectionContext,
-        IntegrationConnectionStatus,
+        IntegrationConnectionStatus, config::IntegrationConnectionConfig,
+        integrations::slack::SlackConfig, integrations::slack::SlackContext,
+        provider::IntegrationConnectionContext,
     },
     notification::{NotificationSourceKind, NotificationStatus},
     third_party::{integrations::slack::SlackThread, item::ThirdPartyItemData},
@@ -21,7 +21,8 @@ use universal_inbox_api::{
 };
 
 use crate::helpers::{
-    auth::{authenticated_app, AuthenticatedApp},
+    TestedApp,
+    auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
         create_and_mock_integration_connection, create_integration_connection,
         nango_slack_connection,
@@ -38,7 +39,6 @@ use crate::helpers::{
     rest::create_resource_response,
     settings, tested_app_with_local_auth,
     user::create_user_and_login,
-    TestedApp,
 };
 
 mod webhook {
@@ -230,19 +230,21 @@ mod webhook {
     }
 
     async fn assert_message_ignored(app: &mut TestedApp) {
-        assert!(app
-            .redis_storage
-            .is_empty()
-            .await
-            .expect("Failed to get jobs count"));
+        assert!(
+            app.redis_storage
+                .is_empty()
+                .await
+                .expect("Failed to get jobs count")
+        );
     }
 
     async fn assert_message_processed(app: &mut TestedApp) {
-        assert!(!app
-            .redis_storage
-            .is_empty()
-            .await
-            .expect("Failed to get jobs count"));
+        assert!(
+            !app.redis_storage
+                .is_empty()
+                .await
+                .expect("Failed to get jobs count")
+        );
     }
 }
 

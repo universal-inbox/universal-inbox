@@ -1,18 +1,18 @@
 use std::fmt;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use chrono::{DateTime, Timelike, Utc};
 use git_url_parse::GitUrl;
 use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, DisplayFromStr};
+use serde_with::{DisplayFromStr, serde_as};
 use url::{Host, Url};
 use uuid::Uuid;
 
 use crate::{
+    HasHtmlUrl,
     integration_connection::IntegrationConnectionId,
     third_party::item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemFromSource},
     user::UserId,
-    HasHtmlUrl,
 };
 
 #[serde_as]
@@ -811,11 +811,10 @@ pub enum GithubUrl {
 impl GithubUrl {
     pub fn try_from_api_url(resource_url: &Url) -> Result<Self> {
         if resource_url.host() != Some(Host::Domain("api.github.com")) {
-            return Err(
-                anyhow!(
-                    "Failed to parse Github API resource URL: it must be hosted on api.github.com, found: {:?}", resource_url.host()
-                )
-            );
+            return Err(anyhow!(
+                "Failed to parse Github API resource URL: it must be hosted on api.github.com, found: {:?}",
+                resource_url.host()
+            ));
         }
 
         let splitted_url = resource_url.path().split('/').collect::<Vec<&str>>();
@@ -991,30 +990,36 @@ mod tests {
 
         #[rstest]
         fn test_try_from_api_url_from_non_api_domain() {
-            assert!(GithubUrl::try_from_api_url(
-                &"https://github.com/octokit/octokit.rb/pull/123"
-                    .parse::<Url>()
-                    .unwrap()
-            )
-            .is_err());
+            assert!(
+                GithubUrl::try_from_api_url(
+                    &"https://github.com/octokit/octokit.rb/pull/123"
+                        .parse::<Url>()
+                        .unwrap()
+                )
+                .is_err()
+            );
         }
 
         #[rstest]
         fn test_try_from_api_url_from_unknown_resource() {
-            assert!(GithubUrl::try_from_api_url(
-                &"https://api.github.com/unknown/123".parse::<Url>().unwrap()
-            )
-            .is_err());
+            assert!(
+                GithubUrl::try_from_api_url(
+                    &"https://api.github.com/unknown/123".parse::<Url>().unwrap()
+                )
+                .is_err()
+            );
         }
 
         #[rstest]
         fn test_try_from_api_url_from_invalid_pull_request_number() {
-            assert!(GithubUrl::try_from_api_url(
-                &"https://api.github.com/repos/octokit/octokit.rb/abc"
-                    .parse::<Url>()
-                    .unwrap()
-            )
-            .is_err());
+            assert!(
+                GithubUrl::try_from_api_url(
+                    &"https://api.github.com/repos/octokit/octokit.rb/abc"
+                        .parse::<Url>()
+                        .unwrap()
+                )
+                .is_err()
+            );
         }
     }
 }

@@ -2,20 +2,20 @@
 
 use dioxus::prelude::*;
 use dioxus_free_icons::{
+    Icon,
     icons::bs_icons::{
         BsArrowRepeat, BsArrowUpRightSquare, BsCalendar2Check, BsCardChecklist, BsFlag,
     },
-    Icon,
 };
 
 use universal_inbox::{
+    HasHtmlUrl,
     task::Task,
     third_party::integrations::todoist::{TodoistItem, TodoistItemPriority},
-    HasHtmlUrl,
 };
 
 use crate::{
-    components::{markdown::Markdown, SmallCard, TagsInCard},
+    components::{SmallCard, TagsInCard, markdown::Markdown},
     theme::{
         PRIORITY_HIGH_COLOR_CLASS, PRIORITY_LOW_COLOR_CLASS, PRIORITY_NORMAL_COLOR_CLASS,
         PRIORITY_URGENT_COLOR_CLASS,

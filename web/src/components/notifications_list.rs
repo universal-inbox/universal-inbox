@@ -2,6 +2,7 @@
 
 use dioxus::prelude::*;
 use dioxus_free_icons::{
+    Icon,
     icons::{
         bs_icons::{
             BsBellSlash, BsBookmarkCheck, BsCalendar2Check, BsClockHistory, BsLightning,
@@ -9,14 +10,13 @@ use dioxus_free_icons::{
         },
         md_action_icons::{MdAddTask, MdCheckCircleOutline},
     },
-    Icon,
 };
 
 use universal_inbox::{
+    HasHtmlUrl, Page,
     notification::{NotificationListOrder, NotificationWithTask},
     task::{Task, TaskId, TaskPlanning, TaskPriority},
     third_party::item::ThirdPartyItemData,
-    HasHtmlUrl, Page,
 };
 
 use crate::{

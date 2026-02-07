@@ -9,8 +9,8 @@ use universal_inbox::{
 };
 
 use crate::universal_inbox::{
-    integration_connection::service::IntegrationConnectionService,
-    notification::service::NotificationService, task::service::TaskService, UniversalInboxError,
+    UniversalInboxError, integration_connection::service::IntegrationConnectionService,
+    notification::service::NotificationService, task::service::TaskService,
 };
 
 #[tracing::instrument(

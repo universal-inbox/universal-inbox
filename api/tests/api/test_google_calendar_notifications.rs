@@ -6,17 +6,17 @@ use universal_inbox::{
         config::IntegrationConnectionConfig,
         integrations::{google_calendar::GoogleCalendarConfig, google_mail::GoogleMailConfig},
     },
-    notification::{service::NotificationPatch, Notification, NotificationStatus},
+    notification::{Notification, NotificationStatus, service::NotificationPatch},
     third_party::integrations::{
         google_calendar::GoogleCalendarEvent,
-        google_mail::{GoogleMailThread, GOOGLE_MAIL_INBOX_LABEL},
+        google_mail::{GOOGLE_MAIL_INBOX_LABEL, GoogleMailThread},
     },
 };
 
 use universal_inbox_api::{configuration::Settings, integrations::oauth2::NangoConnection};
 
 use crate::helpers::{
-    auth::{authenticated_app, AuthenticatedApp},
+    auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
         create_and_mock_integration_connection, nango_google_calendar_connection,
         nango_google_mail_connection,

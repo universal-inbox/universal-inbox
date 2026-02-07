@@ -4,14 +4,15 @@ use rstest::*;
 use uuid::Uuid;
 
 use universal_inbox::{
+    HasHtmlUrl,
     integration_connection::{
         config::IntegrationConnectionConfig, integrations::github::GithubConfig,
         integrations::todoist::TodoistConfig,
     },
     notification::{
-        service::NotificationPatch, Notification, NotificationStatus, NotificationWithTask,
+        Notification, NotificationStatus, NotificationWithTask, service::NotificationPatch,
     },
-    task::{service::TaskPatch, DueDate, Task, TaskCreation, TaskPriority, TaskStatus},
+    task::{DueDate, Task, TaskCreation, TaskPriority, TaskStatus, service::TaskPatch},
     third_party::{
         integrations::{
             github::GithubNotification,
@@ -19,7 +20,6 @@ use universal_inbox::{
         },
         item::{ThirdPartyItem, ThirdPartyItemCreationResult, ThirdPartyItemData},
     },
-    HasHtmlUrl,
 };
 
 use universal_inbox_api::{
@@ -34,7 +34,7 @@ use universal_inbox_api::{
 };
 
 use crate::helpers::{
-    auth::{authenticated_app, AuthenticatedApp},
+    auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
         create_and_mock_integration_connection, nango_github_connection, nango_todoist_connection,
     },
@@ -45,11 +45,11 @@ use crate::helpers::{
     rest::{create_resource, get_resource, patch_resource},
     settings,
     task::todoist::{
-        mock_todoist_complete_item_service, mock_todoist_delete_item_service,
-        mock_todoist_get_item_service, mock_todoist_item_add_service,
-        mock_todoist_sync_project_add, mock_todoist_sync_resources_service,
-        mock_todoist_sync_service, sync_todoist_projects_response, todoist_item,
-        TodoistSyncPartialCommand,
+        TodoistSyncPartialCommand, mock_todoist_complete_item_service,
+        mock_todoist_delete_item_service, mock_todoist_get_item_service,
+        mock_todoist_item_add_service, mock_todoist_sync_project_add,
+        mock_todoist_sync_resources_service, mock_todoist_sync_service,
+        sync_todoist_projects_response, todoist_item,
     },
 };
 

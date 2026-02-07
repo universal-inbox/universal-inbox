@@ -3,15 +3,15 @@ use std::sync::Arc;
 
 use clap::Parser;
 use sqlx::{
-    postgres::{PgConnectOptions, PgPoolOptions},
     ConnectOptions, Executor,
+    postgres::{PgConnectOptions, PgPoolOptions},
 };
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 use wiremock::MockServer;
 
 use universal_inbox_api::{
-    build_services, commands,
+    ExecutionContext, build_services, commands,
     configuration::Settings,
     integrations::{
         github::GithubService, google_calendar::GoogleCalendarService,
@@ -24,7 +24,6 @@ use universal_inbox_api::{
         init_subscriber,
     },
     utils::passkey::build_webauthn,
-    ExecutionContext,
 };
 
 #[tokio::main]

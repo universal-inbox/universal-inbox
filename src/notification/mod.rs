@@ -10,11 +10,11 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::{
+    HasHtmlUrl,
     integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
     task::{Task, TaskId},
     third_party::item::{ThirdPartyItem, ThirdPartyItemSourceKind},
     user::UserId,
-    HasHtmlUrl,
 };
 
 pub mod service;
