@@ -2,12 +2,13 @@
 
 use dioxus::prelude::*;
 use dioxus_free_icons::{
-    icons::bs_icons::{BsChatText, BsSlack},
     Icon,
+    icons::bs_icons::{BsChatText, BsSlack},
 };
 use slack_morphism::SlackChannelInfo;
 
 use universal_inbox::{
+    HasHtmlUrl,
     notification::NotificationWithTask,
     third_party::{
         integrations::slack::{
@@ -18,17 +19,16 @@ use universal_inbox::{
         item::ThirdPartyItemData,
     },
     utils::emoji::replace_emoji_code_with_emoji,
-    HasHtmlUrl,
 };
 
 use crate::{
     components::{
         integrations::slack::{
-            icons::SlackNotificationIcon, SlackMessageActorDisplay, SlackTeamDisplay,
-            SlackUserDisplay,
+            SlackMessageActorDisplay, SlackTeamDisplay, SlackUserDisplay,
+            icons::SlackNotificationIcon,
         },
         list::{ListContext, ListItem},
-        notifications_list::{get_notification_list_item_action_buttons, TaskHint},
+        notifications_list::{TaskHint, get_notification_list_item_action_buttons},
     },
     utils::format_elapsed_time,
 };

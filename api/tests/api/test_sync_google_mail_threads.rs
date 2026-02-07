@@ -11,6 +11,7 @@ use uuid::Uuid;
 
 use universal_inbox::{
     integration_connection::{
+        IntegrationConnection,
         config::IntegrationConnectionConfig,
         integrations::{
             google_calendar::GoogleCalendarConfig,
@@ -18,17 +19,16 @@ use universal_inbox::{
             todoist::TodoistConfig,
         },
         provider::IntegrationProvider,
-        IntegrationConnection,
     },
     notification::{
-        service::NotificationPatch, Notification, NotificationSourceKind, NotificationStatus,
+        Notification, NotificationSourceKind, NotificationStatus, service::NotificationPatch,
     },
     third_party::{
         integrations::{
             google_calendar::GoogleCalendarEvent,
             google_mail::{
-                GoogleMailMessageBody, GoogleMailMessageHeader, GoogleMailThread,
-                GOOGLE_MAIL_INBOX_LABEL, GOOGLE_MAIL_UNREAD_LABEL,
+                GOOGLE_MAIL_INBOX_LABEL, GOOGLE_MAIL_UNREAD_LABEL, GoogleMailMessageBody,
+                GoogleMailMessageHeader, GoogleMailThread,
             },
             todoist::TodoistItem,
         },
@@ -50,7 +50,7 @@ use universal_inbox_api::{
 };
 
 use crate::helpers::{
-    auth::{authenticated_app, AuthenticatedApp},
+    auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
         create_and_mock_integration_connection, get_integration_connection,
         nango_google_calendar_connection, nango_google_mail_connection, nango_todoist_connection,
@@ -348,7 +348,7 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
 
     // First message is already known by Universal Inbox and marked as unsubscribed
     google_mail_thread_get_456.messages[0].label_ids = None; // Read & archived
-                                                             // Second message is new (ie. in INBOX)
+    // Second message is new (ie. in INBOX)
     google_mail_thread_get_456.messages[1].label_ids = Some(if has_new_unread_message {
         vec![
             "TEST_LABEL".to_string(),

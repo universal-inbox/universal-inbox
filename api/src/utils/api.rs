@@ -8,13 +8,13 @@ use reqwest_middleware::{
     ClientBuilder, ClientWithMiddleware, Error as MiddlewareError, Extension,
 };
 use reqwest_retry::{
-    default_on_request_failure, default_on_request_success, policies::ExponentialBackoff, Jitter,
-    RetryTransientMiddleware, Retryable, RetryableStrategy,
+    Jitter, RetryTransientMiddleware, Retryable, RetryableStrategy, default_on_request_failure,
+    default_on_request_success, policies::ExponentialBackoff,
 };
 use reqwest_tracing::{
     DisableOtelPropagation, OtelPathNames, SpanBackendWithUrl, TracingMiddleware,
 };
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use thiserror::Error;
 
 use crate::universal_inbox::UniversalInboxError;
@@ -311,8 +311,8 @@ mod tests_api_error {
     use super::*;
     use rstest::*;
     use wiremock::{
-        matchers::{method, path},
         Mock, MockServer, ResponseTemplate,
+        matchers::{method, path},
     };
 
     // Mock rate limit detector for testing

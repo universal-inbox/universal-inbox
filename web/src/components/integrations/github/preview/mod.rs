@@ -3,13 +3,13 @@
 use dioxus::prelude::*;
 
 use dioxus_free_icons::{
-    icons::bs_icons::{BsArrowUpRightSquare, BsCheckCircle, BsRecordCircle},
     Icon,
+    icons::bs_icons::{BsArrowUpRightSquare, BsCheckCircle, BsRecordCircle},
 };
 
 use universal_inbox::{
-    notification::NotificationWithTask, third_party::integrations::github::GithubNotification,
-    HasHtmlUrl,
+    HasHtmlUrl, notification::NotificationWithTask,
+    third_party::integrations::github::GithubNotification,
 };
 
 use crate::components::integrations::github::icons::{GithubDiscussionIcon, GithubPullRequestIcon};

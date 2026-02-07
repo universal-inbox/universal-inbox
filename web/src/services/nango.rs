@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 use universal_inbox::integration_connection::{ConnectionId, NangoProviderKey, NangoPublicKey};
 use url::Url;

@@ -4,7 +4,7 @@ use dioxus::prelude::*;
 use email_address::EmailAddress;
 use log::error;
 
-use universal_inbox::{user::Password, FrontAuthenticationConfig};
+use universal_inbox::{FrontAuthenticationConfig, user::Password};
 
 use crate::{
     auth::authenticate_authorization_code_flow,
@@ -12,11 +12,11 @@ use crate::{
         floating_label_inputs::FloatingLabelInputText, loading::Loading,
         universal_inbox_title::UniversalInboxTitle,
     },
-    config::{get_api_base_url, APP_CONFIG},
+    config::{APP_CONFIG, get_api_base_url},
     form::FormValues,
     icons::{GOOGLE_LOGO, PASSKEY_LOGO},
     route::Route,
-    services::user_service::{UserCommand, CONNECTED_USER},
+    services::user_service::{CONNECTED_USER, UserCommand},
 };
 
 pub fn SignupPage() -> Element {

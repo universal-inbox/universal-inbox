@@ -2,19 +2,19 @@
 
 use dioxus::prelude::*;
 use dioxus_free_icons::{
+    Icon,
     icons::bs_icons::{
         BsArrowRepeat, BsCalendar2Event, BsCheckCircleFill, BsPersonCheck, BsPersonDash, BsPersonX,
         BsQuestionCircleFill, BsXCircleFill,
     },
-    Icon,
 };
 
 use universal_inbox::{
+    HasHtmlUrl,
     notification::NotificationWithTask,
     third_party::integrations::google_calendar::{
         EventMethod, GoogleCalendarEvent, GoogleCalendarEventStatus,
     },
-    HasHtmlUrl,
 };
 
 use crate::{
@@ -22,7 +22,7 @@ use crate::{
         integrations::google_calendar::{icons::GoogleCalendar, utils::compute_date_label},
         list::{ListContext, ListItem, ListItemActionButton},
         notifications_list::{
-            get_notification_list_item_action_buttons, NotificationListContext, TaskHint,
+            NotificationListContext, TaskHint, get_notification_list_item_action_buttons,
         },
     },
     services::notification_service::NotificationCommand,

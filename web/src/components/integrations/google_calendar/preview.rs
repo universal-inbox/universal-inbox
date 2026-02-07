@@ -1,6 +1,7 @@
 #![allow(non_snake_case)]
 use dioxus::prelude::*;
 use dioxus_free_icons::{
+    Icon,
     icons::{
         bs_icons::{
             BsArrowRepeat, BsArrowUpRightSquare, BsCalendar2Event, BsPeople, BsPerson,
@@ -8,22 +9,21 @@ use dioxus_free_icons::{
         },
         md_communication_icons::MdLocationOn,
     },
-    Icon,
 };
 use rrule::Frequency;
 
 use universal_inbox::{
+    HasHtmlUrl,
     notification::NotificationWithTask,
     third_party::integrations::google_calendar::{
         EventAttendee, EventMethod, GoogleCalendarEvent, GoogleCalendarEventAttendeeResponseStatus,
         GoogleCalendarEventStatus,
     },
-    HasHtmlUrl,
 };
 
 use crate::{
     components::{
-        integrations::google_calendar::utils::compute_date_label, CollapseCardWithIcon, SmallCard,
+        CollapseCardWithIcon, SmallCard, integrations::google_calendar::utils::compute_date_label,
     },
     services::notification_service::NotificationCommand,
 };
@@ -402,10 +402,10 @@ fn format_recurrence_details(event: &GoogleCalendarEvent) -> Option<Vec<String>>
                             // For count-based rules, we'd need to calculate occurrences per rule
                             // For simplicity, we'll show combined occurrences from the full RRuleSet
                             let occurrences = recurrence.clone().all(100); // Reasonable limit for display
-                            if let Some(last_occurrence) = occurrences.dates.last() {
-                                if latest_end.is_none() || *last_occurrence > latest_end.unwrap() {
-                                    latest_end = Some(*last_occurrence);
-                                }
+                            if let Some(last_occurrence) = occurrences.dates.last()
+                                && (latest_end.is_none() || *last_occurrence > latest_end.unwrap())
+                            {
+                                latest_end = Some(*last_occurrence);
                             }
                         }
                     }

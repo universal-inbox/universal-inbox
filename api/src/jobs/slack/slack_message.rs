@@ -8,20 +8,20 @@ use tracing::warn;
 
 use universal_inbox::{
     integration_connection::{
+        IntegrationConnection,
         integrations::slack::{SlackConfig, SlackContext, SlackMessageConfig},
         provider::{IntegrationConnectionContext, IntegrationProvider, IntegrationProviderKind},
-        IntegrationConnection,
     },
     third_party::item::{ThirdPartyItem, ThirdPartyItemKind},
 };
 
 use crate::{
-    integrations::slack::{find_slack_references_in_message, SlackService},
+    integrations::slack::{SlackService, find_slack_references_in_message},
     universal_inbox::{
-        integration_connection::service::IntegrationConnectionService,
-        notification::{service::NotificationService, NotificationEventService},
-        third_party::service::ThirdPartyItemService,
         UniversalInboxError,
+        integration_connection::service::IntegrationConnectionService,
+        notification::{NotificationEventService, service::NotificationService},
+        third_party::service::ThirdPartyItemService,
     },
 };
 
@@ -122,22 +122,20 @@ pub async fn handle_slack_message_push_event(
 
     for third_party_item in third_party_items.iter() {
         if !handled_integration_connection_ids.contains(&third_party_item.integration_connection_id)
-        {
-            if let Some(integration_connection) = integration_connection_service
+            && let Some(integration_connection) = integration_connection_service
                 .read()
                 .await
                 .get_integration_connection(executor, third_party_item.integration_connection_id)
                 .await?
-            {
-                handle_slack_message_push_event_if_enabled(
-                    executor,
-                    event,
-                    integration_connection,
-                    Some(third_party_item),
-                    notification_service.clone(),
-                )
-                .await?;
-            }
+        {
+            handle_slack_message_push_event_if_enabled(
+                executor,
+                event,
+                integration_connection,
+                Some(third_party_item),
+                notification_service.clone(),
+            )
+            .await?;
         }
     }
 

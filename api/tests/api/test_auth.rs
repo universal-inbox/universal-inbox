@@ -11,13 +11,14 @@ use universal_inbox::{
 use universal_inbox_api::{configuration::Settings, universal_inbox::user::model::UserAuth};
 
 use crate::helpers::{
+    TestedApp,
     auth::{
-        authenticated_app, fetch_auth_tokens_for_user, get_user_auth, mock_oidc_introspection,
-        mock_oidc_keys, mock_oidc_openid_configuration, mock_oidc_user_info, AuthenticatedApp,
+        AuthenticatedApp, authenticated_app, fetch_auth_tokens_for_user, get_user_auth,
+        mock_oidc_introspection, mock_oidc_keys, mock_oidc_openid_configuration,
+        mock_oidc_user_info,
     },
     settings, tested_app,
     user::logout_user_response,
-    TestedApp,
 };
 
 mod authenticate_session {

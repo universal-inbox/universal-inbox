@@ -4,7 +4,7 @@ use http::StatusCode;
 use httpmock::Method::DELETE;
 use rstest::*;
 use serde_json::json;
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 use uuid::Uuid;
 
 use universal_inbox::{
@@ -13,7 +13,7 @@ use universal_inbox::{
         integrations::{github::GithubConfig, linear::LinearConfig},
     },
     notification::{
-        service::NotificationPatch, Notification, NotificationSourceKind, NotificationStatus,
+        Notification, NotificationSourceKind, NotificationStatus, service::NotificationPatch,
     },
     third_party::integrations::{github::GithubNotification, linear::LinearNotification},
 };
@@ -24,7 +24,7 @@ use universal_inbox_api::{
 };
 
 use crate::helpers::{
-    auth::{authenticate_user, authenticated_app, AuthenticatedApp},
+    auth::{AuthenticatedApp, authenticate_user, authenticated_app},
     integration_connection::{
         create_and_mock_integration_connection, nango_github_connection, nango_linear_connection,
     },

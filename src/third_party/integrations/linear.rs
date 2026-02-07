@@ -4,16 +4,16 @@ use anyhow::anyhow;
 use chrono::{DateTime, NaiveDate, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
-use serde_with::{serde_as, DisplayFromStr};
+use serde_with::{DisplayFromStr, serde_as};
 use url::Url;
 use uuid::Uuid;
 
 use crate::{
+    HasHtmlUrl,
     integration_connection::IntegrationConnectionId,
     task::{TaskPriority, TaskStatus},
     third_party::item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemFromSource},
     user::UserId,
-    HasHtmlUrl,
 };
 
 #[serde_as]

@@ -17,7 +17,7 @@ use crate::{
             },
             todoist::preview::TodoistTaskPreview,
         },
-        tasks_list::{get_task_list_item_action_buttons, TaskListContext},
+        tasks_list::{TaskListContext, get_task_list_item_action_buttons},
     },
     model::UniversalInboxUIModel,
     services::task_service::TaskCommand,

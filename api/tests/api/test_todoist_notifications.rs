@@ -7,7 +7,7 @@ use universal_inbox::{
     integration_connection::{
         config::IntegrationConnectionConfig, integrations::todoist::TodoistConfig,
     },
-    notification::{service::NotificationPatch, Notification, NotificationStatus},
+    notification::{Notification, NotificationStatus, service::NotificationPatch},
     task::{Task, TaskStatus},
     third_party::{
         integrations::todoist::TodoistItem,
@@ -21,7 +21,7 @@ use universal_inbox_api::{
 };
 
 use crate::helpers::{
-    auth::{authenticated_app, AuthenticatedApp},
+    auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{create_and_mock_integration_connection, nango_todoist_connection},
     rest::{create_resource, get_resource, patch_resource, patch_resource_response},
     settings,

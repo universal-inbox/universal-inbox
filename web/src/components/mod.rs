@@ -2,7 +2,7 @@
 
 use chrono::{DateTime, Utc};
 use dioxus::prelude::*;
-use dioxus_free_icons::{icons::bs_icons::BsPersonCircle, Icon};
+use dioxus_free_icons::{Icon, icons::bs_icons::BsPersonCircle};
 use url::Url;
 
 use crate::{

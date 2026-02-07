@@ -8,16 +8,16 @@ use tracing::{error, info};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use universal_inbox::{
-    notification::{service::NotificationPatch, NotificationId},
+    notification::{NotificationId, service::NotificationPatch},
     user::UserId,
 };
 
 use crate::{
     integrations::slack::SlackService,
     universal_inbox::{
-        integration_connection::service::IntegrationConnectionService,
+        UniversalInboxError, integration_connection::service::IntegrationConnectionService,
         notification::service::NotificationService, task::service::TaskService,
-        third_party::service::ThirdPartyItemService, UniversalInboxError,
+        third_party::service::ThirdPartyItemService,
     },
 };
 

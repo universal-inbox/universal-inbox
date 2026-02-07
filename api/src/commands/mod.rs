@@ -18,11 +18,10 @@ use crate::{
     integrations::slack::SlackService,
     run_server, run_worker,
     universal_inbox::{
-        auth_token::service::AuthenticationTokenService,
+        UniversalInboxError, auth_token::service::AuthenticationTokenService,
         integration_connection::service::IntegrationConnectionService,
         notification::service::NotificationService, task::service::TaskService,
         third_party::service::ThirdPartyItemService, user::service::UserService,
-        UniversalInboxError,
     },
     utils::{cache::Cache, jwt::JWTBase64EncodedSigningKeys},
 };

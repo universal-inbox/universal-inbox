@@ -7,7 +7,7 @@ use universal_inbox::{
         config::IntegrationConnectionConfig, integrations::todoist::TodoistConfig,
     },
     task::{
-        integrations::todoist::TODOIST_INBOX_PROJECT, PresetDueDate, ProjectSummary, TaskPriority,
+        PresetDueDate, ProjectSummary, TaskPriority, integrations::todoist::TODOIST_INBOX_PROJECT,
     },
 };
 

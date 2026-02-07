@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use actix_web::{web, HttpResponse, Scope};
+use actix_web::{HttpResponse, Scope, web};
 use anyhow::Context;
 use apalis::prelude::Storage;
 use apalis_redis::RedisStorage;
@@ -8,8 +8,8 @@ use serde_json::json;
 use slack_morphism::prelude::*;
 use tokio::sync::RwLock;
 use tokio_retry::{
-    strategy::{jitter, ExponentialBackoff},
     Retry,
+    strategy::{ExponentialBackoff, jitter},
 };
 use tracing::{debug, warn};
 use universal_inbox::{
@@ -23,10 +23,10 @@ use universal_inbox::{
 
 use crate::{
     integrations::slack::has_slack_references_in_message,
-    jobs::{slack::SlackPushEventCallbackJob, UniversalInboxJob},
+    jobs::{UniversalInboxJob, slack::SlackPushEventCallbackJob},
     universal_inbox::{
-        integration_connection::service::IntegrationConnectionService,
-        third_party::service::ThirdPartyItemService, UniversalInboxError,
+        UniversalInboxError, integration_connection::service::IntegrationConnectionService,
+        third_party::service::ThirdPartyItemService,
     },
 };
 
@@ -125,10 +125,9 @@ pub async fn push_slack_event(
                     user.to_string(),
                 )
                 .await?
+                && reaction_name == *reaction
             {
-                if reaction_name == *reaction {
-                    send_slack_push_event_callback_job(storage.as_ref(), event.clone()).await?;
-                }
+                send_slack_push_event_callback_job(storage.as_ref(), event.clone()).await?;
             }
         }
         SlackPushEvent::EventCallback(
@@ -154,18 +153,17 @@ pub async fn push_slack_event(
             }
 
             // Check if the message is a reply to a known thread
-            if let Some(thread_ts) = &thread_ts {
-                if service
+            if let Some(thread_ts) = &thread_ts
+                && service
                     .has_third_party_item_for_source_id(
                         &mut transaction,
                         ThirdPartyItemKind::SlackThread,
                         &thread_ts.0,
                     )
                     .await?
-                {
-                    send_slack_push_event_callback_job(storage.as_ref(), event.clone()).await?;
-                    return Ok(HttpResponse::Ok().finish());
-                }
+            {
+                send_slack_push_event_callback_job(storage.as_ref(), event.clone()).await?;
+                return Ok(HttpResponse::Ok().finish());
             }
         }
         SlackPushEvent::AppRateLimited(SlackAppRateLimitedEvent {

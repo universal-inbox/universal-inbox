@@ -1,6 +1,6 @@
 use std::{sync::Weak, time::Duration};
 
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use async_trait::async_trait;
 use chrono::{DateTime, Timelike, Utc};
 use http::{HeaderMap, HeaderValue};
@@ -24,14 +24,14 @@ use universal_inbox::{
 use url::Url;
 use uuid::Uuid;
 use wiremock::{
-    matchers::{method, path},
     Mock, MockServer, ResponseTemplate,
+    matchers::{method, path},
 };
 
 use crate::{
     integrations::oauth2::AccessToken,
     universal_inbox::{
-        integration_connection::service::IntegrationConnectionService, UniversalInboxError,
+        UniversalInboxError, integration_connection::service::IntegrationConnectionService,
     },
     utils::api::ApiClient,
 };
@@ -183,7 +183,7 @@ impl GoogleCalendarService {
                 return Err(UniversalInboxError::Unexpected(anyhow!(
                     "Cannot answer invitation for non-Google Calendar event: {:?}",
                     source_item.data
-                )))
+                )));
             }
         };
 
@@ -396,7 +396,7 @@ mod tests {
         use super::*;
         use pretty_assertions::assert_eq;
 
-        use universal_inbox::{third_party::item::ThirdPartyItemFromSource, HasHtmlUrl};
+        use universal_inbox::{HasHtmlUrl, third_party::item::ThirdPartyItemFromSource};
 
         #[fixture]
         fn google_calendar_service() -> GoogleCalendarService {

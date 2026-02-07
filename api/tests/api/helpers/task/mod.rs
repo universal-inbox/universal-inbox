@@ -1,13 +1,13 @@
 use anyhow::anyhow;
 use reqwest::{Client, Response};
 use serde_json::json;
-use tokio_retry::{strategy::FixedInterval, Retry};
+use tokio_retry::{Retry, strategy::FixedInterval};
 
 use universal_inbox::{
+    Page,
     task::{
         ProjectSummary, Task, TaskCreationResult, TaskId, TaskSourceKind, TaskStatus, TaskSummary,
     },
-    Page,
 };
 
 pub mod linear;

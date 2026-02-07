@@ -8,23 +8,23 @@ use dioxus::prelude::*;
 use gloo_utils::errors::JsError;
 use keyboard_manager::{KeyboardHandler, KeyboardManager};
 use log::debug;
-use wasm_bindgen::{prelude::Closure, JsCast};
+use wasm_bindgen::{JsCast, prelude::Closure};
 use web_sys::KeyboardEvent;
 
-use config::{get_api_base_url, get_app_config, APP_CONFIG};
+use config::{APP_CONFIG, get_api_base_url, get_app_config};
 use model::UI_MODEL;
 use route::Route;
 use services::{
     authentication_token_service::{
-        authentication_token_service, AUTHENTICATION_TOKENS, CREATED_AUTHENTICATION_TOKEN,
+        AUTHENTICATION_TOKENS, CREATED_AUTHENTICATION_TOKEN, authentication_token_service,
     },
-    integration_connection_service::{integration_connnection_service, INTEGRATION_CONNECTIONS},
-    notification_service::{notification_service, NOTIFICATIONS_PAGE, NOTIFICATION_FILTERS},
+    integration_connection_service::{INTEGRATION_CONNECTIONS, integration_connnection_service},
+    notification_service::{NOTIFICATION_FILTERS, NOTIFICATIONS_PAGE, notification_service},
     task_service::task_service,
-    toast_service::{toast_service, TOASTS, VIEWPORT_WIDTH},
-    user_service::{user_service, CONNECTED_USER},
+    toast_service::{TOASTS, VIEWPORT_WIDTH, toast_service},
+    user_service::{CONNECTED_USER, user_service},
 };
-use theme::{toggle_dark_mode, IS_DARK_MODE};
+use theme::{IS_DARK_MODE, toggle_dark_mode};
 use utils::{current_location, get_local_storage};
 
 use crate::{
@@ -124,10 +124,10 @@ pub fn App() -> Element {
 
             // Set up resize listener
             let closure = Closure::wrap(Box::new(move || {
-                if let Some(window) = web_sys::window() {
-                    if let Some(width) = window.inner_width().ok().and_then(|w| w.as_f64()) {
-                        *VIEWPORT_WIDTH.write() = width;
-                    }
+                if let Some(window) = web_sys::window()
+                    && let Some(width) = window.inner_width().ok().and_then(|w| w.as_f64())
+                {
+                    *VIEWPORT_WIDTH.write() = width;
                 }
             }) as Box<dyn FnMut()>);
 

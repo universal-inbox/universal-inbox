@@ -10,13 +10,13 @@ use serde_json::json;
 
 use universal_inbox::{
     integration_connection::{
-        integrations::todoist::TodoistConfig, provider::IntegrationProvider, IntegrationConnection,
-        IntegrationConnectionId,
+        IntegrationConnection, IntegrationConnectionId, integrations::todoist::TodoistConfig,
+        provider::IntegrationProvider,
     },
     notification::{NotificationId, NotificationWithTask},
     task::{
-        integrations::todoist::TODOIST_INBOX_PROJECT, DueDate, ProjectSummary, TaskCreation,
-        TaskId, TaskPlanning, TaskPriority,
+        DueDate, ProjectSummary, TaskCreation, TaskId, TaskPlanning, TaskPriority,
+        integrations::todoist::TODOIST_INBOX_PROJECT,
     },
 };
 use url::Url;
@@ -84,8 +84,8 @@ pub fn TaskPlanningModal(
             }
         }
 
-        if notification_to_plan().task.is_none() {
-            if let LoadState::Loaded(Some(IntegrationConnection {
+        if notification_to_plan().task.is_none()
+            && let LoadState::Loaded(Some(IntegrationConnection {
                 id,
                 provider:
                     IntegrationProvider::Todoist {
@@ -98,15 +98,12 @@ pub fn TaskPlanningModal(
                     },
                 ..
             })) = task_service_integration_connection()
-            {
-                if !create_notification_from_inbox_task
-                    && Some(id) != current_task_service_integration_connection_id()
-                {
-                    *current_task_service_integration_connection_id.write() = Some(id);
-                    if project.peek().is_none() {
-                        *project.write() = Some(TODOIST_INBOX_PROJECT.to_string());
-                    }
-                }
+            && !create_notification_from_inbox_task
+            && Some(id) != current_task_service_integration_connection_id()
+        {
+            *current_task_service_integration_connection_id.write() = Some(id);
+            if project.peek().is_none() {
+                *project.write() = Some(TODOIST_INBOX_PROJECT.to_string());
             }
         }
     });

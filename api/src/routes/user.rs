@@ -3,8 +3,8 @@ use std::sync::Arc;
 use actix_http::body::BoxBody;
 use actix_jwt_authc::Authenticated;
 use actix_session::Session;
-use actix_web::{web, HttpResponse, Scope};
-use anyhow::{anyhow, Context};
+use actix_web::{HttpResponse, Scope, web};
+use anyhow::{Context, anyhow};
 use chrono::{TimeDelta, Utc};
 use email_address::EmailAddress;
 use redis::AsyncCommands;
@@ -15,24 +15,24 @@ use validator::Validate;
 use webauthn_rs::prelude::*;
 
 use universal_inbox::{
+    SuccessResponse,
     auth::auth_token::{AuthenticationToken, TruncatedAuthenticationToken},
     user::{
         Credentials, EmailValidationToken, Password, PasswordResetToken, RegisterUserParameters,
         User, UserId, Username,
     },
-    SuccessResponse,
 };
 
 use crate::{
     configuration::Settings,
     routes::auth::USER_AUTH_KIND_SESSION_KEY,
     universal_inbox::{
+        UniversalInboxError,
         auth_token::service::AuthenticationTokenService,
         user::{
             model::{LocalUserAuth, UserAuth, UserAuthKind},
             service::UserService,
         },
-        UniversalInboxError,
     },
     utils::{
         cache::Cache,

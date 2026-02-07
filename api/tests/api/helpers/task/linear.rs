@@ -3,7 +3,7 @@ use chrono::{TimeDelta, Timelike, Utc};
 use universal_inbox::{
     integration_connection::IntegrationConnectionId,
     task::{
-        service::TaskPatch, PresetDueDate, ProjectSummary, Task, TaskCreationConfig, TaskPriority,
+        PresetDueDate, ProjectSummary, Task, TaskCreationConfig, TaskPriority, service::TaskPatch,
     },
     third_party::{
         integrations::{linear::LinearIssue, todoist::TodoistItem},

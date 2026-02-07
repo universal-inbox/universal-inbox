@@ -1,17 +1,17 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
-use dioxus_free_icons::{icons::bs_icons::BsArrowUpRightSquare, Icon};
+use dioxus_free_icons::{Icon, icons::bs_icons::BsArrowUpRightSquare};
 use slack_morphism::SlackHistoryMessage;
 
 use universal_inbox::third_party::integrations::slack::{SlackMessageRender, SlackThread};
 
 use crate::components::{
+    MessageHeader,
     integrations::slack::{
-        get_sender_name_and_avatar, preview::reactions::SlackReactions, SlackTeamDisplay,
+        SlackTeamDisplay, get_sender_name_and_avatar, preview::reactions::SlackReactions,
     },
     markdown::SlackMarkdown,
-    MessageHeader,
 };
 
 #[component]

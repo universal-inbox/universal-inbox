@@ -14,14 +14,14 @@ use universal_inbox_api::{
 };
 
 use crate::helpers::{
-    auth::{authenticated_app, fetch_auth_tokens_for_user, get_user_auth, AuthenticatedApp},
+    TestedApp,
+    auth::{AuthenticatedApp, authenticated_app, fetch_auth_tokens_for_user, get_user_auth},
     settings, tested_app_with_local_auth,
     user::{
         get_current_user, get_current_user_response, get_password_reset_token,
         get_user_email_validation_token, login_user_response, logout_user_response, register_user,
         register_user_response,
     },
-    TestedApp,
 };
 
 mod register_user {
@@ -196,9 +196,9 @@ mod email_domain_blacklist {
     ) {
         use chrono::{TimeDelta, Utc};
         use openidconnect::{
-            core::{CoreHmacKey, CoreIdToken, CoreIdTokenClaims, CoreJwsSigningAlgorithm},
             Audience, EmptyAdditionalClaims, EndUserEmail, IssuerUrl, StandardClaims,
             SubjectIdentifier,
+            core::{CoreHmacKey, CoreIdToken, CoreIdTokenClaims, CoreJwsSigningAlgorithm},
         };
 
         let app = tested_app_with_domain_blacklist.await;

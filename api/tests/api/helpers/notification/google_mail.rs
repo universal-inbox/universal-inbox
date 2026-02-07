@@ -3,15 +3,16 @@ use std::str::FromStr;
 use chrono::{TimeZone, Utc};
 use email_address::EmailAddress;
 use httpmock::{
-    prelude::HttpMockRequest,
     Method::{GET, POST},
     Mock, MockServer,
+    prelude::HttpMockRequest,
 };
 use rstest::*;
 use serde_json::json;
 use url::Url;
 
 use universal_inbox::{
+    HasHtmlUrl,
     integration_connection::IntegrationConnectionId,
     notification::{Notification, NotificationSourceKind, NotificationStatus},
     third_party::{
@@ -19,7 +20,6 @@ use universal_inbox::{
         item::ThirdPartyItemData,
     },
     user::UserId,
-    HasHtmlUrl,
 };
 
 use universal_inbox_api::integrations::google_mail::{
@@ -27,7 +27,7 @@ use universal_inbox_api::integrations::google_mail::{
 };
 
 use crate::helpers::{
-    load_json_fixture_file, notification::create_notification_from_source_item, TestedApp,
+    TestedApp, load_json_fixture_file, notification::create_notification_from_source_item,
 };
 
 pub async fn create_notification_from_google_mail_thread(

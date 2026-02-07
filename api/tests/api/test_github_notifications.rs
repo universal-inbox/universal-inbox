@@ -11,7 +11,7 @@ use universal_inbox::{
         config::IntegrationConnectionConfig,
         integrations::{github::GithubConfig, todoist::TodoistConfig},
     },
-    notification::{service::NotificationPatch, Notification, NotificationStatus},
+    notification::{Notification, NotificationStatus, service::NotificationPatch},
     task::Task,
     third_party::{
         integrations::{github::GithubNotification, todoist::TodoistItem},
@@ -25,7 +25,7 @@ use universal_inbox_api::{
 };
 
 use crate::helpers::{
-    auth::{authenticated_app, AuthenticatedApp},
+    auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
         create_and_mock_integration_connection, nango_github_connection, nango_todoist_connection,
     },

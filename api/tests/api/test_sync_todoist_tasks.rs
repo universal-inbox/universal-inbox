@@ -5,16 +5,16 @@ use chrono::{TimeDelta, TimeZone, Timelike, Utc};
 use http::StatusCode;
 use pretty_assertions::assert_eq;
 use rstest::*;
-use tokio::time::{sleep, Duration};
-use tokio_retry::{strategy::FixedInterval, Retry};
+use tokio::time::{Duration, sleep};
+use tokio_retry::{Retry, strategy::FixedInterval};
 use uuid::Uuid;
 
 use universal_inbox::{
     integration_connection::{
+        IntegrationConnection, IntegrationConnectionStatus,
         config::IntegrationConnectionConfig,
         integrations::todoist::{SyncToken, TodoistConfig, TodoistContext},
         provider::{IntegrationConnectionContext, IntegrationProvider, IntegrationProviderKind},
-        IntegrationConnection, IntegrationConnectionStatus,
     },
     notification::{Notification, NotificationStatus},
     task::{Task, TaskCreationResult, TaskPriority, TaskSourceKind, TaskStatus},
@@ -29,7 +29,7 @@ use universal_inbox_api::{
 };
 
 use crate::helpers::{
-    auth::{authenticated_app, AuthenticatedApp},
+    auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
         create_and_mock_integration_connection, create_integration_connection,
         get_integration_connection, get_integration_connection_per_provider,
@@ -247,13 +247,17 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
     .await
     .unwrap();
     assert!(integration_connection.last_tasks_sync_started_at.is_some());
-    assert!(integration_connection
-        .last_tasks_sync_completed_at
-        .is_some());
+    assert!(
+        integration_connection
+            .last_tasks_sync_completed_at
+            .is_some()
+    );
     assert!(integration_connection.last_tasks_sync_failed_at.is_none());
-    assert!(integration_connection
-        .last_tasks_sync_failure_message
-        .is_none());
+    assert!(
+        integration_connection
+            .last_tasks_sync_failure_message
+            .is_none()
+    );
     assert_eq!(integration_connection.tasks_sync_failures, 0);
     assert_eq!(
         integration_connection.status,
@@ -311,9 +315,11 @@ async fn test_sync_tasks_should_add_new_task_and_delete_notification_when_disabl
     .await;
 
     assert_eq!(task_creations.len(), todoist_items.len());
-    assert!(task_creations
-        .iter()
-        .all(|task_creation| { task_creation.notifications.is_empty() }));
+    assert!(
+        task_creations
+            .iter()
+            .all(|task_creation| { task_creation.notifications.is_empty() })
+    );
     todoist_tasks_mock.assert();
     todoist_projects_mock.assert();
 

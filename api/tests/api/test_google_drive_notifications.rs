@@ -4,14 +4,14 @@ use universal_inbox::{
     integration_connection::{
         config::IntegrationConnectionConfig, integrations::google_drive::GoogleDriveConfig,
     },
-    notification::{service::NotificationPatch, Notification, NotificationStatus},
+    notification::{Notification, NotificationStatus, service::NotificationPatch},
     third_party::integrations::google_drive::GoogleDriveComment,
 };
 
 use universal_inbox_api::{configuration::Settings, integrations::oauth2::NangoConnection};
 
 use crate::helpers::{
-    auth::{authenticated_app, AuthenticatedApp},
+    auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
         create_and_mock_integration_connection, nango_google_drive_connection,
     },

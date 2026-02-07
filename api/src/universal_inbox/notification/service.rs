@@ -3,37 +3,37 @@ use std::{
     sync::{Arc, Weak},
 };
 
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use apalis::prelude::Storage;
 use apalis_redis::RedisStorage;
 use chrono::{DateTime, Utc};
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
 use tokio_retry::{
-    strategy::{jitter, ExponentialBackoff},
     Retry,
+    strategy::{ExponentialBackoff, jitter},
 };
 use tracing::{debug, error, info};
 
 use universal_inbox::{
+    Page, PageToken,
     integration_connection::{
+        IntegrationConnection,
         integrations::todoist::TodoistConfig,
         provider::{IntegrationProvider, IntegrationProviderKind},
-        IntegrationConnection,
     },
     notification::{
-        service::{InvitationPatch, NotificationPatch},
         Notification, NotificationId, NotificationListOrder, NotificationSource,
         NotificationSourceKind, NotificationStatus, NotificationSyncSourceKind,
         NotificationWithTask,
+        service::{InvitationPatch, NotificationPatch},
     },
-    task::{service::TaskPatch, Task, TaskCreation, TaskId, TaskStatus},
+    task::{Task, TaskCreation, TaskId, TaskStatus, service::TaskPatch},
     third_party::{
         integrations::slack::{SlackReaction, SlackStar, SlackThread},
         item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemId, ThirdPartyItemKind},
     },
     user::UserId,
-    Page, PageToken,
 };
 
 use crate::{
@@ -44,15 +44,15 @@ use crate::{
         third_party::ThirdPartyItemSourceService,
     },
     jobs::UniversalInboxJob,
-    repository::{notification::NotificationRepository, Repository},
+    repository::{Repository, notification::NotificationRepository},
     universal_inbox::{
+        UniversalInboxError, UpdateStatus, UpsertStatus,
         integration_connection::service::{
             IntegrationConnectionService, IntegrationConnectionSyncType,
         },
         task::service::TaskService,
         third_party::service::ThirdPartyItemService,
         user::service::UserService,
-        UniversalInboxError, UpdateStatus, UpsertStatus,
     },
 };
 
@@ -132,11 +132,11 @@ impl NotificationService {
     ) -> Result<(), UniversalInboxError> {
         // Skip side effects for test accounts
         let user = self.user_service.get_user(executor, for_user_id).await?;
-        if let Some(user) = user {
-            if user.is_testing {
-                debug!("Skipping notification side effects for test account {for_user_id}");
-                return Ok(());
-            }
+        if let Some(user) = user
+            && user.is_testing
+        {
+            debug!("Skipping notification side effects for test account {for_user_id}");
+            return Ok(());
         }
 
         debug!(
@@ -167,17 +167,17 @@ impl NotificationService {
             }
             NotificationSourceKind::GoogleCalendar => {
                 // Google Calendar events are derived from Google Mail threads
-                if let Some(ref mut source_item) = notification.source_item.source_item {
-                    if source_item.kind() == ThirdPartyItemKind::GoogleMailThread {
-                        self.apply_updated_notification_side_effect(
-                            executor,
-                            (*self.google_mail_service.read().await).clone().into(),
-                            patch,
-                            source_item,
-                            for_user_id,
-                        )
-                        .await?
-                    }
+                if let Some(ref mut source_item) = notification.source_item.source_item
+                    && source_item.kind() == ThirdPartyItemKind::GoogleMailThread
+                {
+                    self.apply_updated_notification_side_effect(
+                        executor,
+                        (*self.google_mail_service.read().await).clone().into(),
+                        patch,
+                        source_item,
+                        for_user_id,
+                    )
+                    .await?
                 }
 
                 self.apply_updated_notification_side_effect(
@@ -244,7 +244,7 @@ impl NotificationService {
                     return Err(UniversalInboxError::Unexpected(anyhow!(
                         "Unsupported Slack notification data type for third party item {}",
                         notification.source_item.id
-                    )))
+                    )));
                 }
             },
             NotificationSourceKind::Todoist => {
@@ -286,16 +286,16 @@ impl NotificationService {
             }
         };
 
-        if let Some(task_id) = patch.task_id {
-            if apply_task_side_effects {
-                self.task_service
-                    .upgrade()
-                    .context("Unable to access task_service from notification_service")?
-                    .read()
-                    .await
-                    .link_notification_with_task(executor, notification, task_id, for_user_id)
-                    .await?;
-            }
+        if let Some(task_id) = patch.task_id
+            && apply_task_side_effects
+        {
+            self.task_service
+                .upgrade()
+                .context("Unable to access task_service from notification_service")?
+                .read()
+                .await
+                .link_notification_with_task(executor, notification, task_id, for_user_id)
+                .await?;
         }
 
         Ok(())
@@ -469,12 +469,12 @@ impl NotificationService {
             .get_one_notification(executor, notification_id)
             .await?;
 
-        if let Some(ref notif) = notification {
-            if notif.user_id != for_user_id {
-                return Err(UniversalInboxError::Forbidden(format!(
-                    "Only the owner of the notification {notification_id} can access it"
-                )));
-            }
+        if let Some(ref notif) = notification
+            && notif.user_id != for_user_id
+        {
+            return Err(UniversalInboxError::Forbidden(format!(
+                "Only the owner of the notification {notification_id} can access it"
+            )));
         }
 
         Ok(notification)
@@ -933,7 +933,9 @@ impl NotificationService {
         let task_creation = if let Some(task_creation) = task_creation {
             task_creation
         } else {
-            debug!("No task creation details provided, using default values from Todoist integration connection config");
+            debug!(
+                "No task creation details provided, using default values from Todoist integration connection config"
+            );
             let Some(IntegrationConnection {
                 provider:
                     IntegrationProvider::Todoist {
@@ -959,8 +961,8 @@ impl NotificationService {
                 .await?
             else {
                 return Err(UniversalInboxError::Unexpected(anyhow!(
-                        "Cannot create task from notification {notification_id} as no Todoist integration is connected for user {for_user_id}"
-                    )));
+                    "Cannot create task from notification {notification_id} as no Todoist integration is connected for user {for_user_id}"
+                )));
             };
 
             TaskCreation {
@@ -1140,7 +1142,9 @@ impl NotificationService {
             )
             .await?
         else {
-            debug!("No validated {integration_provider_kind} integration found for user {user_id}, skipping notifications sync");
+            debug!(
+                "No validated {integration_provider_kind} integration found for user {user_id}, skipping notifications sync"
+            );
             return Ok(vec![]);
         };
 
@@ -1148,7 +1152,9 @@ impl NotificationService {
             .provider
             .is_sync_notifications_enabled()
         {
-            debug!("{integration_provider_kind} integration for user {user_id} is disabled, skipping notifications sync");
+            debug!(
+                "{integration_provider_kind} integration for user {user_id} is disabled, skipping notifications sync"
+            );
             return Ok(vec![]);
         }
 
