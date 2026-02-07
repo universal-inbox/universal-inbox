@@ -16,8 +16,8 @@ ammonia = "4.0.0"
 anyhow = { workspace = true }
 cfg-if = "1.0"
 chrono = { workspace = true, features = ["wasmbind"] }
-chrono-tz = "0.10"
-comrak = { version = "0.41.0", default-features = false, features = [
+chrono-tz = "0.10.3"
+comrak = { version = "0.50.0", default-features = false, features = [
   "shortcodes",
 ] }
 console_error_panic_hook = "0.1"
@@ -94,7 +94,7 @@ features = [
 # - rand
 # - rand_core
 [dependencies.getrandom]
-version = "0.3.3"
+version = "0.3.4"
 features = ["wasm_js"]
 
 [package.metadata.cargo-machete]
