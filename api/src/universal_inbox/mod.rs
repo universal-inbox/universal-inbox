@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Error};
+use anyhow::{Error, anyhow};
 use format_serde_error::SerdeError;
 use url::ParseError;
 use uuid::Uuid;

@@ -7,10 +7,10 @@ use rstest::fixture;
 
 use universal_inbox::{
     integration_connection::{
-        config::IntegrationConnectionConfig,
-        provider::{IntegrationConnectionContext, IntegrationProviderKind},
         IntegrationConnection, IntegrationConnectionId, IntegrationConnectionStatus,
         NangoProviderKey,
+        config::IntegrationConnectionConfig,
+        provider::{IntegrationConnectionContext, IntegrationProviderKind},
     },
     user::UserId,
 };
@@ -24,7 +24,7 @@ use universal_inbox_api::{
     universal_inbox::UpdateStatus,
 };
 
-use crate::helpers::{auth::AuthenticatedApp, load_json_fixture_file, TestedApp};
+use crate::helpers::{TestedApp, auth::AuthenticatedApp, load_json_fixture_file};
 
 pub async fn list_integration_connections_response(client: &Client, api_address: &str) -> Response {
     client

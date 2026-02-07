@@ -1,10 +1,11 @@
 use chrono::{DateTime, Utc};
-use httpmock::{prelude::HttpMockRequest, Method::GET, Mock, MockServer};
+use httpmock::{Method::GET, Mock, MockServer, prelude::HttpMockRequest};
 use pretty_assertions::assert_eq;
 use rstest::*;
 use url::Url;
 
 use universal_inbox::{
+    HasHtmlUrl,
     integration_connection::IntegrationConnectionId,
     notification::{Notification, NotificationSourceKind, NotificationStatus},
     third_party::{
@@ -12,7 +13,6 @@ use universal_inbox::{
         item::{ThirdPartyItemData, ThirdPartyItemFromSource},
     },
     user::UserId,
-    HasHtmlUrl,
 };
 
 use universal_inbox_api::integrations::google_drive::{
@@ -20,7 +20,7 @@ use universal_inbox_api::integrations::google_drive::{
 };
 
 use crate::helpers::{
-    load_json_fixture_file, notification::create_notification_from_source_item, TestedApp,
+    TestedApp, load_json_fixture_file, notification::create_notification_from_source_item,
 };
 
 pub async fn create_notification_from_google_drive_comment(

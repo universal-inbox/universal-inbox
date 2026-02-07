@@ -6,11 +6,11 @@ use uuid::Uuid;
 
 use universal_inbox::{
     integration_connection::{
+        IntegrationConnection, IntegrationConnectionCreation, IntegrationConnectionStatus,
         config::IntegrationConnectionConfig,
         integrations::google_mail::GoogleMailConfig,
         integrations::{github::GithubConfig, google_mail::GoogleMailContext},
         provider::{IntegrationConnectionContext, IntegrationProvider, IntegrationProviderKind},
-        IntegrationConnection, IntegrationConnectionCreation, IntegrationConnectionStatus,
     },
     notification::Notification,
     third_party::integrations::google_mail::{GoogleMailLabel, GoogleMailThread},
@@ -22,7 +22,7 @@ use universal_inbox_api::{
 };
 
 use crate::helpers::{
-    auth::{authenticate_user, authenticated_app, AuthenticatedApp},
+    auth::{AuthenticatedApp, authenticate_user, authenticated_app},
     integration_connection::{
         create_integration_connection, get_integration_connection, list_integration_connections,
         mock_nango_connection_service, mock_nango_delete_connection_service,

@@ -2,25 +2,25 @@
 
 use dioxus::prelude::*;
 
-use dioxus_free_icons::{icons::bs_icons::BsChatTextFill, Icon};
+use dioxus_free_icons::{Icon, icons::bs_icons::BsChatTextFill};
 use universal_inbox::{
+    HasHtmlUrl,
     notification::NotificationWithTask,
     third_party::integrations::github::{
         GithubDiscussion, GithubNotification, GithubNotificationItem, GithubPullRequest,
         GithubPullRequestReviewDecision,
     },
-    HasHtmlUrl,
 };
 
 use crate::{
     components::{
         integrations::github::{
+            GithubActorDisplay,
             icons::{Github, GithubNotificationIcon},
             preview::pull_request::ChecksGithubPullRequest,
-            GithubActorDisplay,
         },
         list::{ListContext, ListItem},
-        notifications_list::{get_notification_list_item_action_buttons, TaskHint},
+        notifications_list::{TaskHint, get_notification_list_item_action_buttons},
     },
     utils::format_elapsed_time,
 };

@@ -16,8 +16,8 @@ use universal_inbox::{
 use crate::{
     integrations::slack::SlackService,
     universal_inbox::{
-        task::{service::TaskService, TaskEventService},
         UniversalInboxError,
+        task::{TaskEventService, service::TaskService},
     },
 };
 

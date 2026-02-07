@@ -2,7 +2,7 @@
 
 use dioxus::prelude::*;
 use dioxus::web::WebEventExt;
-use dioxus_free_icons::{icons::bs_icons::BsChatText, Icon};
+use dioxus_free_icons::{Icon, icons::bs_icons::BsChatText};
 use serde_json::json;
 use slack_morphism::SlackReactionName;
 

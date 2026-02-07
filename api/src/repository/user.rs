@@ -1,9 +1,9 @@
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use email_address::EmailAddress;
 use secrecy::{ExposeSecret, SecretBox};
-use sqlx::{types::Json, Postgres, QueryBuilder, Transaction};
+use sqlx::{Postgres, QueryBuilder, Transaction, types::Json};
 use uuid::Uuid;
 use webauthn_rs::prelude::*;
 
@@ -15,10 +15,10 @@ use universal_inbox::{
 use crate::{
     repository::Repository,
     universal_inbox::{
+        UniversalInboxError, UpdateStatus,
         user::model::{
             AuthUserId, LocalUserAuth, OpenIdConnectUserAuth, PasskeyUserAuth, UserAuth,
         },
-        UniversalInboxError, UpdateStatus,
     },
 };
 

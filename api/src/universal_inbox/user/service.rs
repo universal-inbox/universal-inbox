@@ -1,17 +1,17 @@
 use std::{str::FromStr, sync::Arc};
 
-use anyhow::{anyhow, Context};
-use argon2::{password_hash::SaltString, Argon2, Params, PasswordHasher, PasswordVerifier};
+use anyhow::{Context, anyhow};
+use argon2::{Argon2, Params, PasswordHasher, PasswordVerifier, password_hash::SaltString};
 use chrono::Utc;
 use email_address::EmailAddress;
 use openidconnect::{
+    AccessToken, AuthorizationCode, CsrfToken, EmptyAdditionalClaims, EndSessionUrl, IdToken,
+    LogoutRequest, Nonce, PostLogoutRedirectUrl, ProviderMetadataWithLogout, RedirectUrl,
+    SubjectIdentifier, TokenIntrospectionResponse,
     core::{
         CoreGenderClaim, CoreIdToken, CoreJweContentEncryptionAlgorithm, CoreJwsSigningAlgorithm,
         CoreUserInfoClaims,
     },
-    AccessToken, AuthorizationCode, CsrfToken, EmptyAdditionalClaims, EndSessionUrl, IdToken,
-    LogoutRequest, Nonce, PostLogoutRedirectUrl, ProviderMetadataWithLogout, RedirectUrl,
-    SubjectIdentifier, TokenIntrospectionResponse,
 };
 use secrecy::{ExposeSecret, SecretBox};
 use sqlx::{Postgres, Transaction};
@@ -36,11 +36,11 @@ use crate::{
     },
     mailer::{EmailTemplate, Mailer},
     observability::spawn_blocking_with_tracing,
-    repository::user::UserRepository,
     repository::Repository,
+    repository::user::UserRepository,
     universal_inbox::{
-        user::model::{AuthUserId, OpenIdConnectUserAuth, PasskeyUserAuth, UserAuth, UserAuthKind},
         UniversalInboxError, UpdateStatus,
+        user::model::{AuthUserId, OpenIdConnectUserAuth, PasskeyUserAuth, UserAuth, UserAuthKind},
     },
 };
 
@@ -83,15 +83,14 @@ impl UserService {
                 ..
             },
         ) = &user_result
+            && let Some(chat_support_settings) = &self.application_settings.chat_support
         {
-            if let Some(chat_support_settings) = &self.application_settings.chat_support {
-                let chat_support_email_signature =
-                    Some(chat_support_settings.sign_email(email.as_str()));
-                return Ok(Some(User {
-                    chat_support_email_signature,
-                    ..user.clone()
-                }));
-            }
+            let chat_support_email_signature =
+                Some(chat_support_settings.sign_email(email.as_str()));
+            return Ok(Some(User {
+                chat_support_email_signature,
+                ..user.clone()
+            }));
         }
 
         Ok(user_result)
@@ -248,7 +247,7 @@ impl UserService {
                 return Err(anyhow!(
                     "Expected OpenIDConnect UserAuth, got {:?}",
                     user_auth
-                ))?
+                ))?;
             }
         };
 
@@ -576,11 +575,11 @@ impl UserService {
     ) -> Result<(), UniversalInboxError> {
         // Skip sending verification email for test accounts
         let user = self.repository.get_user(executor, user_id).await?;
-        if let Some(user) = user {
-            if user.is_testing {
-                debug!("Skipping verification email for test account {user_id}");
-                return Ok(());
-            }
+        if let Some(user) = user
+            && user.is_testing
+        {
+            debug!("Skipping verification email for test account {user_id}");
+            return Ok(());
         }
 
         let email_validation_token: EmailValidationToken = Uuid::new_v4().into();
@@ -670,11 +669,11 @@ impl UserService {
             .repository
             .get_user_by_email(executor, &email_address)
             .await?;
-        if let Some(user) = user {
-            if user.is_testing {
-                debug!("Skipping password reset email for test account {email_address}");
-                return Ok(());
-            }
+        if let Some(user) = user
+            && user.is_testing
+        {
+            debug!("Skipping password reset email for test account {email_address}");
+            return Ok(());
         }
 
         let password_reset_token: PasswordResetToken = Uuid::new_v4().into();
@@ -717,7 +716,9 @@ impl UserService {
                 warn!("No user found for email address {email_address}");
             }
             _ => {
-                error!("User not updated while resetting password for email address {email_address}, should not happen");
+                error!(
+                    "User not updated while resetting password for email address {email_address}, should not happen"
+                );
             }
         }
 

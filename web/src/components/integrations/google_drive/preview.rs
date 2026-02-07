@@ -2,19 +2,19 @@
 
 use chrono::{DateTime, Utc};
 use dioxus::prelude::*;
-use dioxus_free_icons::{icons::bs_icons::BsArrowUpRightSquare, Icon};
+use dioxus_free_icons::{Icon, icons::bs_icons::BsArrowUpRightSquare};
 use url::Url;
 
 use universal_inbox::{
+    HasHtmlUrl,
     notification::NotificationWithTask,
     third_party::integrations::google_drive::{
         GoogleDriveComment, GoogleDriveCommentAuthor, GoogleDriveCommentReply,
     },
-    HasHtmlUrl,
 };
 
 use crate::components::{
-    integrations::google_drive::icons::GoogleDriveFile, markdown::Markdown, MessageHeader,
+    MessageHeader, integrations::google_drive::icons::GoogleDriveFile, markdown::Markdown,
 };
 
 #[component]

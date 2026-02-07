@@ -5,8 +5,8 @@ use dioxus::prelude::*;
 use universal_inbox::third_party::integrations::linear::{LinearLabel, LinearNotification};
 
 use crate::components::{
-    integrations::linear::preview::{issue::LinearIssuePreview, project::LinearProjectPreview},
     Tag,
+    integrations::linear::preview::{issue::LinearIssuePreview, project::LinearProjectPreview},
 };
 
 pub mod issue;

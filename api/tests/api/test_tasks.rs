@@ -8,7 +8,7 @@ use universal_inbox::{
     integration_connection::{
         config::IntegrationConnectionConfig, integrations::todoist::TodoistConfig,
     },
-    task::{service::TaskPatch, ProjectSummary, TaskStatus},
+    task::{ProjectSummary, TaskStatus, service::TaskPatch},
     third_party::{
         integrations::todoist::TodoistItem,
         item::{ThirdPartyItem, ThirdPartyItemCreationResult, ThirdPartyItemData},
@@ -21,7 +21,7 @@ use universal_inbox_api::{
 };
 
 use crate::helpers::{
-    auth::{authenticate_user, authenticated_app, AuthenticatedApp},
+    auth::{AuthenticatedApp, authenticate_user, authenticated_app},
     integration_connection::{create_and_mock_integration_connection, nango_todoist_connection},
     rest::{create_resource, get_resource_response, patch_resource_response},
     settings,

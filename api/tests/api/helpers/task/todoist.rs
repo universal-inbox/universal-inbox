@@ -10,6 +10,7 @@ use url::Url;
 use uuid::Uuid;
 
 use universal_inbox::{
+    HasHtmlUrl,
     integration_connection::integrations::todoist::SyncToken,
     notification::{NotificationSourceKind, NotificationStatus},
     task::{DueDate, TaskCreationResult, TaskStatus},
@@ -18,7 +19,6 @@ use universal_inbox::{
         item::ThirdPartyItemData,
     },
     user::UserId,
-    HasHtmlUrl,
 };
 
 use universal_inbox_api::integrations::todoist::{

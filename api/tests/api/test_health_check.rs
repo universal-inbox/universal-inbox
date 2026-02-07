@@ -1,7 +1,7 @@
 use rstest::*;
 use serde_json::json;
 
-use crate::helpers::{tested_app, TestedApp};
+use crate::helpers::{TestedApp, tested_app};
 
 #[rstest]
 #[tokio::test]

@@ -2,8 +2,8 @@
 
 use dioxus::prelude::*;
 use dioxus_free_icons::{
-    icons::bs_icons::{BsBoxArrowInLeft, BsCheckCircle},
     Icon,
+    icons::bs_icons::{BsBoxArrowInLeft, BsCheckCircle},
 };
 use gravatar_rs::Generator;
 
@@ -14,7 +14,7 @@ use crate::{
     route::Route,
     services::{
         crisp::init_crisp,
-        user_service::{UserCommand, CONNECTED_USER},
+        user_service::{CONNECTED_USER, UserCommand},
     },
 };
 

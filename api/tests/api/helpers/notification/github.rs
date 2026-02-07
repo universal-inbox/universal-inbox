@@ -9,6 +9,7 @@ use rstest::*;
 use url::Url;
 
 use universal_inbox::{
+    HasHtmlUrl,
     integration_connection::IntegrationConnectionId,
     notification::{Notification, NotificationSourceKind, NotificationStatus},
     third_party::{
@@ -16,15 +17,14 @@ use universal_inbox::{
         item::ThirdPartyItemData,
     },
     user::UserId,
-    HasHtmlUrl,
 };
 
 use universal_inbox_api::integrations::github::graphql::{
-    discussion_query, pull_request_query, DiscussionQuery, PullRequestQuery,
+    DiscussionQuery, PullRequestQuery, discussion_query, pull_request_query,
 };
 
 use crate::helpers::{
-    load_json_fixture_file, notification::create_notification_from_source_item, TestedApp,
+    TestedApp, load_json_fixture_file, notification::create_notification_from_source_item,
 };
 
 pub async fn create_notification_from_github_notification(

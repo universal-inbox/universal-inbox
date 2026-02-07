@@ -2,10 +2,11 @@
 
 use dioxus::prelude::*;
 
-use universal_inbox::{task::Task, third_party::integrations::linear::LinearIssue, HasHtmlUrl};
+use universal_inbox::{HasHtmlUrl, task::Task, third_party::integrations::linear::LinearIssue};
 
 use crate::{
     components::{
+        UserWithAvatar,
         integrations::linear::{
             icons::{Linear, LinearIssueIcon},
             list_item::LinearIssueListItemSubtitle,
@@ -13,7 +14,6 @@ use crate::{
         list::{ListContext, ListItem},
         notifications_list::TaskHint,
         tasks_list::get_task_list_item_action_buttons,
-        UserWithAvatar,
     },
     utils::format_elapsed_time,
 };

@@ -4,7 +4,7 @@ use rstest::*;
 use slack_morphism::prelude::*;
 
 use crate::helpers::{
-    auth::{authenticated_app, AuthenticatedApp},
+    auth::{AuthenticatedApp, authenticated_app},
     rest::create_resource_response,
 };
 

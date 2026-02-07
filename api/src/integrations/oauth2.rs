@@ -1,6 +1,6 @@
 use std::fmt;
 
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use chrono::{DateTime, Utc};
 use http::{HeaderMap, HeaderValue};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, Extension};
@@ -13,8 +13,8 @@ use serde_with::serde_as;
 use slack_morphism::SlackTeamId;
 use tracing::warn;
 use universal_inbox::integration_connection::{
-    integrations::slack::SlackContext, provider::IntegrationConnectionContext, ConnectionId,
-    NangoProviderKey,
+    ConnectionId, NangoProviderKey, integrations::slack::SlackContext,
+    provider::IntegrationConnectionContext,
 };
 use url::Url;
 
@@ -230,13 +230,9 @@ impl NangoService {
         if status_code != reqwest::StatusCode::BAD_REQUEST
             && status_code != reqwest::StatusCode::NO_CONTENT
         {
-            return Err(
-                UniversalInboxError::Unexpected(
-                    anyhow!(
-                        "Failed to delete connection {connection_id} for provider {provider_config_key} from Nango API: unexpected response status code {status_code}"
-                    )
-                )
-            );
+            return Err(UniversalInboxError::Unexpected(anyhow!(
+                "Failed to delete connection {connection_id} for provider {provider_config_key} from Nango API: unexpected response status code {status_code}"
+            )));
         };
 
         Ok(())

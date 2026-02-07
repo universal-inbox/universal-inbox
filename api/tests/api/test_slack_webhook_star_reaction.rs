@@ -8,6 +8,7 @@ use slack_blocks_render::SlackReferences;
 use slack_morphism::prelude::*;
 
 use universal_inbox::{
+    HasHtmlUrl,
     integration_connection::{
         config::IntegrationConnectionConfig,
         integrations::{
@@ -24,7 +25,6 @@ use universal_inbox::{
         },
         item::{ThirdPartyItemData, ThirdPartyItemSource, ThirdPartyItemSourceKind},
     },
-    HasHtmlUrl,
 };
 
 use universal_inbox_api::{
@@ -33,7 +33,7 @@ use universal_inbox_api::{
 };
 
 use crate::helpers::{
-    auth::{authenticated_app, AuthenticatedApp},
+    auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
         create_and_mock_integration_connection, nango_slack_connection, nango_todoist_connection,
     },
@@ -85,12 +85,13 @@ async fn test_receive_star_reaction_event_for_unknown_user(
 
     assert_eq!(response.status(), 200);
 
-    assert!(app
-        .app
-        .redis_storage
-        .is_empty()
-        .await
-        .expect("Failed to get jobs count"));
+    assert!(
+        app.app
+            .redis_storage
+            .is_empty()
+            .await
+            .expect("Failed to get jobs count")
+    );
 
     let notifications = list_notifications(
         &app.client,
@@ -144,12 +145,13 @@ async fn test_receive_star_reaction_event_for_disabled_config(
 
     assert_eq!(response.status(), 200);
 
-    assert!(app
-        .app
-        .redis_storage
-        .is_empty()
-        .await
-        .expect("Failed to get jobs count"));
+    assert!(
+        app.app
+            .redis_storage
+            .is_empty()
+            .await
+            .expect("Failed to get jobs count")
+    );
 
     let notifications = list_notifications(
         &app.client,
@@ -202,12 +204,13 @@ async fn test_receive_reaction_event_for_different_reaction(
 
     assert_eq!(response.status(), 200);
 
-    assert!(app
-        .app
-        .redis_storage
-        .is_empty()
-        .await
-        .expect("Failed to get jobs count"));
+    assert!(
+        app.app
+            .redis_storage
+            .is_empty()
+            .await
+            .expect("Failed to get jobs count")
+    );
 
     let notifications = list_notifications(
         &app.client,

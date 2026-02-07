@@ -6,11 +6,11 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::{
+    HasHtmlUrl,
     integration_connection::IntegrationConnectionId,
     task::{DueDate, TaskPriority},
     third_party::item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemFromSource},
     user::UserId,
-    HasHtmlUrl,
 };
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]

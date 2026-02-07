@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
 use actix_web::{
+    HttpResponse,
     http::header::{CacheControl, CacheDirective},
-    web, HttpResponse,
+    web,
 };
 use anyhow::Context;
 

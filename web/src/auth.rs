@@ -13,11 +13,11 @@ use reqwest::{Client, Method};
 use url::Url;
 
 use universal_inbox::{
-    auth::{
-        openidconnect::OpenidConnectProvider, AuthIdToken, AuthorizeSessionResponse,
-        SessionAuthValidationParameters,
-    },
     FrontAuthenticationConfig,
+    auth::{
+        AuthIdToken, AuthorizeSessionResponse, SessionAuthValidationParameters,
+        openidconnect::OpenidConnectProvider,
+    },
 };
 
 use crate::{
@@ -131,20 +131,18 @@ pub fn Authenticated(
                 // we must continue the flow to exchange the auth_code against an access token
                 // Not starting the flow here (ie. `auth_code.is_none()`) because it should have been
                 // started from the login page
-                if let Some(oidc_auth_code_pkce_flow_config) = oidc_auth_code_pkce_flow_config {
-                    if auth_code.is_some() {
-                        if let Err(auth_error) = authenticate_pkce_flow(
-                            &api_base_url,
-                            auth_code,
-                            &oidc_auth_code_pkce_flow_config.oidc_issuer_url,
-                            &oidc_auth_code_pkce_flow_config.oidc_client_id,
-                            &oidc_auth_code_pkce_flow_config.oidc_redirect_url,
-                        )
-                        .await
-                        {
-                            *error.write() = Some(auth_error);
-                        }
-                    }
+                if let Some(oidc_auth_code_pkce_flow_config) = oidc_auth_code_pkce_flow_config
+                    && auth_code.is_some()
+                    && let Err(auth_error) = authenticate_pkce_flow(
+                        &api_base_url,
+                        auth_code,
+                        &oidc_auth_code_pkce_flow_config.oidc_issuer_url,
+                        &oidc_auth_code_pkce_flow_config.oidc_client_id,
+                        &oidc_auth_code_pkce_flow_config.oidc_redirect_url,
+                    )
+                    .await
+                {
+                    *error.write() = Some(auth_error);
                 }
             }
         }

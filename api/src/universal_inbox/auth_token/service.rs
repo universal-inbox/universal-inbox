@@ -14,9 +14,9 @@ use universal_inbox::{
 
 use crate::{
     configuration::HttpSessionSettings,
-    repository::{auth_token::AuthenticationTokenRepository, Repository},
+    repository::{Repository, auth_token::AuthenticationTokenRepository},
     universal_inbox::UniversalInboxError,
-    utils::jwt::{Claims, JWTBase64EncodedSigningKeys, JWTSigningKeys, JWT_SIGNING_ALGO},
+    utils::jwt::{Claims, JWT_SIGNING_ALGO, JWTBase64EncodedSigningKeys, JWTSigningKeys},
 };
 
 pub struct AuthenticationTokenService {

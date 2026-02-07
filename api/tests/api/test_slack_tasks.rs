@@ -12,7 +12,7 @@ use universal_inbox::{
         integrations::{slack::SlackConfig, todoist::TodoistConfig},
     },
     notification::{NotificationSourceKind, NotificationStatus},
-    task::{service::TaskPatch, Task, TaskCreationResult, TaskSourceKind, TaskStatus},
+    task::{Task, TaskCreationResult, TaskSourceKind, TaskStatus, service::TaskPatch},
     third_party::{
         integrations::{
             slack::{SlackStar, SlackStarItem, SlackStarState},
@@ -28,7 +28,7 @@ use universal_inbox_api::{
 };
 
 use crate::helpers::{
-    auth::{authenticated_app, AuthenticatedApp},
+    auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
         create_and_mock_integration_connection, nango_slack_connection, nango_todoist_connection,
     },

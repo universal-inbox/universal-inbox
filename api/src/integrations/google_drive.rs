@@ -1,6 +1,6 @@
 use std::{str::FromStr, sync::Weak, time::Duration};
 
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use email_address::EmailAddress;
@@ -15,8 +15,8 @@ use url::Url;
 use uuid::Uuid;
 
 use wiremock::{
-    matchers::{method, path, path_regex},
     Mock, MockServer, ResponseTemplate,
+    matchers::{method, path, path_regex},
 };
 
 use universal_inbox::{
@@ -46,8 +46,8 @@ use crate::{
         third_party::ThirdPartyItemSourceService,
     },
     universal_inbox::{
-        integration_connection::service::IntegrationConnectionService,
-        notification::service::NotificationService, UniversalInboxError,
+        UniversalInboxError, integration_connection::service::IntegrationConnectionService,
+        notification::service::NotificationService,
     },
     utils::api::ApiClient,
 };
@@ -639,12 +639,12 @@ fn should_create_item(
         .as_ref()
         .map(|n| n.source_item.updated_at);
 
-    if let Some(last_update) = last_existing_third_party_item_update {
-        if existing_notification.as_ref().unwrap().status != NotificationStatus::Unsubscribed {
-            // If the existing notification is not unsubscribed, create a new item only if the
-            // comment is newer than the existing notification
-            return comment.modified_time > last_update;
-        }
+    if let Some(last_update) = last_existing_third_party_item_update
+        && existing_notification.as_ref().unwrap().status != NotificationStatus::Unsubscribed
+    {
+        // If the existing notification is not unsubscribed, create a new item only if the
+        // comment is newer than the existing notification
+        return comment.modified_time > last_update;
     }
 
     comment.is_user_mentioned(

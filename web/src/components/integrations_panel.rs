@@ -5,22 +5,22 @@ use std::collections::HashMap;
 use chrono::{Local, SecondsFormat};
 use dioxus::prelude::*;
 use dioxus_free_icons::{
+    Icon,
     icons::{
         bs_icons::{BsBellSlash, BsClockHistory, BsExclamationTriangle, BsPlug, BsTrash},
         md_action_icons::MdCheckCircleOutline,
     },
-    Icon,
 };
 use itertools::Itertools;
 use log::warn;
 
 use universal_inbox::{
+    IntegrationProviderStaticConfig,
     integration_connection::{
+        IntegrationConnection, IntegrationConnectionStatus,
         config::IntegrationConnectionConfig,
         provider::{IntegrationProvider, IntegrationProviderKind},
-        IntegrationConnection, IntegrationConnectionStatus,
     },
-    IntegrationProviderStaticConfig,
 };
 
 use crate::{
@@ -306,8 +306,9 @@ pub fn IntegrationSettings(
             let result = ic.has_oauth_scopes(&config().required_oauth_scopes);
             if ic.status == IntegrationConnectionStatus::Validated && !result {
                 warn!(
-                    "{kind} is connected, but it is missing some permissions: required OAuth scopes: {:?} vs registered OAuth scopes: {:?}", 
-                    config().required_oauth_scopes, ic.registered_oauth_scopes
+                    "{kind} is connected, but it is missing some permissions: required OAuth scopes: {:?} vs registered OAuth scopes: {:?}",
+                    config().required_oauth_scopes,
+                    ic.registered_oauth_scopes
                 );
             }
             result

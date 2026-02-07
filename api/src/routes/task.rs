@@ -3,8 +3,9 @@ use std::sync::Arc;
 use actix_http::body::BoxBody;
 use actix_jwt_authc::{Authenticated, MaybeAuthenticated};
 use actix_web::{
+    HttpResponse, Scope,
     http::header::{self, CacheDirective},
-    web, HttpResponse, Scope,
+    web,
 };
 use anyhow::Context;
 use apalis_redis::RedisStorage;
@@ -13,19 +14,19 @@ use serde_json::json;
 use tokio::sync::RwLock;
 
 use universal_inbox::{
+    Page,
     task::{
-        service::SyncTasksParameters, service::TaskPatch, ProjectSummary, Task, TaskId, TaskStatus,
-        TaskSummary,
+        ProjectSummary, Task, TaskId, TaskStatus, TaskSummary, service::SyncTasksParameters,
+        service::TaskPatch,
     },
     user::UserId,
-    Page,
 };
 
 use crate::{
     jobs::UniversalInboxJob,
     universal_inbox::{
-        integration_connection::service::IntegrationConnectionService, task::service::TaskService,
         UniversalInboxError, UpdateStatus,
+        integration_connection::service::IntegrationConnectionService, task::service::TaskService,
     },
     utils::jwt::Claims,
 };

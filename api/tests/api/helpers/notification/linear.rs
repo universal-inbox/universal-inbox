@@ -6,6 +6,7 @@ use url::Url;
 use uuid::Uuid;
 
 use universal_inbox::{
+    HasHtmlUrl,
     integration_connection::IntegrationConnectionId,
     notification::{Notification, NotificationStatus},
     third_party::{
@@ -13,10 +14,11 @@ use universal_inbox::{
         item::ThirdPartyItemData,
     },
     user::UserId,
-    HasHtmlUrl,
 };
 
 use universal_inbox_api::integrations::linear::graphql::{
+    AssignedIssuesQuery, IssueUpdateState, IssueUpdateSubscribers, NotificationArchive,
+    NotificationSubscribersQuery, NotificationUpdateSnoozedUntilAt, NotificationsQuery,
     assigned_issues_query,
     issue_update_state::{self, IssueUpdateStateIssueUpdate},
     issue_update_subscribers::{self, IssueUpdateSubscribersIssueUpdate},
@@ -32,13 +34,11 @@ use universal_inbox_api::integrations::linear::graphql::{
     notification_update_snoozed_until_at::{
         self, NotificationUpdateSnoozedUntilAtNotificationUpdate,
     },
-    notifications_query, AssignedIssuesQuery, IssueUpdateState, IssueUpdateSubscribers,
-    NotificationArchive, NotificationSubscribersQuery, NotificationUpdateSnoozedUntilAt,
-    NotificationsQuery,
+    notifications_query,
 };
 
 use crate::helpers::{
-    load_json_fixture_file, notification::create_notification_from_source_item, TestedApp,
+    TestedApp, load_json_fixture_file, notification::create_notification_from_source_item,
 };
 
 pub async fn create_notification_from_linear_notification(

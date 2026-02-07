@@ -8,9 +8,10 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::{
+    HasHtmlUrl,
     integration_connection::{
-        provider::{IntegrationProviderKind, IntegrationProviderSource},
         IntegrationConnectionId,
+        provider::{IntegrationProviderKind, IntegrationProviderSource},
     },
     notification::Notification,
     task::Task,
@@ -25,7 +26,6 @@ use crate::{
         todoist::TodoistItem,
     },
     user::UserId,
-    HasHtmlUrl,
 };
 
 #[serde_as]
@@ -293,7 +293,9 @@ impl TryFrom<IntegrationProviderKind> for ThirdPartyItemSyncSourceKind {
             IntegrationProviderKind::Todoist => Ok(Self::Todoist),
             IntegrationProviderKind::Linear => Ok(Self::Linear),
             IntegrationProviderKind::Github => Ok(Self::Github),
-            _ => Err(anyhow!("IntegrationProviderKind {provider_kind} is not a valid ThirdPartyItemSyncSourceKind")),
+            _ => Err(anyhow!(
+                "IntegrationProviderKind {provider_kind} is not a valid ThirdPartyItemSyncSourceKind"
+            )),
         }
     }
 }

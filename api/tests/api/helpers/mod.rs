@@ -5,7 +5,7 @@ use httpmock::MockServer;
 use openidconnect::{ClientId, IntrospectionUrl, IssuerUrl};
 use rstest::*;
 use sqlx::{
-    postgres::PgConnectOptions, ConnectOptions, Connection, Executor, PgConnection, PgPool,
+    ConnectOptions, Connection, Executor, PgConnection, PgPool, postgres::PgConnectOptions,
 };
 use tokio::sync::RwLock;
 use tracing::info;
@@ -181,7 +181,7 @@ pub async fn tested_app(
     let nango_mock_server = MockServer::start();
     let nango_mock_server_url = &nango_mock_server.base_url();
 
-    if let AuthenticationSettings::OpenIDConnect(ref mut oidc_settings) =
+    if let AuthenticationSettings::OpenIDConnect(oidc_settings) =
         &mut settings.application.security.authentication[0]
     {
         oidc_settings.oidc_issuer_url =
@@ -481,7 +481,7 @@ pub async fn tested_app_with_domain_blacklist(
     let nango_mock_server_url = &nango_mock_server.base_url();
 
     // Set up OIDC authentication settings pointing to mock server
-    if let AuthenticationSettings::OpenIDConnect(ref mut oidc_settings) =
+    if let AuthenticationSettings::OpenIDConnect(oidc_settings) =
         &mut settings.application.security.authentication[0]
     {
         oidc_settings.oidc_issuer_url =

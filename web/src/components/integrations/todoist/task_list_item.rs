@@ -1,20 +1,20 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
-use dioxus_free_icons::{icons::bs_icons::BsCardChecklist, Icon};
+use dioxus_free_icons::{Icon, icons::bs_icons::BsCardChecklist};
 
 use universal_inbox::{
+    HasHtmlUrl,
     task::Task,
     third_party::integrations::todoist::{TodoistItem, TodoistItemPriority},
-    HasHtmlUrl,
 };
 
 use crate::{
     components::{
+        Tag, TagDisplay,
         integrations::todoist::{icons::Todoist, list_item::TodoistListItemSubtitle},
         list::{ListContext, ListItem},
         tasks_list::get_task_list_item_action_buttons,
-        Tag, TagDisplay,
     },
     utils::format_elapsed_time,
 };

@@ -1,6 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use async_trait::async_trait;
 use chrono::{DateTime, Timelike, Utc};
 use futures::stream::{self, TryStreamExt};
@@ -13,8 +13,8 @@ use tokio::sync::RwLock;
 use url::Url;
 use uuid::Uuid;
 use wiremock::{
-    matchers::{body_partial_json, method, path_regex},
     Mock, MockServer, ResponseTemplate,
+    matchers::{body_partial_json, method, path_regex},
 };
 
 use universal_inbox::{
@@ -30,14 +30,14 @@ use universal_inbox::{
 use crate::{
     integrations::{
         github::graphql::{
-            discussion_query, pull_request_query, DiscussionQuery, PullRequestQuery,
+            DiscussionQuery, PullRequestQuery, discussion_query, pull_request_query,
         },
         notification::ThirdPartyNotificationSourceService,
         oauth2::AccessToken,
         third_party::ThirdPartyItemSourceService,
     },
     universal_inbox::{
-        integration_connection::service::IntegrationConnectionService, UniversalInboxError,
+        UniversalInboxError, integration_connection::service::IntegrationConnectionService,
     },
     utils::{
         api::{ApiClient, ApiClientError},

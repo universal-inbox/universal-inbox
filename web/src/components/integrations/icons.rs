@@ -2,7 +2,7 @@
 
 use cfg_if::cfg_if;
 use dioxus::prelude::*;
-use dioxus_free_icons::{icons::bs_icons::BsSlack, Icon};
+use dioxus_free_icons::{Icon, icons::bs_icons::BsSlack};
 
 use universal_inbox::{
     integration_connection::provider::IntegrationProviderKind,

@@ -1,7 +1,7 @@
 extern crate console_error_panic_hook;
 
 use cfg_if::cfg_if;
-use log::{info, Level};
+use log::{Level, info};
 use std::panic;
 use universal_inbox_web::App;
 

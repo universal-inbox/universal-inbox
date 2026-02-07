@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use dioxus::prelude::*;
 
 use futures_util::StreamExt;
@@ -7,12 +7,12 @@ use reqwest::Method;
 use url::Url;
 
 use universal_inbox::{
-    integration_connection::{
-        config::IntegrationConnectionConfig, provider::IntegrationProviderKind,
-        IntegrationConnection, IntegrationConnectionCreation, IntegrationConnectionId,
-        IntegrationConnectionStatus, NangoPublicKey,
-    },
     IntegrationProviderStaticConfig,
+    integration_connection::{
+        IntegrationConnection, IntegrationConnectionCreation, IntegrationConnectionId,
+        IntegrationConnectionStatus, NangoPublicKey, config::IntegrationConnectionConfig,
+        provider::IntegrationProviderKind,
+    },
 };
 
 use crate::{
@@ -89,7 +89,9 @@ pub async fn integration_connnection_service(
                         &task_service,
                     ),
                     Err(error) => {
-                        error!("An error occurred while connecting with {integration_provider_kind}: {error:?}");
+                        error!(
+                            "An error occurred while connecting with {integration_provider_kind}: {error:?}"
+                        );
                         toast_service.send(ToastCommand::Push(Toast {
                             kind: ToastKind::Failure,
                             message: format!("An error occurred while connecting with {integration_provider_kind}. Please, retry 🙏 If the issue keeps happening, please contact our support."),
@@ -477,14 +479,13 @@ fn update_integration_connection_status(
     mut integration_connections: Signal<Option<Vec<IntegrationConnection>>>,
 ) {
     debug!("Updating integration connection {integration_connection_id} status with {status}");
-    if let Some(integration_connections) = integration_connections.write().as_mut() {
-        if let Some(integration_connection) = integration_connections
+    if let Some(integration_connections) = integration_connections.write().as_mut()
+        && let Some(integration_connection) = integration_connections
             .iter_mut()
             .find(|integration_connection| integration_connection.id == integration_connection_id)
-        {
-            integration_connection.status = status;
-            integration_connection.failure_message = failure_message;
-        }
+    {
+        integration_connection.status = status;
+        integration_connection.failure_message = failure_message;
     }
 }
 

@@ -6,11 +6,11 @@ use email_address::EmailAddress;
 use graphql_client::Response;
 use secrecy::SecretBox;
 use slack_morphism::{
+    SlackReactionName,
     api::{
         SlackApiConversationsHistoryResponse, SlackApiConversationsInfoResponse,
         SlackApiTeamInfoResponse, SlackApiUsersInfoResponse,
     },
-    SlackReactionName,
 };
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
@@ -19,16 +19,16 @@ use uuid::Uuid;
 
 use universal_inbox::{
     integration_connection::{
+        IntegrationConnection, IntegrationConnectionId, IntegrationConnectionStatus,
         config::IntegrationConnectionConfig,
         integrations::slack::{
             SlackConfig, SlackMessageConfig, SlackReactionConfig, SlackStarConfig,
             SlackSyncTaskConfig, SlackSyncType,
         },
         provider::IntegrationProviderKind,
-        IntegrationConnection, IntegrationConnectionId, IntegrationConnectionStatus,
     },
-    notification::{service::NotificationPatch, Notification, NotificationSource},
-    task::{service::TaskPatch, Task, TaskSource},
+    notification::{Notification, NotificationSource, service::NotificationPatch},
+    task::{Task, TaskSource, service::TaskPatch},
     third_party::{
         integrations::{
             github::GithubNotification,
@@ -52,8 +52,8 @@ use crate::{
     integrations::{
         google_mail::{GoogleMailUserProfile, RawGoogleMailThread},
         linear::{
-            graphql::{assigned_issues_query, notifications_query},
             LinearService,
+            graphql::{assigned_issues_query, notifications_query},
         },
         notification::ThirdPartyNotificationSourceService,
         slack::SlackService,
@@ -61,6 +61,7 @@ use crate::{
         todoist::TodoistService,
     },
     universal_inbox::{
+        UniversalInboxError,
         integration_connection::service::IntegrationConnectionService,
         notification::service::NotificationService,
         task::service::TaskService,
@@ -69,7 +70,6 @@ use crate::{
             model::{LocalUserAuth, UserAuth},
             service::UserService,
         },
-        UniversalInboxError,
     },
 };
 

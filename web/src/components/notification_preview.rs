@@ -18,8 +18,8 @@ use crate::{
         integrations::{
             api::web_page::preview::WebPagePreview,
             github::preview::{
-                discussion::GithubDiscussionPreview, pull_request::GithubPullRequestPreview,
-                GithubNotificationDefaultPreview,
+                GithubNotificationDefaultPreview, discussion::GithubDiscussionPreview,
+                pull_request::GithubPullRequestPreview,
             },
             google_calendar::preview::GoogleCalendarEventPreview,
             google_drive::preview::GoogleDriveCommentPreview,
@@ -32,7 +32,7 @@ use crate::{
                 im::SlackImPreview, message::SlackMessagePreview, thread::SlackThreadPreview,
             },
         },
-        notifications_list::{get_notification_list_item_action_buttons, NotificationListContext},
+        notifications_list::{NotificationListContext, get_notification_list_item_action_buttons},
         task_preview::TaskDetailsPreview,
     },
     model::{PreviewPane, UniversalInboxUIModel},

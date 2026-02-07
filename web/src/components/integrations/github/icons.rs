@@ -3,11 +3,11 @@
 use dioxus::prelude::*;
 
 use dioxus_free_icons::{
+    Icon,
     icons::{
         bs_icons::{BsCheckCircle, BsRecordCircle},
         go_icons::{GoGitCommit, GoGitPullRequest, GoGitPullRequestClosed, GoGitPullRequestDraft},
     },
-    Icon,
 };
 
 use universal_inbox::{

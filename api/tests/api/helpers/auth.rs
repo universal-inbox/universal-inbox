@@ -1,16 +1,16 @@
 use chrono::{TimeDelta, TimeZone, Utc};
 use httpmock::Method::{GET, POST};
 use openidconnect::{
-    core::{CoreHmacKey, CoreIdToken, CoreIdTokenClaims, CoreJwsSigningAlgorithm},
     AccessToken, Audience, EmptyAdditionalClaims, EndUserEmail, IssuerUrl, StandardClaims,
     SubjectIdentifier,
+    core::{CoreHmacKey, CoreIdToken, CoreIdTokenClaims, CoreJwsSigningAlgorithm},
 };
 use reqwest::Client;
 use rstest::fixture;
 use serde_json::json;
 
 use universal_inbox::{
-    auth::{auth_token::AuthenticationToken, SessionAuthValidationParameters},
+    auth::{SessionAuthValidationParameters, auth_token::AuthenticationToken},
     user::{User, UserId},
 };
 
@@ -19,7 +19,7 @@ use universal_inbox_api::{
     universal_inbox::user::model::UserAuth,
 };
 
-use super::{tested_app, TestedApp};
+use super::{TestedApp, tested_app};
 
 pub struct AuthenticatedApp {
     pub client: Client,

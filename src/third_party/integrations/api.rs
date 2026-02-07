@@ -1,17 +1,17 @@
 use anyhow::anyhow;
 use chrono::{DateTime, Timelike, Utc};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde_with::{serde_as, DisplayFromStr};
+use serde_with::{DisplayFromStr, serde_as};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use url::Url;
 use uuid::Uuid;
 
 use crate::{
+    HasHtmlUrl,
     integration_connection::IntegrationConnectionId,
     third_party::item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemFromSource},
     user::UserId,
-    HasHtmlUrl,
 };
 
 #[serde_as]

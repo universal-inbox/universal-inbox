@@ -1,9 +1,9 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
-use dioxus_free_icons::{icons::bs_icons::BsArrowUpRightSquare, Icon};
+use dioxus_free_icons::{Icon, icons::bs_icons::BsArrowUpRightSquare};
 
-use universal_inbox::{third_party::integrations::slack::SlackFileCommentDetails, HasHtmlUrl};
+use universal_inbox::{HasHtmlUrl, third_party::integrations::slack::SlackFileCommentDetails};
 
 use crate::components::{integrations::slack::SlackTeamDisplay, markdown::SlackMarkdown};
 

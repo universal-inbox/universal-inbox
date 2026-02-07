@@ -2,8 +2,8 @@
 
 use dioxus::prelude::*;
 use dioxus_free_icons::{
-    icons::bs_icons::{BsArrowRepeat, BsCalendar2Check},
     Icon,
+    icons::bs_icons::{BsArrowRepeat, BsCalendar2Check},
 };
 
 use universal_inbox::third_party::integrations::todoist::TodoistItem;

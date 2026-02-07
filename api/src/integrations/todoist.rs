@@ -1,13 +1,13 @@
 use std::{
     collections::HashMap,
     sync::{
-        atomic::{AtomicU64, Ordering},
         Arc,
+        atomic::{AtomicU64, Ordering},
     },
     time::Duration,
 };
 
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use async_trait::async_trait;
 use cached::proc_macro::cached;
 use chrono::{DateTime, Timelike, Utc};
@@ -20,8 +20,8 @@ use tokio::sync::RwLock;
 use url::Url;
 use uuid::Uuid;
 use wiremock::{
-    matchers::{body_partial_json, body_string_contains, method, path},
     Mock, MockServer, ResponseTemplate,
+    matchers::{body_partial_json, body_string_contains, method, path},
 };
 
 use universal_inbox::{
@@ -34,10 +34,10 @@ use universal_inbox::{
     },
     notification::{Notification, NotificationSource, NotificationSourceKind, NotificationStatus},
     task::{
-        integrations::todoist::{TodoistProject, TODOIST_INBOX_PROJECT},
-        service::TaskPatch,
         CreateOrUpdateTaskRequest, ProjectSummary, TaskCreation, TaskCreationConfig, TaskSource,
         TaskSourceKind, TaskStatus,
+        integrations::todoist::{TODOIST_INBOX_PROJECT, TodoistProject},
+        service::TaskPatch,
     },
     third_party::{
         integrations::todoist::{TodoistItem, TodoistItemDue, TodoistItemPriority},
@@ -55,7 +55,7 @@ use crate::{
         third_party::ThirdPartyItemSourceService,
     },
     universal_inbox::{
-        integration_connection::service::IntegrationConnectionService, UniversalInboxError,
+        UniversalInboxError, integration_connection::service::IntegrationConnectionService,
     },
     utils::api::{ApiClient, ApiClientError},
 };
@@ -363,7 +363,10 @@ impl TodoistService {
         let command_result = sync_response.sync_status.values().next();
         match command_result {
             Some(TodoistCommandStatus::Ok(_)) => Ok(sync_response),
-            Some(TodoistCommandStatus::Error { error_code, error: _ }) => {
+            Some(TodoistCommandStatus::Error {
+                error_code,
+                error: _,
+            }) => {
                 if *error_code == 22 {
                     Err(UniversalInboxError::ItemNotFound(format!(
                         "Todoist item not found while sending commands {commands:?}: {command_result:?}"

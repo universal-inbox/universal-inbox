@@ -10,7 +10,7 @@ use universal_inbox::{
 };
 
 use crate::universal_inbox::{
-    notification::service::NotificationService, task::service::TaskService, UniversalInboxError,
+    UniversalInboxError, notification::service::NotificationService, task::service::TaskService,
 };
 
 #[derive(Debug, Serialize, Deserialize)]
