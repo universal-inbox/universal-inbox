@@ -7,7 +7,7 @@ use universal_inbox::third_party::integrations::linear::{LinearIssue, LinearProj
 use crate::components::integrations::linear::icons::LinearProjectDefaultIcon;
 
 #[component]
-pub fn LinearIssueListItemSubtitle(linear_issue: ReadOnlySignal<LinearIssue>) -> Element {
+pub fn LinearIssueListItemSubtitle(linear_issue: ReadSignal<LinearIssue>) -> Element {
     let team = linear_issue().team;
 
     rsx! {

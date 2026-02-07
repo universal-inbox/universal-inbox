@@ -26,10 +26,10 @@ use crate::{
 #[component]
 pub fn TaskPreview(
     ui_model: Signal<UniversalInboxUIModel>,
-    task: ReadOnlySignal<Task>,
-    expand_details: ReadOnlySignal<bool>,
-    is_help_enabled: ReadOnlySignal<bool>,
-    tasks_count: ReadOnlySignal<usize>,
+    task: ReadSignal<Task>,
+    expand_details: ReadSignal<bool>,
+    is_help_enabled: ReadSignal<bool>,
+    tasks_count: ReadSignal<usize>,
 ) -> Element {
     let task_service = use_coroutine_handle::<TaskCommand>();
     let context = use_memo(move || TaskListContext {
@@ -160,10 +160,7 @@ pub fn TaskPreview(
 }
 
 #[component]
-pub fn TaskDetailsPreview(
-    task: ReadOnlySignal<Task>,
-    expand_details: ReadOnlySignal<bool>,
-) -> Element {
+pub fn TaskDetailsPreview(task: ReadSignal<Task>, expand_details: ReadSignal<bool>) -> Element {
     match task().source_item.data {
         ThirdPartyItemData::TodoistItem(todoist_item) => rsx! {
             TodoistTaskPreview { todoist_item: *todoist_item, task }

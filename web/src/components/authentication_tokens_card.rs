@@ -28,7 +28,7 @@ use crate::{
 pub fn AuthenticationTokensCard() -> Element {
     let authentication_token_service = use_coroutine_handle::<AuthenticationTokenCommand>();
 
-    let _ = use_resource(move || {
+    let _resource = use_resource(move || {
         to_owned![authentication_token_service];
 
         async move {

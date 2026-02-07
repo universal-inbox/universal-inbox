@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use anyhow::anyhow;
 use dioxus::prelude::FormValue;
 use email_address::EmailAddress;
@@ -7,29 +5,34 @@ use secrecy::SecretBox;
 
 use universal_inbox::user::{Credentials, Password, RegisterUserParameters, Username};
 
-pub struct FormValues(pub HashMap<String, FormValue>);
+pub struct FormValues(pub Vec<(String, FormValue)>);
+
+impl FormValues {
+    fn get_text(&self, name: &str) -> Option<&str> {
+        self.0.iter().find_map(|(k, v)| {
+            if k == name {
+                match v {
+                    FormValue::Text(s) => Some(s.as_str()),
+                    _ => None,
+                }
+            } else {
+                None
+            }
+        })
+    }
+}
 
 impl TryFrom<FormValues> for Credentials {
     type Error = anyhow::Error;
 
     fn try_from(form_values: FormValues) -> Result<Self, Self::Error> {
         let email = form_values
-            .0
-            .get("email")
-            .ok_or_else(|| anyhow!("email is required"))?
-            .clone()
-            .to_vec()
-            .first()
+            .get_text("email")
             .ok_or_else(|| anyhow!("email is required"))?
             .parse()?;
 
         let password = form_values
-            .0
-            .get("password")
-            .ok_or_else(|| anyhow!("password is required"))?
-            .clone()
-            .to_vec()
-            .first()
+            .get_text("password")
             .ok_or_else(|| anyhow!("password is required"))?
             .parse()?;
 
@@ -53,12 +56,7 @@ impl TryFrom<FormValues> for EmailAddress {
 
     fn try_from(form_values: FormValues) -> Result<Self, Self::Error> {
         let email = form_values
-            .0
-            .get("email")
-            .ok_or_else(|| anyhow!("email is required"))?
-            .clone()
-            .to_vec()
-            .first()
+            .get_text("email")
             .ok_or_else(|| anyhow!("email is required"))?
             .parse()?;
 
@@ -71,12 +69,7 @@ impl TryFrom<FormValues> for SecretBox<Password> {
 
     fn try_from(form_values: FormValues) -> Result<Self, Self::Error> {
         let password = form_values
-            .0
-            .get("password")
-            .ok_or_else(|| anyhow!("password is required"))?
-            .clone()
-            .to_vec()
-            .first()
+            .get_text("password")
             .ok_or_else(|| anyhow!("password is required"))?
             .parse()?;
 
@@ -89,12 +82,7 @@ impl TryFrom<FormValues> for Username {
 
     fn try_from(form_values: FormValues) -> Result<Self, Self::Error> {
         let username = form_values
-            .0
-            .get("username")
-            .ok_or_else(|| anyhow!("username is required"))?
-            .clone()
-            .to_vec()
-            .first()
+            .get_text("username")
             .ok_or_else(|| anyhow!("username is required"))?
             .to_owned();
 

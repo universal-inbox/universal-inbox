@@ -1,3 +1,4 @@
+use dioxus::prelude::dioxus_core::use_drop;
 use dioxus::prelude::*;
 use dioxus::web::WebEventExt;
 use log::error;
@@ -71,7 +72,8 @@ pub fn TaskLinkModal(
                         form {
                             class: "flex flex-col space-y-4 relative",
                             method: "dialog",
-                            onsubmit: move |_| {
+                            onsubmit: move |evt| {
+                                evt.prevent_default();
                                 close_flyonui_modal("#task-linking-modal");
                                 if let Some(task) = selected_task() {
                                     on_task_link.call(task.id);

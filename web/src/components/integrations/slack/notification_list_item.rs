@@ -35,8 +35,8 @@ use crate::{
 
 #[component]
 pub fn SlackStarNotificationListItem(
-    notification: ReadOnlySignal<NotificationWithTask>,
-    is_selected: ReadOnlySignal<bool>,
+    notification: ReadSignal<NotificationWithTask>,
+    is_selected: ReadSignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
     rsx! {
@@ -51,9 +51,9 @@ pub fn SlackStarNotificationListItem(
 
 #[component]
 pub fn SlackReactionNotificationListItem(
-    notification: ReadOnlySignal<NotificationWithTask>,
-    slack_reaction: ReadOnlySignal<SlackReaction>,
-    is_selected: ReadOnlySignal<bool>,
+    notification: ReadSignal<NotificationWithTask>,
+    slack_reaction: ReadSignal<SlackReaction>,
+    is_selected: ReadSignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
     let emoji = replace_emoji_code_with_emoji(&slack_reaction().name.0).unwrap_or("👀".to_string());
@@ -70,8 +70,8 @@ pub fn SlackReactionNotificationListItem(
 
 #[component]
 pub fn SlackThreadNotificationListItem(
-    notification: ReadOnlySignal<NotificationWithTask>,
-    is_selected: ReadOnlySignal<bool>,
+    notification: ReadSignal<NotificationWithTask>,
+    is_selected: ReadSignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
     rsx! {
@@ -86,9 +86,9 @@ pub fn SlackThreadNotificationListItem(
 
 #[component]
 pub fn SlackNotificationListItem(
-    notification: ReadOnlySignal<NotificationWithTask>,
+    notification: ReadSignal<NotificationWithTask>,
     subicon: Option<Element>,
-    is_selected: ReadOnlySignal<bool>,
+    is_selected: ReadSignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
     let notification_updated_at = use_memo(move || format_elapsed_time(notification().updated_at));
@@ -123,7 +123,7 @@ pub fn SlackNotificationListItem(
 }
 
 #[component]
-pub fn SlackNotificationSubtitle(notification: ReadOnlySignal<NotificationWithTask>) -> Element {
+pub fn SlackNotificationSubtitle(notification: ReadSignal<NotificationWithTask>) -> Element {
     fn channel_str(channel: &SlackChannelInfo) -> String {
         if let Some(channel_name) = &channel.name {
             format!("#{}", channel_name)
@@ -171,7 +171,7 @@ pub fn SlackNotificationSubtitle(notification: ReadOnlySignal<NotificationWithTa
 }
 
 #[component]
-fn SlackNotificationListItemDetails(notification: ReadOnlySignal<NotificationWithTask>) -> Element {
+fn SlackNotificationListItemDetails(notification: ReadSignal<NotificationWithTask>) -> Element {
     match notification().source_item.data {
         ThirdPartyItemData::SlackStar(slack_star) => match slack_star.item {
             SlackStarItem::SlackMessage(slack_message) => rsx! {
@@ -209,7 +209,7 @@ fn SlackNotificationListItemDetails(notification: ReadOnlySignal<NotificationWit
 }
 
 #[component]
-pub fn SlackThreadListItemDetails(slack_thread: ReadOnlySignal<SlackThread>) -> Element {
+pub fn SlackThreadListItemDetails(slack_thread: ReadSignal<SlackThread>) -> Element {
     let slack_thread = slack_thread();
     let first_unread_message = slack_thread.first_unread_message();
     let sender = first_unread_message.get_sender(&slack_thread.sender_profiles);
@@ -223,7 +223,7 @@ pub fn SlackThreadListItemDetails(slack_thread: ReadOnlySignal<SlackThread>) -> 
 }
 
 #[component]
-pub fn SlackMessageListItemDetails(slack_message: ReadOnlySignal<SlackMessageDetails>) -> Element {
+pub fn SlackMessageListItemDetails(slack_message: ReadSignal<SlackMessageDetails>) -> Element {
     rsx! {
         SlackTeamDisplay { team: slack_message().team }
         SlackMessageActorDisplay { sender: slack_message().sender }
@@ -231,7 +231,7 @@ pub fn SlackMessageListItemDetails(slack_message: ReadOnlySignal<SlackMessageDet
 }
 
 #[component]
-pub fn SlackFileListItemDetails(slack_file: ReadOnlySignal<SlackFileDetails>) -> Element {
+pub fn SlackFileListItemDetails(slack_file: ReadSignal<SlackFileDetails>) -> Element {
     rsx! {
         SlackTeamDisplay { team: slack_file().team }
         if let Some(user) = slack_file().sender {
@@ -242,7 +242,7 @@ pub fn SlackFileListItemDetails(slack_file: ReadOnlySignal<SlackFileDetails>) ->
 
 #[component]
 pub fn SlackFileCommentListItemDetails(
-    slack_file_comment: ReadOnlySignal<SlackFileCommentDetails>,
+    slack_file_comment: ReadSignal<SlackFileCommentDetails>,
 ) -> Element {
     rsx! {
         SlackTeamDisplay { team: slack_file_comment().team }
@@ -253,21 +253,21 @@ pub fn SlackFileCommentListItemDetails(
 }
 
 #[component]
-pub fn SlackChannelListItemDetails(slack_channel: ReadOnlySignal<SlackChannelDetails>) -> Element {
+pub fn SlackChannelListItemDetails(slack_channel: ReadSignal<SlackChannelDetails>) -> Element {
     rsx! {
         SlackTeamDisplay { team: slack_channel().team }
     }
 }
 
 #[component]
-pub fn SlackImListItemDetails(slack_im: ReadOnlySignal<SlackImDetails>) -> Element {
+pub fn SlackImListItemDetails(slack_im: ReadSignal<SlackImDetails>) -> Element {
     rsx! {
         SlackTeamDisplay { team: slack_im().team }
     }
 }
 
 #[component]
-pub fn SlackGroupListItemDetails(slack_group: ReadOnlySignal<SlackGroupDetails>) -> Element {
+pub fn SlackGroupListItemDetails(slack_group: ReadSignal<SlackGroupDetails>) -> Element {
     rsx! {
         SlackTeamDisplay { team: slack_group().team }
     }

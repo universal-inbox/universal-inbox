@@ -3,6 +3,7 @@
 use log::{debug, error};
 
 use anyhow::{Context, Result};
+use dioxus::prelude::dioxus_core::needs_update;
 use dioxus::prelude::*;
 use gloo_utils::errors::JsError;
 use openidconnect::{
@@ -79,7 +80,7 @@ pub fn Authenticated(
     // end workaround
 
     let auth_configs = authentication_configs.clone();
-    let _ = use_resource(move || {
+    let _resource = use_resource(move || {
         to_owned![auth_code];
         to_owned![auth_configs];
         to_owned![api_base_url];

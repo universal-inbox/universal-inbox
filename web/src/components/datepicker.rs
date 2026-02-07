@@ -43,7 +43,7 @@ where
     <T as FromStr>::Err: Display,
 {
     let name = props.name.clone();
-    let _ = use_resource(move || {
+    let _resource = use_resource(move || {
         to_owned![name];
         async move {
             // Initialize datepicker element

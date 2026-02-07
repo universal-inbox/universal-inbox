@@ -2,6 +2,7 @@
 
 use std::{fmt::Display, marker::PhantomData, str::FromStr};
 
+use dioxus::prelude::dioxus_core::use_drop;
 use dioxus::prelude::*;
 use dioxus::web::WebEventExt;
 use json_value_merge::Merge;
@@ -18,9 +19,9 @@ use crate::{
 
 #[derive(Props, Clone, PartialEq)]
 pub struct InputProps<T: Clone + PartialEq + 'static> {
-    name: ReadOnlySignal<String>,
+    name: ReadSignal<String>,
     #[props(!optional)]
-    label: ReadOnlySignal<Option<String>>,
+    label: ReadSignal<Option<String>>,
     required: Option<bool>,
     value: Signal<String>,
     #[props(default)]
@@ -69,7 +70,7 @@ where
         }
     });
 
-    let _ = use_resource(move || async move {
+    let _resource = use_resource(move || async move {
         if props.autofocus.unwrap_or_default() {
             let name = (props.name)();
             if let Err(error) = focus_and_select_input_element(&name).await {
@@ -130,9 +131,9 @@ where
 
 #[derive(Props, Clone, PartialEq)]
 pub struct InputSelectProps<T: Clone + PartialEq + 'static> {
-    name: ReadOnlySignal<String>,
+    name: ReadSignal<String>,
     #[props(!optional)]
-    label: ReadOnlySignal<Option<String>>,
+    label: ReadSignal<Option<String>>,
     #[props(default)]
     class: Option<String>,
     #[props(default)]
@@ -220,9 +221,9 @@ where
 
 #[derive(Props, Clone, PartialEq)]
 pub struct InputSearchProps<T: Clone + PartialEq + 'static> {
-    name: ReadOnlySignal<String>,
+    name: ReadSignal<String>,
     #[props(optional)]
-    label: ReadOnlySignal<Option<String>>,
+    label: ReadSignal<Option<String>>,
     #[props(default)]
     required: Option<bool>,
     #[props(default)]
@@ -232,7 +233,7 @@ pub struct InputSearchProps<T: Clone + PartialEq + 'static> {
     #[props(default)]
     on_select: Option<EventHandler<Option<T>>>,
     #[props(default)]
-    data_select: ReadOnlySignal<Option<serde_json::Value>>,
+    data_select: ReadSignal<Option<serde_json::Value>>,
     #[props(default)]
     class: Option<String>,
     children: Element,
@@ -317,7 +318,7 @@ where
 }
 
 #[component]
-pub fn ErrorMessage(message: ReadOnlySignal<Option<String>>) -> Element {
+pub fn ErrorMessage(message: ReadSignal<Option<String>>) -> Element {
     if let Some(error) = message() {
         rsx! { span { class: "helper-text ps-3", "{error} "} }
     } else {

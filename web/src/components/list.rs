@@ -20,7 +20,7 @@ pub struct ListContext {
 }
 
 #[component]
-pub fn List(id: String, show_shortcut: ReadOnlySignal<bool>, children: Element) -> Element {
+pub fn List(id: String, show_shortcut: ReadSignal<bool>, children: Element) -> Element {
     let context = use_memo(move || ListContext {
         show_shortcut: show_shortcut(),
     });
@@ -37,14 +37,14 @@ pub fn List(id: String, show_shortcut: ReadOnlySignal<bool>, children: Element) 
 
 #[component]
 pub fn ListItem(
-    title: ReadOnlySignal<String>,
-    subtitle: ReadOnlySignal<Element>,
-    link: ReadOnlySignal<Url>,
+    title: ReadSignal<String>,
+    subtitle: ReadSignal<Element>,
+    link: ReadSignal<Url>,
     icon: Option<Element>,
     subicon: Option<Element>,
-    is_selected: ReadOnlySignal<bool>,
+    is_selected: ReadSignal<bool>,
     on_select: EventHandler<()>,
-    action_buttons: ReadOnlySignal<Vec<Element>>,
+    action_buttons: ReadSignal<Vec<Element>>,
     children: Element,
 ) -> Element {
     let style = use_memo(move || if is_selected() { "row-active" } else { "" });
@@ -156,12 +156,12 @@ pub fn ListItem(
 #[derive(Props, Clone, PartialEq)]
 pub struct ListItemActionButtonProps {
     children: Element,
-    title: ReadOnlySignal<String>,
-    shortcut: ReadOnlySignal<String>,
+    title: ReadSignal<String>,
+    shortcut: ReadSignal<String>,
     disabled_label: Option<Option<String>>,
     button_class: Option<String>,
     container_class: Option<String>,
-    show_shortcut: ReadOnlySignal<bool>,
+    show_shortcut: ReadSignal<bool>,
     #[props(optional)]
     data_overlay: Option<String>,
     #[props(optional)]
@@ -230,7 +230,7 @@ pub fn ListPaginationButtons<
     T: Serialize + for<'d> Deserialize<'d> + 'static + Clone + PartialEq,
 >(
     current_page: Signal<usize>,
-    page: ReadOnlySignal<Page<T>>,
+    page: ReadSignal<Page<T>>,
     on_select: EventHandler<PageToken>,
 ) -> Element {
     if page().pages_count == 0 {
