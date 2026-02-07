@@ -33,7 +33,7 @@ mod content_security_policy {
                        &HeaderValue::from_str(
                            &format!(
                                "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'unsafe-inline' 'unsafe-eval' https://cdn.headwayapp.co; style-src 'self' 'unsafe-inline'; object-src 'none'; connect-src 'self' {} {} {}; img-src * 'self' data:; worker-src 'none'; frame-src 'self' https://headway-widget.net",
-                               nango_ws_base_url, settings.oauth2.nango_base_url, app.oidc_issuer_mock_server.as_ref().unwrap().base_url()
+                               nango_ws_base_url, settings.oauth2.nango_base_url, app.oidc_issuer_mock_server.as_ref().unwrap().uri()
                            )
                        ).unwrap()
                    )

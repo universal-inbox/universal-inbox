@@ -1,14 +1,12 @@
 use std::collections::HashMap;
 
 use chrono::Utc;
-use httpmock::{
-    Method::{GET, POST},
-    Mock, MockServer,
-};
 use rstest::*;
 use serde_json::{Value, json};
 use slack_blocks_render::SlackReferences;
 use slack_morphism::prelude::*;
+use wiremock::matchers::{body_json, header, method, path, query_param};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use universal_inbox::{
     integration_connection::IntegrationConnectionId,
@@ -146,67 +144,70 @@ pub async fn create_notification_from_slack_thread(
     .await
 }
 
-pub fn mock_slack_fetch_user<'a>(
-    slack_mock_server: &'a MockServer,
-    user_id: &'a str,
-    fixture_response_file: &'a str,
-) -> Mock<'a> {
-    slack_mock_server.mock(|when, then| {
-        when.method(GET)
-            .path("/users.info")
-            .query_param("user", user_id);
-        then.status(200)
-            .header("content-type", "application/json")
-            .body_from_file(fixture_path(fixture_response_file));
-    })
+pub async fn mock_slack_fetch_user(
+    slack_mock_server: &MockServer,
+    user_id: &str,
+    fixture_response_file: &str,
+) {
+    Mock::given(method("GET"))
+        .and(path("/users.info"))
+        .and(query_param("user", user_id))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            std::fs::read_to_string(fixture_path(fixture_response_file)).unwrap(),
+            "application/json",
+        ))
+        .mount(slack_mock_server)
+        .await;
 }
 
-pub fn mock_slack_fetch_bot<'a>(
-    slack_mock_server: &'a MockServer,
-    bot_id: &'a str,
-    fixture_response_file: &'a str,
-) -> Mock<'a> {
-    slack_mock_server.mock(|when, then| {
-        when.method(GET)
-            .path("/bots.info")
-            .query_param("bot", bot_id);
-        then.status(200)
-            .header("content-type", "application/json")
-            .body_from_file(fixture_path(fixture_response_file));
-    })
+pub async fn mock_slack_fetch_bot(
+    slack_mock_server: &MockServer,
+    bot_id: &str,
+    fixture_response_file: &str,
+) {
+    Mock::given(method("GET"))
+        .and(path("/bots.info"))
+        .and(query_param("bot", bot_id))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            std::fs::read_to_string(fixture_path(fixture_response_file)).unwrap(),
+            "application/json",
+        ))
+        .mount(slack_mock_server)
+        .await;
 }
 
-pub fn mock_slack_fetch_reply<'a>(
-    slack_mock_server: &'a MockServer,
-    channel_id: &'a str,
-    message_id: &'a str,
-    fixture_response_file: &'a str,
-) -> Mock<'a> {
-    slack_mock_server.mock(|when, then| {
-        when.method(GET)
-            .path("/conversations.replies")
-            .query_param("channel", channel_id)
-            .query_param("ts", message_id)
-            .query_param("latest", message_id)
-            .query_param("limit", "1")
-            .query_param("inclusive", "true");
-        then.status(200)
-            .header("content-type", "application/json")
-            .body_from_file(fixture_path(fixture_response_file));
-    })
+pub async fn mock_slack_fetch_reply(
+    slack_mock_server: &MockServer,
+    channel_id: &str,
+    message_id: &str,
+    fixture_response_file: &str,
+) {
+    Mock::given(method("GET"))
+        .and(path("/conversations.replies"))
+        .and(query_param("channel", channel_id))
+        .and(query_param("ts", message_id))
+        .and(query_param("latest", message_id))
+        .and(query_param("limit", "1"))
+        .and(query_param("inclusive", "true"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            std::fs::read_to_string(fixture_path(fixture_response_file)).unwrap(),
+            "application/json",
+        ))
+        .mount(slack_mock_server)
+        .await;
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn mock_slack_fetch_thread<'a>(
-    slack_mock_server: &'a MockServer,
-    channel_id: &'a str,
-    first_message_id: &'a str,
-    message_id: &'a str,
-    fixture_response_file: &'a str,
+pub async fn mock_slack_fetch_thread(
+    slack_mock_server: &MockServer,
+    channel_id: &str,
+    first_message_id: &str,
+    message_id: &str,
+    fixture_response_file: &str,
     subscribed: bool,
     last_read_message_index: Option<usize>,
-    access_token: &'a str,
-) -> Mock<'a> {
+    access_token: &str,
+) {
     let mut json_body: Value = load_json_fixture_file(fixture_response_file);
     json_body["messages"][0]["subscribed"] = Value::Bool(subscribed);
     json_body["messages"][0]["last_read"] = match last_read_message_index {
@@ -219,135 +220,160 @@ pub fn mock_slack_fetch_thread<'a>(
         None => Value::Null,
     };
 
-    slack_mock_server.mock(|when, then| {
-        when.method(GET)
-            .header("authorization", format!("Bearer {access_token}"))
-            .path("/conversations.replies")
-            .query_param("channel", channel_id)
-            .query_param("ts", first_message_id)
-            .query_param("latest", message_id)
-            .query_param("inclusive", "true");
-        then.status(200)
-            .header("content-type", "application/json")
-            .json_body(json_body);
-    })
-}
-pub fn mock_slack_fetch_channel<'a>(
-    slack_mock_server: &'a MockServer,
-    channel_id: &'a str,
-    fixture_response_file: &'a str,
-) -> Mock<'a> {
-    slack_mock_server.mock(|when, then| {
-        when.method(GET)
-            .path("/conversations.info")
-            .query_param("channel", channel_id);
-        then.status(200)
-            .header("content-type", "application/json")
-            .body_from_file(fixture_path(fixture_response_file));
-    })
+    Mock::given(method("GET"))
+        .and(header(
+            "authorization",
+            format!("Bearer {access_token}").as_str(),
+        ))
+        .and(path("/conversations.replies"))
+        .and(query_param("channel", channel_id))
+        .and(query_param("ts", first_message_id))
+        .and(query_param("latest", message_id))
+        .and(query_param("inclusive", "true"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_json(json_body),
+        )
+        .mount(slack_mock_server)
+        .await;
 }
 
-pub fn mock_slack_fetch_team<'a>(
-    slack_mock_server: &'a MockServer,
-    team_id: &'a str,
-    fixture_response_file: &'a str,
-) -> Mock<'a> {
-    slack_mock_server.mock(|when, then| {
-        when.method(GET)
-            .path("/team.info")
-            .query_param("team", team_id);
-        then.status(200)
-            .header("content-type", "application/json")
-            .body_from_file(fixture_path(fixture_response_file));
-    })
+pub async fn mock_slack_fetch_channel(
+    slack_mock_server: &MockServer,
+    channel_id: &str,
+    fixture_response_file: &str,
+) {
+    Mock::given(method("GET"))
+        .and(path("/conversations.info"))
+        .and(query_param("channel", channel_id))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            std::fs::read_to_string(fixture_path(fixture_response_file)).unwrap(),
+            "application/json",
+        ))
+        .mount(slack_mock_server)
+        .await;
 }
 
-pub fn mock_slack_list_usergroups<'a>(
-    slack_mock_server: &'a MockServer,
-    fixture_response_file: &'a str,
-) -> Mock<'a> {
-    slack_mock_server.mock(|when, then| {
-        when.method(GET).path("/usergroups.list");
-        then.status(200)
-            .header("content-type", "application/json")
-            .body_from_file(fixture_path(fixture_response_file));
-    })
+pub async fn mock_slack_fetch_team(
+    slack_mock_server: &MockServer,
+    team_id: &str,
+    fixture_response_file: &str,
+) {
+    Mock::given(method("GET"))
+        .and(path("/team.info"))
+        .and(query_param("team", team_id))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            std::fs::read_to_string(fixture_path(fixture_response_file)).unwrap(),
+            "application/json",
+        ))
+        .mount(slack_mock_server)
+        .await;
 }
 
-pub fn mock_slack_list_users_in_usergroup<'a>(
-    slack_mock_server: &'a MockServer,
-    usergroup_id: &'a str,
-    fixture_response_file: &'a str,
-) -> Mock<'a> {
-    slack_mock_server.mock(|when, then| {
-        when.method(GET)
-            .path("/usergroups.users.list")
-            .query_param("usergroup", usergroup_id);
-        then.status(200)
-            .header("content-type", "application/json")
-            .body_from_file(fixture_path(fixture_response_file));
-    })
+pub async fn mock_slack_list_usergroups(
+    slack_mock_server: &MockServer,
+    fixture_response_file: &str,
+) {
+    Mock::given(method("GET"))
+        .and(path("/usergroups.list"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            std::fs::read_to_string(fixture_path(fixture_response_file)).unwrap(),
+            "application/json",
+        ))
+        .mount(slack_mock_server)
+        .await;
 }
 
-pub fn mock_slack_stars_add<'a>(
-    slack_mock_server: &'a MockServer,
-    channel_id: &'a str,
-    message_id: &'a str,
-) -> Mock<'a> {
-    slack_mock_server.mock(|when, then| {
-        when.method(POST)
-            .path("/stars.add")
-            .header("authorization", "Bearer slack_test_user_access_token")
-            .json_body(json!({"channel": channel_id, "timestamp": message_id}));
-        then.status(200)
-            .header("content-type", "application/json")
-            .json_body(json!({ "ok": true }));
-    })
+pub async fn mock_slack_list_users_in_usergroup(
+    slack_mock_server: &MockServer,
+    usergroup_id: &str,
+    fixture_response_file: &str,
+) {
+    Mock::given(method("GET"))
+        .and(path("/usergroups.users.list"))
+        .and(query_param("usergroup", usergroup_id))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            std::fs::read_to_string(fixture_path(fixture_response_file)).unwrap(),
+            "application/json",
+        ))
+        .mount(slack_mock_server)
+        .await;
 }
 
-pub fn mock_slack_stars_remove<'a>(
-    slack_mock_server: &'a MockServer,
-    channel_id: &'a str,
-    message_id: &'a str,
-) -> Mock<'a> {
-    slack_mock_server.mock(|when, then| {
-        when.method(POST)
-            .path("/stars.remove")
-            .header("authorization", "Bearer slack_test_user_access_token")
-            .json_body(json!({"channel": channel_id, "timestamp": message_id}));
-        then.status(200)
-            .header("content-type", "application/json")
-            .json_body(json!({ "ok": true }));
-    })
+pub async fn mock_slack_stars_add(
+    slack_mock_server: &MockServer,
+    channel_id: &str,
+    message_id: &str,
+) {
+    Mock::given(method("POST"))
+        .and(path("/stars.add"))
+        .and(header(
+            "authorization",
+            "Bearer slack_test_user_access_token",
+        ))
+        .and(body_json(
+            json!({"channel": channel_id, "timestamp": message_id}),
+        ))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_json(json!({ "ok": true })),
+        )
+        .mount(slack_mock_server)
+        .await;
 }
 
-pub fn mock_slack_get_chat_permalink<'a>(
-    slack_mock_server: &'a MockServer,
-    channel_id: &'a str,
-    message_id: &'a str,
-    fixture_response_file: &'a str,
-) -> Mock<'a> {
-    slack_mock_server.mock(|when, then| {
-        when.method(GET)
-            .path("/chat.getPermalink")
-            .query_param("channel", channel_id)
-            .query_param("message_ts", message_id);
-        then.status(200)
-            .header("content-type", "application/json")
-            .body_from_file(fixture_path(fixture_response_file));
-    })
+pub async fn mock_slack_stars_remove(
+    slack_mock_server: &MockServer,
+    channel_id: &str,
+    message_id: &str,
+) {
+    Mock::given(method("POST"))
+        .and(path("/stars.remove"))
+        .and(header(
+            "authorization",
+            "Bearer slack_test_user_access_token",
+        ))
+        .and(body_json(
+            json!({"channel": channel_id, "timestamp": message_id}),
+        ))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_json(json!({ "ok": true })),
+        )
+        .mount(slack_mock_server)
+        .await;
 }
 
-pub fn mock_slack_list_emojis<'a>(
-    slack_mock_server: &'a MockServer,
-    fixture_response_file: &'a str,
-) -> Mock<'a> {
-    slack_mock_server.mock(|when, then| {
-        when.method(GET).path("/emoji.list");
-        then.status(200)
-            .header("content-type", "application/json")
-            .body_from_file(fixture_path(fixture_response_file));
-    })
+pub async fn mock_slack_get_chat_permalink(
+    slack_mock_server: &MockServer,
+    channel_id: &str,
+    message_id: &str,
+    fixture_response_file: &str,
+) {
+    Mock::given(method("GET"))
+        .and(path("/chat.getPermalink"))
+        .and(query_param("channel", channel_id))
+        .and(query_param("message_ts", message_id))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            std::fs::read_to_string(fixture_path(fixture_response_file)).unwrap(),
+            "application/json",
+        ))
+        .mount(slack_mock_server)
+        .await;
+}
+
+pub async fn mock_slack_list_emojis(slack_mock_server: &MockServer, fixture_response_file: &str) {
+    Mock::given(method("GET"))
+        .and(path("/emoji.list"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            std::fs::read_to_string(fixture_path(fixture_response_file)).unwrap(),
+            "application/json",
+        ))
+        .mount(slack_mock_server)
+        .await;
 }
 
 #[fixture]

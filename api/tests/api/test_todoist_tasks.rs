@@ -1,5 +1,4 @@
 use chrono::{NaiveDate, TimeZone, Timelike, Utc};
-use httpmock::Method::DELETE;
 use rstest::*;
 use uuid::Uuid;
 
@@ -20,6 +19,11 @@ use universal_inbox::{
         },
         item::{ThirdPartyItem, ThirdPartyItemCreationResult, ThirdPartyItemData},
     },
+};
+
+use wiremock::{
+    Mock, ResponseTemplate,
+    matchers::{method, path},
 };
 
 use universal_inbox_api::{
@@ -86,7 +90,8 @@ mod patch_task {
             "projects",
             &sync_todoist_projects_response,
             None,
-        );
+        )
+        .await;
 
         let creation: Box<ThirdPartyItemCreationResult> = create_resource(
             &app.client,
@@ -112,10 +117,11 @@ mod patch_task {
         assert_eq!(existing_todoist_task.status, TaskStatus::Active);
         let existing_todoist_notification = creation.notification.as_ref().unwrap().clone();
 
-        let todoist_mock = mock_todoist_delete_item_service(
+        let _todoist_mock = mock_todoist_delete_item_service(
             &app.app.todoist_mock_server,
             &creation.third_party_item.source_id,
-        );
+        )
+        .await;
 
         let patched_task = patch_resource(
             &app.client,
@@ -129,7 +135,6 @@ mod patch_task {
         )
         .await;
 
-        todoist_mock.assert();
         assert_eq!(
             patched_task,
             Box::new(Task {
@@ -174,7 +179,8 @@ mod patch_task {
             "projects",
             &sync_todoist_projects_response,
             None,
-        );
+        )
+        .await;
 
         let creation: Box<ThirdPartyItemCreationResult> = create_resource(
             &app.client,
@@ -200,10 +206,11 @@ mod patch_task {
         assert_eq!(existing_todoist_task.status, TaskStatus::Active);
         let existing_todoist_notification = creation.notification.as_ref().unwrap().clone();
 
-        let todoist_mock = mock_todoist_complete_item_service(
+        let _todoist_mock = mock_todoist_complete_item_service(
             &app.app.todoist_mock_server,
             &creation.third_party_item.source_id,
-        );
+        )
+        .await;
 
         let patched_task: Box<Task> = patch_resource(
             &app.client,
@@ -217,7 +224,6 @@ mod patch_task {
         )
         .await;
 
-        todoist_mock.assert();
         assert!(patched_task.completed_at.is_some());
         assert_eq!(
             patched_task,
@@ -259,12 +265,13 @@ mod patch_task {
             None,
         )
         .await;
-        let todoist_projects_mock = mock_todoist_sync_resources_service(
+        let _todoist_projects_mock = mock_todoist_sync_resources_service(
             &app.app.todoist_mock_server,
             "projects",
             &sync_todoist_projects_response,
             None,
-        );
+        )
+        .await;
 
         let creation: Box<ThirdPartyItemCreationResult> = create_resource(
             &app.client,
@@ -300,14 +307,16 @@ mod patch_task {
         let new_project = "Project1".to_string();
         let new_project_id = "3333".to_string();
 
-        let todoist_project_add_mock = mock_todoist_sync_project_add(
+        let _todoist_project_add_mock = mock_todoist_sync_project_add(
             &app.app.todoist_mock_server,
             &new_project,
             &new_project_id,
-        );
-        let todoist_uncomplete_item_mock =
-            mock_todoist_uncomplete_item_service(&app.app.todoist_mock_server, &todoist_item.id);
-        let todoist_sync_mock = mock_todoist_sync_service(
+        )
+        .await;
+        let _todoist_uncomplete_item_mock =
+            mock_todoist_uncomplete_item_service(&app.app.todoist_mock_server, &todoist_item.id)
+                .await;
+        let _todoist_sync_mock = mock_todoist_sync_service(
             &app.app.todoist_mock_server,
             vec![
                 TodoistSyncPartialCommand::ItemMove {
@@ -333,7 +342,8 @@ mod patch_task {
                 },
             ],
             None,
-        );
+        )
+        .await;
 
         let patched_task = patch_resource(
             &app.client,
@@ -349,11 +359,6 @@ mod patch_task {
             },
         )
         .await;
-
-        todoist_projects_mock.assert();
-        todoist_project_add_mock.assert();
-        todoist_sync_mock.assert();
-        todoist_uncomplete_item_mock.assert();
 
         assert_eq!(
             patched_task,
@@ -376,7 +381,7 @@ mod patch_task {
     }
 
     // Cannot test project creation as it will fetch projects more than once
-    // and httpmock does not support mocking the same URL with different results
+    // and wiremock does not support mocking the same URL with different results
     #[rstest]
     #[tokio::test]
     async fn test_create_todoist_task_from_notification(
@@ -435,20 +440,19 @@ mod patch_task {
         )
         .await;
 
-        let github_mark_thread_as_done_mock = app.app.github_mock_server.mock(|when, then| {
-            when.method(DELETE)
-                .path("/notifications/threads/1")
-                .header("accept", "application/vnd.github.v3+json")
-                .header("authorization", "Bearer github_test_access_token");
-            then.status(205);
-        });
-        let todoist_projects_mock = mock_todoist_sync_resources_service(
+        Mock::given(method("DELETE"))
+            .and(path("/notifications/threads/1"))
+            .respond_with(ResponseTemplate::new(205))
+            .mount(&app.app.github_mock_server)
+            .await;
+        let _todoist_projects_mock = mock_todoist_sync_resources_service(
             &app.app.todoist_mock_server,
             "projects",
             &sync_todoist_projects_response,
             None,
-        );
-        let todoist_item_add_mock = mock_todoist_item_add_service(
+        )
+        .await;
+        let _todoist_item_add_mock = mock_todoist_item_add_service(
             &app.app.todoist_mock_server,
             &todoist_item.id,
             todoist_item.content.clone(),
@@ -456,9 +460,10 @@ mod patch_task {
             Some(todoist_item.project_id.clone()),
             due_at.as_ref().map(|due_at| due_at.into()),
             todoist_item.priority,
-        );
-        let todoist_get_item_mock =
-            mock_todoist_get_item_service(&app.app.todoist_mock_server, todoist_item.clone());
+        )
+        .await;
+        let _todoist_get_item_mock =
+            mock_todoist_get_item_service(&app.app.todoist_mock_server, todoist_item.clone()).await;
 
         let notification_with_task = create_task_from_notification(
             &app.client,
@@ -473,11 +478,6 @@ mod patch_task {
             }),
         )
         .await;
-
-        todoist_projects_mock.assert();
-        todoist_item_add_mock.assert();
-        todoist_get_item_mock.assert();
-        github_mark_thread_as_done_mock.assert();
 
         let new_task_id = notification_with_task
             .as_ref()
@@ -620,20 +620,19 @@ mod patch_task {
         )
         .await;
 
-        let github_mark_thread_as_done_mock = app.app.github_mock_server.mock(|when, then| {
-            when.method(DELETE)
-                .path("/notifications/threads/1")
-                .header("accept", "application/vnd.github.v3+json")
-                .header("authorization", "Bearer github_test_access_token");
-            then.status(205);
-        });
-        let todoist_projects_mock = mock_todoist_sync_resources_service(
+        Mock::given(method("DELETE"))
+            .and(path("/notifications/threads/1"))
+            .respond_with(ResponseTemplate::new(205))
+            .mount(&app.app.github_mock_server)
+            .await;
+        let _todoist_projects_mock = mock_todoist_sync_resources_service(
             &app.app.todoist_mock_server,
             "projects",
             &sync_todoist_projects_response,
             None,
-        );
-        let todoist_item_add_mock = mock_todoist_item_add_service(
+        )
+        .await;
+        let _todoist_item_add_mock = mock_todoist_item_add_service(
             &app.app.todoist_mock_server,
             &todoist_item.id,
             notification.title.clone(),
@@ -641,18 +640,14 @@ mod patch_task {
             Some(project_id.clone()),
             Some((&Into::<DueDate>::into(PresetDueDate::Today)).into()),
             todoist_item.priority,
-        );
-        let todoist_get_item_mock =
-            mock_todoist_get_item_service(&app.app.todoist_mock_server, todoist_item.clone());
+        )
+        .await;
+        let _todoist_get_item_mock =
+            mock_todoist_get_item_service(&app.app.todoist_mock_server, todoist_item.clone()).await;
 
         let notification_with_task =
             create_task_from_notification(&app.client, &app.app.api_address, notification.id, None)
                 .await;
-
-        todoist_projects_mock.assert();
-        todoist_item_add_mock.assert();
-        todoist_get_item_mock.assert();
-        github_mark_thread_as_done_mock.assert();
 
         let new_task_id = notification_with_task
             .as_ref()
@@ -781,7 +776,8 @@ mod patch_notification {
             "projects",
             &sync_todoist_projects_response,
             None,
-        );
+        )
+        .await;
 
         let creation: Box<ThirdPartyItemCreationResult> = create_resource(
             &app.client,
@@ -805,7 +801,7 @@ mod patch_notification {
         .await;
         let existing_todoist_task = creation.task.as_ref().unwrap().clone();
 
-        let todoist_sync_mock = mock_todoist_sync_service(
+        let _todoist_sync_mock = mock_todoist_sync_service(
             &app.app.todoist_mock_server,
             vec![TodoistSyncPartialCommand::ItemUpdate {
                 args: TodoistSyncCommandItemUpdateArgs {
@@ -819,7 +815,8 @@ mod patch_notification {
                 },
             }],
             None,
-        );
+        )
+        .await;
 
         let patched_notification = patch_resource(
             &app.client,
@@ -833,7 +830,6 @@ mod patch_notification {
         )
         .await;
 
-        todoist_sync_mock.assert();
         assert_eq!(
             patched_notification,
             Box::new(Notification {

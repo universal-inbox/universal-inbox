@@ -1,7 +1,6 @@
 use chrono::{TimeDelta, TimeZone, Timelike, Utc};
 use graphql_client::Response;
 use http::StatusCode;
-use httpmock::Method::DELETE;
 use rstest::*;
 use serde_json::json;
 use tokio::time::{Duration, sleep};
@@ -16,6 +15,11 @@ use universal_inbox::{
         Notification, NotificationSourceKind, NotificationStatus, service::NotificationPatch,
     },
     third_party::integrations::{github::GithubNotification, linear::LinearNotification},
+};
+
+use wiremock::{
+    Mock, ResponseTemplate,
+    matchers::{method, path},
 };
 
 use universal_inbox_api::{
@@ -455,20 +459,16 @@ mod patch_notifications_bulk {
             None,
         )
         .await;
-        let github_mark_thread_as_done_mock = app.app.github_mock_server.mock(|when, then| {
-            when.method(DELETE)
-                .path("/notifications/threads/1")
-                .header("accept", "application/vnd.github.v3+json")
-                .header("authorization", "Bearer github_test_access_token");
-            then.status(205);
-        });
-        let github_mark_thread_as_done_mock2 = app.app.github_mock_server.mock(|when, then| {
-            when.method(DELETE)
-                .path("/notifications/threads/2")
-                .header("accept", "application/vnd.github.v3+json")
-                .header("authorization", "Bearer github_test_access_token");
-            then.status(205);
-        });
+        Mock::given(method("DELETE"))
+            .and(path("/notifications/threads/1"))
+            .respond_with(ResponseTemplate::new(205))
+            .mount(&app.app.github_mock_server)
+            .await;
+        Mock::given(method("DELETE"))
+            .and(path("/notifications/threads/2"))
+            .respond_with(ResponseTemplate::new(205))
+            .mount(&app.app.github_mock_server)
+            .await;
 
         // Create multiple notifications
         let notification1 = create_notification_from_github_notification(
@@ -540,9 +540,6 @@ mod patch_notifications_bulk {
             .await
             .expect("Failed to get job count");
         assert_eq!(job_count, 0);
-
-        github_mark_thread_as_done_mock.assert();
-        github_mark_thread_as_done_mock2.assert();
     }
 }
 

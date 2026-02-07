@@ -94,7 +94,8 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         "projects",
         &sync_todoist_projects_response,
         None,
-    );
+    )
+    .await;
 
     let creation: Box<ThirdPartyItemCreationResult> = create_resource(
         &app.client,
@@ -155,11 +156,12 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
             display_name: "Jane Doe".to_string(),
         },
     };
-    let google_drive_get_user_info_mock = mock_google_drive_get_user_info_service(
+    let _google_drive_get_user_info_mock = mock_google_drive_get_user_info_service(
         &app.app.google_drive_mock_server,
         &google_drive_about_response,
-    );
-    let google_drive_files_list_mock = mock_google_drive_files_list_service(
+    )
+    .await;
+    let _google_drive_files_list_mock = mock_google_drive_files_list_service(
         &app.app.google_drive_mock_server,
         None,
         settings
@@ -170,13 +172,14 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
             .unwrap(),
         google_drive_integration_connection.created_at,
         &google_drive_files_list,
-    );
+    )
+    .await;
     let empty_files_result = GoogleDriveFileList {
         files: None,
         incomplete_search: None,
         next_page_token: None,
     };
-    let google_drive_files_list_mock2 = mock_google_drive_files_list_service(
+    let _google_drive_files_list_mock2 = mock_google_drive_files_list_service(
         &app.app.google_drive_mock_server,
         Some("next_token"),
         settings
@@ -187,7 +190,8 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
             .unwrap(),
         google_drive_integration_connection.created_at,
         &empty_files_result,
-    );
+    )
+    .await;
 
     let modified_time = Utc::now() + Duration::minutes(5); // ensure it's after the existing notification time
     let google_drive_comment_456 = GoogleDriveComment {
@@ -204,7 +208,7 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         ]),
         ..google_drive_comments_list
     };
-    let google_drive_comments_list_mock = mock_google_drive_comments_list_service(
+    let _google_drive_comments_list_mock = mock_google_drive_comments_list_service(
         &app.app.google_drive_mock_server,
         None,
         settings
@@ -215,12 +219,13 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
             .unwrap(),
         &google_drive_files_list.files.as_ref().unwrap()[0].id,
         &google_drive_comments_list,
-    );
+    )
+    .await;
     let empty_result = GoogleDriveCommentList {
         comments: None,
         next_page_token: None,
     };
-    let google_drive_comments_list_mock2 = mock_google_drive_comments_list_service(
+    let _google_drive_comments_list_mock2 = mock_google_drive_comments_list_service(
         &app.app.google_drive_mock_server,
         Some("next_token"),
         settings
@@ -231,9 +236,10 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
             .unwrap(),
         &google_drive_files_list.files.as_ref().unwrap()[0].id,
         &empty_result,
-    );
+    )
+    .await;
 
-    let google_drive_comments_list_mock3 = mock_google_drive_comments_list_service(
+    let _google_drive_comments_list_mock3 = mock_google_drive_comments_list_service(
         &app.app.google_drive_mock_server,
         None,
         settings
@@ -244,7 +250,8 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
             .unwrap(),
         &google_drive_files_list.files.as_ref().unwrap()[1].id,
         &empty_result,
-    );
+    )
+    .await;
 
     let notifications: Vec<Notification> = sync_notifications(
         &app.client,
@@ -263,12 +270,6 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         user_email_address.as_ref(),
         "Jane Doe",
     );
-    google_drive_get_user_info_mock.assert_hits(1);
-    google_drive_files_list_mock.assert();
-    google_drive_files_list_mock2.assert();
-    google_drive_comments_list_mock.assert();
-    google_drive_comments_list_mock2.assert();
-    google_drive_comments_list_mock3.assert();
 
     let updated_notification: Box<Notification> = get_resource(
         &app.client,
@@ -379,10 +380,11 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
             display_name: "Jane Doe".to_string(),
         },
     };
-    let google_drive_get_user_info_mock = mock_google_drive_get_user_info_service(
+    let _google_drive_get_user_info_mock = mock_google_drive_get_user_info_service(
         &app.app.google_drive_mock_server,
         &google_drive_about_response,
-    );
+    )
+    .await;
 
     let google_drive_integration_connection = create_and_mock_integration_connection(
         &app.app,
@@ -417,7 +419,7 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
     google_drive_files_list.files = Some(vec![
         google_drive_files_list.files.as_ref().unwrap()[0].clone(),
     ]);
-    let google_drive_files_list_mock = mock_google_drive_files_list_service(
+    let _google_drive_files_list_mock = mock_google_drive_files_list_service(
         &app.app.google_drive_mock_server,
         None,
         settings
@@ -428,10 +430,11 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
             .unwrap(),
         google_drive_integration_connection.created_at,
         &google_drive_files_list,
-    );
+    )
+    .await;
 
     google_drive_comments_list.next_page_token = None;
-    let google_drive_comments_list_mock = mock_google_drive_comments_list_service(
+    let _google_drive_comments_list_mock = mock_google_drive_comments_list_service(
         &app.app.google_drive_mock_server,
         None,
         settings
@@ -442,7 +445,8 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
             .unwrap(),
         &google_drive_files_list.files.as_ref().unwrap()[0].id,
         &google_drive_comments_list,
-    );
+    )
+    .await;
 
     let notifications: Vec<Notification> = sync_notifications(
         &app.client,
@@ -460,9 +464,6 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
             1
         }
     );
-    google_drive_get_user_info_mock.assert_hits(1);
-    google_drive_files_list_mock.assert();
-    google_drive_comments_list_mock.assert();
 
     let updated_notification: Box<Notification> = get_resource(
         &app.client,

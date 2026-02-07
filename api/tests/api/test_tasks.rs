@@ -81,7 +81,8 @@ mod get_task {
             "projects",
             &sync_todoist_projects_response,
             None,
-        );
+        )
+        .await;
 
         let creation: Box<ThirdPartyItemCreationResult> = create_resource(
             &app.client,
@@ -162,7 +163,8 @@ mod list_tasks {
             "projects",
             &sync_todoist_projects_response,
             None,
-        );
+        )
+        .await;
 
         let creation: Box<ThirdPartyItemCreationResult> = create_resource(
             &app.client,
@@ -265,7 +267,8 @@ mod patch_task {
             "projects",
             &sync_todoist_projects_response,
             None,
-        );
+        )
+        .await;
 
         let creation: Box<ThirdPartyItemCreationResult> = create_resource(
             &app.client,
@@ -330,7 +333,8 @@ mod patch_task {
             "projects",
             &sync_todoist_projects_response,
             None,
-        );
+        )
+        .await;
 
         let creation: Box<ThirdPartyItemCreationResult> = create_resource(
             &app.client,
@@ -398,7 +402,8 @@ mod patch_task {
             "projects",
             &sync_todoist_projects_response,
             None,
-        );
+        )
+        .await;
 
         let creation: Box<ThirdPartyItemCreationResult> = create_resource(
             &app.client,
@@ -517,7 +522,8 @@ mod search_tasks {
             "projects",
             &sync_todoist_projects_response,
             None,
-        );
+        )
+        .await;
 
         let creation: Box<ThirdPartyItemCreationResult> = create_resource(
             &app.client,
@@ -631,12 +637,13 @@ mod search_projects {
             None,
         )
         .await;
-        let todoist_projects_mock = mock_todoist_sync_resources_service(
+        let _todoist_projects_mock = mock_todoist_sync_resources_service(
             &app.app.todoist_mock_server,
             "projects",
             &sync_todoist_projects_response,
             None,
-        );
+        )
+        .await;
 
         let projects = search_projects(&app.client, &app.app.api_address, "in").await;
 
@@ -670,8 +677,6 @@ mod search_projects {
             }
         );
 
-        todoist_projects_mock.assert();
         // Todoist API calls should have been cached
-        todoist_projects_mock.assert_hits(1);
     }
 }

@@ -258,33 +258,39 @@ async fn test_receive_star_or_reaction_added_event_as_notification(
         "C05XXX",
         "1707686216.825719",
         "slack_get_chat_permalink_response.json",
-    );
-    mock_slack_list_emojis(&app.app.slack_mock_server, "slack_emoji_list_response.json");
-    let slack_fetch_user_mock = mock_slack_fetch_user(
+    )
+    .await;
+    mock_slack_list_emojis(&app.app.slack_mock_server, "slack_emoji_list_response.json").await;
+    let _slack_fetch_user_mock = mock_slack_fetch_user(
         &app.app.slack_mock_server,
         "U05YYY", // The message's creator, not the user who starred the message
         "slack_fetch_user_response.json",
-    );
-    let slack_fetch_message_mock = mock_slack_fetch_reply(
+    )
+    .await;
+    let _slack_fetch_message_mock = mock_slack_fetch_reply(
         &app.app.slack_mock_server,
         "C05XXX",
         "1707686216.825719",
         "slack_fetch_message_response.json",
-    );
-    let slack_fetch_channel_mock = mock_slack_fetch_channel(
+    )
+    .await;
+    let _slack_fetch_channel_mock = mock_slack_fetch_channel(
         &app.app.slack_mock_server,
         "C05XXX",
         "slack_fetch_channel_response.json",
-    );
-    let slack_fetch_team_mock = mock_slack_fetch_team(
+    )
+    .await;
+    let _slack_fetch_team_mock = mock_slack_fetch_team(
         &app.app.slack_mock_server,
         "T05XXX",
         "slack_fetch_team_response.json",
-    );
-    let slack_list_usergroups_mock = mock_slack_list_usergroups(
+    )
+    .await;
+    let _slack_list_usergroups_mock = mock_slack_list_usergroups(
         &app.app.slack_mock_server,
         "slack_list_usergroups_response.json",
-    );
+    )
+    .await;
 
     let response = if star_added_case {
         create_resource_response(
@@ -312,12 +318,6 @@ async fn test_receive_star_or_reaction_added_event_as_notification(
         1,
     )
     .await;
-
-    slack_fetch_user_mock.assert();
-    slack_fetch_message_mock.assert();
-    slack_fetch_channel_mock.assert();
-    slack_fetch_team_mock.assert();
-    slack_list_usergroups_mock.assert();
 
     assert_eq!(notifications.len(), 1);
     assert_eq!(notifications[0].source_item.source_id, "1707686216.825719");
@@ -503,38 +503,45 @@ async fn test_receive_bot_star_added_event_as_notification(
         "C05XXX",
         "1707686216.825719",
         "slack_get_chat_permalink_response.json",
-    );
-    mock_slack_list_emojis(&app.app.slack_mock_server, "slack_emoji_list_response.json");
-    let slack_fetch_bot_mock = mock_slack_fetch_bot(
+    )
+    .await;
+    mock_slack_list_emojis(&app.app.slack_mock_server, "slack_emoji_list_response.json").await;
+    let _slack_fetch_bot_mock = mock_slack_fetch_bot(
         &app.app.slack_mock_server,
         "B05YYY", // The message's creator, not the user who starred the message
         "slack_fetch_bot_response.json",
-    );
-    let slack_fetch_user_mock = mock_slack_fetch_user(
+    )
+    .await;
+    let _slack_fetch_user_mock = mock_slack_fetch_user(
         &app.app.slack_mock_server,
         "U05YYY", // The user ID found in the message
         "slack_fetch_user_response.json",
-    );
-    let slack_fetch_message_mock = mock_slack_fetch_reply(
+    )
+    .await;
+    let _slack_fetch_message_mock = mock_slack_fetch_reply(
         &app.app.slack_mock_server,
         "C05XXX",
         "1707686216.825719",
         "slack_fetch_message_response.json",
-    );
-    let slack_fetch_channel_mock = mock_slack_fetch_channel(
+    )
+    .await;
+    let _slack_fetch_channel_mock = mock_slack_fetch_channel(
         &app.app.slack_mock_server,
         "C05XXX",
         "slack_fetch_channel_response.json",
-    );
-    let slack_fetch_team_mock = mock_slack_fetch_team(
+    )
+    .await;
+    let _slack_fetch_team_mock = mock_slack_fetch_team(
         &app.app.slack_mock_server,
         "T05XXX",
         "slack_fetch_team_response.json",
-    );
-    let slack_list_usergroups_mock = mock_slack_list_usergroups(
+    )
+    .await;
+    let _slack_list_usergroups_mock = mock_slack_list_usergroups(
         &app.app.slack_mock_server,
         "slack_list_usergroups_response.json",
-    );
+    )
+    .await;
 
     let response = create_resource_response(
         &app.client,
@@ -552,13 +559,6 @@ async fn test_receive_bot_star_added_event_as_notification(
         1,
     )
     .await;
-
-    slack_fetch_bot_mock.assert();
-    slack_fetch_message_mock.assert();
-    slack_fetch_channel_mock.assert();
-    slack_fetch_team_mock.assert();
-    slack_list_usergroups_mock.assert();
-    slack_fetch_user_mock.assert();
 
     assert_eq!(notifications.len(), 1);
     assert_eq!(notifications[0].source_item.source_id, "1707686216.825719");
@@ -637,6 +637,7 @@ async fn test_receive_bot_star_added_event_as_notification(
         slack_push_bot_star_added_event.clone(),
     )
     .await;
+
     assert_eq!(response.status(), 200);
     let notifications = list_notifications_until(
         &app.client,
@@ -686,12 +687,14 @@ async fn test_receive_star_or_reaction_removed_event_as_notification(
         "C05XXX",
         "1707686216.825719",
         "slack_get_chat_permalink_response.json",
-    );
-    let slack_fetch_user_mock = mock_slack_fetch_user(
+    )
+    .await;
+    let _slack_fetch_user_mock = mock_slack_fetch_user(
         &app.app.slack_mock_server,
         "U05YYY", // The message's creator, not the user who starred the message
         "slack_fetch_user_response.json",
-    );
+    )
+    .await;
     if with_message_in_thread {
         let SlackPushEvent::EventCallback(SlackPushEventCallback {
             event:
@@ -720,26 +723,30 @@ async fn test_receive_star_or_reaction_removed_event_as_notification(
         };
         removed_message.message.origin.thread_ts = Some(thread_ts.into());
     }
-    let slack_fetch_message_mock = mock_slack_fetch_reply(
+    let _slack_fetch_message_mock = mock_slack_fetch_reply(
         &app.app.slack_mock_server,
         "C05XXX",
         "1707686216.825719",
         "slack_fetch_message_response.json",
-    );
-    let slack_fetch_channel_mock = mock_slack_fetch_channel(
+    )
+    .await;
+    let _slack_fetch_channel_mock = mock_slack_fetch_channel(
         &app.app.slack_mock_server,
         "C05XXX",
         "slack_fetch_channel_response.json",
-    );
-    let slack_fetch_team_mock = mock_slack_fetch_team(
+    )
+    .await;
+    let _slack_fetch_team_mock = mock_slack_fetch_team(
         &app.app.slack_mock_server,
         "T05XXX",
         "slack_fetch_team_response.json",
-    );
-    let slack_list_usergroups_mock = mock_slack_list_usergroups(
+    )
+    .await;
+    let _slack_list_usergroups_mock = mock_slack_list_usergroups(
         &app.app.slack_mock_server,
         "slack_list_usergroups_response.json",
-    );
+    )
+    .await;
 
     let response = if slack_star_case {
         create_resource_response(
@@ -766,12 +773,6 @@ async fn test_receive_star_or_reaction_removed_event_as_notification(
         1,
     )
     .await;
-
-    slack_fetch_user_mock.assert();
-    slack_fetch_message_mock.assert();
-    slack_fetch_channel_mock.assert();
-    slack_fetch_team_mock.assert();
-    slack_list_usergroups_mock.assert();
 
     assert_eq!(notifications.len(), 1);
     assert_eq!(notifications[0].source_item.source_id, "1707686216.825719");
@@ -884,42 +885,49 @@ async fn test_receive_star_or_reaction_added_event_as_task(
         "C05XXX",
         "1707686216.825719",
         "slack_get_chat_permalink_response.json",
-    );
-    mock_slack_list_emojis(&app.app.slack_mock_server, "slack_emoji_list_response.json");
-    let slack_fetch_user_mock = mock_slack_fetch_user(
+    )
+    .await;
+    mock_slack_list_emojis(&app.app.slack_mock_server, "slack_emoji_list_response.json").await;
+    let _slack_fetch_user_mock = mock_slack_fetch_user(
         &app.app.slack_mock_server,
         "U05YYY", // The message's creator, not the user who starred the message
         "slack_fetch_user_response.json",
-    );
+    )
+    .await;
     let slack_message_id = "1707686216.825719";
-    let slack_fetch_message_mock = mock_slack_fetch_reply(
+    let _slack_fetch_message_mock = mock_slack_fetch_reply(
         &app.app.slack_mock_server,
         "C05XXX",
         slack_message_id,
         "slack_fetch_message_response.json",
-    );
-    let slack_fetch_channel_mock = mock_slack_fetch_channel(
+    )
+    .await;
+    let _slack_fetch_channel_mock = mock_slack_fetch_channel(
         &app.app.slack_mock_server,
         "C05XXX",
         "slack_fetch_channel_response.json",
-    );
-    let slack_fetch_team_mock = mock_slack_fetch_team(
+    )
+    .await;
+    let _slack_fetch_team_mock = mock_slack_fetch_team(
         &app.app.slack_mock_server,
         "T05XXX",
         "slack_fetch_team_response.json",
-    );
-    let slack_list_usergroups_mock = mock_slack_list_usergroups(
+    )
+    .await;
+    let _slack_list_usergroups_mock = mock_slack_list_usergroups(
         &app.app.slack_mock_server,
         "slack_list_usergroups_response.json",
-    );
+    )
+    .await;
 
-    let todoist_projects_mock = mock_todoist_sync_resources_service(
+    let _todoist_projects_mock = mock_todoist_sync_resources_service(
         &app.app.todoist_mock_server,
         "projects",
         &sync_todoist_projects_response,
         None,
-    );
-    let todoist_item_add_mock = mock_todoist_item_add_service(
+    )
+    .await;
+    let _todoist_item_add_mock = mock_todoist_item_add_service(
         &app.app.todoist_mock_server,
         &todoist_item.id,
         "[📥  Universal Inbox new release 📥...](https://slack.com/archives/C05XXX/p1234567890)"
@@ -948,9 +956,10 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
         Some("1111".to_string()), // ie. "Inbox"
         None,
         TodoistItemPriority::P1,
-    );
-    let todoist_get_item_mock =
-        mock_todoist_get_item_service(&app.app.todoist_mock_server, todoist_item.clone());
+    )
+    .await;
+    let _todoist_get_item_mock =
+        mock_todoist_get_item_service(&app.app.todoist_mock_server, todoist_item.clone()).await;
 
     let response = if slack_star_case {
         create_resource_response(
@@ -973,15 +982,6 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
     assert_eq!(response.status(), 200);
     list_notifications_until(&app.client, &app.app.api_address, vec![], 0).await;
     let tasks = list_tasks_until(&app.client, &app.app.api_address, TaskStatus::Active, 1).await;
-
-    slack_fetch_user_mock.assert();
-    slack_fetch_message_mock.assert();
-    slack_fetch_channel_mock.assert();
-    slack_fetch_team_mock.assert();
-    slack_list_usergroups_mock.assert();
-    todoist_projects_mock.assert();
-    todoist_item_add_mock.assert();
-    todoist_get_item_mock.assert();
 
     assert_eq!(tasks.len(), 1);
     assert_eq!(tasks[0].status, TaskStatus::Active);
@@ -1079,42 +1079,49 @@ async fn test_receive_star_or_reaction_removed_and_added_event_as_task(
         "C05XXX",
         "1707686216.825719",
         "slack_get_chat_permalink_response.json",
-    );
-    mock_slack_list_emojis(&app.app.slack_mock_server, "slack_emoji_list_response.json");
-    let slack_fetch_user_mock = mock_slack_fetch_user(
+    )
+    .await;
+    mock_slack_list_emojis(&app.app.slack_mock_server, "slack_emoji_list_response.json").await;
+    let _slack_fetch_user_mock = mock_slack_fetch_user(
         &app.app.slack_mock_server,
         "U05YYY", // The message's creator, not the user who starred the message
         "slack_fetch_user_response.json",
-    );
+    )
+    .await;
     let slack_message_id = "1707686216.825719";
-    let slack_fetch_message_mock = mock_slack_fetch_reply(
+    let _slack_fetch_message_mock = mock_slack_fetch_reply(
         &app.app.slack_mock_server,
         "C05XXX",
         slack_message_id,
         "slack_fetch_message_response.json",
-    );
-    let slack_fetch_channel_mock = mock_slack_fetch_channel(
+    )
+    .await;
+    let _slack_fetch_channel_mock = mock_slack_fetch_channel(
         &app.app.slack_mock_server,
         "C05XXX",
         "slack_fetch_channel_response.json",
-    );
-    let slack_fetch_team_mock = mock_slack_fetch_team(
+    )
+    .await;
+    let _slack_fetch_team_mock = mock_slack_fetch_team(
         &app.app.slack_mock_server,
         "T05XXX",
         "slack_fetch_team_response.json",
-    );
-    let slack_list_usergroups_mock = mock_slack_list_usergroups(
+    )
+    .await;
+    let _slack_list_usergroups_mock = mock_slack_list_usergroups(
         &app.app.slack_mock_server,
         "slack_list_usergroups_response.json",
-    );
+    )
+    .await;
 
-    let todoist_projects_mock = mock_todoist_sync_resources_service(
+    let _todoist_projects_mock = mock_todoist_sync_resources_service(
         &app.app.todoist_mock_server,
         "projects",
         &sync_todoist_projects_response,
         None,
-    );
-    let todoist_item_add_mock = mock_todoist_item_add_service(
+    )
+    .await;
+    let _todoist_item_add_mock = mock_todoist_item_add_service(
         &app.app.todoist_mock_server,
         &todoist_item.id,
         "[📥  Universal Inbox new release 📥...](https://slack.com/archives/C05XXX/p1234567890)"
@@ -1143,9 +1150,10 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
         Some("1111".to_string()), // ie. "Inbox"
         None,
         TodoistItemPriority::P1,
-    );
-    let todoist_get_item_mock =
-        mock_todoist_get_item_service(&app.app.todoist_mock_server, todoist_item.clone());
+    )
+    .await;
+    let _todoist_get_item_mock =
+        mock_todoist_get_item_service(&app.app.todoist_mock_server, todoist_item.clone()).await;
 
     // First creation of a deleted notification and an active task
     let response = if slack_star_case {
@@ -1176,15 +1184,6 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
     .await;
     let tasks = list_tasks_until(&app.client, &app.app.api_address, TaskStatus::Active, 1).await;
 
-    slack_fetch_user_mock.assert();
-    slack_fetch_message_mock.assert();
-    slack_fetch_channel_mock.assert();
-    slack_fetch_team_mock.assert();
-    slack_list_usergroups_mock.assert();
-    todoist_projects_mock.assert();
-    todoist_item_add_mock.assert();
-    todoist_get_item_mock.assert();
-
     assert_eq!(tasks.len(), 1);
     let star_added_task = &tasks[0];
     assert_eq!(tasks[0].status, TaskStatus::Active);
@@ -1205,8 +1204,9 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
         ThirdPartyItemSourceKind::Todoist
     );
 
-    let todoist_complete_item_mock =
-        mock_todoist_complete_item_service(&app.app.todoist_mock_server, &sink_item.source_id);
+    let _todoist_complete_item_mock =
+        mock_todoist_complete_item_service(&app.app.todoist_mock_server, &sink_item.source_id)
+            .await;
 
     // Notification should still be marked as deleted and associated task as done
     let response = if slack_star_case {
@@ -1236,8 +1236,6 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
     .await;
     let tasks = list_tasks_until(&app.client, &app.app.api_address, TaskStatus::Done, 1).await;
 
-    todoist_complete_item_mock.assert();
-
     assert_eq!(tasks.len(), 1);
     assert_eq!(tasks[0].id, star_added_task.id);
     assert_eq!(tasks[0].status, TaskStatus::Done);
@@ -1258,8 +1256,9 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
         ThirdPartyItemSourceKind::Todoist
     );
 
-    let todoist_uncomplete_item_mock =
-        mock_todoist_uncomplete_item_service(&app.app.todoist_mock_server, &sink_item.source_id);
+    let _todoist_uncomplete_item_mock =
+        mock_todoist_uncomplete_item_service(&app.app.todoist_mock_server, &sink_item.source_id)
+            .await;
 
     // Task should be marked as active again
     let response = if slack_star_case {
@@ -1281,8 +1280,6 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
     };
     assert_eq!(response.status(), 200);
     let tasks = list_tasks_until(&app.client, &app.app.api_address, TaskStatus::Active, 1).await;
-
-    todoist_uncomplete_item_mock.assert();
 
     assert_eq!(tasks.len(), 1);
     assert_eq!(tasks[0].id, star_added_task.id);

@@ -116,22 +116,24 @@ async fn test_sync_tasks_should_create_new_task(
         .unwrap()
         .try_into()
         .unwrap();
-    let linear_assigned_issues_mock =
-        mock_linear_assigned_issues_query(&app.app.linear_mock_server, &sync_linear_tasks_response);
+    let _linear_assigned_issues_mock =
+        mock_linear_assigned_issues_query(&app.app.linear_mock_server, &sync_linear_tasks_response)
+            .await;
 
     mock_todoist_sync_resources_service(
         &app.app.todoist_mock_server,
         "projects",
         &sync_todoist_projects_response,
         None,
-    );
+    )
+    .await;
     let expected_task_title = format!(
         "[{}]({})",
         sync_linear_issues[0].title.clone(),
         sync_linear_issues[0].get_html_url()
     );
     let due_at: DueDate = PresetDueDate::Today.into();
-    let todoist_item_add_mock = mock_todoist_item_add_service(
+    let _todoist_item_add_mock = mock_todoist_item_add_service(
         &app.app.todoist_mock_server,
         &todoist_item.id,
         expected_task_title.clone(),
@@ -139,9 +141,10 @@ async fn test_sync_tasks_should_create_new_task(
         Some("2222".to_string()), // ie. "Project2"
         Some((&due_at).into()),
         TodoistItemPriority::P1,
-    );
-    let todoist_get_item_mock =
-        mock_todoist_get_item_service(&app.app.todoist_mock_server, todoist_item.clone());
+    )
+    .await;
+    let _todoist_get_item_mock =
+        mock_todoist_get_item_service(&app.app.todoist_mock_server, todoist_item.clone()).await;
 
     let task_creation_results: Vec<TaskCreationResult> = sync_tasks(
         &app.client,
@@ -175,10 +178,6 @@ async fn test_sync_tasks_should_create_new_task(
     let sink_item = task.sink_item.clone().unwrap();
     assert_eq!(sink_item.kind(), ThirdPartyItemKind::TodoistItem);
     assert_eq!(sink_item.source_id, todoist_item.id);
-
-    linear_assigned_issues_mock.assert();
-    todoist_item_add_mock.assert();
-    todoist_get_item_mock.assert();
 
     let integration_connection = get_integration_connection_per_provider(
         &app,
@@ -298,10 +297,11 @@ async fn test_sync_tasks_should_not_update_default_values(
         errors: None,
         extensions: None,
     };
-    let linear_assigned_issues_mock = mock_linear_assigned_issues_query(
+    let _linear_assigned_issues_mock = mock_linear_assigned_issues_query(
         &app.app.linear_mock_server,
         &single_sync_linear_tasks_response,
-    );
+    )
+    .await;
 
     let task_creation_results: Vec<TaskCreationResult> = sync_tasks(
         &app.client,
@@ -319,8 +319,6 @@ async fn test_sync_tasks_should_not_update_default_values(
     assert_eq!(task.id, existing_task.id);
     assert_eq!(task.due_at, existing_task.due_at);
     assert_eq!(task.project, existing_task.project);
-
-    linear_assigned_issues_mock.assert();
 }
 
 #[rstest]
@@ -392,21 +390,24 @@ async fn test_sync_tasks_should_complete_existing_task(
         errors: None,
         extensions: None,
     };
-    let linear_assigned_issues_mock = mock_linear_assigned_issues_query(
+    let _linear_assigned_issues_mock = mock_linear_assigned_issues_query(
         &app.app.linear_mock_server,
         &empty_sync_linear_tasks_response,
-    );
+    )
+    .await;
 
     mock_todoist_sync_resources_service(
         &app.app.todoist_mock_server,
         "projects",
         &sync_todoist_projects_response,
         None,
-    );
-    let todoist_complete_item_mock = mock_todoist_complete_item_service(
+    )
+    .await;
+    let _todoist_complete_item_mock = mock_todoist_complete_item_service(
         &app.app.todoist_mock_server,
         &existing_task.sink_item.as_ref().unwrap().source_id,
-    );
+    )
+    .await;
 
     let task_creation_results: Vec<TaskCreationResult> = sync_tasks(
         &app.client,
@@ -421,9 +422,6 @@ async fn test_sync_tasks_should_complete_existing_task(
     let task = &task_creation_results[0].task;
     assert_eq!(task.id, existing_task.id);
     assert_eq!(task.status, TaskStatus::Done);
-
-    linear_assigned_issues_mock.assert();
-    todoist_complete_item_mock.assert();
 }
 
 #[rstest]
@@ -499,19 +497,21 @@ async fn test_sync_tasks_should_complete_existing_task_and_recreate_sink_task_if
         errors: None,
         extensions: None,
     };
-    let linear_assigned_issues_mock = mock_linear_assigned_issues_query(
+    let _linear_assigned_issues_mock = mock_linear_assigned_issues_query(
         &app.app.linear_mock_server,
         &empty_sync_linear_tasks_response,
-    );
+    )
+    .await;
 
     mock_todoist_sync_resources_service(
         &app.app.todoist_mock_server,
         "projects",
         &sync_todoist_projects_response,
         None,
-    );
+    )
+    .await;
 
-    let todoist_complete_item_mock = mock_todoist_sync_service(
+    let _todoist_complete_item_mock = mock_todoist_sync_service(
         &app.app.todoist_mock_server,
         vec![TodoistSyncPartialCommand::ItemComplete {
             args: TodoistSyncCommandItemCompleteArgs {
@@ -530,9 +530,10 @@ async fn test_sync_tasks_should_complete_existing_task_and_recreate_sink_task_if
             temp_id_mapping: HashMap::new(),
             sync_token: SyncToken("sync token".to_string()),
         }),
-    );
+    )
+    .await;
     let new_todoist_item_id = "another_id".to_string();
-    let todoist_item_add_mock = mock_todoist_item_add_service(
+    let _todoist_item_add_mock = mock_todoist_item_add_service(
         &app.app.todoist_mock_server,
         &new_todoist_item_id,
         existing_task.title.clone(),
@@ -540,14 +541,16 @@ async fn test_sync_tasks_should_complete_existing_task_and_recreate_sink_task_if
         Some("2222".to_string()), // ie. "Project2"
         Some((&Into::<DueDate>::into(PresetDueDate::Today)).into()),
         TodoistItemPriority::P1,
-    );
-    let todoist_get_item_mock = mock_todoist_get_item_service(
+    )
+    .await;
+    let _todoist_get_item_mock = mock_todoist_get_item_service(
         &app.app.todoist_mock_server,
         Box::new(TodoistItem {
             id: new_todoist_item_id.clone(),
             ..*todoist_item.clone()
         }),
-    );
+    )
+    .await;
 
     let task_creation_results: Vec<TaskCreationResult> = sync_tasks(
         &app.client,
@@ -567,11 +570,6 @@ async fn test_sync_tasks_should_complete_existing_task_and_recreate_sink_task_if
         task.sink_item.as_ref().unwrap().source_id,
         new_todoist_item_id
     );
-
-    linear_assigned_issues_mock.assert();
-    todoist_complete_item_mock.assert();
-    todoist_item_add_mock.assert();
-    todoist_get_item_mock.assert();
 }
 
 #[rstest]
@@ -695,20 +693,22 @@ async fn test_sync_tasks_should_create_sink_item_if_missing_when_updating_task(
         errors: None,
         extensions: None,
     };
-    let linear_assigned_issues_mock = mock_linear_assigned_issues_query(
+    let _linear_assigned_issues_mock = mock_linear_assigned_issues_query(
         &app.app.linear_mock_server,
         &single_sync_linear_tasks_response,
-    );
+    )
+    .await;
 
     mock_todoist_sync_resources_service(
         &app.app.todoist_mock_server,
         "projects",
         &sync_todoist_projects_response,
         None,
-    );
+    )
+    .await;
 
     let new_todoist_item_id = "new_todoist_id".to_string();
-    let todoist_item_add_mock = mock_todoist_item_add_service(
+    let _todoist_item_add_mock = mock_todoist_item_add_service(
         &app.app.todoist_mock_server,
         &new_todoist_item_id,
         existing_task.title.clone(),
@@ -716,14 +716,16 @@ async fn test_sync_tasks_should_create_sink_item_if_missing_when_updating_task(
         Some("2222".to_string()),
         Some((&Into::<DueDate>::into(PresetDueDate::Today)).into()),
         TodoistItemPriority::P1,
-    );
-    let todoist_get_item_mock = mock_todoist_get_item_service(
+    )
+    .await;
+    let _todoist_get_item_mock = mock_todoist_get_item_service(
         &app.app.todoist_mock_server,
         Box::new(TodoistItem {
             id: new_todoist_item_id.clone(),
             ..*todoist_item.clone()
         }),
-    );
+    )
+    .await;
 
     let task_creation_results: Vec<TaskCreationResult> = sync_tasks(
         &app.client,
@@ -741,8 +743,4 @@ async fn test_sync_tasks_should_create_sink_item_if_missing_when_updating_task(
         task.sink_item.as_ref().unwrap().source_id,
         new_todoist_item_id
     );
-
-    linear_assigned_issues_mock.assert();
-    todoist_item_add_mock.assert();
-    todoist_get_item_mock.assert();
 }

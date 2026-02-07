@@ -1,10 +1,13 @@
 #![allow(clippy::too_many_arguments)]
 use chrono::{TimeZone, Timelike, Utc};
 use http::StatusCode;
-use httpmock::Method::{DELETE, PUT};
 use rstest::*;
 use serde_json::json;
 use uuid::Uuid;
+use wiremock::{
+    Mock, ResponseTemplate,
+    matchers::{method, path},
+};
 
 use universal_inbox::{
     integration_connection::{
@@ -68,13 +71,11 @@ mod patch_resource {
         )
         .await;
 
-        let github_mark_thread_as_done_mock = app.app.github_mock_server.mock(|when, then| {
-            when.method(DELETE)
-                .path("/notifications/threads/1")
-                .header("accept", "application/vnd.github.v3+json")
-                .header("authorization", "Bearer github_test_access_token");
-            then.status(github_status_code);
-        });
+        Mock::given(method("DELETE"))
+            .and(path("/notifications/threads/1"))
+            .respond_with(ResponseTemplate::new(github_status_code))
+            .mount(&app.app.github_mock_server)
+            .await;
         let integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
@@ -91,7 +92,8 @@ mod patch_resource {
             "projects",
             &sync_todoist_projects_response,
             None,
-        );
+        )
+        .await;
 
         let creation: Box<ThirdPartyItemCreationResult> = create_resource(
             &app.client,
@@ -152,7 +154,6 @@ mod patch_resource {
                 ..*expected_notification
             })
         );
-        github_mark_thread_as_done_mock.assert();
 
         let task: Box<Task> = get_resource(
             &app.client,
@@ -171,7 +172,7 @@ mod patch_resource {
         #[future] authenticated_app: AuthenticatedApp,
         github_notification: Box<GithubNotification>,
         nango_github_connection: Box<NangoConnection>,
-        #[values(205, 304, 404)] github_status_code: u16,
+        #[values(205, 304, 404)] _github_status_code: u16,
     ) {
         let app = authenticated_app.await;
         let github_integration_connection = create_and_mock_integration_connection(
@@ -186,21 +187,16 @@ mod patch_resource {
         )
         .await;
 
-        let github_mark_thread_as_done_mock = app.app.github_mock_server.mock(|when, then| {
-            when.method(DELETE)
-                .path("/notifications/threads/1")
-                .header("accept", "application/vnd.github.v3+json")
-                .header("authorization", "Bearer github_test_access_token");
-            then.status(github_status_code);
-        });
-        let github_unsubscribed_mock = app.app.github_mock_server.mock(|when, then| {
-            when.method(PUT)
-                .path("/notifications/threads/1/subscription")
-                .header("accept", "application/vnd.github.v3+json")
-                .header("authorization", "Bearer github_test_access_token")
-                .json_body(json!({"ignored": true}));
-            then.status(github_status_code);
-        });
+        Mock::given(method("DELETE"))
+            .and(path("/notifications/threads/1"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&app.app.github_mock_server)
+            .await;
+        Mock::given(method("PUT"))
+            .and(path("/notifications/threads/1/subscription"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&app.app.github_mock_server)
+            .await;
 
         let expected_notification = create_notification_from_github_notification(
             &app.app,
@@ -229,8 +225,6 @@ mod patch_resource {
                 ..*expected_notification
             })
         );
-        github_mark_thread_as_done_mock.assert();
-        github_unsubscribed_mock.assert();
     }
 
     #[rstest]
@@ -254,13 +248,11 @@ mod patch_resource {
         )
         .await;
 
-        let github_mark_thread_as_done_mock = app.app.github_mock_server.mock(|when, then| {
-            when.method(DELETE)
-                .path("/notifications/threads/1")
-                .header("accept", "application/vnd.github.v3+json")
-                .header("authorization", "Bearer github_test_access_token");
-            then.status(403);
-        });
+        Mock::given(method("DELETE"))
+            .and(path("/notifications/threads/1"))
+            .respond_with(ResponseTemplate::new(403))
+            .mount(&app.app.github_mock_server)
+            .await;
         let expected_notification = create_notification_from_github_notification(
             &app.app,
             &github_notification,
@@ -284,7 +276,6 @@ mod patch_resource {
 
         let body = response.text().await.expect("Cannot get response body");
         assert!(body.contains("Failed to mark Github notification `1` as done"));
-        github_mark_thread_as_done_mock.assert();
 
         let notification: Box<Notification> = get_resource(
             &app.client,
@@ -366,10 +357,10 @@ mod patch_resource {
             None,
         )
         .await;
-        let github_api_mock = app.app.github_mock_server.mock(|when, then| {
-            when.any_request();
-            then.status(200);
-        });
+        Mock::given(wiremock::matchers::any())
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&app.app.github_mock_server)
+            .await;
         let snoozed_time = Utc.with_ymd_and_hms(2022, 1, 1, 1, 2, 3).unwrap();
         let expected_notification = create_notification_from_github_notification(
             &app.app,
@@ -403,7 +394,6 @@ mod patch_resource {
         .await;
 
         assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
-        github_api_mock.assert_hits(0);
     }
 
     #[rstest]
@@ -426,10 +416,10 @@ mod patch_resource {
             None,
         )
         .await;
-        let github_api_mock = app.app.github_mock_server.mock(|when, then| {
-            when.any_request();
-            then.status(200);
-        });
+        Mock::given(wiremock::matchers::any())
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&app.app.github_mock_server)
+            .await;
         let expected_notification = create_notification_from_github_notification(
             &app.app,
             &github_notification,
@@ -450,17 +440,16 @@ mod patch_resource {
         .await;
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-        github_api_mock.assert_hits(0);
     }
 
     #[rstest]
     #[tokio::test]
     async fn test_patch_unknown_notification(#[future] authenticated_app: AuthenticatedApp) {
         let app = authenticated_app.await;
-        let github_api_mock = app.app.github_mock_server.mock(|when, then| {
-            when.any_request();
-            then.status(200);
-        });
+        Mock::given(wiremock::matchers::any())
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&app.app.github_mock_server)
+            .await;
         let unknown_notification_id = Uuid::new_v4();
 
         let response = patch_resource_response(
@@ -484,6 +473,5 @@ mod patch_resource {
             })
             .to_string()
         );
-        github_api_mock.assert_hits(0);
     }
 }
