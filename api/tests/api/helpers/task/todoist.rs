@@ -1,13 +1,14 @@
 use std::collections::HashMap;
 
 use chrono::NaiveDate;
-use httpmock::{Method::POST, Mock, MockServer};
 use pretty_assertions::assert_eq;
 use rstest::*;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use url::Url;
 use uuid::Uuid;
+use wiremock::matchers::{body_json, body_partial_json, body_string, header, method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use universal_inbox::{
     HasHtmlUrl,
@@ -41,15 +42,15 @@ pub fn sync_todoist_projects_response() -> TodoistSyncResponse {
     load_json_fixture_file("sync_todoist_projects_response.json")
 }
 
-pub fn mock_todoist_item_add_service<'a>(
-    todoist_mock_server: &'a MockServer,
+pub async fn mock_todoist_item_add_service(
+    todoist_mock_server: &MockServer,
     new_item_id: &str,
     content: String,
     description: Option<String>,
     project_id: Option<String>,
     due: Option<TodoistItemDue>,
     priority: TodoistItemPriority,
-) -> Mock<'a> {
+) {
     let sync_item_add_todoist_response = TodoistSyncStatusResponse {
         sync_status: HashMap::from([(Uuid::new_v4(), TodoistCommandStatus::Ok("ok".to_string()))]),
         full_sync: false,
@@ -70,30 +71,30 @@ pub fn mock_todoist_item_add_service<'a>(
         }],
         Some(sync_item_add_todoist_response),
     )
+    .await;
 }
 
-pub fn mock_todoist_get_item_service(
+pub async fn mock_todoist_get_item_service(
     todoist_mock_server: &MockServer,
     result: Box<TodoistItem>,
-) -> Mock<'_> {
+) {
     let item_id = result.id.clone();
     let response = TodoistItemInfoResponse { item: *result };
 
-    todoist_mock_server.mock(|when, then| {
-        when.method(POST)
-            .path("/items/get")
-            .body(format!("item_id={item_id}&all_data=false"))
-            .header("authorization", "Bearer todoist_test_access_token");
-        then.status(200)
-            .header("content-type", "application/json")
-            .json_body_obj(&response);
-    })
+    Mock::given(method("POST"))
+        .and(path("/items/get"))
+        .and(body_string(format!("item_id={item_id}&all_data=false")))
+        .and(header("authorization", "Bearer todoist_test_access_token"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_json(&response),
+        )
+        .mount(todoist_mock_server)
+        .await;
 }
 
-pub fn mock_todoist_delete_item_service<'a>(
-    todoist_mock_server: &'a MockServer,
-    task_id: &str,
-) -> Mock<'a> {
+pub async fn mock_todoist_delete_item_service(todoist_mock_server: &MockServer, task_id: &str) {
     mock_todoist_sync_service(
         todoist_mock_server,
         vec![TodoistSyncPartialCommand::ItemDelete {
@@ -103,12 +104,10 @@ pub fn mock_todoist_delete_item_service<'a>(
         }],
         None,
     )
+    .await;
 }
 
-pub fn mock_todoist_complete_item_service<'a>(
-    todoist_mock_server: &'a MockServer,
-    task_id: &str,
-) -> Mock<'a> {
+pub async fn mock_todoist_complete_item_service(todoist_mock_server: &MockServer, task_id: &str) {
     mock_todoist_sync_service(
         todoist_mock_server,
         vec![TodoistSyncPartialCommand::ItemComplete {
@@ -118,12 +117,10 @@ pub fn mock_todoist_complete_item_service<'a>(
         }],
         None,
     )
+    .await;
 }
 
-pub fn mock_todoist_uncomplete_item_service<'a>(
-    todoist_mock_server: &'a MockServer,
-    task_id: &str,
-) -> Mock<'a> {
+pub async fn mock_todoist_uncomplete_item_service(todoist_mock_server: &MockServer, task_id: &str) {
     mock_todoist_sync_service(
         todoist_mock_server,
         vec![TodoistSyncPartialCommand::ItemUncomplete {
@@ -133,13 +130,14 @@ pub fn mock_todoist_uncomplete_item_service<'a>(
         }],
         None,
     )
+    .await;
 }
 
-pub fn mock_todoist_sync_project_add<'a>(
-    todoist_mock_server: &'a MockServer,
+pub async fn mock_todoist_sync_project_add(
+    todoist_mock_server: &MockServer,
     new_project: &str,
     new_project_id: &str,
-) -> Mock<'a> {
+) {
     let sync_project_add_todoist_response = TodoistSyncStatusResponse {
         sync_status: HashMap::from([(Uuid::new_v4(), TodoistCommandStatus::Ok("ok".to_string()))]),
         full_sync: false,
@@ -156,13 +154,14 @@ pub fn mock_todoist_sync_project_add<'a>(
         }],
         Some(sync_project_add_todoist_response),
     )
+    .await;
 }
 
-pub fn mock_todoist_sync_service(
+pub async fn mock_todoist_sync_service(
     todoist_mock_server: &MockServer,
     commands: Vec<TodoistSyncPartialCommand>,
     result: Option<TodoistSyncStatusResponse>,
-) -> Mock<'_> {
+) {
     let body = json!({ "commands": commands });
 
     let response = result.unwrap_or_else(|| {
@@ -178,37 +177,41 @@ pub fn mock_todoist_sync_service(
         }
     });
 
-    todoist_mock_server.mock(|when, then| {
-        when.method(POST)
-            .path("/sync")
-            .json_body_partial(body.to_string())
-            .header("authorization", "Bearer todoist_test_access_token");
-        then.status(200)
-            .header("content-type", "application/json")
-            .json_body_obj(&response);
-    })
+    Mock::given(method("POST"))
+        .and(path("/sync"))
+        .and(body_partial_json(body))
+        .and(header("authorization", "Bearer todoist_test_access_token"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_json(&response),
+        )
+        .mount(todoist_mock_server)
+        .await;
 }
 
-pub fn mock_todoist_sync_resources_service<'a>(
-    todoist_mock_server: &'a MockServer,
+pub async fn mock_todoist_sync_resources_service(
+    todoist_mock_server: &MockServer,
     resource_name: &str,
     result: &TodoistSyncResponse,
     sync_token: Option<SyncToken>,
-) -> Mock<'a> {
-    todoist_mock_server.mock(|when, then| {
-        when.method(POST)
-            .path("/sync")
-            .json_body(json!({
-                "sync_token": sync_token
-                    .map(|sync_token| sync_token.0)
-                    .unwrap_or_else(|| "*".to_string()),
-                "resource_types": [resource_name]
-            }))
-            .header("authorization", "Bearer todoist_test_access_token");
-        then.status(200)
-            .header("content-type", "application/json")
-            .json_body_obj(result);
-    })
+) {
+    Mock::given(method("POST"))
+        .and(path("/sync"))
+        .and(body_json(json!({
+            "sync_token": sync_token
+                .map(|sync_token| sync_token.0)
+                .unwrap_or_else(|| "*".to_string()),
+            "resource_types": [resource_name]
+        })))
+        .and(header("authorization", "Bearer todoist_test_access_token"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_json(result),
+        )
+        .mount(todoist_mock_server)
+        .await;
 }
 
 #[fixture]

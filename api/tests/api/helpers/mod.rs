@@ -1,7 +1,6 @@
 use std::{collections::HashMap, env, fs, net::TcpListener, str::FromStr, sync::Arc};
 
 use apalis_redis::RedisStorage;
-use httpmock::MockServer;
 use openidconnect::{ClientId, IntrospectionUrl, IssuerUrl};
 use rstest::*;
 use sqlx::{
@@ -11,6 +10,7 @@ use tokio::sync::RwLock;
 use tracing::info;
 use url::Url;
 use uuid::Uuid;
+use wiremock::MockServer;
 
 use universal_inbox_api::{
     configuration::{
@@ -161,25 +161,25 @@ pub async fn tested_app(
     Cache::set_namespace(Uuid::new_v4().to_string()).await;
 
     // tag: New notification integration
-    let github_mock_server = MockServer::start();
-    let github_mock_server_url = &github_mock_server.base_url();
-    let linear_mock_server = MockServer::start();
-    let linear_mock_server_url = &linear_mock_server.base_url();
-    let google_calendar_mock_server = MockServer::start();
-    let google_calendar_mock_server_url = &google_calendar_mock_server.base_url();
-    let google_mail_mock_server = MockServer::start();
-    let google_mail_mock_server_url = &google_mail_mock_server.base_url();
-    let google_drive_mock_server = MockServer::start();
-    let google_drive_mock_server_url = &google_drive_mock_server.base_url();
-    let slack_mock_server = MockServer::start();
-    let slack_mock_server_url = &slack_mock_server.base_url();
-    let todoist_mock_server = MockServer::start();
-    let todoist_mock_server_url = &todoist_mock_server.base_url();
+    let github_mock_server = MockServer::start().await;
+    let github_mock_server_url = &github_mock_server.uri();
+    let linear_mock_server = MockServer::start().await;
+    let linear_mock_server_url = &linear_mock_server.uri();
+    let google_calendar_mock_server = MockServer::start().await;
+    let google_calendar_mock_server_url = &google_calendar_mock_server.uri();
+    let google_mail_mock_server = MockServer::start().await;
+    let google_mail_mock_server_url = &google_mail_mock_server.uri();
+    let google_drive_mock_server = MockServer::start().await;
+    let google_drive_mock_server_url = &google_drive_mock_server.uri();
+    let slack_mock_server = MockServer::start().await;
+    let slack_mock_server_url = &slack_mock_server.uri();
+    let todoist_mock_server = MockServer::start().await;
+    let todoist_mock_server_url = &todoist_mock_server.uri();
 
-    let oidc_issuer_mock_server = MockServer::start();
-    let oidc_issuer_mock_server_url = &oidc_issuer_mock_server.base_url();
-    let nango_mock_server = MockServer::start();
-    let nango_mock_server_url = &nango_mock_server.base_url();
+    let oidc_issuer_mock_server = MockServer::start().await;
+    let oidc_issuer_mock_server_url = &oidc_issuer_mock_server.uri();
+    let nango_mock_server = MockServer::start().await;
+    let nango_mock_server_url = &nango_mock_server.uri();
 
     if let AuthenticationSettings::OpenIDConnect(oidc_settings) =
         &mut settings.application.security.authentication[0]
@@ -314,23 +314,23 @@ pub async fn tested_app_with_local_auth(
     Cache::set_namespace(Uuid::new_v4().to_string()).await;
 
     // tag: New notification integration
-    let github_mock_server = MockServer::start();
-    let github_mock_server_url = &github_mock_server.base_url();
-    let linear_mock_server = MockServer::start();
-    let linear_mock_server_url = &linear_mock_server.base_url();
-    let google_mail_mock_server = MockServer::start();
-    let google_mail_mock_server_url = &google_mail_mock_server.base_url();
-    let google_drive_mock_server = MockServer::start();
-    let google_drive_mock_server_url = &google_drive_mock_server.base_url();
-    let google_calendar_mock_server = MockServer::start();
-    let google_calendar_mock_server_url = &google_calendar_mock_server.base_url();
-    let slack_mock_server = MockServer::start();
-    let slack_mock_server_url = &slack_mock_server.base_url();
-    let todoist_mock_server = MockServer::start();
-    let todoist_mock_server_url = &todoist_mock_server.base_url();
+    let github_mock_server = MockServer::start().await;
+    let github_mock_server_url = &github_mock_server.uri();
+    let linear_mock_server = MockServer::start().await;
+    let linear_mock_server_url = &linear_mock_server.uri();
+    let google_mail_mock_server = MockServer::start().await;
+    let google_mail_mock_server_url = &google_mail_mock_server.uri();
+    let google_drive_mock_server = MockServer::start().await;
+    let google_drive_mock_server_url = &google_drive_mock_server.uri();
+    let google_calendar_mock_server = MockServer::start().await;
+    let google_calendar_mock_server_url = &google_calendar_mock_server.uri();
+    let slack_mock_server = MockServer::start().await;
+    let slack_mock_server_url = &slack_mock_server.uri();
+    let todoist_mock_server = MockServer::start().await;
+    let todoist_mock_server_url = &todoist_mock_server.uri();
 
-    let nango_mock_server = MockServer::start();
-    let nango_mock_server_url = &nango_mock_server.base_url();
+    let nango_mock_server = MockServer::start().await;
+    let nango_mock_server_url = &nango_mock_server.uri();
 
     settings.application.security.authentication =
         vec![AuthenticationSettings::Local(LocalAuthenticationSettings {
@@ -460,25 +460,25 @@ pub async fn tested_app_with_domain_blacklist(
         .expect("Failed to create cache");
     Cache::set_namespace(Uuid::new_v4().to_string()).await;
 
-    let github_mock_server = MockServer::start();
-    let github_mock_server_url = &github_mock_server.base_url();
-    let linear_mock_server = MockServer::start();
-    let linear_mock_server_url = &linear_mock_server.base_url();
-    let google_mail_mock_server = MockServer::start();
-    let google_mail_mock_server_url = &google_mail_mock_server.base_url();
-    let google_drive_mock_server = MockServer::start();
-    let google_drive_mock_server_url = &google_drive_mock_server.base_url();
-    let google_calendar_mock_server = MockServer::start();
-    let google_calendar_mock_server_url = &google_calendar_mock_server.base_url();
-    let slack_mock_server = MockServer::start();
-    let slack_mock_server_url = &slack_mock_server.base_url();
-    let todoist_mock_server = MockServer::start();
-    let todoist_mock_server_url = &todoist_mock_server.base_url();
+    let github_mock_server = MockServer::start().await;
+    let github_mock_server_url = &github_mock_server.uri();
+    let linear_mock_server = MockServer::start().await;
+    let linear_mock_server_url = &linear_mock_server.uri();
+    let google_mail_mock_server = MockServer::start().await;
+    let google_mail_mock_server_url = &google_mail_mock_server.uri();
+    let google_drive_mock_server = MockServer::start().await;
+    let google_drive_mock_server_url = &google_drive_mock_server.uri();
+    let google_calendar_mock_server = MockServer::start().await;
+    let google_calendar_mock_server_url = &google_calendar_mock_server.uri();
+    let slack_mock_server = MockServer::start().await;
+    let slack_mock_server_url = &slack_mock_server.uri();
+    let todoist_mock_server = MockServer::start().await;
+    let todoist_mock_server_url = &todoist_mock_server.uri();
 
-    let oidc_issuer_mock_server = MockServer::start();
-    let oidc_issuer_mock_server_url = &oidc_issuer_mock_server.base_url();
-    let nango_mock_server = MockServer::start();
-    let nango_mock_server_url = &nango_mock_server.base_url();
+    let oidc_issuer_mock_server = MockServer::start().await;
+    let oidc_issuer_mock_server_url = &oidc_issuer_mock_server.uri();
+    let nango_mock_server = MockServer::start().await;
+    let nango_mock_server_url = &nango_mock_server.uri();
 
     // Set up OIDC authentication settings pointing to mock server
     if let AuthenticationSettings::OpenIDConnect(oidc_settings) =
@@ -606,6 +606,30 @@ pub async fn tested_app_with_domain_blacklist(
         mailer_stub,
         redis_storage,
         cache,
+    }
+}
+
+/// Custom wiremock matcher: query parameter is absent
+pub struct QueryParamAbsent(pub String);
+
+impl wiremock::Match for QueryParamAbsent {
+    fn matches(&self, request: &wiremock::Request) -> bool {
+        !request
+            .url
+            .query_pairs()
+            .any(|(name, _)| name == self.0.as_str())
+    }
+}
+
+/// Custom wiremock matcher: query parameter exists (any value)
+pub struct QueryParamPresent(pub String);
+
+impl wiremock::Match for QueryParamPresent {
+    fn matches(&self, request: &wiremock::Request) -> bool {
+        request
+            .url
+            .query_pairs()
+            .any(|(name, _)| name == self.0.as_str())
     }
 }
 

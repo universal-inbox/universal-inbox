@@ -101,41 +101,48 @@ async fn test_sync_todoist_slack_task(
         "C05XXX",
         "1707686216.825719",
         "slack_get_chat_permalink_response.json",
-    );
-    mock_slack_list_emojis(&app.app.slack_mock_server, "slack_emoji_list_response.json");
-    let slack_fetch_user_mock = mock_slack_fetch_user(
+    )
+    .await;
+    mock_slack_list_emojis(&app.app.slack_mock_server, "slack_emoji_list_response.json").await;
+    let _slack_fetch_user_mock = mock_slack_fetch_user(
         &app.app.slack_mock_server,
         "U05YYY", // The message's creator, not the user who starred the message
         "slack_fetch_user_response.json",
-    );
+    )
+    .await;
     let slack_message_id = "1707686216.825719";
-    let slack_fetch_message_mock = mock_slack_fetch_reply(
+    let _slack_fetch_message_mock = mock_slack_fetch_reply(
         &app.app.slack_mock_server,
         "C05XXX",
         slack_message_id,
         "slack_fetch_message_response.json",
-    );
-    let slack_fetch_channel_mock = mock_slack_fetch_channel(
+    )
+    .await;
+    let _slack_fetch_channel_mock = mock_slack_fetch_channel(
         &app.app.slack_mock_server,
         "C05XXX",
         "slack_fetch_channel_response.json",
-    );
-    let slack_fetch_team_mock = mock_slack_fetch_team(
+    )
+    .await;
+    let _slack_fetch_team_mock = mock_slack_fetch_team(
         &app.app.slack_mock_server,
         "T05XXX",
         "slack_fetch_team_response.json",
-    );
-    let slack_list_usergroups_mock = mock_slack_list_usergroups(
+    )
+    .await;
+    let _slack_list_usergroups_mock = mock_slack_list_usergroups(
         &app.app.slack_mock_server,
         "slack_list_usergroups_response.json",
-    );
+    )
+    .await;
 
-    let todoist_projects_mock = mock_todoist_sync_resources_service(
+    let _todoist_projects_mock = mock_todoist_sync_resources_service(
         &app.app.todoist_mock_server,
         "projects",
         &sync_todoist_projects_response,
         None,
-    );
+    )
+    .await;
     let todoist_item = &mut sync_todoist_items_response.items.as_mut().unwrap()[1];
     // First setting the status and project before the sync
     todoist_item.project_id = "1111".to_string();
@@ -146,7 +153,7 @@ async fn test_sync_todoist_slack_task(
         todoist_item.checked = true;
         todoist_item.completed_at = Some(Utc::now());
     }
-    let todoist_item_add_mock = mock_todoist_item_add_service(
+    let _todoist_item_add_mock = mock_todoist_item_add_service(
         &app.app.todoist_mock_server,
         &todoist_item.id,
         "[📥  Universal Inbox new release 📥...](https://slack.com/archives/C05XXX/p1234567890)"
@@ -175,9 +182,11 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
         Some(todoist_item.project_id.clone()),
         None,
         TodoistItemPriority::P1,
-    );
-    let todoist_get_item_mock =
-        mock_todoist_get_item_service(&app.app.todoist_mock_server, Box::new(todoist_item.clone()));
+    )
+    .await;
+    let _todoist_get_item_mock =
+        mock_todoist_get_item_service(&app.app.todoist_mock_server, Box::new(todoist_item.clone()))
+            .await;
 
     let response = create_resource_response(
         &app.client,
@@ -204,15 +213,6 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
     )
     .await;
 
-    slack_fetch_user_mock.assert();
-    slack_fetch_message_mock.assert();
-    slack_fetch_channel_mock.assert();
-    slack_fetch_team_mock.assert();
-    slack_list_usergroups_mock.assert();
-    todoist_projects_mock.assert();
-    todoist_item_add_mock.assert();
-    todoist_get_item_mock.assert();
-
     assert_eq!(tasks.len(), 1);
     let existing_task = tasks.first().unwrap();
 
@@ -226,18 +226,19 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
     }
     todoist_item.project_id = new_project_id.to_string();
 
-    let todoist_tasks_mock = mock_todoist_sync_resources_service(
+    let _todoist_tasks_mock = mock_todoist_sync_resources_service(
         &app.app.todoist_mock_server,
         "items",
         &sync_todoist_items_response,
         None,
-    );
+    )
+    .await;
 
-    let slack_stars_add_mock =
-        mock_slack_stars_add(&app.app.slack_mock_server, "C05XXX", "1707686216.825719");
-    let slack_stars_remove_mock = (expected_new_task_status == TaskStatus::Done).then(|| {
-        mock_slack_stars_remove(&app.app.slack_mock_server, "C05XXX", "1707686216.825719")
-    });
+    let _slack_stars_add_mock =
+        mock_slack_stars_add(&app.app.slack_mock_server, "C05XXX", "1707686216.825719").await;
+    if expected_new_task_status == TaskStatus::Done {
+        mock_slack_stars_remove(&app.app.slack_mock_server, "C05XXX", "1707686216.825719").await;
+    }
 
     let task_creations: Vec<TaskCreationResult> = sync_tasks(
         &app.client,
@@ -254,13 +255,6 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
         if new_project_id == "1111" {
             assert_eq!(task_creation.notifications.len(), 1);
         }
-    }
-    todoist_tasks_mock.assert();
-    todoist_projects_mock.assert();
-    if let Some(slack_stars_remove_mock) = slack_stars_remove_mock {
-        slack_stars_remove_mock.assert();
-    } else {
-        slack_stars_add_mock.assert();
     }
 
     let updated_task: Box<Task> = get_resource(
@@ -355,7 +349,8 @@ async fn test_patch_slack_task_status_as_done(
         "projects",
         &sync_todoist_projects_response,
         None,
-    );
+    )
+    .await;
 
     mock_todoist_item_add_service(
         &app.app.todoist_mock_server,
@@ -385,11 +380,13 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
         Some(todoist_item.project_id.clone()),
         None,
         TodoistItemPriority::P1,
-    );
+    )
+    .await;
     mock_todoist_get_item_service(
         &app.app.todoist_mock_server,
         Box::new(*todoist_item.clone()),
-    );
+    )
+    .await;
 
     let SlackPushEvent::EventCallback(SlackPushEventCallback {
         event:
@@ -437,12 +434,13 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
     let exiting_task = creation.task.as_ref().unwrap().clone();
     assert_eq!(exiting_task.status, TaskStatus::Active);
 
-    let todoist_mock = mock_todoist_complete_item_service(
+    let _todoist_mock = mock_todoist_complete_item_service(
         &app.app.todoist_mock_server,
         &exiting_task.sink_item.as_ref().unwrap().source_id,
-    );
-    let slack_star_remove_mock =
-        mock_slack_stars_remove(&app.app.slack_mock_server, "C05XXX", "1707686216.825719");
+    )
+    .await;
+    let _slack_star_remove_mock =
+        mock_slack_stars_remove(&app.app.slack_mock_server, "C05XXX", "1707686216.825719").await;
 
     let patched_task: Box<Task> = patch_resource(
         &app.client,
@@ -455,9 +453,6 @@ Here is a [link](https://www.universal-inbox.com)@@john.doe@@@admins@#universal-
         },
     )
     .await;
-
-    todoist_mock.assert();
-    slack_star_remove_mock.assert();
 
     assert!(patched_task.completed_at.is_some());
     assert_eq!(

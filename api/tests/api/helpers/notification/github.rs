@@ -1,12 +1,10 @@
 use chrono::{TimeZone, Utc};
 use graphql_client::{GraphQLQuery, Response};
-use httpmock::{
-    Method::{GET, POST},
-    Mock, MockServer,
-};
 use pretty_assertions::assert_eq;
 use rstest::*;
 use url::Url;
+use wiremock::matchers::{body_json, header, method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use universal_inbox::{
     HasHtmlUrl,
@@ -24,7 +22,8 @@ use universal_inbox_api::integrations::github::graphql::{
 };
 
 use crate::helpers::{
-    TestedApp, load_json_fixture_file, notification::create_notification_from_source_item,
+    QueryParamPresent, TestedApp, load_json_fixture_file,
+    notification::create_notification_from_source_item,
 };
 
 pub async fn create_notification_from_github_notification(
@@ -44,70 +43,82 @@ pub async fn create_notification_from_github_notification(
     .await
 }
 
-pub fn mock_github_notifications_service<'a>(
-    github_mock_server: &'a MockServer,
-    page: &'a str,
-    result: &'a Vec<GithubNotification>,
-) -> Mock<'a> {
-    github_mock_server.mock(|when, then| {
-        when.method(GET)
-            .path("/notifications")
-            .header("accept", "application/vnd.github.v3+json")
-            .header("authorization", "Bearer github_test_access_token")
-            .query_param("page", page)
-            .query_param_exists("per_page");
-        then.status(200)
-            .header("content-type", "application/json")
-            .json_body_obj(result);
-    })
+pub async fn mock_github_notifications_service(
+    github_mock_server: &MockServer,
+    page: &str,
+    result: &Vec<GithubNotification>,
+) {
+    Mock::given(method("GET"))
+        .and(path("/notifications"))
+        .and(header("accept", "application/vnd.github.v3+json"))
+        .and(header("authorization", "Bearer github_test_access_token"))
+        .and(wiremock::matchers::query_param("page", page))
+        .and(QueryParamPresent("per_page".to_string()))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_json(result),
+        )
+        .mount(github_mock_server)
+        .await;
 }
 
-pub fn mock_github_pull_request_query<'a>(
-    github_mock_server: &'a MockServer,
+pub async fn mock_github_pull_request_query(
+    github_mock_server: &MockServer,
     owner: String,
     repository: String,
     pr_number: i64,
-    result: &'a Response<pull_request_query::ResponseData>,
-) -> Mock<'a> {
+    result: &Response<pull_request_query::ResponseData>,
+) {
     let expected_request_body = PullRequestQuery::build_query(pull_request_query::Variables {
         owner,
         repository,
         pr_number,
     });
-    github_mock_server.mock(|when, then| {
-        when.method(POST)
-            .path("/graphql")
-            .json_body_obj(&expected_request_body)
-            .header("accept", "application/vnd.github.merge-info-preview+json")
-            .header("authorization", "Bearer github_test_access_token");
-        then.status(200)
-            .header("content-type", "application/json")
-            .json_body_obj(result);
-    })
+    Mock::given(method("POST"))
+        .and(path("/graphql"))
+        .and(body_json(&expected_request_body))
+        .and(header(
+            "accept",
+            "application/vnd.github.merge-info-preview+json",
+        ))
+        .and(header("authorization", "Bearer github_test_access_token"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_json(result),
+        )
+        .mount(github_mock_server)
+        .await;
 }
 
-pub fn mock_github_discussion_query<'a>(
-    github_mock_server: &'a MockServer,
+pub async fn mock_github_discussion_query(
+    github_mock_server: &MockServer,
     owner: String,
     repository: String,
     discussion_number: i64,
-    result: &'a Response<discussion_query::ResponseData>,
-) -> Mock<'a> {
+    result: &Response<discussion_query::ResponseData>,
+) {
     let expected_request_body = DiscussionQuery::build_query(discussion_query::Variables {
         owner,
         repository,
         discussion_number,
     });
-    github_mock_server.mock(|when, then| {
-        when.method(POST)
-            .path("/graphql")
-            .json_body_obj(&expected_request_body)
-            .header("accept", "application/vnd.github.merge-info-preview+json")
-            .header("authorization", "Bearer github_test_access_token");
-        then.status(200)
-            .header("content-type", "application/json")
-            .json_body_obj(result);
-    })
+    Mock::given(method("POST"))
+        .and(path("/graphql"))
+        .and(body_json(&expected_request_body))
+        .and(header(
+            "accept",
+            "application/vnd.github.merge-info-preview+json",
+        ))
+        .and(header("authorization", "Bearer github_test_access_token"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_json(result),
+        )
+        .mount(github_mock_server)
+        .await;
 }
 
 #[fixture]

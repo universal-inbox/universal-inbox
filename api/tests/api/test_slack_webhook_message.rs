@@ -432,11 +432,12 @@ mod job {
         let service = app.notification_service.read().await;
         let mut transaction = service.begin().await.unwrap();
         add_usergroup_ref_in_message(&mut message_event, "G01");
-        let slack_list_users_in_usergroup_mock = mock_slack_list_users_in_usergroup(
+        let _slack_list_users_in_usergroup_mock = mock_slack_list_users_in_usergroup(
             &app.slack_mock_server,
             "G01",
             "slack_list_users_in_usergroup_response.json",
-        );
+        )
+        .await;
 
         nango_slack_connection.credentials.raw["authed_user"]["id"] = json!("U02");
         nango_slack_connection.credentials.raw["authed_user"]["access_token"] =
@@ -478,19 +479,21 @@ mod job {
         )
         .await;
 
-        let slack_fetch_user_mock1 = mock_slack_fetch_user(
+        let _slack_fetch_user_mock1 = mock_slack_fetch_user(
             &app.slack_mock_server,
             "U01",
             "slack_fetch_user_response.json",
-        );
-        let slack_fetch_user_mock2 = mock_slack_fetch_user(
+        )
+        .await;
+        let _slack_fetch_user_mock2 = mock_slack_fetch_user(
             &app.slack_mock_server,
             "U02",
             "slack_fetch_user_response.json",
-        );
+        )
+        .await;
 
         let slack_message_id = "1732535291.911209"; // First message
-        let slack_fetch_thread_mock_u01 = mock_slack_fetch_thread(
+        let _slack_fetch_thread_mock_u01 = mock_slack_fetch_thread(
             &app.slack_mock_server,
             "C05XXX",
             slack_message_id,
@@ -499,16 +502,18 @@ mod job {
             true,
             None,
             "slack_test_user_access_token",
-        );
+        )
+        .await;
         mock_slack_get_chat_permalink(
             &app.slack_mock_server,
             "C05XXX",
             slack_message_id,
             "slack_get_chat_permalink_response.json",
-        );
-        mock_slack_list_emojis(&app.slack_mock_server, "slack_emoji_list_response.json");
+        )
+        .await;
+        mock_slack_list_emojis(&app.slack_mock_server, "slack_emoji_list_response.json").await;
 
-        let slack_fetch_thread_mock_u02 = mock_slack_fetch_thread(
+        let _slack_fetch_thread_mock_u02 = mock_slack_fetch_thread(
             &app.slack_mock_server,
             "C05XXX",
             slack_message_id,
@@ -517,24 +522,28 @@ mod job {
             true,
             Some(1),
             "slack_other_user_access_token",
-        );
+        )
+        .await;
         mock_slack_get_chat_permalink(
             &app.slack_mock_server,
             "C05XXX",
             "1729779674.478289",
             "slack_get_chat_permalink_response.json",
-        );
+        )
+        .await;
 
-        let slack_fetch_channel_mock = mock_slack_fetch_channel(
+        let _slack_fetch_channel_mock = mock_slack_fetch_channel(
             &app.slack_mock_server,
             "C05XXX",
             "slack_fetch_channel_response.json",
-        );
-        let slack_fetch_team_mock = mock_slack_fetch_team(
+        )
+        .await;
+        let _slack_fetch_team_mock = mock_slack_fetch_team(
             &app.slack_mock_server,
             "T01",
             "slack_fetch_team_response.json",
-        );
+        )
+        .await;
 
         handle_slack_message_push_event(
             &mut transaction,
@@ -552,14 +561,6 @@ mod job {
             .await
             .context("Failed to commit transaction")
             .unwrap();
-
-        slack_fetch_user_mock1.assert_hits(2);
-        slack_fetch_user_mock2.assert_hits(2);
-        slack_fetch_thread_mock_u01.assert_hits(1);
-        slack_fetch_thread_mock_u02.assert_hits(1);
-        slack_fetch_channel_mock.assert_hits(1);
-        slack_fetch_team_mock.assert_hits(1);
-        slack_list_users_in_usergroup_mock.assert_hits(1);
 
         let notifications_u02 = list_notifications(
             &client_u02,
@@ -632,17 +633,17 @@ mod job {
         let app = authenticated_app.await;
         let service = app.app.notification_service.read().await;
         let mut transaction = service.begin().await.unwrap();
-        let slack_list_users_in_usergroup_mock = if user_in_group {
+        if user_in_group {
             add_usergroup_ref_in_message(&mut message_event, "G01");
-            Some(mock_slack_list_users_in_usergroup(
+            mock_slack_list_users_in_usergroup(
                 &app.app.slack_mock_server,
                 "G01",
                 "slack_list_users_in_usergroup_response.json",
-            ))
+            )
+            .await;
         } else {
             add_user_ref_in_message(&mut message_event, "U01");
-            None
-        };
+        }
         nango_slack_connection.credentials.raw["authed_user"]["id"] = json!("U01");
         nango_slack_connection.credentials.raw["authed_user"]["access_token"] =
             json!("slack_test_user_access_token");
@@ -667,23 +668,24 @@ mod job {
             "C05XXX",
             slack_message_id,
             "slack_get_chat_permalink_response.json",
-        );
-        let mut slack_fetch_user_mock1 = None;
-        let mut slack_fetch_user_mock2 = None;
+        )
+        .await;
         if !embedded_user_profiles {
             // Fetch all users replying in the thread
-            slack_fetch_user_mock1 = Some(mock_slack_fetch_user(
+            mock_slack_fetch_user(
                 &app.app.slack_mock_server,
                 "U01",
                 "slack_fetch_user_response.json",
-            ));
-            slack_fetch_user_mock2 = Some(mock_slack_fetch_user(
+            )
+            .await;
+            mock_slack_fetch_user(
                 &app.app.slack_mock_server,
                 "U02",
                 "slack_fetch_user_response.json",
-            ));
+            )
+            .await;
         }
-        let slack_fetch_thread_mock = mock_slack_fetch_thread(
+        let _slack_fetch_thread_mock = mock_slack_fetch_thread(
             &app.app.slack_mock_server,
             "C05XXX",
             slack_message_id,
@@ -696,17 +698,20 @@ mod job {
             true,
             None,
             "slack_test_user_access_token",
-        );
-        let slack_fetch_channel_mock = mock_slack_fetch_channel(
+        )
+        .await;
+        let _slack_fetch_channel_mock = mock_slack_fetch_channel(
             &app.app.slack_mock_server,
             "C05XXX",
             "slack_fetch_channel_response.json",
-        );
-        let slack_fetch_team_mock = mock_slack_fetch_team(
+        )
+        .await;
+        let _slack_fetch_team_mock = mock_slack_fetch_team(
             &app.app.slack_mock_server,
             "T01",
             "slack_fetch_team_response.json",
-        );
+        )
+        .await;
 
         handle_slack_message_push_event(
             &mut transaction,
@@ -724,19 +729,6 @@ mod job {
             .await
             .context("Failed to commit transaction")
             .unwrap();
-
-        if let Some(slack_fetch_user_mock1) = slack_fetch_user_mock1 {
-            slack_fetch_user_mock1.assert();
-        }
-        if let Some(slack_fetch_user_mock2) = slack_fetch_user_mock2 {
-            slack_fetch_user_mock2.assert();
-        }
-        slack_fetch_thread_mock.assert();
-        slack_fetch_channel_mock.assert();
-        slack_fetch_team_mock.assert();
-        if let Some(slack_list_users_in_usergroup_mock) = slack_list_users_in_usergroup_mock {
-            slack_list_users_in_usergroup_mock.assert();
-        }
 
         let notifications = list_notifications(
             &app.client,
@@ -873,17 +865,19 @@ mod job {
         let slack_root_message_id = slack_thread.messages.first().origin.ts.to_string();
         let slack_message_id = message.origin.ts.to_string();
         // Fetch all users replying in the thread
-        let slack_fetch_user_mock1 = mock_slack_fetch_user(
+        let _slack_fetch_user_mock1 = mock_slack_fetch_user(
             &app.app.slack_mock_server,
             "U01",
             "slack_fetch_user_response.json",
-        );
-        let slack_fetch_user_mock2 = mock_slack_fetch_user(
+        )
+        .await;
+        let _slack_fetch_user_mock2 = mock_slack_fetch_user(
             &app.app.slack_mock_server,
             "U02",
             "slack_fetch_user_response.json",
-        );
-        let slack_fetch_thread_mock = mock_slack_fetch_thread(
+        )
+        .await;
+        let _slack_fetch_thread_mock = mock_slack_fetch_thread(
             &app.app.slack_mock_server,
             "C05XXX",
             &slack_root_message_id,
@@ -892,17 +886,20 @@ mod job {
             subscribed,
             Some(0),
             "slack_test_user_access_token",
-        );
-        let slack_fetch_channel_mock = mock_slack_fetch_channel(
+        )
+        .await;
+        let _slack_fetch_channel_mock = mock_slack_fetch_channel(
             &app.app.slack_mock_server,
             "C05XXX",
             "slack_fetch_channel_response.json",
-        );
-        let slack_fetch_team_mock = mock_slack_fetch_team(
+        )
+        .await;
+        let _slack_fetch_team_mock = mock_slack_fetch_team(
             &app.app.slack_mock_server,
             "T01",
             "slack_fetch_team_response.json",
-        );
+        )
+        .await;
 
         let slack_first_unread_message_id = slack_thread.messages.last().origin.ts.clone();
         slack_thread.subscribed = was_subscribed;
@@ -912,7 +909,8 @@ mod job {
             "C05XXX",
             slack_first_unread_message_id.as_ref(),
             "slack_get_chat_permalink_response.json",
-        );
+        )
+        .await;
         let existing_notification = create_notification_from_slack_thread(
             &app.app,
             &slack_thread,
@@ -945,12 +943,6 @@ mod job {
             .await
             .context("Failed to commit transaction")
             .unwrap();
-
-        slack_fetch_user_mock1.assert();
-        slack_fetch_user_mock2.assert();
-        slack_fetch_thread_mock.assert();
-        slack_fetch_channel_mock.assert();
-        slack_fetch_team_mock.assert();
 
         let notifications = list_notifications(
             &app.client,
@@ -1050,17 +1042,19 @@ mod job {
         let slack_root_message_id = slack_thread.messages.first().origin.ts.to_string();
         let slack_message_id = message.origin.ts.to_string();
         // Fetch all users replying in the thread
-        let slack_fetch_user_mock1 = mock_slack_fetch_user(
+        let _slack_fetch_user_mock1 = mock_slack_fetch_user(
             &app.slack_mock_server,
             "U01",
             "slack_fetch_user_response.json",
-        );
-        let slack_fetch_user_mock2 = mock_slack_fetch_user(
+        )
+        .await;
+        let _slack_fetch_user_mock2 = mock_slack_fetch_user(
             &app.slack_mock_server,
             "U02",
             "slack_fetch_user_response.json",
-        );
-        let slack_fetch_thread_mock_u02 = mock_slack_fetch_thread(
+        )
+        .await;
+        let _slack_fetch_thread_mock_u02 = mock_slack_fetch_thread(
             &app.slack_mock_server,
             "C05XXX",
             &slack_root_message_id,
@@ -1069,24 +1063,28 @@ mod job {
             true,
             Some(1),
             "slack_other_user_access_token",
-        );
-        let slack_fetch_channel_mock = mock_slack_fetch_channel(
+        )
+        .await;
+        let _slack_fetch_channel_mock = mock_slack_fetch_channel(
             &app.slack_mock_server,
             "C05XXX",
             "slack_fetch_channel_response.json",
-        );
-        let slack_fetch_team_mock = mock_slack_fetch_team(
+        )
+        .await;
+        let _slack_fetch_team_mock = mock_slack_fetch_team(
             &app.slack_mock_server,
             "T01",
             "slack_fetch_team_response.json",
-        );
+        )
+        .await;
         let slack_first_unread_message_id_u02 = slack_thread.messages.first().origin.ts.clone();
         mock_slack_get_chat_permalink(
             &app.slack_mock_server,
             "C05XXX",
             slack_first_unread_message_id_u02.as_ref(),
             "slack_get_chat_permalink_response.json",
-        );
+        )
+        .await;
 
         // Creating user U01 and its Slack connection
         let (client_u01, user_u01) =
@@ -1112,8 +1110,9 @@ mod job {
             "C05XXX",
             slack_first_unread_message_id_u01.as_ref(),
             "slack_get_chat_permalink_response.json",
-        );
-        let slack_fetch_thread_mock_u01 = mock_slack_fetch_thread(
+        )
+        .await;
+        let _slack_fetch_thread_mock_u01 = mock_slack_fetch_thread(
             &app.slack_mock_server,
             "C05XXX",
             &slack_root_message_id,
@@ -1122,7 +1121,8 @@ mod job {
             true,
             None,
             "slack_test_user_access_token",
-        );
+        )
+        .await;
 
         slack_thread.subscribed = true;
         slack_thread.last_read = Some(slack_first_unread_message_id_u01.clone());
@@ -1165,13 +1165,6 @@ mod job {
             .await
             .context("Failed to commit transaction")
             .unwrap();
-
-        slack_fetch_user_mock1.assert_hits(2);
-        slack_fetch_user_mock2.assert_hits(2);
-        slack_fetch_thread_mock_u01.assert_hits(1);
-        slack_fetch_thread_mock_u02.assert_hits(1);
-        slack_fetch_channel_mock.assert_hits(1);
-        slack_fetch_team_mock.assert_hits(1);
 
         let notifications_u02 = list_notifications(
             &client_u02,

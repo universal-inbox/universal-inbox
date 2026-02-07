@@ -1,5 +1,4 @@
 use chrono::{TimeDelta, TimeZone, Utc};
-use httpmock::Method::{GET, POST};
 use openidconnect::{
     AccessToken, Audience, EmptyAdditionalClaims, EndUserEmail, IssuerUrl, StandardClaims,
     SubjectIdentifier,
@@ -8,6 +7,8 @@ use openidconnect::{
 use reqwest::Client;
 use rstest::fixture;
 use serde_json::json;
+use wiremock::matchers::{method, path};
+use wiremock::{Mock, ResponseTemplate};
 
 use universal_inbox::{
     auth::{SessionAuthValidationParameters, auth_token::AuthenticationToken},
@@ -35,10 +36,10 @@ pub async fn authenticate_user(
     email: &str,
 ) -> (Client, User) {
     app.oidc_issuer_mock_server.as_ref().unwrap().reset().await;
-    mock_oidc_openid_configuration(app);
-    mock_oidc_keys(app);
-    mock_oidc_introspection(app, auth_provider_user_id, true);
-    mock_oidc_user_info(app, auth_provider_user_id, first_name, last_name, email);
+    mock_oidc_openid_configuration(app).await;
+    mock_oidc_keys(app).await;
+    mock_oidc_introspection(app, auth_provider_user_id, true).await;
+    mock_oidc_user_info(app, auth_provider_user_id, first_name, last_name, email).await;
 
     let client = Client::builder().cookie_store(true).build().unwrap();
 
@@ -46,7 +47,7 @@ pub async fn authenticate_user(
     let oidc_issuer_mock_server_url = app
         .oidc_issuer_mock_server
         .as_ref()
-        .map(|s| s.base_url())
+        .map(|s| s.uri())
         .unwrap();
     let id_token = CoreIdToken::new(
         CoreIdTokenClaims::new(
@@ -96,17 +97,15 @@ pub async fn authenticated_app(#[future] tested_app: TestedApp) -> Authenticated
     AuthenticatedApp { client, app, user }
 }
 
-pub fn mock_oidc_openid_configuration(app: &TestedApp) {
-    let oidc_issuer_mock_server_url = app.oidc_issuer_mock_server.as_ref().unwrap().base_url();
+pub async fn mock_oidc_openid_configuration(app: &TestedApp) {
+    let oidc_issuer_mock_server_url = app.oidc_issuer_mock_server.as_ref().unwrap().uri();
 
-    app.oidc_issuer_mock_server
-        .as_ref()
-        .unwrap()
-        .mock(|when, then| {
-            when.method(GET).path("/.well-known/openid-configuration");
-            then.status(200)
-                .header("Content-Type", "application/json")
-                .json_body(json!({
+    Mock::given(method("GET"))
+        .and(path("/.well-known/openid-configuration"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Content-Type", "application/json")
+                .set_body_json(json!({
                     "authorization_endpoint": format!("{oidc_issuer_mock_server_url}/authorize"),
                     "jwks_uri": format!("{oidc_issuer_mock_server_url}/keys"),
                     "introspection_endpoint": format!("{oidc_issuer_mock_server_url}/introspect"),
@@ -131,19 +130,19 @@ pub fn mock_oidc_openid_configuration(app: &TestedApp) {
                     ],
                     "userinfo_endpoint": format!("{oidc_issuer_mock_server_url}/userinfo"),
                     "end_session_endpoint": format!("{oidc_issuer_mock_server_url}/end_session")
-                }));
-        });
+                })),
+        )
+        .mount(app.oidc_issuer_mock_server.as_ref().unwrap())
+        .await;
 }
 
-pub fn mock_oidc_keys(app: &TestedApp) {
-    app.oidc_issuer_mock_server
-        .as_ref()
-        .unwrap()
-        .mock(|when, then| {
-            when.method(GET).path("/keys");
-            then.status(200)
-                .header("Content-Type", "application/json")
-                .json_body(json!({
+pub async fn mock_oidc_keys(app: &TestedApp) {
+    Mock::given(method("GET"))
+        .and(path("/keys"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Content-Type", "application/json")
+                .set_body_json(json!({
                     "keys": [
                         {
                             "alg": "RS256",
@@ -154,21 +153,21 @@ pub fn mock_oidc_keys(app: &TestedApp) {
                             "use": "sig"
                         },
                     ]
-                }));
-        });
+                })),
+        )
+        .mount(app.oidc_issuer_mock_server.as_ref().unwrap())
+        .await;
 }
 
-pub fn mock_oidc_introspection(app: &TestedApp, auth_provider_user_id: &str, active: bool) {
-    let oidc_issuer_mock_server_url = &app.oidc_issuer_mock_server.as_ref().unwrap().base_url();
+pub async fn mock_oidc_introspection(app: &TestedApp, auth_provider_user_id: &str, active: bool) {
+    let oidc_issuer_mock_server_url = &app.oidc_issuer_mock_server.as_ref().unwrap().uri();
 
-    app.oidc_issuer_mock_server
-        .as_ref()
-        .unwrap()
-        .mock(|when, then| {
-            when.method(POST).path("/introspect");
-            then.status(200)
-                .header("Content-Type", "application/json")
-                .json_body(json!({
+    Mock::given(method("POST"))
+        .and(path("/introspect"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Content-Type", "application/json")
+                .set_body_json(json!({
                     "active": active,
                     "scopes": "openid, profile, email",
                     "client_id": "1234567890",
@@ -181,33 +180,35 @@ pub fn mock_oidc_introspection(app: &TestedApp, auth_provider_user_id: &str, act
                     "aud": ["1234567890"],
                     "iss": &oidc_issuer_mock_server_url,
                     "jti": "1234567",
-                }));
-        });
+                })),
+        )
+        .mount(app.oidc_issuer_mock_server.as_ref().unwrap())
+        .await;
 }
 
-pub fn mock_oidc_user_info(
+pub async fn mock_oidc_user_info(
     app: &TestedApp,
     auth_provider_user_id: &str,
     first_name: &str,
     last_name: &str,
     email: &str,
 ) {
-    app.oidc_issuer_mock_server
-        .as_ref()
-        .unwrap()
-        .mock(|when, then| {
-            when.method(GET).path("/userinfo");
-            then.status(200)
-                .header("Content-Type", "application/json")
-                .json_body(json!({
+    Mock::given(method("GET"))
+        .and(path("/userinfo"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Content-Type", "application/json")
+                .set_body_json(json!({
                     "sub": auth_provider_user_id,
                     "name": format!("{} {}", first_name, last_name),
                     "given_name": first_name,
                     "family_name": last_name,
                     "preferred_username": "username",
                     "email": email,
-                }));
-        });
+                })),
+        )
+        .mount(app.oidc_issuer_mock_server.as_ref().unwrap())
+        .await;
 }
 
 pub async fn fetch_auth_tokens_for_user(

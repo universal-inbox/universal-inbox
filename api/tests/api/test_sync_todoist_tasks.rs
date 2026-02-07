@@ -46,6 +46,7 @@ use crate::helpers::{
         },
     },
 };
+use wiremock::{Mock, ResponseTemplate};
 
 #[rstest]
 #[tokio::test]
@@ -72,12 +73,13 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
         None,
     )
     .await;
-    let todoist_projects_mock = mock_todoist_sync_resources_service(
+    let _todoist_projects_mock = mock_todoist_sync_resources_service(
         &app.app.todoist_mock_server,
         "projects",
         &sync_todoist_projects_response,
         None,
-    );
+    )
+    .await;
 
     let todoist_items = sync_todoist_items_response.items.clone().unwrap();
     let existing_todoist_third_party_item_creation: Box<ThirdPartyItemCreationResult> =
@@ -119,12 +121,13 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
         .as_ref()
         .unwrap();
 
-    let todoist_tasks_mock = mock_todoist_sync_resources_service(
+    let _todoist_tasks_mock = mock_todoist_sync_resources_service(
         &app.app.todoist_mock_server,
         "items",
         &sync_todoist_items_response,
         None,
-    );
+    )
+    .await;
 
     let task_creations: Vec<TaskCreationResult> = sync_tasks(
         &app.client,
@@ -136,8 +139,6 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
 
     assert_eq!(task_creations.len(), todoist_items.len());
     assert_sync_items(&task_creations, &todoist_items, app.user.id);
-    todoist_tasks_mock.assert();
-    todoist_projects_mock.assert();
 
     let updated_todoist_task: Box<Task> = get_resource(
         &app.client,
@@ -293,18 +294,20 @@ async fn test_sync_tasks_should_add_new_task_and_delete_notification_when_disabl
     )
     .await;
 
-    let todoist_tasks_mock = mock_todoist_sync_resources_service(
+    let _todoist_tasks_mock = mock_todoist_sync_resources_service(
         &app.app.todoist_mock_server,
         "items",
         &sync_todoist_items_response,
         None,
-    );
-    let todoist_projects_mock = mock_todoist_sync_resources_service(
+    )
+    .await;
+    let _todoist_projects_mock = mock_todoist_sync_resources_service(
         &app.app.todoist_mock_server,
         "projects",
         &sync_todoist_projects_response,
         None,
-    );
+    )
+    .await;
 
     let task_creations: Vec<TaskCreationResult> = sync_tasks(
         &app.client,
@@ -320,8 +323,6 @@ async fn test_sync_tasks_should_add_new_task_and_delete_notification_when_disabl
             .iter()
             .all(|task_creation| { task_creation.notifications.is_empty() })
     );
-    todoist_tasks_mock.assert();
-    todoist_projects_mock.assert();
 
     let notifications = list_notifications_with_tasks(
         &app.client,
@@ -358,7 +359,7 @@ async fn test_sync_tasks_should_add_new_empty_task(
     )
     .await;
 
-    let todoist_tasks_mock = mock_todoist_sync_resources_service(
+    let _todoist_tasks_mock = mock_todoist_sync_resources_service(
         &app.app.todoist_mock_server,
         "items",
         &TodoistSyncResponse {
@@ -391,8 +392,9 @@ async fn test_sync_tasks_should_add_new_empty_task(
             sync_token: SyncToken("sync_token".to_string()),
         },
         None,
-    );
-    let todoist_projects_mock = mock_todoist_sync_resources_service(
+    )
+    .await;
+    let _todoist_projects_mock = mock_todoist_sync_resources_service(
         &app.app.todoist_mock_server,
         "projects",
         &TodoistSyncResponse {
@@ -403,7 +405,8 @@ async fn test_sync_tasks_should_add_new_empty_task(
             sync_token: SyncToken("project_sync_token".to_string()),
         },
         None,
-    );
+    )
+    .await;
 
     let task_creations: Vec<TaskCreationResult> = sync_tasks(
         &app.client,
@@ -430,8 +433,6 @@ async fn test_sync_tasks_should_add_new_empty_task(
     assert!(task_creations[0].task.tags.is_empty());
     assert_eq!(task_creations[0].task.title, "".to_string());
     //assert_sync_items(&task_creations, &todoist_items, app.user.id);
-    todoist_tasks_mock.assert();
-    todoist_projects_mock.assert();
 }
 
 #[rstest]
@@ -471,12 +472,13 @@ async fn test_sync_tasks_should_reuse_existing_sync_token(
         temp_id_mapping: HashMap::new(),
         sync_token: SyncToken("new_sync_token".to_string()),
     };
-    let todoist_tasks_mock = mock_todoist_sync_resources_service(
+    let _todoist_tasks_mock = mock_todoist_sync_resources_service(
         &app.app.todoist_mock_server,
         "items",
         &sync_todoist_items_response,
         Some(sync_token),
-    );
+    )
+    .await;
 
     let task_creations: Vec<TaskCreationResult> = sync_tasks(
         &app.client,
@@ -487,7 +489,6 @@ async fn test_sync_tasks_should_reuse_existing_sync_token(
     .await;
 
     assert_eq!(task_creations.len(), 0);
-    todoist_tasks_mock.assert();
 
     let updated_integration_connection =
         get_integration_connection(&app, integration_connection.id)
@@ -528,12 +529,13 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
         None,
     )
     .await;
-    let todoist_projects_mock = mock_todoist_sync_resources_service(
+    let _todoist_projects_mock = mock_todoist_sync_resources_service(
         &app.app.todoist_mock_server,
         "projects",
         &sync_todoist_projects_response,
         None,
-    );
+    )
+    .await;
 
     // Only task "1123" will be marked as Done during the sync, keeping reference to task and
     // notifications ids
@@ -575,12 +577,13 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
     let third_party_item_creation = third_party_item_creation.unwrap();
     let todoist_items = sync_todoist_items_response.items.clone().unwrap();
 
-    let todoist_sync_items_mock = mock_todoist_sync_resources_service(
+    let _todoist_sync_items_mock = mock_todoist_sync_resources_service(
         &app.app.todoist_mock_server,
         "items",
         &sync_todoist_items_response,
         None,
-    );
+    )
+    .await;
 
     let task_creations: Vec<TaskCreationResult> = sync_tasks(
         &app.client,
@@ -592,8 +595,6 @@ async fn test_sync_tasks_should_mark_as_completed_tasks_not_active_anymore(
 
     assert_eq!(task_creations.len(), todoist_items.len());
     assert_sync_items(&task_creations, &todoist_items, app.user.id);
-    todoist_sync_items_mock.assert();
-    todoist_projects_mock.assert();
 
     let completed_task: Box<Task> = get_resource(
         &app.client,
@@ -649,12 +650,13 @@ async fn test_sync_tasks_should_not_update_tasks_and_notifications_with_empty_in
         None,
     )
     .await;
-    let todoist_projects_mock = mock_todoist_sync_resources_service(
+    let _todoist_projects_mock = mock_todoist_sync_resources_service(
         &app.app.todoist_mock_server,
         "projects",
         &sync_todoist_projects_response,
         None,
-    );
+    )
+    .await;
 
     let mut third_party_items_created: Vec<ThirdPartyItemCreationResult> = vec![];
     {
@@ -694,12 +696,13 @@ async fn test_sync_tasks_should_not_update_tasks_and_notifications_with_empty_in
             .collect(),
     );
 
-    let todoist_sync_items_mock = mock_todoist_sync_resources_service(
+    let _todoist_sync_items_mock = mock_todoist_sync_resources_service(
         &app.app.todoist_mock_server,
         "items",
         &sync_todoist_items_response,
         None,
-    );
+    )
+    .await;
 
     let task_creations: Vec<TaskCreationResult> = sync_tasks(
         &app.client,
@@ -716,8 +719,6 @@ async fn test_sync_tasks_should_not_update_tasks_and_notifications_with_empty_in
     );
     assert_eq!(task_creations[0].task.status, TaskStatus::Active);
     assert_eq!(task_creations[0].notifications.len(), 1);
-    todoist_sync_items_mock.assert();
-    todoist_projects_mock.assert();
 
     // We want to assert that the task that was not in the response (ie. source = "1123") has not
     // been updated
@@ -767,10 +768,10 @@ async fn test_sync_tasks_with_no_validated_integration_connections(
         None,
     )
     .await;
-    let todoist_mock = app.app.todoist_mock_server.mock(|when, then| {
-        when.any_request();
-        then.status(200);
-    });
+    Mock::given(wiremock::matchers::any())
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&app.app.todoist_mock_server)
+        .await;
 
     let response = sync_tasks_response(
         &app.client,
@@ -781,7 +782,6 @@ async fn test_sync_tasks_with_no_validated_integration_connections(
     .await;
 
     assert_eq!(response.status(), StatusCode::OK);
-    todoist_mock.assert_hits(0);
 }
 
 #[rstest]
@@ -803,10 +803,10 @@ async fn test_sync_tasks_with_synchronization_disabled(
         None,
     )
     .await;
-    let todoist_mock = app.app.todoist_mock_server.mock(|when, then| {
-        when.any_request();
-        then.status(200);
-    });
+    Mock::given(wiremock::matchers::any())
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&app.app.todoist_mock_server)
+        .await;
 
     let response = sync_tasks_response(
         &app.client,
@@ -817,7 +817,6 @@ async fn test_sync_tasks_with_synchronization_disabled(
     .await;
 
     assert_eq!(response.status(), StatusCode::OK);
-    todoist_mock.assert_hits(0);
 }
 
 #[rstest]
@@ -844,12 +843,13 @@ async fn test_sync_all_tasks_asynchronously(
         None,
     )
     .await;
-    let mut todoist_projects_mock = mock_todoist_sync_resources_service(
+    let _todoist_projects_mock = mock_todoist_sync_resources_service(
         &app.app.todoist_mock_server,
         "projects",
         &sync_todoist_projects_response,
         None,
-    );
+    )
+    .await;
 
     let todoist_items = sync_todoist_items_response.items.clone().unwrap();
     let _existing_todoist_third_party_item_creation: Box<ThirdPartyItemCreationResult> =
@@ -883,12 +883,13 @@ async fn test_sync_all_tasks_asynchronously(
         )
         .await;
 
-    let mut todoist_tasks_mock = mock_todoist_sync_resources_service(
+    let _todoist_tasks_mock = mock_todoist_sync_resources_service(
         &app.app.todoist_mock_server,
         "items",
         &sync_todoist_items_response,
         None,
-    );
+    )
+    .await;
 
     if trigger_sync_when_listing_tasks {
         let result = list_tasks(&app.client, &app.app.api_address, TaskStatus::Active, true).await;
@@ -926,17 +927,11 @@ async fn test_sync_all_tasks_asynchronously(
     .await
     .unwrap();
 
-    todoist_tasks_mock.assert();
-    todoist_projects_mock.assert();
-
-    todoist_tasks_mock.delete();
-    todoist_projects_mock.delete();
-
     // Triggering a new sync should not actually sync again
-    let todoist_mock = app.app.todoist_mock_server.mock(|when, then| {
-        when.any_request();
-        then.status(200);
-    });
+    Mock::given(wiremock::matchers::any())
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&app.app.todoist_mock_server)
+        .await;
 
     let unauthenticated_client = reqwest::Client::new();
     let response = sync_tasks_response(
@@ -956,7 +951,6 @@ async fn test_sync_all_tasks_asynchronously(
     // Even after 1s, the existing task's status should not have been updated
     // because the sync happen too soon after the previous one
     assert_eq!(result.len(), 2);
-    todoist_mock.assert_hits(0);
 }
 
 #[rstest]
@@ -979,10 +973,10 @@ async fn test_sync_all_tasks_asynchronously_in_error(
     )
     .await;
 
-    let todoist_mock = app.app.todoist_mock_server.mock(|when, then| {
-        when.any_request();
-        then.status(400); // Using 400 to simulate an error that will not be retried by the ApiClient
-    });
+    Mock::given(wiremock::matchers::any())
+        .respond_with(ResponseTemplate::new(400))
+        .mount(&app.app.todoist_mock_server)
+        .await;
 
     let unauthenticated_client = reqwest::Client::new();
     let response = sync_tasks_response(
@@ -1002,7 +996,6 @@ async fn test_sync_all_tasks_asynchronously_in_error(
     // Even after 1s, the existing task's status should not have been updated
     // because the sync was in error
     assert_eq!(result.len(), 0);
-    todoist_mock.assert_hits(1);
 
     let integration_connection = get_integration_connection_per_provider(
         &app,

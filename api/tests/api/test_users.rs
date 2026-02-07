@@ -205,10 +205,10 @@ mod email_domain_blacklist {
 
         // Set up OIDC mocks with a blacklisted domain email
         app.oidc_issuer_mock_server.as_ref().unwrap().reset().await;
-        mock_oidc_openid_configuration(&app);
-        mock_oidc_keys(&app);
-        mock_oidc_introspection(&app, "1234", true);
-        mock_oidc_user_info(&app, "1234", "John", "Doe", "user@blocked.com");
+        mock_oidc_openid_configuration(&app).await;
+        mock_oidc_keys(&app).await;
+        mock_oidc_introspection(&app, "1234", true).await;
+        mock_oidc_user_info(&app, "1234", "John", "Doe", "user@blocked.com").await;
 
         let client = reqwest::Client::builder()
             .cookie_store(true)
@@ -220,7 +220,7 @@ mod email_domain_blacklist {
         let oidc_issuer_mock_server_url = app
             .oidc_issuer_mock_server
             .as_ref()
-            .map(|s| s.base_url())
+            .map(|s| s.uri())
             .unwrap();
         let id_token = CoreIdToken::new(
             CoreIdTokenClaims::new(

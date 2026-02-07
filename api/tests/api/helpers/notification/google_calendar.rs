@@ -1,10 +1,8 @@
-use httpmock::{
-    Method::{DELETE, GET},
-    Mock, MockServer,
-};
 use rstest::*;
-
 use serde_json::json;
+use wiremock::matchers::{body_json, header, method, path, query_param};
+use wiremock::{Mock, MockServer, ResponseTemplate};
+
 use universal_inbox::{
     integration_connection::IntegrationConnectionId,
     notification::Notification,
@@ -88,52 +86,65 @@ pub async fn create_notification_from_google_calendar_event(
     Box::new(notification)
 }
 
-pub fn mock_google_calendar_list_events_service<'a>(
-    google_calendar_mock_server: &'a MockServer,
-    event_id: &'a str,
-    result: &'a GoogleCalendarEventsList,
-) -> Mock<'a> {
-    google_calendar_mock_server.mock(|when, then| {
-        when.method(GET)
-            .path("/calendars/primary/events")
-            .header("authorization", "Bearer google_calendar_test_access_token")
-            .query_param("iCalUID", event_id)
-            .query_param("maxResults", "1");
-        then.status(200)
-            .header("content-type", "application/json")
-            .json_body_obj(result);
-    })
+pub async fn mock_google_calendar_list_events_service(
+    google_calendar_mock_server: &MockServer,
+    event_id: &str,
+    result: &GoogleCalendarEventsList,
+) {
+    Mock::given(method("GET"))
+        .and(path("/calendars/primary/events"))
+        .and(header(
+            "authorization",
+            "Bearer google_calendar_test_access_token",
+        ))
+        .and(query_param("iCalUID", event_id))
+        .and(query_param("maxResults", "1"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_json(result),
+        )
+        .mount(google_calendar_mock_server)
+        .await;
 }
 
-pub fn mock_google_calendar_event_delete_service<'a>(
-    google_calendar_mock_server: &'a MockServer,
-    event_id: &'a str,
-) -> Mock<'a> {
-    google_calendar_mock_server.mock(|when, then| {
-        when.method(DELETE)
-            .path(format!("/calendars/primary/events/{event_id}"))
-            .header("authorization", "Bearer google_calendar_test_access_token");
-        then.status(200).header("content-type", "application/json");
-    })
+pub async fn mock_google_calendar_event_delete_service(
+    google_calendar_mock_server: &MockServer,
+    event_id: &str,
+) {
+    Mock::given(method("DELETE"))
+        .and(path(format!("/calendars/primary/events/{event_id}")))
+        .and(header(
+            "authorization",
+            "Bearer google_calendar_test_access_token",
+        ))
+        .respond_with(ResponseTemplate::new(200).insert_header("content-type", "application/json"))
+        .mount(google_calendar_mock_server)
+        .await;
 }
 
-pub fn mock_google_calendar_event_answer_service<'a>(
-    google_calendar_mock_server: &'a MockServer,
-    event_id: &'a str,
+pub async fn mock_google_calendar_event_answer_service(
+    google_calendar_mock_server: &MockServer,
+    event_id: &str,
     attendees: Vec<EventAttendee>,
-    result: &'a GoogleCalendarEvent,
-) -> Mock<'a> {
-    google_calendar_mock_server.mock(|when, then| {
-        when.method("PATCH")
-            .path(format!("/calendars/primary/events/{event_id}"))
-            .header("authorization", "Bearer google_calendar_test_access_token")
-            .json_body(json!({
-                "attendees": attendees
-            }));
-        then.status(200)
-            .header("content-type", "application/json")
-            .json_body_obj(result);
-    })
+    result: &GoogleCalendarEvent,
+) {
+    Mock::given(method("PATCH"))
+        .and(path(format!("/calendars/primary/events/{event_id}")))
+        .and(header(
+            "authorization",
+            "Bearer google_calendar_test_access_token",
+        ))
+        .and(body_json(json!({
+            "attendees": attendees
+        })))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_json(result),
+        )
+        .mount(google_calendar_mock_server)
+        .await;
 }
 
 #[fixture]

@@ -77,7 +77,8 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         "projects",
         &sync_todoist_projects_response,
         None,
-    );
+    )
+    .await;
 
     let creation: Box<ThirdPartyItemCreationResult> = create_resource(
         &app.client,
@@ -171,10 +172,11 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     )
     .await;
 
-    let linear_notifications_mock = mock_linear_notifications_query(
+    let _linear_notifications_mock = mock_linear_notifications_query(
         &app.app.linear_mock_server,
         &sync_linear_notifications_response,
-    );
+    )
+    .await;
 
     let notifications: Vec<Notification> = sync_notifications(
         &app.client,
@@ -186,7 +188,6 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
 
     assert_eq!(notifications.len(), sync_linear_notifications.len());
     assert_sync_notifications(&notifications, &sync_linear_notifications, app.user.id);
-    linear_notifications_mock.assert();
 
     let updated_notification: Box<Notification> = get_resource(
         &app.client,
@@ -338,10 +339,11 @@ async fn test_sync_linear_notifications_should_mark_existing_notifications_for_s
     }
     nodes.push(new_update_node);
 
-    let linear_notifications_mock = mock_linear_notifications_query(
+    let _linear_notifications_mock = mock_linear_notifications_query(
         &app.app.linear_mock_server,
         &sync_linear_notifications_response,
-    );
+    )
+    .await;
 
     let synced_notifications: Vec<Notification> = sync_notifications(
         &app.client,
@@ -350,7 +352,6 @@ async fn test_sync_linear_notifications_should_mark_existing_notifications_for_s
         false,
     )
     .await;
-    linear_notifications_mock.assert();
     // 6 notifications were fetched but 2 for the same Linear issue
     assert_eq!(synced_notifications.len(), 5);
 

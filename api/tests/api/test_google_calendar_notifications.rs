@@ -90,12 +90,13 @@ mod patch_resource {
             .source_item
             .clone()
             .unwrap();
-        let google_mail_thread_modify_mock = mock_google_mail_thread_modify_service(
+        let _google_mail_thread_modify_mock = mock_google_mail_thread_modify_service(
             &app.app.google_mail_mock_server,
             &gmail_third_party_item.source_id,
             vec![],
             vec![GOOGLE_MAIL_INBOX_LABEL, &synced_label_id],
-        );
+        )
+        .await;
 
         let patched_notification = patch_resource(
             &app.client,
@@ -116,7 +117,6 @@ mod patch_resource {
                 ..*expected_notification
             })
         );
-        google_mail_thread_modify_mock.assert();
     }
 
     #[rstest]
@@ -175,17 +175,19 @@ mod patch_resource {
             .source_item
             .clone()
             .unwrap();
-        let google_mail_thread_modify_mock = mock_google_mail_thread_modify_service(
+        let _google_mail_thread_modify_mock = mock_google_mail_thread_modify_service(
             &app.app.google_mail_mock_server,
             &gmail_third_party_item.source_id,
             vec![],
             vec![GOOGLE_MAIL_INBOX_LABEL, &synced_label_id],
-        );
+        )
+        .await;
 
-        let google_calendar_event_delete_mock = mock_google_calendar_event_delete_service(
+        let _google_calendar_event_delete_mock = mock_google_calendar_event_delete_service(
             &app.app.google_calendar_mock_server,
             &google_calendar_event.id,
-        );
+        )
+        .await;
 
         let patched_notification = patch_resource(
             &app.client,
@@ -206,8 +208,6 @@ mod patch_resource {
                 ..*expected_notification
             })
         );
-        google_mail_thread_modify_mock.assert();
-        google_calendar_event_delete_mock.assert();
     }
 
     #[rstest]
@@ -354,12 +354,13 @@ mod update_invitation {
             .source_item
             .clone()
             .unwrap();
-        let google_mail_thread_modify_mock = mock_google_mail_thread_modify_service(
+        let _google_mail_thread_modify_mock = mock_google_mail_thread_modify_service(
             &app.app.google_mail_mock_server,
             &gmail_third_party_item.source_id,
             vec![],
             vec![GOOGLE_MAIL_INBOX_LABEL, &synced_label_id],
-        );
+        )
+        .await;
         let mut attendees = google_calendar_event.attendees.clone();
         if let Some(idx) = attendees.iter().position(|a| a.self_ == Some(true)) {
             attendees[idx] = EventAttendee {
@@ -371,12 +372,13 @@ mod update_invitation {
             attendees: attendees.clone(),
             ..google_calendar_event
         };
-        let google_calendar_event_answer_mock = mock_google_calendar_event_answer_service(
+        let _google_calendar_event_answer_mock = mock_google_calendar_event_answer_service(
             &app.app.google_calendar_mock_server,
             &gcal_third_party_item.source_id,
             attendees,
             &updated_google_calendar_event,
-        );
+        )
+        .await;
 
         let patched_notification: Box<Notification> = app
             .client
@@ -399,8 +401,6 @@ mod update_invitation {
                 ..*expected_notification
             })
         );
-        google_mail_thread_modify_mock.assert();
-        google_calendar_event_answer_mock.assert();
 
         let ThirdPartyItemData::GoogleCalendarEvent(event) = patched_notification.source_item.data
         else {

@@ -2,14 +2,11 @@ use std::str::FromStr;
 
 use chrono::{TimeZone, Utc};
 use email_address::EmailAddress;
-use httpmock::{
-    Method::{GET, POST},
-    Mock, MockServer,
-    prelude::HttpMockRequest,
-};
 use rstest::*;
 use serde_json::json;
 use url::Url;
+use wiremock::matchers::{body_string, header, method, path, query_param};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use universal_inbox::{
     HasHtmlUrl,
@@ -27,7 +24,8 @@ use universal_inbox_api::integrations::google_mail::{
 };
 
 use crate::helpers::{
-    TestedApp, load_json_fixture_file, notification::create_notification_from_source_item,
+    QueryParamAbsent, TestedApp, load_json_fixture_file,
+    notification::create_notification_from_source_item,
 };
 
 pub async fn create_notification_from_google_mail_thread(
@@ -55,133 +53,151 @@ pub async fn create_notification_from_google_mail_thread(
     .await
 }
 
-pub fn mock_google_mail_get_user_profile_service<'a>(
-    google_mail_mock_server: &'a MockServer,
-    result: &'a GoogleMailUserProfile,
-) -> Mock<'a> {
-    google_mail_mock_server.mock(|when, then| {
-        when.method(GET)
-            .path("/users/me/profile")
-            .header("authorization", "Bearer google_mail_test_access_token");
-        then.status(200)
-            .header("content-type", "application/json")
-            .json_body_obj(result);
-    })
+pub async fn mock_google_mail_get_user_profile_service(
+    google_mail_mock_server: &MockServer,
+    result: &GoogleMailUserProfile,
+) {
+    Mock::given(method("GET"))
+        .and(path("/users/me/profile"))
+        .and(header(
+            "authorization",
+            "Bearer google_mail_test_access_token",
+        ))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_json(result),
+        )
+        .mount(google_mail_mock_server)
+        .await;
 }
 
-pub fn mock_google_mail_labels_list_service<'a>(
-    google_mail_mock_server: &'a MockServer,
-    result: &'a GoogleMailLabelList,
-) -> Mock<'a> {
-    google_mail_mock_server.mock(|when, then| {
-        when.method(GET)
-            .path("/users/me/labels")
-            .header("authorization", "Bearer google_mail_test_access_token");
-        then.status(200)
-            .header("content-type", "application/json")
-            .json_body_obj(result);
-    })
+pub async fn mock_google_mail_labels_list_service(
+    google_mail_mock_server: &MockServer,
+    result: &GoogleMailLabelList,
+) {
+    Mock::given(method("GET"))
+        .and(path("/users/me/labels"))
+        .and(header(
+            "authorization",
+            "Bearer google_mail_test_access_token",
+        ))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_json(result),
+        )
+        .mount(google_mail_mock_server)
+        .await;
 }
 
-pub fn mock_google_mail_threads_list_service<'a>(
-    google_mail_mock_server: &'a MockServer,
-    page_token: Option<&'a str>,
+pub async fn mock_google_mail_threads_list_service(
+    google_mail_mock_server: &MockServer,
+    page_token: Option<&str>,
     per_page: usize,
     label_ids: Option<Vec<String>>,
-    result: &'a GoogleMailThreadList,
-) -> Mock<'a> {
-    google_mail_mock_server.mock(|when, then| {
-        let mut when = when
-            .method(GET)
-            .path("/users/me/threads")
-            .header("authorization", "Bearer google_mail_test_access_token")
-            .query_param("prettyPrint", "false")
-            .query_param("maxResults", per_page.to_string());
+    result: &GoogleMailThreadList,
+) {
+    let mut mock_builder = Mock::given(method("GET"))
+        .and(path("/users/me/threads"))
+        .and(header(
+            "authorization",
+            "Bearer google_mail_test_access_token",
+        ))
+        .and(query_param("prettyPrint", "false"))
+        .and(query_param("maxResults", per_page.to_string()));
 
-        if let Some(label_ids) = label_ids {
-            for label_id in label_ids {
-                when = when.query_param("labelIds", label_id);
-            }
-        } else {
-            when = when.matches(|req: &HttpMockRequest| {
-                req.query_params
-                    .as_ref()
-                    .map(|param| !param.iter().any(|(name, _)| name == "labelIds"))
-                    .unwrap_or(true)
-            });
+    if let Some(label_ids) = label_ids {
+        for label_id in label_ids {
+            mock_builder = mock_builder.and(query_param("labelIds", label_id));
         }
+    } else {
+        mock_builder = mock_builder.and(QueryParamAbsent("labelIds".to_string()));
+    }
 
-        if let Some(page_token) = page_token {
-            when.query_param("pageToken", page_token.to_string());
-        } else {
-            when.matches(|req: &HttpMockRequest| {
-                req.query_params
-                    .as_ref()
-                    .map(|param| !param.iter().any(|(name, _)| name == "pageToken"))
-                    .unwrap_or(true)
-            });
-        }
+    if let Some(page_token) = page_token {
+        mock_builder = mock_builder.and(query_param("pageToken", page_token.to_string()));
+    } else {
+        mock_builder = mock_builder.and(QueryParamAbsent("pageToken".to_string()));
+    }
 
-        then.status(200)
-            .header("content-type", "application/json")
-            .json_body_obj(result);
-    })
+    mock_builder
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_json(result),
+        )
+        .mount(google_mail_mock_server)
+        .await;
 }
 
-pub fn mock_google_mail_thread_get_service<'a>(
-    google_mail_mock_server: &'a MockServer,
-    thread_id: &'a str,
-    result: &'a RawGoogleMailThread,
-) -> Mock<'a> {
-    google_mail_mock_server.mock(|when, then| {
-        when.method(GET)
-            .path(format!("/users/me/threads/{thread_id}"))
-            .header("authorization", "Bearer google_mail_test_access_token")
-            .query_param("prettyPrint", "false")
-            .query_param("format", "full");
-        then.status(200)
-            .header("content-type", "application/json")
-            .json_body_obj(result);
-    })
+pub async fn mock_google_mail_thread_get_service(
+    google_mail_mock_server: &MockServer,
+    thread_id: &str,
+    result: &RawGoogleMailThread,
+) {
+    Mock::given(method("GET"))
+        .and(path(format!("/users/me/threads/{thread_id}")))
+        .and(header(
+            "authorization",
+            "Bearer google_mail_test_access_token",
+        ))
+        .and(query_param("prettyPrint", "false"))
+        .and(query_param("format", "full"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_json(result),
+        )
+        .mount(google_mail_mock_server)
+        .await;
 }
 
-pub fn mock_google_mail_thread_modify_service<'a>(
-    google_mail_mock_server: &'a MockServer,
-    thread_id: &'a str,
-    labels_to_add: Vec<&'a str>,
-    labels_to_remove: Vec<&'a str>,
-) -> Mock<'a> {
-    google_mail_mock_server.mock(|when, then| {
-        when.method(POST)
-            .path(format!("/users/me/threads/{thread_id}/modify"))
-            .body(
-                json!({
-                    "addLabelIds": labels_to_add,
-                    "removeLabelIds": labels_to_remove
-                })
-                .to_string(),
-            )
-            .header("authorization", "Bearer google_mail_test_access_token");
-        then.status(200).header("content-type", "application/json");
-    })
+pub async fn mock_google_mail_thread_modify_service(
+    google_mail_mock_server: &MockServer,
+    thread_id: &str,
+    labels_to_add: Vec<&str>,
+    labels_to_remove: Vec<&str>,
+) {
+    Mock::given(method("POST"))
+        .and(path(format!("/users/me/threads/{thread_id}/modify")))
+        .and(body_string(
+            json!({
+                "addLabelIds": labels_to_add,
+                "removeLabelIds": labels_to_remove
+            })
+            .to_string(),
+        ))
+        .and(header(
+            "authorization",
+            "Bearer google_mail_test_access_token",
+        ))
+        .respond_with(ResponseTemplate::new(200).insert_header("content-type", "application/json"))
+        .mount(google_mail_mock_server)
+        .await;
 }
 
-pub fn mock_google_mail_get_attachment_service<'a>(
-    google_mail_mock_server: &'a MockServer,
-    message_id: &'a str,
-    attachment_id: &'a str,
-    result: &'a GoogleMailMessageBody,
-) -> Mock<'a> {
-    google_mail_mock_server.mock(|when, then| {
-        when.method(GET)
-            .path(format!(
-                "/users/me/messages/{message_id}/attachments/{attachment_id}"
-            ))
-            .header("authorization", "Bearer google_mail_test_access_token");
-        then.status(200)
-            .header("content-type", "application/json")
-            .json_body_obj(result);
-    })
+pub async fn mock_google_mail_get_attachment_service(
+    google_mail_mock_server: &MockServer,
+    message_id: &str,
+    attachment_id: &str,
+    result: &GoogleMailMessageBody,
+) {
+    Mock::given(method("GET"))
+        .and(path(format!(
+            "/users/me/messages/{message_id}/attachments/{attachment_id}"
+        )))
+        .and(header(
+            "authorization",
+            "Bearer google_mail_test_access_token",
+        ))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_json(result),
+        )
+        .mount(google_mail_mock_server)
+        .await;
 }
 
 #[fixture]
