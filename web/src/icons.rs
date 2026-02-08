@@ -7,10 +7,14 @@ use crate::images::UI_LOGO_SYMBOL_TRANSPARENT;
 
 cfg_if! {
     if #[cfg(feature = "trunk")] {
+        #[allow(dead_code)]
         pub const GOOGLE_LOGO: &str = "/images/google-logo.svg";
+        #[cfg(feature = "web")]
         pub const PASSKEY_LOGO: &str = "/images/passkey-logo.svg";
     } else {
+        #[allow(dead_code)]
         pub const GOOGLE_LOGO: Asset = asset!("/images/google-logo.svg");
+        #[cfg(feature = "web")]
         pub const PASSKEY_LOGO: Asset = asset!("/images/passkey-logo.svg");
     }
 }

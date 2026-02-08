@@ -1,10 +1,18 @@
-[build]
-target = "wasm32-unknown-unknown"
-rustflags = ["--cfg=web_sys_unstable_apis"]
-
 [target.wasm32-unknown-unknown]
 runner = 'wasm-bindgen-test-runner'
-rustflags = ['--cfg', 'getrandom_backend="wasm_js"']
+rustflags = ['--cfg=web_sys_unstable_apis', '--cfg', 'getrandom_backend="wasm_js"']
+
+[target.aarch64-linux-android]
+linker = "/Users/david.rousselie/Library/Android/sdk/ndk/29.0.13113456/toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android24-clang"
+
+[target.armv7-linux-androideabi]
+linker = "/Users/david.rousselie/Library/Android/sdk/ndk/29.0.13113456/toolchains/llvm/prebuilt/darwin-x86_64/bin/armv7a-linux-androideabi24-clang"
+
+[target.i686-linux-android]
+linker = "/Users/david.rousselie/Library/Android/sdk/ndk/29.0.13113456/toolchains/llvm/prebuilt/darwin-x86_64/bin/i686-linux-android24-clang"
+
+[target.x86_64-linux-android]
+linker = "/Users/david.rousselie/Library/Android/sdk/ndk/29.0.13113456/toolchains/llvm/prebuilt/darwin-x86_64/bin/x86_64-linux-android24-clang"
 
 [profile.release]
 opt-level = "z"

@@ -1,10 +1,14 @@
 pub mod api;
 pub mod authentication_token_service;
+#[cfg(feature = "web")]
 pub mod crisp;
+#[cfg(feature = "web")]
 pub mod flyonui;
+#[cfg(feature = "web")]
 pub mod headway;
 pub mod integration_connection_service;
 pub mod local_storage;
+#[cfg(feature = "web")]
 pub mod nango;
 pub mod notification_service;
 pub mod task_service;

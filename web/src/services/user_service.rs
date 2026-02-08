@@ -7,6 +7,7 @@ use log::error;
 use reqwest::Method;
 use secrecy::SecretBox;
 use url::Url;
+#[cfg(feature = "web")]
 use webauthn_rs_proto::*;
 
 use universal_inbox::{
@@ -18,13 +19,14 @@ use universal_inbox::{
     },
 };
 
-use crate::{
-    model::UniversalInboxUIModel,
-    services::{api::call_api, crisp::unload_crisp},
-    utils::{create_navigator_credentials, get_navigator_credentials, redirect_to},
-};
+#[cfg(feature = "web")]
+use crate::services::crisp::unload_crisp;
+#[cfg(feature = "web")]
+use crate::utils::{create_navigator_credentials, get_navigator_credentials, redirect_to};
+use crate::{model::UniversalInboxUIModel, services::api::call_api};
 
 pub enum UserCommand {
+    #[allow(dead_code)]
     GetUser,
     RegisterUser(RegisterUserParameters),
     Login(Credentials),
@@ -33,7 +35,9 @@ pub enum UserCommand {
     VerifyEmail(UserId, EmailValidationToken),
     SendPasswordResetEmail(EmailAddress),
     ResetPassword(UserId, PasswordResetToken, SecretBox<Password>),
+    #[cfg(feature = "web")]
     RegisterPasskey(Username),
+    #[cfg(feature = "web")]
     LoginPasskey(Username),
     UpdateUser(UserPatch),
 }
@@ -94,6 +98,7 @@ pub async fn user_service(
                 };
             }
             Some(UserCommand::Logout) => {
+                #[cfg(feature = "web")]
                 unload_crisp();
                 let result: Result<CloseSessionResponse> = call_api(
                     Method::DELETE,
@@ -105,6 +110,7 @@ pub async fn user_service(
                 .await;
 
                 if let Ok(CloseSessionResponse { logout_url }) = result {
+                    #[cfg(feature = "web")]
                     let _ = redirect_to(logout_url.as_str());
                 };
             }
@@ -190,10 +196,12 @@ pub async fn user_service(
                     }
                 };
             }
+            #[cfg(feature = "web")]
             Some(UserCommand::LoginPasskey(username)) => {
                 start_passkey_authentication(username, &api_base_url, connected_user, ui_model)
                     .await;
             }
+            #[cfg(feature = "web")]
             Some(UserCommand::RegisterPasskey(username)) => {
                 start_passkey_registration(username, &api_base_url, connected_user, ui_model).await;
             }
@@ -245,6 +253,7 @@ async fn get_user(
     }
 }
 
+#[cfg(feature = "web")]
 async fn start_passkey_registration(
     username: Username,
     api_base_url: &Url,
@@ -278,6 +287,7 @@ async fn start_passkey_registration(
     finish_passkey_registration(rpkc, api_base_url, connected_user, ui_model).await;
 }
 
+#[cfg(feature = "web")]
 async fn finish_passkey_registration(
     register_credentials: RegisterPublicKeyCredential,
     api_base_url: &Url,
@@ -303,6 +313,7 @@ async fn finish_passkey_registration(
     };
 }
 
+#[cfg(feature = "web")]
 async fn start_passkey_authentication(
     username: Username,
     api_base_url: &Url,
@@ -336,6 +347,7 @@ async fn start_passkey_authentication(
     finish_passkey_authentication(pkc, api_base_url, connected_user, ui_model).await;
 }
 
+#[cfg(feature = "web")]
 async fn finish_passkey_authentication(
     credentials: PublicKeyCredential,
     api_base_url: &Url,

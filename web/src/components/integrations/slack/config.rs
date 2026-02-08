@@ -2,6 +2,7 @@
 
 use dioxus::prelude::dioxus_core::use_drop;
 use dioxus::prelude::*;
+#[cfg(feature = "web")]
 use dioxus::web::WebEventExt;
 use dioxus_free_icons::{Icon, icons::bs_icons::BsChatText};
 use serde_json::json;
@@ -19,6 +20,8 @@ use universal_inbox::{
     utils::emoji::replace_emoji_code_with_emoji,
 };
 
+#[cfg(feature = "web")]
+use crate::services::flyonui::{forget_flyonui_tabs_element, init_flyonui_tabs_element};
 use crate::{
     components::{
         floating_label_inputs::{FloatingLabelInputSearchSelect, FloatingLabelSelect},
@@ -27,7 +30,6 @@ use crate::{
     },
     config::get_api_base_url,
     model::UniversalInboxUIModel,
-    services::flyonui::{forget_flyonui_tabs_element, init_flyonui_tabs_element},
 };
 
 #[component]
@@ -38,11 +40,17 @@ pub fn SlackProviderConfiguration(
 ) -> Element {
     let emoji = replace_emoji_code_with_emoji(config().reaction_config.reaction_name.0.as_str())
         .unwrap_or("👀".to_string());
+    #[cfg(feature = "web")]
     let mut mounted_element: Signal<Option<web_sys::Element>> = use_signal(|| None);
+    #[cfg(not(feature = "web"))]
+    let mut mounted_element: Signal<Option<()>> = use_signal(|| None);
 
     use_drop(move || {
-        if let Some(element) = mounted_element() {
-            forget_flyonui_tabs_element(&element);
+        #[cfg(feature = "web")]
+        {
+            if let Some(element) = mounted_element() {
+                forget_flyonui_tabs_element(&element);
+            }
         }
     });
 
@@ -54,9 +62,12 @@ pub fn SlackProviderConfiguration(
                 role: "tablist",
                 class: "tabs tabs-bordered tabs-sm flex-wrap",
                 onmounted: move |element| {
-                    let web_element = element.as_web_event();
-                    init_flyonui_tabs_element(&web_element);
-                    mounted_element.set(Some(web_element));
+                    #[cfg(feature = "web")]
+                    {
+                        let web_element = element.as_web_event();
+                        init_flyonui_tabs_element(&web_element);
+                        mounted_element.set(Some(web_element));
+                    }
                 },
 
                 button {

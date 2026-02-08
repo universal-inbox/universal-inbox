@@ -2,33 +2,43 @@
 
 use std::cmp::Ordering;
 
+#[cfg(feature = "web")]
 use dioxus::prelude::dioxus_core::use_drop;
 use dioxus::prelude::*;
 use log::debug;
 use sorted_groups::SortedGroups;
-use web_sys::KeyboardEvent;
 
+#[cfg(feature = "web")]
+use universal_inbox::HasHtmlUrl;
 use universal_inbox::{
-    HasHtmlUrl, Page,
+    Page,
     task::{Task, TaskId},
 };
 
 use crate::{
-    components::{
-        resizable_panel::ResizablePanel, task_preview::TaskPreview, tasks_list::TasksList,
-        welcome_hero::WelcomeHero,
-    },
-    keyboard_manager::{KEYBOARD_MANAGER, KeyboardHandler},
+    components::{task_preview::TaskPreview, tasks_list::TasksList, welcome_hero::WelcomeHero},
     model::UI_MODEL,
     route::Route,
     services::task_service::{SYNCED_TASKS_PAGE, TaskCommand},
     settings::PanelPosition,
+};
+
+#[cfg(feature = "web")]
+use crate::{
+    components::resizable_panel::ResizablePanel,
+    keyboard_manager::{KEYBOARD_MANAGER, KeyboardHandler},
     utils::{
         get_screen_width, open_link, scroll_element, scroll_element_by_page,
         scroll_element_into_view_by_class,
     },
 };
 
+#[cfg(not(feature = "web"))]
+fn get_screen_width() -> Result<usize, anyhow::Error> {
+    Ok(0)
+}
+
+#[cfg(feature = "web")]
 static KEYBOARD_HANDLER: SyncTasksPageKeyboardHandler = SyncTasksPageKeyboardHandler {};
 
 fn due_at_group_from_task(task: &TaskWithOrder) -> String {
@@ -117,6 +127,7 @@ fn InternalSyncedTaskPage(task_id: ReadSignal<Option<TaskId>>) -> Element {
         }
     });
 
+    #[cfg(feature = "web")]
     use_drop(move || {
         KEYBOARD_MANAGER.write().active_keyboard_handler = None;
     });
@@ -136,7 +147,10 @@ fn InternalSyncedTaskPage(task_id: ReadSignal<Option<TaskId>>) -> Element {
             id: "tasks-page",
             class: "{layout_class}",
             onmounted: move |_| {
-                KEYBOARD_MANAGER.write().active_keyboard_handler = Some(&KEYBOARD_HANDLER);
+                #[cfg(feature = "web")]
+                {
+                    KEYBOARD_MANAGER.write().active_keyboard_handler = Some(&KEYBOARD_HANDLER);
+                }
             },
 
             if SORTED_SYNCED_TASKS().is_empty() {
@@ -153,15 +167,7 @@ fn InternalSyncedTaskPage(task_id: ReadSignal<Option<TaskId>>) -> Element {
 
                 if let Some(index) = UI_MODEL.read().selected_task_index {
                     if let Some((_, task)) = SORTED_SYNCED_TASKS().get(index) {
-                        ResizablePanel {
-                            TaskPreview {
-                                task: task.task.clone(),
-                                expand_details: UI_MODEL.read().preview_cards_expanded,
-                                is_help_enabled: UI_MODEL.read().is_help_enabled,
-                                ui_model: UI_MODEL.signal(),
-                                tasks_count: tasks().content.len()
-                            }
-                        }
+                        { task_detail_panel(task.task.clone(), tasks().content.len()) }
                     }
                 }
             }
@@ -169,11 +175,44 @@ fn InternalSyncedTaskPage(task_id: ReadSignal<Option<TaskId>>) -> Element {
     }
 }
 
+#[cfg(feature = "web")]
+fn task_detail_panel(task: Task, tasks_count: usize) -> Element {
+    rsx! {
+        ResizablePanel {
+            TaskPreview {
+                task: task,
+                expand_details: UI_MODEL.read().preview_cards_expanded,
+                is_help_enabled: UI_MODEL.read().is_help_enabled,
+                ui_model: UI_MODEL.signal(),
+                tasks_count: tasks_count
+            }
+        }
+    }
+}
+
+#[cfg(not(feature = "web"))]
+fn task_detail_panel(task: Task, tasks_count: usize) -> Element {
+    rsx! {
+        div {
+            class: "h-full flex-1 overflow-y-auto",
+            TaskPreview {
+                task: task,
+                expand_details: UI_MODEL.read().preview_cards_expanded,
+                is_help_enabled: UI_MODEL.read().is_help_enabled,
+                ui_model: UI_MODEL.signal(),
+                tasks_count: tasks_count
+            }
+        }
+    }
+}
+
+#[cfg(feature = "web")]
 #[derive(PartialEq)]
 struct SyncTasksPageKeyboardHandler {}
 
+#[cfg(feature = "web")]
 impl KeyboardHandler for SyncTasksPageKeyboardHandler {
-    fn handle_keydown(&self, event: &KeyboardEvent) -> bool {
+    fn handle_keydown(&self, event: &web_sys::KeyboardEvent) -> bool {
         let task_service = use_coroutine_handle::<TaskCommand>();
         let sorted_tasks = SORTED_SYNCED_TASKS();
         let list_length = sorted_tasks.len();

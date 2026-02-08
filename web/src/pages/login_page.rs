@@ -8,14 +8,12 @@ use log::error;
 use universal_inbox::{FrontAuthenticationConfig, user::Password};
 
 use crate::{
-    auth::authenticate_authorization_code_flow,
     components::{
         floating_label_inputs::FloatingLabelInputText, loading::Loading,
         universal_inbox_title::UniversalInboxTitle,
     },
     config::{APP_CONFIG, get_api_base_url},
     form::FormValues,
-    icons::{GOOGLE_LOGO, PASSKEY_LOGO},
     route::Route,
     services::user_service::{CONNECTED_USER, UserCommand},
 };
@@ -42,16 +40,23 @@ pub fn LoginPage() -> Element {
         .authentication_configs
         .iter()
         .any(|auth_config| matches!(auth_config, FrontAuthenticationConfig::Local));
+    #[cfg(feature = "web")]
     let is_google_auth_enabled = app_config.authentication_configs.iter().any(|auth_config| {
         matches!(
             auth_config,
             FrontAuthenticationConfig::OIDCGoogleAuthorizationCodeFlow(_)
         )
     });
+    #[cfg(not(feature = "web"))]
+    let is_google_auth_enabled = false;
+
+    #[cfg(feature = "web")]
     let is_passkey_auth_enabled = app_config
         .authentication_configs
         .iter()
         .any(|auth_config| matches!(auth_config, FrontAuthenticationConfig::Passkey));
+    #[cfg(not(feature = "web"))]
+    let is_passkey_auth_enabled = false;
 
     rsx! {
         div {
@@ -125,47 +130,11 @@ pub fn LoginPage() -> Element {
                 }
 
                 if is_google_auth_enabled {
-                    div {
-                        class: "flex flex-col px-10",
-
-                        button {
-                            class: "btn btn-primary w-full relative",
-                            onclick: move |_| {
-                                spawn({
-                                    async move {
-                                        if let Err(auth_error) =
-                                            authenticate_authorization_code_flow(&api_base_url()).await
-                                        {
-                                            error!("An error occured while authenticating: {:?}", auth_error);
-                                        }
-                                    }
-                                });
-                            },
-
-                            img {
-                                class: "h-8 w-8 bg-white rounded-md absolute left-2",
-                                src: "{GOOGLE_LOGO}",
-                            }
-                            "Sign in with Google"
-                        }
-                    }
+                    { google_login_section(api_base_url) }
                 }
 
                 if is_passkey_auth_enabled {
-                    div {
-                        class: "flex flex-col px-10",
-
-                        Link {
-                            class: "btn btn-primary w-full relative",
-                            to: Route::PasskeyLoginPage {},
-
-                            img {
-                                class: "h-8 w-8 bg-white rounded-md absolute left-2",
-                                src: "{PASSKEY_LOGO}",
-                            }
-                            "Sign in with a passkey"
-                        }
-                    }
+                    { passkey_login_section() }
                 }
             }
 
@@ -182,4 +151,70 @@ pub fn LoginPage() -> Element {
             }
         }
     }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn google_login_section(api_base_url: Memo<url::Url>) -> Element {
+    use crate::auth::authenticate_authorization_code_flow;
+    use crate::icons::GOOGLE_LOGO;
+    use log::error;
+
+    rsx! {
+        div {
+            class: "flex flex-col px-10",
+
+            button {
+                class: "btn btn-primary w-full relative",
+                onclick: move |_| {
+                    spawn({
+                        async move {
+                            if let Err(auth_error) =
+                                authenticate_authorization_code_flow(&api_base_url()).await
+                            {
+                                error!("An error occured while authenticating: {:?}", auth_error);
+                            }
+                        }
+                    });
+                },
+
+                img {
+                    class: "h-8 w-8 bg-white rounded-md absolute left-2",
+                    src: "{GOOGLE_LOGO}",
+                }
+                "Sign in with Google"
+            }
+        }
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn google_login_section(_api_base_url: Memo<url::Url>) -> Element {
+    rsx! {}
+}
+
+#[cfg(feature = "web")]
+fn passkey_login_section() -> Element {
+    use crate::icons::PASSKEY_LOGO;
+
+    rsx! {
+        div {
+            class: "flex flex-col px-10",
+
+            Link {
+                class: "btn btn-primary w-full relative",
+                to: Route::PasskeyLoginPage {},
+
+                img {
+                    class: "h-8 w-8 bg-white rounded-md absolute left-2",
+                    src: "{PASSKEY_LOGO}",
+                }
+                "Sign in with a passkey"
+            }
+        }
+    }
+}
+
+#[cfg(not(feature = "web"))]
+fn passkey_login_section() -> Element {
+    rsx! {}
 }

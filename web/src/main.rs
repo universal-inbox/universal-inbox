@@ -1,7 +1,9 @@
+#[cfg(feature = "web")]
 extern crate console_error_panic_hook;
 
 use cfg_if::cfg_if;
 use log::{Level, info};
+#[cfg(feature = "web")]
 use std::panic;
 use universal_inbox_web::App;
 
@@ -25,7 +27,12 @@ cfg_if! {
 }
 
 fn main() {
+    #[cfg(feature = "web")]
     panic::set_hook(Box::new(console_error_panic_hook::hook));
+    #[cfg(feature = "mobile")]
+    android_logger::init_once(
+        android_logger::Config::default().with_max_level(log::LevelFilter::Debug),
+    );
     init_log();
     dioxus::launch(App);
 }

@@ -24,6 +24,7 @@ pub mod markdown;
 pub mod nav_bar;
 pub mod notification_preview;
 pub mod notifications_list;
+#[cfg(feature = "web")]
 pub mod resizable_panel;
 pub mod spinner;
 pub mod task_link_modal;
