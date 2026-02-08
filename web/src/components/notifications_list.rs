@@ -305,6 +305,10 @@ fn NotificationListItem(
                 on_select,
             }
         },
+        ThirdPartyItemData::TickTickItem(_ticktick_item) => {
+            // TickTick notification list item will be implemented in Phase 4
+            rsx! {}
+        }
         ThirdPartyItemData::LinearIssue(_) => rsx! {},
         ThirdPartyItemData::WebPage(web_page) => rsx! {
             WebPageNotificationListItem {

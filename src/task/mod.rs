@@ -18,6 +18,7 @@ use crate::{
     integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
     notification::Notification,
     task::integrations::todoist::{DEFAULT_TODOIST_HTML_URL, TODOIST_INBOX_PROJECT},
+    third_party::integrations::ticktick::{DEFAULT_TICKTICK_HTML_URL, TICKTICK_INBOX_PROJECT},
     third_party::item::{
         ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemSource, ThirdPartyItemSourceKind,
     },
@@ -133,9 +134,11 @@ impl Task {
     pub fn is_in_inbox(&self) -> bool {
         match self.kind {
             TaskSourceKind::Todoist => self.project == TODOIST_INBOX_PROJECT,
+            TaskSourceKind::TickTick => self.project == TICKTICK_INBOX_PROJECT,
             _ => match &self.sink_item {
                 Some(sink_item) => match sink_item.get_third_party_item_source_kind() {
                     ThirdPartyItemSourceKind::Todoist => self.project == TODOIST_INBOX_PROJECT,
+                    ThirdPartyItemSourceKind::TickTick => self.project == TICKTICK_INBOX_PROJECT,
                     _ => false,
                 },
                 _ => false,
@@ -151,6 +154,12 @@ impl Task {
             ThirdPartyItemData::TodoistItem(todoist_task) => format!(
                 "{DEFAULT_TODOIST_HTML_URL}project/{}",
                 todoist_task.project_id
+            )
+            .parse::<Url>()
+            .unwrap(),
+            ThirdPartyItemData::TickTickItem(ticktick_task) => format!(
+                "{}#p/{}",
+                DEFAULT_TICKTICK_HTML_URL, ticktick_task.project_id
             )
             .parse::<Url>()
             .unwrap(),
@@ -423,6 +432,7 @@ macro_attr! {
     #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!)]
     pub enum TaskSyncSourceKind {
         Todoist,
+        TickTick,
         Linear
     }
 }
@@ -431,6 +441,7 @@ macro_attr! {
     #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!)]
     pub enum TaskSourceKind {
         Todoist,
+        TickTick,
         Slack,
         Linear
     }
@@ -442,6 +453,7 @@ impl TryFrom<ThirdPartyItemSourceKind> for TaskSourceKind {
     fn try_from(source_kind: ThirdPartyItemSourceKind) -> Result<Self, Self::Error> {
         match source_kind {
             ThirdPartyItemSourceKind::Todoist => Ok(Self::Todoist),
+            ThirdPartyItemSourceKind::TickTick => Ok(Self::TickTick),
             ThirdPartyItemSourceKind::LinearIssue => Ok(Self::Linear),
             ThirdPartyItemSourceKind::SlackReaction | ThirdPartyItemSourceKind::SlackStar => {
                 Ok(Self::Slack)
@@ -459,6 +471,7 @@ impl TryFrom<IntegrationProviderKind> for TaskSyncSourceKind {
     fn try_from(provider_kind: IntegrationProviderKind) -> Result<Self, Self::Error> {
         match provider_kind {
             IntegrationProviderKind::Todoist => Ok(Self::Todoist),
+            IntegrationProviderKind::TickTick => Ok(Self::TickTick),
             IntegrationProviderKind::Linear => Ok(Self::Linear),
             _ => Err(anyhow!(
                 "IntegrationProviderKind {provider_kind} is not a valid TaskSyncSourceKind"
@@ -471,6 +484,7 @@ impl From<TaskSyncSourceKind> for IntegrationProviderKind {
     fn from(source_kind: TaskSyncSourceKind) -> Self {
         match source_kind {
             TaskSyncSourceKind::Todoist => IntegrationProviderKind::Todoist,
+            TaskSyncSourceKind::TickTick => IntegrationProviderKind::TickTick,
             TaskSyncSourceKind::Linear => IntegrationProviderKind::Linear,
         }
     }

@@ -247,7 +247,7 @@ impl NotificationService {
                     )));
                 }
             },
-            NotificationSourceKind::Todoist => {
+            NotificationSourceKind::Todoist | NotificationSourceKind::TickTick => {
                 if let Some(NotificationStatus::Deleted) = patch.status {
                     if let Some(task_id) = notification.task_id {
                         if apply_task_side_effects {
@@ -269,15 +269,16 @@ impl NotificationService {
                         }
                     } else {
                         return Err(UniversalInboxError::Unexpected(anyhow!(
-                            "Todoist notification {} is expected to be linked to a task",
+                            "{} notification {} is expected to be linked to a task",
+                            notification.kind,
                             notification.id
                         )));
                     }
                     // Other actions than delete or snoozing is not supported
                 } else if patch.snoozed_until.is_none() {
                     return Err(UniversalInboxError::UnsupportedAction(format!(
-                        "Cannot update the status of Todoist notification {}, update task's project",
-                        notification.id
+                        "Cannot update the status of {} notification {}, update task's project",
+                        notification.kind, notification.id
                     )));
                 }
             }

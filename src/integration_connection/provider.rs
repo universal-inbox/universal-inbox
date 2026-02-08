@@ -15,6 +15,7 @@ use crate::{
                 SlackConfig, SlackContext, SlackReactionConfig, SlackStarConfig,
                 SlackSyncTaskConfig, SlackSyncType,
             },
+            ticktick::{TickTickConfig, TickTickContext},
             todoist::{TodoistConfig, TodoistContext},
         },
     },
@@ -51,7 +52,10 @@ pub enum IntegrationProvider {
         context: Option<TodoistContext>,
         config: TodoistConfig,
     },
-    TickTick,
+    TickTick {
+        context: Option<TickTickContext>,
+        config: TickTickConfig,
+    },
     API,
 }
 
@@ -115,7 +119,18 @@ impl IntegrationProvider {
                     .transpose()?,
                 config,
             }),
-            IntegrationConnectionConfig::TickTick => Ok(Self::TickTick),
+            IntegrationConnectionConfig::TickTick(config) => Ok(Self::TickTick {
+                context: context
+                    .map(|c| {
+                        if let IntegrationConnectionContext::TickTick(c) = c {
+                            Ok(c)
+                        } else {
+                            Err(anyhow!("Unexpect context for TickTick provider: {c:?}"))
+                        }
+                    })
+                    .transpose()?,
+                config,
+            }),
             IntegrationConnectionConfig::API => Ok(Self::API),
         }
     }
@@ -130,7 +145,7 @@ impl IntegrationProvider {
             IntegrationProvider::Notion => false,
             IntegrationProvider::Slack { context, .. } => context.is_none(),
             IntegrationProvider::Todoist { context, .. } => context.is_none(),
-            IntegrationProvider::TickTick => false,
+            IntegrationProvider::TickTick { context, .. } => context.is_none(),
             IntegrationProvider::API => false,
         }
     }
@@ -153,7 +168,7 @@ impl IntegrationProvider {
             IntegrationProvider::Notion => IntegrationProviderKind::Notion,
             IntegrationProvider::Slack { .. } => IntegrationProviderKind::Slack,
             IntegrationProvider::Todoist { .. } => IntegrationProviderKind::Todoist,
-            IntegrationProvider::TickTick => IntegrationProviderKind::TickTick,
+            IntegrationProvider::TickTick { .. } => IntegrationProviderKind::TickTick,
             IntegrationProvider::API => IntegrationProviderKind::API,
         }
     }
@@ -182,7 +197,9 @@ impl IntegrationProvider {
             IntegrationProvider::Slack { config, .. } => {
                 IntegrationConnectionConfig::Slack(config.clone())
             }
-            IntegrationProvider::TickTick => IntegrationConnectionConfig::TickTick,
+            IntegrationProvider::TickTick { config, .. } => {
+                IntegrationConnectionConfig::TickTick(config.clone())
+            }
             IntegrationProvider::API => IntegrationConnectionConfig::API,
         }
     }
@@ -201,6 +218,7 @@ impl IntegrationProvider {
     pub fn is_sync_tasks_enabled(&self) -> bool {
         match self {
             IntegrationProvider::Todoist { config, .. } => config.sync_tasks_enabled,
+            IntegrationProvider::TickTick { config, .. } => config.sync_tasks_enabled,
             IntegrationProvider::Linear { config } => config.sync_task_config.enabled,
             IntegrationProvider::Slack { .. } => false, // Slack tasks are not synced but received via the webhook
             _ => false,
@@ -210,6 +228,9 @@ impl IntegrationProvider {
     pub fn should_create_notification_from_inbox_task(&self) -> bool {
         match self {
             IntegrationProvider::Todoist { config, .. } => {
+                config.create_notification_from_inbox_task
+            }
+            IntegrationProvider::TickTick { config, .. } => {
                 config.create_notification_from_inbox_task
             }
             _ => false,
@@ -294,6 +315,7 @@ impl IntegrationProvider {
 #[serde(tag = "type", content = "content")]
 pub enum IntegrationConnectionContext {
     Todoist(TodoistContext),
+    TickTick(TickTickContext),
     GoogleDrive(GoogleDriveContext),
     GoogleMail(GoogleMailContext),
     Slack(SlackContext),
@@ -360,7 +382,9 @@ impl IntegrationProviderKind {
             IntegrationProviderKind::Todoist => {
                 IntegrationConnectionConfig::Todoist(Default::default())
             }
-            IntegrationProviderKind::TickTick => IntegrationConnectionConfig::TickTick,
+            IntegrationProviderKind::TickTick => {
+                IntegrationConnectionConfig::TickTick(Default::default())
+            }
             IntegrationProviderKind::API => IntegrationConnectionConfig::API,
         }
     }

@@ -23,6 +23,7 @@ use crate::{
         google_mail::GoogleMailThread,
         linear::{LinearIssue, LinearNotification, LinearWorkflowState, LinearWorkflowStateType},
         slack::{SlackReaction, SlackReactionState, SlackStar, SlackStarState, SlackThread},
+        ticktick::TickTickItem,
         todoist::TodoistItem,
     },
     user::UserId,
@@ -55,6 +56,7 @@ impl HasHtmlUrl for ThirdPartyItem {
     fn get_html_url(&self) -> Url {
         match self.data {
             ThirdPartyItemData::TodoistItem(ref item) => item.get_html_url(),
+            ThirdPartyItemData::TickTickItem(ref item) => item.get_html_url(),
             ThirdPartyItemData::SlackStar(ref star) => star.get_html_url(),
             ThirdPartyItemData::SlackReaction(ref reaction) => reaction.get_html_url(),
             ThirdPartyItemData::SlackThread(ref thread) => thread.get_html_url(),
@@ -75,6 +77,7 @@ pub type ThirdPartyItemId = TypedId<Uuid, ThirdPartyItem>;
 #[serde(tag = "type", content = "content")]
 pub enum ThirdPartyItemData {
     TodoistItem(Box<TodoistItem>),
+    TickTickItem(Box<TickTickItem>),
     SlackStar(Box<SlackStar>),
     SlackReaction(Box<SlackReaction>),
     SlackThread(Box<SlackThread>),
@@ -91,6 +94,7 @@ impl ThirdPartyItemData {
     pub fn kind(&self) -> ThirdPartyItemKind {
         match self {
             ThirdPartyItemData::TodoistItem(_) => ThirdPartyItemKind::TodoistItem,
+            ThirdPartyItemData::TickTickItem(_) => ThirdPartyItemKind::TickTickItem,
             ThirdPartyItemData::SlackStar(_) => ThirdPartyItemKind::SlackStar,
             ThirdPartyItemData::SlackReaction(_) => ThirdPartyItemKind::SlackReaction,
             ThirdPartyItemData::SlackThread(_) => ThirdPartyItemKind::SlackThread,
@@ -109,6 +113,7 @@ macro_attr! {
     #[derive(Copy, Clone, PartialEq, Debug, EnumFromStr!, EnumDisplay!)]
     pub enum ThirdPartyItemKind {
         TodoistItem,
+        TickTickItem,
         SlackStar,
         SlackReaction,
         SlackThread,
@@ -130,6 +135,7 @@ impl IntegrationProviderSource for ThirdPartyItem {
     fn get_integration_provider_kind(&self) -> IntegrationProviderKind {
         match self.data {
             ThirdPartyItemData::TodoistItem(_) => IntegrationProviderKind::Todoist,
+            ThirdPartyItemData::TickTickItem(_) => IntegrationProviderKind::TickTick,
             ThirdPartyItemData::SlackStar(_)
             | ThirdPartyItemData::SlackReaction(_)
             | ThirdPartyItemData::SlackThread(_) => IntegrationProviderKind::Slack,
@@ -149,6 +155,7 @@ impl ThirdPartyItemSource for ThirdPartyItem {
     fn get_third_party_item_source_kind(&self) -> ThirdPartyItemSourceKind {
         match self.data {
             ThirdPartyItemData::TodoistItem(_) => ThirdPartyItemSourceKind::Todoist,
+            ThirdPartyItemData::TickTickItem(_) => ThirdPartyItemSourceKind::TickTick,
             ThirdPartyItemData::SlackStar(_) => ThirdPartyItemSourceKind::SlackStar,
             ThirdPartyItemData::SlackReaction(_) => ThirdPartyItemSourceKind::SlackReaction,
             ThirdPartyItemData::SlackThread(_) => ThirdPartyItemSourceKind::SlackThread,
@@ -263,6 +270,7 @@ macro_attr! {
     #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!)]
     pub enum ThirdPartyItemSyncSourceKind {
         Todoist,
+        TickTick,
         Linear,
         Github,
     }
@@ -272,6 +280,7 @@ macro_attr! {
     #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, EnumFromStr!, EnumDisplay!)]
     pub enum ThirdPartyItemSourceKind {
         Todoist,
+        TickTick,
         SlackStar,
         SlackReaction,
         SlackThread,
@@ -291,6 +300,7 @@ impl TryFrom<IntegrationProviderKind> for ThirdPartyItemSyncSourceKind {
     fn try_from(provider_kind: IntegrationProviderKind) -> Result<Self, Self::Error> {
         match provider_kind {
             IntegrationProviderKind::Todoist => Ok(Self::Todoist),
+            IntegrationProviderKind::TickTick => Ok(Self::TickTick),
             IntegrationProviderKind::Linear => Ok(Self::Linear),
             IntegrationProviderKind::Github => Ok(Self::Github),
             _ => Err(anyhow!(

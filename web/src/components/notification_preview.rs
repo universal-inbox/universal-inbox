@@ -353,6 +353,8 @@ fn NotificationDetailsPreview(
         ThirdPartyItemData::WebPage(web_page) => rsx! {
             WebPagePreview { notification, web_page: *web_page }
         },
-        ThirdPartyItemData::LinearIssue(_) | ThirdPartyItemData::TodoistItem(_) => rsx! {},
+        ThirdPartyItemData::LinearIssue(_)
+        | ThirdPartyItemData::TodoistItem(_)
+        | ThirdPartyItemData::TickTickItem(_) => rsx! {},
     }
 }

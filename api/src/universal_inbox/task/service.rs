@@ -930,6 +930,10 @@ impl TaskService {
                 )
                 .await
             }
+            TaskSyncSourceKind::TickTick => {
+                // TickTick sync will be implemented in Phase 3 (TICK-3.4)
+                Ok(vec![])
+            }
         }
     }
 
