@@ -25,6 +25,7 @@ pub mod google_mail;
 pub mod linear;
 pub mod oauth2;
 pub mod slack;
+pub mod ticktick;
 pub mod todoist;
 
 pub mod third_party {
