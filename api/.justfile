@@ -52,3 +52,6 @@ generate-jwt-token user-email:
 
 generate-user:
     cargo run -- test generate-user
+
+anonymize-db:
+    cargo run -- test anonymize-db
