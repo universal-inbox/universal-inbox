@@ -25,7 +25,8 @@ use universal_inbox::{
     auth::openidconnect::OpenidConnectProvider,
     user::{
         Credentials, EmailValidationToken, Password, PasswordHash, PasswordResetToken, User,
-        UserAuthKind, UserAuthMethod, UserId, UserPatch, Username,
+        UserAuthKind, UserAuthMethod, UserId, UserPatch, UserPreferences, UserPreferencesPatch,
+        Username,
     },
 };
 
@@ -38,6 +39,7 @@ use crate::{
     observability::spawn_blocking_with_tracing,
     repository::Repository,
     repository::user::UserRepository,
+    repository::user_preferences::UserPreferencesRepository,
     universal_inbox::{
         UniversalInboxError, UpdateStatus,
         user::model::{
@@ -1382,5 +1384,38 @@ impl UserService {
         }
 
         Ok(user)
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = user_id.to_string()),
+        err
+    )]
+    pub async fn get_user_preferences(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+    ) -> Result<Option<UserPreferences>, UniversalInboxError> {
+        self.repository
+            .get_user_preferences(executor, user_id)
+            .await
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = user_id.to_string()),
+        err
+    )]
+    pub async fn patch_user_preferences(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        patch: &UserPreferencesPatch,
+    ) -> Result<UserPreferences, UniversalInboxError> {
+        self.repository
+            .create_or_update_user_preferences(executor, user_id, patch)
+            .await
     }
 }

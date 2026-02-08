@@ -27,6 +27,7 @@ pub mod linear;
 pub mod oauth2;
 pub mod slack;
 pub mod slack_oauth;
+pub mod ticktick;
 pub mod todoist;
 pub mod todoist_oauth;
 
@@ -115,7 +116,7 @@ pub mod task {
         async fn update_task(
             &self,
             executor: &mut Transaction<'_, Postgres>,
-            id: &str,
+            third_party_item: &ThirdPartyItem,
             patch: &TaskPatch,
             user_id: UserId,
         ) -> Result<(), UniversalInboxError>;

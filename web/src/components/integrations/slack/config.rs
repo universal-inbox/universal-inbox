@@ -22,6 +22,7 @@ use universal_inbox::{
             SlackConfig, SlackContext, SlackEmojiSuggestion, SlackMessageConfig,
             SlackReactionConfig, SlackSyncTaskConfig, SlackSyncType,
         },
+        provider::IntegrationProviderKind,
     },
     slack_bridge::SlackBridgeStatus,
     task::{PresetDueDate, ProjectSummary, TaskPriority},
@@ -32,12 +33,14 @@ use crate::{
     components::{
         floating_label_inputs::{FloatingLabelInputSearchSelect, FloatingLabelSelect},
         flyonui::tooltip::{Tooltip, TooltipPlacement},
+        task_manager_picker::resolve_task_manager_kind,
     },
     config::get_api_base_url,
-    model::UniversalInboxUIModel,
+    model::{LoadState, UniversalInboxUIModel},
     services::{
         api::call_api,
         flyonui::{forget_flyonui_tabs_element, init_flyonui_tabs_element},
+        integration_connection_service::TASK_SERVICE_INTEGRATION_CONNECTIONS,
     },
 };
 
@@ -139,6 +142,8 @@ fn SlackReactionConfiguration(
     let mut default_priority = use_signal(|| Some(TaskPriority::P4));
     let mut default_due_at: Signal<Option<PresetDueDate>> = use_signal(|| None);
     let mut default_project: Signal<Option<ProjectSummary>> = use_signal(|| None);
+    let mut default_task_manager_provider_kind: Signal<Option<IntegrationProviderKind>> =
+        use_signal(|| None);
     let mut task_config_enabled = use_signal(|| false);
     use_memo(move || {
         *default_emoji.write() = config().reaction_config.reaction_name.0.clone();
@@ -151,6 +156,7 @@ fn SlackReactionConfiguration(
             *default_priority.write() = Some(config.default_priority);
             default_due_at.write().clone_from(&config.default_due_at);
             *default_project.write() = config.target_project;
+            *default_task_manager_provider_kind.write() = config.task_manager_provider_kind;
             *task_config_enabled.write() = ui_model.read().is_task_actions_enabled;
         } else {
             *task_config_enabled.write() = false;
@@ -170,6 +176,10 @@ fn SlackReactionConfiguration(
             "hidden overflow-hidden"
         }
     });
+    let show_task_manager_select = matches!(
+        &*TASK_SERVICE_INTEGRATION_CONNECTIONS.read(),
+        LoadState::Loaded(connections) if connections.len() >= 2
+    );
     let api_base_url = get_api_base_url().unwrap();
     let as_tasks_disabled =
         !config().reaction_config.sync_enabled || !ui_model.read().is_task_actions_enabled;
@@ -391,35 +401,42 @@ fn SlackReactionConfiguration(
                         class: "label-text cursor-pointer grow text-sm text-base-content",
                         "Project to assign synchronized tasks to"
                     }
-                    FloatingLabelInputSearchSelect::<ProjectSummary> {
-                        name: "reaction-project-search-input".to_string(),
-                        class: "w-full max-w-xs bg-base-100 rounded-sm",
-                        required: true,
-                        disabled: !ui_model.read().is_task_actions_enabled,
-                        data_select: json!({
-                            "value": default_project().map(|p| p.source_id.to_string()),
-                            "apiUrl": format!("{api_base_url}tasks/projects/search"),
-                            "apiSearchQueryKey": "matches",
-                            "apiFieldsMap": {
-                                "id": "source_id",
-                                "val": "source_id",
-                                "title": "name"
-                            }
-                        }),
-                        on_select: move |project: Option<ProjectSummary>| {
-                            on_config_change.call(IntegrationConnectionConfig::Slack(SlackConfig {
-                                reaction_config: SlackReactionConfig {
-                                    sync_type: SlackSyncType::AsTasks(match &config().reaction_config.sync_type {
-                                        SlackSyncType::AsTasks(config) => SlackSyncTaskConfig {
-                                            target_project: project.clone(),
-                                            ..config.clone()
+                    {
+                        let kind = resolve_task_manager_kind(default_task_manager_provider_kind());
+                        rsx! {
+                            FloatingLabelInputSearchSelect::<ProjectSummary> {
+                                key: "reaction-project-search-{kind}",
+                                name: "reaction-project-search-input".to_string(),
+                                class: "w-full max-w-xs bg-base-100 rounded-sm",
+                                required: true,
+                                disabled: !ui_model.read().is_task_actions_enabled,
+                                data_select: json!({
+                                    "value": default_project().map(|p| p.source_id.to_string()),
+                                    "apiUrl": format!("{api_base_url}tasks/projects/search"),
+                                    "apiSearchQueryKey": "matches",
+                                    "apiQuery": { "provider_kind": kind.to_string() },
+                                    "apiFieldsMap": {
+                                        "id": "source_id",
+                                        "val": "source_id",
+                                        "title": "name"
+                                    }
+                                }),
+                                on_select: move |project: Option<ProjectSummary>| {
+                                    on_config_change.call(IntegrationConnectionConfig::Slack(SlackConfig {
+                                        reaction_config: SlackReactionConfig {
+                                            sync_type: SlackSyncType::AsTasks(match &config().reaction_config.sync_type {
+                                                SlackSyncType::AsTasks(config) => SlackSyncTaskConfig {
+                                                    target_project: project.clone(),
+                                                    ..config.clone()
+                                                },
+                                                _ => Default::default(),
+                                            }),
+                                            ..config().reaction_config
                                         },
-                                        _ => Default::default(),
-                                    }),
-                                    ..config().reaction_config
-                                },
-                                ..config()
-                            }))
+                                        ..config()
+                                    }))
+                                }
+                            }
                         }
                     }
                 }
@@ -498,6 +515,47 @@ fn SlackReactionConfiguration(
                         option { selected: default_priority() == Some(TaskPriority::P2), value: "2", "🟠 Priority 2" }
                         option { selected: default_priority() == Some(TaskPriority::P3), value: "3", "🟡 Priority 3" }
                         option { selected: default_priority() == Some(TaskPriority::P4), value: "4", "🔵 Priority 4" }
+                    }
+                }
+
+                if show_task_manager_select {
+                    div {
+                        class: "flex items-center gap-2",
+                        label {
+                            class: "label-text cursor-pointer grow text-sm text-base-content",
+                            "Task manager to sync with"
+                        }
+                        FloatingLabelSelect::<IntegrationProviderKind> {
+                            label: None,
+                            class: "max-w-xs",
+                            name: "reaction-task-manager-input".to_string(),
+                            disabled: !ui_model.read().is_task_actions_enabled,
+                            default_value: default_task_manager_provider_kind().map(|p| p.to_string()).unwrap_or_default(),
+                            on_select: move |task_manager_provider_kind| {
+                                *default_project.write() = None;
+                                on_config_change.call(IntegrationConnectionConfig::Slack(SlackConfig {
+                                    reaction_config: SlackReactionConfig {
+                                        sync_type: SlackSyncType::AsTasks(match &config().reaction_config.sync_type {
+                                            SlackSyncType::AsTasks(task_config) => SlackSyncTaskConfig {
+                                                task_manager_provider_kind,
+                                                target_project: None,
+                                                ..task_config.clone()
+                                            },
+                                            _ => SlackSyncTaskConfig {
+                                                task_manager_provider_kind,
+                                                target_project: None,
+                                                ..Default::default()
+                                            },
+                                        }),
+                                        ..config().reaction_config
+                                    },
+                                    ..config()
+                                }));
+                            },
+
+                            option { selected: default_task_manager_provider_kind() == Some(IntegrationProviderKind::Todoist), value: "Todoist", "Todoist" }
+                            option { selected: default_task_manager_provider_kind() == Some(IntegrationProviderKind::TickTick), value: "TickTick", "TickTick" }
+                        }
                     }
                 }
             }
