@@ -26,6 +26,7 @@ use crate::{
     utils::{cache::Cache, jwt::JWTBase64EncodedSigningKeys},
 };
 
+pub mod anonymize;
 pub mod generate;
 pub mod sync;
 pub mod user;
@@ -124,6 +125,8 @@ pub enum CacheCommands {
 pub enum TestCommands {
     /// Generate testing user
     GenerateUser,
+    /// Anonymize database (user emails, names, passwords) after restoring a production backup
+    AnonymizeDb,
 }
 
 #[derive(Subcommand)]
@@ -347,6 +350,7 @@ impl Cli {
                     )
                     .await
                 }
+                TestCommands::AnonymizeDb => anonymize::anonymize_database(user_service).await,
             },
 
             Commands::User { command } => match command {
