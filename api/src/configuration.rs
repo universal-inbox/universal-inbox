@@ -14,10 +14,9 @@ use universal_inbox::integration_connection::{
     NangoProviderKey, NangoPublicKey, provider::IntegrationProviderKind,
 };
 
-use crate::{
-    ExecutionContext,
-    universal_inbox::{UniversalInboxError, user::model::UserAuthKind},
-};
+use universal_inbox::user::UserAuthKind;
+
+use crate::{ExecutionContext, universal_inbox::UniversalInboxError};
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct Settings {
