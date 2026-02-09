@@ -24,7 +24,7 @@ jobs:
         with:
           enable-cache: "true"
       - name: Build documentation
-        run: devbox run -- just build-doc
+        run: devbox run -- just build
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
