@@ -9,5 +9,6 @@ pub mod nango;
 pub mod notification_service;
 pub mod task_service;
 pub mod toast_service;
+pub mod user_preferences_service;
 pub mod user_service;
 pub mod version;

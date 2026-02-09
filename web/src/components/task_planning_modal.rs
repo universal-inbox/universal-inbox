@@ -9,14 +9,17 @@ use serde_json::json;
 
 use universal_inbox::{
     integration_connection::{
-        IntegrationConnection, IntegrationConnectionId, integrations::todoist::TodoistConfig,
-        provider::IntegrationProvider,
+        IntegrationConnection, IntegrationConnectionId,
+        integrations::ticktick::TickTickConfig,
+        integrations::todoist::TodoistConfig,
+        provider::{IntegrationProvider, IntegrationProviderKind},
     },
     notification::{NotificationId, NotificationWithTask},
     task::{
         DueDate, ProjectSummary, TaskCreation, TaskId, TaskPlanning, TaskPriority,
         integrations::todoist::TODOIST_INBOX_PROJECT,
     },
+    third_party::integrations::ticktick::TICKTICK_INBOX_PROJECT,
 };
 use url::Url;
 
@@ -26,7 +29,7 @@ use crate::{
         floating_label_inputs::{
             FloatingLabelInputSearchSelect, FloatingLabelInputText, FloatingLabelSelect,
         },
-        integrations::todoist::icons::Todoist,
+        integrations::{icons::TickTick, todoist::icons::Todoist},
     },
     model::{LoadState, UniversalInboxUIModel},
     services::flyonui::{close_flyonui_modal, forget_flyonui_modal, init_flyonui_modal},
@@ -38,11 +41,25 @@ pub fn TaskPlanningModal(
     api_base_url: Url,
     notification_to_plan: ReadSignal<NotificationWithTask>,
     task_service_integration_connection: Signal<LoadState<Option<IntegrationConnection>>>,
+    task_service_integration_connections: Signal<LoadState<Vec<IntegrationConnection>>>,
     ui_model: Signal<UniversalInboxUIModel>,
     on_task_planning: EventHandler<(TaskPlanning, TaskId)>,
     on_task_creation: EventHandler<TaskCreation>,
 ) -> Element {
-    let icon = rsx! { div { class: "h-5 w-5 flex-none", Todoist {} } };
+    let mut selected_task_provider_kind: Signal<Option<IntegrationProviderKind>> =
+        use_signal(|| None);
+    let icon = {
+        let kind = selected_task_provider_kind();
+        match kind {
+            Some(IntegrationProviderKind::Todoist) => {
+                rsx! { div { class: "h-5 w-5 flex-none", Todoist {} } }
+            }
+            Some(IntegrationProviderKind::TickTick) => {
+                rsx! { div { class: "h-5 w-5 flex-none", TickTick {} } }
+            }
+            _ => rsx! { div { class: "h-5 w-5 flex-none" } },
+        }
+    };
     let mut project: Signal<Option<String>> = use_signal(|| None);
     let mut due_at = use_signal(|| Utc::now().format("%Y-%m-%d").to_string());
     let mut priority = use_signal(|| Some(TaskPriority::P4));
@@ -84,9 +101,21 @@ pub fn TaskPlanningModal(
         }
 
         if notification_to_plan().task.is_none()
-            && let LoadState::Loaded(Some(IntegrationConnection {
-                id,
-                provider:
+            && let LoadState::Loaded(connections) = task_service_integration_connections()
+        {
+            // Auto-select first task service if none selected
+            if selected_task_provider_kind.peek().is_none() && !connections.is_empty() {
+                *selected_task_provider_kind.write() = Some(connections[0].provider.kind());
+            }
+
+            // Set default project based on the selected provider
+            if let Some(selected_kind) = selected_task_provider_kind()
+                && let Some(connection) = connections
+                    .iter()
+                    .find(|c| c.provider.kind() == selected_kind)
+            {
+                let connection_id = connection.id;
+                match &connection.provider {
                     IntegrationProvider::Todoist {
                         config:
                             TodoistConfig {
@@ -94,15 +123,35 @@ pub fn TaskPlanningModal(
                                 ..
                             },
                         ..
-                    },
-                ..
-            })) = task_service_integration_connection()
-            && !create_notification_from_inbox_task
-            && Some(id) != current_task_service_integration_connection_id()
-        {
-            *current_task_service_integration_connection_id.write() = Some(id);
-            if project.peek().is_none() {
-                *project.write() = Some(TODOIST_INBOX_PROJECT.to_string());
+                    } if !create_notification_from_inbox_task
+                        && Some(connection_id)
+                            != current_task_service_integration_connection_id() =>
+                    {
+                        *current_task_service_integration_connection_id.write() =
+                            Some(connection_id);
+                        if project.peek().is_none() {
+                            *project.write() = Some(TODOIST_INBOX_PROJECT.to_string());
+                        }
+                    }
+                    IntegrationProvider::TickTick {
+                        config:
+                            TickTickConfig {
+                                create_notification_from_inbox_task,
+                                ..
+                            },
+                        ..
+                    } if !create_notification_from_inbox_task
+                        && Some(connection_id)
+                            != current_task_service_integration_connection_id() =>
+                    {
+                        *current_task_service_integration_connection_id.write() =
+                            Some(connection_id);
+                        if project.peek().is_none() {
+                            *project.write() = Some(TICKTICK_INBOX_PROJECT.to_string());
+                        }
+                    }
+                    _ => {}
+                }
             }
         }
     });
@@ -150,7 +199,7 @@ pub fn TaskPlanningModal(
                                     *force_validation.write() = true;
                                 }
                             } else if let Some(task_creation_parameters) = validate_creation_form(
-                                &evt.data.values(), project()
+                                &evt.data.values(), project(), selected_task_provider_kind()
                             ) {
                                 on_task_creation.call(task_creation_parameters);
                                 close_flyonui_modal("#task-planning-modal");
@@ -176,6 +225,31 @@ pub fn TaskPlanningModal(
                                         autofocus: true,
                                         force_validation: force_validation(),
                                         icon: icon,
+                                    }
+                                }
+                            }
+
+                            if let LoadState::Loaded(connections) = task_service_integration_connections() {
+                                if connections.len() > 1 {
+                                    FloatingLabelSelect::<IntegrationProviderKind> {
+                                        name: "task-manager-select".to_string(),
+                                        label: Some("Task manager".to_string()),
+                                        required: true,
+                                        force_validation: force_validation(),
+                                        default_value: selected_task_provider_kind().map(|k| k.to_string()).unwrap_or_default(),
+                                        on_select: move |kind: Option<IntegrationProviderKind>| {
+                                            *selected_task_provider_kind.write() = kind;
+                                            // Reset project when switching task manager
+                                            *project.write() = None;
+                                        },
+
+                                        for connection in connections.iter() {
+                                            option {
+                                                selected: selected_task_provider_kind() == Some(connection.provider.kind()),
+                                                value: "{connection.provider.kind()}",
+                                                "{connection.provider.kind()}"
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -297,6 +371,7 @@ fn validate_planning_form(
 fn validate_creation_form(
     values: &[(String, FormValue)],
     selected_project: Option<String>,
+    task_provider_kind: Option<IntegrationProviderKind>,
 ) -> Option<TaskCreation> {
     let title = get_form_text(values, "task-title-input")
         .ok_or_else(|| "Task title is required".to_string());
@@ -327,7 +402,7 @@ fn validate_creation_form(
             project_name: Some(project_name),
             due_at,
             priority,
-            task_provider_kind: None,
+            task_provider_kind,
         });
     }
 

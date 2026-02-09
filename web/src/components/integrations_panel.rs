@@ -31,6 +31,7 @@ use crate::{
             google_drive::config::GoogleDriveProviderConfiguration,
             google_mail::config::GoogleMailProviderConfiguration, icons::IntegrationProviderIcon,
             linear::config::LinearProviderConfiguration, slack::config::SlackProviderConfiguration,
+            ticktick::config::TickTickProviderConfiguration,
             todoist::config::TodoistProviderConfiguration,
         },
         markdown::Markdown,
@@ -484,6 +485,12 @@ pub fn IntegrationConnectionProviderConfiguration(
         },
         IntegrationProvider::Github { config } => rsx! {
             GithubProviderConfiguration {
+                on_config_change: move |c| on_config_change.call(c),
+                config: config.clone()
+            }
+        },
+        IntegrationProvider::TickTick { config, .. } => rsx! {
+            TickTickProviderConfiguration {
                 on_config_change: move |c| on_config_change.call(c),
                 config: config.clone()
             }

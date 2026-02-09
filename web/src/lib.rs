@@ -24,6 +24,7 @@ use services::{
     notification_service::{NOTIFICATION_FILTERS, NOTIFICATIONS_PAGE, notification_service},
     task_service::task_service,
     toast_service::{TOASTS, VIEWPORT_WIDTH, toast_service},
+    user_preferences_service::{USER_PREFERENCES, user_preferences_service},
     user_service::{CONNECTED_USER, user_service},
 };
 use theme::{IS_DARK_MODE, toggle_dark_mode};
@@ -100,6 +101,18 @@ pub fn App() -> Element {
             toast_service_handle,
             notification_service_handle,
             task_service_handle,
+        )
+    });
+
+    let _user_preferences_service_handle = use_coroutine(move |rx| {
+        to_owned![toast_service_handle];
+
+        user_preferences_service(
+            rx,
+            api_base_url(),
+            USER_PREFERENCES.signal(),
+            UI_MODEL.signal(),
+            toast_service_handle,
         )
     });
 

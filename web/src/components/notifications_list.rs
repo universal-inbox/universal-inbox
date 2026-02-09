@@ -35,6 +35,7 @@ use crate::{
                 SlackReactionNotificationListItem, SlackStarNotificationListItem,
                 SlackThreadNotificationListItem,
             },
+            ticktick::notification_list_item::TickTickNotificationListItem,
             todoist::notification_list_item::TodoistNotificationListItem,
         },
         list::{List, ListItemActionButton, ListPaginationButtons},
@@ -46,7 +47,9 @@ use crate::{
     model::UI_MODEL,
     services::{
         flyonui::open_flyonui_modal,
-        integration_connection_service::TASK_SERVICE_INTEGRATION_CONNECTION,
+        integration_connection_service::{
+            TASK_SERVICE_INTEGRATION_CONNECTION, TASK_SERVICE_INTEGRATION_CONNECTIONS,
+        },
         notification_service::{
             NotificationCommand, NotificationFilters, NotificationSourceKindFilter,
         },
@@ -197,6 +200,7 @@ pub fn NotificationsList(
                     api_base_url: api_base_url(),
                     notification_to_plan: notification(),
                     task_service_integration_connection: TASK_SERVICE_INTEGRATION_CONNECTION.signal(),
+                    task_service_integration_connections: TASK_SERVICE_INTEGRATION_CONNECTIONS.signal(),
                     ui_model: UI_MODEL.signal(),
                     on_task_planning: move |(params, task_id): (TaskPlanning, TaskId)| {
                         notification_service.send(NotificationCommand::PlanTask(
@@ -305,10 +309,14 @@ fn NotificationListItem(
                 on_select,
             }
         },
-        ThirdPartyItemData::TickTickItem(_ticktick_item) => {
-            // TickTick notification list item will be implemented in Phase 4
-            rsx! {}
-        }
+        ThirdPartyItemData::TickTickItem(ticktick_item) => rsx! {
+            TickTickNotificationListItem {
+                notification,
+                ticktick_item: *ticktick_item,
+                is_selected,
+                on_select,
+            }
+        },
         ThirdPartyItemData::LinearIssue(_) => rsx! {},
         ThirdPartyItemData::WebPage(web_page) => rsx! {
             WebPageNotificationListItem {
