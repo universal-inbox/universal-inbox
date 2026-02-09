@@ -127,8 +127,8 @@ fn user_preferences_from_row(
     let user_id: uuid::Uuid = row.get("user_id");
     let default_task_manager_provider_kind: Option<String> =
         row.get("default_task_manager_provider_kind");
-    let created_at: chrono::NaiveDateTime = row.get("created_at");
-    let updated_at: chrono::NaiveDateTime = row.get("updated_at");
+    let created_at: DateTime<Utc> = row.get("created_at");
+    let updated_at: DateTime<Utc> = row.get("updated_at");
 
     let default_task_manager_provider_kind = default_task_manager_provider_kind
         .map(|kind| {
@@ -144,7 +144,7 @@ fn user_preferences_from_row(
     Ok(UserPreferences {
         user_id: user_id.into(),
         default_task_manager_provider_kind,
-        created_at: DateTime::from_naive_utc_and_offset(created_at, Utc),
-        updated_at: DateTime::from_naive_utc_and_offset(updated_at, Utc),
+        created_at,
+        updated_at,
     })
 }

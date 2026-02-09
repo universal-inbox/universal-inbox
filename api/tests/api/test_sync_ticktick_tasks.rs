@@ -274,6 +274,7 @@ async fn test_sync_ticktick_tasks_with_no_validated_integration_connections(
         None,
         None,
         None,
+        None,
     )
     .await;
     Mock::given(wiremock::matchers::any())

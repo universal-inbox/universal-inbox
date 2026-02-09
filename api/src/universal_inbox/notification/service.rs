@@ -18,8 +18,7 @@ use tracing::{debug, error, info};
 use universal_inbox::{
     Page, PageToken,
     integration_connection::{
-        IntegrationConnection,
-        integrations::todoist::TodoistConfig,
+        integrations::{ticktick::TickTickConfig, todoist::TodoistConfig},
         provider::{IntegrationProvider, IntegrationProviderKind},
     },
     notification::{
@@ -956,20 +955,7 @@ impl NotificationService {
             debug!(
                 "No task creation details provided, using default values from {resolved_provider_kind} integration connection config"
             );
-            let Some(IntegrationConnection {
-                provider:
-                    IntegrationProvider::Todoist {
-                        config:
-                            TodoistConfig {
-                                default_project,
-                                default_due_at,
-                                default_priority,
-                                ..
-                            },
-                        ..
-                    },
-                ..
-            }) = self
+            let Some(integration_connection) = self
                 .integration_connection_service
                 .read()
                 .await
@@ -983,6 +969,36 @@ impl NotificationService {
                 return Err(UniversalInboxError::Unexpected(anyhow!(
                     "Cannot create task from notification {notification_id} as no {resolved_provider_kind} integration is connected for user {for_user_id}"
                 )));
+            };
+
+            let (default_project, default_due_at, default_priority) = match integration_connection
+                .provider
+            {
+                IntegrationProvider::Todoist {
+                    config:
+                        TodoistConfig {
+                            default_project,
+                            default_due_at,
+                            default_priority,
+                            ..
+                        },
+                    ..
+                } => (default_project, default_due_at, default_priority),
+                IntegrationProvider::TickTick {
+                    config:
+                        TickTickConfig {
+                            default_project,
+                            default_due_at,
+                            default_priority,
+                            ..
+                        },
+                    ..
+                } => (default_project, default_due_at, default_priority),
+                _ => {
+                    return Err(UniversalInboxError::Unexpected(anyhow!(
+                        "Cannot create task from notification {notification_id}: unsupported provider {resolved_provider_kind}"
+                    )));
+                }
             };
 
             TaskCreation {
