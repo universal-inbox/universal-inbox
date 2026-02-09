@@ -330,6 +330,7 @@ pub struct TaskCreationConfig {
     pub project_name: Option<String>,
     pub due_at: Option<DueDate>,
     pub priority: TaskPriority,
+    pub task_manager_provider_kind: Option<IntegrationProviderKind>,
 }
 
 #[serde_as]

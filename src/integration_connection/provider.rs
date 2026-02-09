@@ -241,72 +241,79 @@ impl IntegrationProvider {
         &self,
         third_party_item: &ThirdPartyItem,
     ) -> Option<TaskCreationConfig> {
-        let (target_project, default_due_at, default_priority) = match self {
-            IntegrationProvider::Slack { config, .. } => {
-                match third_party_item.get_third_party_item_source_kind() {
-                    ThirdPartyItemSourceKind::SlackStar => {
-                        let SlackConfig {
-                            star_config:
-                                SlackStarConfig {
-                                    sync_type:
-                                        SlackSyncType::AsTasks(SlackSyncTaskConfig {
-                                            target_project,
-                                            default_due_at,
-                                            default_priority,
-                                        }),
-                                    ..
-                                },
-                            ..
-                        } = config
-                        else {
-                            return None;
-                        };
+        let (target_project, default_due_at, default_priority, task_manager_provider_kind) =
+            match self {
+                IntegrationProvider::Slack { config, .. } => {
+                    match third_party_item.get_third_party_item_source_kind() {
+                        ThirdPartyItemSourceKind::SlackStar => {
+                            let SlackConfig {
+                                star_config:
+                                    SlackStarConfig {
+                                        sync_type:
+                                            SlackSyncType::AsTasks(SlackSyncTaskConfig {
+                                                target_project,
+                                                default_due_at,
+                                                default_priority,
+                                                task_manager_provider_kind,
+                                            }),
+                                        ..
+                                    },
+                                ..
+                            } = config
+                            else {
+                                return None;
+                            };
 
-                        (
-                            target_project.as_ref(),
-                            default_due_at.as_ref(),
-                            default_priority,
-                        )
-                    }
-                    ThirdPartyItemSourceKind::SlackReaction => {
-                        let SlackConfig {
-                            reaction_config:
-                                SlackReactionConfig {
-                                    sync_type:
-                                        SlackSyncType::AsTasks(SlackSyncTaskConfig {
-                                            target_project,
-                                            default_due_at,
-                                            default_priority,
-                                        }),
-                                    ..
-                                },
-                            ..
-                        } = config
-                        else {
-                            return None;
-                        };
+                            (
+                                target_project.as_ref(),
+                                default_due_at.as_ref(),
+                                default_priority,
+                                task_manager_provider_kind.as_ref(),
+                            )
+                        }
+                        ThirdPartyItemSourceKind::SlackReaction => {
+                            let SlackConfig {
+                                reaction_config:
+                                    SlackReactionConfig {
+                                        sync_type:
+                                            SlackSyncType::AsTasks(SlackSyncTaskConfig {
+                                                target_project,
+                                                default_due_at,
+                                                default_priority,
+                                                task_manager_provider_kind,
+                                            }),
+                                        ..
+                                    },
+                                ..
+                            } = config
+                            else {
+                                return None;
+                            };
 
-                        (
-                            target_project.as_ref(),
-                            default_due_at.as_ref(),
-                            default_priority,
-                        )
+                            (
+                                target_project.as_ref(),
+                                default_due_at.as_ref(),
+                                default_priority,
+                                task_manager_provider_kind.as_ref(),
+                            )
+                        }
+                        _ => return None,
                     }
-                    _ => return None,
                 }
-            }
-            IntegrationProvider::Linear { config } => (
-                config.sync_task_config.target_project.as_ref(),
-                config.sync_task_config.default_due_at.as_ref(),
-                &TaskPriority::default(),
-            ),
-            _ => return None,
-        };
+                IntegrationProvider::Linear { config } => (
+                    config.sync_task_config.target_project.as_ref(),
+                    config.sync_task_config.default_due_at.as_ref(),
+                    &TaskPriority::default(),
+                    config.sync_task_config.task_manager_provider_kind.as_ref(),
+                ),
+                _ => return None,
+            };
 
         Some(TaskCreationConfig {
             project_name: target_project.map(|project| project.name.clone()),
             due_at: default_due_at.map(|due_at| due_at.clone().into()),
             priority: *default_priority,
+            task_manager_provider_kind: task_manager_provider_kind.copied(),
         })
     }
 }

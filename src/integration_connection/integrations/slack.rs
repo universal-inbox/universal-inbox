@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use slack_morphism::{SlackReactionName, SlackTeamId};
 
+use crate::integration_connection::provider::IntegrationProviderKind;
 use crate::task::{PresetDueDate, ProjectSummary, TaskPriority};
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
@@ -120,6 +121,7 @@ pub struct SlackSyncTaskConfig {
     pub target_project: Option<ProjectSummary>,
     pub default_due_at: Option<PresetDueDate>,
     pub default_priority: TaskPriority,
+    pub task_manager_provider_kind: Option<IntegrationProviderKind>,
 }
 
 impl Default for SlackSyncTaskConfig {
@@ -128,6 +130,7 @@ impl Default for SlackSyncTaskConfig {
             target_project: None,
             default_due_at: None,
             default_priority: TaskPriority::P4,
+            task_manager_provider_kind: None,
         }
     }
 }
