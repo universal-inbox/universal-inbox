@@ -3,11 +3,11 @@ use std::{str::FromStr, sync::Arc};
 use actix_jwt_authc::Authenticated;
 use actix_session::Session;
 use actix_web::{
-    web::{self, Redirect},
     HttpResponse, Scope,
+    web::{self, Redirect},
 };
-use anyhow::{anyhow, Context};
-use openidconnect::{core::CoreIdToken, AuthorizationCode, CsrfToken, Nonce};
+use anyhow::{Context, anyhow};
+use openidconnect::{AuthorizationCode, CsrfToken, Nonce, core::CoreIdToken};
 use secrecy::ExposeSecret;
 use serde::Deserialize;
 use tokio::sync::RwLock;
@@ -20,13 +20,13 @@ use universal_inbox::{
 };
 
 use crate::{
+    Claims,
     configuration::{AuthenticationSettings, OIDCFlowSettings, Settings},
     universal_inbox::{
-        auth_token::service::AuthenticationTokenService, user::service::UserService,
-        UniversalInboxError,
+        UniversalInboxError, auth_token::service::AuthenticationTokenService,
+        user::service::UserService,
     },
     utils::jwt::JWT_SESSION_KEY,
-    Claims,
 };
 
 pub fn scope() -> Scope {

@@ -3,7 +3,7 @@ use std::{fmt, str::FromStr};
 use anyhow::anyhow;
 use chrono::{DateTime, Timelike, Utc};
 use email_address::EmailAddress;
-use secrecy::{zeroize::Zeroize, CloneableSecret, SecretBox, SerializableSecret};
+use secrecy::{CloneableSecret, SecretBox, SerializableSecret, zeroize::Zeroize};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use uuid::Uuid;
@@ -97,7 +97,7 @@ impl RegisterUserParameters {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Default, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Default, Clone, PartialEq)]
 pub struct UserPatch {
     pub first_name: Option<String>,
     pub last_name: Option<String>,
@@ -294,11 +294,4 @@ pub enum UserAuthMethodDisplayInfo {
     Passkey { username: String },
     OIDCGoogleAuthorizationCode,
     OIDCAuthorizationCodePKCE,
-}
-
-#[derive(Serialize, Deserialize, Debug, Default, Clone, PartialEq)]
-pub struct UserPatch {
-    pub first_name: Option<String>,
-    pub last_name: Option<String>,
-    pub email: Option<EmailAddress>,
 }

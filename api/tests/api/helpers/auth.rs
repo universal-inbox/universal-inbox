@@ -236,3 +236,14 @@ pub async fn get_user_auth(app: &TestedApp, user_id: UserId) -> UserAuth {
     transaction.commit().await.unwrap();
     user_auth
 }
+
+pub async fn get_all_user_auths(app: &TestedApp, user_id: UserId) -> Vec<UserAuth> {
+    let mut transaction = app.repository.begin().await.unwrap();
+    let user_auths = app
+        .repository
+        .get_all_user_auths(&mut transaction, user_id)
+        .await
+        .unwrap();
+    transaction.commit().await.unwrap();
+    user_auths
+}

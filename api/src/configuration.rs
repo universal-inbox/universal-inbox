@@ -5,18 +5,18 @@ use config::{Config, ConfigError, Environment, File};
 use hex;
 use openidconnect::{ClientId, ClientSecret, IntrospectionUrl, IssuerUrl};
 use ring::hmac;
-use secrecy::{zeroize::Zeroize, CloneableSecret, ExposeSecret, SecretBox};
+use secrecy::{CloneableSecret, ExposeSecret, SecretBox, zeroize::Zeroize};
 use serde::{Deserialize, Deserializer};
-use serde_with::{serde_as, DisplayFromStr};
+use serde_with::{DisplayFromStr, serde_as};
 use url::Url;
 
 use universal_inbox::integration_connection::{
-    provider::IntegrationProviderKind, NangoProviderKey, NangoPublicKey,
+    NangoProviderKey, NangoPublicKey, provider::IntegrationProviderKind,
 };
 
 use universal_inbox::user::UserAuthKind;
 
-use crate::{universal_inbox::UniversalInboxError, ExecutionContext};
+use crate::{ExecutionContext, universal_inbox::UniversalInboxError};
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct Settings {

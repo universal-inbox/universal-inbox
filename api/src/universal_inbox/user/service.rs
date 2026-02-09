@@ -40,7 +40,9 @@ use crate::{
     repository::user::UserRepository,
     universal_inbox::{
         UniversalInboxError, UpdateStatus,
-        user::model::{AuthUserId, LocalUserAuth, OpenIdConnectUserAuth, PasskeyUserAuth, UserAuth},
+        user::model::{
+            AuthUserId, LocalUserAuth, OpenIdConnectUserAuth, PasskeyUserAuth, UserAuth,
+        },
     },
 };
 
@@ -124,7 +126,10 @@ impl UserService {
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
     ) -> Result<Vec<UserAuthMethod>, UniversalInboxError> {
-        let user_auths = self.repository.get_all_user_auths(executor, user_id).await?;
+        let user_auths = self
+            .repository
+            .get_all_user_auths(executor, user_id)
+            .await?;
         Ok(user_auths.iter().map(UserAuthMethod::from).collect())
     }
 
@@ -193,21 +198,18 @@ impl UserService {
             .repository
             .get_user_auth_by_username(executor, username)
             .await?
+            && existing_user_id != user_id
         {
-            if existing_user_id != user_id {
-                return Err(UniversalInboxError::AlreadyExists {
-                    source: None,
-                    id: existing_user_id.0,
-                });
-            }
+            return Err(UniversalInboxError::AlreadyExists {
+                source: None,
+                id: existing_user_id.0,
+            });
         }
 
         let (creation_challenge_response, passkey_registration) = self
             .webauthn
             .start_passkey_registration(user_id.0, username.0.as_str(), username.0.as_str(), None)
-            .with_context(|| {
-                format!("Failed to start Passkey registration for {username}")
-            })?;
+            .with_context(|| format!("Failed to start Passkey registration for {username}"))?;
 
         Ok((creation_challenge_response, passkey_registration))
     }
