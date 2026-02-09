@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT password_reset_token FROM user_auth WHERE user_id = $1",
+  "query": "SELECT password_reset_token FROM user_auth WHERE user_id = $1 AND kind = 'Local'::user_auth_kind",
   "describe": {
     "columns": [
       {
@@ -18,5 +18,5 @@
       true
     ]
   },
-  "hash": "fd750704efee0dcc494ef5d65644123cd91ed71f1dd1757394fd6e34e1ce2737"
+  "hash": "eb93ff7b3c2cdca3310edc3b6408c29dd9a8f29a76a5e670351c685adf1a8b1b"
 }

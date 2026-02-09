@@ -4,7 +4,7 @@ use secrecy::SecretBox;
 
 use universal_inbox::user::{
     Credentials, EmailValidationToken, Password, PasswordResetToken, RegisterUserParameters, User,
-    UserId, UserPatch,
+    UserAuthKind, UserAuthMethod, UserId, UserPatch,
 };
 
 use universal_inbox_api::{
@@ -119,6 +119,47 @@ pub async fn get_password_reset_token(
         .unwrap();
     transaction.commit().await.unwrap();
     token
+}
+
+pub async fn list_auth_methods_response(client: &Client, app: &TestedApp) -> reqwest::Response {
+    client
+        .get(format!("{}users/me/auth-methods", app.api_address))
+        .send()
+        .await
+        .unwrap()
+}
+
+pub async fn list_auth_methods(client: &Client, app: &TestedApp) -> Vec<UserAuthMethod> {
+    list_auth_methods_response(client, app)
+        .await
+        .json()
+        .await
+        .unwrap()
+}
+
+pub async fn add_local_auth_response(
+    client: &Client,
+    app: &TestedApp,
+    password: &str,
+) -> reqwest::Response {
+    client
+        .post(format!("{}users/me/auth-methods/local", app.api_address))
+        .json(&SecretBox::new(Box::new(Password(password.to_string()))))
+        .send()
+        .await
+        .unwrap()
+}
+
+pub async fn remove_auth_method_response(
+    client: &Client,
+    app: &TestedApp,
+    kind: UserAuthKind,
+) -> reqwest::Response {
+    client
+        .delete(format!("{}users/me/auth-methods/{kind}", app.api_address))
+        .send()
+        .await
+        .unwrap()
 }
 
 pub async fn create_user(app: &TestedApp, email: EmailAddress, password: &str) -> User {
