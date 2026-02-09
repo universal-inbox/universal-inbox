@@ -1,7 +1,7 @@
 [[hooks]]
 stage = "pre_build"
 command = "sh"
-command_arguments = ["-c", "test -f public/js/index.js || npx --yes rspack build"]
+command_arguments = ["-c", "npx --yes rspack build"]
 
 [[hooks]]
 stage = "build"

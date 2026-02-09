@@ -25,6 +25,12 @@ ensure-db:
 migrate-db:
     sqlx database setup
 
+test:
+    cargo nextest run -E 'not binary(browser)'
+
+test-browser:
+    cargo nextest run -E 'binary(browser)'
+
 ## Run recipes
 run *command="serve --embed-async-workers": ensure-db
     cargo run --color always -- {{ command }}
