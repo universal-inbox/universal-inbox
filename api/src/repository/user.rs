@@ -9,7 +9,9 @@ use webauthn_rs::prelude::*;
 
 use universal_inbox::{
     auth::AuthIdToken,
-    user::{EmailValidationToken, PasswordHash, PasswordResetToken, User, UserId, Username},
+    user::{
+        EmailValidationToken, PasswordHash, PasswordResetToken, User, UserId, UserPatch, Username,
+    },
 };
 
 use crate::{
@@ -132,6 +134,13 @@ pub trait UserRepository {
         executor: &mut Transaction<'_, Postgres>,
         user_id: &UserId,
         passkey: &Passkey,
+    ) -> Result<UpdateStatus<User>, UniversalInboxError>;
+
+    async fn update_user_profile(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        patch: &UserPatch,
     ) -> Result<UpdateStatus<User>, UniversalInboxError>;
 }
 
@@ -1116,6 +1125,127 @@ impl UserRepository for Repository {
             Ok(UpdateStatus {
                 updated: updated_user_row.is_updated,
                 result: Some(updated_user_row.user_row.try_into().unwrap()),
+            })
+        } else {
+            Ok(UpdateStatus {
+                updated: false,
+                result: None,
+            })
+        }
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = user_id.to_string()),
+        err
+    )]
+    async fn update_user_profile(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        patch: &UserPatch,
+    ) -> Result<UpdateStatus<User>, UniversalInboxError> {
+        if patch.first_name.is_none() && patch.last_name.is_none() && patch.email.is_none() {
+            return Ok(UpdateStatus {
+                updated: false,
+                result: None,
+            });
+        }
+
+        let mut query_builder = QueryBuilder::new(r#"UPDATE "user" SET"#);
+        let mut separated = query_builder.separated(", ");
+        if let Some(first_name) = &patch.first_name {
+            separated
+                .push(" first_name = ")
+                .push_bind_unseparated(first_name.clone());
+        }
+        if let Some(last_name) = &patch.last_name {
+            separated
+                .push(" last_name = ")
+                .push_bind_unseparated(last_name.clone());
+        }
+        if let Some(email) = &patch.email {
+            separated
+                .push(" email = ")
+                .push_bind_unseparated(email.to_string());
+            separated.push(" email_validated_at = NULL ");
+            separated.push(" email_validation_sent_at = NULL ");
+        }
+        separated
+            .push(" updated_at = ")
+            .push_bind_unseparated(Utc::now().naive_utc());
+        query_builder
+            .push(r#" WHERE "user".id = "#)
+            .push_bind(user_id.0);
+
+        query_builder.push(
+            r#"
+                RETURNING
+                  "user".id,
+                  "user".first_name,
+                  "user".last_name,
+                  "user".email,
+                  "user".email_validated_at,
+                  "user".email_validation_sent_at,
+                  "user".is_testing,
+                  "user".created_at,
+                  "user".updated_at,
+                  (SELECT"#,
+        );
+        let mut separated = query_builder.separated(" OR ");
+        if let Some(first_name) = &patch.first_name {
+            separated
+                .push(" (first_name is NULL OR first_name != ")
+                .push_bind_unseparated(first_name.clone())
+                .push_unseparated(")");
+        }
+        if let Some(last_name) = &patch.last_name {
+            separated
+                .push(" (last_name is NULL OR last_name != ")
+                .push_bind_unseparated(last_name.clone())
+                .push_unseparated(")");
+        }
+        if let Some(email) = &patch.email {
+            separated
+                .push(" (email is NULL OR email != ")
+                .push_bind_unseparated(email.to_string())
+                .push_unseparated(")");
+        }
+        query_builder
+            .push(r#" FROM "user" WHERE id = "#)
+            .push_bind(user_id.0)
+            .push(r#") as "is_updated""#);
+
+        let record: Option<UpdatedUserRow> = query_builder
+            .build_query_as::<UpdatedUserRow>()
+            .fetch_optional(&mut **executor)
+            .await
+            .map_err(|err| {
+                match err
+                    .as_database_error()
+                    .and_then(|db_error| db_error.code().map(|code| code.to_string()))
+                {
+                    Some(x) if x == *"23505" => UniversalInboxError::AlreadyExists {
+                        source: Some(err),
+                        id: user_id.0,
+                    },
+                    _ => {
+                        let message = format!(
+                            "Failed to update user profile for user {user_id} from storage: {err}"
+                        );
+                        UniversalInboxError::DatabaseError {
+                            source: err,
+                            message,
+                        }
+                    }
+                }
+            })?;
+
+        if let Some(updated_user_row) = record {
+            Ok(UpdateStatus {
+                updated: updated_user_row.is_updated,
+                result: Some(updated_user_row.user_row.try_into()?),
             })
         } else {
             Ok(UpdateStatus {

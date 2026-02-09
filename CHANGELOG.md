@@ -14,6 +14,7 @@
 - Add a new way to turn notifications into a task with default parameters
 - Add Google Drive integration
 - Prevent user registration from blck listed domains
+- Users can now update their firstname, lastname and password
 
 ### Changed
 

@@ -4,7 +4,7 @@ use secrecy::SecretBox;
 
 use universal_inbox::user::{
     Credentials, EmailValidationToken, Password, PasswordResetToken, RegisterUserParameters, User,
-    UserId,
+    UserId, UserPatch,
 };
 
 use universal_inbox_api::{
@@ -153,4 +153,17 @@ pub async fn create_user_and_login(
     let login_response = login_user_response(&client, app, email, password).await;
     assert_eq!(login_response.status(), http::StatusCode::OK);
     (client, user)
+}
+
+pub async fn patch_user_response(
+    client: &Client,
+    app: &TestedApp,
+    patch: &UserPatch,
+) -> reqwest::Response {
+    client
+        .patch(format!("{}users/me", app.api_address))
+        .json(patch)
+        .send()
+        .await
+        .unwrap()
 }

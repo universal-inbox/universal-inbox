@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use universal_inbox::{
     auth::auth_token::AuthenticationToken,
-    user::{EmailValidationToken, Password, PasswordResetToken, User, UserId},
+    user::{EmailValidationToken, Password, PasswordResetToken, User, UserId, UserPatch},
 };
 
 use universal_inbox_api::{
@@ -19,8 +19,8 @@ use crate::helpers::{
     settings, tested_app_with_local_auth,
     user::{
         get_current_user, get_current_user_response, get_password_reset_token,
-        get_user_email_validation_token, login_user_response, logout_user_response, register_user,
-        register_user_response,
+        get_user_email_validation_token, login_user_response, logout_user_response,
+        patch_user_response, register_user, register_user_response,
     },
 };
 
@@ -802,5 +802,222 @@ mod create_authentication_token {
         let auth_tokens = fetch_auth_tokens_for_user(&app.app, app.user.id).await;
         assert_eq!(auth_tokens.len(), 1);
         assert_eq!(auth_tokens[0].id, auth_token.id);
+    }
+}
+
+mod patch_user {
+    use super::*;
+    use crate::helpers::tested_app_with_domain_blacklist;
+    use pretty_assertions::assert_eq;
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_patch_user_first_and_last_name(#[future] tested_app_with_local_auth: TestedApp) {
+        let app = tested_app_with_local_auth.await;
+
+        let (client, user) = register_user(
+            &app,
+            "john@doe.name".parse().unwrap(),
+            "Very-harD-pasSword-5",
+        )
+        .await;
+
+        let patch = UserPatch {
+            first_name: Some("John".to_string()),
+            last_name: Some("Doe".to_string()),
+            email: None,
+        };
+
+        let response = patch_user_response(&client, &app, &patch).await;
+        assert_eq!(response.status(), http::StatusCode::OK);
+        let patched_user: User = response.json().await.unwrap();
+        assert_eq!(patched_user.first_name, Some("John".to_string()));
+        assert_eq!(patched_user.last_name, Some("Doe".to_string()));
+        assert_eq!(patched_user.email, user.email);
+
+        // Verify via GET
+        let fetched_user = get_current_user(&client, &app).await;
+        assert_eq!(fetched_user.first_name, Some("John".to_string()));
+        assert_eq!(fetched_user.last_name, Some("Doe".to_string()));
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_patch_user_email_resets_validation(
+        #[future] tested_app_with_local_auth: TestedApp,
+    ) {
+        let app = tested_app_with_local_auth.await;
+
+        let (client, user) = register_user(
+            &app,
+            "john@doe.name".parse().unwrap(),
+            "Very-harD-pasSword-5",
+        )
+        .await;
+
+        // First verify email
+        let email_validation_token = get_user_email_validation_token(&app, user.id)
+            .await
+            .unwrap();
+
+        let anonymous_client = reqwest::Client::builder()
+            .cookie_store(true)
+            .build()
+            .unwrap();
+        let api_email_verification_url = format!(
+            "{}users/{}/email-verification/{email_validation_token}",
+            app.api_address, user.id
+        );
+        anonymous_client
+            .get(api_email_verification_url)
+            .send()
+            .await
+            .unwrap();
+
+        let verified_user = get_current_user(&client, &app).await;
+        assert!(verified_user.email_validated_at.is_some());
+
+        // Now change email
+        let patch = UserPatch {
+            first_name: None,
+            last_name: None,
+            email: Some("new@email.name".parse().unwrap()),
+        };
+
+        let response = patch_user_response(&client, &app, &patch).await;
+        assert_eq!(response.status(), http::StatusCode::OK);
+        let patched_user: User = response.json().await.unwrap();
+        assert_eq!(patched_user.email, Some("new@email.name".parse().unwrap()));
+        assert!(patched_user.email_validated_at.is_none());
+        assert!(patched_user.email_validation_sent_at.is_some());
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_patch_user_same_values_returns_not_modified(
+        #[future] tested_app_with_local_auth: TestedApp,
+    ) {
+        let app = tested_app_with_local_auth.await;
+
+        let (client, _user) = register_user(
+            &app,
+            "john@doe.name".parse().unwrap(),
+            "Very-harD-pasSword-5",
+        )
+        .await;
+
+        // Patch with the same email
+        let patch = UserPatch {
+            first_name: None,
+            last_name: None,
+            email: Some("john@doe.name".parse().unwrap()),
+        };
+
+        let response = patch_user_response(&client, &app, &patch).await;
+        assert_eq!(response.status(), http::StatusCode::NOT_MODIFIED);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_patch_user_unauthenticated(#[future] tested_app_with_local_auth: TestedApp) {
+        let app = tested_app_with_local_auth.await;
+
+        let anonymous_client = reqwest::Client::builder()
+            .cookie_store(true)
+            .build()
+            .unwrap();
+
+        let patch = UserPatch {
+            first_name: Some("John".to_string()),
+            last_name: None,
+            email: None,
+        };
+
+        let response = patch_user_response(&anonymous_client, &app, &patch).await;
+        assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_patch_user_duplicate_email(#[future] tested_app_with_local_auth: TestedApp) {
+        let app = tested_app_with_local_auth.await;
+
+        // Register first user
+        let (client, _user) = register_user(
+            &app,
+            "john@doe.name".parse().unwrap(),
+            "Very-harD-pasSword-5",
+        )
+        .await;
+
+        // Register second user
+        let _ = register_user(
+            &app,
+            "jane@doe.name".parse().unwrap(),
+            "Very-harD-pasSword-5",
+        )
+        .await;
+
+        // First user tries to change email to second user's email
+        let patch = UserPatch {
+            first_name: None,
+            last_name: None,
+            email: Some("jane@doe.name".parse().unwrap()),
+        };
+
+        let response = patch_user_response(&client, &app, &patch).await;
+        assert_eq!(response.status(), http::StatusCode::CONFLICT);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_patch_user_empty_patch(#[future] tested_app_with_local_auth: TestedApp) {
+        let app = tested_app_with_local_auth.await;
+
+        let (client, _user) = register_user(
+            &app,
+            "john@doe.name".parse().unwrap(),
+            "Very-harD-pasSword-5",
+        )
+        .await;
+
+        let patch = UserPatch {
+            first_name: None,
+            last_name: None,
+            email: None,
+        };
+
+        let response = patch_user_response(&client, &app, &patch).await;
+        // Empty patch returns NotFound because update_user_profile returns early with result: None
+        assert_eq!(response.status(), http::StatusCode::NOT_FOUND);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_patch_user_blacklisted_email_domain(
+        #[future] tested_app_with_domain_blacklist: TestedApp,
+    ) {
+        let app = tested_app_with_domain_blacklist.await;
+
+        let (client, _user) = register_user(
+            &app,
+            "john@allowed.com".parse().unwrap(),
+            "Very-harD-pasSword-5",
+        )
+        .await;
+
+        let patch = UserPatch {
+            first_name: None,
+            last_name: None,
+            email: Some("john@blocked.com".parse().unwrap()),
+        };
+
+        let response = patch_user_response(&client, &app, &patch).await;
+        assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+        let body: HashMap<String, String> = response.json().await.unwrap();
+        assert_eq!(
+            body.get("message").unwrap(),
+            "Forbidden access: Registration is not allowed from this domain"
+        );
     }
 }

@@ -25,7 +25,7 @@ use universal_inbox::{
     auth::openidconnect::OpenidConnectProvider,
     user::{
         Credentials, EmailValidationToken, Password, PasswordHash, PasswordResetToken, User,
-        UserId, Username,
+        UserId, UserPatch, Username,
     },
 };
 
@@ -124,6 +124,60 @@ impl UserService {
         user_id: UserId,
     ) -> Result<bool, UniversalInboxError> {
         self.repository.delete_user(executor, user_id).await
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = user_id.to_string()),
+        err
+    )]
+    pub async fn patch_user(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        patch: &UserPatch,
+    ) -> Result<UpdateStatus<User>, UniversalInboxError> {
+        // Check email domain blacklist if email is being changed
+        if let Some(ref email) = patch.email {
+            let domain = email.domain().to_lowercase();
+            if let Some(rejection_message) = self
+                .application_settings
+                .security
+                .email_domain_blacklist
+                .get(&domain)
+            {
+                return Err(UniversalInboxError::Forbidden(rejection_message.clone()));
+            }
+        }
+
+        let update_status = self
+            .repository
+            .update_user_profile(executor, user_id, patch)
+            .await?;
+
+        // If email was changed and update succeeded, send verification email
+        if patch.email.is_some()
+            && let UpdateStatus {
+                updated: true,
+                result: Some(_),
+            } = &update_status
+        {
+            self.send_verification_email(executor, user_id, false)
+                .await?;
+            // Re-fetch user to include the updated email_validation_sent_at
+            let updated_user = self
+                .repository
+                .get_user(executor, user_id)
+                .await
+                .context("Failed to re-fetch user after sending verification email")?;
+            return Ok(UpdateStatus {
+                updated: true,
+                result: updated_user,
+            });
+        }
+
+        Ok(update_status)
     }
 
     /// In an OpenID Connect Authorization code flow, the API has fetched the access token and
