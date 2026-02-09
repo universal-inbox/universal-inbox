@@ -340,7 +340,7 @@ impl Cli {
 
             Commands::Test { command } => match command {
                 TestCommands::GenerateUser => {
-                    generate::generate_testing_user(
+                    let _email = generate::generate_testing_user(
                         user_service,
                         integration_connection_service,
                         notification_service,
@@ -348,7 +348,8 @@ impl Cli {
                         third_party_item_service,
                         settings,
                     )
-                    .await
+                    .await?;
+                    Ok(())
                 }
                 TestCommands::AnonymizeDb => anonymize::anonymize_database(user_service).await,
             },

@@ -31,4 +31,15 @@ repos:
         files: \.rs$
         stages: [pre-commit]
         priority: 20
-        
+
+  - repo: local
+    hooks:
+      - id: test-browser
+        name: Test the web application with the browser
+        language: system
+        pass_filenames: false
+        entry: just test-browser
+        files: \.rs$
+        stages: [pre-commit]
+        priority: 20
+       

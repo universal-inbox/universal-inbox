@@ -1,34 +1,33 @@
-use std::{collections::HashMap, env, fs, net::TcpListener, str::FromStr, sync::Arc};
+use std::{collections::HashMap, env, fs, sync::Arc};
 
 use apalis_redis::RedisStorage;
 use openidconnect::{ClientId, IntrospectionUrl, IssuerUrl};
 use rstest::*;
-use sqlx::{
-    ConnectOptions, Connection, Executor, PgConnection, PgPool, postgres::PgConnectOptions,
-};
+use sqlx::PgPool;
 use tokio::sync::RwLock;
 use tracing::info;
-use url::Url;
-use uuid::Uuid;
 use wiremock::MockServer;
 
 use universal_inbox_api::{
     configuration::{
         AuthenticationSettings, LocalAuthenticationSettings, OIDCFlowSettings, Settings,
     },
-    integrations::{oauth2::NangoService, slack::SlackService},
+    integrations::slack::SlackService,
     jobs::UniversalInboxJob,
-    observability::{get_subscriber, init_subscriber},
     repository::Repository,
     universal_inbox::{
         integration_connection::service::IntegrationConnectionService,
         notification::service::NotificationService, task::service::TaskService,
         third_party::service::ThirdPartyItemService, user::service::UserService,
     },
-    utils::{cache::Cache, passkey::build_webauthn},
+    utils::cache::Cache,
 };
 
-use crate::helpers::mailer::MailerStub;
+use crate::common::mailer::MailerStub;
+use crate::common::{build_and_spawn, setup_test_env};
+
+// Re-export shared fixtures so rstest can resolve them by name in this module's fixtures
+pub use crate::common::{db_connection, redis_storage, settings, tracing_setup};
 
 pub mod auth;
 pub mod integration_connection;
@@ -72,75 +71,6 @@ impl Drop for TestedApp {
 }
 
 #[fixture]
-#[once]
-fn tracing_setup(settings: Settings) {
-    info!("Setting up tracing");
-
-    let subscriber = get_subscriber(&settings.application.observability.logging.log_directive);
-    init_subscriber(
-        subscriber,
-        log::LevelFilter::from_str(
-            &settings
-                .application
-                .observability
-                .logging
-                .dependencies_log_level,
-        )
-        .unwrap_or(log::LevelFilter::Error),
-    );
-    color_backtrace::install();
-}
-
-#[fixture]
-async fn db_connection(mut settings: Settings) -> Arc<PgPool> {
-    settings.database.database_name = Uuid::new_v4().to_string();
-    let mut server_connection =
-        PgConnection::connect(&settings.database.connection_string_without_db())
-            .await
-            .expect("Failed to connect to Postgres");
-    server_connection
-        .execute(&*format!(
-            r#"CREATE DATABASE "{}";"#,
-            settings.database.database_name
-        ))
-        .await
-        .expect("Failed to create database.");
-
-    let options = PgConnectOptions::new()
-        .username(&settings.database.username)
-        .password(&settings.database.password)
-        .host(&settings.database.host)
-        .port(settings.database.port)
-        .database(&settings.database.database_name)
-        .log_statements(log::LevelFilter::Info);
-    let db_connection = PgPool::connect_with(options).await.expect("error");
-
-    sqlx::migrate!("./migrations")
-        .run(&db_connection)
-        .await
-        .expect("Failed to migrate the database");
-
-    Arc::new(db_connection)
-}
-
-#[fixture]
-async fn redis_storage(settings: Settings) -> RedisStorage<UniversalInboxJob> {
-    let namespace = format!("universal-inbox:jobs:UniversalInboxJob:{}", Uuid::new_v4());
-    RedisStorage::new_with_config(
-        apalis_redis::connect(settings.redis.connection_string())
-            .await
-            .expect("Redis storage connection failed"),
-        apalis_redis::Config::default().set_namespace(&namespace),
-    )
-}
-
-#[fixture]
-pub fn settings() -> Settings {
-    Settings::new_from_file(Some("config/test".to_string()))
-        .expect("Cannot load test configuration")
-}
-
-#[fixture]
 pub async fn tested_app(
     mut settings: Settings,
     #[allow(unused, clippy::let_unit_value)] tracing_setup: (),
@@ -148,38 +78,11 @@ pub async fn tested_app(
     #[future] redis_storage: RedisStorage<UniversalInboxJob>,
 ) -> TestedApp {
     info!("Setting up server");
-    rustls::crypto::ring::default_provider()
-        .install_default()
-        .expect("Failed to install rustls crypto provider");
 
-    let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
-    let port = listener.local_addr().unwrap().port();
-
-    let cache = Cache::new(settings.redis.connection_string())
-        .await
-        .expect("Failed to create cache");
-    Cache::set_namespace(Uuid::new_v4().to_string()).await;
-
-    // tag: New notification integration
-    let github_mock_server = MockServer::start().await;
-    let github_mock_server_url = &github_mock_server.uri();
-    let linear_mock_server = MockServer::start().await;
-    let linear_mock_server_url = &linear_mock_server.uri();
-    let google_calendar_mock_server = MockServer::start().await;
-    let google_calendar_mock_server_url = &google_calendar_mock_server.uri();
-    let google_mail_mock_server = MockServer::start().await;
-    let google_mail_mock_server_url = &google_mail_mock_server.uri();
-    let google_drive_mock_server = MockServer::start().await;
-    let google_drive_mock_server_url = &google_drive_mock_server.uri();
-    let slack_mock_server = MockServer::start().await;
-    let slack_mock_server_url = &slack_mock_server.uri();
-    let todoist_mock_server = MockServer::start().await;
-    let todoist_mock_server_url = &todoist_mock_server.uri();
+    let (listener, port, cache, mock_servers) = setup_test_env(&settings).await;
 
     let oidc_issuer_mock_server = MockServer::start().await;
     let oidc_issuer_mock_server_url = &oidc_issuer_mock_server.uri();
-    let nango_mock_server = MockServer::start().await;
-    let nango_mock_server_url = &nango_mock_server.uri();
 
     if let AuthenticationSettings::OpenIDConnect(oidc_settings) =
         &mut settings.application.security.authentication[0]
@@ -196,97 +99,40 @@ pub async fn tested_app(
     }
 
     let pool: Arc<PgPool> = db_connection.await;
-    let webauthn = Arc::new(
-        build_webauthn(&settings.application.front_base_url)
-            .expect("Failed to build a Webauthn context"),
-    );
+    let redis_storage = redis_storage.await;
 
-    let nango_service = NangoService::new(
-        nango_mock_server_url.parse::<Url>().unwrap(),
-        &settings.oauth2.nango_secret_key,
-    )
-    .expect("Failed to create new NangoService");
-
-    let mailer_stub = Arc::new(RwLock::new(MailerStub::new()));
-    let (
-        notification_service,
-        task_service,
-        user_service,
-        integration_connection_service,
-        auth_token_service,
-        third_party_item_service,
-        slack_service,
-    ) = universal_inbox_api::build_services(
+    let (services, mailer_stub, redis_storage) = build_and_spawn(
+        listener,
         pool.clone(),
-        &settings,
-        Some(github_mock_server_url.to_string()),
-        Some(linear_mock_server_url.to_string()),
-        Some(google_mail_mock_server_url.to_string()),
-        Some(google_drive_mock_server_url.to_string()),
-        Some(google_calendar_mock_server_url.to_string()),
-        Some(slack_mock_server_url.to_string()),
-        Some(todoist_mock_server_url.to_string()),
-        nango_service,
-        mailer_stub.clone(),
-        webauthn,
-        universal_inbox_api::ExecutionContext::Http,
+        settings.clone(),
+        &mock_servers,
+        redis_storage,
     )
     .await;
-
-    let redis_storage = redis_storage.await;
 
     let app_address = format!("http://127.0.0.1:{port}");
     let api_address = format!("{app_address}{}", settings.application.api_path);
-    let server = universal_inbox_api::run_server(
-        listener,
-        redis_storage.clone(),
-        settings,
-        notification_service.clone(),
-        task_service.clone(),
-        user_service.clone(),
-        integration_connection_service.clone(),
-        auth_token_service,
-        third_party_item_service.clone(),
-    )
-    .await
-    .expect("Failed to bind address");
-
-    tokio::spawn(server);
-
-    let worker = universal_inbox_api::run_worker(
-        Some(1),
-        redis_storage.clone(),
-        notification_service.clone(),
-        task_service.clone(),
-        integration_connection_service.clone(),
-        third_party_item_service.clone(),
-        slack_service.clone(),
-    )
-    .await;
-
-    tokio::spawn(worker.run());
-
     let repository = Arc::new(Repository::new(pool.clone()));
 
     TestedApp {
         app_address,
         api_address,
         repository,
-        user_service,
-        task_service,
-        notification_service,
-        integration_connection_service,
-        third_party_item_service,
-        slack_service,
-        github_mock_server,
-        linear_mock_server,
-        google_calendar_mock_server,
-        google_mail_mock_server,
-        google_drive_mock_server,
-        slack_mock_server,
-        todoist_mock_server,
+        user_service: services.user_service,
+        task_service: services.task_service,
+        notification_service: services.notification_service,
+        integration_connection_service: services.integration_connection_service,
+        third_party_item_service: services.third_party_item_service,
+        slack_service: services.slack_service,
+        github_mock_server: mock_servers.github,
+        linear_mock_server: mock_servers.linear,
+        google_calendar_mock_server: mock_servers.google_calendar,
+        google_mail_mock_server: mock_servers.google_mail,
+        google_drive_mock_server: mock_servers.google_drive,
+        slack_mock_server: mock_servers.slack,
+        todoist_mock_server: mock_servers.todoist,
         oidc_issuer_mock_server: Some(oidc_issuer_mock_server),
-        nango_mock_server,
+        nango_mock_server: mock_servers.nango,
         mailer_stub,
         redis_storage,
         cache,
@@ -301,36 +147,8 @@ pub async fn tested_app_with_local_auth(
     #[future] redis_storage: RedisStorage<UniversalInboxJob>,
 ) -> TestedApp {
     info!("Setting up server");
-    rustls::crypto::ring::default_provider()
-        .install_default()
-        .expect("Failed to install rustls crypto provider");
 
-    let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
-    let port = listener.local_addr().unwrap().port();
-
-    let cache = Cache::new(settings.redis.connection_string())
-        .await
-        .expect("Failed to create cache");
-    Cache::set_namespace(Uuid::new_v4().to_string()).await;
-
-    // tag: New notification integration
-    let github_mock_server = MockServer::start().await;
-    let github_mock_server_url = &github_mock_server.uri();
-    let linear_mock_server = MockServer::start().await;
-    let linear_mock_server_url = &linear_mock_server.uri();
-    let google_mail_mock_server = MockServer::start().await;
-    let google_mail_mock_server_url = &google_mail_mock_server.uri();
-    let google_drive_mock_server = MockServer::start().await;
-    let google_drive_mock_server_url = &google_drive_mock_server.uri();
-    let google_calendar_mock_server = MockServer::start().await;
-    let google_calendar_mock_server_url = &google_calendar_mock_server.uri();
-    let slack_mock_server = MockServer::start().await;
-    let slack_mock_server_url = &slack_mock_server.uri();
-    let todoist_mock_server = MockServer::start().await;
-    let todoist_mock_server_url = &todoist_mock_server.uri();
-
-    let nango_mock_server = MockServer::start().await;
-    let nango_mock_server_url = &nango_mock_server.uri();
+    let (listener, port, cache, mock_servers) = setup_test_env(&settings).await;
 
     settings.application.security.authentication =
         vec![AuthenticationSettings::Local(LocalAuthenticationSettings {
@@ -343,97 +161,40 @@ pub async fn tested_app_with_local_auth(
     settings.application.security.email_domain_blacklist = HashMap::new();
 
     let pool: Arc<PgPool> = db_connection.await;
+    let redis_storage = redis_storage.await;
 
-    let nango_service = NangoService::new(
-        nango_mock_server_url.parse::<Url>().unwrap(),
-        &settings.oauth2.nango_secret_key,
-    )
-    .expect("Failed to create new NangoService");
-    let webauthn = Arc::new(
-        build_webauthn(&settings.application.front_base_url)
-            .expect("Failed to build a Webauthn context"),
-    );
-
-    let mailer_stub = Arc::new(RwLock::new(MailerStub::new()));
-    let (
-        notification_service,
-        task_service,
-        user_service,
-        integration_connection_service,
-        auth_token_service,
-        third_party_item_service,
-        slack_service,
-    ) = universal_inbox_api::build_services(
+    let (services, mailer_stub, redis_storage) = build_and_spawn(
+        listener,
         pool.clone(),
-        &settings,
-        Some(github_mock_server_url.to_string()),
-        Some(linear_mock_server_url.to_string()),
-        Some(google_mail_mock_server_url.to_string()),
-        Some(google_drive_mock_server_url.to_string()),
-        Some(google_calendar_mock_server_url.to_string()),
-        Some(slack_mock_server_url.to_string()),
-        Some(todoist_mock_server_url.to_string()),
-        nango_service,
-        mailer_stub.clone(),
-        webauthn,
-        universal_inbox_api::ExecutionContext::Http,
+        settings.clone(),
+        &mock_servers,
+        redis_storage,
     )
     .await;
-
-    let redis_storage = redis_storage.await;
 
     let app_address = format!("http://127.0.0.1:{port}");
     let api_address = format!("{app_address}{}", settings.application.api_path);
-    let server = universal_inbox_api::run_server(
-        listener,
-        redis_storage.clone(),
-        settings,
-        notification_service.clone(),
-        task_service.clone(),
-        user_service.clone(),
-        integration_connection_service.clone(),
-        auth_token_service,
-        third_party_item_service.clone(),
-    )
-    .await
-    .expect("Failed to bind address");
-
-    tokio::spawn(server);
-
-    let worker = universal_inbox_api::run_worker(
-        Some(1),
-        redis_storage.clone(),
-        notification_service.clone(),
-        task_service.clone(),
-        integration_connection_service.clone(),
-        third_party_item_service.clone(),
-        slack_service.clone(),
-    )
-    .await;
-
-    tokio::spawn(worker.run());
-
     let repository = Arc::new(Repository::new(pool.clone()));
 
     TestedApp {
         app_address,
         api_address,
         repository,
-        user_service,
-        task_service,
-        notification_service,
-        integration_connection_service,
-        third_party_item_service,
-        slack_service,
-        github_mock_server,
-        linear_mock_server,
-        google_calendar_mock_server,
-        google_mail_mock_server,
-        google_drive_mock_server,
-        slack_mock_server,
-        todoist_mock_server,
+        user_service: services.user_service,
+        task_service: services.task_service,
+        notification_service: services.notification_service,
+        integration_connection_service: services.integration_connection_service,
+        third_party_item_service: services.third_party_item_service,
+        slack_service: services.slack_service,
+        github_mock_server: mock_servers.github,
+        linear_mock_server: mock_servers.linear,
+        google_calendar_mock_server: mock_servers.google_calendar,
+        google_mail_mock_server: mock_servers.google_mail,
+        google_drive_mock_server: mock_servers.google_drive,
+        slack_mock_server: mock_servers.slack,
+        todoist_mock_server: mock_servers.todoist,
         oidc_issuer_mock_server: None,
-        nango_mock_server,
+        nango_mock_server: mock_servers.nango,
         mailer_stub,
         redis_storage,
         cache,
@@ -448,37 +209,11 @@ pub async fn tested_app_with_domain_blacklist(
     #[future] redis_storage: RedisStorage<UniversalInboxJob>,
 ) -> TestedApp {
     info!("Setting up server with domain blacklist");
-    rustls::crypto::ring::default_provider()
-        .install_default()
-        .expect("Failed to install rustls crypto provider");
 
-    let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
-    let port = listener.local_addr().unwrap().port();
-
-    let cache = Cache::new(settings.redis.connection_string())
-        .await
-        .expect("Failed to create cache");
-    Cache::set_namespace(Uuid::new_v4().to_string()).await;
-
-    let github_mock_server = MockServer::start().await;
-    let github_mock_server_url = &github_mock_server.uri();
-    let linear_mock_server = MockServer::start().await;
-    let linear_mock_server_url = &linear_mock_server.uri();
-    let google_mail_mock_server = MockServer::start().await;
-    let google_mail_mock_server_url = &google_mail_mock_server.uri();
-    let google_drive_mock_server = MockServer::start().await;
-    let google_drive_mock_server_url = &google_drive_mock_server.uri();
-    let google_calendar_mock_server = MockServer::start().await;
-    let google_calendar_mock_server_url = &google_calendar_mock_server.uri();
-    let slack_mock_server = MockServer::start().await;
-    let slack_mock_server_url = &slack_mock_server.uri();
-    let todoist_mock_server = MockServer::start().await;
-    let todoist_mock_server_url = &todoist_mock_server.uri();
+    let (listener, port, cache, mock_servers) = setup_test_env(&settings).await;
 
     let oidc_issuer_mock_server = MockServer::start().await;
     let oidc_issuer_mock_server_url = &oidc_issuer_mock_server.uri();
-    let nango_mock_server = MockServer::start().await;
-    let nango_mock_server_url = &nango_mock_server.uri();
 
     // Set up OIDC authentication settings pointing to mock server
     if let AuthenticationSettings::OpenIDConnect(oidc_settings) =
@@ -512,97 +247,40 @@ pub async fn tested_app_with_domain_blacklist(
     );
 
     let pool: Arc<PgPool> = db_connection.await;
+    let redis_storage = redis_storage.await;
 
-    let nango_service = NangoService::new(
-        nango_mock_server_url.parse::<Url>().unwrap(),
-        &settings.oauth2.nango_secret_key,
-    )
-    .expect("Failed to create new NangoService");
-    let webauthn = Arc::new(
-        build_webauthn(&settings.application.front_base_url)
-            .expect("Failed to build a Webauthn context"),
-    );
-
-    let mailer_stub = Arc::new(RwLock::new(MailerStub::new()));
-    let (
-        notification_service,
-        task_service,
-        user_service,
-        integration_connection_service,
-        auth_token_service,
-        third_party_item_service,
-        slack_service,
-    ) = universal_inbox_api::build_services(
+    let (services, mailer_stub, redis_storage) = build_and_spawn(
+        listener,
         pool.clone(),
-        &settings,
-        Some(github_mock_server_url.to_string()),
-        Some(linear_mock_server_url.to_string()),
-        Some(google_mail_mock_server_url.to_string()),
-        Some(google_drive_mock_server_url.to_string()),
-        Some(google_calendar_mock_server_url.to_string()),
-        Some(slack_mock_server_url.to_string()),
-        Some(todoist_mock_server_url.to_string()),
-        nango_service,
-        mailer_stub.clone(),
-        webauthn,
-        universal_inbox_api::ExecutionContext::Http,
+        settings.clone(),
+        &mock_servers,
+        redis_storage,
     )
     .await;
-
-    let redis_storage = redis_storage.await;
 
     let app_address = format!("http://127.0.0.1:{port}");
     let api_address = format!("{app_address}{}", settings.application.api_path);
-    let server = universal_inbox_api::run_server(
-        listener,
-        redis_storage.clone(),
-        settings,
-        notification_service.clone(),
-        task_service.clone(),
-        user_service.clone(),
-        integration_connection_service.clone(),
-        auth_token_service,
-        third_party_item_service.clone(),
-    )
-    .await
-    .expect("Failed to bind address");
-
-    tokio::spawn(server);
-
-    let worker = universal_inbox_api::run_worker(
-        Some(1),
-        redis_storage.clone(),
-        notification_service.clone(),
-        task_service.clone(),
-        integration_connection_service.clone(),
-        third_party_item_service.clone(),
-        slack_service.clone(),
-    )
-    .await;
-
-    tokio::spawn(worker.run());
-
     let repository = Arc::new(Repository::new(pool.clone()));
 
     TestedApp {
         app_address,
         api_address,
         repository,
-        user_service,
-        task_service,
-        notification_service,
-        integration_connection_service,
-        third_party_item_service,
-        slack_service,
-        github_mock_server,
-        linear_mock_server,
-        google_calendar_mock_server,
-        google_mail_mock_server,
-        google_drive_mock_server,
-        slack_mock_server,
-        todoist_mock_server,
+        user_service: services.user_service,
+        task_service: services.task_service,
+        notification_service: services.notification_service,
+        integration_connection_service: services.integration_connection_service,
+        third_party_item_service: services.third_party_item_service,
+        slack_service: services.slack_service,
+        github_mock_server: mock_servers.github,
+        linear_mock_server: mock_servers.linear,
+        google_calendar_mock_server: mock_servers.google_calendar,
+        google_mail_mock_server: mock_servers.google_mail,
+        google_drive_mock_server: mock_servers.google_drive,
+        slack_mock_server: mock_servers.slack,
+        todoist_mock_server: mock_servers.todoist,
         oidc_issuer_mock_server: Some(oidc_issuer_mock_server),
-        nango_mock_server,
+        nango_mock_server: mock_servers.nango,
         mailer_stub,
         redis_storage,
         cache,

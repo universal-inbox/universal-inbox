@@ -55,6 +55,7 @@ install-tools:
   if [ -z "$DOCKER_BUILD" ]; then
     cargo binstall -y cargo-llvm-cov --version 0.6.16
   fi
+  just api install-tools
 
 ## Build recipes
 build-release-all: build-release
@@ -68,6 +69,9 @@ check-all: check
 
 format-all:
     cargo fmt --all
+
+check-format:
+    cargo fmt --all --check
 
 lint-dockerfile:
     hadolint Dockerfile
