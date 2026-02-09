@@ -37,6 +37,7 @@ use crate::{
         slack::SlackService,
         task::{ThirdPartyTaskService, ThirdPartyTaskSourceService},
         third_party::ThirdPartyItemSourceService,
+        ticktick::TickTickService,
         todoist::TodoistService,
     },
     jobs::UniversalInboxJob,
@@ -55,6 +56,7 @@ use crate::{
 pub struct TaskService {
     repository: Arc<Repository>,
     pub todoist_service: Arc<TodoistService>,
+    pub ticktick_service: Arc<TickTickService>,
     pub linear_service: Arc<LinearService>,
     notification_service: Weak<RwLock<NotificationService>>,
     pub slack_service: Arc<SlackService>,
@@ -69,6 +71,7 @@ impl TaskService {
     pub fn new(
         repository: Arc<Repository>,
         todoist_service: Arc<TodoistService>,
+        ticktick_service: Arc<TickTickService>,
         linear_service: Arc<LinearService>,
         notification_service: Weak<RwLock<NotificationService>>,
         slack_service: Arc<SlackService>,
@@ -80,6 +83,7 @@ impl TaskService {
         TaskService {
             repository,
             todoist_service,
+            ticktick_service,
             linear_service,
             notification_service,
             slack_service,
@@ -187,7 +191,7 @@ impl TaskService {
     ) -> Result<(), UniversalInboxError> {
         match upsert_task {
             UpsertStatus::Created(task) => {
-                if task.kind == TaskSourceKind::Todoist {
+                if task.kind == TaskSourceKind::Todoist || task.kind == TaskSourceKind::TickTick {
                     debug!(
                         "No side effect to apply for newly created {} task {}",
                         task.kind, task.id
@@ -208,7 +212,12 @@ impl TaskService {
                     .context("Unable to access third_party_item_service from task_service")?
                     .read()
                     .await
-                    .create_sink_item_from_task(executor, task, false)
+                    .create_sink_item_from_task(
+                        executor,
+                        task,
+                        false,
+                        IntegrationProviderKind::Todoist,
+                    )
                     .await?;
             }
             UpsertStatus::Updated {
@@ -218,7 +227,9 @@ impl TaskService {
                 let task_source_item = &new_task.source_item;
 
                 if new_task.sink_item.is_none() {
-                    if new_task.kind == TaskSourceKind::Todoist {
+                    if new_task.kind == TaskSourceKind::Todoist
+                        || new_task.kind == TaskSourceKind::TickTick
+                    {
                         debug!(
                             "No side effect to apply for {} task {} with no sink item",
                             new_task.kind, new_task.id
@@ -236,7 +247,12 @@ impl TaskService {
                         .context("Unable to access third_party_item_service from task_service")?
                         .read()
                         .await
-                        .create_sink_item_from_task(executor, new_task, false)
+                        .create_sink_item_from_task(
+                            executor,
+                            new_task,
+                            false,
+                            IntegrationProviderKind::Todoist,
+                        )
                         .await?;
 
                     return Ok(());
@@ -302,7 +318,9 @@ impl TaskService {
                     return side_effect_result;
                 };
 
-                if new_task.kind == TaskSourceKind::Todoist {
+                if new_task.kind == TaskSourceKind::Todoist
+                    || new_task.kind == TaskSourceKind::TickTick
+                {
                     // Return the error as there is no fallback in that case
                     return side_effect_result;
                 }
@@ -320,7 +338,12 @@ impl TaskService {
                     .context("Unable to access third_party_item_service from task_service")?
                     .read()
                     .await
-                    .create_sink_item_from_task(executor, new_task, true)
+                    .create_sink_item_from_task(
+                        executor,
+                        new_task,
+                        true,
+                        IntegrationProviderKind::Todoist,
+                    )
                     .await?;
             }
             _ => {}
@@ -465,9 +488,51 @@ impl TaskService {
         executor: &mut Transaction<'_, Postgres>,
         task_creation: &TaskCreation,
         notification: &Notification,
+        task_provider_kind: IntegrationProviderKind,
     ) -> Result<Box<Task>, UniversalInboxError> {
+        match task_provider_kind {
+            IntegrationProviderKind::Todoist => {
+                self.create_task_from_notification_with_service(
+                    executor,
+                    task_creation,
+                    notification,
+                    self.todoist_service.clone(),
+                )
+                .await
+            }
+            IntegrationProviderKind::TickTick => {
+                self.create_task_from_notification_with_service(
+                    executor,
+                    task_creation,
+                    notification,
+                    self.ticktick_service.clone(),
+                )
+                .await
+            }
+            _ => Err(UniversalInboxError::UnsupportedAction(format!(
+                "Task creation from notification is not supported for {task_provider_kind}"
+            ))),
+        }
+    }
+
+    async fn create_task_from_notification_with_service<T, U>(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        task_creation: &TaskCreation,
+        notification: &Notification,
+        third_party_task_service: Arc<U>,
+    ) -> Result<Box<Task>, UniversalInboxError>
+    where
+        T: TryFrom<ThirdPartyItem> + ThirdPartyItemFromSource + Debug,
+        U: ThirdPartyTaskSourceService<T>
+            + ThirdPartyTaskService<T>
+            + NotificationSource
+            + TaskSource
+            + Send
+            + Sync,
+        <T as TryFrom<ThirdPartyItem>>::Error: Send + Sync,
+    {
         let user_id = notification.user_id;
-        let third_party_task_service = self.todoist_service.clone();
         let integration_provider_kind = third_party_task_service.get_integration_provider_kind();
         let Some(integration_connection) = self
             .integration_connection_service
@@ -529,9 +594,9 @@ impl TaskService {
         {
             Ok(Box::new(task))
         } else {
-            return Err(UniversalInboxError::Unexpected(anyhow!(
+            Err(UniversalInboxError::Unexpected(anyhow!(
                 "A task should have been created from the {integration_provider_kind} task {source_id}",
-            )));
+            )))
         }
     }
 
@@ -613,6 +678,22 @@ impl TaskService {
                 .save_task_as_notification(
                     executor,
                     self.todoist_service.clone(),
+                    &task,
+                    &third_party_item,
+                    &integration_connection.provider,
+                    true, // Force incremental here to avoid deleting all other notification for this third party item kind
+                    user_id,
+                )
+                .await?
+        } else if integration_provider_kind == IntegrationProviderKind::TickTick {
+            self.notification_service
+                .upgrade()
+                .context("Unable to access notification_service from task_service")?
+                .read()
+                .await
+                .save_task_as_notification(
+                    executor,
+                    self.ticktick_service.clone(),
                     &task,
                     &third_party_item,
                     &integration_connection.provider,
@@ -931,8 +1012,13 @@ impl TaskService {
                 .await
             }
             TaskSyncSourceKind::TickTick => {
-                // TickTick sync will be implemented in Phase 3 (TICK-3.4)
-                Ok(vec![])
+                self.sync_third_party_tasks(
+                    executor,
+                    self.ticktick_service.clone(),
+                    user_id,
+                    force_sync,
+                )
+                .await
             }
         }
     }
@@ -986,9 +1072,13 @@ impl TaskService {
         let sync_result_from_linear = self
             .sync_tasks_with_transaction(TaskSyncSourceKind::Linear, user_id, force_sync)
             .await?;
+        let sync_result_from_ticktick = self
+            .sync_tasks_with_transaction(TaskSyncSourceKind::TickTick, user_id, force_sync)
+            .await?;
         Ok(sync_result_from_todoist
             .into_iter()
             .chain(sync_result_from_linear.into_iter())
+            .chain(sync_result_from_ticktick.into_iter())
             .collect())
     }
 
@@ -1062,7 +1152,7 @@ impl TaskService {
             updated: _,
             result: Some(task),
         } = &updated_task
-            && task.kind == TaskSourceKind::Todoist
+            && (task.kind == TaskSourceKind::Todoist || task.kind == TaskSourceKind::TickTick)
             && patch.status.is_some()
         {
             let notification_patch = NotificationPatch {
@@ -1188,10 +1278,23 @@ impl TaskService {
         executor: &mut Transaction<'_, Postgres>,
         matches: &str,
         user_id: UserId,
+        task_provider_kind: IntegrationProviderKind,
     ) -> Result<Vec<ProjectSummary>, UniversalInboxError> {
-        self.todoist_service
-            .search_projects(executor, matches, user_id)
-            .await
+        match task_provider_kind {
+            IntegrationProviderKind::Todoist => {
+                self.todoist_service
+                    .search_projects(executor, matches, user_id)
+                    .await
+            }
+            IntegrationProviderKind::TickTick => {
+                self.ticktick_service
+                    .search_projects(executor, matches, user_id)
+                    .await
+            }
+            _ => Err(UniversalInboxError::UnsupportedAction(format!(
+                "Project search is not supported for {task_provider_kind}"
+            ))),
+        }
     }
 
     pub async fn get_or_create_project(
@@ -1199,10 +1302,23 @@ impl TaskService {
         executor: &mut Transaction<'_, Postgres>,
         project_name: &str,
         user_id: UserId,
+        task_provider_kind: IntegrationProviderKind,
     ) -> Result<ProjectSummary, UniversalInboxError> {
-        self.todoist_service
-            .get_or_create_project(executor, project_name, user_id, None)
-            .await
+        match task_provider_kind {
+            IntegrationProviderKind::Todoist => {
+                self.todoist_service
+                    .get_or_create_project(executor, project_name, user_id, None)
+                    .await
+            }
+            IntegrationProviderKind::TickTick => {
+                self.ticktick_service
+                    .get_or_create_project(executor, project_name, user_id, None)
+                    .await
+            }
+            _ => Err(UniversalInboxError::UnsupportedAction(format!(
+                "Project creation is not supported for {task_provider_kind}"
+            ))),
+        }
     }
 
     #[tracing::instrument(
@@ -1236,6 +1352,16 @@ impl TaskService {
                 self.apply_updated_task_side_effect(
                     executor,
                     self.todoist_service.clone(),
+                    patch,
+                    third_party_item,
+                    for_user_id,
+                )
+                .await
+            }
+            ThirdPartyItemSourceKind::TickTick => {
+                self.apply_updated_task_side_effect(
+                    executor,
+                    self.ticktick_service.clone(),
                     patch,
                     third_party_item,
                     for_user_id,

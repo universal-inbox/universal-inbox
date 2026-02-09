@@ -114,6 +114,7 @@ pub struct MockServers {
     pub google_drive: MockServer,
     pub slack: MockServer,
     pub todoist: MockServer,
+    pub ticktick: MockServer,
     pub nango: MockServer,
 }
 
@@ -127,6 +128,7 @@ impl MockServers {
         let google_drive = MockServer::start().await;
         let slack = MockServer::start().await;
         let todoist = MockServer::start().await;
+        let ticktick = MockServer::start().await;
         let nango = MockServer::start().await;
 
         Self {
@@ -137,6 +139,7 @@ impl MockServers {
             google_drive,
             slack,
             todoist,
+            ticktick,
             nango,
         }
     }
@@ -190,6 +193,7 @@ pub async fn build_test_services(
         Some(mock_servers.google_calendar.uri()),
         Some(mock_servers.slack.uri()),
         Some(mock_servers.todoist.uri()),
+        Some(mock_servers.ticktick.uri()),
         nango_service,
         mailer,
         webauthn,

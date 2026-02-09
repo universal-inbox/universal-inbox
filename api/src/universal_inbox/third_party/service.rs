@@ -27,7 +27,7 @@ use crate::{
     integrations::{
         api::APIService, linear::LinearService, slack::SlackService,
         task::ThirdPartyTaskSourceService, third_party::ThirdPartyItemSourceService,
-        todoist::TodoistService,
+        ticktick::TickTickService, todoist::TodoistService,
     },
     repository::{Repository, third_party::ThirdPartyItemRepository, user::UserRepository},
     universal_inbox::{
@@ -43,6 +43,7 @@ pub struct ThirdPartyItemService {
     notification_service: Weak<RwLock<NotificationService>>,
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     todoist_service: Arc<TodoistService>,
+    ticktick_service: Arc<TickTickService>,
     slack_service: Arc<SlackService>,
     linear_service: Arc<LinearService>,
     api_service: Arc<APIService>,
@@ -56,6 +57,7 @@ impl ThirdPartyItemService {
         notification_service: Weak<RwLock<NotificationService>>,
         integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
         todoist_service: Arc<TodoistService>,
+        ticktick_service: Arc<TickTickService>,
         slack_service: Arc<SlackService>,
         linear_service: Arc<LinearService>,
         api_service: Arc<APIService>,
@@ -66,6 +68,7 @@ impl ThirdPartyItemService {
             notification_service,
             integration_connection_service,
             todoist_service,
+            ticktick_service,
             slack_service,
             linear_service,
             api_service,
@@ -118,6 +121,20 @@ impl ThirdPartyItemService {
                         executor,
                         *third_party_item.clone(),
                         self.todoist_service.clone(),
+                        user_id,
+                    )
+                    .await?
+            }
+            ThirdPartyItemSourceKind::TickTick => {
+                self.task_service
+                    .upgrade()
+                    .context("Unable to access task_service from third_party_service")?
+                    .read()
+                    .await
+                    .create_task_from_third_party_item(
+                        executor,
+                        *third_party_item.clone(),
+                        self.ticktick_service.clone(),
                         user_id,
                     )
                     .await?
@@ -405,9 +422,45 @@ impl ThirdPartyItemService {
         executor: &mut Transaction<'_, Postgres>,
         task: &mut Task,
         overwrite_existing_sink_item: bool,
+        task_provider_kind: IntegrationProviderKind,
     ) -> Result<Box<ThirdPartyItem>, UniversalInboxError> {
+        match task_provider_kind {
+            IntegrationProviderKind::Todoist => {
+                self.create_sink_item_from_task_with_service(
+                    executor,
+                    task,
+                    overwrite_existing_sink_item,
+                    self.todoist_service.clone(),
+                )
+                .await
+            }
+            IntegrationProviderKind::TickTick => {
+                self.create_sink_item_from_task_with_service(
+                    executor,
+                    task,
+                    overwrite_existing_sink_item,
+                    self.ticktick_service.clone(),
+                )
+                .await
+            }
+            _ => Err(UniversalInboxError::UnsupportedAction(format!(
+                "Sink item creation is not supported for {task_provider_kind}"
+            ))),
+        }
+    }
+
+    async fn create_sink_item_from_task_with_service<T, U>(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        task: &mut Task,
+        overwrite_existing_sink_item: bool,
+        third_party_task_service: Arc<U>,
+    ) -> Result<Box<ThirdPartyItem>, UniversalInboxError>
+    where
+        T: ThirdPartyItemFromSource,
+        U: ThirdPartyTaskSourceService<T> + IntegrationProviderSource + Send + Sync,
+    {
         let user_id = task.user_id;
-        let third_party_task_service = self.todoist_service.clone(); // Shortcut as only Todoist is supported for now as a sink
         let integration_provider_kind = third_party_task_service.get_integration_provider_kind();
         let (_, integration_connection) = self
             .integration_connection_service

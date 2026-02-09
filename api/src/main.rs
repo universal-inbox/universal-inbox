@@ -16,7 +16,8 @@ use universal_inbox_api::{
     integrations::{
         github::GithubService, google_calendar::GoogleCalendarService,
         google_drive::GoogleDriveService, google_mail::GoogleMailService, linear::LinearService,
-        oauth2::NangoService, slack::SlackService, todoist::TodoistService,
+        oauth2::NangoService, slack::SlackService, ticktick::TickTickService,
+        todoist::TodoistService,
     },
     mailer::SmtpMailer,
     observability::{
@@ -147,6 +148,7 @@ async fn main() -> std::io::Result<()> {
     let google_calendar_mock_server = get_google_calendar_mock_server(&settings).await;
     let slack_mock_server = get_slack_mock_server(&settings).await;
     let todoist_mock_server = get_todoist_mock_server(&settings).await;
+    let ticktick_mock_server = get_ticktick_mock_server(&settings).await;
 
     let (
         notification_service,
@@ -166,6 +168,7 @@ async fn main() -> std::io::Result<()> {
         google_calendar_mock_server.map(|mock| mock.uri()),
         slack_mock_server.map(|mock| mock.uri()),
         todoist_mock_server.map(|mock| mock.uri()),
+        ticktick_mock_server.map(|mock| mock.uri()),
         nango_service,
         mailer,
         webauthn,
@@ -198,6 +201,16 @@ async fn get_todoist_mock_server(settings: &Settings) -> Option<MockServer> {
     if settings.application.dry_run {
         let mock_server = wiremock::MockServer::start().await;
         TodoistService::mock_all(&mock_server).await;
+        Some(mock_server)
+    } else {
+        None
+    }
+}
+
+async fn get_ticktick_mock_server(settings: &Settings) -> Option<MockServer> {
+    if settings.application.dry_run {
+        let mock_server = wiremock::MockServer::start().await;
+        TickTickService::mock_all(&mock_server).await;
         Some(mock_server)
     } else {
         None

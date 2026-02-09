@@ -981,7 +981,12 @@ impl NotificationService {
             .context("Unable to access task_service from notification_service")?
             .read()
             .await
-            .create_task_from_notification(executor, &task_creation, &notification)
+            .create_task_from_notification(
+                executor,
+                &task_creation,
+                &notification,
+                IntegrationProviderKind::Todoist,
+            )
             .await?;
 
         let delete_patch = NotificationPatch {
