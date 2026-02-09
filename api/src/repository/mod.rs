@@ -11,6 +11,7 @@ pub mod notification;
 pub mod task;
 pub mod third_party;
 pub mod user;
+pub mod user_preferences;
 
 #[derive(Debug)]
 pub struct Repository {

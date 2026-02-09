@@ -327,6 +327,7 @@ fn validate_creation_form(
             project_name: Some(project_name),
             due_at,
             priority,
+            task_provider_kind: None,
         });
     }
 

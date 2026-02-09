@@ -322,6 +322,7 @@ pub struct TaskCreation {
     pub project_name: Option<String>,
     pub due_at: Option<DueDate>,
     pub priority: TaskPriority,
+    pub task_provider_kind: Option<IntegrationProviderKind>,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]

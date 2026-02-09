@@ -476,6 +476,7 @@ impl ThirdPartyItemService {
             project_name: Some(task.project.clone()),
             due_at: task.due_at.clone(),
             priority: task.priority,
+            task_provider_kind: None,
         };
 
         if let Some(sink_item) = &task.sink_item

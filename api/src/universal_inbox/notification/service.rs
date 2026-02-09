@@ -931,11 +931,30 @@ impl NotificationService {
                 anyhow!("Cannot create task from unknown notification {notification_id}")
             })?;
 
+        // Resolve the task provider kind:
+        // 1. From task_creation.task_provider_kind (explicit user choice)
+        // 2. From user preferences default_task_manager_provider_kind
+        // 3. Fall back to Todoist
+        let explicit_provider_kind = task_creation.as_ref().and_then(|tc| tc.task_provider_kind);
+        let resolved_provider_kind = if let Some(kind) = explicit_provider_kind {
+            kind
+        } else if let Some(prefs) = self
+            .user_service
+            .get_user_preferences(executor, for_user_id)
+            .await?
+        {
+            prefs
+                .default_task_manager_provider_kind
+                .unwrap_or(IntegrationProviderKind::Todoist)
+        } else {
+            IntegrationProviderKind::Todoist
+        };
+
         let task_creation = if let Some(task_creation) = task_creation {
             task_creation
         } else {
             debug!(
-                "No task creation details provided, using default values from Todoist integration connection config"
+                "No task creation details provided, using default values from {resolved_provider_kind} integration connection config"
             );
             let Some(IntegrationConnection {
                 provider:
@@ -956,13 +975,13 @@ impl NotificationService {
                 .await
                 .get_validated_integration_connection_per_kind(
                     executor,
-                    IntegrationProviderKind::Todoist,
+                    resolved_provider_kind,
                     for_user_id,
                 )
                 .await?
             else {
                 return Err(UniversalInboxError::Unexpected(anyhow!(
-                    "Cannot create task from notification {notification_id} as no Todoist integration is connected for user {for_user_id}"
+                    "Cannot create task from notification {notification_id} as no {resolved_provider_kind} integration is connected for user {for_user_id}"
                 )));
             };
 
@@ -972,6 +991,7 @@ impl NotificationService {
                 project_name: default_project.map(|p| p.name),
                 due_at: default_due_at.map(|d| d.into()),
                 priority: default_priority.unwrap_or_default(),
+                task_provider_kind: Some(resolved_provider_kind),
             }
         };
 
@@ -985,7 +1005,7 @@ impl NotificationService {
                 executor,
                 &task_creation,
                 &notification,
-                IntegrationProviderKind::Todoist,
+                resolved_provider_kind,
             )
             .await?;
 

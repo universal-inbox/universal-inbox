@@ -19,7 +19,7 @@ use universal_inbox::{
     auth::auth_token::{AuthenticationToken, TruncatedAuthenticationToken},
     user::{
         Credentials, EmailValidationToken, Password, PasswordResetToken, RegisterUserParameters,
-        User, UserId, UserPatch, Username,
+        User, UserId, UserPatch, UserPreferences, UserPreferencesPatch, Username,
     },
 };
 
@@ -67,6 +67,11 @@ pub fn scope() -> Scope {
                     web::resource("/authentication-tokens")
                         .route(web::get().to(list_authentication_tokens))
                         .route(web::post().to(create_authentication_token)),
+                )
+                .service(
+                    web::resource("/preferences")
+                        .route(web::get().to(get_user_preferences))
+                        .route(web::patch().to(patch_user_preferences)),
                 ),
         )
         .service(
@@ -486,6 +491,64 @@ pub async fn create_authentication_token(
     Ok(HttpResponse::Ok().content_type("application/json").body(
         serde_json::to_string(&result).context("Cannot serialize created authentication token")?,
     ))
+}
+
+pub async fn get_user_preferences(
+    user_service: web::Data<Arc<UserService>>,
+    authenticated: Authenticated<Claims>,
+) -> Result<HttpResponse, UniversalInboxError> {
+    let user_id = authenticated
+        .claims
+        .sub
+        .parse::<UserId>()
+        .context("Wrong user ID format")?;
+    let service = user_service.clone();
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while fetching user preferences")?;
+
+    let preferences = service
+        .get_user_preferences(&mut transaction, user_id)
+        .await?;
+
+    match preferences {
+        Some(prefs) => Ok(HttpResponse::Ok().json(prefs)),
+        None => Ok(HttpResponse::Ok().json(UserPreferences {
+            user_id,
+            default_task_manager_provider_kind: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        })),
+    }
+}
+
+pub async fn patch_user_preferences(
+    user_service: web::Data<Arc<UserService>>,
+    patch: web::Json<UserPreferencesPatch>,
+    authenticated: Authenticated<Claims>,
+) -> Result<HttpResponse, UniversalInboxError> {
+    let user_id = authenticated
+        .claims
+        .sub
+        .parse::<UserId>()
+        .context("Wrong user ID format")?;
+    let service = user_service.clone();
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while patching user preferences")?;
+
+    let preferences = service
+        .patch_user_preferences(&mut transaction, user_id, &patch)
+        .await?;
+
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit while patching user preferences")?;
+
+    Ok(HttpResponse::Ok().json(preferences))
 }
 
 #[allow(dependency_on_unit_never_type_fallback)]
