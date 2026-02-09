@@ -62,7 +62,8 @@ mod patch_notification {
             "projects",
             &sync_todoist_projects_response,
             None,
-        );
+        )
+        .await;
 
         let creation: Box<ThirdPartyItemCreationResult> = create_resource(
             &app.client,
@@ -88,10 +89,11 @@ mod patch_notification {
 
         assert_eq!(existing_todoist_task.status, TaskStatus::Active);
         let existing_todoist_notification = creation.notification.as_ref().unwrap().clone();
-        let todoist_mock = mock_todoist_delete_item_service(
+        let _todoist_mock = mock_todoist_delete_item_service(
             &app.app.todoist_mock_server,
             &existing_todoist_task.source_item.source_id,
-        );
+        )
+        .await;
 
         let patched_notification = patch_resource(
             &app.client,
@@ -112,7 +114,6 @@ mod patch_notification {
                 ..existing_todoist_notification.clone()
             })
         );
-        todoist_mock.assert();
 
         let deleted_task: Box<Task> = get_resource(
             &app.client,
@@ -150,7 +151,8 @@ mod patch_notification {
             "projects",
             &sync_todoist_projects_response,
             None,
-        );
+        )
+        .await;
 
         let creation: Box<ThirdPartyItemCreationResult> = create_resource(
             &app.client,

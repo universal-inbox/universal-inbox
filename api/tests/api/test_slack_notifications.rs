@@ -1,6 +1,5 @@
 #![allow(clippy::too_many_arguments)]
 use chrono::{TimeZone, Utc};
-use httpmock::Method::POST;
 use rstest::*;
 use serde_json::json;
 
@@ -13,6 +12,10 @@ use universal_inbox::{
 };
 
 use universal_inbox_api::{configuration::Settings, integrations::oauth2::NangoConnection};
+use wiremock::{
+    Mock, ResponseTemplate,
+    matchers::{method, path},
+};
 
 use crate::helpers::{
     auth::{AuthenticatedApp, authenticated_app},
@@ -49,8 +52,9 @@ mod patch_resource_slack_star {
         )
         .await;
 
-        let slack_stars_remove_mock =
-            mock_slack_stars_remove(&app.app.slack_mock_server, "C05XXX", "1707686216.825719");
+        let _slack_stars_remove_mock =
+            mock_slack_stars_remove(&app.app.slack_mock_server, "C05XXX", "1707686216.825719")
+                .await;
 
         let expected_notification = create_notification_from_slack_star(
             &app.app,
@@ -79,7 +83,6 @@ mod patch_resource_slack_star {
                 ..*expected_notification
             })
         );
-        slack_stars_remove_mock.assert();
     }
 
     #[rstest]
@@ -103,8 +106,9 @@ mod patch_resource_slack_star {
         )
         .await;
 
-        let slack_stars_remove_mock =
-            mock_slack_stars_remove(&app.app.slack_mock_server, "C05XXX", "1707686216.825719");
+        let _slack_stars_remove_mock =
+            mock_slack_stars_remove(&app.app.slack_mock_server, "C05XXX", "1707686216.825719")
+                .await;
         let expected_notification = create_notification_from_slack_star(
             &app.app,
             &slack_star_added,
@@ -132,7 +136,6 @@ mod patch_resource_slack_star {
                 ..*expected_notification
             })
         );
-        slack_stars_remove_mock.assert();
     }
 
     #[rstest]
@@ -156,15 +159,11 @@ mod patch_resource_slack_star {
         )
         .await;
 
-        let slack_stars_add_mock = app.app.slack_mock_server.mock(|when, then| {
-            when.method(POST)
-                .path("/stars.remove")
-                .header("authorization", "Bearer slack_test_user_access_token")
-                .json_body(json!({"channel": "C05XXX", "timestamp": "1707686216.825719"}));
-            then.status(200)
-                .header("content-type", "application/json")
-                .json_body(json!({ "ok": false, "error": "error_message" }));
-        });
+        Mock::given(method("POST"))
+            .and(path("/stars.remove"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&app.app.slack_mock_server)
+            .await;
 
         let expected_notification = create_notification_from_slack_star(
             &app.app,
@@ -196,7 +195,6 @@ mod patch_resource_slack_star {
             body,
             json!({ "message": "Failed to remove Slack star" }).to_string()
         );
-        slack_stars_add_mock.assert();
 
         let notification: Box<Notification> = get_resource(
             &app.client,

@@ -1,9 +1,7 @@
-use httpmock::{
-    Method::{DELETE, GET},
-    Mock, MockServer,
-};
 use reqwest::{Client, Response};
 use rstest::fixture;
+use wiremock::matchers::{header, method, path, query_param};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use universal_inbox::{
     integration_connection::{
@@ -71,37 +69,51 @@ pub async fn verify_integration_connection(
         .expect("Cannot parse JSON result")
 }
 
-pub fn mock_nango_connection_service<'a>(
-    nango_mock_server: &'a MockServer,
+pub async fn mock_nango_connection_service(
+    nango_mock_server: &MockServer,
     nango_secret_key: &str,
     connection_id: &str,
     provider_config_key: &NangoProviderKey,
     result: Box<NangoConnection>,
-) -> Mock<'a> {
-    nango_mock_server.mock(|when, then| {
-        when.method(GET)
-            .path(format!("/connection/{connection_id}"))
-            .header("authorization", format!("Bearer {nango_secret_key}"))
-            .query_param("provider_config_key", provider_config_key.to_string());
-        then.status(200)
-            .header("content-type", "application/json")
-            .json_body_obj(&result);
-    })
+) {
+    Mock::given(method("GET"))
+        .and(path(format!("/connection/{connection_id}")))
+        .and(header(
+            "authorization",
+            format!("Bearer {nango_secret_key}").as_str(),
+        ))
+        .and(query_param(
+            "provider_config_key",
+            provider_config_key.to_string(),
+        ))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_json(&result),
+        )
+        .mount(nango_mock_server)
+        .await;
 }
 
-pub fn mock_nango_delete_connection_service<'a>(
-    nango_mock_server: &'a MockServer,
+pub async fn mock_nango_delete_connection_service(
+    nango_mock_server: &MockServer,
     nango_secret_key: &str,
     connection_id: &str,
     provider_config_key: &NangoProviderKey,
-) -> Mock<'a> {
-    nango_mock_server.mock(|when, then| {
-        when.method(DELETE)
-            .path(format!("/connection/{connection_id}"))
-            .header("authorization", format!("Bearer {nango_secret_key}"))
-            .query_param("provider_config_key", provider_config_key.to_string());
-        then.status(204).header("content-type", "application/json");
-    })
+) {
+    Mock::given(method("DELETE"))
+        .and(path(format!("/connection/{connection_id}")))
+        .and(header(
+            "authorization",
+            format!("Bearer {nango_secret_key}").as_str(),
+        ))
+        .and(query_param(
+            "provider_config_key",
+            provider_config_key.to_string(),
+        ))
+        .respond_with(ResponseTemplate::new(204).insert_header("content-type", "application/json"))
+        .mount(nango_mock_server)
+        .await;
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -255,7 +267,8 @@ pub async fn create_and_mock_integration_connection(
         &integration_connection.connection_id.to_string(),
         config_key,
         nango_connection,
-    );
+    )
+    .await;
 
     integration_connection
 }

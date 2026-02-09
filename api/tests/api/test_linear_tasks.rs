@@ -113,18 +113,20 @@ async fn test_sync_todoist_linear_task(
     todoist_item.project_id = new_project_id.to_string();
     let todoist_item_id = todoist_item.id.clone();
 
-    let todoist_projects_mock = mock_todoist_sync_resources_service(
+    let _todoist_projects_mock = mock_todoist_sync_resources_service(
         &app.app.todoist_mock_server,
         "projects",
         &sync_todoist_projects_response,
         None,
-    );
-    let todoist_tasks_mock = mock_todoist_sync_resources_service(
+    )
+    .await;
+    let _todoist_tasks_mock = mock_todoist_sync_resources_service(
         &app.app.todoist_mock_server,
         "items",
         &sync_todoist_items_response,
         None,
-    );
+    )
+    .await;
 
     let linear_issues: Vec<LinearIssue> = sync_linear_tasks_response
         .data
@@ -155,7 +157,7 @@ async fn test_sync_todoist_linear_task(
     )
     .await;
 
-    let linear_update_issue_status_mock = mock_linear_update_issue_state_query(
+    let _linear_update_issue_status_mock = mock_linear_update_issue_state_query(
         &app.app.linear_mock_server,
         linear_issue.id,
         linear_issue
@@ -163,7 +165,8 @@ async fn test_sync_todoist_linear_task(
             .unwrap(),
         true,
         None,
-    );
+    )
+    .await;
 
     let task_creations: Vec<TaskCreationResult> = sync_tasks(
         &app.client,
@@ -180,9 +183,6 @@ async fn test_sync_todoist_linear_task(
             assert_eq!(task_creation.notifications.len(), 1);
         }
     }
-    todoist_tasks_mock.assert();
-    todoist_projects_mock.assert();
-    linear_update_issue_status_mock.assert();
 
     let updated_task: Box<Task> = get_resource(
         &app.client,

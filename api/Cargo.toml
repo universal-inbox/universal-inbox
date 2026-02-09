@@ -148,11 +148,16 @@ webauthn-rs = { workspace = true, features = ["danger-allow-state-serialisation"
 reqwest-retry = "0.9.0"
 
 [dev-dependencies]
-httpmock = { git = "https://github.com/dax/httpmock", branch = "add-mockserver-reset" }
+lzma-rust2 = "0.15.7"
+playwright-rs = "0.8.3"
 pretty_assertions = { workspace = true }
 rrule = { workspace = true }
 rstest = { workspace = true }
 serde_urlencoded = { workspace = true }
+
+[[test]]
+name = "browser"
+path = "tests/browser/main.rs"
 
 [package.metadata.cargo-machete]
 ignored = ["opentelemetry-http", "opentelemetry_http"]

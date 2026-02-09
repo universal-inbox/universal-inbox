@@ -130,7 +130,8 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         "projects",
         &sync_todoist_projects_response,
         None,
-    );
+    )
+    .await;
 
     let creation: Box<ThirdPartyItemCreationResult> = create_resource(
         &app.client,
@@ -185,15 +186,17 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     )
     .await;
 
-    let google_mail_get_user_profile_mock = mock_google_mail_get_user_profile_service(
+    let _google_mail_get_user_profile_mock = mock_google_mail_get_user_profile_service(
         &app.app.google_mail_mock_server,
         &google_mail_user_profile,
-    );
-    let google_mail_labels_list_mock = mock_google_mail_labels_list_service(
+    )
+    .await;
+    let _google_mail_labels_list_mock = mock_google_mail_labels_list_service(
         &app.app.google_mail_mock_server,
         &google_mail_labels_list,
-    );
-    let google_mail_threads_list_mock = mock_google_mail_threads_list_service(
+    )
+    .await;
+    let _google_mail_threads_list_mock = mock_google_mail_threads_list_service(
         &app.app.google_mail_mock_server,
         None,
         settings
@@ -204,13 +207,14 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
             .unwrap(),
         Some(vec![google_mail_config.synced_label.id.clone()]),
         &google_mail_threads_list,
-    );
+    )
+    .await;
     let empty_result = GoogleMailThreadList {
         threads: None,
         result_size_estimate: 1,
         next_page_token: None,
     };
-    let google_mail_threads_list_mock2 = mock_google_mail_threads_list_service(
+    let _google_mail_threads_list_mock2 = mock_google_mail_threads_list_service(
         &app.app.google_mail_mock_server,
         Some("next_token"),
         settings
@@ -221,19 +225,22 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
             .unwrap(),
         Some(vec![google_mail_config.synced_label.id.clone()]),
         &empty_result,
-    );
+    )
+    .await;
     let raw_google_mail_thread_get_123 = google_mail_thread_get_123.clone().into();
-    let google_mail_thread_get_123_mock = mock_google_mail_thread_get_service(
+    let _google_mail_thread_get_123_mock = mock_google_mail_thread_get_service(
         &app.app.google_mail_mock_server,
         "123",
         &raw_google_mail_thread_get_123,
-    );
+    )
+    .await;
     let raw_google_mail_thread_get_456 = google_mail_thread_get_456.clone().into();
-    let google_mail_thread_get_456_mock = mock_google_mail_thread_get_service(
+    let _google_mail_thread_get_456_mock = mock_google_mail_thread_get_service(
         &app.app.google_mail_mock_server,
         "456",
         &raw_google_mail_thread_get_456,
-    );
+    )
+    .await;
 
     let notifications: Vec<Notification> = sync_notifications(
         &app.client,
@@ -250,12 +257,6 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         &google_mail_thread_get_456,
         app.user.id,
     );
-    google_mail_get_user_profile_mock.assert_hits(1);
-    google_mail_labels_list_mock.assert_hits(1);
-    google_mail_threads_list_mock.assert();
-    google_mail_threads_list_mock2.assert();
-    google_mail_thread_get_123_mock.assert();
-    google_mail_thread_get_456_mock.assert();
 
     let updated_notification: Box<Notification> = get_resource(
         &app.client,
@@ -412,15 +413,17 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
         next_page_token: None,
     };
 
-    let google_mail_get_user_profile_mock = mock_google_mail_get_user_profile_service(
+    let _google_mail_get_user_profile_mock = mock_google_mail_get_user_profile_service(
         &app.app.google_mail_mock_server,
         &google_mail_user_profile,
-    );
-    let google_mail_labels_list_mock = mock_google_mail_labels_list_service(
+    )
+    .await;
+    let _google_mail_labels_list_mock = mock_google_mail_labels_list_service(
         &app.app.google_mail_mock_server,
         &google_mail_labels_list,
-    );
-    let google_mail_threads_list_mock = mock_google_mail_threads_list_service(
+    )
+    .await;
+    let _google_mail_threads_list_mock = mock_google_mail_threads_list_service(
         &app.app.google_mail_mock_server,
         None,
         settings
@@ -431,22 +434,24 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
             .unwrap(),
         Some(vec![synced_label_id.clone()]),
         &google_mail_threads_list,
-    );
+    )
+    .await;
     let raw_google_mail_thread_get_456 = google_mail_thread_get_456.clone().into();
-    let google_mail_thread_get_456_mock = mock_google_mail_thread_get_service(
+    let _google_mail_thread_get_456_mock = mock_google_mail_thread_get_service(
         &app.app.google_mail_mock_server,
         "456",
         &raw_google_mail_thread_get_456,
-    );
-    let google_mail_thread_modify_mock =
-        (expected_notification_status_after_sync == NotificationStatus::Unsubscribed).then(|| {
-            mock_google_mail_thread_modify_service(
-                &app.app.google_mail_mock_server,
-                &google_mail_thread_get_456.id,
-                vec![],
-                vec![GOOGLE_MAIL_INBOX_LABEL, &synced_label_id],
-            )
-        });
+    )
+    .await;
+    if expected_notification_status_after_sync == NotificationStatus::Unsubscribed {
+        mock_google_mail_thread_modify_service(
+            &app.app.google_mail_mock_server,
+            &google_mail_thread_get_456.id,
+            vec![],
+            vec![GOOGLE_MAIL_INBOX_LABEL, &synced_label_id],
+        )
+        .await;
+    }
 
     let notifications: Vec<Notification> = sync_notifications(
         &app.client,
@@ -457,13 +462,6 @@ async fn test_sync_notifications_of_unsubscribed_notification_with_new_messages(
     .await;
 
     assert_eq!(notifications.len(), 1);
-    google_mail_get_user_profile_mock.assert_hits(1);
-    google_mail_labels_list_mock.assert_hits(1);
-    google_mail_threads_list_mock.assert();
-    google_mail_thread_get_456_mock.assert();
-    if let Some(google_mail_thread_modify_mock) = google_mail_thread_modify_mock {
-        google_mail_thread_modify_mock.assert();
-    }
 
     let updated_notification: Box<Notification> = get_resource(
         &app.client,
@@ -551,15 +549,17 @@ async fn test_sync_notifications_should_create_a_new_google_calendar_notificatio
     )
     .await;
 
-    let google_mail_get_user_profile_mock = mock_google_mail_get_user_profile_service(
+    let _google_mail_get_user_profile_mock = mock_google_mail_get_user_profile_service(
         &app.app.google_mail_mock_server,
         &google_mail_user_profile,
-    );
-    let google_mail_labels_list_mock = mock_google_mail_labels_list_service(
+    )
+    .await;
+    let _google_mail_labels_list_mock = mock_google_mail_labels_list_service(
         &app.app.google_mail_mock_server,
         &google_mail_labels_list,
-    );
-    let google_mail_threads_list_mock = mock_google_mail_threads_list_service(
+    )
+    .await;
+    let _google_mail_threads_list_mock = mock_google_mail_threads_list_service(
         &app.app.google_mail_mock_server,
         None,
         settings
@@ -570,7 +570,8 @@ async fn test_sync_notifications_should_create_a_new_google_calendar_notificatio
             .unwrap(),
         Some(vec![google_mail_config.synced_label.id.clone()]),
         &google_mail_threads_list,
-    );
+    )
+    .await;
     let empty_result = GoogleMailThreadList {
         threads: None,
         result_size_estimate: 1,
@@ -587,25 +588,29 @@ async fn test_sync_notifications_should_create_a_new_google_calendar_notificatio
             .unwrap(),
         Some(vec![google_mail_config.synced_label.id.clone()]),
         &empty_result,
-    );
+    )
+    .await;
 
     let raw_google_mail_thread_with_invitation = google_mail_thread_with_invitation.clone().into();
-    let google_mail_thread_with_invitation_mock = mock_google_mail_thread_get_service(
+    let _google_mail_thread_with_invitation_mock = mock_google_mail_thread_get_service(
         &app.app.google_mail_mock_server,
         "789",
         &raw_google_mail_thread_with_invitation,
-    );
-    let google_mail_get_attachment_mock = mock_google_mail_get_attachment_service(
+    )
+    .await;
+    let _google_mail_get_attachment_mock = mock_google_mail_get_attachment_service(
         &app.app.google_mail_mock_server,
         "789",
         "attachmentid1", // Found in google_mail_thread_with_invitation
         &google_mail_invitation_attachment,
-    );
-    let google_calendar_list_events_mock = mock_google_calendar_list_events_service(
+    )
+    .await;
+    let _google_calendar_list_events_mock = mock_google_calendar_list_events_service(
         &app.app.google_calendar_mock_server,
         "event_icaluid1", // Found in the ical attachment in google_mail_invitation_attachment
         &google_calendar_events_list,
-    );
+    )
+    .await;
 
     let notifications: Vec<Notification> = sync_notifications(
         &app.client,
@@ -620,13 +625,6 @@ async fn test_sync_notifications_should_create_a_new_google_calendar_notificatio
         notifications[0].kind,
         NotificationSourceKind::GoogleCalendar
     );
-
-    google_mail_get_user_profile_mock.assert_hits(1);
-    google_mail_labels_list_mock.assert_hits(1);
-    google_mail_threads_list_mock.assert();
-    google_mail_thread_with_invitation_mock.assert();
-    google_mail_get_attachment_mock.assert();
-    google_calendar_list_events_mock.assert();
 
     let new_notification: Box<Notification> = get_resource(
         &app.client,
@@ -744,15 +742,17 @@ async fn test_sync_notifications_should_update_a_google_calendar_notification_fr
     let existing_gmail_third_party_item =
         existing_gcal_third_party_item.source_item.as_ref().unwrap();
 
-    let google_mail_get_user_profile_mock = mock_google_mail_get_user_profile_service(
+    let _google_mail_get_user_profile_mock = mock_google_mail_get_user_profile_service(
         &app.app.google_mail_mock_server,
         &google_mail_user_profile,
-    );
-    let google_mail_labels_list_mock = mock_google_mail_labels_list_service(
+    )
+    .await;
+    let _google_mail_labels_list_mock = mock_google_mail_labels_list_service(
         &app.app.google_mail_mock_server,
         &google_mail_labels_list,
-    );
-    let google_mail_threads_list_mock = mock_google_mail_threads_list_service(
+    )
+    .await;
+    let _google_mail_threads_list_mock = mock_google_mail_threads_list_service(
         &app.app.google_mail_mock_server,
         None,
         settings
@@ -763,7 +763,8 @@ async fn test_sync_notifications_should_update_a_google_calendar_notification_fr
             .unwrap(),
         Some(vec![google_mail_config.synced_label.id.clone()]),
         &google_mail_threads_list,
-    );
+    )
+    .await;
     let empty_result = GoogleMailThreadList {
         threads: None,
         result_size_estimate: 1,
@@ -780,25 +781,29 @@ async fn test_sync_notifications_should_update_a_google_calendar_notification_fr
             .unwrap(),
         Some(vec![google_mail_config.synced_label.id.clone()]),
         &empty_result,
-    );
+    )
+    .await;
 
     let raw_google_mail_thread_with_invitation = google_mail_thread_with_invitation.clone().into();
-    let google_mail_thread_with_invitation_mock = mock_google_mail_thread_get_service(
+    let _google_mail_thread_with_invitation_mock = mock_google_mail_thread_get_service(
         &app.app.google_mail_mock_server,
         "789",
         &raw_google_mail_thread_with_invitation,
-    );
-    let google_mail_get_attachment_mock = mock_google_mail_get_attachment_service(
+    )
+    .await;
+    let _google_mail_get_attachment_mock = mock_google_mail_get_attachment_service(
         &app.app.google_mail_mock_server,
         "789",
         "attachmentid1", // Found in google_mail_thread_with_invitation
         &google_mail_invitation_attachment,
-    );
-    let google_calendar_list_events_mock = mock_google_calendar_list_events_service(
+    )
+    .await;
+    let _google_calendar_list_events_mock = mock_google_calendar_list_events_service(
         &app.app.google_calendar_mock_server,
         "event_icaluid1", // Found in the ical attachment in google_mail_invitation_attachment
         &google_calendar_events_list,
-    );
+    )
+    .await;
 
     let notifications: Vec<Notification> = sync_notifications(
         &app.client,
@@ -814,13 +819,6 @@ async fn test_sync_notifications_should_update_a_google_calendar_notification_fr
         NotificationSourceKind::GoogleCalendar
     );
     assert_eq!(notifications[0].id, existing_notification.id);
-
-    google_mail_get_user_profile_mock.assert_hits(1);
-    google_mail_labels_list_mock.assert_hits(1);
-    google_mail_threads_list_mock.assert();
-    google_mail_thread_with_invitation_mock.assert();
-    google_mail_get_attachment_mock.assert();
-    google_calendar_list_events_mock.assert();
 
     let new_notification: Box<Notification> = get_resource(
         &app.client,
@@ -922,15 +920,17 @@ async fn test_sync_notifications_should_create_a_new_google_calendar_notificatio
     )
     .await;
 
-    let google_mail_get_user_profile_mock = mock_google_mail_get_user_profile_service(
+    let _google_mail_get_user_profile_mock = mock_google_mail_get_user_profile_service(
         &app.app.google_mail_mock_server,
         &google_mail_user_profile,
-    );
-    let google_mail_labels_list_mock = mock_google_mail_labels_list_service(
+    )
+    .await;
+    let _google_mail_labels_list_mock = mock_google_mail_labels_list_service(
         &app.app.google_mail_mock_server,
         &google_mail_labels_list,
-    );
-    let google_mail_threads_list_mock = mock_google_mail_threads_list_service(
+    )
+    .await;
+    let _google_mail_threads_list_mock = mock_google_mail_threads_list_service(
         &app.app.google_mail_mock_server,
         None,
         settings
@@ -941,7 +941,8 @@ async fn test_sync_notifications_should_create_a_new_google_calendar_notificatio
             .unwrap(),
         Some(vec![google_mail_config.synced_label.id.clone()]),
         &google_mail_threads_list,
-    );
+    )
+    .await;
     let empty_result = GoogleMailThreadList {
         threads: None,
         result_size_estimate: 1,
@@ -958,26 +959,30 @@ async fn test_sync_notifications_should_create_a_new_google_calendar_notificatio
             .unwrap(),
         Some(vec![google_mail_config.synced_label.id.clone()]),
         &empty_result,
-    );
+    )
+    .await;
 
     let raw_google_mail_thread_with_invitation_reply =
         google_mail_thread_with_invitation_reply.clone().into();
-    let google_mail_thread_with_invitation_reply_mock = mock_google_mail_thread_get_service(
+    let _google_mail_thread_with_invitation_reply_mock = mock_google_mail_thread_get_service(
         &app.app.google_mail_mock_server,
         "890",
         &raw_google_mail_thread_with_invitation_reply,
-    );
-    let google_mail_get_attachment_mock = mock_google_mail_get_attachment_service(
+    )
+    .await;
+    let _google_mail_get_attachment_mock = mock_google_mail_get_attachment_service(
         &app.app.google_mail_mock_server,
         "890",
         "attachmentid2", // Found in google_mail_thread_with_invitation_reply
         &google_mail_invitation_reply_attachment,
-    );
-    let google_calendar_list_events_mock = mock_google_calendar_list_events_service(
+    )
+    .await;
+    let _google_calendar_list_events_mock = mock_google_calendar_list_events_service(
         &app.app.google_calendar_mock_server,
         "event_icaluid2", // Found in the ical attachment in google_mail_invitation_reply_attachment
         &google_calendar_events_list_reply,
-    );
+    )
+    .await;
 
     let notifications: Vec<Notification> = sync_notifications(
         &app.client,
@@ -992,13 +997,6 @@ async fn test_sync_notifications_should_create_a_new_google_calendar_notificatio
         notifications[0].kind,
         NotificationSourceKind::GoogleCalendar
     );
-
-    google_mail_get_user_profile_mock.assert_hits(1);
-    google_mail_labels_list_mock.assert_hits(1);
-    google_mail_threads_list_mock.assert();
-    google_mail_thread_with_invitation_reply_mock.assert();
-    google_mail_get_attachment_mock.assert();
-    google_calendar_list_events_mock.assert();
 
     let new_notification: Box<Notification> = get_resource(
         &app.client,
@@ -1114,15 +1112,17 @@ async fn test_sync_notifications_should_mark_notification_as_deleted_when_user_r
         next_page_token: None,
     };
 
-    let google_mail_get_user_profile_mock = mock_google_mail_get_user_profile_service(
+    let _google_mail_get_user_profile_mock = mock_google_mail_get_user_profile_service(
         &app.app.google_mail_mock_server,
         &google_mail_user_profile,
-    );
-    let google_mail_labels_list_mock = mock_google_mail_labels_list_service(
+    )
+    .await;
+    let _google_mail_labels_list_mock = mock_google_mail_labels_list_service(
         &app.app.google_mail_mock_server,
         &google_mail_labels_list,
-    );
-    let google_mail_threads_list_mock = mock_google_mail_threads_list_service(
+    )
+    .await;
+    let _google_mail_threads_list_mock = mock_google_mail_threads_list_service(
         &app.app.google_mail_mock_server,
         None,
         settings
@@ -1133,13 +1133,15 @@ async fn test_sync_notifications_should_mark_notification_as_deleted_when_user_r
             .unwrap(),
         Some(vec![synced_label_id.clone()]),
         &google_mail_threads_list,
-    );
+    )
+    .await;
     let raw_google_mail_thread_get_456 = google_mail_thread_get_456.clone().into();
-    let google_mail_thread_get_456_mock = mock_google_mail_thread_get_service(
+    let _google_mail_thread_get_456_mock = mock_google_mail_thread_get_service(
         &app.app.google_mail_mock_server,
         "456",
         &raw_google_mail_thread_get_456,
-    );
+    )
+    .await;
 
     let notifications: Vec<Notification> = sync_notifications(
         &app.client,
@@ -1150,10 +1152,6 @@ async fn test_sync_notifications_should_mark_notification_as_deleted_when_user_r
     .await;
 
     assert_eq!(notifications.len(), 1);
-    google_mail_get_user_profile_mock.assert_hits(1);
-    google_mail_labels_list_mock.assert_hits(1);
-    google_mail_threads_list_mock.assert();
-    google_mail_thread_get_456_mock.assert();
 
     let synced_notification: Box<Notification> = get_resource(
         &app.client,

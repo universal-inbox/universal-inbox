@@ -83,7 +83,7 @@ pub async fn generate_testing_user(
     task_service: Arc<RwLock<TaskService>>,
     third_party_item_service: Arc<RwLock<ThirdPartyItemService>>,
     settings: Settings,
-) -> Result<(), UniversalInboxError> {
+) -> Result<String, UniversalInboxError> {
     let service = user_service.clone();
 
     let mut transaction = service
@@ -172,14 +172,17 @@ pub async fn generate_testing_user(
         .await
         .context("Failed to commit transaction while generating new testing user")?;
 
+    let email = user
+        .email
+        .map(|email| email.to_string())
+        .unwrap_or(user.id.to_string());
+
     info!(
         "Test user {} successfully generated with password {DEFAULT_PASSWORD}",
-        user.email
-            .map(|email| email.to_string())
-            .unwrap_or(user.id.to_string())
+        email
     );
 
-    Ok(())
+    Ok(email)
 }
 
 async fn generate_github_notifications(

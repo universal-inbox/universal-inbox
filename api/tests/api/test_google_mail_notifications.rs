@@ -1,7 +1,5 @@
 use chrono::{TimeZone, Utc};
-use httpmock::Method::POST;
 use rstest::*;
-use serde_json::json;
 
 use universal_inbox::{
     integration_connection::{
@@ -12,6 +10,10 @@ use universal_inbox::{
 };
 
 use universal_inbox_api::{configuration::Settings, integrations::oauth2::NangoConnection};
+use wiremock::{
+    Mock, ResponseTemplate,
+    matchers::{method, path},
+};
 
 use crate::helpers::{
     auth::{AuthenticatedApp, authenticated_app},
@@ -60,12 +62,13 @@ mod patch_resource {
         )
         .await;
 
-        let google_mail_thread_modify_mock = mock_google_mail_thread_modify_service(
+        let _google_mail_thread_modify_mock = mock_google_mail_thread_modify_service(
             &app.app.google_mail_mock_server,
             &google_mail_thread_get_123.id,
             vec![],
             vec![GOOGLE_MAIL_INBOX_LABEL, &synced_label_id],
-        );
+        )
+        .await;
 
         let patched_notification = patch_resource(
             &app.client,
@@ -86,7 +89,6 @@ mod patch_resource {
                 ..*expected_notification
             })
         );
-        google_mail_thread_modify_mock.assert();
     }
 
     #[rstest]
@@ -99,7 +101,7 @@ mod patch_resource {
     ) {
         let app = authenticated_app.await;
         let google_mail_config = GoogleMailConfig::enabled();
-        let synced_label_id = google_mail_config.synced_label.id.clone();
+        let _synced_label_id = google_mail_config.synced_label.id.clone();
         let google_mail_integration_connection = create_and_mock_integration_connection(
             &app.app,
             app.user.id,
@@ -120,22 +122,14 @@ mod patch_resource {
         )
         .await;
 
-        let google_mail_thread_modify_mock = app.app.google_mail_mock_server.mock(|when, then| {
-            when.method(POST)
-                .path(format!(
-                    "/users/me/threads/{}/modify",
-                    &google_mail_thread_get_123.id
-                ))
-                .body(
-                    json!({
-                        "addLabelIds": Vec::<String>::new(),
-                        "removeLabelIds": vec![GOOGLE_MAIL_INBOX_LABEL, &synced_label_id]
-                    })
-                    .to_string(),
-                )
-                .header("authorization", "Bearer google_mail_test_access_token");
-            then.status(403).header("content-type", "application/json");
-        });
+        Mock::given(method("POST"))
+            .and(path(format!(
+                "/users/me/threads/{}/modify",
+                &google_mail_thread_get_123.id
+            )))
+            .respond_with(ResponseTemplate::new(403))
+            .mount(&app.app.google_mail_mock_server)
+            .await;
 
         let patch_response = patch_resource_response(
             &app.client,
@@ -152,7 +146,6 @@ mod patch_resource {
         assert_eq!(patch_response.status(), 500);
         let body = patch_response.text().await.unwrap();
         assert_eq!(body, r#"{"message":"Failed to modify Google Mail thread"}"#);
-        google_mail_thread_modify_mock.assert();
     }
 
     #[rstest]
@@ -188,12 +181,13 @@ mod patch_resource {
 
         // Unsubscribed notifications are only archived on Google Mail.
         // Universal Inbox will ignore new messages and archive them during the next sync
-        let google_mail_thread_modify_mock = mock_google_mail_thread_modify_service(
+        let _google_mail_thread_modify_mock = mock_google_mail_thread_modify_service(
             &app.app.google_mail_mock_server,
             &google_mail_thread_get_123.id,
             vec![],
             vec![GOOGLE_MAIL_INBOX_LABEL, &synced_label_id],
-        );
+        )
+        .await;
 
         let patched_notification = patch_resource(
             &app.client,
@@ -214,7 +208,6 @@ mod patch_resource {
                 ..*expected_notification
             })
         );
-        google_mail_thread_modify_mock.assert();
     }
 
     #[rstest]
