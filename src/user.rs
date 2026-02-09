@@ -3,7 +3,7 @@ use std::{fmt, str::FromStr};
 use anyhow::anyhow;
 use chrono::{DateTime, Timelike, Utc};
 use email_address::EmailAddress;
-use secrecy::{CloneableSecret, SecretBox, SerializableSecret, zeroize::Zeroize};
+use secrecy::{zeroize::Zeroize, CloneableSecret, SecretBox, SerializableSecret};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use uuid::Uuid;
@@ -268,4 +268,37 @@ impl FromStr for PasswordResetToken {
     fn from_str(uuid: &str) -> Result<Self, Self::Err> {
         Ok(Self(Uuid::parse_str(uuid)?))
     }
+}
+
+macro_attr! {
+    #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash, EnumFromStr!, EnumDisplay!)]
+    pub enum UserAuthKind {
+        Local,
+        OIDCGoogleAuthorizationCode,
+        OIDCAuthorizationCodePKCE,
+        Passkey,
+    }
+}
+
+/// Frontend-safe representation of a user's authentication method (no secrets exposed).
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub struct UserAuthMethod {
+    pub kind: UserAuthKind,
+    pub display_info: UserAuthMethodDisplayInfo,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(tag = "type")]
+pub enum UserAuthMethodDisplayInfo {
+    Local,
+    Passkey { username: String },
+    OIDCGoogleAuthorizationCode,
+    OIDCAuthorizationCodePKCE,
+}
+
+#[derive(Serialize, Deserialize, Debug, Default, Clone, PartialEq)]
+pub struct UserPatch {
+    pub first_name: Option<String>,
+    pub last_name: Option<String>,
+    pub email: Option<EmailAddress>,
 }
