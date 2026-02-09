@@ -19,7 +19,7 @@ use universal_inbox::{
     auth::auth_token::{AuthenticationToken, TruncatedAuthenticationToken},
     user::{
         Credentials, EmailValidationToken, Password, PasswordResetToken, RegisterUserParameters,
-        User, UserId, Username,
+        User, UserId, UserPatch, Username,
     },
 };
 
@@ -27,7 +27,7 @@ use crate::{
     configuration::Settings,
     routes::auth::USER_AUTH_KIND_SESSION_KEY,
     universal_inbox::{
-        UniversalInboxError,
+        UniversalInboxError, UpdateStatus,
         auth_token::service::AuthenticationTokenService,
         user::{
             model::{LocalUserAuth, UserAuth, UserAuthKind},
@@ -56,7 +56,8 @@ pub fn scope() -> Scope {
                 .service(
                     web::resource("")
                         .route(web::get().to(get_user))
-                        .route(web::post().to(login_user)),
+                        .route(web::post().to(login_user))
+                        .route(web::patch().to(patch_user)),
                 )
                 .service(
                     web::resource("/email-verification")
@@ -126,6 +127,53 @@ pub async fn get_user(
             .content_type("application/json")
             .body(BoxBody::new(
                 json!({ "message": format!("Cannot find user {user_id}") }).to_string(),
+            ))),
+    }
+}
+
+pub async fn patch_user(
+    user_service: web::Data<Arc<UserService>>,
+    authenticated: Authenticated<Claims>,
+    patch: web::Json<UserPatch>,
+) -> Result<HttpResponse, UniversalInboxError> {
+    let user_id = authenticated
+        .claims
+        .sub
+        .parse::<UserId>()
+        .context("Wrong user ID format")?;
+    let service = user_service.clone();
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while patching user")?;
+
+    let updated_user = service
+        .patch_user(&mut transaction, user_id, &patch.into_inner())
+        .await?;
+
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit while patching user")?;
+
+    match updated_user {
+        UpdateStatus {
+            updated: true,
+            result: Some(user),
+        } => Ok(HttpResponse::Ok()
+            .content_type("application/json")
+            .body(serde_json::to_string(&user).context("Cannot serialize user")?)),
+        UpdateStatus {
+            updated: false,
+            result: Some(_),
+        } => Ok(HttpResponse::NotModified().finish()),
+        UpdateStatus {
+            updated: _,
+            result: None,
+        } => Ok(HttpResponse::NotFound()
+            .content_type("application/json")
+            .body(BoxBody::new(
+                json!({ "message": format!("Cannot update unknown user {user_id}") }).to_string(),
             ))),
     }
 }

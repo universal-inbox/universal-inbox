@@ -14,7 +14,7 @@ use universal_inbox::{
     auth::CloseSessionResponse,
     user::{
         Credentials, EmailValidationToken, Password, PasswordResetToken, RegisterUserParameters,
-        User, UserId, Username,
+        User, UserId, UserPatch, Username,
     },
 };
 
@@ -35,6 +35,7 @@ pub enum UserCommand {
     ResetPassword(UserId, PasswordResetToken, SecretBox<Password>),
     RegisterPasskey(Username),
     LoginPasskey(Username),
+    UpdateUser(UserPatch),
 }
 
 pub static CONNECTED_USER: GlobalSignal<Option<User>> = Signal::global(|| None);
@@ -195,6 +196,25 @@ pub async fn user_service(
             }
             Some(UserCommand::RegisterPasskey(username)) => {
                 start_passkey_registration(username, &api_base_url, connected_user, ui_model).await;
+            }
+            Some(UserCommand::UpdateUser(patch)) => {
+                let result: Result<User> = call_api(
+                    Method::PATCH,
+                    &api_base_url,
+                    "users/me",
+                    Some(patch),
+                    Some(ui_model),
+                )
+                .await;
+
+                match result {
+                    Ok(user) => {
+                        connected_user.write().replace(user);
+                    }
+                    Err(err) => {
+                        ui_model.write().error_message = Some(err.to_string());
+                    }
+                };
             }
             None => {}
         }
