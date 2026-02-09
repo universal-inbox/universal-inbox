@@ -162,7 +162,7 @@ impl TickTickService {
     pub async fn mock_all(mock_server: &MockServer) {
         // Mock GET /project - list all projects
         Mock::given(method("GET"))
-            .and(path("/open/v1/project"))
+            .and(path("/project"))
             .respond_with(ResponseTemplate::new(200).set_body_json::<Vec<TickTickProject>>(vec![]))
             .mount(mock_server)
             .await;
@@ -170,14 +170,14 @@ impl TickTickService {
         // Mock GET /project/{projectId}/task - list tasks
         // For testing, return empty array
         Mock::given(method("GET"))
-            .and(path("/open/v1/project/inbox/task"))
+            .and(path("/project/inbox/task"))
             .respond_with(ResponseTemplate::new(200).set_body_json::<Vec<TickTickItem>>(vec![]))
             .mount(mock_server)
             .await;
 
         // Mock POST /task - create task
         Mock::given(method("POST"))
-            .and(path("/open/v1/task"))
+            .and(path("/task"))
             .respond_with(
                 ResponseTemplate::new(200)
                     .insert_header("content-type", "application/json")
@@ -654,6 +654,18 @@ impl ThirdPartyTaskService<TickTickItem> for TickTickService {
         patch: &TaskPatch,
         user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
+        // Only call the TickTick API if there are actual field changes to send.
+        // Status changes (Deleted, Done, Active) are already handled by
+        // delete_task/complete_task/uncomplete_task above.
+        if patch.title.is_none()
+            && patch.body.is_none()
+            && patch.priority.is_none()
+            && patch.due_at.is_none()
+            && patch.project_name.is_none()
+        {
+            return Ok(());
+        }
+
         let (access_token, _) = self
             .integration_connection_service
             .read()

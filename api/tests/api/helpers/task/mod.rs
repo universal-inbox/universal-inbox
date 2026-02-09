@@ -11,6 +11,7 @@ use universal_inbox::{
 };
 
 pub mod linear;
+pub mod ticktick;
 pub mod todoist;
 
 pub async fn list_tasks_response(

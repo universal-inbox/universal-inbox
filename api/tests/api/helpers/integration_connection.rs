@@ -339,3 +339,8 @@ pub fn nango_slack_connection() -> Box<NangoConnection> {
 pub fn nango_todoist_connection() -> Box<NangoConnection> {
     load_json_fixture_file("nango_todoist_connection.json")
 }
+
+#[fixture]
+pub fn nango_ticktick_connection() -> Box<NangoConnection> {
+    load_json_fixture_file("nango_ticktick_connection.json")
+}

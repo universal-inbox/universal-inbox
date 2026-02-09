@@ -1,0 +1,24 @@
+{
+  "id": 456,
+  "created_at": "2023-01-01T01:01:01.000Z",
+  "updated_at": "2023-01-01T01:01:01.000Z",
+  "deleted": false,
+  "environment_id": 1,
+  "provider_config_key": "ticktick",
+  "connection_id": "BC8329D7-B2EE-5B61-0B98-D8C11F976EBF",
+  "credentials": {
+    "type": "OAUTH2",
+    "access_token": "ticktick_test_access_token",
+    "refresh_token": "ticktick_test_refresh_token",
+    "expires_at": "2024-01-01T01:01:01.000Z",
+    "raw": {
+      "access_token": "ticktick_test_access_token",
+      "token_type": "bearer",
+      "scope": "tasks:read,tasks:write"
+    }
+  },
+  "connection_config": {},
+  "metadata": {},
+  "credentials_iv": {},
+  "credentials_tag": {}
+}
