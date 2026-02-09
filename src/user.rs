@@ -97,6 +97,13 @@ impl RegisterUserParameters {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, Default, PartialEq)]
+pub struct UserPatch {
+    pub first_name: Option<String>,
+    pub last_name: Option<String>,
+    pub email: Option<EmailAddress>,
+}
+
 #[derive(Deserialize, Serialize)]
 pub struct Credentials {
     pub email: EmailAddress,

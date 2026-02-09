@@ -3,7 +3,7 @@ use dioxus::prelude::FormValue;
 use email_address::EmailAddress;
 use secrecy::SecretBox;
 
-use universal_inbox::user::{Credentials, Password, RegisterUserParameters, Username};
+use universal_inbox::user::{Credentials, Password, RegisterUserParameters, UserPatch, Username};
 
 pub struct FormValues(pub Vec<(String, FormValue)>);
 
@@ -87,5 +87,31 @@ impl TryFrom<FormValues> for Username {
             .to_owned();
 
         Ok(Username(username))
+    }
+}
+
+impl TryFrom<FormValues> for UserPatch {
+    type Error = anyhow::Error;
+
+    fn try_from(form_values: FormValues) -> Result<Self, Self::Error> {
+        let first_name = form_values
+            .get_text("first_name")
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+        let last_name = form_values
+            .get_text("last_name")
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+        let email = form_values
+            .get_text("email")
+            .filter(|s| !s.is_empty())
+            .map(|s| s.parse())
+            .transpose()?;
+
+        Ok(UserPatch {
+            first_name,
+            last_name,
+            email,
+        })
     }
 }
