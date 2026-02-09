@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use actix_jwt_authc::Authenticated;
-use actix_web::{web, HttpResponse, Scope};
+use actix_web::{HttpResponse, Scope, web};
 use anyhow::Context;
 use tokio::sync::RwLock;
 
@@ -11,7 +11,7 @@ use universal_inbox::{
 };
 
 use crate::{
-    universal_inbox::{third_party::service::ThirdPartyItemService, UniversalInboxError},
+    universal_inbox::{UniversalInboxError, third_party::service::ThirdPartyItemService},
     utils::jwt::Claims,
 };
 

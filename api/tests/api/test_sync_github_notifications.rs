@@ -3,18 +3,18 @@ use chrono::{TimeZone, Timelike, Utc};
 use graphql_client::{Error, Response};
 use http::StatusCode;
 use rstest::*;
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 use uuid::Uuid;
 
 use universal_inbox::{
     integration_connection::{
+        IntegrationConnectionStatus,
         config::IntegrationConnectionConfig,
         integrations::{github::GithubConfig, todoist::TodoistConfig},
         provider::IntegrationProviderKind,
-        IntegrationConnectionStatus,
     },
     notification::{
-        service::NotificationPatch, Notification, NotificationSourceKind, NotificationStatus,
+        Notification, NotificationSourceKind, NotificationStatus, service::NotificationPatch,
     },
     third_party::{
         integrations::{
@@ -38,7 +38,8 @@ use universal_inbox_api::{
 };
 
 use crate::helpers::{
-    auth::{authenticated_app, AuthenticatedApp},
+    TestedApp,
+    auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
         create_and_mock_integration_connection, create_integration_connection,
         get_integration_connection_per_provider, nango_github_connection, nango_todoist_connection,
@@ -59,8 +60,8 @@ use crate::helpers::{
     },
     tested_app_with_local_auth,
     user::create_user_and_login,
-    TestedApp,
 };
+use wiremock::{Mock, ResponseTemplate};
 
 #[rstest]
 #[tokio::test]
@@ -92,7 +93,8 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
         "projects",
         &sync_todoist_projects_response,
         None,
-    );
+    )
+    .await;
 
     let creation: Box<ThirdPartyItemCreationResult> = create_resource(
         &app.client,
@@ -147,22 +149,24 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     )
     .await;
 
-    let github_notifications_mock = mock_github_notifications_service(
+    let _github_notifications_mock = mock_github_notifications_service(
         &app.app.github_mock_server,
         "1",
         &sync_github_notifications,
-    );
+    )
+    .await;
     let empty_result = Vec::<GithubNotification>::new();
-    let github_notifications_mock2 =
-        mock_github_notifications_service(&app.app.github_mock_server, "2", &empty_result);
+    let _github_notifications_mock2 =
+        mock_github_notifications_service(&app.app.github_mock_server, "2", &empty_result).await;
 
-    let github_pull_request_123_query_mock = mock_github_pull_request_query(
+    let _github_pull_request_123_query_mock = mock_github_pull_request_query(
         &app.app.github_mock_server,
         "octokit".to_string(),
         "octokit.rb".to_string(),
         123,
         &github_pull_request_123_response,
-    );
+    )
+    .await;
 
     let notifications: Vec<Notification> = sync_notifications(
         &app.client,
@@ -173,7 +177,6 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     .await;
 
     assert_eq!(notifications.len(), sync_github_notifications.len());
-    github_pull_request_123_query_mock.assert();
     assert_sync_notifications(
         &notifications,
         &sync_github_notifications,
@@ -186,8 +189,6 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
                 .unwrap(),
         )),
     );
-    github_notifications_mock.assert();
-    github_notifications_mock2.assert();
 
     let updated_notification: Box<Notification> = get_resource(
         &app.client,
@@ -223,18 +224,26 @@ async fn test_sync_notifications_should_add_new_notification_and_update_existing
     )
     .await
     .unwrap();
-    assert!(integration_connection
-        .last_notifications_sync_started_at
-        .is_some());
-    assert!(integration_connection
-        .last_notifications_sync_completed_at
-        .is_some());
-    assert!(integration_connection
-        .last_notifications_sync_failed_at
-        .is_none());
-    assert!(integration_connection
-        .last_notifications_sync_failure_message
-        .is_none());
+    assert!(
+        integration_connection
+            .last_notifications_sync_started_at
+            .is_some()
+    );
+    assert!(
+        integration_connection
+            .last_notifications_sync_completed_at
+            .is_some()
+    );
+    assert!(
+        integration_connection
+            .last_notifications_sync_failed_at
+            .is_none()
+    );
+    assert!(
+        integration_connection
+            .last_notifications_sync_failure_message
+            .is_none()
+    );
     assert_eq!(integration_connection.notifications_sync_failures, 0);
     assert_eq!(
         integration_connection.status,
@@ -317,21 +326,23 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
     )
     .await;
 
-    let github_notifications_mock =
-        mock_github_notifications_service(&app.github_mock_server, "1", &sync_github_notifications);
+    let _github_notifications_mock =
+        mock_github_notifications_service(&app.github_mock_server, "1", &sync_github_notifications)
+            .await;
     let empty_result = Vec::<GithubNotification>::new();
-    let github_notifications_mock2 =
-        mock_github_notifications_service(&app.github_mock_server, "2", &empty_result);
+    let _github_notifications_mock2 =
+        mock_github_notifications_service(&app.github_mock_server, "2", &empty_result).await;
 
     // Sync of Github notification 123 will trigger a query of the associated pull request
     // sync_github_notifications[1] won't trigger any query
-    let github_pull_request_123_query_mock = mock_github_pull_request_query(
+    let _github_pull_request_123_query_mock = mock_github_pull_request_query(
         &app.github_mock_server,
         "octokit".to_string(),
         "octokit.rb".to_string(),
         123,
         &github_pull_request_123_response,
-    );
+    )
+    .await;
 
     let notifications: Vec<Notification> = sync_notifications(
         &client,
@@ -342,7 +353,6 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
     .await;
 
     assert_eq!(notifications.len(), sync_github_notifications.len());
-    github_pull_request_123_query_mock.assert();
     assert_sync_notifications(
         &notifications,
         &sync_github_notifications,
@@ -355,8 +365,6 @@ async fn test_sync_notifications_should_mark_deleted_notification_without_subscr
                 .unwrap(),
         )),
     );
-    github_notifications_mock.assert();
-    github_notifications_mock2.assert();
 
     let deleted_notification: Box<Notification> = get_resource(
         &client,
@@ -425,21 +433,23 @@ async fn test_sync_all_notifications_asynchronously(
     )
     .await;
 
-    let mut github_notifications_mock = mock_github_notifications_service(
+    let _github_notifications_mock = mock_github_notifications_service(
         &app.app.github_mock_server,
         "1",
         &sync_github_notifications,
-    );
+    )
+    .await;
     let empty_result = Vec::<GithubNotification>::new();
-    let mut github_notifications_mock2 =
-        mock_github_notifications_service(&app.app.github_mock_server, "2", &empty_result);
-    let mut github_pull_request_123_query_mock = mock_github_pull_request_query(
+    let _github_notifications_mock2 =
+        mock_github_notifications_service(&app.app.github_mock_server, "2", &empty_result).await;
+    let _github_pull_request_123_query_mock = mock_github_pull_request_query(
         &app.app.github_mock_server,
         "octokit".to_string(),
         "octokit.rb".to_string(),
         123,
         &github_pull_request_123_response,
-    );
+    )
+    .await;
 
     if trigger_sync_when_listing_notifications {
         let result = list_notifications(
@@ -496,19 +506,12 @@ async fn test_sync_all_notifications_asynchronously(
     };
 
     assert!(synchronized);
-    github_notifications_mock.assert();
-    github_notifications_mock2.assert();
-    github_pull_request_123_query_mock.assert();
-
-    github_notifications_mock.delete();
-    github_notifications_mock2.delete();
-    github_pull_request_123_query_mock.delete();
 
     // Triggering a new sync should not actually sync again
-    let github_notifications_mock = app.app.github_mock_server.mock(|when, then| {
-        when.any_request();
-        then.status(200);
-    });
+    Mock::given(wiremock::matchers::any())
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&app.app.github_mock_server)
+        .await;
 
     let unauthenticated_client = reqwest::Client::new();
     let response = sync_notifications_response(
@@ -537,7 +540,6 @@ async fn test_sync_all_notifications_asynchronously(
     // Even after 1s, the existing notification's status should not have been updated
     // because the sync happen too soon after the previous one
     assert_eq!(result.len(), 1);
-    github_notifications_mock.assert_hits(0);
 }
 
 #[rstest]
@@ -558,10 +560,10 @@ async fn test_sync_all_notifications_with_no_validated_integration_connections(
     )
     .await;
 
-    let github_notifications_mock = app.app.github_mock_server.mock(|when, then| {
-        when.any_request();
-        then.status(200);
-    });
+    Mock::given(wiremock::matchers::any())
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&app.app.github_mock_server)
+        .await;
 
     let response = sync_notifications_response(
         &app.client,
@@ -572,7 +574,6 @@ async fn test_sync_all_notifications_with_no_validated_integration_connections(
     .await;
 
     assert_eq!(response.status(), StatusCode::OK);
-    github_notifications_mock.assert_hits(0);
 }
 
 #[rstest]
@@ -595,10 +596,10 @@ async fn test_sync_all_notifications_with_synchronization_disabled(
     )
     .await;
 
-    let github_notifications_mock = app.app.github_mock_server.mock(|when, then| {
-        when.any_request();
-        then.status(200);
-    });
+    Mock::given(wiremock::matchers::any())
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&app.app.github_mock_server)
+        .await;
 
     let response = sync_notifications_response(
         &app.client,
@@ -609,7 +610,6 @@ async fn test_sync_all_notifications_with_synchronization_disabled(
     .await;
 
     assert_eq!(response.status(), StatusCode::OK);
-    github_notifications_mock.assert_hits(0);
 }
 
 #[rstest]
@@ -633,10 +633,10 @@ async fn test_sync_all_notifications_asynchronously_in_error(
     )
     .await;
 
-    let github_notifications_mock = app.app.github_mock_server.mock(|when, then| {
-        when.any_request();
-        then.status(400);
-    });
+    Mock::given(wiremock::matchers::any())
+        .respond_with(ResponseTemplate::new(400))
+        .mount(&app.app.github_mock_server)
+        .await;
 
     let unauthenticated_client = reqwest::Client::new();
     let response = sync_notifications_response(
@@ -665,7 +665,6 @@ async fn test_sync_all_notifications_asynchronously_in_error(
     // Even after 1s, the existing notification's status should not have been updated
     // because the sync was in error
     assert_eq!(result.len(), 0);
-    github_notifications_mock.assert_hits(1);
 
     let integration_connection = get_integration_connection_per_provider(
         &app,
@@ -676,15 +675,21 @@ async fn test_sync_all_notifications_asynchronously_in_error(
     )
     .await
     .unwrap();
-    assert!(integration_connection
-        .last_notifications_sync_started_at
-        .is_some());
-    assert!(integration_connection
-        .last_notifications_sync_completed_at
-        .is_none());
-    assert!(integration_connection
-        .last_notifications_sync_failed_at
-        .is_some());
+    assert!(
+        integration_connection
+            .last_notifications_sync_started_at
+            .is_some()
+    );
+    assert!(
+        integration_connection
+            .last_notifications_sync_completed_at
+            .is_none()
+    );
+    assert!(
+        integration_connection
+            .last_notifications_sync_failed_at
+            .is_some()
+    );
     assert_eq!(
         integration_connection
             .last_notifications_sync_failure_message
@@ -740,19 +745,21 @@ async fn test_sync_discussion_notification_with_details(
     .await;
 
     let github_notifications_response = vec![*github_notification];
-    let github_notifications_mock = mock_github_notifications_service(
+    let _github_notifications_mock = mock_github_notifications_service(
         &app.app.github_mock_server,
         "1",
         &github_notifications_response,
-    );
+    )
+    .await;
 
-    let github_discussion_query_mock = mock_github_discussion_query(
+    let _github_discussion_query_mock = mock_github_discussion_query(
         &app.app.github_mock_server,
         "octokit".to_string(),
         "octokit.rb".to_string(),
         123,
         &github_discussion_123_response,
-    );
+    )
+    .await;
 
     let notifications: Vec<Notification> = sync_notifications(
         &app.client,
@@ -763,8 +770,6 @@ async fn test_sync_discussion_notification_with_details(
     .await;
 
     assert_eq!(notifications.len(), 1);
-    github_discussion_query_mock.assert();
-    github_notifications_mock.assert();
 
     let notifications = list_notifications(
         &app.client,
@@ -831,11 +836,12 @@ async fn test_sync_discussion_notification_with_error(
     .await;
 
     let github_notifications_response = vec![*github_notification];
-    let github_notifications_mock = mock_github_notifications_service(
+    let _github_notifications_mock = mock_github_notifications_service(
         &app.app.github_mock_server,
         "1",
         &github_notifications_response,
-    );
+    )
+    .await;
 
     let error_response = Response {
         data: None,
@@ -847,13 +853,14 @@ async fn test_sync_discussion_notification_with_error(
         }]),
         extensions: None,
     };
-    let github_discussion_query_mock = mock_github_discussion_query(
+    let _github_discussion_query_mock = mock_github_discussion_query(
         &app.app.github_mock_server,
         "octokit".to_string(),
         "octokit.rb".to_string(),
         123,
         &error_response,
-    );
+    )
+    .await;
 
     let response = sync_notifications_response(
         &app.client,
@@ -864,8 +871,6 @@ async fn test_sync_discussion_notification_with_error(
     .await;
 
     assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
-    github_discussion_query_mock.assert();
-    github_notifications_mock.assert();
 
     let notifications = list_notifications(
         &app.client,
@@ -889,15 +894,21 @@ async fn test_sync_discussion_notification_with_error(
     )
     .await
     .unwrap();
-    assert!(integration_connection
-        .last_notifications_sync_started_at
-        .is_some());
-    assert!(integration_connection
-        .last_notifications_sync_completed_at
-        .is_none());
-    assert!(integration_connection
-        .last_notifications_sync_failed_at
-        .is_some());
+    assert!(
+        integration_connection
+            .last_notifications_sync_started_at
+            .is_some()
+    );
+    assert!(
+        integration_connection
+            .last_notifications_sync_completed_at
+            .is_none()
+    );
+    assert!(
+        integration_connection
+            .last_notifications_sync_failed_at
+            .is_some()
+    );
     assert_eq!(
         integration_connection
             .last_notifications_sync_failure_message

@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use strum::Display;
 use url::Url;
 
-use integration_connection::{provider::IntegrationProviderKind, NangoProviderKey, NangoPublicKey};
+use integration_connection::{NangoProviderKey, NangoPublicKey, provider::IntegrationProviderKind};
 use utils::base64::{decode_base64, encode_base64};
 
 #[macro_use]

@@ -27,11 +27,7 @@ pub static TOASTS: GlobalSignal<HashMap<Uuid, Toast>> = Signal::global(HashMap::
 pub static VIEWPORT_WIDTH: GlobalSignal<f64> = Signal::global(|| 0.0);
 
 pub fn current_toast_limit(width: f64) -> usize {
-    if width >= 1024.0 {
-        5
-    } else {
-        1
-    }
+    if width >= 1024.0 { 5 } else { 1 }
 }
 
 pub async fn toast_service(

@@ -4,31 +4,31 @@ use std::collections::HashSet;
 
 use dioxus::prelude::*;
 use dioxus_free_icons::{
-    icons::bs_icons::{BsExclamationCircle, BsStar},
     Icon,
+    icons::bs_icons::{BsExclamationCircle, BsStar},
 };
 use universal_inbox::{
+    HasHtmlUrl,
     notification::NotificationWithTask,
     third_party::integrations::google_mail::{
-        GoogleMailThread, MessageSelection, GOOGLE_MAIL_IMPORTANT_LABEL, GOOGLE_MAIL_STARRED_LABEL,
+        GOOGLE_MAIL_IMPORTANT_LABEL, GOOGLE_MAIL_STARRED_LABEL, GoogleMailThread, MessageSelection,
     },
-    HasHtmlUrl,
 };
 
 use crate::{
     components::{
         integrations::google_mail::icons::{GoogleMail, Mail},
         list::{ListContext, ListItem},
-        notifications_list::{get_notification_list_item_action_buttons, TaskHint},
+        notifications_list::{TaskHint, get_notification_list_item_action_buttons},
     },
     utils::format_elapsed_time,
 };
 
 #[component]
 pub fn GoogleMailThreadListItem(
-    notification: ReadOnlySignal<NotificationWithTask>,
-    google_mail_thread: ReadOnlySignal<GoogleMailThread>,
-    is_selected: ReadOnlySignal<bool>,
+    notification: ReadSignal<NotificationWithTask>,
+    google_mail_thread: ReadSignal<GoogleMailThread>,
+    is_selected: ReadSignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
     let notification_updated_at = use_memo(move || format_elapsed_time(notification().updated_at));
@@ -75,7 +75,7 @@ pub fn GoogleMailThreadListItem(
 }
 
 #[component]
-fn GoogleMailThreadSubtitle(google_mail_thread: ReadOnlySignal<GoogleMailThread>) -> Element {
+fn GoogleMailThreadSubtitle(google_mail_thread: ReadSignal<GoogleMailThread>) -> Element {
     let from_address = google_mail_thread().get_message_header(MessageSelection::First, "From");
     let interlocutors_count = google_mail_thread()
         .messages

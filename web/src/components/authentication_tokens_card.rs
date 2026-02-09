@@ -5,11 +5,11 @@ use std::ops::Deref;
 use chrono::{DateTime, Utc};
 use dioxus::prelude::*;
 use dioxus_free_icons::{
+    Icon,
     icons::{
         bs_icons::{BsKey, BsShieldLock, BsTrash},
         go_icons::GoCopy,
     },
-    Icon,
 };
 
 use secrecy::ExposeSecret;
@@ -19,7 +19,7 @@ use crate::{
     components::{loading::Loading, spinner::Spinner},
     model::LoadState,
     services::authentication_token_service::{
-        AuthenticationTokenCommand, AUTHENTICATION_TOKENS, CREATED_AUTHENTICATION_TOKEN,
+        AUTHENTICATION_TOKENS, AuthenticationTokenCommand, CREATED_AUTHENTICATION_TOKEN,
     },
     utils::copy_to_clipboard,
 };
@@ -28,7 +28,7 @@ use crate::{
 pub fn AuthenticationTokensCard() -> Element {
     let authentication_token_service = use_coroutine_handle::<AuthenticationTokenCommand>();
 
-    let _ = use_resource(move || {
+    let _resource = use_resource(move || {
         to_owned![authentication_token_service];
 
         async move {

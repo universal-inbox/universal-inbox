@@ -1,24 +1,24 @@
 use core::fmt;
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use apalis::prelude::*;
 use apalis_redis::RedisStorage;
 use cached::proc_macro::io_cached;
 use chrono::{TimeDelta, Utc};
 use sqlx::{Postgres, Transaction};
 use tokio_retry::{
-    strategy::{jitter, ExponentialBackoff},
     Retry,
+    strategy::{ExponentialBackoff, jitter},
 };
 use tracing::{error, info, warn};
 
 use universal_inbox::{
     integration_connection::{
-        config::IntegrationConnectionConfig,
-        provider::{IntegrationConnectionContext, IntegrationProviderKind},
         IntegrationConnection, IntegrationConnectionId, IntegrationConnectionStatus,
         NangoProviderKey,
+        config::IntegrationConnectionConfig,
+        provider::{IntegrationConnectionContext, IntegrationProviderKind},
     },
     notification::NotificationSyncSourceKind,
     task::TaskSyncSourceKind,
@@ -28,18 +28,18 @@ use universal_inbox::{
 use crate::{
     integrations::oauth2::{AccessToken, NangoService},
     jobs::{
-        sync::{SyncNotificationsJob, SyncTasksJob},
         UniversalInboxJob,
+        sync::{SyncNotificationsJob, SyncTasksJob},
     },
     repository::{
+        Repository,
         integration_connection::{
             IntegrationConnectionRepository, IntegrationConnectionSyncStatusUpdate,
             IntegrationConnectionSyncedBeforeFilter,
         },
         notification::NotificationRepository,
-        Repository,
     },
-    universal_inbox::{user::service::UserService, UniversalInboxError, UpdateStatus},
+    universal_inbox::{UniversalInboxError, UpdateStatus, user::service::UserService},
     utils::cache::build_redis_cache,
 };
 
@@ -212,7 +212,9 @@ impl IntegrationConnectionService {
         for_user_id: Option<UserId>,
         job_storage: &mut RedisStorage<UniversalInboxJob>,
     ) -> Result<(), UniversalInboxError> {
-        info!("Triggering sync notifications job for {notification_sync_source_kind:?} integration connection for user {for_user_id:?}");
+        info!(
+            "Triggering sync notifications job for {notification_sync_source_kind:?} integration connection for user {for_user_id:?}"
+        );
         self.schedule_notifications_sync_status(
             executor,
             notification_sync_source_kind.map(|kind| kind.into()),
@@ -254,7 +256,9 @@ impl IntegrationConnectionService {
         for_user_id: Option<UserId>,
         job_storage: &mut RedisStorage<UniversalInboxJob>,
     ) -> Result<(), UniversalInboxError> {
-        info!("Triggering sync tasks job for {task_sync_source_kind:?} integration connection for user {for_user_id:?}");
+        info!(
+            "Triggering sync tasks job for {task_sync_source_kind:?} integration connection for user {for_user_id:?}"
+        );
         self.schedule_tasks_sync_status(
             executor,
             task_sync_source_kind.map(|kind| kind.into()),
@@ -383,8 +387,8 @@ impl IntegrationConnectionService {
                 .await?
             {
                 return Err(UniversalInboxError::Forbidden(format!(
-                        "Only the owner of the integration connection {integration_connection_id} can patch it"
-                    )));
+                    "Only the owner of the integration connection {integration_connection_id} can patch it"
+                )));
             }
         } else if let Some(kind) = integration_connection_config.notification_source_kind() {
             self.repository
@@ -425,7 +429,9 @@ impl IntegrationConnectionService {
         };
 
         if integration_connection.user_id != for_user_id {
-            return Err(UniversalInboxError::Forbidden(format!("Only the owner of the integration connection {integration_connection_id} can verify it")));
+            return Err(UniversalInboxError::Forbidden(format!(
+                "Only the owner of the integration connection {integration_connection_id} can verify it"
+            )));
         }
 
         let provider_kind = integration_connection.provider.kind();
@@ -507,7 +513,9 @@ impl IntegrationConnectionService {
             .await?
         {
             if integration_connection.user_id != for_user_id {
-                return Err(UniversalInboxError::Forbidden(format!("Only the owner of the integration connection {integration_connection_id} can verify it")));
+                return Err(UniversalInboxError::Forbidden(format!(
+                    "Only the owner of the integration connection {integration_connection_id} can verify it"
+                )));
             }
 
             let provider_kind = integration_connection.provider.kind();
@@ -718,27 +726,26 @@ impl IntegrationConnectionService {
 
         // This is only useful to update incomplete connection context as it was added
         // during the validation afterward
-        if integration_connection.provider.context_is_empty() {
-            if let Some(provider_context) = nango_connection.get_provider_context() {
-                self.repository
-                    .update_integration_connection_context(
-                        executor,
-                        integration_connection.id,
-                        Some(provider_context),
-                    )
-                    .await?;
-            }
+        if integration_connection.provider.context_is_empty()
+            && let Some(provider_context) = nango_connection.get_provider_context()
+        {
+            self.repository
+                .update_integration_connection_context(
+                    executor,
+                    integration_connection.id,
+                    Some(provider_context),
+                )
+                .await?;
         }
 
-        if provider_kind == IntegrationProviderKind::Slack {
-            if let Some(access_token) =
+        if provider_kind == IntegrationProviderKind::Slack
+            && let Some(access_token) =
                 nango_connection.credentials.raw["authed_user"]["access_token"].as_str()
-            {
-                return Ok(Some((
-                    AccessToken(access_token.to_string()),
-                    integration_connection,
-                )));
-            }
+        {
+            return Ok(Some((
+                AccessToken(access_token.to_string()),
+                integration_connection,
+            )));
         }
 
         Ok(Some((
@@ -1120,10 +1127,10 @@ impl IntegrationConnectionService {
             .await?;
 
         for integration_connection in integration_connections {
-            if let Some(provider_kind) = provider_kind {
-                if integration_connection.provider.kind() != provider_kind {
-                    continue;
-                }
+            if let Some(provider_kind) = provider_kind
+                && integration_connection.provider.kind() != provider_kind
+            {
+                continue;
             }
 
             let provider_kind = integration_connection.provider.kind();

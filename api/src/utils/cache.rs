@@ -3,8 +3,8 @@ use std::{sync::Arc, time::Duration};
 use anyhow::Context;
 use cached::AsyncRedisCache;
 use once_cell::sync::Lazy;
-use redis::{aio::ConnectionManager, Client, Script};
-use serde::{de::DeserializeOwned, Serialize};
+use redis::{Client, Script, aio::ConnectionManager};
+use serde::{Serialize, de::DeserializeOwned};
 use tokio::sync::RwLock;
 use tracing::{debug, info};
 

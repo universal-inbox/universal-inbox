@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
-use sqlx::{postgres::PgRow, types::Json, FromRow, Postgres, QueryBuilder, Row, Transaction};
+use sqlx::{FromRow, Postgres, QueryBuilder, Row, Transaction, postgres::PgRow, types::Json};
 use tracing::debug;
 use uuid::Uuid;
 

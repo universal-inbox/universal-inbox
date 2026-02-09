@@ -14,8 +14,8 @@ use crate::components::integrations::slack::{
 
 #[component]
 pub fn SlackReactionTaskPreview(
-    slack_reaction: ReadOnlySignal<SlackReaction>,
-    task: ReadOnlySignal<Task>,
+    slack_reaction: ReadSignal<SlackReaction>,
+    task: ReadSignal<Task>,
 ) -> Element {
     match slack_reaction().item {
         SlackReactionItem::SlackFile(slack_file) => rsx! {

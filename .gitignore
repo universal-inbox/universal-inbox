@@ -12,3 +12,6 @@ docker/cache
 .env
 docs
 .process-compose-override.yaml
+
+# bv (beads viewer) local config and caches
+.bv/

@@ -8,7 +8,7 @@ use universal_inbox::integration_connection::{
 
 #[component]
 pub fn GoogleCalendarProviderConfiguration(
-    config: ReadOnlySignal<GoogleCalendarConfig>,
+    config: ReadSignal<GoogleCalendarConfig>,
     on_config_change: EventHandler<IntegrationConnectionConfig>,
 ) -> Element {
     rsx! {

@@ -3,11 +3,11 @@
 use dioxus::prelude::*;
 
 use dioxus_free_icons::{
+    Icon,
     icons::{
         bs_icons::{BsCheckCircle, BsRecordCircle},
         go_icons::{GoGitCommit, GoGitPullRequest, GoGitPullRequestClosed, GoGitPullRequestDraft},
     },
-    Icon,
 };
 
 use universal_inbox::{
@@ -43,8 +43,8 @@ pub fn Github(class: Option<String>) -> Element {
 
 #[component]
 pub fn GithubNotificationIcon(
-    notif: ReadOnlySignal<NotificationWithTask>,
-    github_notification: ReadOnlySignal<GithubNotification>,
+    notif: ReadSignal<NotificationWithTask>,
+    github_notification: ReadSignal<GithubNotification>,
     class: Option<String>,
 ) -> Element {
     let class = class.unwrap_or_default();

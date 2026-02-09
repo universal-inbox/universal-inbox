@@ -4,7 +4,7 @@ use rstest::*;
 use slack_morphism::prelude::*;
 
 use crate::helpers::{
-    auth::{authenticated_app, AuthenticatedApp},
+    auth::{AuthenticatedApp, authenticated_app},
     rest::create_resource_response,
 };
 
@@ -66,7 +66,7 @@ async fn test_receive_slack_ignored_push_event_callback(
             event: SlackEventCallbackBody::AppHomeOpened(SlackAppHomeOpenedEvent {
                 user: "U123456".into(),
                 channel: "C123456".into(),
-                tab: "home".into(),
+                tab: Some("home".into()),
                 view: None,
             }),
             event_id: "Ev123456".into(),

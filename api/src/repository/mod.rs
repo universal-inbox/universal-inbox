@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use sqlx::{pool::PoolConnection, postgres::PgRow, PgPool, Postgres, Row, Transaction};
+use sqlx::{PgPool, Postgres, Row, Transaction, pool::PoolConnection, postgres::PgRow};
 
 use crate::universal_inbox::UniversalInboxError;
 

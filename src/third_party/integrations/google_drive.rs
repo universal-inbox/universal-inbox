@@ -6,10 +6,10 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::{
+    HasHtmlUrl,
     integration_connection::IntegrationConnectionId,
     third_party::item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemFromSource},
     user::UserId,
-    HasHtmlUrl,
 };
 
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
@@ -29,6 +29,12 @@ pub struct GoogleDriveComment {
     #[serde(default)]
     pub resolved: Option<bool>,
     pub replies: Vec<GoogleDriveCommentReply>,
+    /// The email address of the current user (from IntegrationConnection context)
+    #[serde(default)]
+    pub user_email_address: Option<String>,
+    /// The display name of the current user (from IntegrationConnection context)
+    #[serde(default)]
+    pub user_display_name: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
@@ -49,6 +55,30 @@ pub struct GoogleDriveCommentReply {
 }
 
 impl GoogleDriveComment {
+    /// Check if the last reply in the comment was sent by the current user
+    pub fn is_last_reply_from_user(&self) -> bool {
+        let (Some(user_email), Some(user_display_name)) =
+            (&self.user_email_address, &self.user_display_name)
+        else {
+            return false;
+        };
+
+        if let Some(latest_reply) = self.replies.last() {
+            if let Some(ref latest_reply_author_email) = latest_reply.author.email_address
+                && latest_reply_author_email == user_email
+            {
+                return true;
+            }
+            // Relying on weak display name match as email is not always available
+            // https://issuetracker.google.com/issues/219879781
+            if latest_reply.author.display_name == *user_display_name {
+                return true;
+            }
+        }
+
+        false
+    }
+
     pub fn is_user_mentioned(
         &self,
         user_display_name: &str,
@@ -59,10 +89,10 @@ impl GoogleDriveComment {
         // without being the latest author
         if !self.replies.is_empty() {
             let latest_reply = self.replies[self.replies.len() - 1].clone();
-            if let Some(ref latest_reply_author_email) = latest_reply.author.email_address {
-                if latest_reply_author_email == user_email {
-                    return false;
-                }
+            if let Some(ref latest_reply_author_email) = latest_reply.author.email_address
+                && latest_reply_author_email == user_email
+            {
+                return false;
             }
             if latest_reply.author.display_name == user_display_name {
                 return false;
@@ -70,10 +100,11 @@ impl GoogleDriveComment {
         }
 
         let is_new = after_time.is_none_or(|t| self.modified_time > t);
-        if let Some(ref author_email) = self.author.email_address {
-            if is_new && author_email == user_email {
-                return !self.replies.is_empty();
-            }
+        if let Some(ref author_email) = self.author.email_address
+            && is_new
+            && author_email == user_email
+        {
+            return !self.replies.is_empty();
         }
         // Relying on weak display name match as email is not always available
         // https://issuetracker.google.com/issues/219879781
@@ -87,10 +118,11 @@ impl GoogleDriveComment {
 
         for reply in &self.replies {
             let is_new = after_time.is_none_or(|t| reply.modified_time > t);
-            if let Some(ref reply_author_email) = reply.author.email_address {
-                if is_new && reply_author_email == user_email {
-                    return true;
-                }
+            if let Some(ref reply_author_email) = reply.author.email_address
+                && is_new
+                && reply_author_email == user_email
+            {
+                return true;
             }
 
             // Relying on weak display name match as email is not always available
@@ -206,6 +238,8 @@ mod tests {
             modified_time: Utc.with_ymd_and_hms(2025, 9, 28, 9, 30, 0).unwrap(),
             resolved: Some(false),
             replies: vec![comment_reply],
+            user_email_address: None,
+            user_display_name: None,
         }
     }
 
@@ -317,6 +351,8 @@ mod tests {
                 created_time: Utc::now(),
                 modified_time: Utc::now(),
             }],
+            user_email_address: None,
+            user_display_name: None,
         };
 
         assert!(comment.is_user_mentioned("Test User", "test@example.com", None));
@@ -354,6 +390,8 @@ mod tests {
             modified_time: Utc::now(),
             resolved: Some(false),
             replies: vec![],
+            user_email_address: None,
+            user_display_name: None,
         };
 
         assert!(!comment.is_user_mentioned("Test User", "test@example.com", None));
@@ -413,6 +451,8 @@ mod tests {
                     modified_time: Utc::now(),
                 },
             ],
+            user_email_address: None,
+            user_display_name: None,
         };
 
         assert!(!comment.is_user_mentioned("Test User", "test@example.com", None));
@@ -437,6 +477,8 @@ mod tests {
             modified_time: Utc::now(),
             resolved: Some(false),
             replies: vec![],
+            user_email_address: None,
+            user_display_name: None,
         };
 
         assert!(comment.is_user_mentioned("Test User", "test@example.com", None));
@@ -506,6 +548,8 @@ mod tests {
                     modified_time: Utc::now(),
                 },
             ],
+            user_email_address: None,
+            user_display_name: None,
         };
 
         assert!(comment.is_user_mentioned("Test User", "test@example.com", None));
@@ -551,6 +595,8 @@ mod tests {
                 created_time: Utc::now(),
                 modified_time: Utc::now(),
             }],
+            user_email_address: None,
+            user_display_name: None,
         };
 
         assert!(comment.is_user_mentioned("Test User", "test@example.com", None));
@@ -564,5 +610,163 @@ mod tests {
             "test@example.com",
             Some(Utc::now() + chrono::Duration::minutes(1))
         ));
+    }
+
+    #[rstest]
+    fn test_is_last_reply_from_user_no_user_info() {
+        let comment = GoogleDriveComment {
+            id: "comment_123".to_string(),
+            file_id: "file_456".to_string(),
+            file_name: "Test Document.docx".to_string(),
+            file_mime_type: "application/vnd.google-apps.document".to_string(),
+            content: "Test comment".to_string(),
+            html_content: None,
+            quoted_file_content: None,
+            author: GoogleDriveCommentAuthor {
+                display_name: "Other User".to_string(),
+                email_address: Some("other@example.com".to_string()),
+                photo_link: None,
+            },
+            created_time: Utc::now(),
+            modified_time: Utc::now(),
+            resolved: Some(false),
+            replies: vec![GoogleDriveCommentReply {
+                id: "reply_123".to_string(),
+                content: "This is a reply from user".to_string(),
+                html_content: None,
+                author: GoogleDriveCommentAuthor {
+                    display_name: "Test User".to_string(),
+                    email_address: Some("test@example.com".to_string()),
+                    photo_link: None,
+                },
+                created_time: Utc::now(),
+                modified_time: Utc::now(),
+            }],
+            // No user info stored on comment
+            user_email_address: None,
+            user_display_name: None,
+        };
+
+        assert!(!comment.is_last_reply_from_user());
+    }
+
+    #[rstest]
+    #[case::with_email_address(true)]
+    #[case::without_email_address(false)]
+    fn test_is_last_reply_from_user_when_user_is_last_replier(#[case] has_email: bool) {
+        let comment = GoogleDriveComment {
+            id: "comment_123".to_string(),
+            file_id: "file_456".to_string(),
+            file_name: "Test Document.docx".to_string(),
+            file_mime_type: "application/vnd.google-apps.document".to_string(),
+            content: "Test comment".to_string(),
+            html_content: None,
+            quoted_file_content: None,
+            author: GoogleDriveCommentAuthor {
+                display_name: "Other User".to_string(),
+                email_address: Some("other@example.com".to_string()),
+                photo_link: None,
+            },
+            created_time: Utc::now(),
+            modified_time: Utc::now(),
+            resolved: Some(false),
+            replies: vec![GoogleDriveCommentReply {
+                id: "reply_123".to_string(),
+                content: "This is a reply from user".to_string(),
+                html_content: None,
+                author: GoogleDriveCommentAuthor {
+                    display_name: "Test User".to_string(),
+                    email_address: if has_email {
+                        Some("test@example.com".to_string())
+                    } else {
+                        None
+                    },
+                    photo_link: None,
+                },
+                created_time: Utc::now(),
+                modified_time: Utc::now(),
+            }],
+            user_email_address: Some("test@example.com".to_string()),
+            user_display_name: Some("Test User".to_string()),
+        };
+
+        assert!(comment.is_last_reply_from_user());
+    }
+
+    #[rstest]
+    fn test_is_last_reply_from_user_when_other_is_last_replier() {
+        let comment = GoogleDriveComment {
+            id: "comment_123".to_string(),
+            file_id: "file_456".to_string(),
+            file_name: "Test Document.docx".to_string(),
+            file_mime_type: "application/vnd.google-apps.document".to_string(),
+            content: "Test comment".to_string(),
+            html_content: None,
+            quoted_file_content: None,
+            author: GoogleDriveCommentAuthor {
+                display_name: "Other User".to_string(),
+                email_address: Some("other@example.com".to_string()),
+                photo_link: None,
+            },
+            created_time: Utc::now(),
+            modified_time: Utc::now(),
+            resolved: Some(false),
+            replies: vec![
+                GoogleDriveCommentReply {
+                    id: "reply_123".to_string(),
+                    content: "User reply".to_string(),
+                    html_content: None,
+                    author: GoogleDriveCommentAuthor {
+                        display_name: "Test User".to_string(),
+                        email_address: Some("test@example.com".to_string()),
+                        photo_link: None,
+                    },
+                    created_time: Utc::now(),
+                    modified_time: Utc::now(),
+                },
+                GoogleDriveCommentReply {
+                    id: "reply_456".to_string(),
+                    content: "Other reply".to_string(),
+                    html_content: None,
+                    author: GoogleDriveCommentAuthor {
+                        display_name: "Other User".to_string(),
+                        email_address: Some("other@example.com".to_string()),
+                        photo_link: None,
+                    },
+                    created_time: Utc::now(),
+                    modified_time: Utc::now(),
+                },
+            ],
+            user_email_address: Some("test@example.com".to_string()),
+            user_display_name: Some("Test User".to_string()),
+        };
+
+        assert!(!comment.is_last_reply_from_user());
+    }
+
+    #[rstest]
+    fn test_is_last_reply_from_user_with_no_replies() {
+        let comment = GoogleDriveComment {
+            id: "comment_123".to_string(),
+            file_id: "file_456".to_string(),
+            file_name: "Test Document.docx".to_string(),
+            file_mime_type: "application/vnd.google-apps.document".to_string(),
+            content: "Test comment".to_string(),
+            html_content: None,
+            quoted_file_content: None,
+            author: GoogleDriveCommentAuthor {
+                display_name: "Test User".to_string(),
+                email_address: Some("test@example.com".to_string()),
+                photo_link: None,
+            },
+            created_time: Utc::now(),
+            modified_time: Utc::now(),
+            resolved: Some(false),
+            replies: vec![],
+            user_email_address: Some("test@example.com".to_string()),
+            user_display_name: Some("Test User".to_string()),
+        };
+
+        assert!(!comment.is_last_reply_from_user());
     }
 }

@@ -1,22 +1,22 @@
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
-use sqlx::{postgres::PgRow, types::Json, FromRow, Postgres, QueryBuilder, Row, Transaction};
+use sqlx::{FromRow, Postgres, QueryBuilder, Row, Transaction, postgres::PgRow, types::Json};
 use tracing::debug;
 use uuid::Uuid;
 
 use universal_inbox::{
+    DEFAULT_PAGE_SIZE, Page, PageToken,
     task::{
-        service::TaskPatch, CreateOrUpdateTaskRequest, DueDate, Task, TaskId, TaskPriority,
-        TaskSourceKind, TaskStatus, TaskSummary,
+        CreateOrUpdateTaskRequest, DueDate, Task, TaskId, TaskPriority, TaskSourceKind, TaskStatus,
+        TaskSummary, service::TaskPatch,
     },
     user::UserId,
-    Page, PageToken, DEFAULT_PAGE_SIZE,
 };
 
 use crate::universal_inbox::{UniversalInboxError, UpdateStatus, UpsertStatus};
 
-use super::{third_party::ThirdPartyItemRow, FromRowWithPrefix, Repository};
+use super::{FromRowWithPrefix, Repository, third_party::ThirdPartyItemRow};
 
 #[async_trait]
 pub trait TaskRepository {

@@ -168,15 +168,81 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci
-      - name: Run API tests
+      - name: Run API tests (excluding browser tests)
         env:
           RUST_MIN_STACK: 104857600
           RUST_BACKTRACE: "full"
-        run: devbox run -- just api/test-ci
+        run: devbox run -- just api test-ci
       - name: API test Report
         uses: dorny/test-reporter@v1
         if: success() || failure()
         with:
           name: Tests API
           path: target/nextest/ci/junit.xml
+          reporter: java-junit
+
+  test-browser:
+    needs: build
+    name: Browser tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15.1
+        env:
+          POSTGRES_PASSWORD: password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install Devbox
+        uses: jetpack-io/devbox-install-action@v0.12.0
+        with:
+          enable-cache: "true"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci
+      - name: Install Playwright Chromium
+        run: devbox run -- just api install-tools
+      - name: Install web dependencies and build WASM frontend
+        run: devbox run -- just web build-ci
+      - name: Run browser tests
+        env:
+          RUST_MIN_STACK: 104857600
+          RUST_BACKTRACE: "full"
+          # Nix's ldd can't see system libs installed by `install-deps`, causing
+          # Playwright's host validation to falsely report missing libraries.
+          # The system dynamic linker (used by the Chromium binary) finds them fine.
+          PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS: "1"
+        run: devbox run -- just api test-ci-browser
+      - name: Browser test Report
+        uses: dorny/test-reporter@v1
+        if: success() || failure()
+        with:
+          name: Tests Browser
+          path: target/nextest/ci-browser/junit.xml
           reporter: java-junit

@@ -1,6 +1,6 @@
 #![allow(non_snake_case)]
 
-use comrak::{markdown_to_html as md2html, Options};
+use comrak::{Options, markdown_to_html as md2html};
 use dioxus::prelude::*;
 use regex::Regex;
 

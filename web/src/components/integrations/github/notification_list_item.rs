@@ -2,34 +2,34 @@
 
 use dioxus::prelude::*;
 
-use dioxus_free_icons::{icons::bs_icons::BsChatTextFill, Icon};
+use dioxus_free_icons::{Icon, icons::bs_icons::BsChatTextFill};
 use universal_inbox::{
+    HasHtmlUrl,
     notification::NotificationWithTask,
     third_party::integrations::github::{
         GithubDiscussion, GithubNotification, GithubNotificationItem, GithubPullRequest,
         GithubPullRequestReviewDecision,
     },
-    HasHtmlUrl,
 };
 
 use crate::{
     components::{
         integrations::github::{
+            GithubActorDisplay,
             icons::{Github, GithubNotificationIcon},
             preview::pull_request::ChecksGithubPullRequest,
-            GithubActorDisplay,
         },
         list::{ListContext, ListItem},
-        notifications_list::{get_notification_list_item_action_buttons, TaskHint},
+        notifications_list::{TaskHint, get_notification_list_item_action_buttons},
     },
     utils::format_elapsed_time,
 };
 
 #[component]
 pub fn GithubNotificationListItem(
-    notification: ReadOnlySignal<NotificationWithTask>,
-    github_notification: ReadOnlySignal<GithubNotification>,
-    is_selected: ReadOnlySignal<bool>,
+    notification: ReadSignal<NotificationWithTask>,
+    github_notification: ReadSignal<GithubNotification>,
+    is_selected: ReadSignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
     match github_notification() {
@@ -70,9 +70,9 @@ pub fn GithubNotificationListItem(
 
 #[component]
 pub fn DefaultGithubNotificationListItem(
-    notification: ReadOnlySignal<NotificationWithTask>,
-    github_notification: ReadOnlySignal<GithubNotification>,
-    is_selected: ReadOnlySignal<bool>,
+    notification: ReadSignal<NotificationWithTask>,
+    github_notification: ReadSignal<GithubNotification>,
+    is_selected: ReadSignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
     let notification_updated_at = use_memo(move || format_elapsed_time(notification().updated_at));
@@ -112,10 +112,10 @@ pub fn DefaultGithubNotificationListItem(
 
 #[component]
 pub fn GithubPullRequestNotificationListItem(
-    notification: ReadOnlySignal<NotificationWithTask>,
-    github_notification: ReadOnlySignal<GithubNotification>,
-    github_pull_request: ReadOnlySignal<GithubPullRequest>,
-    is_selected: ReadOnlySignal<bool>,
+    notification: ReadSignal<NotificationWithTask>,
+    github_notification: ReadSignal<GithubNotification>,
+    github_pull_request: ReadSignal<GithubPullRequest>,
+    is_selected: ReadSignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
     let notification_updated_at = use_memo(move || format_elapsed_time(notification().updated_at));
@@ -175,10 +175,10 @@ pub fn GithubPullRequestNotificationListItem(
 
 #[component]
 pub fn GithubDiscussionNotificationListItem(
-    notification: ReadOnlySignal<NotificationWithTask>,
-    github_notification: ReadOnlySignal<GithubNotification>,
-    github_discussion: ReadOnlySignal<GithubDiscussion>,
-    is_selected: ReadOnlySignal<bool>,
+    notification: ReadSignal<NotificationWithTask>,
+    github_notification: ReadSignal<GithubNotification>,
+    github_discussion: ReadSignal<GithubDiscussion>,
+    is_selected: ReadSignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
     let notification_updated_at = use_memo(move || format_elapsed_time(notification().updated_at));
@@ -229,7 +229,7 @@ pub fn GithubDiscussionNotificationListItem(
 }
 
 #[component]
-fn GithubNotificationSubtitle(github_notification: ReadOnlySignal<GithubNotification>) -> Element {
+fn GithubNotificationSubtitle(github_notification: ReadSignal<GithubNotification>) -> Element {
     rsx! {
         div {
             class: "flex gap-2 text-xs text-base-content/50",
@@ -243,7 +243,7 @@ fn GithubNotificationSubtitle(github_notification: ReadOnlySignal<GithubNotifica
 }
 
 #[component]
-pub fn GithubReviewStatus(github_pull_request: ReadOnlySignal<GithubPullRequest>) -> Element {
+pub fn GithubReviewStatus(github_pull_request: ReadSignal<GithubPullRequest>) -> Element {
     github_pull_request()
         .review_decision
         .as_ref()

@@ -26,6 +26,7 @@ pub fn PasswordResetPage() -> Element {
         form {
             class: "flex flex-col justify-center gap-4 px-10 pb-8",
             onsubmit: move |evt| {
+                evt.prevent_default();
                 match FormValues(evt.values()).try_into() {
                     Ok(email_address) => {
                         user_service.send(UserCommand::SendPasswordResetEmail(email_address));

@@ -1,6 +1,6 @@
 use std::{str::FromStr, sync::Weak, time::Duration};
 
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use email_address::EmailAddress;
@@ -15,8 +15,8 @@ use url::Url;
 use uuid::Uuid;
 
 use wiremock::{
-    matchers::{method, path, path_regex},
     Mock, MockServer, ResponseTemplate,
+    matchers::{method, path, path_regex},
 };
 
 use universal_inbox::{
@@ -46,8 +46,8 @@ use crate::{
         third_party::ThirdPartyItemSourceService,
     },
     universal_inbox::{
-        integration_connection::service::IntegrationConnectionService,
-        notification::service::NotificationService, UniversalInboxError,
+        UniversalInboxError, integration_connection::service::IntegrationConnectionService,
+        notification::service::NotificationService,
     },
     utils::api::ApiClient,
 };
@@ -186,6 +186,8 @@ impl RawGoogleDriveComment {
             modified_time: self.modified_time,
             resolved: self.resolved,
             replies,
+            user_email_address: None,
+            user_display_name: None,
         }
     }
 }
@@ -479,11 +481,13 @@ impl ThirdPartyItemSourceService<GoogleDriveComment> for GoogleDriveService {
                 .await?;
 
             for raw_comment in raw_comments {
-                let comment = raw_comment.into_google_drive_comment(
+                let mut comment = raw_comment.into_google_drive_comment(
                     file.name.clone(),
                     file.id.clone(),
                     file.mime_type.clone(),
                 );
+                comment.user_email_address = Some(user_email.to_string());
+                comment.user_display_name = Some(display_name.clone());
 
                 let existing_notification = self
                     .notification_service
@@ -541,10 +545,17 @@ impl ThirdPartyNotificationSourceService<GoogleDriveComment> for GoogleDriveServ
     ) -> Result<Box<Notification>, UniversalInboxError> {
         let title = format!("Comment on {}", source.file_name);
 
+        // If the user sent the last reply, mark as Deleted (user already responded)
+        let status = if source.is_last_reply_from_user() {
+            NotificationStatus::Deleted
+        } else {
+            NotificationStatus::Unread
+        };
+
         Ok(Box::new(Notification {
             id: NotificationId(Uuid::new_v4()),
             title,
-            status: NotificationStatus::Unread,
+            status,
             created_at: source.created_time,
             updated_at: source.modified_time,
             last_read_at: None,
@@ -628,12 +639,12 @@ fn should_create_item(
         .as_ref()
         .map(|n| n.source_item.updated_at);
 
-    if let Some(last_update) = last_existing_third_party_item_update {
-        if existing_notification.as_ref().unwrap().status != NotificationStatus::Unsubscribed {
-            // If the existing notification is not unsubscribed, create a new item only if the
-            // comment is newer than the existing notification
-            return comment.modified_time > last_update;
-        }
+    if let Some(last_update) = last_existing_third_party_item_update
+        && existing_notification.as_ref().unwrap().status != NotificationStatus::Unsubscribed
+    {
+        // If the existing notification is not unsubscribed, create a new item only if the
+        // comment is newer than the existing notification
+        return comment.modified_time > last_update;
     }
 
     comment.is_user_mentioned(
@@ -761,6 +772,8 @@ mod tests {
                 modified_time: Utc.with_ymd_and_hms(2025, 9, 28, 9, 30, 0).unwrap(),
                 resolved: Some(false),
                 replies: vec![comment_reply],
+                user_email_address: None,
+                user_display_name: None,
             }
         }
 

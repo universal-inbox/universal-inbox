@@ -17,10 +17,7 @@ use crate::components::integrations::slack::{
 };
 
 #[component]
-pub fn SlackStarTaskPreview(
-    slack_star: ReadOnlySignal<SlackStar>,
-    task: ReadOnlySignal<Task>,
-) -> Element {
+pub fn SlackStarTaskPreview(slack_star: ReadSignal<SlackStar>, task: ReadSignal<Task>) -> Element {
     match slack_star().item {
         SlackStarItem::SlackChannel(slack_channel) => rsx! {
             SlackChannelPreview {

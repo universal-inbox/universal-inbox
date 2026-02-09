@@ -2,15 +2,15 @@
 
 use dioxus::prelude::*;
 use dioxus_free_icons::{
-    icons::bs_icons::{BsCheck, BsExclamationTriangle},
     Icon,
+    icons::bs_icons::{BsCheck, BsExclamationTriangle},
 };
 use gravatar_rs::Generator;
 
 use crate::{
     components::loading::Loading,
     model::DEFAULT_USER_AVATAR,
-    services::user_service::{UserCommand, CONNECTED_USER},
+    services::user_service::{CONNECTED_USER, UserCommand},
 };
 
 #[component]

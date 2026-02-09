@@ -28,6 +28,7 @@ pub fn PasswordUpdatePage(user_id: UserId, password_reset_token: PasswordResetTo
         form {
             class: "flex flex-col justify-center gap-4 px-10 pb-8",
             onsubmit: move |evt| {
+                evt.prevent_default();
                 match FormValues(evt.values()).try_into() {
                     Ok(password) => {
                         user_service.send(UserCommand::ResetPassword(user_id, password_reset_token.clone(), password));

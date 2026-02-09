@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, Weak},
 };
 
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use apalis_redis::RedisStorage;
 use chrono::{DateTime, Utc};
 use sqlx::{Postgres, Transaction};
@@ -11,14 +11,15 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, info};
 
 use universal_inbox::{
+    HasHtmlUrl, Page,
     integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
     notification::{
-        service::NotificationPatch, Notification, NotificationSource, NotificationStatus,
+        Notification, NotificationSource, NotificationStatus, service::NotificationPatch,
     },
     task::{
-        service::TaskPatch, CreateOrUpdateTaskRequest, ProjectSummary, Task, TaskCreation,
-        TaskCreationConfig, TaskCreationResult, TaskId, TaskSource, TaskSourceKind, TaskStatus,
-        TaskSummary, TaskSyncSourceKind,
+        CreateOrUpdateTaskRequest, ProjectSummary, Task, TaskCreation, TaskCreationConfig,
+        TaskCreationResult, TaskId, TaskSource, TaskSourceKind, TaskStatus, TaskSummary,
+        TaskSyncSourceKind, service::TaskPatch,
     },
     third_party::{
         integrations::slack::{SlackReaction, SlackStar},
@@ -28,7 +29,6 @@ use universal_inbox::{
         },
     },
     user::UserId,
-    HasHtmlUrl, Page,
 };
 
 use crate::{
@@ -40,15 +40,15 @@ use crate::{
         todoist::TodoistService,
     },
     jobs::UniversalInboxJob,
-    repository::{task::TaskRepository, Repository},
+    repository::{Repository, task::TaskRepository},
     universal_inbox::{
+        UniversalInboxError, UpdateStatus, UpsertStatus,
         integration_connection::service::{
             IntegrationConnectionService, IntegrationConnectionSyncType,
         },
         notification::service::NotificationService,
         third_party::service::ThirdPartyItemService,
         user::service::UserService,
-        UniversalInboxError, UpdateStatus, UpsertStatus,
     },
 };
 
@@ -401,12 +401,12 @@ impl TaskService {
     ) -> Result<Option<Task>, UniversalInboxError> {
         let task = self.repository.get_one_task(executor, task_id).await?;
 
-        if let Some(ref task) = task {
-            if task.user_id != for_user_id {
-                return Err(UniversalInboxError::Forbidden(format!(
-                    "Only the owner of the task {task_id} can access it"
-                )));
-            }
+        if let Some(ref task) = task
+            && task.user_id != for_user_id
+        {
+            return Err(UniversalInboxError::Forbidden(format!(
+                "Only the owner of the task {task_id} can access it"
+            )));
         }
 
         Ok(task)
@@ -728,12 +728,16 @@ impl TaskService {
             )
             .await?
         else {
-            debug!("No validated {integration_provider_kind} integration found for user {user_id}, skipping tasks sync");
+            debug!(
+                "No validated {integration_provider_kind} integration found for user {user_id}, skipping tasks sync"
+            );
             return Ok(vec![]);
         };
 
         if !integration_connection.provider.is_sync_tasks_enabled() {
-            debug!("{integration_provider_kind} integration for user {user_id} is disabled, skipping tasks sync");
+            debug!(
+                "{integration_provider_kind} integration for user {user_id} is disabled, skipping tasks sync"
+            );
             return Ok(vec![]);
         }
 
@@ -1054,21 +1058,21 @@ impl TaskService {
             updated: _,
             result: Some(task),
         } = &updated_task
+            && task.kind == TaskSourceKind::Todoist
+            && patch.status.is_some()
         {
-            if task.kind == TaskSourceKind::Todoist && patch.status.is_some() {
-                let notification_patch = NotificationPatch {
-                    status: Some(NotificationStatus::Deleted),
-                    ..Default::default()
-                };
+            let notification_patch = NotificationPatch {
+                status: Some(NotificationStatus::Deleted),
+                ..Default::default()
+            };
 
-                self.notification_service
-                    .upgrade()
-                    .context("Unable to access notification_service from task_service")?
-                    .read()
-                    .await
-                    .patch_notifications_for_task(executor, task.id, None, &notification_patch)
-                    .await?;
-            }
+            self.notification_service
+                .upgrade()
+                .context("Unable to access notification_service from task_service")?
+                .read()
+                .await
+                .patch_notifications_for_task(executor, task.id, None, &notification_patch)
+                .await?;
         }
 
         match updated_task {
@@ -1084,16 +1088,16 @@ impl TaskService {
                 )
                 .await?;
 
-                if let Some(sink_item) = &task.sink_item {
-                    if task.source_item.id != sink_item.id {
-                        self.apply_task_third_party_item_side_effect(
-                            executor,
-                            patch,
-                            sink_item,
-                            for_user_id,
-                        )
-                        .await?;
-                    }
+                if let Some(sink_item) = &task.sink_item
+                    && task.source_item.id != sink_item.id
+                {
+                    self.apply_task_third_party_item_side_effect(
+                        executor,
+                        patch,
+                        sink_item,
+                        for_user_id,
+                    )
+                    .await?;
                 }
             }
             UpdateStatus {
@@ -1216,11 +1220,11 @@ impl TaskService {
     ) -> Result<(), UniversalInboxError> {
         // Skip side effects for test accounts
         let user = self.user_service.get_user(executor, for_user_id).await?;
-        if let Some(user) = user {
-            if user.is_testing {
-                debug!("Skipping task side effects for test account {for_user_id}");
-                return Ok(());
-            }
+        if let Some(user) = user
+            && user.is_testing
+        {
+            debug!("Skipping task side effects for test account {for_user_id}");
+            return Ok(());
         }
 
         match third_party_item.get_third_party_item_source_kind() {

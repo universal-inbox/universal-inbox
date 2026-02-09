@@ -3,8 +3,8 @@
 use dioxus::prelude::*;
 use dioxus::web::WebEventExt;
 use dioxus_free_icons::{
-    icons::bs_icons::{BsExclamationTriangle, BsTrash},
     Icon,
+    icons::bs_icons::{BsExclamationTriangle, BsTrash},
 };
 use gloo_timers::future::TimeoutFuture;
 

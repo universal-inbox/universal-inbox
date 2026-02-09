@@ -1,8 +1,9 @@
 #![allow(non_snake_case)]
 
+use dioxus::prelude::dioxus_core::use_drop;
 use dioxus::prelude::*;
 use dioxus::web::WebEventExt;
-use dioxus_free_icons::{icons::bs_icons::BsChatText, Icon};
+use dioxus_free_icons::{Icon, icons::bs_icons::BsChatText};
 use serde_json::json;
 use slack_morphism::SlackReactionName;
 
@@ -31,7 +32,7 @@ use crate::{
 
 #[component]
 pub fn SlackProviderConfiguration(
-    config: ReadOnlySignal<SlackConfig>,
+    config: ReadSignal<SlackConfig>,
     ui_model: Signal<UniversalInboxUIModel>,
     on_config_change: EventHandler<IntegrationConnectionConfig>,
 ) -> Element {
@@ -114,7 +115,7 @@ pub fn SlackProviderConfiguration(
 
 #[component]
 fn SlackStarConfiguration(
-    config: ReadOnlySignal<SlackConfig>,
+    config: ReadSignal<SlackConfig>,
     ui_model: Signal<UniversalInboxUIModel>,
     on_config_change: EventHandler<IntegrationConnectionConfig>,
 ) -> Element {
@@ -366,7 +367,7 @@ fn SlackStarConfiguration(
 
 #[component]
 fn SlackReactionConfiguration(
-    config: ReadOnlySignal<SlackConfig>,
+    config: ReadSignal<SlackConfig>,
     ui_model: Signal<UniversalInboxUIModel>,
     on_config_change: EventHandler<IntegrationConnectionConfig>,
 ) -> Element {
@@ -650,7 +651,7 @@ fn SlackReactionConfiguration(
 
 #[component]
 fn SlackMessageConfiguration(
-    config: ReadOnlySignal<SlackConfig>,
+    config: ReadSignal<SlackConfig>,
     ui_model: Signal<UniversalInboxUIModel>,
     on_config_change: EventHandler<IntegrationConnectionConfig>,
 ) -> Element {

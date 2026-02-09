@@ -7,17 +7,17 @@ use strum::IntoEnumIterator;
 use url::Url;
 
 use universal_inbox::{
+    Page, PageToken,
     notification::{
+        Notification, NotificationId, NotificationListOrder, NotificationSourceKind,
+        NotificationStatus, NotificationSyncSourceKind, NotificationWithTask,
         service::{
             InvitationPatch, NotificationPatch, PatchNotificationsRequest,
             SyncNotificationsParameters,
         },
-        Notification, NotificationId, NotificationListOrder, NotificationSourceKind,
-        NotificationStatus, NotificationSyncSourceKind, NotificationWithTask,
     },
     task::{TaskCreation, TaskId, TaskPlanning},
     third_party::integrations::google_calendar::GoogleCalendarEventAttendeeResponseStatus,
-    Page, PageToken,
 };
 
 use crate::{
@@ -177,14 +177,14 @@ pub async fn notification_service(
                 .await;
             }
             Some(NotificationCommand::CompleteTaskFromNotification(ref notification)) => {
-                if let Some(ref task) = notification.task {
-                    if notification.is_built_from_task() {
-                        notifications_page
-                            .write()
-                            .remove_element(|notif| notif.id != notification.id);
+                if let Some(ref task) = notification.task
+                    && notification.is_built_from_task()
+                {
+                    notifications_page
+                        .write()
+                        .remove_element(|notif| notif.id != notification.id);
 
-                        task_service.send(TaskCommand::Complete(task.id));
-                    }
+                    task_service.send(TaskCommand::Complete(task.id));
                 }
             }
             Some(NotificationCommand::PlanTask(ref notification, task_id, parameters)) => {

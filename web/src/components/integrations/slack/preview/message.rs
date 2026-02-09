@@ -1,22 +1,22 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
-use dioxus_free_icons::{icons::bs_icons::BsArrowUpRightSquare, Icon};
+use dioxus_free_icons::{Icon, icons::bs_icons::BsArrowUpRightSquare};
 
 use universal_inbox::third_party::integrations::slack::SlackMessageDetails;
 
 use crate::components::{
+    CardWithHeaders, MessageHeader,
     integrations::slack::{
-        get_sender_name_and_avatar, preview::reactions::SlackReactions, SlackTeamDisplay,
+        SlackTeamDisplay, get_sender_name_and_avatar, preview::reactions::SlackReactions,
     },
     markdown::SlackMarkdown,
-    CardWithHeaders, MessageHeader,
 };
 
 #[component]
 pub fn SlackMessagePreview(
-    slack_message: ReadOnlySignal<SlackMessageDetails>,
-    title: ReadOnlySignal<String>,
+    slack_message: ReadSignal<SlackMessageDetails>,
+    title: ReadSignal<String>,
     icon: Option<Element>,
 ) -> Element {
     let channel_name = slack_message()
@@ -60,7 +60,7 @@ pub fn SlackMessagePreview(
 }
 
 #[component]
-fn SlackMessageDisplay(slack_message: ReadOnlySignal<SlackMessageDetails>) -> Element {
+fn SlackMessageDisplay(slack_message: ReadSignal<SlackMessageDetails>) -> Element {
     let posted_at = slack_message().message.origin.ts.to_date_time_opt();
     let text = slack_message().render_content();
     let (user_name, avatar_url) = get_sender_name_and_avatar(&slack_message().sender);

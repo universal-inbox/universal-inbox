@@ -2,10 +2,11 @@
 
 use dioxus::prelude::*;
 
-use universal_inbox::{task::Task, third_party::integrations::linear::LinearIssue, HasHtmlUrl};
+use universal_inbox::{HasHtmlUrl, task::Task, third_party::integrations::linear::LinearIssue};
 
 use crate::{
     components::{
+        UserWithAvatar,
         integrations::linear::{
             icons::{Linear, LinearIssueIcon},
             list_item::LinearIssueListItemSubtitle,
@@ -13,16 +14,15 @@ use crate::{
         list::{ListContext, ListItem},
         notifications_list::TaskHint,
         tasks_list::get_task_list_item_action_buttons,
-        UserWithAvatar,
     },
     utils::format_elapsed_time,
 };
 
 #[component]
 pub fn LinearTaskListItem(
-    task: ReadOnlySignal<Task>,
-    linear_issue: ReadOnlySignal<LinearIssue>,
-    is_selected: ReadOnlySignal<bool>,
+    task: ReadSignal<Task>,
+    linear_issue: ReadSignal<LinearIssue>,
+    is_selected: ReadSignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
     let task_updated_at = use_memo(move || format_elapsed_time(task().updated_at));

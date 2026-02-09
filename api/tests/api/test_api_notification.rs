@@ -1,16 +1,16 @@
 use chrono::Utc;
 use rstest::rstest;
 use universal_inbox::{
+    HasHtmlUrl,
     notification::{NotificationSourceKind, NotificationStatus},
     third_party::{
         integrations::api::{APISource, WebPage},
         item::{ThirdPartyItemCreationResult, ThirdPartyItemData},
     },
-    HasHtmlUrl,
 };
 
 use crate::helpers::{
-    auth::{authenticated_app, AuthenticatedApp},
+    auth::{AuthenticatedApp, authenticated_app},
     rest::create_resource,
 };
 

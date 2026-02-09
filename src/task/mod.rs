@@ -14,6 +14,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::{
+    HasHtmlUrl,
     integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
     notification::Notification,
     task::integrations::todoist::{DEFAULT_TODOIST_HTML_URL, TODOIST_INBOX_PROJECT},
@@ -22,7 +23,6 @@ use crate::{
     },
     user::UserId,
     utils::default_value::DefaultValue,
-    HasHtmlUrl,
 };
 
 pub mod integrations;

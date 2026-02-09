@@ -8,11 +8,11 @@ use log::debug;
 use crate::{
     auth::Authenticated,
     components::loading::Loading,
-    config::{get_api_base_url, APP_CONFIG},
+    config::{APP_CONFIG, get_api_base_url},
     model::{AuthenticationState, UI_MODEL},
     route::Route,
     services::{
-        integration_connection_service::{IntegrationConnectionCommand, INTEGRATION_CONNECTIONS},
+        integration_connection_service::{INTEGRATION_CONNECTIONS, IntegrationConnectionCommand},
         notification_service::NotificationCommand,
         task_service::TaskCommand,
     },

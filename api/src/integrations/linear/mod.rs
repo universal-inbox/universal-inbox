@@ -1,7 +1,7 @@
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::{HashMap, hash_map::Entry};
 use std::{sync::Arc, time::Duration};
 
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use async_trait::async_trait;
 use chrono::{DateTime, Timelike, Utc};
 use graphql::{
@@ -27,16 +27,17 @@ use tokio::sync::RwLock;
 use url::Url;
 use uuid::Uuid;
 use wiremock::{
-    matchers::{body_partial_json, method},
     Mock, MockServer, ResponseTemplate,
+    matchers::{body_partial_json, method},
 };
 
 use universal_inbox::{
+    HasHtmlUrl,
     integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
     notification::{Notification, NotificationSource, NotificationSourceKind, NotificationStatus},
     task::{
-        integrations::todoist::TODOIST_INBOX_PROJECT, service::TaskPatch,
         CreateOrUpdateTaskRequest, TaskCreationConfig, TaskSource, TaskSourceKind, TaskStatus,
+        integrations::todoist::TODOIST_INBOX_PROJECT, service::TaskPatch,
     },
     third_party::{
         integrations::linear::{LinearIssue, LinearNotification},
@@ -46,17 +47,16 @@ use universal_inbox::{
     },
     user::UserId,
     utils::default_value::DefaultValue,
-    HasHtmlUrl,
 };
 
 use crate::{
     integrations::{
         linear::graphql::{
+            AssignedIssuesQuery, IssueUpdateState, IssueUpdateSubscribers, NotificationArchive,
+            NotificationSubscribersQuery, NotificationUpdateSnoozedUntilAt, NotificationsQuery,
             assigned_issues_query, issue_update_state, issue_update_subscribers,
             notification_archive, notification_subscribers_query,
-            notification_update_snoozed_until_at, notifications_query, AssignedIssuesQuery,
-            IssueUpdateState, IssueUpdateSubscribers, NotificationArchive,
-            NotificationSubscribersQuery, NotificationUpdateSnoozedUntilAt, NotificationsQuery,
+            notification_update_snoozed_until_at, notifications_query,
         },
         notification::ThirdPartyNotificationSourceService,
         oauth2::AccessToken,
@@ -64,7 +64,7 @@ use crate::{
         third_party::ThirdPartyItemSourceService,
     },
     universal_inbox::{
-        integration_connection::service::IntegrationConnectionService, UniversalInboxError,
+        UniversalInboxError, integration_connection::service::IntegrationConnectionService,
     },
     utils::{api::ApiClient, graphql::assert_no_error_in_graphql_response},
 };
@@ -493,13 +493,12 @@ impl ThirdPartyItemSourceService<LinearNotification> for LinearService {
                 } => match issue_notifications.entry(issue.id) {
                     Entry::Occupied(mut entry) => {
                         if let LinearNotification::IssueNotification {
-                            updated_at: ref existing_updated_at,
+                            updated_at: existing_updated_at,
                             ..
                         } = entry.get()
+                            && updated_at > existing_updated_at
                         {
-                            if updated_at > existing_updated_at {
-                                entry.insert(notification);
-                            }
+                            entry.insert(notification);
                         }
                     }
                     Entry::Vacant(entry) => {

@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use dioxus::prelude::*;
 use log::{debug, error};
 use reqwest::{
-    header::{HeaderMap, HeaderValue},
     Client, Method, Response, StatusCode,
+    header::{HeaderMap, HeaderValue},
 };
 use serde_json;
 use url::Url;
@@ -41,10 +41,12 @@ pub async fn call_api<R: for<'de> serde::de::Deserialize<'de>, B: serde::Seriali
             == response.headers().get("content-type").cloned()
         {
             let message: HashMap<String, String> = response.json().await?;
-            return Err(anyhow!(message
-                .get("message")
-                .cloned()
-                .unwrap_or(default_error_message)));
+            return Err(anyhow!(
+                message
+                    .get("message")
+                    .cloned()
+                    .unwrap_or(default_error_message)
+            ));
         } else {
             error!(
                 "Error calling Universal Inbox API: {:?}",
@@ -67,10 +69,12 @@ pub async fn call_api<R: for<'de> serde::de::Deserialize<'de>, B: serde::Seriali
                 == response.headers().get("content-type").cloned()
             {
                 let message: HashMap<String, String> = response.json().await?;
-                return Err(anyhow!(message
-                    .get("message")
-                    .cloned()
-                    .unwrap_or(default_error_message)));
+                return Err(anyhow!(
+                    message
+                        .get("message")
+                        .cloned()
+                        .unwrap_or(default_error_message)
+                ));
             } else {
                 return Err(anyhow!(default_error_message));
             }

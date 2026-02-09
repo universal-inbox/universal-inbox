@@ -3,13 +3,13 @@
 use dioxus::prelude::*;
 
 use dioxus_free_icons::{
-    icons::bs_icons::{BsArrowUpRightSquare, BsCheckCircle, BsRecordCircle},
     Icon,
+    icons::bs_icons::{BsArrowUpRightSquare, BsCheckCircle, BsRecordCircle},
 };
 
 use universal_inbox::{
-    notification::NotificationWithTask, third_party::integrations::github::GithubNotification,
-    HasHtmlUrl,
+    HasHtmlUrl, notification::NotificationWithTask,
+    third_party::integrations::github::GithubNotification,
 };
 
 use crate::components::integrations::github::icons::{GithubDiscussionIcon, GithubPullRequestIcon};
@@ -19,7 +19,7 @@ pub mod pull_request;
 
 #[component]
 pub fn GithubNotificationDefaultPreview(
-    notification: ReadOnlySignal<NotificationWithTask>,
+    notification: ReadSignal<NotificationWithTask>,
     github_notification: GithubNotification,
 ) -> Element {
     let github_notification_id = github_notification.extract_id();

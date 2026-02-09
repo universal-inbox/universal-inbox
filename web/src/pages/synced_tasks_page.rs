@@ -2,14 +2,15 @@
 
 use std::cmp::Ordering;
 
+use dioxus::prelude::dioxus_core::use_drop;
 use dioxus::prelude::*;
 use log::debug;
 use sorted_groups::SortedGroups;
 use web_sys::KeyboardEvent;
 
 use universal_inbox::{
-    task::{Task, TaskId},
     HasHtmlUrl, Page,
+    task::{Task, TaskId},
 };
 
 use crate::{
@@ -17,10 +18,10 @@ use crate::{
         resizable_panel::ResizablePanel, task_preview::TaskPreview, tasks_list::TasksList,
         welcome_hero::WelcomeHero,
     },
-    keyboard_manager::{KeyboardHandler, KEYBOARD_MANAGER},
+    keyboard_manager::{KEYBOARD_MANAGER, KeyboardHandler},
     model::UI_MODEL,
     route::Route,
-    services::task_service::{TaskCommand, SYNCED_TASKS_PAGE},
+    services::task_service::{SYNCED_TASKS_PAGE, TaskCommand},
     settings::PanelPosition,
     utils::{
         get_screen_width, open_link, scroll_element, scroll_element_by_page,
@@ -67,8 +68,8 @@ pub fn SyncedTasksPage() -> Element {
 }
 
 #[component]
-fn InternalSyncedTaskPage(task_id: ReadOnlySignal<Option<TaskId>>) -> Element {
-    let tasks = Into::<ReadOnlySignal<Page<Task>>>::into(SYNCED_TASKS_PAGE.signal());
+fn InternalSyncedTaskPage(task_id: ReadSignal<Option<TaskId>>) -> Element {
+    let tasks = Into::<ReadSignal<Page<Task>>>::into(SYNCED_TASKS_PAGE.signal());
     let nav = use_navigator();
     debug!("Rendering synced tasks page for task {:?}", task_id(),);
 
@@ -90,10 +91,9 @@ fn InternalSyncedTaskPage(task_id: ReadOnlySignal<Option<TaskId>>) -> Element {
             if let Some(task_index) = SORTED_SYNCED_TASKS()
                 .iter()
                 .position(|(_, t)| t.task.id == task_id)
+                && UI_MODEL.peek().selected_task_index != Some(task_index)
             {
-                if UI_MODEL.peek().selected_task_index != Some(task_index) {
-                    UI_MODEL.write().selected_task_index = Some(task_index);
-                }
+                UI_MODEL.write().selected_task_index = Some(task_index);
             }
         } else if UI_MODEL.peek().selected_task_index.is_some()
             && get_screen_width().unwrap_or_default() < 1024
@@ -104,13 +104,13 @@ fn InternalSyncedTaskPage(task_id: ReadOnlySignal<Option<TaskId>>) -> Element {
 
     use_effect(move || {
         if let Some(index) = UI_MODEL.read().selected_task_index {
-            if let Some((_, selected_task)) = SORTED_SYNCED_TASKS().get(index) {
-                if *task_id.peek() != Some(selected_task.task.id) {
-                    let route = Route::SyncedTaskPage {
-                        task_id: selected_task.task.id,
-                    };
-                    nav.push(route);
-                }
+            if let Some((_, selected_task)) = SORTED_SYNCED_TASKS().get(index)
+                && *task_id.peek() != Some(selected_task.task.id)
+            {
+                let route = Route::SyncedTaskPage {
+                    task_id: selected_task.task.id,
+                };
+                nav.push(route);
             }
         } else if task_id.peek().is_some() {
             nav.push(Route::SyncedTasksPage {});
@@ -189,27 +189,25 @@ impl KeyboardHandler for SyncTasksPageKeyboardHandler {
             event.shift_key(),
         ) {
             ("ArrowDown", false, false, false, false) => {
-                if let Some(index) = selected_task_index {
-                    if index < (list_length - 1) {
-                        let new_index = index + 1;
-                        let mut ui_model = UI_MODEL.write();
-                        ui_model.selected_task_index = Some(new_index);
-                        drop(ui_model);
-                        let _ =
-                            scroll_element_into_view_by_class("tasks_list", "row-hover", new_index);
-                    }
+                if let Some(index) = selected_task_index
+                    && index < (list_length - 1)
+                {
+                    let new_index = index + 1;
+                    let mut ui_model = UI_MODEL.write();
+                    ui_model.selected_task_index = Some(new_index);
+                    drop(ui_model);
+                    let _ = scroll_element_into_view_by_class("tasks_list", "row-hover", new_index);
                 }
             }
             ("ArrowUp", false, false, false, false) => {
-                if let Some(index) = selected_task_index {
-                    if index > 0 {
-                        let new_index = index - 1;
-                        let mut ui_model = UI_MODEL.write();
-                        ui_model.selected_task_index = Some(new_index);
-                        drop(ui_model);
-                        let _ =
-                            scroll_element_into_view_by_class("tasks_list", "row-hover", new_index);
-                    }
+                if let Some(index) = selected_task_index
+                    && index > 0
+                {
+                    let new_index = index - 1;
+                    let mut ui_model = UI_MODEL.write();
+                    ui_model.selected_task_index = Some(new_index);
+                    drop(ui_model);
+                    let _ = scroll_element_into_view_by_class("tasks_list", "row-hover", new_index);
                 }
             }
             ("c", false, false, false, false) => {

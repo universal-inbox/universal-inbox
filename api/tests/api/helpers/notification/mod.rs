@@ -5,18 +5,18 @@ use std::{fmt::Debug, sync::Arc};
 use anyhow::anyhow;
 use reqwest::{Client, Response};
 use serde_json::json;
-use tokio_retry::{strategy::FixedInterval, Retry};
+use tokio_retry::{Retry, strategy::FixedInterval};
 
 use universal_inbox::{
+    Page,
     integration_connection::IntegrationConnectionId,
     notification::{
-        service::NotificationPatch, Notification, NotificationId, NotificationSource,
-        NotificationSourceKind, NotificationStatus, NotificationWithTask,
+        Notification, NotificationId, NotificationSource, NotificationSourceKind,
+        NotificationStatus, NotificationWithTask, service::NotificationPatch,
     },
     task::{TaskCreation, TaskId},
     third_party::item::{ThirdPartyItem, ThirdPartyItemData},
     user::UserId,
-    Page,
 };
 
 use universal_inbox_api::{
@@ -24,7 +24,7 @@ use universal_inbox_api::{
     repository::{notification::NotificationRepository, third_party::ThirdPartyItemRepository},
 };
 
-use crate::helpers::{auth::AuthenticatedApp, TestedApp};
+use crate::helpers::{TestedApp, auth::AuthenticatedApp};
 
 pub mod github;
 pub mod google_calendar;

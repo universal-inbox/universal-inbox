@@ -13,9 +13,9 @@ use crate::{
         slack_reaction::handle_slack_reaction_push_event, slack_star::handle_slack_star_push_event,
     },
     universal_inbox::{
-        integration_connection::service::IntegrationConnectionService,
+        UniversalInboxError, integration_connection::service::IntegrationConnectionService,
         notification::service::NotificationService, task::service::TaskService,
-        third_party::service::ThirdPartyItemService, UniversalInboxError,
+        third_party::service::ThirdPartyItemService,
     },
 };
 

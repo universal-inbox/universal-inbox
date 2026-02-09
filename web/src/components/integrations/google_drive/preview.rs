@@ -2,29 +2,29 @@
 
 use chrono::{DateTime, Utc};
 use dioxus::prelude::*;
-use dioxus_free_icons::{icons::bs_icons::BsArrowUpRightSquare, Icon};
+use dioxus_free_icons::{Icon, icons::bs_icons::BsArrowUpRightSquare};
 use url::Url;
 
 use universal_inbox::{
+    HasHtmlUrl,
     notification::NotificationWithTask,
     third_party::integrations::google_drive::{
         GoogleDriveComment, GoogleDriveCommentAuthor, GoogleDriveCommentReply,
     },
-    HasHtmlUrl,
 };
 
 use crate::components::{
-    integrations::google_drive::icons::GoogleDriveFile, markdown::Markdown, MessageHeader,
+    MessageHeader, integrations::google_drive::icons::GoogleDriveFile, markdown::Markdown,
 };
 
 #[component]
 pub fn GoogleDriveCommentPreview(
-    notification: ReadOnlySignal<NotificationWithTask>,
-    google_drive_comment: ReadOnlySignal<GoogleDriveComment>,
-    expand_details: ReadOnlySignal<bool>,
+    notification: ReadSignal<NotificationWithTask>,
+    google_drive_comment: ReadSignal<GoogleDriveComment>,
+    expand_details: ReadSignal<bool>,
 ) -> Element {
     let mut show_all_replies = use_signal(|| false);
-    let _ = use_resource(move || async move {
+    let _resource = use_resource(move || async move {
         *show_all_replies.write() = expand_details();
     });
     let link = notification().get_html_url();
@@ -121,7 +121,7 @@ pub fn GoogleDriveCommentPreview(
 }
 
 #[component]
-fn GoogleDriveCommentDisplay(comment: ReadOnlySignal<GoogleDriveComment>) -> Element {
+fn GoogleDriveCommentDisplay(comment: ReadSignal<GoogleDriveComment>) -> Element {
     rsx! {
         CommentDisplay {
             modified_time: comment().modified_time,
@@ -133,7 +133,7 @@ fn GoogleDriveCommentDisplay(comment: ReadOnlySignal<GoogleDriveComment>) -> Ele
 }
 
 #[component]
-fn GoogleDriveCommentReplyDisplay(reply: ReadOnlySignal<GoogleDriveCommentReply>) -> Element {
+fn GoogleDriveCommentReplyDisplay(reply: ReadSignal<GoogleDriveCommentReply>) -> Element {
     rsx! {
         CommentDisplay {
             modified_time: reply().modified_time,
@@ -146,10 +146,10 @@ fn GoogleDriveCommentReplyDisplay(reply: ReadOnlySignal<GoogleDriveCommentReply>
 
 #[component]
 fn CommentDisplay(
-    modified_time: ReadOnlySignal<DateTime<Utc>>,
-    author: ReadOnlySignal<GoogleDriveCommentAuthor>,
-    html_content: ReadOnlySignal<Option<String>>,
-    content: ReadOnlySignal<String>,
+    modified_time: ReadSignal<DateTime<Utc>>,
+    author: ReadSignal<GoogleDriveCommentAuthor>,
+    html_content: ReadSignal<Option<String>>,
+    content: ReadSignal<String>,
 ) -> Element {
     let avatar_url: Option<Url> = author()
         .photo_link

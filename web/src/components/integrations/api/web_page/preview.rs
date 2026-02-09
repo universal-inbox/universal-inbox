@@ -1,8 +1,8 @@
 #![allow(non_snake_case)]
 use dioxus::prelude::*;
 use dioxus_free_icons::{
-    icons::bs_icons::{BsArrowUpRightSquare, BsLink45deg},
     Icon,
+    icons::bs_icons::{BsArrowUpRightSquare, BsLink45deg},
 };
 
 use universal_inbox::{
@@ -11,8 +11,8 @@ use universal_inbox::{
 
 #[component]
 pub fn WebPagePreview(
-    notification: ReadOnlySignal<NotificationWithTask>,
-    web_page: ReadOnlySignal<WebPage>,
+    notification: ReadSignal<NotificationWithTask>,
+    web_page: ReadSignal<WebPage>,
 ) -> Element {
     let source_icon = if web_page().favicon.is_some() {
         rsx! {

@@ -4,14 +4,14 @@ use std::collections::HashMap;
 
 use chrono::{Local, SecondsFormat};
 use dioxus::prelude::*;
-use dioxus_free_icons::{icons::bs_icons::BsPlug, Icon};
+use dioxus_free_icons::{Icon, icons::bs_icons::BsPlug};
 
 use universal_inbox::{
-    integration_connection::{
-        provider::IntegrationProviderKind, IntegrationConnection,
-        IntegrationConnectionStatus as ConnectionStatus,
-    },
     IntegrationProviderStaticConfig,
+    integration_connection::{
+        IntegrationConnection, IntegrationConnectionStatus as ConnectionStatus,
+        provider::IntegrationProviderKind,
+    },
 };
 
 use crate::{

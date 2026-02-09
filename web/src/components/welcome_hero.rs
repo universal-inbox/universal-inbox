@@ -6,7 +6,7 @@ use rand::seq::IndexedRandom;
 use crate::images::UI_LOGO_SYMBOL_TRANSPARENT;
 
 #[component]
-pub fn WelcomeHero(inbox_zero_message: ReadOnlySignal<String>) -> Element {
+pub fn WelcomeHero(inbox_zero_message: ReadSignal<String>) -> Element {
     let tips = use_memo(|| {
         vec![
             rsx! { span { "• Scroll down notification details by a page with ", kbd { class: "kbd kbd-xs", "Space" }, " key" } },

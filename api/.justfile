@@ -25,6 +25,12 @@ ensure-db:
 migrate-db:
     sqlx database setup
 
+test:
+    cargo nextest run -E 'not binary(browser)'
+
+test-browser:
+    cargo nextest run -E 'binary(browser)'
+
 ## Run recipes
 run *command="serve --embed-async-workers": ensure-db
     cargo run --color always -- {{ command }}
@@ -52,3 +58,27 @@ generate-jwt-token user-email:
 
 generate-user:
     cargo run -- test generate-user
+
+test-ci:
+    cargo nextest run --profile ci -E 'not binary(browser)'
+
+test-ci-browser:
+    cargo nextest run --profile ci-browser -E 'binary(browser)'
+
+install-tools:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    # Install Playwright browsers for browser tests (version must match playwright-rs crate)
+    PLAYWRIGHT_VERSION="1.56.1"
+    PLAYWRIGHT_CACHE_DIR="${PLAYWRIGHT_BROWSERS_PATH:-${HOME}/Library/Caches/ms-playwright}"
+    if [ "$(uname)" = "Linux" ]; then
+        PLAYWRIGHT_CACHE_DIR="${PLAYWRIGHT_BROWSERS_PATH:-${HOME}/.cache/ms-playwright}"
+    fi
+
+    if [ -d "${PLAYWRIGHT_CACHE_DIR}/chromium-1194" ]; then
+        echo "Playwright Chromium already installed, skipping."
+    else
+        echo "Installing Playwright Chromium ${PLAYWRIGHT_VERSION}..."
+        npx --yes playwright@${PLAYWRIGHT_VERSION} install chromium
+    fi

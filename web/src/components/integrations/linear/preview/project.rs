@@ -2,8 +2,8 @@
 
 use dioxus::prelude::*;
 use dioxus_free_icons::{
-    icons::bs_icons::{BsArrowRight, BsArrowUpRightSquare, BsCalendar2Event},
     Icon,
+    icons::bs_icons::{BsArrowRight, BsArrowUpRightSquare, BsCalendar2Event},
 };
 
 use universal_inbox::third_party::integrations::linear::{
@@ -11,19 +11,19 @@ use universal_inbox::third_party::integrations::linear::{
 };
 
 use crate::components::{
+    CardWithHeaders, CollapseCard, MessageHeader, SmallCard, Tag, TagDisplay, UserWithAvatar,
     integrations::linear::{
         get_notification_type_label,
         icons::{LinearProjectHealtIcon, LinearProjectIcon},
     },
     markdown::Markdown,
-    CardWithHeaders, CollapseCard, MessageHeader, SmallCard, Tag, TagDisplay, UserWithAvatar,
 };
 
 #[component]
 pub fn LinearProjectPreview(
-    linear_project: ReadOnlySignal<LinearProject>,
-    linear_notification: ReadOnlySignal<Option<LinearNotification>>,
-    expand_details: ReadOnlySignal<bool>,
+    linear_project: ReadSignal<LinearProject>,
+    linear_notification: ReadSignal<Option<LinearNotification>>,
+    expand_details: ReadSignal<bool>,
 ) -> Element {
     rsx! {
         div {
@@ -54,9 +54,9 @@ pub fn LinearProjectPreview(
 
 #[component]
 pub fn LinearProjectDetails(
-    linear_project: ReadOnlySignal<LinearProject>,
-    linear_notification: ReadOnlySignal<Option<LinearNotification>>,
-    expand_details: ReadOnlySignal<bool>,
+    linear_project: ReadSignal<LinearProject>,
+    linear_notification: ReadSignal<Option<LinearNotification>>,
+    expand_details: ReadSignal<bool>,
     dark_bg: Option<bool>,
 ) -> Element {
     let (card_style, header_style, prose_style) = if dark_bg.unwrap_or_default() {
@@ -147,7 +147,7 @@ pub fn LinearProjectDetails(
 
 #[component]
 fn LinearProjectUpdateDetails(
-    project_update: ReadOnlySignal<LinearProjectUpdate>,
+    project_update: ReadSignal<LinearProjectUpdate>,
     dark_bg: Option<bool>,
 ) -> Element {
     let (card_style, header_style, prose_style) = if dark_bg.unwrap_or_default() {

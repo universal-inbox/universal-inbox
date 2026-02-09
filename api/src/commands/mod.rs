@@ -18,11 +18,10 @@ use crate::{
     integrations::slack::SlackService,
     run_server, run_worker,
     universal_inbox::{
-        auth_token::service::AuthenticationTokenService,
+        UniversalInboxError, auth_token::service::AuthenticationTokenService,
         integration_connection::service::IntegrationConnectionService,
         notification::service::NotificationService, task::service::TaskService,
         third_party::service::ThirdPartyItemService, user::service::UserService,
-        UniversalInboxError,
     },
     utils::{cache::Cache, jwt::JWTBase64EncodedSigningKeys},
 };
@@ -338,7 +337,7 @@ impl Cli {
 
             Commands::Test { command } => match command {
                 TestCommands::GenerateUser => {
-                    generate::generate_testing_user(
+                    let _email = generate::generate_testing_user(
                         user_service,
                         integration_connection_service,
                         notification_service,
@@ -346,7 +345,8 @@ impl Cli {
                         third_party_item_service,
                         settings,
                     )
-                    .await
+                    .await?;
+                    Ok(())
                 }
             },
 

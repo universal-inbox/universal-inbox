@@ -1,27 +1,27 @@
 use anyhow::anyhow;
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
-use sqlx::{postgres::PgRow, FromRow, Postgres, QueryBuilder, Row, Transaction};
+use sqlx::{FromRow, Postgres, QueryBuilder, Row, Transaction, postgres::PgRow};
 use tracing::debug;
 use uuid::Uuid;
 
 use universal_inbox::{
+    DEFAULT_PAGE_SIZE, Page, PageToken,
     notification::{
-        service::NotificationPatch, Notification, NotificationId, NotificationListOrder,
-        NotificationSourceKind, NotificationStatus, NotificationWithTask,
+        Notification, NotificationId, NotificationListOrder, NotificationSourceKind,
+        NotificationStatus, NotificationWithTask, service::NotificationPatch,
     },
     task::TaskId,
     third_party::item::ThirdPartyItemId,
     user::UserId,
-    Page, PageToken, DEFAULT_PAGE_SIZE,
 };
 
 use crate::{
-    repository::{task::TaskRow, Repository},
+    repository::{Repository, task::TaskRow},
     universal_inbox::{UniversalInboxError, UpdateStatus, UpsertStatus},
 };
 
-use super::{third_party::ThirdPartyItemRow, FromRowWithPrefix};
+use super::{FromRowWithPrefix, third_party::ThirdPartyItemRow};
 
 #[async_trait]
 pub trait NotificationRepository {

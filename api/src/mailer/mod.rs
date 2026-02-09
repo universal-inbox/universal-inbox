@@ -1,14 +1,14 @@
 use std::fmt::Debug;
 
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use async_trait::async_trait;
 use enum_display::EnumDisplay;
 use lettre::{
+    AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor,
     message::{Mailbox, MultiPart},
     transport::smtp::authentication::Credentials,
-    AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor,
 };
-use mailgen::{themes::DefaultTheme, Action, Branding, Email, EmailBuilder, Greeting, Mailgen};
+use mailgen::{Action, Branding, Email, EmailBuilder, Greeting, Mailgen, themes::DefaultTheme};
 use secrecy::{ExposeSecret, SecretBox};
 use serde::Serialize;
 use tracing::info;

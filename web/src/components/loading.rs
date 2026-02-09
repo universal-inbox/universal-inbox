@@ -6,7 +6,7 @@ use crate::components::spinner::Spinner;
 
 #[component]
 #[allow(unused_variables)]
-pub fn Loading(label: ReadOnlySignal<String>) -> Element {
+pub fn Loading(label: ReadSignal<String>) -> Element {
     rsx! {
         div {
             class: "h-full flex justify-center items-center overflow-hidden",

@@ -1,29 +1,29 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
-use dioxus_free_icons::{icons::bs_icons::BsCardChecklist, Icon};
+use dioxus_free_icons::{Icon, icons::bs_icons::BsCardChecklist};
 
 use universal_inbox::{
+    HasHtmlUrl,
     task::Task,
     third_party::integrations::todoist::{TodoistItem, TodoistItemPriority},
-    HasHtmlUrl,
 };
 
 use crate::{
     components::{
+        Tag, TagDisplay,
         integrations::todoist::{icons::Todoist, list_item::TodoistListItemSubtitle},
         list::{ListContext, ListItem},
         tasks_list::get_task_list_item_action_buttons,
-        Tag, TagDisplay,
     },
     utils::format_elapsed_time,
 };
 
 #[component]
 pub fn TodoistTaskListItem(
-    task: ReadOnlySignal<Task>,
-    todoist_item: ReadOnlySignal<TodoistItem>,
-    is_selected: ReadOnlySignal<bool>,
+    task: ReadSignal<Task>,
+    todoist_item: ReadSignal<TodoistItem>,
+    is_selected: ReadSignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
     let task_updated_at = use_memo(move || format_elapsed_time(task().updated_at));

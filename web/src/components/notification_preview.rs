@@ -18,8 +18,8 @@ use crate::{
         integrations::{
             api::web_page::preview::WebPagePreview,
             github::preview::{
-                discussion::GithubDiscussionPreview, pull_request::GithubPullRequestPreview,
-                GithubNotificationDefaultPreview,
+                GithubNotificationDefaultPreview, discussion::GithubDiscussionPreview,
+                pull_request::GithubPullRequestPreview,
             },
             google_calendar::preview::GoogleCalendarEventPreview,
             google_drive::preview::GoogleDriveCommentPreview,
@@ -32,7 +32,7 @@ use crate::{
                 im::SlackImPreview, message::SlackMessagePreview, thread::SlackThreadPreview,
             },
         },
-        notifications_list::{get_notification_list_item_action_buttons, NotificationListContext},
+        notifications_list::{NotificationListContext, get_notification_list_item_action_buttons},
         task_preview::TaskDetailsPreview,
     },
     model::{PreviewPane, UniversalInboxUIModel},
@@ -42,8 +42,8 @@ use crate::{
 #[component]
 pub fn NotificationPreview(
     ui_model: Signal<UniversalInboxUIModel>,
-    notification: ReadOnlySignal<NotificationWithTask>,
-    notifications_count: ReadOnlySignal<usize>,
+    notification: ReadSignal<NotificationWithTask>,
+    notifications_count: ReadSignal<usize>,
 ) -> Element {
     let notification_service = use_coroutine_handle::<NotificationCommand>();
     let context = use_memo(move || NotificationListContext {
@@ -250,8 +250,8 @@ pub fn NotificationPreview(
 
 #[component]
 fn NotificationDetailsPreview(
-    notification: ReadOnlySignal<NotificationWithTask>,
-    expand_details: ReadOnlySignal<bool>,
+    notification: ReadSignal<NotificationWithTask>,
+    expand_details: ReadSignal<bool>,
 ) -> Element {
     match notification().source_item.data {
         ThirdPartyItemData::GithubNotification(github_notification) => {

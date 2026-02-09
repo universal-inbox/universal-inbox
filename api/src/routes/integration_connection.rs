@@ -2,23 +2,23 @@ use std::sync::Arc;
 
 use actix_http::body::BoxBody;
 use actix_jwt_authc::Authenticated;
-use actix_web::{web, HttpResponse, Scope};
+use actix_web::{HttpResponse, Scope, web};
 use anyhow::Context;
 use serde_json::json;
 use tokio::sync::RwLock;
 
 use universal_inbox::{
     integration_connection::{
-        config::IntegrationConnectionConfig, IntegrationConnection, IntegrationConnectionCreation,
-        IntegrationConnectionId, IntegrationConnectionStatus,
+        IntegrationConnection, IntegrationConnectionCreation, IntegrationConnectionId,
+        IntegrationConnectionStatus, config::IntegrationConnectionConfig,
     },
     user::UserId,
 };
 
 use crate::{
     universal_inbox::{
-        integration_connection::service::IntegrationConnectionService, UniversalInboxError,
-        UpdateStatus,
+        UniversalInboxError, UpdateStatus,
+        integration_connection::service::IntegrationConnectionService,
     },
     utils::jwt::Claims,
 };

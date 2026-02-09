@@ -6,11 +6,11 @@ use email_address::EmailAddress;
 use graphql_client::Response;
 use secrecy::SecretBox;
 use slack_morphism::{
+    SlackReactionName,
     api::{
         SlackApiConversationsHistoryResponse, SlackApiConversationsInfoResponse,
         SlackApiTeamInfoResponse, SlackApiUsersInfoResponse,
     },
-    SlackReactionName,
 };
 use sqlx::{Postgres, Transaction};
 use tokio::sync::RwLock;
@@ -19,16 +19,16 @@ use uuid::Uuid;
 
 use universal_inbox::{
     integration_connection::{
+        IntegrationConnection, IntegrationConnectionId, IntegrationConnectionStatus,
         config::IntegrationConnectionConfig,
         integrations::slack::{
             SlackConfig, SlackMessageConfig, SlackReactionConfig, SlackStarConfig,
             SlackSyncTaskConfig, SlackSyncType,
         },
         provider::IntegrationProviderKind,
-        IntegrationConnection, IntegrationConnectionId, IntegrationConnectionStatus,
     },
-    notification::{service::NotificationPatch, Notification, NotificationSource},
-    task::{service::TaskPatch, Task, TaskSource},
+    notification::{Notification, NotificationSource, service::NotificationPatch},
+    task::{Task, TaskSource, service::TaskPatch},
     third_party::{
         integrations::{
             github::GithubNotification,
@@ -52,8 +52,8 @@ use crate::{
     integrations::{
         google_mail::{GoogleMailUserProfile, RawGoogleMailThread},
         linear::{
-            graphql::{assigned_issues_query, notifications_query},
             LinearService,
+            graphql::{assigned_issues_query, notifications_query},
         },
         notification::ThirdPartyNotificationSourceService,
         slack::SlackService,
@@ -61,6 +61,7 @@ use crate::{
         todoist::TodoistService,
     },
     universal_inbox::{
+        UniversalInboxError,
         integration_connection::service::IntegrationConnectionService,
         notification::service::NotificationService,
         task::service::TaskService,
@@ -69,7 +70,6 @@ use crate::{
             model::{LocalUserAuth, UserAuth},
             service::UserService,
         },
-        UniversalInboxError,
     },
 };
 
@@ -83,7 +83,7 @@ pub async fn generate_testing_user(
     task_service: Arc<RwLock<TaskService>>,
     third_party_item_service: Arc<RwLock<ThirdPartyItemService>>,
     settings: Settings,
-) -> Result<(), UniversalInboxError> {
+) -> Result<String, UniversalInboxError> {
     let service = user_service.clone();
 
     let mut transaction = service
@@ -172,14 +172,17 @@ pub async fn generate_testing_user(
         .await
         .context("Failed to commit transaction while generating new testing user")?;
 
+    let email = user
+        .email
+        .map(|email| email.to_string())
+        .unwrap_or(user.id.to_string());
+
     info!(
         "Test user {} successfully generated with password {DEFAULT_PASSWORD}",
-        user.email
-            .map(|email| email.to_string())
-            .unwrap_or(user.id.to_string())
+        email
     );
 
-    Ok(())
+    Ok(email)
 }
 
 async fn generate_github_notifications(
@@ -497,6 +500,7 @@ pub fn slack_thread() -> Result<Box<SlackThread>, UniversalInboxError> {
         team: team_response.team.clone(),
         references: None,
         sender_profiles: Default::default(),
+        user_slack_id: None,
     }))
 }
 

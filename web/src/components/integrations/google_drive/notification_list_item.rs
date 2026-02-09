@@ -2,31 +2,31 @@
 
 use dioxus::prelude::*;
 use dioxus_free_icons::{
-    icons::bs_icons::{BsChatSquareText, BsCheckCircle},
     Icon,
+    icons::bs_icons::{BsChatSquareText, BsCheckCircle},
 };
 use url::Url;
 
 use universal_inbox::{
-    notification::NotificationWithTask,
-    third_party::integrations::google_drive::GoogleDriveComment, HasHtmlUrl,
+    HasHtmlUrl, notification::NotificationWithTask,
+    third_party::integrations::google_drive::GoogleDriveComment,
 };
 
 use crate::{
     components::{
+        UserWithAvatar,
         integrations::google_drive::icons::{GoogleDrive, GoogleDriveFile},
         list::{ListContext, ListItem},
-        notifications_list::{get_notification_list_item_action_buttons, TaskHint},
-        UserWithAvatar,
+        notifications_list::{TaskHint, get_notification_list_item_action_buttons},
     },
     utils::format_elapsed_time,
 };
 
 #[component]
 pub fn GoogleDriveCommentListItem(
-    notification: ReadOnlySignal<NotificationWithTask>,
-    google_drive_comment: ReadOnlySignal<GoogleDriveComment>,
-    is_selected: ReadOnlySignal<bool>,
+    notification: ReadSignal<NotificationWithTask>,
+    google_drive_comment: ReadSignal<GoogleDriveComment>,
+    is_selected: ReadSignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
     let notification_updated_at = use_memo(move || format_elapsed_time(notification().updated_at));
@@ -95,7 +95,7 @@ pub fn GoogleDriveCommentListItem(
 }
 
 #[component]
-fn GoogleDriveCommentSubtitle(google_drive_comment: ReadOnlySignal<GoogleDriveComment>) -> Element {
+fn GoogleDriveCommentSubtitle(google_drive_comment: ReadSignal<GoogleDriveComment>) -> Element {
     let author_name = &google_drive_comment().author.display_name;
     let file_name = &google_drive_comment().file_name;
 

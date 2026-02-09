@@ -2,18 +2,18 @@
 
 use dioxus::prelude::*;
 
-use dioxus_free_icons::{icons::bs_icons::BsArrowUpRightSquare, Icon};
+use dioxus_free_icons::{Icon, icons::bs_icons::BsArrowUpRightSquare};
 use universal_inbox::third_party::integrations::github::GithubDiscussion;
 
 use crate::components::{
-    integrations::github::{icons::GithubDiscussionIcon, GithubActorDisplay},
     CollapseCard, SmallCard, TagsInCard,
+    integrations::github::{GithubActorDisplay, icons::GithubDiscussionIcon},
 };
 
 #[component]
 pub fn GithubDiscussionPreview(
-    github_discussion: ReadOnlySignal<GithubDiscussion>,
-    expand_details: ReadOnlySignal<bool>,
+    github_discussion: ReadSignal<GithubDiscussion>,
+    expand_details: ReadSignal<bool>,
 ) -> Element {
     rsx! {
         div {
@@ -43,8 +43,8 @@ pub fn GithubDiscussionPreview(
 
 #[component]
 fn GithubDiscussionDetails(
-    github_discussion: ReadOnlySignal<GithubDiscussion>,
-    expand_details: ReadOnlySignal<bool>,
+    github_discussion: ReadSignal<GithubDiscussion>,
+    expand_details: ReadSignal<bool>,
 ) -> Element {
     rsx! {
         div {

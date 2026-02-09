@@ -1,8 +1,10 @@
 #![allow(non_snake_case)]
 
+use dioxus::prelude::dioxus_core::use_drop;
 use dioxus::prelude::*;
 use dioxus::web::WebEventExt;
 use dioxus_free_icons::{
+    Icon,
     icons::{
         bs_icons::{
             BsBell, BsBook, BsBookmarkCheck, BsBoxArrowInLeft, BsGear, BsInbox, BsMoon, BsPerson,
@@ -10,7 +12,6 @@ use dioxus_free_icons::{
         },
         go_icons::GoMarkGithub,
     },
-    Icon,
 };
 use gravatar_rs::Generator;
 
@@ -25,9 +26,9 @@ use crate::{
         headway::init_headway,
         notification_service::NOTIFICATIONS_PAGE,
         task_service::SYNCED_TASKS_PAGE,
-        user_service::{UserCommand, CONNECTED_USER},
+        user_service::{CONNECTED_USER, UserCommand},
     },
-    theme::{toggle_dark_mode, IS_DARK_MODE},
+    theme::{IS_DARK_MODE, toggle_dark_mode},
 };
 
 pub fn NavBar() -> Element {

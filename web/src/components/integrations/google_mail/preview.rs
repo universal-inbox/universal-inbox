@@ -3,26 +3,26 @@
 use std::collections::HashSet;
 
 use dioxus::prelude::*;
-use dioxus_free_icons::{icons::bs_icons::BsArrowUpRightSquare, Icon};
+use dioxus_free_icons::{Icon, icons::bs_icons::BsArrowUpRightSquare};
 
 use universal_inbox::{
+    HasHtmlUrl,
     notification::NotificationWithTask,
     third_party::integrations::google_mail::{
-        GoogleMailMessage, GoogleMailThread, GOOGLE_MAIL_IMPORTANT_LABEL, GOOGLE_MAIL_STARRED_LABEL,
+        GOOGLE_MAIL_IMPORTANT_LABEL, GOOGLE_MAIL_STARRED_LABEL, GoogleMailMessage, GoogleMailThread,
     },
-    HasHtmlUrl,
 };
 
-use crate::components::{integrations::google_mail::icons::Mail, CardWithHeaders, Tag, TagsInCard};
+use crate::components::{CardWithHeaders, Tag, TagsInCard, integrations::google_mail::icons::Mail};
 
 #[component]
 pub fn GoogleMailThreadPreview(
-    notification: ReadOnlySignal<NotificationWithTask>,
-    google_mail_thread: ReadOnlySignal<GoogleMailThread>,
-    expand_details: ReadOnlySignal<bool>,
+    notification: ReadSignal<NotificationWithTask>,
+    google_mail_thread: ReadSignal<GoogleMailThread>,
+    expand_details: ReadSignal<bool>,
 ) -> Element {
     let mut show_all = use_signal(|| false);
-    let _ = use_resource(move || async move {
+    let _resource = use_resource(move || async move {
         *show_all.write() = expand_details();
     });
     let link = notification().get_html_url();
@@ -125,7 +125,7 @@ pub fn GoogleMailThreadPreview(
 }
 
 #[component]
-fn GoogleMailThreadMessage(message: ReadOnlySignal<GoogleMailMessage>) -> Element {
+fn GoogleMailThreadMessage(message: ReadSignal<GoogleMailMessage>) -> Element {
     let mut headers = vec![];
     if let Some(from) = message().get_header("From") {
         headers

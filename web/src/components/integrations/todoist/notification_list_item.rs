@@ -1,29 +1,29 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
-use dioxus_free_icons::{icons::bs_icons::BsCardChecklist, Icon};
+use dioxus_free_icons::{Icon, icons::bs_icons::BsCardChecklist};
 
 use universal_inbox::{
+    HasHtmlUrl,
     notification::NotificationWithTask,
     third_party::integrations::todoist::{TodoistItem, TodoistItemPriority},
-    HasHtmlUrl,
 };
 
 use crate::{
     components::{
+        Tag, TagDisplay,
         integrations::todoist::{icons::Todoist, list_item::TodoistListItemSubtitle},
         list::{ListContext, ListItem},
-        notifications_list::{get_notification_list_item_action_buttons, TaskHint},
-        Tag, TagDisplay,
+        notifications_list::{TaskHint, get_notification_list_item_action_buttons},
     },
     utils::format_elapsed_time,
 };
 
 #[component]
 pub fn TodoistNotificationListItem(
-    notification: ReadOnlySignal<NotificationWithTask>,
-    todoist_item: ReadOnlySignal<TodoistItem>,
-    is_selected: ReadOnlySignal<bool>,
+    notification: ReadSignal<NotificationWithTask>,
+    todoist_item: ReadSignal<TodoistItem>,
+    is_selected: ReadSignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
     let notification_updated_at = use_memo(move || format_elapsed_time(notification().updated_at));

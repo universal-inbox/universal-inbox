@@ -3,30 +3,30 @@
 use dioxus::prelude::*;
 
 use universal_inbox::{
+    HasHtmlUrl,
     notification::NotificationWithTask,
     third_party::integrations::linear::{LinearIssue, LinearNotification, LinearProject},
-    HasHtmlUrl,
 };
 
 use crate::{
     components::{
+        Tag, TagDisplay, UserWithAvatar,
         integrations::linear::{
             get_notification_type_label,
             icons::{Linear, LinearIssueIcon, LinearProjectIcon},
             list_item::LinearIssueListItemSubtitle,
         },
         list::{ListContext, ListItem},
-        notifications_list::{get_notification_list_item_action_buttons, TaskHint},
-        Tag, TagDisplay, UserWithAvatar,
+        notifications_list::{TaskHint, get_notification_list_item_action_buttons},
     },
     utils::format_elapsed_time,
 };
 
 #[component]
 pub fn LinearNotificationListItem(
-    notification: ReadOnlySignal<NotificationWithTask>,
-    linear_notification: ReadOnlySignal<LinearNotification>,
-    is_selected: ReadOnlySignal<bool>,
+    notification: ReadSignal<NotificationWithTask>,
+    linear_notification: ReadSignal<LinearNotification>,
+    is_selected: ReadSignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
     match linear_notification() {
@@ -55,10 +55,10 @@ pub fn LinearNotificationListItem(
 
 #[component]
 pub fn LinearIssueNotificationListItem(
-    notification: ReadOnlySignal<NotificationWithTask>,
+    notification: ReadSignal<NotificationWithTask>,
     notification_type: String,
-    linear_issue: ReadOnlySignal<LinearIssue>,
-    is_selected: ReadOnlySignal<bool>,
+    linear_issue: ReadSignal<LinearIssue>,
+    is_selected: ReadSignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
     let notification_updated_at = use_memo(move || format_elapsed_time(notification().updated_at));
@@ -105,10 +105,10 @@ pub fn LinearIssueNotificationListItem(
 
 #[component]
 pub fn LinearProjectNotificationListItem(
-    notification: ReadOnlySignal<NotificationWithTask>,
+    notification: ReadSignal<NotificationWithTask>,
     notification_type: String,
-    linear_project: ReadOnlySignal<LinearProject>,
-    is_selected: ReadOnlySignal<bool>,
+    linear_project: ReadSignal<LinearProject>,
+    is_selected: ReadSignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
     let notification_updated_at = use_memo(move || format_elapsed_time(notification().updated_at));

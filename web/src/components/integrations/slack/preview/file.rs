@@ -1,16 +1,16 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
-use dioxus_free_icons::{icons::bs_icons::BsArrowUpRightSquare, Icon};
+use dioxus_free_icons::{Icon, icons::bs_icons::BsArrowUpRightSquare};
 
-use universal_inbox::{third_party::integrations::slack::SlackFileDetails, HasHtmlUrl};
+use universal_inbox::{HasHtmlUrl, third_party::integrations::slack::SlackFileDetails};
 
 use crate::components::{integrations::slack::SlackTeamDisplay, markdown::SlackMarkdown};
 
 #[component]
 pub fn SlackFilePreview(
-    slack_file: ReadOnlySignal<SlackFileDetails>,
-    title: ReadOnlySignal<String>,
+    slack_file: ReadSignal<SlackFileDetails>,
+    title: ReadSignal<String>,
     icon: Option<Element>,
 ) -> Element {
     let channel_name = slack_file()

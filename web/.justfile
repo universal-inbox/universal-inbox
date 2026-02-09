@@ -31,6 +31,8 @@ bundle-fonts output-dir="public":
 clear-dev-assets:
     rm -rf ../target/dx/universal-inbox-web/debug/web/public/assets
 
+build-ci: install build-assets build
+
 ## Dev recipes
 check: install build-assets
     cargo clippy --tests -- -D warnings

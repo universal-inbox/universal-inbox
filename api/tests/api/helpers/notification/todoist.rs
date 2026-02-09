@@ -5,7 +5,7 @@ use universal_inbox::{
     user::UserId,
 };
 
-use crate::helpers::{notification::create_notification_from_source_item, TestedApp};
+use crate::helpers::{TestedApp, notification::create_notification_from_source_item};
 
 pub async fn create_notification_from_todoist_item(
     app: &TestedApp,

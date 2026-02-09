@@ -5,8 +5,8 @@ use dioxus::prelude::*;
 use universal_inbox::third_party::integrations::linear::{LinearLabel, LinearNotification};
 
 use crate::components::{
-    integrations::linear::preview::{issue::LinearIssuePreview, project::LinearProjectPreview},
     Tag,
+    integrations::linear::preview::{issue::LinearIssuePreview, project::LinearProjectPreview},
 };
 
 pub mod issue;
@@ -23,8 +23,8 @@ impl From<LinearLabel> for Tag {
 
 #[component]
 pub fn LinearNotificationPreview(
-    linear_notification: ReadOnlySignal<LinearNotification>,
-    expand_details: ReadOnlySignal<bool>,
+    linear_notification: ReadSignal<LinearNotification>,
+    expand_details: ReadSignal<bool>,
 ) -> Element {
     match linear_notification() {
         LinearNotification::IssueNotification { issue, .. } => rsx! {

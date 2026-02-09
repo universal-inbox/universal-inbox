@@ -14,14 +14,14 @@ use universal_inbox_api::{
 };
 
 use crate::helpers::{
-    auth::{authenticated_app, fetch_auth_tokens_for_user, get_user_auth, AuthenticatedApp},
+    TestedApp,
+    auth::{AuthenticatedApp, authenticated_app, fetch_auth_tokens_for_user, get_user_auth},
     settings, tested_app_with_local_auth,
     user::{
         get_current_user, get_current_user_response, get_password_reset_token,
         get_user_email_validation_token, login_user_response, logout_user_response, register_user,
         register_user_response,
     },
-    TestedApp,
 };
 
 mod register_user {
@@ -196,19 +196,19 @@ mod email_domain_blacklist {
     ) {
         use chrono::{TimeDelta, Utc};
         use openidconnect::{
-            core::{CoreHmacKey, CoreIdToken, CoreIdTokenClaims, CoreJwsSigningAlgorithm},
             Audience, EmptyAdditionalClaims, EndUserEmail, IssuerUrl, StandardClaims,
             SubjectIdentifier,
+            core::{CoreHmacKey, CoreIdToken, CoreIdTokenClaims, CoreJwsSigningAlgorithm},
         };
 
         let app = tested_app_with_domain_blacklist.await;
 
         // Set up OIDC mocks with a blacklisted domain email
         app.oidc_issuer_mock_server.as_ref().unwrap().reset().await;
-        mock_oidc_openid_configuration(&app);
-        mock_oidc_keys(&app);
-        mock_oidc_introspection(&app, "1234", true);
-        mock_oidc_user_info(&app, "1234", "John", "Doe", "user@blocked.com");
+        mock_oidc_openid_configuration(&app).await;
+        mock_oidc_keys(&app).await;
+        mock_oidc_introspection(&app, "1234", true).await;
+        mock_oidc_user_info(&app, "1234", "John", "Doe", "user@blocked.com").await;
 
         let client = reqwest::Client::builder()
             .cookie_store(true)
@@ -220,7 +220,7 @@ mod email_domain_blacklist {
         let oidc_issuer_mock_server_url = app
             .oidc_issuer_mock_server
             .as_ref()
-            .map(|s| s.base_url())
+            .map(|s| s.uri())
             .unwrap();
         let id_token = CoreIdToken::new(
             CoreIdTokenClaims::new(
