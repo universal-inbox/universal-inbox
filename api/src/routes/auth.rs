@@ -16,16 +16,15 @@ use url::Url;
 
 use universal_inbox::{
     auth::{AuthorizeSessionResponse, CloseSessionResponse, SessionAuthValidationParameters},
-    user::UserId,
+    user::{UserAuthKind, UserAuthMethod, UserId},
 };
 
 use crate::{
     Claims,
     configuration::{AuthenticationSettings, OIDCFlowSettings, Settings},
     universal_inbox::{
-        UniversalInboxError,
-        auth_token::service::AuthenticationTokenService,
-        user::{model::UserAuthKind, service::UserService},
+        UniversalInboxError, auth_token::service::AuthenticationTokenService,
+        user::service::UserService,
     },
     utils::jwt::JWT_SESSION_KEY,
 };
@@ -41,6 +40,9 @@ pub fn scope() -> Scope {
                 .route(web::post().to(authenticate_session))
                 .route(web::delete().to(close_session)),
         )
+        // OIDC linking routes (for adding OIDC auth to existing user)
+        .service(web::resource("link-oidc/authorize").route(web::get().to(authorize_link_oidc)))
+        .service(web::resource("link-oidc/session").route(web::post().to(link_oidc_pkce_session)))
 }
 
 /// Authenticate a user session using the Authorization Code + PKCE flow.
@@ -126,16 +128,16 @@ pub async fn authenticate_session(
 }
 
 pub const USER_AUTH_KIND_SESSION_KEY: &str = "user_auth_kind";
+pub const LINKING_USER_ID_SESSION_KEY: &str = "linking_user_id";
 const OIDC_CSRF_TOKEN_SESSION_KEY: &str = "oidc_csrf_token";
 const OIDC_NONCE_SESSION_KEY: &str = "oidc_nonce";
 const OIDC_AUTHORIZATION_URL_SESSION_KEY: &str = "authorization_url";
 
-/// Implement the Authorization Code flow and redirect the user to the OpenIDConnect
-/// auth provider.
-pub async fn authorize_session(
-    user_service: web::Data<Arc<UserService>>,
-    session: Session,
-    settings: web::Data<Settings>,
+/// Common logic for building an OIDC authorization URL and storing state in session.
+async fn build_oidc_authorization_response(
+    user_service: &UserService,
+    session: &Session,
+    settings: &Settings,
 ) -> Result<HttpResponse, UniversalInboxError> {
     if let Some(authorization_url) = session
         .get::<Url>(OIDC_AUTHORIZATION_URL_SESSION_KEY)
@@ -148,7 +150,6 @@ pub async fn authorize_session(
         ));
     }
 
-    let service = user_service.clone();
     let Some(AuthenticationSettings::OpenIDConnect(openid_connect_settings)) = &settings
         .application
         .security
@@ -162,7 +163,7 @@ pub async fn authorize_session(
         )));
     };
     let (authorization_url, csrf_token, nonce) =
-        service.build_auth_url(openid_connect_settings).await?;
+        user_service.build_auth_url(openid_connect_settings).await?;
 
     debug!(
         "store CSRF token: {:?} & nonce: {:?}",
@@ -189,6 +190,37 @@ pub async fn authorize_session(
     ))
 }
 
+/// Implement the Authorization Code flow and redirect the user to the OpenIDConnect
+/// auth provider.
+pub async fn authorize_session(
+    user_service: web::Data<Arc<UserService>>,
+    session: Session,
+    settings: web::Data<Settings>,
+) -> Result<HttpResponse, UniversalInboxError> {
+    build_oidc_authorization_response(&user_service, &session, &settings).await
+}
+
+/// Initiate OIDC linking for an already-authenticated user.
+/// Stores LINKING_USER_ID in session so the callback knows to link rather than create.
+pub async fn authorize_link_oidc(
+    user_service: web::Data<Arc<UserService>>,
+    authenticated: Authenticated<Claims>,
+    session: Session,
+    settings: web::Data<Settings>,
+) -> Result<HttpResponse, UniversalInboxError> {
+    let user_id = authenticated
+        .claims
+        .sub
+        .parse::<UserId>()
+        .context("Wrong user ID format")?;
+
+    session
+        .insert(LINKING_USER_ID_SESSION_KEY, user_id)
+        .context("Failed to insert linking user ID into the session")?;
+
+    build_oidc_authorization_response(&user_service, &session, &settings).await
+}
+
 #[derive(Debug, Deserialize)]
 pub struct AuthenticatedSessionRequest {
     code: AuthorizationCode,
@@ -200,6 +232,9 @@ pub struct AuthenticatedSessionRequest {
 /// It should also store the auth ID token received from the auth provider and create a new
 /// user if it does not exist.
 /// Finally it creates a new authenticated session.
+///
+/// If `LINKING_USER_ID` is present in the session (set by `authorize_link_oidc`),
+/// the OIDC auth will be linked to the existing user instead of creating a new one.
 pub async fn authenticated_session(
     settings: web::Data<Settings>,
     session: Session,
@@ -233,6 +268,16 @@ pub async fn authenticated_session(
         .context("Failed to extract Nonce from the session")?
         .context(format!("Missing `{OIDC_NONCE_SESSION_KEY}` session key"))?;
 
+    // Check if this is an OIDC linking flow (initiated by authorize_link_oidc)
+    let linking_user_id = session
+        .get::<UserId>(LINKING_USER_ID_SESSION_KEY)
+        .context("Failed to extract linking user ID from the session")?;
+    if linking_user_id.is_some() {
+        session
+            .remove(LINKING_USER_ID_SESSION_KEY)
+            .context("Failed to remove linking user ID from the session")?;
+    }
+
     let service = user_service.clone();
     let mut transaction = service
         .begin()
@@ -251,6 +296,32 @@ pub async fn authenticated_session(
                 .to_string()
         )));
     };
+
+    if let Some(linking_user_id) = linking_user_id {
+        // Linking flow: add OIDC auth to existing user
+        service
+            .link_for_auth_code_flow(
+                &mut transaction,
+                linking_user_id,
+                openid_connect_settings,
+                authenticated_session_request.code.clone(),
+                nonce,
+            )
+            .await?;
+
+        transaction
+            .commit()
+            .await
+            .context("Failed to commit while linking OIDC auth method")?;
+
+        // Redirect to settings/profile page after linking
+        return Ok(Redirect::to(format!(
+            "{}settings",
+            settings.application.front_base_url
+        )));
+    }
+
+    // Normal authentication flow
     let user = service
         .authenticate_for_auth_code_flow(
             &mut transaction,
@@ -325,4 +396,70 @@ pub async fn close_session(
         serde_json::to_string(&CloseSessionResponse { logout_url })
             .context("Cannot response to close session")?,
     ))
+}
+
+/// Link an OIDC auth method to the currently authenticated user via the PKCE flow.
+/// Similar to `authenticate_session` but links instead of creating/updating a user.
+#[allow(clippy::too_many_arguments)]
+pub async fn link_oidc_pkce_session(
+    params: web::Json<SessionAuthValidationParameters>,
+    user_service: web::Data<Arc<UserService>>,
+    authenticated: Authenticated<Claims>,
+    settings: web::Data<Settings>,
+) -> Result<HttpResponse, UniversalInboxError> {
+    let user_id = authenticated
+        .claims
+        .sub
+        .parse::<UserId>()
+        .context("Wrong user ID format")?;
+
+    let service = user_service.clone();
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while linking OIDC auth method")?;
+
+    let Some(AuthenticationSettings::OpenIDConnect(openid_connect_settings)) = &settings
+        .application
+        .security
+        .authentication
+        .iter()
+        .find(|auth| matches!(auth, AuthenticationSettings::OpenIDConnect(_)))
+    else {
+        return Err(UniversalInboxError::Unexpected(anyhow!(
+            "This service can only be called when OpenID Connect authentication is configured"
+                .to_string()
+        )));
+    };
+    let OIDCFlowSettings::AuthorizationCodePKCEFlow(pkce_flow_settings) =
+        &openid_connect_settings.oidc_flow_settings
+    else {
+        return Err(UniversalInboxError::Unexpected(anyhow!(
+            "This service can only be called when OpenID Connect PKCE flow is configured"
+                .to_string()
+        )));
+    };
+
+    let id_token = CoreIdToken::from_str(&params.auth_id_token.to_string())
+        .context("Could not parse OIDC ID token")?;
+    let access_token = params.access_token.clone();
+    let auth_method: UserAuthMethod = service
+        .link_for_auth_code_pkce_flow(
+            &mut transaction,
+            user_id,
+            openid_connect_settings,
+            pkce_flow_settings,
+            access_token,
+            id_token,
+        )
+        .await?;
+
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit while linking OIDC auth method")?;
+
+    Ok(HttpResponse::Ok()
+        .content_type("application/json")
+        .body(serde_json::to_string(&auth_method).context("Cannot serialize auth method")?))
 }

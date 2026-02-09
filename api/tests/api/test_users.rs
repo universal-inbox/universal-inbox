@@ -6,7 +6,9 @@ use uuid::Uuid;
 
 use universal_inbox::{
     auth::auth_token::AuthenticationToken,
-    user::{EmailValidationToken, Password, PasswordResetToken, User, UserId, UserPatch},
+    user::{
+        EmailValidationToken, Password, PasswordResetToken, User, UserAuthKind, UserId, UserPatch,
+    },
 };
 
 use universal_inbox_api::{
@@ -672,7 +674,7 @@ mod password_reset {
         assert_eq!(login_response.status(), http::StatusCode::OK);
 
         let user = get_current_user(&new_client, &app).await;
-        let user_auth = get_user_auth(&app, user.id).await;
+        let user_auth = get_user_auth(&app, user.id, UserAuthKind::Local).await;
         if let UserAuth::Local(local_user_auth) = user_auth {
             assert!(local_user_auth.password_reset_at.is_some());
             assert!(local_user_auth.password_reset_sent_at.is_some());

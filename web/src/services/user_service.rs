@@ -14,7 +14,7 @@ use universal_inbox::{
     auth::CloseSessionResponse,
     user::{
         Credentials, EmailValidationToken, Password, PasswordResetToken, RegisterUserParameters,
-        User, UserId, UserPatch, Username,
+        User, UserAuthKind, UserAuthMethod, UserId, UserPatch, Username,
     },
 };
 
@@ -36,14 +36,20 @@ pub enum UserCommand {
     RegisterPasskey(Username),
     LoginPasskey(Username),
     UpdateUser(UserPatch),
+    ListAuthMethods,
+    AddLocalAuth(SecretBox<Password>),
+    AddPasskeyAuthMethod(Username),
+    RemoveAuthMethod(UserAuthKind),
 }
 
 pub static CONNECTED_USER: GlobalSignal<Option<User>> = Signal::global(|| None);
+pub static AUTH_METHODS: GlobalSignal<Option<Vec<UserAuthMethod>>> = Signal::global(|| None);
 
 pub async fn user_service(
     mut rx: UnboundedReceiver<UserCommand>,
     api_base_url: Url,
     mut connected_user: Signal<Option<User>>,
+    mut auth_methods: Signal<Option<Vec<UserAuthMethod>>>,
     mut ui_model: Signal<UniversalInboxUIModel>,
 ) {
     loop {
@@ -197,12 +203,12 @@ pub async fn user_service(
             Some(UserCommand::RegisterPasskey(username)) => {
                 start_passkey_registration(username, &api_base_url, connected_user, ui_model).await;
             }
-            Some(UserCommand::UpdateUser(patch)) => {
+            Some(UserCommand::UpdateUser(user_patch)) => {
                 let result: Result<User> = call_api(
                     Method::PATCH,
                     &api_base_url,
                     "users/me",
-                    Some(patch),
+                    Some(user_patch),
                     Some(ui_model),
                 )
                 .await;
@@ -210,6 +216,73 @@ pub async fn user_service(
                 match result {
                     Ok(user) => {
                         connected_user.write().replace(user);
+                        ui_model.write().confirmation_message =
+                            Some("Profile updated successfully".to_string());
+                    }
+                    Err(err) => {
+                        ui_model.write().error_message = Some(err.to_string());
+                    }
+                };
+            }
+            Some(UserCommand::ListAuthMethods) => {
+                let result: Result<Vec<UserAuthMethod>> = call_api(
+                    Method::GET,
+                    &api_base_url,
+                    "users/me/auth-methods",
+                    None::<i32>,
+                    Some(ui_model),
+                )
+                .await;
+
+                match result {
+                    Ok(methods) => {
+                        *auth_methods.write() = Some(methods);
+                    }
+                    Err(err) => {
+                        error!("Failed to list auth methods: {err}");
+                    }
+                };
+            }
+            Some(UserCommand::AddLocalAuth(password)) => {
+                let result: Result<UserAuthMethod> = call_api(
+                    Method::POST,
+                    &api_base_url,
+                    "users/me/auth-methods/local",
+                    Some(password),
+                    Some(ui_model),
+                )
+                .await;
+
+                match result {
+                    Ok(_) => {
+                        ui_model.write().confirmation_message =
+                            Some("Password authentication added successfully".to_string());
+                        refresh_auth_methods(&api_base_url, auth_methods, ui_model).await;
+                    }
+                    Err(err) => {
+                        ui_model.write().error_message = Some(err.to_string());
+                    }
+                };
+            }
+            Some(UserCommand::AddPasskeyAuthMethod(username)) => {
+                start_add_passkey_auth_method(username, &api_base_url, auth_methods, ui_model)
+                    .await;
+            }
+            Some(UserCommand::RemoveAuthMethod(kind)) => {
+                let result: Result<SuccessResponse> = call_api(
+                    Method::DELETE,
+                    &api_base_url,
+                    &format!("users/me/auth-methods/{kind}"),
+                    None::<i32>,
+                    Some(ui_model),
+                )
+                .await;
+
+                match result {
+                    Ok(_) => {
+                        ui_model.write().confirmation_message =
+                            Some("Authentication method removed successfully".to_string());
+                        refresh_auth_methods(&api_base_url, auth_methods, ui_model).await;
                     }
                     Err(err) => {
                         ui_model.write().error_message = Some(err.to_string());
@@ -354,6 +427,89 @@ async fn finish_passkey_authentication(
     match result {
         Ok(user) => {
             connected_user.write().replace(user);
+        }
+        Err(err) => {
+            ui_model.write().error_message = Some(err.to_string());
+        }
+    };
+}
+
+async fn refresh_auth_methods(
+    api_base_url: &Url,
+    mut auth_methods: Signal<Option<Vec<UserAuthMethod>>>,
+    ui_model: Signal<UniversalInboxUIModel>,
+) {
+    let result: Result<Vec<UserAuthMethod>> = call_api(
+        Method::GET,
+        api_base_url,
+        "users/me/auth-methods",
+        None::<i32>,
+        Some(ui_model),
+    )
+    .await;
+
+    match result {
+        Ok(methods) => {
+            *auth_methods.write() = Some(methods);
+        }
+        Err(err) => {
+            error!("Failed to refresh auth methods: {err}");
+        }
+    }
+}
+
+async fn start_add_passkey_auth_method(
+    username: Username,
+    api_base_url: &Url,
+    auth_methods: Signal<Option<Vec<UserAuthMethod>>>,
+    ui_model: Signal<UniversalInboxUIModel>,
+) {
+    let result: Result<CreationChallengeResponse> = call_api(
+        Method::POST,
+        api_base_url,
+        "users/me/auth-methods/passkey/registration/start",
+        Some(username),
+        None,
+    )
+    .await;
+
+    let c_options: web_sys::CredentialCreationOptions = match result {
+        Ok(ccr) => ccr.into(),
+        Err(err) => {
+            error!("Failed to start passkey registration: {err}");
+            return;
+        }
+    };
+
+    let rpkc = match create_navigator_credentials(c_options).await {
+        Ok(w_rpkc) => RegisterPublicKeyCredential::from(w_rpkc),
+        Err(err) => {
+            error!("Failed to create public key for passkey registration: {err}");
+            return;
+        }
+    };
+    finish_add_passkey_auth_method(rpkc, api_base_url, auth_methods, ui_model).await;
+}
+
+async fn finish_add_passkey_auth_method(
+    register_credentials: RegisterPublicKeyCredential,
+    api_base_url: &Url,
+    auth_methods: Signal<Option<Vec<UserAuthMethod>>>,
+    mut ui_model: Signal<UniversalInboxUIModel>,
+) {
+    let result: Result<UserAuthMethod> = call_api(
+        Method::POST,
+        api_base_url,
+        "users/me/auth-methods/passkey/registration/finish",
+        Some(register_credentials),
+        Some(ui_model),
+    )
+    .await;
+
+    match result {
+        Ok(_) => {
+            ui_model.write().confirmation_message = Some("Passkey added successfully".to_string());
+            refresh_auth_methods(api_base_url, auth_methods, ui_model).await;
         }
         Err(err) => {
             ui_model.write().error_message = Some(err.to_string());
