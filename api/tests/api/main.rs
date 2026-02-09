@@ -1,4 +1,6 @@
 #![recursion_limit = "256"]
+#[path = "../common/mod.rs"]
+mod common;
 mod helpers;
 mod test_api_notification;
 mod test_auth;
