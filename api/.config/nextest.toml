@@ -2,13 +2,3 @@
 junit.path = "junit.xml"
 failure-output = "immediate-final"
 fail-fast = false
-# Exclude browser tests from the default CI profile — they run in a separate CI job
-# that installs Playwright and builds the WASM frontend.
-default-filter = "not binary(browser)"
-
-[profile.ci-browser]
-junit.path = "junit.xml"
-failure-output = "immediate-final"
-fail-fast = false
-test-threads = 1
-default-filter = "binary(browser)"

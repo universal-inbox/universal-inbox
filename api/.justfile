@@ -53,6 +53,12 @@ generate-jwt-token user-email:
 generate-user:
     cargo run -- test generate-user
 
+test-ci:
+    cargo nextest run --profile ci -E 'not binary(browser)'
+
+test-ci-browser:
+    cargo nextest run --profile ci-browser -E 'binary(browser)'
+
 install-tools:
     #!/usr/bin/env bash
     set -euo pipefail

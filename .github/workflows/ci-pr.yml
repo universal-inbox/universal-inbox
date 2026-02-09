@@ -172,7 +172,7 @@ jobs:
         env:
           RUST_MIN_STACK: 104857600
           RUST_BACKTRACE: "full"
-        run: devbox run -- just api/test-ci
+        run: devbox run -- bash -c "cd api && cargo nextest run --profile ci -E 'not binary(browser)'"
       - name: API test Report
         uses: dorny/test-reporter@v1
         if: success() || failure()
@@ -226,19 +226,25 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci
+      - name: Install Playwright system dependencies
+        run: npx --yes playwright@1.56.1 install-deps chromium
       - name: Install Playwright Chromium
         run: devbox run -- just api/install-tools
-      - name: Build WASM frontend
-        run: devbox run -- just web/build
+      - name: Install web dependencies and build WASM frontend
+        run: devbox run -- bash -c "cd web && just install && just build-assets && just build"
       - name: Run browser tests
         env:
           RUST_MIN_STACK: 104857600
           RUST_BACKTRACE: "full"
-        run: devbox run -- bash -c "cd api && cargo nextest run --profile ci-browser"
+          # Nix's ldd can't see system libs installed by `install-deps`, causing
+          # Playwright's host validation to falsely report missing libraries.
+          # The system dynamic linker (used by the Chromium binary) finds them fine.
+          PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS: "1"
+        run: devbox run -- just api/test-ci-browser
       - name: Browser test Report
         uses: dorny/test-reporter@v1
         if: success() || failure()
         with:
           name: Tests Browser
-          path: target/nextest/ci/junit.xml
+          path: target/nextest/ci-browser/junit.xml
           reporter: java-junit

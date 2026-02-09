@@ -2,3 +2,9 @@
 junit.path = "junit.xml"
 failure-output = "immediate-final"
 fail-fast = false
+
+[profile.ci-browser]
+junit.path = "junit.xml"
+failure-output = "immediate-final"
+fail-fast = false
+test-threads = 1

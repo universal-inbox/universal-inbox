@@ -7,7 +7,7 @@ use tokio::sync::RwLock;
 use tracing::info;
 use wiremock::MockServer;
 
-use playwright_rs::{Page, Playwright, expect};
+use playwright_rs::{LaunchOptions, Page, Playwright, expect};
 
 /// Timeout for Playwright expect assertions.
 /// Debug WASM binaries (~74 MB) take significant time to download and initialize.
@@ -135,9 +135,11 @@ pub async fn launch_browser() -> (Playwright, Page) {
     let playwright = Playwright::launch()
         .await
         .expect("Failed to launch Playwright");
+    // Disable Chromium sandbox on CI (Linux containers lack required kernel features)
+    let launch_options = LaunchOptions::default().chromium_sandbox(false);
     let browser = playwright
         .chromium()
-        .launch()
+        .launch_with_options(launch_options)
         .await
         .expect("Failed to launch Chromium");
     let page = browser.new_page().await.expect("Failed to create page");
