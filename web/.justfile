@@ -68,23 +68,11 @@ run-trunk:
     trunk serve --features trunk
 
 ## Mobile recipes
-[private]
-ndk-home := env("ANDROID_NDK_HOME", env("HOME", "") + "/Library/Android/sdk/ndk/29.0.13113456")
-
-[private]
-ndk-toolchain := ndk-home + "/toolchains/llvm/prebuilt/darwin-x86_64/bin"
-
 mobile-serve: build-assets
-    CC_aarch64_linux_android={{ndk-toolchain}}/aarch64-linux-android24-clang \
-    AR_aarch64_linux_android={{ndk-toolchain}}/llvm-ar \
     dx serve --platform android
 
 mobile-build: build-assets
-    CC_aarch64_linux_android={{ndk-toolchain}}/aarch64-linux-android24-clang \
-    AR_aarch64_linux_android={{ndk-toolchain}}/llvm-ar \
     dx build --platform android
 
 mobile-build-release: build-assets
-    CC_aarch64_linux_android={{ndk-toolchain}}/aarch64-linux-android24-clang \
-    AR_aarch64_linux_android={{ndk-toolchain}}/llvm-ar \
     dx build --platform android --release

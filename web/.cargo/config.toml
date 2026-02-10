@@ -2,17 +2,8 @@
 runner = 'wasm-bindgen-test-runner'
 rustflags = ['--cfg=web_sys_unstable_apis', '--cfg', 'getrandom_backend="wasm_js"']
 
-[target.aarch64-linux-android]
-linker = "/Users/david.rousselie/Library/Android/sdk/ndk/29.0.13113456/toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android24-clang"
-
-[target.armv7-linux-androideabi]
-linker = "/Users/david.rousselie/Library/Android/sdk/ndk/29.0.13113456/toolchains/llvm/prebuilt/darwin-x86_64/bin/armv7a-linux-androideabi24-clang"
-
-[target.i686-linux-android]
-linker = "/Users/david.rousselie/Library/Android/sdk/ndk/29.0.13113456/toolchains/llvm/prebuilt/darwin-x86_64/bin/i686-linux-android24-clang"
-
-[target.x86_64-linux-android]
-linker = "/Users/david.rousselie/Library/Android/sdk/ndk/29.0.13113456/toolchains/llvm/prebuilt/darwin-x86_64/bin/x86_64-linux-android24-clang"
+# Android linker configuration is handled automatically by Dioxus CLI
+# (discovers NDK via ANDROID_NDK_HOME / NDK_HOME env vars)
 
 [profile.release]
 opt-level = "z"
