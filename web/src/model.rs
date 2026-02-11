@@ -11,6 +11,7 @@ pub static UI_MODEL: GlobalSignal<UniversalInboxUIModel> = Signal::global(|| {
 });
 pub const DEFAULT_USER_AVATAR: &str = "https://avatars.githubusercontent.com/u/1062408?v=4";
 pub const VERSION: Option<&'static str> = option_env!("VERSION");
+pub static VERSION_MISMATCH: GlobalSignal<Option<String>> = Signal::global(|| None);
 
 #[derive(Debug)]
 pub struct UniversalInboxUIModel {
