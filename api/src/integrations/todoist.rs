@@ -62,14 +62,14 @@ use crate::{
 
 #[derive(Clone)]
 pub struct TodoistService {
-    pub todoist_sync_base_url: String,
-    pub todoist_sync_base_path: String,
+    pub todoist_base_url: String,
+    pub todoist_base_path: String,
     pub projects_cache_index: Arc<AtomicU64>,
     pub integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     pub max_retry_duration: Duration,
 }
 
-static TODOIST_SYNC_BASE_URL: &str = "https://api.todoist.com/sync/v9";
+static TODOIST_BASE_URL: &str = "https://api.todoist.com/api/v1";
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 #[serde(tag = "type")]
@@ -185,30 +185,24 @@ pub enum TodoistCommandStatus {
     Error { error_code: i32, error: String },
 }
 
-#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
-pub struct TodoistItemInfoResponse {
-    pub item: TodoistItem,
-}
-
 impl TodoistService {
     pub fn new(
-        todoist_sync_base_url: Option<String>,
+        todoist_base_url: Option<String>,
         integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
         max_retry_duration: Duration,
     ) -> Result<TodoistService, UniversalInboxError> {
-        let todoist_sync_base_url =
-            todoist_sync_base_url.unwrap_or_else(|| TODOIST_SYNC_BASE_URL.to_string());
-        let todoist_sync_base_path = Url::parse(&todoist_sync_base_url)
-            .context("Cannot parse Todoist sync base URL")?
+        let todoist_base_url = todoist_base_url.unwrap_or_else(|| TODOIST_BASE_URL.to_string());
+        let todoist_base_path = Url::parse(&todoist_base_url)
+            .context("Cannot parse Todoist base URL")?
             .path()
             .to_string();
 
         Ok(TodoistService {
-            todoist_sync_base_url,
-            todoist_sync_base_path: if &todoist_sync_base_path == "/" {
+            todoist_base_url,
+            todoist_base_path: if &todoist_base_path == "/" {
                 "".to_string()
             } else {
-                todoist_sync_base_path
+                todoist_base_path
             },
             projects_cache_index: Arc::new(AtomicU64::new(0)),
             integration_connection_service,
@@ -280,8 +274,8 @@ impl TodoistService {
         ApiClient::build(
             headers,
             [
-                format!("{}/sync", self.todoist_sync_base_path),
-                format!("{}/items/get", self.todoist_sync_base_path),
+                format!("{}/sync", self.todoist_base_path),
+                format!("{}/tasks", self.todoist_base_path),
             ],
             self.max_retry_duration,
         )
@@ -296,7 +290,7 @@ impl TodoistService {
         Ok(self
             .build_todoist_client(access_token)?
             .post(
-                format!("{}/sync", self.todoist_sync_base_url),
+                format!("{}/sync", self.todoist_base_url),
                 Some(&json!({
                     "sync_token": sync_token
                         .map(|sync_token| sync_token.0)
@@ -323,20 +317,17 @@ impl TodoistService {
     ) -> Result<Option<TodoistItem>, UniversalInboxError> {
         match self
             .build_todoist_client(access_token)?
-            .post_form::<TodoistItemInfoResponse, _, _>(
-                format!("{}/items/get", self.todoist_sync_base_url),
-                &[("item_id", id), ("all_data", "false")],
-            )
+            .get::<TodoistItem, _>(format!("{}/tasks/{}", self.todoist_base_url, id))
             .await
         {
-            Ok(item_info) => Ok(Some(item_info.item)),
+            Ok(item) => Ok(Some(item)),
             Err(ApiClientError::NetworkError(err))
                 if err.status() == Some(reqwest_middleware::reqwest::StatusCode::NOT_FOUND) =>
             {
                 Ok(None)
             }
             Err(err) => Err(UniversalInboxError::Unexpected(anyhow!(
-                "Cannot get item {id} from Todoist API: {err}"
+                "Cannot get task {id} from Todoist API: {err}"
             ))),
         }
     }
@@ -350,7 +341,7 @@ impl TodoistService {
 
         let sync_response: TodoistSyncStatusResponse = self
             .build_todoist_client(access_token)?
-            .post(format!("{}/sync", self.todoist_sync_base_url), Some(&body))
+            .post(format!("{}/sync", self.todoist_base_url), Some(&body))
             .await
             .with_context(|| {
                 format!(
@@ -451,7 +442,7 @@ impl TodoistService {
     size = 1,
     time = 600,
     key = "String",
-    convert = r#"{ format!("{}{}{}", _user_id, service.projects_cache_index.load(Ordering::Relaxed), service.todoist_sync_base_url.clone()) }"#
+    convert = r#"{ format!("{}{}{}", _user_id, service.projects_cache_index.load(Ordering::Relaxed), service.todoist_base_url.clone()) }"#
 )]
 async fn cached_fetch_all_projects(
     service: &TodoistService,

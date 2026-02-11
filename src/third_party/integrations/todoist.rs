@@ -28,6 +28,7 @@ pub struct TodoistItem {
     pub priority: TodoistItemPriority,
     pub checked: bool, // aka. is_completed
     pub is_deleted: bool,
+    #[serde(alias = "is_collapsed")]
     pub collapsed: bool,
     pub completed_at: Option<DateTime<Utc>>,
     pub added_at: DateTime<Utc>,

@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use url::Url;
 use uuid::Uuid;
-use wiremock::matchers::{body_json, body_partial_json, body_string, header, method, path};
+use wiremock::matchers::{body_json, body_partial_json, header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use universal_inbox::{
@@ -23,11 +23,10 @@ use universal_inbox::{
 };
 
 use universal_inbox_api::integrations::todoist::{
-    TodoistCommandStatus, TodoistItemInfoResponse, TodoistSyncCommandItemAddArgs,
-    TodoistSyncCommandItemCompleteArgs, TodoistSyncCommandItemDeleteArgs,
-    TodoistSyncCommandItemMoveArgs, TodoistSyncCommandItemUncompleteArgs,
-    TodoistSyncCommandItemUpdateArgs, TodoistSyncCommandProjectAddArgs, TodoistSyncResponse,
-    TodoistSyncStatusResponse,
+    TodoistCommandStatus, TodoistSyncCommandItemAddArgs, TodoistSyncCommandItemCompleteArgs,
+    TodoistSyncCommandItemDeleteArgs, TodoistSyncCommandItemMoveArgs,
+    TodoistSyncCommandItemUncompleteArgs, TodoistSyncCommandItemUpdateArgs,
+    TodoistSyncCommandProjectAddArgs, TodoistSyncResponse, TodoistSyncStatusResponse,
 };
 
 use crate::helpers::load_json_fixture_file;
@@ -79,16 +78,14 @@ pub async fn mock_todoist_get_item_service(
     result: Box<TodoistItem>,
 ) {
     let item_id = result.id.clone();
-    let response = TodoistItemInfoResponse { item: *result };
 
-    Mock::given(method("POST"))
-        .and(path("/items/get"))
-        .and(body_string(format!("item_id={item_id}&all_data=false")))
+    Mock::given(method("GET"))
+        .and(path(format!("/tasks/{item_id}")))
         .and(header("authorization", "Bearer todoist_test_access_token"))
         .respond_with(
             ResponseTemplate::new(200)
                 .insert_header("content-type", "application/json")
-                .set_body_json(&response),
+                .set_body_json(&*result),
         )
         .mount(todoist_mock_server)
         .await;
