@@ -13,7 +13,10 @@ use url::Url;
 use crate::{
     components::toast_zone::{Toast, ToastKind},
     model::{AuthenticationState, UniversalInboxUIModel},
-    services::toast_service::{ToastCommand, ToastUpdate},
+    services::{
+        toast_service::{ToastCommand, ToastUpdate},
+        version::check_version_mismatch,
+    },
 };
 
 pub async fn call_api<R: for<'de> serde::de::Deserialize<'de>, B: serde::Serialize>(
@@ -34,6 +37,12 @@ pub async fn call_api<R: for<'de> serde::de::Deserialize<'de>, B: serde::Seriali
     }
 
     let response: Response = request.send().await?;
+
+    if let Some(backend_version) = response.headers().get("x-app-version")
+        && let Ok(version_str) = backend_version.to_str()
+    {
+        check_version_mismatch(version_str);
+    }
 
     if response.status().is_server_error() || response.status() == StatusCode::BAD_REQUEST {
         let default_error_message = "Error calling Universal Inbox API".to_string();

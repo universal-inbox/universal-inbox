@@ -113,6 +113,7 @@ pub async fn run_server(
         .unwrap_or_else(|| ".".to_string());
     let listen_address = listener.local_addr().unwrap();
     let csp_header_value = build_csp_header(&settings);
+    let api_version = settings.application.version.clone();
 
     // Setup HTTP session + JWT auth
     let session_secret_key = Key::from(settings.application.http_session.secret_key.as_bytes());
@@ -174,10 +175,12 @@ pub async fn run_server(
                 http::header::COOKIE,
                 http::header::CONTENT_TYPE,
             ])
+            .expose_headers(vec!["x-app-version"])
             .supports_credentials()
             .max_age(3600);
 
         let csp_header_value = csp_header_value.clone();
+        let api_version = api_version.clone();
         let mut app = App::new()
             .wrap_fn(move |req, srv| {
                 let fut = srv.call(req);
@@ -212,6 +215,7 @@ pub async fn run_server(
             .wrap(ErrorHandlers::new().handler(StatusCode::UNAUTHORIZED, reset_cookies))
             .wrap_fn(move |req, srv| {
                 let csp_header_value = csp_header_value.clone();
+                let api_version = api_version.clone();
                 let fut = srv.call(req);
                 async move {
                     let mut res = fut.await?;
@@ -229,6 +233,12 @@ pub async fn run_server(
                         res.headers_mut().insert(
                             header::CONTENT_SECURITY_POLICY,
                             header::HeaderValue::from_str(&csp_header_value).unwrap(),
+                        );
+                    }
+                    if let Some(ref version) = api_version {
+                        res.headers_mut().insert(
+                            header::HeaderName::from_static("x-app-version"),
+                            header::HeaderValue::from_str(version).unwrap(),
                         );
                     }
                     Ok(res)
