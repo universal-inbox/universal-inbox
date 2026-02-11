@@ -2,6 +2,7 @@
 environment = "test"
 static_path = ""
 static_dir = "tests/api/statics"
+sync_failure_window_in_hours = 1
 
 [application.observability.logging]
 log_directive = "debug"
