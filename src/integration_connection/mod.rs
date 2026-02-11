@@ -1,6 +1,6 @@
 use std::{fmt, str::FromStr};
 
-use chrono::{DateTime, Timelike, Utc};
+use chrono::{DateTime, TimeDelta, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use uuid::Uuid;
@@ -40,6 +40,8 @@ pub struct IntegrationConnection {
     pub last_tasks_sync_failed_at: Option<DateTime<Utc>>,
     pub last_tasks_sync_failure_message: Option<String>,
     pub tasks_sync_failures: u32,
+    pub first_notifications_sync_failed_at: Option<DateTime<Utc>>,
+    pub first_tasks_sync_failed_at: Option<DateTime<Utc>>,
     pub provider: IntegrationProvider,
     pub registered_oauth_scopes: Vec<String>,
 }
@@ -71,6 +73,8 @@ impl IntegrationConnection {
             last_tasks_sync_failed_at: None,
             last_tasks_sync_failure_message: None,
             tasks_sync_failures: 0,
+            first_notifications_sync_failed_at: None,
+            first_tasks_sync_failed_at: None,
             // Using unwrap as None cannot mismatch with the provided config
             provider: IntegrationProvider::new(config, None).unwrap(),
             registered_oauth_scopes: Vec::new(),
@@ -97,6 +101,87 @@ impl IntegrationConnection {
         scopes
             .iter()
             .all(|scope| self.registered_oauth_scopes.contains(scope))
+    }
+
+    pub fn sync_backoff_delay(
+        failures: u32,
+        base_delay_seconds: u64,
+        max_delay_seconds: u64,
+    ) -> TimeDelta {
+        if failures == 0 {
+            return TimeDelta::zero();
+        }
+        let exponent = failures.saturating_sub(1);
+        let delay_secs = base_delay_seconds
+            .saturating_mul(1u64.checked_shl(exponent).unwrap_or(u64::MAX))
+            .min(max_delay_seconds);
+        TimeDelta::seconds(delay_secs as i64)
+    }
+
+    pub fn is_notifications_sync_in_backoff(
+        &self,
+        base_delay_seconds: u64,
+        max_delay_seconds: u64,
+    ) -> bool {
+        self.is_sync_in_backoff(
+            self.notifications_sync_failures,
+            self.last_notifications_sync_failed_at,
+            base_delay_seconds,
+            max_delay_seconds,
+        )
+    }
+
+    pub fn is_tasks_sync_in_backoff(
+        &self,
+        base_delay_seconds: u64,
+        max_delay_seconds: u64,
+    ) -> bool {
+        self.is_sync_in_backoff(
+            self.tasks_sync_failures,
+            self.last_tasks_sync_failed_at,
+            base_delay_seconds,
+            max_delay_seconds,
+        )
+    }
+
+    fn is_sync_in_backoff(
+        &self,
+        failures: u32,
+        last_failed_at: Option<DateTime<Utc>>,
+        base_delay_seconds: u64,
+        max_delay_seconds: u64,
+    ) -> bool {
+        if failures == 0 {
+            return false;
+        }
+        let Some(failed_at) = last_failed_at else {
+            return false;
+        };
+        let backoff = Self::sync_backoff_delay(failures, base_delay_seconds, max_delay_seconds);
+        Utc::now() < failed_at + backoff
+    }
+
+    pub fn has_exceeded_failure_window(
+        first_failed_at: Option<DateTime<Utc>>,
+        window_hours: i64,
+    ) -> bool {
+        let Some(first_failed) = first_failed_at else {
+            return false;
+        };
+        Utc::now() - first_failed > TimeDelta::hours(window_hours)
+    }
+
+    pub fn is_notifications_sync_degraded(&self) -> bool {
+        self.status == IntegrationConnectionStatus::Validated
+            && self.notifications_sync_failures > 0
+    }
+
+    pub fn is_tasks_sync_degraded(&self) -> bool {
+        self.status == IntegrationConnectionStatus::Validated && self.tasks_sync_failures > 0
+    }
+
+    pub fn is_sync_degraded(&self) -> bool {
+        self.is_notifications_sync_degraded() || self.is_tasks_sync_degraded()
     }
 
     pub fn is_syncing_notifications(&self) -> bool {
@@ -330,5 +415,91 @@ mod tests {
         connection.last_tasks_sync_scheduled_at = Some(Utc::now());
         connection.last_tasks_sync_completed_at = Some(Utc::now());
         assert_eq!(connection.is_syncing(), false);
+    }
+
+    #[rstest]
+    #[case(0, 120, 3600, 0)]
+    #[case(1, 120, 3600, 120)]
+    #[case(2, 120, 3600, 240)]
+    #[case(3, 120, 3600, 480)]
+    #[case(4, 120, 3600, 960)]
+    #[case(5, 120, 3600, 1920)]
+    #[case(6, 120, 3600, 3600)]
+    #[case(7, 120, 3600, 3600)]
+    #[case(100, 120, 3600, 3600)]
+    fn test_sync_backoff_delay(
+        #[case] failures: u32,
+        #[case] base: u64,
+        #[case] max: u64,
+        #[case] expected_secs: i64,
+    ) {
+        assert_eq!(
+            IntegrationConnection::sync_backoff_delay(failures, base, max),
+            TimeDelta::seconds(expected_secs)
+        );
+    }
+
+    #[rstest]
+    fn test_is_notifications_sync_in_backoff_within_window(mut connection: IntegrationConnection) {
+        connection.notifications_sync_failures = 2;
+        connection.last_notifications_sync_failed_at = Some(Utc::now() - Duration::seconds(60));
+        assert!(connection.is_notifications_sync_in_backoff(120, 3600));
+    }
+
+    #[rstest]
+    fn test_is_notifications_sync_in_backoff_past_window(mut connection: IntegrationConnection) {
+        connection.notifications_sync_failures = 2;
+        connection.last_notifications_sync_failed_at = Some(Utc::now() - Duration::seconds(300));
+        assert!(!connection.is_notifications_sync_in_backoff(120, 3600));
+    }
+
+    #[rstest]
+    fn test_is_notifications_sync_in_backoff_no_failures(connection: IntegrationConnection) {
+        assert!(!connection.is_notifications_sync_in_backoff(120, 3600));
+    }
+
+    #[rstest]
+    fn test_is_sync_degraded_validated_with_failures(mut connection: IntegrationConnection) {
+        connection.status = IntegrationConnectionStatus::Validated;
+        connection.notifications_sync_failures = 3;
+        assert!(connection.is_sync_degraded());
+    }
+
+    #[rstest]
+    fn test_is_sync_degraded_failing_status(mut connection: IntegrationConnection) {
+        connection.status = IntegrationConnectionStatus::Failing;
+        connection.notifications_sync_failures = 3;
+        assert!(!connection.is_sync_degraded());
+    }
+
+    #[rstest]
+    fn test_is_sync_degraded_no_failures(mut connection: IntegrationConnection) {
+        connection.status = IntegrationConnectionStatus::Validated;
+        assert!(!connection.is_sync_degraded());
+    }
+
+    #[rstest]
+    fn test_has_exceeded_failure_window_exceeded() {
+        let first_failed = Some(Utc::now() - Duration::hours(49));
+        assert!(IntegrationConnection::has_exceeded_failure_window(
+            first_failed,
+            48
+        ));
+    }
+
+    #[rstest]
+    fn test_has_exceeded_failure_window_not_exceeded() {
+        let first_failed = Some(Utc::now() - Duration::hours(47));
+        assert!(!IntegrationConnection::has_exceeded_failure_window(
+            first_failed,
+            48
+        ));
+    }
+
+    #[rstest]
+    fn test_has_exceeded_failure_window_none() {
+        assert!(!IntegrationConnection::has_exceeded_failure_window(
+            None, 48
+        ));
     }
 }

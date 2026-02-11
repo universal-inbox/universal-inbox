@@ -3,6 +3,7 @@ use rstest::fixture;
 use wiremock::matchers::{header, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
+use chrono::{DateTime, Utc};
 use universal_inbox::{
     integration_connection::{
         IntegrationConnection, IntegrationConnectionId, IntegrationConnectionStatus,
@@ -125,6 +126,7 @@ pub async fn create_integration_connection(
     context: Option<IntegrationConnectionContext>,
     provider_user_id: Option<String>,
     initial_sync_failures: Option<u32>,
+    first_notifications_sync_failed_at: Option<DateTime<Utc>>,
     registered_oauth_scopes: Option<Vec<String>>,
 ) -> Box<IntegrationConnection> {
     let mut transaction = app.repository.begin().await.unwrap();
@@ -132,6 +134,9 @@ pub async fn create_integration_connection(
         IntegrationConnection::new(user_id, config, IntegrationConnectionStatus::Created);
     if let Some(initial_sync_failures) = initial_sync_failures {
         new_integration_connection.notifications_sync_failures = initial_sync_failures;
+    }
+    if let Some(first_failed_at) = first_notifications_sync_failed_at {
+        new_integration_connection.first_notifications_sync_failed_at = Some(first_failed_at);
     }
     let integration_connection = app
         .repository
@@ -246,6 +251,32 @@ pub async fn create_and_mock_integration_connection(
     initial_sync_failures: Option<u32>,
     context: Option<IntegrationConnectionContext>,
 ) -> Box<IntegrationConnection> {
+    create_and_mock_integration_connection_with_backoff(
+        app,
+        user_id,
+        nango_secret_key,
+        config,
+        settings,
+        nango_connection,
+        initial_sync_failures,
+        None,
+        context,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn create_and_mock_integration_connection_with_backoff(
+    app: &TestedApp,
+    user_id: UserId,
+    nango_secret_key: &str,
+    config: IntegrationConnectionConfig,
+    settings: &Settings,
+    nango_connection: Box<NangoConnection>,
+    initial_sync_failures: Option<u32>,
+    first_notifications_sync_failed_at: Option<DateTime<Utc>>,
+    context: Option<IntegrationConnectionContext>,
+) -> Box<IntegrationConnection> {
     let provider_kind = config.kind();
     let registered_oauth_scopes = nango_connection.get_registered_oauth_scopes().ok();
     let integration_connection = create_integration_connection(
@@ -256,6 +287,7 @@ pub async fn create_and_mock_integration_connection(
         context,
         nango_connection.get_provider_user_id(),
         initial_sync_failures,
+        first_notifications_sync_failed_at,
         registered_oauth_scopes,
     )
     .await;
