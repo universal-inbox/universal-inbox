@@ -100,6 +100,7 @@ redis = { version = "0.32.7", features = [
 ] }
 regex = { workspace = true }
 reqwest = { workspace = true, features = ["rustls-tls", "gzip"] }
+reqwest_v013 = { package = "reqwest", version = "0.13", default-features = false, features = ["rustls", "json", "cookies", "gzip"] }
 reqwest-middleware = { version = "0.5.0", features = ["json", "form"] }
 reqwest-tracing = { version = "0.7.0", features = ["opentelemetry_0_31"] }
 rustls = { version = "0.23.0" } # Used to initialize lettre
@@ -160,4 +161,4 @@ name = "browser"
 path = "tests/browser/main.rs"
 
 [package.metadata.cargo-machete]
-ignored = ["opentelemetry-http", "opentelemetry_http"]
+ignored = ["opentelemetry-http", "opentelemetry_http", "reqwest_v013"]
