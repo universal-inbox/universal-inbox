@@ -33,6 +33,7 @@ fn main() {
     android_logger::init_once(
         android_logger::Config::default().with_max_level(log::LevelFilter::Debug),
     );
+    #[cfg(not(feature = "mobile"))]
     init_log();
     dioxus::launch(App);
 }

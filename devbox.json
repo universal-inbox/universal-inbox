@@ -40,7 +40,6 @@
     "prek":                               "latest",
     "sccache":                            "latest",
     "zellij":                             "latest",
-    "androidenv.androidPkgs.ndk-bundle":  "latest",
     "cargo-ndk":                          "latest",
     "jdk17":                              "latest",
     "path:android-sdk-flake#android-sdk": ""

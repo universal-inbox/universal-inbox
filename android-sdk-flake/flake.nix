@@ -1,56 +1,49 @@
 {
-  description = "Android SDK for Dioxus mobile builds";
+  description = "Android SDK for Dioxus mobile builds (using tadfisher/android-nixpkgs for proper Apple Silicon emulator support)";
 
   inputs = {
-    # Pin to the same nixpkgs commit that devbox uses
-    nixpkgs.url = "github:NixOS/nixpkgs/01b6809f7f9d1183a2b3e081f0a1e6f8f415cb09";
+    android-nixpkgs = {
+      url = "github:tadfisher/android-nixpkgs/stable";
+    };
+    flake-utils.url = "github:numtide/flake-utils";
   };
 
   outputs =
-    { self, nixpkgs }:
-    let
-      supportedSystems = [
+    {
+      self,
+      android-nixpkgs,
+      flake-utils,
+    }:
+    flake-utils.lib.eachSystem
+      [
         "x86_64-linux"
-        "aarch64-linux"
         "x86_64-darwin"
         "aarch64-darwin"
-      ];
-      forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
-    in
-    {
-      packages = forAllSystems (
-        system:
-        let
-          pkgs = import nixpkgs {
-            inherit system;
-            config = {
-              allowUnfree = true;
-              android_sdk.accept_license = true;
-            };
-          };
+      ]
+      (system: {
+        packages = rec {
+          android-sdk = android-nixpkgs.sdk.${system} (
+            sdkPkgs: with sdkPkgs; [
+              # Command line tools (required for a working SDK)
+              cmdline-tools-latest
+              platform-tools
 
-          androidComposition = pkgs.androidenv.composeAndroidPackages {
-            # Dioxus 0.7 uses compileSdk = 33, AGP 8.7.0
-            platformVersions = [ "33" ];
-            buildToolsVersions = [
-              "34.0.0"
-              "35.0.1"
-            ];
-            platformToolsVersion = "36.0.0";
-            cmdLineToolsVersion = "latest";
+              # Build tools — AGP 8.7.0 requires 34.0.0, Dioxus also pulls 35.0.1
+              build-tools-34-0-0
+              build-tools-35-0-1
 
-            # NDK is managed separately via devbox (androidenv.androidPkgs.ndk-bundle)
-            includeNDK = false;
+              # Platform — Dioxus 0.7 uses compileSdk = 33
+              platforms-android-33
 
-            includeEmulator = false;
-            includeSystemImages = false;
-            includeSources = false;
-          };
-        in
-        {
-          android-sdk = androidComposition.androidsdk;
-          default = androidComposition.androidsdk;
-        }
-      );
-    };
+              # NDK — same version as previously used via devbox
+              ndk-29-0-14206865
+
+              # Emulator with ARM64 system images (Google APIs, no Play Store)
+              emulator
+              system-images-android-33-google-apis-arm64-v8a
+            ]
+          );
+          default = android-sdk;
+        };
+      });
 }

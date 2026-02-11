@@ -158,8 +158,14 @@ pub fn App() -> Element {
         #[cfg(feature = "web")]
         setup_key_bindings(KEYBOARD_MANAGER.signal().into());
 
-        let app_config = get_app_config().await.unwrap();
-        APP_CONFIG.write().replace(app_config);
+        match get_app_config().await {
+            Ok(app_config) => {
+                APP_CONFIG.write().replace(app_config);
+            }
+            Err(err) => {
+                debug!("Failed to load app config: {err:?}");
+            }
+        }
     });
 
     // Dioxus 0.4.1 bug workaround: https://github.com/DioxusLabs/dioxus/issues/1511

@@ -1,54 +1,6 @@
 {
   "lockfile_version": "1",
   "packages": {
-    "androidenv.androidPkgs.ndk-bundle@latest": {
-      "last_modified": "2026-01-23T17:20:52Z",
-      "resolved": "github:NixOS/nixpkgs/a1bab9e494f5f4939442a57a58d0449a109593fe#androidenv.androidPkgs.ndk-bundle",
-      "source": "devbox-search",
-      "version": "29.0.14206865",
-      "systems": {
-        "aarch64-darwin": {
-          "outputs": [
-            {
-              "name": "out",
-              "path": "/nix/store/yy1k9m5zgfxlm0fw4mq8zajqny482rpd-android-sdk-ndk-29.0.14206865",
-              "default": true
-            }
-          ],
-          "store_path": "/nix/store/yy1k9m5zgfxlm0fw4mq8zajqny482rpd-android-sdk-ndk-29.0.14206865"
-        },
-        "aarch64-linux": {
-          "outputs": [
-            {
-              "name": "out",
-              "path": "/nix/store/9bxqllpy1sspzhgiw24lcqd8j9m6va0s-android-sdk-ndk-29.0.14206865",
-              "default": true
-            }
-          ],
-          "store_path": "/nix/store/9bxqllpy1sspzhgiw24lcqd8j9m6va0s-android-sdk-ndk-29.0.14206865"
-        },
-        "x86_64-darwin": {
-          "outputs": [
-            {
-              "name": "out",
-              "path": "/nix/store/19bpydp9n21iyl0w5a0ydhp4zqmsyqc1-android-sdk-ndk-29.0.14206865",
-              "default": true
-            }
-          ],
-          "store_path": "/nix/store/19bpydp9n21iyl0w5a0ydhp4zqmsyqc1-android-sdk-ndk-29.0.14206865"
-        },
-        "x86_64-linux": {
-          "outputs": [
-            {
-              "name": "out",
-              "path": "/nix/store/jz5nwj1n4jlzjkrijh7kk6yv9idvifw2-android-sdk-ndk-29.0.14206865",
-              "default": true
-            }
-          ],
-          "store_path": "/nix/store/jz5nwj1n4jlzjkrijh7kk6yv9idvifw2-android-sdk-ndk-29.0.14206865"
-        }
-      }
-    },
     "binaryen@latest": {
       "last_modified": "2025-07-28T17:09:23Z",
       "resolved": "github:NixOS/nixpkgs/648f70160c03151bc2121d179291337ad6bc564b#binaryen",

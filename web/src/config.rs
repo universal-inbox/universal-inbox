@@ -31,8 +31,10 @@ pub struct AppConfig {
 pub static APP_CONFIG: GlobalSignal<Option<AppConfig>> = Signal::global(|| None);
 
 /// On mobile, the API base URL is configured by the user at first launch and stored locally.
+/// Defaults to the production server URL.
 #[cfg(feature = "mobile")]
-pub static MOBILE_API_BASE_URL: GlobalSignal<Option<Url>> = Signal::global(|| None);
+pub static MOBILE_API_BASE_URL: GlobalSignal<Option<Url>> =
+    Signal::global(|| Some(Url::parse("https://app.universal-inbox.com/api/").unwrap()));
 
 #[cfg(feature = "web")]
 pub fn get_api_base_url() -> Result<Url> {

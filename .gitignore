@@ -14,5 +14,8 @@ docs
 .process-compose-override.yaml
 .justfile.local
 
+# Android emulator AVD data
+.android/
+
 # bv (beads viewer) local config and caches
 .bv/
