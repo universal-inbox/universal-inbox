@@ -9,6 +9,7 @@ pub struct TodoistProject {
     pub color: String,
     pub parent_id: Option<String>,
     pub child_order: i32,
+    #[serde(alias = "is_collapsed")]
     pub collapsed: bool,
     pub shared: bool,
     pub sync_id: Option<String>,

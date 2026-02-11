@@ -2,8 +2,8 @@ use playwright_rs::expect;
 use rstest::*;
 
 use crate::helpers::{
-    browser_tested_app, generate_test_user, launch_browser, login, wait_for_notification_rows,
-    BrowserTestedApp, EXPECT_TIMEOUT,
+    BrowserTestedApp, EXPECT_TIMEOUT, browser_tested_app, generate_test_user, launch_browser,
+    login, wait_for_notification_rows,
 };
 
 /// Test that a logged-in user with generated data sees notifications on the main page.

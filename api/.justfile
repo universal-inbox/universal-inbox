@@ -25,10 +25,10 @@ ensure-db:
 migrate-db:
     sqlx database setup
 
-test:
-    cargo nextest run -E 'not binary(browser)'
+test test-filter="" $RUST_LOG="info":
+    cargo nextest run -E 'not binary(browser)' --color always {{test-filter}}
 
-test-browser:
+test-browser test-filter="" $RUST_LOG="info":
     #!/usr/bin/env bash
 
     set -euo pipefail
@@ -36,7 +36,7 @@ test-browser:
     cd ..
     just web build-ci
     cd -
-    cargo nextest run -E 'binary(browser)'
+    cargo nextest run -E 'binary(browser)' --color always {{test-filter}}
 
 ## Run recipes
 run *command="serve --embed-async-workers": ensure-db

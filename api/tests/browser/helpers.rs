@@ -7,7 +7,7 @@ use tokio::sync::RwLock;
 use tracing::info;
 use wiremock::MockServer;
 
-use playwright_rs::{expect, LaunchOptions, Page, Playwright};
+use playwright_rs::{LaunchOptions, Page, Playwright, expect};
 
 /// Timeout for Playwright expect assertions.
 /// Debug WASM binaries (~74 MB) take significant time to download and initialize,
