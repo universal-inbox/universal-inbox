@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT\n                  integration_connection.id,\n                  integration_connection.user_id,\n                  integration_connection.provider_user_id,\n                  integration_connection.connection_id,\n                  integration_connection.status as \"status: _\",\n                  integration_connection.failure_message,\n                  integration_connection.created_at,\n                  integration_connection.updated_at,\n                  integration_connection.last_notifications_sync_scheduled_at,\n                  integration_connection.last_notifications_sync_started_at,\n                  integration_connection.last_notifications_sync_completed_at,\n                  integration_connection.last_notifications_sync_failed_at,\n                  integration_connection.last_notifications_sync_failure_message,\n                  integration_connection.notifications_sync_failures,\n                  integration_connection.last_tasks_sync_scheduled_at,\n                  integration_connection.last_tasks_sync_started_at,\n                  integration_connection.last_tasks_sync_completed_at,\n                  integration_connection.last_tasks_sync_failed_at,\n                  integration_connection.last_tasks_sync_failure_message,\n                  integration_connection.tasks_sync_failures,\n                  integration_connection_config.config as \"config: Json<IntegrationConnectionConfig>\",\n                  integration_connection.context as \"context: Json<IntegrationConnectionContext>\",\n                  integration_connection.registered_oauth_scopes as \"registered_oauth_scopes: Json<Vec<String>>\"\n                FROM integration_connection\n                INNER JOIN integration_connection_config\n                  ON integration_connection.id = integration_connection_config.integration_connection_id\n                WHERE\n                    integration_connection.provider_user_id = ANY($1)\n                    AND integration_connection.provider_kind::TEXT = $2\n                    AND integration_connection.status::TEXT = 'Validated'\n            ",
+  "query": "\n                SELECT\n                  integration_connection.id,\n                  integration_connection.user_id,\n                  integration_connection.provider_user_id,\n                  integration_connection.connection_id,\n                  integration_connection.status as \"status: _\",\n                  integration_connection.failure_message,\n                  integration_connection.created_at,\n                  integration_connection.updated_at,\n                  integration_connection.last_notifications_sync_scheduled_at,\n                  integration_connection.last_notifications_sync_started_at,\n                  integration_connection.last_notifications_sync_completed_at,\n                  integration_connection.last_notifications_sync_failed_at,\n                  integration_connection.last_notifications_sync_failure_message,\n                  integration_connection.notifications_sync_failures,\n                  integration_connection.last_tasks_sync_scheduled_at,\n                  integration_connection.last_tasks_sync_started_at,\n                  integration_connection.last_tasks_sync_completed_at,\n                  integration_connection.last_tasks_sync_failed_at,\n                  integration_connection.last_tasks_sync_failure_message,\n                  integration_connection.tasks_sync_failures,\n                  integration_connection.first_notifications_sync_failed_at,\n                  integration_connection.first_tasks_sync_failed_at,\n                  integration_connection_config.config as \"config: Json<IntegrationConnectionConfig>\",\n                  integration_connection.context as \"context: Json<IntegrationConnectionContext>\",\n                  integration_connection.registered_oauth_scopes as \"registered_oauth_scopes: Json<Vec<String>>\"\n                FROM integration_connection\n                INNER JOIN integration_connection_config\n                  ON integration_connection.id = integration_connection_config.integration_connection_id\n                WHERE\n                    integration_connection.provider_user_id = $1\n                    AND integration_connection.provider_kind::TEXT = $2\n                    AND integration_connection.status::TEXT = 'Validated'\n            ",
   "describe": {
     "columns": [
       {
@@ -116,23 +116,33 @@
       },
       {
         "ordinal": 20,
+        "name": "first_notifications_sync_failed_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 21,
+        "name": "first_tasks_sync_failed_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 22,
         "name": "config: Json<IntegrationConnectionConfig>",
         "type_info": "Json"
       },
       {
-        "ordinal": 21,
+        "ordinal": 23,
         "name": "context: Json<IntegrationConnectionContext>",
         "type_info": "Json"
       },
       {
-        "ordinal": 22,
+        "ordinal": 24,
         "name": "registered_oauth_scopes: Json<Vec<String>>",
         "type_info": "Json"
       }
     ],
     "parameters": {
       "Left": [
-        "TextArray",
+        "Text",
         "Text"
       ]
     },
@@ -157,10 +167,12 @@
       true,
       true,
       false,
+      true,
+      true,
       false,
       true,
       false
     ]
   },
-  "hash": "1a1225fcf3def85d9fead9ee3a150f6f53acb3cf29fadf63b3a656329cd61ecf"
+  "hash": "c1b70d76cce84d894be40ee5868d1d68e043ca810aa4116cab49404049c00b64"
 }

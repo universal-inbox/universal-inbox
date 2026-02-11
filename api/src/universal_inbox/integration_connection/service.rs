@@ -11,7 +11,7 @@ use tokio_retry::{
     Retry,
     strategy::{ExponentialBackoff, jitter},
 };
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 use universal_inbox::{
     integration_connection::{
@@ -51,6 +51,9 @@ pub struct IntegrationConnectionService {
     user_service: Arc<UserService>,
     min_sync_notifications_interval_in_minutes: i64,
     min_sync_tasks_interval_in_minutes: i64,
+    sync_backoff_base_delay_in_seconds: u64,
+    sync_backoff_max_delay_in_seconds: u64,
+    sync_failure_window_in_hours: i64,
 }
 
 pub const UNKNOWN_NANGO_CONNECTION_ERROR_MESSAGE: &str = "🔌 The OAuth connection is failing due to a technical issue on our end. Please try to reconnect the integration. If the issue keeps happening, please contact our support.";
@@ -71,6 +74,7 @@ impl fmt::Display for IntegrationConnectionSyncType {
 }
 
 impl IntegrationConnectionService {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         repository: Arc<Repository>,
         nango_service: NangoService,
@@ -79,6 +83,9 @@ impl IntegrationConnectionService {
         user_service: Arc<UserService>,
         min_sync_notifications_interval_in_minutes: i64,
         min_sync_tasks_interval_in_minutes: i64,
+        sync_backoff_base_delay_in_seconds: u64,
+        sync_backoff_max_delay_in_seconds: u64,
+        sync_failure_window_in_hours: i64,
     ) -> IntegrationConnectionService {
         IntegrationConnectionService {
             repository,
@@ -88,6 +95,9 @@ impl IntegrationConnectionService {
             user_service,
             min_sync_notifications_interval_in_minutes,
             min_sync_tasks_interval_in_minutes,
+            sync_backoff_base_delay_in_seconds,
+            sync_backoff_max_delay_in_seconds,
+            sync_failure_window_in_hours,
         }
     }
 
@@ -587,7 +597,8 @@ impl IntegrationConnectionService {
                 ),
             }
         };
-        self.repository
+        let connection = self
+            .repository
             .get_integration_connection_per_provider(
                 executor,
                 for_user_id,
@@ -595,7 +606,29 @@ impl IntegrationConnectionService {
                 synced_before_filter,
                 Some(IntegrationConnectionStatus::Validated),
             )
-            .await
+            .await?;
+
+        if let Some(ref conn) = connection {
+            let in_backoff = match sync_type {
+                IntegrationConnectionSyncType::Notifications => conn
+                    .is_notifications_sync_in_backoff(
+                        self.sync_backoff_base_delay_in_seconds,
+                        self.sync_backoff_max_delay_in_seconds,
+                    ),
+                IntegrationConnectionSyncType::Tasks => conn.is_tasks_sync_in_backoff(
+                    self.sync_backoff_base_delay_in_seconds,
+                    self.sync_backoff_max_delay_in_seconds,
+                ),
+            };
+            if in_backoff {
+                debug!(
+                    "{integration_provider_kind} {sync_type} sync for user {for_user_id} is in backoff, skipping"
+                );
+                return Ok(None);
+            }
+        }
+
+        Ok(connection)
     }
 
     #[tracing::instrument(
@@ -847,6 +880,7 @@ impl IntegrationConnectionService {
                 for_user_id,
                 integration_provider_kind,
                 IntegrationConnectionSyncStatusUpdate::NotificationsSyncScheduled,
+                self.sync_failure_window_in_hours,
             )
             .await
     }
@@ -872,6 +906,7 @@ impl IntegrationConnectionService {
                 Some(for_user_id),
                 Some(integration_provider_kind),
                 IntegrationConnectionSyncStatusUpdate::NotificationsSyncStarted,
+                self.sync_failure_window_in_hours,
             )
             .await
     }
@@ -897,6 +932,7 @@ impl IntegrationConnectionService {
                 Some(for_user_id),
                 Some(integration_provider_kind),
                 IntegrationConnectionSyncStatusUpdate::NotificationsSyncCompleted,
+                self.sync_failure_window_in_hours,
             )
             .await
     }
@@ -923,6 +959,7 @@ impl IntegrationConnectionService {
                 Some(for_user_id),
                 Some(integration_provider_kind),
                 IntegrationConnectionSyncStatusUpdate::NotificationsSyncFailed(failure_message),
+                self.sync_failure_window_in_hours,
             )
             .await
     }
@@ -948,6 +985,7 @@ impl IntegrationConnectionService {
                 for_user_id,
                 integration_provider_kind,
                 IntegrationConnectionSyncStatusUpdate::TasksSyncScheduled,
+                self.sync_failure_window_in_hours,
             )
             .await
     }
@@ -973,6 +1011,7 @@ impl IntegrationConnectionService {
                 Some(for_user_id),
                 Some(integration_provider_kind),
                 IntegrationConnectionSyncStatusUpdate::TasksSyncStarted,
+                self.sync_failure_window_in_hours,
             )
             .await
     }
@@ -998,6 +1037,7 @@ impl IntegrationConnectionService {
                 Some(for_user_id),
                 Some(integration_provider_kind),
                 IntegrationConnectionSyncStatusUpdate::TasksSyncCompleted,
+                self.sync_failure_window_in_hours,
             )
             .await
     }
@@ -1024,6 +1064,7 @@ impl IntegrationConnectionService {
                 Some(for_user_id),
                 Some(integration_provider_kind),
                 IntegrationConnectionSyncStatusUpdate::TasksSyncFailed(failure_message),
+                self.sync_failure_window_in_hours,
             )
             .await
     }

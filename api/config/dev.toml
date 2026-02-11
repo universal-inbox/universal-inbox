@@ -5,6 +5,9 @@ static_dir = "../target/dx/universal-inbox-web/debug/web/public"
 static_path = ""
 min_sync_tasks_interval_in_minutes = 2
 min_sync_notifications_interval_in_minutes = 2
+sync_backoff_base_delay_in_seconds = 10
+sync_backoff_max_delay_in_seconds = 60
+sync_failure_window_in_hours = 1
 version = "dev"
 front_base_url = "https://dev.universal-inbox.com"
 
