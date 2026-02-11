@@ -330,6 +330,7 @@ mod job {
             Some("U01".to_string()),
             None,
             None,
+            None,
         )
         .await;
         add_user_ref_in_message(&mut message_event, "U01");
@@ -380,6 +381,7 @@ mod job {
             IntegrationConnectionStatus::Validated,
             None,
             Some("U01".to_string()),
+            None,
             None,
             None,
         )

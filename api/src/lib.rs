@@ -389,6 +389,9 @@ pub async fn build_services(
             .application
             .min_sync_notifications_interval_in_minutes,
         settings.application.min_sync_tasks_interval_in_minutes,
+        settings.application.sync_backoff_base_delay_in_seconds,
+        settings.application.sync_backoff_max_delay_in_seconds,
+        settings.application.sync_failure_window_in_hours,
     )));
 
     let todoist_service = Arc::new(

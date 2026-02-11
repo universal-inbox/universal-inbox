@@ -1,5 +1,5 @@
 #![allow(clippy::too_many_arguments)]
-use chrono::{TimeZone, Timelike, Utc};
+use chrono::{TimeDelta, TimeZone, Timelike, Utc};
 use graphql_client::{Error, Response};
 use http::StatusCode;
 use rstest::*;
@@ -32,16 +32,15 @@ use universal_inbox_api::{
         oauth2::NangoConnection,
         todoist::TodoistSyncResponse,
     },
-    repository::integration_connection::{
-        MAX_SYNC_FAILURES_BEFORE_DISCONNECT, TOO_MANY_SYNC_FAILURES_ERROR_MESSAGE,
-    },
+    repository::integration_connection::TOO_MANY_SYNC_FAILURES_ERROR_MESSAGE,
 };
 
 use crate::helpers::{
     TestedApp,
     auth::{AuthenticatedApp, authenticated_app},
     integration_connection::{
-        create_and_mock_integration_connection, create_integration_connection,
+        create_and_mock_integration_connection,
+        create_and_mock_integration_connection_with_backoff, create_integration_connection,
         get_integration_connection_per_provider, nango_github_connection, nango_todoist_connection,
     },
     notification::{
@@ -557,6 +556,7 @@ async fn test_sync_all_notifications_with_no_validated_integration_connections(
         None,
         None,
         None,
+        None,
     )
     .await;
 
@@ -620,15 +620,17 @@ async fn test_sync_all_notifications_asynchronously_in_error(
     nango_github_connection: Box<NangoConnection>,
 ) {
     let app = authenticated_app.await;
-    create_and_mock_integration_connection(
+    // Set first_notifications_sync_failed_at beyond the failure window (dev config = 1h)
+    // so the next failure will trigger the Failing status
+    create_and_mock_integration_connection_with_backoff(
         &app.app,
         app.user.id,
         &settings.oauth2.nango_secret_key,
         IntegrationConnectionConfig::Github(GithubConfig::enabled()),
         &settings,
         nango_github_connection,
-        // Starting with max sync failures minus 1, it should mark the connection as failing with a new failure
-        Some(MAX_SYNC_FAILURES_BEFORE_DISCONNECT - 1),
+        Some(5),
+        Some(Utc::now() - TimeDelta::hours(2)),
         None,
     )
     .await;
@@ -697,9 +699,11 @@ async fn test_sync_all_notifications_asynchronously_in_error(
             .as_str(),
         "Failed to fetch notifications from Github"
     );
-    assert_eq!(
-        integration_connection.notifications_sync_failures,
-        MAX_SYNC_FAILURES_BEFORE_DISCONNECT
+    assert_eq!(integration_connection.notifications_sync_failures, 6);
+    assert!(
+        integration_connection
+            .first_notifications_sync_failed_at
+            .is_some()
     );
     assert_eq!(
         integration_connection.status,

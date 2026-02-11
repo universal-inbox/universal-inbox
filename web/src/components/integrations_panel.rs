@@ -240,7 +240,7 @@ pub fn IntegrationSettings(
             status: IntegrationConnectionStatus::Validated,
             last_notifications_sync_failure_message: Some(message),
             ..
-        })) => Some(format!("🔴 Notifications last sync failed: {message}")),
+        })) => Some(format!("🟡 Notifications sync degraded: {message}")),
         Some(Some(
             c @ IntegrationConnection {
                 status: IntegrationConnectionStatus::Validated,
@@ -284,7 +284,7 @@ pub fn IntegrationSettings(
             status: IntegrationConnectionStatus::Validated,
             last_tasks_sync_failure_message: Some(message),
             ..
-        })) => Some(format!("🔴 Tasks last sync failed: {message}")),
+        })) => Some(format!("🟡 Tasks sync degraded: {message}")),
         Some(Some(
             c @ IntegrationConnection {
                 status: IntegrationConnectionStatus::Validated,

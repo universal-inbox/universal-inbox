@@ -26,6 +26,7 @@
 - Display notifications elasped time since last update
 - Open links from notifications preview in a new tab
 - Automatically delete a notification when the user is the author of the latest message
+- Implement exponential backoff retries for failed synchronizations
 
 ### Fixed
 

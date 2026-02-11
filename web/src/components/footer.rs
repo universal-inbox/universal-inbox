@@ -40,6 +40,14 @@ pub fn Footer() -> Element {
                 "",
             );
         };
+        let has_degraded_sync = integration_connections.iter().any(|c| c.is_sync_degraded());
+        if has_degraded_sync {
+            return (
+                Some("Some integrations are experiencing sync issues. Retrying automatically."),
+                "bg-warning text-warning-content",
+                "",
+            );
+        };
         let has_missing_permission = integration_connections.iter().any(|c| {
             if let Some(provider_config) = app_config.integration_providers.get(&c.provider.kind())
             {
@@ -282,16 +290,18 @@ pub fn IntegrationConnectionStatus(
                 .unwrap_or_else(|| "Connection failed".to_string()),
         ),
         IntegrationConnection {
+            status: ConnectionStatus::Validated,
             last_notifications_sync_failure_message: Some(message),
             ..
         }
         | IntegrationConnection {
+            status: ConnectionStatus::Validated,
             last_tasks_sync_failure_message: Some(message),
             ..
         } => (
-            "text-error",
-            "tooltip-error",
-            format!("{provider_kind} failed to sync: {message}"),
+            "text-warning",
+            "tooltip-warning",
+            format!("{provider_kind} sync is degraded: {message}"),
         ),
         IntegrationConnection { .. } => (
             "",
