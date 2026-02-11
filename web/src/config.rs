@@ -10,7 +10,10 @@ use universal_inbox::{
     integration_connection::{NangoPublicKey, provider::IntegrationProviderKind},
 };
 
-use crate::{services::api::call_api, utils::current_origin};
+use crate::{
+    services::{api::call_api, version::check_version_mismatch},
+    utils::current_origin,
+};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct AppConfig {
@@ -23,6 +26,7 @@ pub struct AppConfig {
     pub show_changelog: bool,
     pub chat_support_website_id: Option<String>,
     pub chat_support_user_email_signature: Option<String>,
+    pub version: Option<String>,
 }
 
 pub static APP_CONFIG: GlobalSignal<Option<AppConfig>> = Signal::global(|| None);
@@ -45,6 +49,10 @@ pub async fn get_app_config() -> Result<AppConfig> {
     )
     .await?;
 
+    if let Some(ref version) = front_config.version {
+        check_version_mismatch(version);
+    }
+
     let app_config = AppConfig {
         api_base_url,
         authentication_configs: front_config.authentication_configs,
@@ -55,6 +63,7 @@ pub async fn get_app_config() -> Result<AppConfig> {
         show_changelog: front_config.show_changelog,
         chat_support_website_id: front_config.chat_support_website_id,
         chat_support_user_email_signature: front_config.chat_support_user_email_signature,
+        version: front_config.version,
     };
     Ok(app_config)
 }

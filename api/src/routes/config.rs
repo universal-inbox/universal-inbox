@@ -101,6 +101,7 @@ pub async fn front_config(
             .chat_support
             .as_ref()
             .map(|chat_support| chat_support.identity_verification_secret_key.clone()),
+        version: settings.application.version.clone(),
     };
 
     Ok(HttpResponse::Ok()
