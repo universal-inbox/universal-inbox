@@ -207,6 +207,15 @@ impl IntegrationProvider {
         }
     }
 
+    pub fn is_auto_delete_notifications_on_task_sync_enabled(&self) -> bool {
+        match self {
+            IntegrationProvider::Linear { config } => {
+                config.sync_task_config.enabled && config.sync_task_config.auto_delete_notifications
+            }
+            _ => false,
+        }
+    }
+
     pub fn should_create_notification_from_inbox_task(&self) -> bool {
         match self {
             IntegrationProvider::Todoist { config, .. } => {

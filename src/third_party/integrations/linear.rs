@@ -108,6 +108,13 @@ impl LinearNotification {
             LinearNotification::ProjectNotification { .. } => None,
         }
     }
+
+    pub fn get_issue_id(&self) -> Option<Uuid> {
+        match self {
+            LinearNotification::IssueNotification { issue, .. } => Some(issue.id),
+            LinearNotification::ProjectNotification { .. } => None,
+        }
+    }
 }
 
 impl HasHtmlUrl for LinearNotification {
