@@ -1104,8 +1104,8 @@ impl IntegrationConnectionRepository for Repository {
         executor: &mut Transaction<'_, Postgres>,
         id: IntegrationConnectionId,
     ) -> Result<bool, UniversalInboxError> {
-        let count: Option<i64> = sqlx::query_scalar!(
-            r#"SELECT count(*) FROM integration_connection WHERE id = $1"#,
+        let exists: Option<bool> = sqlx::query_scalar!(
+            r#"SELECT EXISTS(SELECT 1 FROM integration_connection WHERE id = $1)"#,
             id.0
         )
         .fetch_one(&mut **executor)
@@ -1118,10 +1118,7 @@ impl IntegrationConnectionRepository for Repository {
             }
         })?;
 
-        if let Some(1) = count {
-            return Ok(true);
-        }
-        return Ok(false);
+        Ok(exists.unwrap_or(false))
     }
 
     #[tracing::instrument(
