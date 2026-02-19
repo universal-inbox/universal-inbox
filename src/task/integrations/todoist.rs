@@ -11,7 +11,8 @@ pub struct TodoistProject {
     pub child_order: i32,
     #[serde(alias = "is_collapsed")]
     pub collapsed: bool,
-    pub shared: bool,
+    #[serde(alias = "shared")]
+    pub is_shared: bool,
     pub sync_id: Option<String>,
     pub is_deleted: bool,
     pub is_archived: bool,
