@@ -13,7 +13,7 @@ use crate::helpers::{
 async fn test_user_can_login(#[future] browser_tested_app: BrowserTestedApp) {
     let app = browser_tested_app.await;
     let email = generate_test_user(&app).await;
-    let (_playwright, page) = launch_browser().await;
+    let (_context, page) = launch_browser().await;
 
     login(&page, &app.app_url, &email).await;
 
@@ -127,7 +127,7 @@ async fn test_user_can_login(#[future] browser_tested_app: BrowserTestedApp) {
 async fn test_login_fails_with_wrong_password(#[future] browser_tested_app: BrowserTestedApp) {
     let app = browser_tested_app.await;
     let email = generate_test_user(&app).await;
-    let (_playwright, page) = launch_browser().await;
+    let (_context, page) = launch_browser().await;
 
     page.goto(&format!("{}/login", app.app_url), None)
         .await
@@ -187,7 +187,7 @@ async fn test_login_fails_with_wrong_password(#[future] browser_tested_app: Brow
 #[tokio::test]
 async fn test_login_fails_with_nonexistent_user(#[future] browser_tested_app: BrowserTestedApp) {
     let app = browser_tested_app.await;
-    let (_playwright, page) = launch_browser().await;
+    let (_context, page) = launch_browser().await;
 
     page.goto(&format!("{}/login", app.app_url), None)
         .await

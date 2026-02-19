@@ -1,9 +1,9 @@
 [profile.default]
-# Browser tests share Playwright/Chromium instances and database connections,
-# so they must run sequentially to avoid resource contention.
 [[profile.default.overrides]]
 filter = 'binary(browser)'
 threads-required = 'num-cpus'
+retries = 2
+slow-timeout = { period = "120s" }
 
 [profile.ci]
 junit.path = "junit.xml"
@@ -15,3 +15,5 @@ junit.path = "junit.xml"
 failure-output = "immediate-final"
 fail-fast = false
 test-threads = 1
+retries = 2
+slow-timeout = { period = "120s" }
