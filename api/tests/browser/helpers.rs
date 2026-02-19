@@ -3,11 +3,11 @@ use std::{collections::HashMap, env, sync::Arc, time::Duration};
 use apalis_redis::RedisStorage;
 use rstest::*;
 use sqlx::PgPool;
-use tokio::sync::RwLock;
+use tokio::sync::{OnceCell, RwLock};
 use tracing::info;
 use wiremock::MockServer;
 
-use playwright_rs::{LaunchOptions, Page, Playwright, expect};
+use playwright_rs::{Browser, BrowserContext, LaunchOptions, Page, Playwright, expect};
 
 /// Timeout for Playwright expect assertions.
 /// Debug WASM binaries (~74 MB) take significant time to download and initialize,
@@ -128,22 +128,36 @@ pub async fn browser_tested_app(
     }
 }
 
+/// Shared across all tests to avoid re-launching Playwright + Chromium per test (~5-10s each).
+/// Test isolation is preserved: each test gets a fresh `BrowserContext` + `Page`.
+static SHARED_BROWSER: OnceCell<(Playwright, Browser)> = OnceCell::const_new();
+
 /// Launch a headless Chromium browser and return a new page.
 ///
 /// External requests (e.g., CDN scripts, analytics) are blocked so they don't
 /// stall page initialization in the isolated test environment.
-pub async fn launch_browser() -> (Playwright, Page) {
-    let playwright = Playwright::launch()
+pub async fn launch_browser() -> (BrowserContext, Page) {
+    let (_playwright, browser) = SHARED_BROWSER
+        .get_or_init(|| async {
+            let playwright = Playwright::launch()
+                .await
+                .expect("Failed to launch Playwright");
+            // Disable Chromium sandbox on CI (Linux containers lack required kernel features)
+            let launch_options = LaunchOptions::default().chromium_sandbox(false);
+            let browser = playwright
+                .chromium()
+                .launch_with_options(launch_options)
+                .await
+                .expect("Failed to launch Chromium");
+            (playwright, browser)
+        })
+        .await;
+
+    let context = browser
+        .new_context()
         .await
-        .expect("Failed to launch Playwright");
-    // Disable Chromium sandbox on CI (Linux containers lack required kernel features)
-    let launch_options = LaunchOptions::default().chromium_sandbox(false);
-    let browser = playwright
-        .chromium()
-        .launch_with_options(launch_options)
-        .await
-        .expect("Failed to launch Chromium");
-    let page = browser.new_page().await.expect("Failed to create page");
+        .expect("Failed to create browser context");
+    let page = context.new_page().await.expect("Failed to create page");
 
     // Block external network requests that may hang in isolated test environments
     page.route("**/*headwayapp.co*", |route| async move {
@@ -155,7 +169,7 @@ pub async fn launch_browser() -> (Playwright, Page) {
         .await
         .expect("Failed to set up route interception for cdn");
 
-    (playwright, page)
+    (context, page)
 }
 
 /// Generate a test user with sample data and return the email address.
