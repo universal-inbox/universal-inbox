@@ -15,6 +15,7 @@ use tokio::sync::RwLock;
 
 use universal_inbox::{
     Page,
+    integration_connection::provider::IntegrationProviderKind,
     task::{
         ProjectSummary, Task, TaskId, TaskStatus, TaskSummary, service::SyncTasksParameters,
         service::TaskPatch,
@@ -307,7 +308,12 @@ pub async fn search_projects(
         .await
         .context("Failed to create new transaction while listing tasks")?;
     let task_projects: Vec<ProjectSummary> = service
-        .search_projects(&mut transaction, matches, user_id)
+        .search_projects(
+            &mut transaction,
+            matches,
+            user_id,
+            IntegrationProviderKind::Todoist,
+        )
         .await?;
 
     Ok(HttpResponse::Ok()

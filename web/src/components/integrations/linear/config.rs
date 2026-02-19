@@ -6,6 +6,7 @@ use universal_inbox::{
     integration_connection::{
         config::IntegrationConnectionConfig,
         integrations::linear::{LinearConfig, LinearSyncTaskConfig},
+        provider::IntegrationProviderKind,
     },
     task::{PresetDueDate, ProjectSummary},
 };
@@ -16,7 +17,8 @@ use crate::{
         flyonui::tooltip::{Tooltip, TooltipPlacement},
     },
     config::get_api_base_url,
-    model::UniversalInboxUIModel,
+    model::{LoadState, UniversalInboxUIModel},
+    services::integration_connection_service::TASK_SERVICE_INTEGRATION_CONNECTIONS,
 };
 
 #[component]
@@ -27,18 +29,26 @@ pub fn LinearProviderConfiguration(
 ) -> Element {
     let mut default_project: Signal<Option<ProjectSummary>> = use_signal(|| None);
     let mut default_due_at: Signal<Option<PresetDueDate>> = use_signal(|| None);
+    let mut default_task_manager_provider_kind: Signal<Option<IntegrationProviderKind>> =
+        use_signal(|| None);
     let mut task_config_enabled = use_signal(|| false);
     use_memo(move || {
         *default_project.write() = config().sync_task_config.target_project;
         default_due_at
             .write()
             .clone_from(&config().sync_task_config.default_due_at);
+        *default_task_manager_provider_kind.write() =
+            config().sync_task_config.task_manager_provider_kind;
         *task_config_enabled.write() = if !ui_model.read().is_task_actions_enabled {
             false
         } else {
             config().sync_task_config.enabled
         };
     });
+    let show_task_manager_select = matches!(
+        &*TASK_SERVICE_INTEGRATION_CONNECTIONS.read(),
+        LoadState::Loaded(connections) if connections.len() >= 2
+    );
     let collapse_style = use_memo(move || {
         if task_config_enabled() {
             ""
@@ -187,6 +197,35 @@ pub fn LinearProviderConfiguration(
                             option { selected: default_due_at() == Some(PresetDueDate::Tomorrow), "{PresetDueDate::Tomorrow}" }
                             option { selected: default_due_at() == Some(PresetDueDate::ThisWeekend), "{PresetDueDate::ThisWeekend}" }
                             option { selected: default_due_at() == Some(PresetDueDate::NextWeek), "{PresetDueDate::NextWeek}" }
+                        }
+                    }
+
+                    if show_task_manager_select {
+                        div {
+                            class: "flex items-center gap-2",
+                            label {
+                                class: "label-text cursor-pointer grow text-sm text-base-content",
+                                "Task manager to sync with"
+                            }
+                            FloatingLabelSelect::<IntegrationProviderKind> {
+                                label: None,
+                                class: "max-w-xs",
+                                name: "linear-task-manager-input".to_string(),
+                                disabled: !ui_model.read().is_task_actions_enabled,
+                                default_value: default_task_manager_provider_kind().map(|p| p.to_string()).unwrap_or_default(),
+                                on_select: move |task_manager_provider_kind| {
+                                    on_config_change.call(IntegrationConnectionConfig::Linear(LinearConfig {
+                                        sync_task_config: LinearSyncTaskConfig {
+                                            task_manager_provider_kind,
+                                            ..config().sync_task_config
+                                        },
+                                        ..config()
+                                    }));
+                                },
+
+                                option { selected: default_task_manager_provider_kind() == Some(IntegrationProviderKind::Todoist), value: "Todoist", "Todoist" }
+                                option { selected: default_task_manager_provider_kind() == Some(IntegrationProviderKind::TickTick), value: "TickTick", "TickTick" }
+                            }
                         }
                     }
                 }

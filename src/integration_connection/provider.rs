@@ -15,6 +15,7 @@ use crate::{
                 SlackConfig, SlackContext, SlackReactionConfig, SlackStarConfig,
                 SlackSyncTaskConfig, SlackSyncType,
             },
+            ticktick::{TickTickConfig, TickTickContext},
             todoist::{TodoistConfig, TodoistContext},
         },
     },
@@ -51,7 +52,10 @@ pub enum IntegrationProvider {
         context: Option<TodoistContext>,
         config: TodoistConfig,
     },
-    TickTick,
+    TickTick {
+        context: Option<TickTickContext>,
+        config: TickTickConfig,
+    },
     API,
 }
 
@@ -115,7 +119,18 @@ impl IntegrationProvider {
                     .transpose()?,
                 config,
             }),
-            IntegrationConnectionConfig::TickTick => Ok(Self::TickTick),
+            IntegrationConnectionConfig::TickTick(config) => Ok(Self::TickTick {
+                context: context
+                    .map(|c| {
+                        if let IntegrationConnectionContext::TickTick(c) = c {
+                            Ok(c)
+                        } else {
+                            Err(anyhow!("Unexpect context for TickTick provider: {c:?}"))
+                        }
+                    })
+                    .transpose()?,
+                config,
+            }),
             IntegrationConnectionConfig::API => Ok(Self::API),
         }
     }
@@ -130,7 +145,7 @@ impl IntegrationProvider {
             IntegrationProvider::Notion => false,
             IntegrationProvider::Slack { context, .. } => context.is_none(),
             IntegrationProvider::Todoist { context, .. } => context.is_none(),
-            IntegrationProvider::TickTick => false,
+            IntegrationProvider::TickTick { context, .. } => context.is_none(),
             IntegrationProvider::API => false,
         }
     }
@@ -153,7 +168,7 @@ impl IntegrationProvider {
             IntegrationProvider::Notion => IntegrationProviderKind::Notion,
             IntegrationProvider::Slack { .. } => IntegrationProviderKind::Slack,
             IntegrationProvider::Todoist { .. } => IntegrationProviderKind::Todoist,
-            IntegrationProvider::TickTick => IntegrationProviderKind::TickTick,
+            IntegrationProvider::TickTick { .. } => IntegrationProviderKind::TickTick,
             IntegrationProvider::API => IntegrationProviderKind::API,
         }
     }
@@ -182,7 +197,9 @@ impl IntegrationProvider {
             IntegrationProvider::Slack { config, .. } => {
                 IntegrationConnectionConfig::Slack(config.clone())
             }
-            IntegrationProvider::TickTick => IntegrationConnectionConfig::TickTick,
+            IntegrationProvider::TickTick { config, .. } => {
+                IntegrationConnectionConfig::TickTick(config.clone())
+            }
             IntegrationProvider::API => IntegrationConnectionConfig::API,
         }
     }
@@ -201,6 +218,7 @@ impl IntegrationProvider {
     pub fn is_sync_tasks_enabled(&self) -> bool {
         match self {
             IntegrationProvider::Todoist { config, .. } => config.sync_tasks_enabled,
+            IntegrationProvider::TickTick { config, .. } => config.sync_tasks_enabled,
             IntegrationProvider::Linear { config } => config.sync_task_config.enabled,
             IntegrationProvider::Slack { .. } => false, // Slack tasks are not synced but received via the webhook
             _ => false,
@@ -212,6 +230,9 @@ impl IntegrationProvider {
             IntegrationProvider::Todoist { config, .. } => {
                 config.create_notification_from_inbox_task
             }
+            IntegrationProvider::TickTick { config, .. } => {
+                config.create_notification_from_inbox_task
+            }
             _ => false,
         }
     }
@@ -220,72 +241,79 @@ impl IntegrationProvider {
         &self,
         third_party_item: &ThirdPartyItem,
     ) -> Option<TaskCreationConfig> {
-        let (target_project, default_due_at, default_priority) = match self {
-            IntegrationProvider::Slack { config, .. } => {
-                match third_party_item.get_third_party_item_source_kind() {
-                    ThirdPartyItemSourceKind::SlackStar => {
-                        let SlackConfig {
-                            star_config:
-                                SlackStarConfig {
-                                    sync_type:
-                                        SlackSyncType::AsTasks(SlackSyncTaskConfig {
-                                            target_project,
-                                            default_due_at,
-                                            default_priority,
-                                        }),
-                                    ..
-                                },
-                            ..
-                        } = config
-                        else {
-                            return None;
-                        };
+        let (target_project, default_due_at, default_priority, task_manager_provider_kind) =
+            match self {
+                IntegrationProvider::Slack { config, .. } => {
+                    match third_party_item.get_third_party_item_source_kind() {
+                        ThirdPartyItemSourceKind::SlackStar => {
+                            let SlackConfig {
+                                star_config:
+                                    SlackStarConfig {
+                                        sync_type:
+                                            SlackSyncType::AsTasks(SlackSyncTaskConfig {
+                                                target_project,
+                                                default_due_at,
+                                                default_priority,
+                                                task_manager_provider_kind,
+                                            }),
+                                        ..
+                                    },
+                                ..
+                            } = config
+                            else {
+                                return None;
+                            };
 
-                        (
-                            target_project.as_ref(),
-                            default_due_at.as_ref(),
-                            default_priority,
-                        )
-                    }
-                    ThirdPartyItemSourceKind::SlackReaction => {
-                        let SlackConfig {
-                            reaction_config:
-                                SlackReactionConfig {
-                                    sync_type:
-                                        SlackSyncType::AsTasks(SlackSyncTaskConfig {
-                                            target_project,
-                                            default_due_at,
-                                            default_priority,
-                                        }),
-                                    ..
-                                },
-                            ..
-                        } = config
-                        else {
-                            return None;
-                        };
+                            (
+                                target_project.as_ref(),
+                                default_due_at.as_ref(),
+                                default_priority,
+                                task_manager_provider_kind.as_ref(),
+                            )
+                        }
+                        ThirdPartyItemSourceKind::SlackReaction => {
+                            let SlackConfig {
+                                reaction_config:
+                                    SlackReactionConfig {
+                                        sync_type:
+                                            SlackSyncType::AsTasks(SlackSyncTaskConfig {
+                                                target_project,
+                                                default_due_at,
+                                                default_priority,
+                                                task_manager_provider_kind,
+                                            }),
+                                        ..
+                                    },
+                                ..
+                            } = config
+                            else {
+                                return None;
+                            };
 
-                        (
-                            target_project.as_ref(),
-                            default_due_at.as_ref(),
-                            default_priority,
-                        )
+                            (
+                                target_project.as_ref(),
+                                default_due_at.as_ref(),
+                                default_priority,
+                                task_manager_provider_kind.as_ref(),
+                            )
+                        }
+                        _ => return None,
                     }
-                    _ => return None,
                 }
-            }
-            IntegrationProvider::Linear { config } => (
-                config.sync_task_config.target_project.as_ref(),
-                config.sync_task_config.default_due_at.as_ref(),
-                &TaskPriority::default(),
-            ),
-            _ => return None,
-        };
+                IntegrationProvider::Linear { config } => (
+                    config.sync_task_config.target_project.as_ref(),
+                    config.sync_task_config.default_due_at.as_ref(),
+                    &TaskPriority::default(),
+                    config.sync_task_config.task_manager_provider_kind.as_ref(),
+                ),
+                _ => return None,
+            };
 
         Some(TaskCreationConfig {
             project_name: target_project.map(|project| project.name.clone()),
             due_at: default_due_at.map(|due_at| due_at.clone().into()),
             priority: *default_priority,
+            task_manager_provider_kind: task_manager_provider_kind.copied(),
         })
     }
 }
@@ -294,6 +322,7 @@ impl IntegrationProvider {
 #[serde(tag = "type", content = "content")]
 pub enum IntegrationConnectionContext {
     Todoist(TodoistContext),
+    TickTick(TickTickContext),
     GoogleDrive(GoogleDriveContext),
     GoogleMail(GoogleMailContext),
     Slack(SlackContext),
@@ -360,7 +389,9 @@ impl IntegrationProviderKind {
             IntegrationProviderKind::Todoist => {
                 IntegrationConnectionConfig::Todoist(Default::default())
             }
-            IntegrationProviderKind::TickTick => IntegrationConnectionConfig::TickTick,
+            IntegrationProviderKind::TickTick => {
+                IntegrationConnectionConfig::TickTick(Default::default())
+            }
             IntegrationProviderKind::API => IntegrationConnectionConfig::API,
         }
     }

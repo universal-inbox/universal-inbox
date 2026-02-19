@@ -12,6 +12,7 @@ use crate::{
         integrations::{
             linear::task_list_item::LinearTaskListItem,
             slack::task_list_item::{SlackReactionTaskListItem, SlackStarTaskListItem},
+            ticktick::task_list_item::TickTickTaskListItem,
             todoist::task_list_item::TodoistTaskListItem,
         },
         list::{List, ListItemActionButton},
@@ -105,6 +106,14 @@ fn TaskListItem(
             SlackReactionTaskListItem {
                 task,
                 slack_reaction: *slack_reaction,
+                is_selected,
+                on_select,
+            }
+        },
+        ThirdPartyItemData::TickTickItem(ticktick_item) => rsx! {
+            TickTickTaskListItem {
+                task,
+                ticktick_item: *ticktick_item,
                 is_selected,
                 on_select,
             }

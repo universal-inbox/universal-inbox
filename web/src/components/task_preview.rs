@@ -15,6 +15,7 @@ use crate::{
             slack::preview::{
                 slack_reaction::SlackReactionTaskPreview, slack_star::SlackStarTaskPreview,
             },
+            ticktick::preview::TickTickTaskPreview,
             todoist::preview::TodoistTaskPreview,
         },
         tasks_list::{TaskListContext, get_task_list_item_action_buttons},
@@ -56,6 +57,7 @@ pub fn TaskPreview(
             ""
         };
     let task_type = match task().source_item.kind() {
+        ThirdPartyItemKind::TickTickItem => "Task",
         ThirdPartyItemKind::TodoistItem => "Task",
         ThirdPartyItemKind::SlackStar => "Saved for later message",
         ThirdPartyItemKind::SlackReaction => "Reaction",
@@ -162,6 +164,9 @@ pub fn TaskPreview(
 #[component]
 pub fn TaskDetailsPreview(task: ReadSignal<Task>, expand_details: ReadSignal<bool>) -> Element {
     match task().source_item.data {
+        ThirdPartyItemData::TickTickItem(ticktick_item) => rsx! {
+            TickTickTaskPreview { ticktick_item: *ticktick_item, task }
+        },
         ThirdPartyItemData::TodoistItem(todoist_item) => rsx! {
             TodoistTaskPreview { todoist_item: *todoist_item, task }
         },

@@ -93,6 +93,7 @@ pub fn NotificationIcon(kind: NotificationSourceKind) -> Element {
         NotificationSourceKind::GoogleDrive => rsx! { GoogleDrive { class: "h-5 w-5" } },
         NotificationSourceKind::GoogleMail => rsx! { GoogleMail { class: "h-5 w-5" } },
         NotificationSourceKind::Todoist => rsx! { Todoist { class: "h-5 w-5" } },
+        NotificationSourceKind::TickTick => rsx! { TickTick { class: "h-5 w-5" } },
         NotificationSourceKind::Slack => rsx! { Icon { class: "h-5 w-5", icon: BsSlack } },
         NotificationSourceKind::API => rsx! { UniversalInbox { class: "h-5 w-5" } },
     }
@@ -103,6 +104,7 @@ pub fn TaskIcon(class: String, kind: TaskSourceKind) -> Element {
     // tag: New notification integration
     match kind {
         TaskSourceKind::Todoist => rsx! { Todoist { class } },
+        TaskSourceKind::TickTick => rsx! { TickTick { class } },
         TaskSourceKind::Linear => rsx! { Linear { class } },
         TaskSourceKind::Slack => rsx! { Icon { class, icon: BsSlack } },
     }

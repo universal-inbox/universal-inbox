@@ -118,7 +118,10 @@ impl NotificationWithTask {
     }
 
     pub fn is_built_from_task(&self) -> bool {
-        matches!(self.kind, NotificationSourceKind::Todoist)
+        matches!(
+            self.kind,
+            NotificationSourceKind::Todoist | NotificationSourceKind::TickTick
+        )
     }
 
     pub fn into_notification(self) -> Notification {
@@ -197,6 +200,7 @@ macro_attr! {
     pub enum NotificationSourceKind {
         Github,
         Todoist,
+        TickTick,
         Linear,
         GoogleMail,
         GoogleCalendar,
@@ -212,6 +216,7 @@ impl TryFrom<ThirdPartyItemSourceKind> for NotificationSourceKind {
     fn try_from(source_kind: ThirdPartyItemSourceKind) -> Result<Self, Self::Error> {
         match source_kind {
             ThirdPartyItemSourceKind::Todoist => Ok(Self::Todoist),
+            ThirdPartyItemSourceKind::TickTick => Ok(Self::TickTick),
             ThirdPartyItemSourceKind::GithubNotification => Ok(Self::Github),
             ThirdPartyItemSourceKind::LinearNotification => Ok(Self::Linear),
             ThirdPartyItemSourceKind::GoogleMailThread => Ok(Self::GoogleMail),
@@ -268,6 +273,7 @@ impl TryFrom<IntegrationProviderKind> for NotificationSourceKind {
             IntegrationProviderKind::GoogleCalendar => Ok(Self::GoogleCalendar),
             IntegrationProviderKind::GoogleDrive => Ok(Self::GoogleDrive),
             IntegrationProviderKind::Todoist => Ok(Self::Todoist),
+            IntegrationProviderKind::TickTick => Ok(Self::TickTick),
             IntegrationProviderKind::Slack => Ok(Self::Slack),
             _ => Err(()),
         }
@@ -284,6 +290,7 @@ impl From<NotificationSourceKind> for IntegrationProviderKind {
             NotificationSourceKind::GoogleCalendar => Self::GoogleCalendar,
             NotificationSourceKind::GoogleDrive => Self::GoogleDrive,
             NotificationSourceKind::Todoist => Self::Todoist,
+            NotificationSourceKind::TickTick => Self::TickTick,
             NotificationSourceKind::Slack => Self::Slack,
             NotificationSourceKind::API => Self::API,
         }

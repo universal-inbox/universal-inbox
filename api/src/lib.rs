@@ -61,7 +61,8 @@ use crate::{
     configuration::Settings,
     integrations::{
         github::GithubService, google_drive::GoogleDriveService, google_mail::GoogleMailService,
-        linear::LinearService, oauth2::NangoService, todoist::TodoistService,
+        linear::LinearService, oauth2::NangoService, ticktick::TickTickService,
+        todoist::TodoistService,
     },
     jobs::handle_universal_inbox_job,
     observability::AuthenticatedRootSpanBuilder,
@@ -362,6 +363,7 @@ pub async fn build_services(
     google_calendar_base_url: Option<String>,
     slack_base_url: Option<String>,
     todoist_address: Option<String>,
+    ticktick_address: Option<String>,
     nango_service: NangoService,
     mailer: Arc<RwLock<dyn Mailer + Send + Sync>>,
     webauthn: Arc<Webauthn>,
@@ -411,6 +413,14 @@ pub async fn build_services(
             settings.get_integration_max_retry_duration(execution_context, "todoist"),
         )
         .expect("Failed to create new TodoistService"),
+    );
+    let ticktick_service = Arc::new(
+        TickTickService::new(
+            ticktick_address,
+            integration_connection_service.clone(),
+            settings.get_integration_max_retry_duration(execution_context, "ticktick"),
+        )
+        .expect("Failed to create new TickTickService"),
     );
     // tag: New notification integration
     let github_settings = settings
@@ -487,6 +497,7 @@ pub async fn build_services(
         Weak::new(),
         integration_connection_service.clone(),
         todoist_service.clone(),
+        ticktick_service.clone(),
         slack_service.clone(),
         linear_service.clone(),
         api_service.clone(),
@@ -522,6 +533,7 @@ pub async fn build_services(
     let task_service = Arc::new(RwLock::new(TaskService::new(
         repository,
         todoist_service.clone(),
+        ticktick_service.clone(),
         linear_service.clone(),
         Arc::downgrade(&notification_service),
         slack_service.clone(),

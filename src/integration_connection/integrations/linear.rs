@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::integration_connection::provider::IntegrationProviderKind;
 use crate::task::{PresetDueDate, ProjectSummary};
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
@@ -38,6 +39,7 @@ pub struct LinearSyncTaskConfig {
     pub enabled: bool,
     pub target_project: Option<ProjectSummary>,
     pub default_due_at: Option<PresetDueDate>,
+    pub task_manager_provider_kind: Option<IntegrationProviderKind>,
 }
 
 impl LinearSyncTaskConfig {
@@ -46,6 +48,7 @@ impl LinearSyncTaskConfig {
             enabled: true,
             target_project: None,
             default_due_at: None,
+            task_manager_provider_kind: None,
         }
     }
 
@@ -54,6 +57,7 @@ impl LinearSyncTaskConfig {
             enabled: false,
             target_project: None,
             default_due_at: None,
+            task_manager_provider_kind: None,
         }
     }
 }

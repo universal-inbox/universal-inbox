@@ -5,7 +5,7 @@ repos:
       - id: fmt
         name: Format Rust code
         description: Format files with cargo fmt
-        entry: just format-all
+        entry: just format
         language: system
         files: \.rs$
         pass_filenames: false

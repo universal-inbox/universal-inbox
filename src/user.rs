@@ -9,6 +9,8 @@ use serde_with::serde_as;
 use uuid::Uuid;
 use validator::Validate;
 
+use crate::integration_connection::provider::IntegrationProviderKind;
+
 #[serde_as]
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct User {
@@ -268,4 +270,17 @@ impl FromStr for PasswordResetToken {
     fn from_str(uuid: &str) -> Result<Self, Self::Err> {
         Ok(Self(Uuid::parse_str(uuid)?))
     }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct UserPreferences {
+    pub user_id: UserId,
+    pub default_task_manager_provider_kind: Option<IntegrationProviderKind>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
+pub struct UserPreferencesPatch {
+    pub default_task_manager_provider_kind: Option<Option<IntegrationProviderKind>>,
 }
