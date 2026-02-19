@@ -11,7 +11,7 @@ use crate::helpers::{
 #[tokio::test]
 async fn test_user_can_register(#[future] browser_tested_app: BrowserTestedApp) {
     let app = browser_tested_app.await;
-    let (_playwright, page) = launch_browser().await;
+    let (_context, page) = launch_browser().await;
 
     // Register a new user
     let email = format!("browser-test+{}@test.com", uuid::Uuid::new_v4());
@@ -46,7 +46,7 @@ async fn test_registration_fails_with_invalid_email(
     #[future] browser_tested_app: BrowserTestedApp,
 ) {
     let app = browser_tested_app.await;
-    let (_playwright, page) = launch_browser().await;
+    let (_context, page) = launch_browser().await;
 
     page.goto(&format!("{}/signup", app.app_url), None)
         .await
@@ -108,7 +108,7 @@ async fn test_registration_fails_with_short_password(
     #[future] browser_tested_app: BrowserTestedApp,
 ) {
     let app = browser_tested_app.await;
-    let (_playwright, page) = launch_browser().await;
+    let (_context, page) = launch_browser().await;
 
     page.goto(&format!("{}/signup", app.app_url), None)
         .await

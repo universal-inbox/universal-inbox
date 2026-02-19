@@ -12,7 +12,7 @@ use crate::helpers::{
 async fn test_notifications_are_displayed(#[future] browser_tested_app: BrowserTestedApp) {
     let app = browser_tested_app.await;
     let email = generate_test_user(&app).await;
-    let (_playwright, page) = launch_browser().await;
+    let (_context, page) = launch_browser().await;
 
     login(&page, &app.app_url, &email).await;
 
@@ -38,7 +38,7 @@ async fn test_notifications_are_displayed(#[future] browser_tested_app: BrowserT
 async fn test_delete_notification_with_keyboard(#[future] browser_tested_app: BrowserTestedApp) {
     let app = browser_tested_app.await;
     let email = generate_test_user(&app).await;
-    let (_playwright, page) = launch_browser().await;
+    let (_context, page) = launch_browser().await;
 
     login(&page, &app.app_url, &email).await;
     wait_for_notification_rows(&page).await;
@@ -111,7 +111,7 @@ async fn test_unsubscribe_notification_with_keyboard(
 ) {
     let app = browser_tested_app.await;
     let email = generate_test_user(&app).await;
-    let (_playwright, page) = launch_browser().await;
+    let (_context, page) = launch_browser().await;
 
     login(&page, &app.app_url, &email).await;
     wait_for_notification_rows(&page).await;
@@ -182,7 +182,7 @@ async fn test_unsubscribe_notification_with_keyboard(
 async fn test_snooze_notification_with_keyboard(#[future] browser_tested_app: BrowserTestedApp) {
     let app = browser_tested_app.await;
     let email = generate_test_user(&app).await;
-    let (_playwright, page) = launch_browser().await;
+    let (_context, page) = launch_browser().await;
 
     login(&page, &app.app_url, &email).await;
     wait_for_notification_rows(&page).await;
