@@ -11,9 +11,13 @@ use serde_json;
 use url::Url;
 
 use crate::{
-    components::toast_zone::{Toast, ToastKind},
+    components::{
+        subscription_required_modal::SUBSCRIPTION_REQUIRED_MODAL_ID,
+        toast_zone::{Toast, ToastKind},
+    },
     model::{AuthenticationState, UniversalInboxUIModel},
     services::{
+        flyonui::open_flyonui_modal,
         toast_service::{ToastCommand, ToastUpdate},
         version::check_version_mismatch,
     },
@@ -42,6 +46,24 @@ pub async fn call_api<R: for<'de> serde::de::Deserialize<'de>, B: serde::Seriali
         && let Ok(version_str) = backend_version.to_str()
     {
         check_version_mismatch(version_str);
+    }
+
+    if response.status() == StatusCode::FORBIDDEN {
+        if Some(HeaderValue::from_static("application/json"))
+            == response.headers().get("content-type").cloned()
+        {
+            let message: HashMap<String, String> = response.json().await?;
+            if message.get("error").map(|e| e.as_str()) == Some("subscription_required") {
+                open_flyonui_modal(&format!("#{SUBSCRIPTION_REQUIRED_MODAL_ID}"));
+                return Err(anyhow!(
+                    message
+                        .get("message")
+                        .cloned()
+                        .unwrap_or_else(|| "Subscription required".to_string())
+                ));
+            }
+        }
+        return Err(anyhow!("Access forbidden"));
     }
 
     if response.status().is_server_error() || response.status() == StatusCode::BAD_REQUEST {

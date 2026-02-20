@@ -147,6 +147,13 @@ vec1 = { workspace = true }
 wiremock = "0.6.0"
 webauthn-rs = { workspace = true, features = ["danger-allow-state-serialisation"] }
 reqwest-retry = "0.9.0"
+async-stripe = { version = "0.41", default-features = false, features = [
+  "runtime-tokio-hyper",
+  "checkout",
+  "billing",
+  "webhook-events",
+  "connect",
+] }
 
 [dev-dependencies]
 lzma-rust2 = "0.15.7"

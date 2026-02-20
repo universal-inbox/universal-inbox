@@ -73,6 +73,7 @@ features = [
   "EventListener",
   "EventTarget",
   "Headers",
+  "History",
   "HtmlInputElement",
   "InputEvent",
   "InputEventInit",

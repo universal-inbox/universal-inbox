@@ -13,7 +13,8 @@ use universal_inbox::{
 use crate::{
     components::{
         notification_preview::NotificationPreview, notifications_list::NotificationsList,
-        resizable_panel::ResizablePanel, welcome_hero::WelcomeHero,
+        read_only_banner::ReadOnlyBanner, resizable_panel::ResizablePanel,
+        welcome_hero::WelcomeHero,
     },
     keyboard_manager::{KEYBOARD_MANAGER, KeyboardHandler},
     model::{PreviewPane, UI_MODEL},
@@ -21,6 +22,7 @@ use crate::{
     services::{
         flyonui::open_flyonui_modal,
         notification_service::{NOTIFICATION_FILTERS, NOTIFICATIONS_PAGE, NotificationCommand},
+        user_service::CONNECTED_USER,
     },
     settings::PanelPosition,
     utils::{
@@ -114,34 +116,40 @@ fn InternalNotificationPage(notification_id: ReadSignal<Option<NotificationId>>)
 
     rsx! {
         div {
-            id: "notifications-page",
-            class: "{layout_class}",
-            onmounted: move |_| {
-                KEYBOARD_MANAGER.write().active_keyboard_handler = Some(&KEYBOARD_HANDLER);
-            },
+            class: "flex flex-col h-full",
 
-            if NOTIFICATIONS_PAGE.read().content.is_empty() && !NOTIFICATION_FILTERS().is_filtered() {
-                WelcomeHero { inbox_zero_message: "Your notifications will appear here when they arrive." }
-            } else {
-                div {
-                    class: match panel_position {
-                        PanelPosition::Right => "h-full flex-1 max-lg:w-full max-lg:absolute",
-                        PanelPosition::Bottom => "flex-1 max-lg:w-full max-lg:absolute overflow-y-auto",
-                    },
+            ReadOnlyBanner {}
 
-                    NotificationsList {
-                        notifications,
-                        notification_filters: NOTIFICATION_FILTERS.signal(),
+            div {
+                id: "notifications-page",
+                class: "{layout_class} flex-1",
+                onmounted: move |_| {
+                    KEYBOARD_MANAGER.write().active_keyboard_handler = Some(&KEYBOARD_HANDLER);
+                },
+
+                if NOTIFICATIONS_PAGE.read().content.is_empty() && !NOTIFICATION_FILTERS().is_filtered() {
+                    WelcomeHero { inbox_zero_message: "Your notifications will appear here when they arrive." }
+                } else {
+                    div {
+                        class: match panel_position {
+                            PanelPosition::Right => "h-full flex-1 max-lg:w-full max-lg:absolute",
+                            PanelPosition::Bottom => "flex-1 max-lg:w-full max-lg:absolute overflow-y-auto",
+                        },
+
+                        NotificationsList {
+                            notifications,
+                            notification_filters: NOTIFICATION_FILTERS.signal(),
+                        }
                     }
-                }
 
-                if let Some(index) = UI_MODEL.read().selected_notification_index {
-                    if let Some(notification) = NOTIFICATIONS_PAGE().content.get(index) {
-                        ResizablePanel {
-                            NotificationPreview {
-                                notification: notification.clone(),
-                                notifications_count: notifications().content.len(),
-                                ui_model: UI_MODEL.signal()
+                    if let Some(index) = UI_MODEL.read().selected_notification_index {
+                        if let Some(notification) = NOTIFICATIONS_PAGE().content.get(index) {
+                            ResizablePanel {
+                                NotificationPreview {
+                                    notification: notification.clone(),
+                                    notifications_count: notifications().content.len(),
+                                    ui_model: UI_MODEL.signal()
+                                }
                             }
                         }
                     }
@@ -162,6 +170,11 @@ impl KeyboardHandler for NotificationsPageKeyboardHandler {
         let selected_notification_index = UI_MODEL.peek().selected_notification_index;
         let selected_notification =
             selected_notification_index.and_then(|index| notifications_page.content.get(index));
+        let is_read_only = CONNECTED_USER
+            .peek()
+            .as_ref()
+            .map(|ctx| ctx.subscription.is_read_only)
+            .unwrap_or(false);
         let mut handled = true;
 
         match (
@@ -217,31 +230,31 @@ impl KeyboardHandler for NotificationsPageKeyboardHandler {
             {
                 UI_MODEL.write().selected_preview_pane = PreviewPane::Notification;
             }
-            ("d", false, false, false, false) => {
+            ("d", false, false, false, false) if !is_read_only => {
                 if let Some(notification) = selected_notification {
                     notification_service.send(NotificationCommand::DeleteFromNotification(
                         notification.clone(),
                     ))
                 }
             }
-            ("c", false, false, false, false) => {
+            ("c", false, false, false, false) if !is_read_only => {
                 if let Some(notification) = selected_notification {
                     notification_service.send(NotificationCommand::CompleteTaskFromNotification(
                         notification.clone(),
                     ))
                 }
             }
-            ("u", false, false, false, false) => {
+            ("u", false, false, false, false) if !is_read_only => {
                 if let Some(notification) = selected_notification {
                     notification_service.send(NotificationCommand::Unsubscribe(notification.id))
                 }
             }
-            ("s", false, false, false, false) => {
+            ("s", false, false, false, false) if !is_read_only => {
                 if let Some(notification) = selected_notification {
                     notification_service.send(NotificationCommand::Snooze(notification.id))
                 }
             }
-            ("t", false, false, false, false) => {
+            ("t", false, false, false, false) if !is_read_only => {
                 if let Some(notification) = selected_notification {
                     notification_service.send(
                         NotificationCommand::CreateTaskWithDetaultsFromNotification(
@@ -250,31 +263,31 @@ impl KeyboardHandler for NotificationsPageKeyboardHandler {
                     )
                 }
             }
-            ("y", false, false, false, false) => {
+            ("y", false, false, false, false) if !is_read_only => {
                 if let Some(notification) = selected_notification {
                     notification_service
                         .send(NotificationCommand::AcceptInvitation(notification.id))
                 }
             }
-            ("n", false, false, false, false) => {
+            ("n", false, false, false, false) if !is_read_only => {
                 if let Some(notification) = selected_notification {
                     notification_service
                         .send(NotificationCommand::DeclineInvitation(notification.id))
                 }
             }
-            ("m", false, false, false, false) => {
+            ("m", false, false, false, false) if !is_read_only => {
                 if let Some(notification) = selected_notification {
                     notification_service.send(NotificationCommand::TentativelyAcceptInvitation(
                         notification.id,
                     ))
                 }
             }
-            ("p", false, false, false, false) => {
+            ("p", false, false, false, false) if !is_read_only => {
                 if UI_MODEL.peek().is_task_actions_enabled {
                     open_flyonui_modal("#task-planning-modal");
                 }
             }
-            ("l", false, false, false, false) => {
+            ("l", false, false, false, false) if !is_read_only => {
                 if UI_MODEL.peek().is_task_actions_enabled {
                     open_flyonui_modal("#task-linking-modal");
                 }

@@ -102,6 +102,7 @@ pub async fn front_config(
             .as_ref()
             .map(|chat_support| chat_support.identity_verification_secret_key.clone()),
         version: settings.application.version.clone(),
+        stripe_enabled: settings.stripe_enabled(),
     };
 
     Ok(HttpResponse::Ok()
