@@ -10,6 +10,7 @@ use crate::{
     utils::{compute_text_color_from_background_color, format_elapsed_time},
 };
 
+pub mod auth_methods_card;
 pub mod authentication_tokens_card;
 pub mod datepicker;
 pub mod delete_all_confirmation_modal;
