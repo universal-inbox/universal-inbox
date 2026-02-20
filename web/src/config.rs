@@ -10,10 +10,9 @@ use universal_inbox::{
     integration_connection::{NangoPublicKey, provider::IntegrationProviderKind},
 };
 
-use crate::{
-    services::{api::call_api, version::check_version_mismatch},
-    utils::current_origin,
-};
+use crate::services::{api::call_api, version::check_version_mismatch};
+#[cfg(feature = "web")]
+use crate::utils::current_origin;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct AppConfig {
@@ -31,11 +30,26 @@ pub struct AppConfig {
 
 pub static APP_CONFIG: GlobalSignal<Option<AppConfig>> = Signal::global(|| None);
 
+/// On mobile, the API base URL is configured by the user at first launch and stored locally.
+/// Defaults to the production server URL.
+#[cfg(feature = "mobile")]
+pub static MOBILE_API_BASE_URL: GlobalSignal<Option<Url>> =
+    Signal::global(|| Some(Url::parse("https://app.universal-inbox.com/api/").unwrap()));
+
+#[cfg(feature = "web")]
 pub fn get_api_base_url() -> Result<Url> {
     match current_origin()?.join("/api/") {
         Ok(url) => Ok(url),
         Err(err) => Err(anyhow::anyhow!("Failed to parse api_base_url: {}", err)),
     }
+}
+
+#[cfg(feature = "mobile")]
+pub fn get_api_base_url() -> Result<Url> {
+    MOBILE_API_BASE_URL
+        .read()
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("Mobile API base URL not configured"))
 }
 
 pub async fn get_app_config() -> Result<AppConfig> {

@@ -1,11 +1,20 @@
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Result, anyhow};
 use chrono::{DateTime, Local, Utc};
+
+#[cfg(feature = "web")]
+use anyhow::Context;
+#[cfg(feature = "web")]
 use gloo_timers::future::TimeoutFuture;
+#[cfg(feature = "web")]
 use gloo_utils::errors::JsError;
+#[cfg(feature = "web")]
 use url::Url;
+#[cfg(feature = "web")]
 use wasm_bindgen::JsCast;
+#[cfg(feature = "web")]
 use web_sys::{Element, HtmlElement, HtmlInputElement, ScrollBehavior, ScrollToOptions, Window};
 
+#[cfg(feature = "web")]
 pub async fn focus_and_select_input_element(id: &str) -> Result<HtmlInputElement> {
     let elt = wait_for_element_by_id(id, 300)
         .await?
@@ -19,6 +28,7 @@ pub async fn focus_and_select_input_element(id: &str) -> Result<HtmlInputElement
     Ok(elt)
 }
 
+#[cfg(feature = "web")]
 pub async fn focus_element(id: &str) -> Result<HtmlElement> {
     let elt = wait_for_element_by_id(id, 300)
         .await?
@@ -32,6 +42,7 @@ pub async fn focus_element(id: &str) -> Result<HtmlElement> {
     Ok(elt)
 }
 
+#[cfg(feature = "web")]
 pub fn get_element_by_id(id: &str) -> Result<Element> {
     let window = web_sys::window().context("Unable to load `window`")?;
     let document = window.document().context("Unable to load `document`")?;
@@ -40,6 +51,7 @@ pub fn get_element_by_id(id: &str) -> Result<Element> {
         .context(format!("Element `{id}` not found"))
 }
 
+#[cfg(feature = "web")]
 pub async fn wait_for_element_by_id(id: &str, timeout: u32) -> Result<Element> {
     let max_loops = timeout / 10;
     let window = web_sys::window().context("Unable to load `window`")?;
@@ -57,6 +69,7 @@ pub async fn wait_for_element_by_id(id: &str, timeout: u32) -> Result<Element> {
         .context(format!("Element `{id}` not found"))
 }
 
+#[cfg(feature = "web")]
 pub fn redirect_to(url: &str) -> Result<()> {
     let window = web_sys::window().context("Unable to load `window`")?;
     Ok(window
@@ -65,6 +78,7 @@ pub fn redirect_to(url: &str) -> Result<()> {
         .map_err(|err| JsError::try_from(err).unwrap())?)
 }
 
+#[cfg(feature = "web")]
 pub fn current_location() -> Result<Url> {
     let window = web_sys::window().context("Unable to load `window`")?;
     Ok(Url::parse(
@@ -75,6 +89,7 @@ pub fn current_location() -> Result<Url> {
     )?)
 }
 
+#[cfg(feature = "web")]
 pub fn current_origin() -> Result<Url> {
     let window = web_sys::window().context("Unable to load `window`")?;
     Ok(Url::parse(
@@ -85,6 +100,7 @@ pub fn current_origin() -> Result<Url> {
     )?)
 }
 
+#[cfg(feature = "web")]
 pub fn get_local_storage() -> Result<web_sys::Storage> {
     let window = web_sys::window().context("Unable to get the window object")?;
     window
@@ -108,6 +124,7 @@ pub fn compute_text_color_from_background_color(color: &str) -> String {
     }
 }
 
+#[cfg(feature = "web")]
 pub fn open_link(url: &str) -> Result<Window> {
     let window = web_sys::window().context("Unable to get the window object")?;
     window
@@ -116,6 +133,7 @@ pub fn open_link(url: &str) -> Result<Window> {
         .context("Unable to open the link in a new tab")
 }
 
+#[cfg(feature = "web")]
 pub async fn copy_to_clipboard(text: &str) -> Result<()> {
     wasm_bindgen_futures::JsFuture::from(
         web_sys::window()
@@ -131,6 +149,7 @@ pub async fn copy_to_clipboard(text: &str) -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "web")]
 pub fn scroll_element(id: &str, by: f64) -> Result<()> {
     let elt = get_element_by_id(id)?;
     let scroll_options = ScrollToOptions::new();
@@ -140,11 +159,13 @@ pub fn scroll_element(id: &str, by: f64) -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "web")]
 pub fn scroll_element_by_page(id: &str) -> Result<()> {
     let elt = get_element_by_id(id)?;
     scroll_element(id, elt.client_height().into())
 }
 
+#[cfg(feature = "web")]
 pub async fn create_navigator_credentials(
     options: web_sys::CredentialCreationOptions,
 ) -> Result<web_sys::PublicKeyCredential> {
@@ -163,6 +184,7 @@ pub async fn create_navigator_credentials(
     .context("Failed to create public key for Passkey authentication")
 }
 
+#[cfg(feature = "web")]
 pub async fn get_navigator_credentials(
     options: web_sys::CredentialRequestOptions,
 ) -> Result<web_sys::PublicKeyCredential> {
@@ -181,6 +203,7 @@ pub async fn get_navigator_credentials(
     .context("Failed to get public key for Passkey authentication")
 }
 
+#[cfg(feature = "web")]
 pub fn get_screen_width() -> Result<usize> {
     let window = web_sys::window().context("Unable to load `window`")?;
     Ok(window
@@ -190,6 +213,7 @@ pub fn get_screen_width() -> Result<usize> {
         .unwrap_or_default() as usize)
 }
 
+#[cfg(feature = "web")]
 pub fn scroll_element_into_view_by_class(
     container_id: &str,
     child_class: &str,
@@ -198,12 +222,10 @@ pub fn scroll_element_into_view_by_class(
     let window = web_sys::window().context("Unable to load `window`")?;
     let document = window.document().context("Unable to load `document`")?;
 
-    // Get the container element
     let container = document
         .get_element_by_id(container_id)
         .context(format!("Container element `{container_id}` not found"))?;
 
-    // Get all elements with the specified class within the container
     let elements = container
         .query_selector_all(&format!(".{}", child_class))
         .map_err(|err| JsError::try_from(err).unwrap())?;
@@ -271,7 +293,7 @@ pub fn format_elapsed_time(updated_at: DateTime<Utc>) -> String {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "web"))]
 mod tests {
     use super::*;
     use chrono::{Duration, Utc};

@@ -1,34 +1,51 @@
 #![allow(non_snake_case)]
 
+#[cfg(feature = "web")]
 use dioxus::prelude::dioxus_core::use_drop;
 use dioxus::prelude::*;
 use log::debug;
-use web_sys::KeyboardEvent;
 
+#[cfg(feature = "web")]
+use universal_inbox::HasHtmlUrl;
 use universal_inbox::{
-    HasHtmlUrl, Page,
+    Page,
     notification::{NotificationId, NotificationWithTask},
 };
 
 use crate::{
     components::{
         notification_preview::NotificationPreview, notifications_list::NotificationsList,
-        resizable_panel::ResizablePanel, welcome_hero::WelcomeHero,
+        welcome_hero::WelcomeHero,
     },
-    keyboard_manager::{KEYBOARD_MANAGER, KeyboardHandler},
-    model::{PreviewPane, UI_MODEL},
+    model::UI_MODEL,
     route::Route,
-    services::{
-        flyonui::open_flyonui_modal,
-        notification_service::{NOTIFICATION_FILTERS, NOTIFICATIONS_PAGE, NotificationCommand},
+    services::notification_service::{
+        NOTIFICATION_FILTERS, NOTIFICATIONS_PAGE, NotificationCommand,
     },
     settings::PanelPosition,
+};
+
+#[cfg(feature = "web")]
+use crate::keyboard_manager::{KEYBOARD_MANAGER, KeyboardHandler};
+#[cfg(feature = "web")]
+use crate::model::PreviewPane;
+
+#[cfg(feature = "web")]
+use crate::{
+    components::resizable_panel::ResizablePanel,
+    services::flyonui::open_flyonui_modal,
     utils::{
         get_screen_width, open_link, scroll_element, scroll_element_by_page,
         scroll_element_into_view_by_class,
     },
 };
 
+#[cfg(not(feature = "web"))]
+fn get_screen_width() -> Result<usize, anyhow::Error> {
+    Ok(0)
+}
+
+#[cfg(feature = "web")]
 static KEYBOARD_HANDLER: NotificationsPageKeyboardHandler = NotificationsPageKeyboardHandler {};
 
 #[component]
@@ -98,6 +115,7 @@ fn InternalNotificationPage(notification_id: ReadSignal<Option<NotificationId>>)
         }
     });
 
+    #[cfg(feature = "web")]
     use_drop(move || {
         KEYBOARD_MANAGER.write().active_keyboard_handler = None;
     });
@@ -117,7 +135,10 @@ fn InternalNotificationPage(notification_id: ReadSignal<Option<NotificationId>>)
             id: "notifications-page",
             class: "{layout_class}",
             onmounted: move |_| {
-                KEYBOARD_MANAGER.write().active_keyboard_handler = Some(&KEYBOARD_HANDLER);
+                #[cfg(feature = "web")]
+                {
+                    KEYBOARD_MANAGER.write().active_keyboard_handler = Some(&KEYBOARD_HANDLER);
+                }
             },
 
             if NOTIFICATIONS_PAGE.read().content.is_empty() && !NOTIFICATION_FILTERS().is_filtered() {
@@ -137,13 +158,7 @@ fn InternalNotificationPage(notification_id: ReadSignal<Option<NotificationId>>)
 
                 if let Some(index) = UI_MODEL.read().selected_notification_index {
                     if let Some(notification) = NOTIFICATIONS_PAGE().content.get(index) {
-                        ResizablePanel {
-                            NotificationPreview {
-                                notification: notification.clone(),
-                                notifications_count: notifications().content.len(),
-                                ui_model: UI_MODEL.signal()
-                            }
-                        }
+                        { notification_detail_panel(notification.clone(), notifications().content.len()) }
                     }
                 }
             }
@@ -151,11 +166,46 @@ fn InternalNotificationPage(notification_id: ReadSignal<Option<NotificationId>>)
     }
 }
 
+#[cfg(feature = "web")]
+fn notification_detail_panel(
+    notification: NotificationWithTask,
+    notifications_count: usize,
+) -> Element {
+    rsx! {
+        ResizablePanel {
+            NotificationPreview {
+                notification: notification,
+                notifications_count: notifications_count,
+                ui_model: UI_MODEL.signal()
+            }
+        }
+    }
+}
+
+#[cfg(not(feature = "web"))]
+fn notification_detail_panel(
+    notification: NotificationWithTask,
+    notifications_count: usize,
+) -> Element {
+    rsx! {
+        div {
+            class: "h-full flex-1 overflow-y-auto",
+            NotificationPreview {
+                notification: notification,
+                notifications_count: notifications_count,
+                ui_model: UI_MODEL.signal()
+            }
+        }
+    }
+}
+
+#[cfg(feature = "web")]
 #[derive(PartialEq)]
 struct NotificationsPageKeyboardHandler {}
 
+#[cfg(feature = "web")]
 impl KeyboardHandler for NotificationsPageKeyboardHandler {
-    fn handle_keydown(&self, event: &KeyboardEvent) -> bool {
+    fn handle_keydown(&self, event: &web_sys::KeyboardEvent) -> bool {
         let notification_service = use_coroutine_handle::<NotificationCommand>();
         let notifications_page = NOTIFICATIONS_PAGE();
         let list_length = notifications_page.content.len();

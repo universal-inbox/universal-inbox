@@ -1,18 +1,28 @@
 #![allow(non_snake_case)]
 
-use log::{debug, error};
-
-use anyhow::{Context, Result};
-use dioxus::prelude::dioxus_core::needs_update;
 use dioxus::prelude::*;
+
+#[cfg(target_arch = "wasm32")]
+use anyhow::{Context, Result};
+#[cfg(target_arch = "wasm32")]
+use dioxus::prelude::dioxus_core::needs_update;
+#[cfg(target_arch = "wasm32")]
 use gloo_utils::errors::JsError;
+#[cfg(target_arch = "wasm32")]
+use log::{debug, error};
+#[cfg(target_arch = "wasm32")]
 use openidconnect::{
     AccessToken, AuthorizationCode, ClientId, IssuerUrl, Nonce, PkceCodeChallenge,
     PkceCodeVerifier, RedirectUrl,
 };
+#[cfg(target_arch = "wasm32")]
 use reqwest::{Client, Method};
+#[cfg(target_arch = "wasm32")]
 use url::Url;
 
+#[cfg(not(target_arch = "wasm32"))]
+use universal_inbox::FrontAuthenticationConfig;
+#[cfg(target_arch = "wasm32")]
 use universal_inbox::{
     FrontAuthenticationConfig,
     auth::{
@@ -21,6 +31,9 @@ use universal_inbox::{
     },
 };
 
+#[cfg(not(target_arch = "wasm32"))]
+use crate::route::Route;
+#[cfg(target_arch = "wasm32")]
 use crate::{
     components::loading::Loading,
     model::{AuthenticationState, UI_MODEL},
@@ -32,9 +45,18 @@ use crate::{
 #[component]
 #[allow(unused_variables)]
 pub fn AuthPage(query: String) -> Element {
-    rsx! { Loading { label: "Authenticating..." } }
+    #[cfg(target_arch = "wasm32")]
+    {
+        use crate::components::loading::Loading;
+        rsx! { Loading { label: "Authenticating..." } }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        rsx! { Outlet::<Route> {} }
+    }
 }
 
+#[cfg(target_arch = "wasm32")]
 #[component]
 pub fn Authenticated(
     authentication_configs: Vec<FrontAuthenticationConfig>,
@@ -199,6 +221,17 @@ pub fn Authenticated(
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+#[component]
+pub fn Authenticated(
+    authentication_configs: Vec<FrontAuthenticationConfig>,
+    api_base_url: url::Url,
+    children: Element,
+) -> Element {
+    rsx! { Outlet::<Route> {} }
+}
+
+#[cfg(target_arch = "wasm32")]
 pub async fn authenticate_authorization_code_flow(api_base_url: &Url) -> Result<()> {
     debug!("auth: Authenticating with Authorization code flow (server flow)");
     debug!("auth: Not authenticated, redirecting to login");
@@ -214,6 +247,7 @@ pub async fn authenticate_authorization_code_flow(api_base_url: &Url) -> Result<
 // - if there is no access token or if invalid, redirect to the auth provider
 // - if called on the auth callback URL with a `code` query parameter, fetch the access token and create
 // an authenticated session against the API
+#[cfg(target_arch = "wasm32")]
 async fn authenticate_pkce_flow(
     api_base_url: &Url,
     auth_code: Option<String>,
@@ -248,6 +282,7 @@ async fn authenticate_pkce_flow(
 
 /// Generate the PKCE challenge and build an authorization URL (at the auth provider) to redirect the user to
 /// Store the PKCE code verifier and the nonce in the local storage for later verification
+#[cfg(target_arch = "wasm32")]
 pub async fn build_auth_url(oidc_provider: OpenidConnectProvider) -> Result<Url> {
     let (pkce_challenge, pkce_code_verifier) = PkceCodeChallenge::new_random_sha256();
 
@@ -267,6 +302,7 @@ pub async fn build_auth_url(oidc_provider: OpenidConnectProvider) -> Result<Url>
 }
 
 /// Fetch the access token from the auth provider using the given code
+#[cfg(target_arch = "wasm32")]
 async fn fetch_access_token(
     oidc_provider: OpenidConnectProvider,
     auth_code: AuthorizationCode,
@@ -303,6 +339,7 @@ async fn fetch_access_token(
     Ok((access_token, id_token.to_string().into()))
 }
 
+#[cfg(target_arch = "wasm32")]
 async fn is_session_authenticated(
     api_base_url: &Url,
     access_token: &AccessToken,
@@ -322,6 +359,7 @@ async fn is_session_authenticated(
     Ok(response.status().is_success())
 }
 
+#[cfg(target_arch = "wasm32")]
 async fn create_authenticated_session(
     api_base_url: &Url,
     access_token: &AccessToken,
@@ -339,6 +377,7 @@ async fn create_authenticated_session(
     Ok(())
 }
 
+#[cfg(target_arch = "wasm32")]
 async fn get_authorization_code_flow_auth_url(api_base_url: &Url) -> Result<Url> {
     let response: AuthorizeSessionResponse = call_api(
         Method::GET,

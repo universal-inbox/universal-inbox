@@ -3,6 +3,7 @@
 use chrono::{NaiveDate, Utc};
 use dioxus::prelude::dioxus_core::use_drop;
 use dioxus::prelude::*;
+#[cfg(feature = "web")]
 use dioxus::web::WebEventExt;
 use log::error;
 use serde_json::json;
@@ -20,6 +21,10 @@ use universal_inbox::{
 };
 use url::Url;
 
+#[cfg(feature = "web")]
+use crate::services::flyonui::{close_flyonui_modal, forget_flyonui_modal, init_flyonui_modal};
+#[cfg(feature = "web")]
+use crate::utils::focus_element;
 use crate::{
     components::{
         datepicker::DatePicker,
@@ -29,8 +34,6 @@ use crate::{
         integrations::todoist::icons::Todoist,
     },
     model::{LoadState, UniversalInboxUIModel},
-    services::flyonui::{close_flyonui_modal, forget_flyonui_modal, init_flyonui_modal},
-    utils::focus_element,
 };
 
 #[component]
@@ -54,9 +57,13 @@ pub fn TaskPlanningModal(
         Option<IntegrationConnectionId>,
     > = use_signal(|| None);
 
+    #[cfg(feature = "web")]
     let mut mounted_element: Signal<Option<web_sys::Element>> = use_signal(|| None);
+    #[cfg(not(feature = "web"))]
+    let mut mounted_element: Signal<Option<()>> = use_signal(|| None);
 
     use_drop(move || {
+        #[cfg(feature = "web")]
         if let Some(element) = mounted_element() {
             forget_flyonui_modal(&element);
         }
@@ -114,9 +121,12 @@ pub fn TaskPlanningModal(
             role: "dialog",
             tabindex: "-1",
             onmounted: move |element| {
-                let web_element = element.as_web_event();
-                init_flyonui_modal(&web_element);
-                mounted_element.set(Some(web_element));
+                #[cfg(feature = "web")]
+                {
+                    let web_element = element.as_web_event();
+                    init_flyonui_modal(&web_element);
+                    mounted_element.set(Some(web_element));
+                }
             },
 
             div {
@@ -145,6 +155,7 @@ pub fn TaskPlanningModal(
                                     &evt.data.values(), project()
                                 ) {
                                     on_task_planning.call((task_planning_parameters, task.id));
+                                    #[cfg(feature = "web")]
                                     close_flyonui_modal("#task-planning-modal");
                                 } else {
                                     *force_validation.write() = true;
@@ -153,6 +164,7 @@ pub fn TaskPlanningModal(
                                 &evt.data.values(), project()
                             ) {
                                 on_task_creation.call(task_creation_parameters);
+                                #[cfg(feature = "web")]
                                 close_flyonui_modal("#task-planning-modal");
                             } else {
                                 *force_validation.write() = true;
@@ -196,6 +208,7 @@ pub fn TaskPlanningModal(
                                 }),
                                 on_select: move |selected_project: Option<ProjectSummary>| {
                                     *project.write() = selected_project.map(|p| p.name);
+                                    #[cfg(feature = "web")]
                                     spawn({
                                         async move {
                                             if let Err(error) = focus_element("task-planning-modal-submit").await {

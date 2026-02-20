@@ -15,13 +15,14 @@ use dioxus_free_icons::{
 use secrecy::ExposeSecret;
 use universal_inbox::auth::auth_token::AuthenticationTokenId;
 
+#[cfg(feature = "web")]
+use crate::utils::copy_to_clipboard;
 use crate::{
     components::{loading::Loading, spinner::Spinner},
     model::LoadState,
     services::authentication_token_service::{
         AUTHENTICATION_TOKENS, AuthenticationTokenCommand, CREATED_AUTHENTICATION_TOKEN,
     },
-    utils::copy_to_clipboard,
 };
 
 #[component]
@@ -181,7 +182,10 @@ pub fn AuthenticationToken(
                         onclick: move |_| {
                             let jwt_token = jwt_token.clone();
                             async move {
-                                copy_to_clipboard(&jwt_token).await.unwrap();
+                                #[cfg(feature = "web")]
+                                {
+                                    copy_to_clipboard(&jwt_token).await.unwrap();
+                                }
                                 *is_copied.write() = true;
                             }
                         },

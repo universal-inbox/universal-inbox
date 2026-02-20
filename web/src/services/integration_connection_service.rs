@@ -15,13 +15,15 @@ use universal_inbox::{
     },
 };
 
+#[cfg(feature = "web")]
+use crate::services::nango::nango_auth;
 use crate::{
     components::toast_zone::{Toast, ToastKind},
     config::AppConfig,
     model::{LoadState, UniversalInboxUIModel},
     services::{
-        api::call_api, nango::nango_auth, notification_service::NotificationCommand,
-        task_service::TaskCommand, toast_service::ToastCommand,
+        api::call_api, notification_service::NotificationCommand, task_service::TaskCommand,
+        toast_service::ToastCommand,
     },
 };
 
@@ -337,6 +339,7 @@ async fn authenticate_integration_connection(
         "Authenticating integration_connection {} for {provider_kind}",
         integration_connection.id
     );
+    #[cfg(feature = "web")]
     nango_auth(
         &nango_base_url,
         &nango_public_key,
@@ -345,6 +348,11 @@ async fn authenticate_integration_connection(
         provider_config.oauth_user_scopes.clone(),
     )
     .await?;
+    #[cfg(not(feature = "web"))]
+    {
+        let _ = (&nango_base_url, &nango_public_key, &provider_config);
+        return Err(anyhow!("Nango auth not supported on mobile"));
+    }
 
     verify_integration_connection(
         integration_connection.id,

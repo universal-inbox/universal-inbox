@@ -46,6 +46,10 @@ install-rust-toolchain:
     rustup toolchain uninstall $toolchain
   done
   rustup target list --installed | grep -q '^wasm32-unknown-unknown$' || rustup target add wasm32-unknown-unknown
+  # Android targets for Dioxus mobile builds
+  for target in aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android; do
+    rustup target list --installed | grep -q "^${target}$" || rustup target add "$target"
+  done
   rustup component list --installed | grep -q '^rust-analyzer-' || rustup component add rust-analyzer
   rustup component list --installed | grep -q '^llvm-tools-' || rustup component add llvm-tools-preview
 
