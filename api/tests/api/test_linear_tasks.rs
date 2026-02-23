@@ -92,6 +92,7 @@ async fn test_sync_todoist_linear_task(
                 enabled: true,
                 target_project: Some(project.clone()),
                 default_due_at: Some(PresetDueDate::Today),
+                ..Default::default()
             },
         }),
         &settings,
