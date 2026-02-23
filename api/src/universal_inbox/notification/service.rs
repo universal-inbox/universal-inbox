@@ -1094,6 +1094,7 @@ impl NotificationService {
                         executor,
                         ThirdPartyItemKind::LinearIssue,
                         &linear_issue_id.to_string(),
+                        Some(user_id),
                     )
                     .await?;
 
