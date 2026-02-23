@@ -46,6 +46,7 @@ pub trait ThirdPartyItemRepository {
         executor: &mut Transaction<'_, Postgres>,
         kind: ThirdPartyItemKind,
         source_id: &str,
+        user_id: Option<UserId>,
     ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError>;
 
     async fn find_third_party_items_for_user_id(
@@ -357,6 +358,7 @@ impl ThirdPartyItemRepository for Repository {
         fields(
             kind = kind.to_string(),
             source_id = source_id,
+            user.id = user_id.map(|id| id.to_string()),
         ),
         err
     )]
@@ -365,6 +367,7 @@ impl ThirdPartyItemRepository for Repository {
         executor: &mut Transaction<'_, Postgres>,
         kind: ThirdPartyItemKind,
         source_id: &str,
+        user_id: Option<UserId>,
     ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError> {
         let mut query_builder = QueryBuilder::new(
             r#"
@@ -391,6 +394,10 @@ impl ThirdPartyItemRepository for Repository {
         query_builder.push_bind(source_id);
         query_builder.push(" AND third_party_item.kind::TEXT = ");
         query_builder.push_bind(kind.to_string());
+        if let Some(user_id) = user_id {
+            query_builder.push(" AND third_party_item.user_id = ");
+            query_builder.push_bind(user_id.0);
+        }
 
         let records = query_builder
             .build_query_as::<ThirdPartyItemRow>()

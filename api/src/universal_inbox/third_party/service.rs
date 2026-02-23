@@ -488,9 +488,10 @@ impl ThirdPartyItemService {
         executor: &mut Transaction<'_, Postgres>,
         kind: ThirdPartyItemKind,
         source_id: &str,
+        user_id: Option<UserId>,
     ) -> Result<Vec<ThirdPartyItem>, UniversalInboxError> {
         self.repository
-            .find_third_party_items_for_source_id(executor, kind, source_id)
+            .find_third_party_items_for_source_id(executor, kind, source_id, user_id)
             .await
     }
 }

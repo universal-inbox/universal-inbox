@@ -73,6 +73,12 @@ pub trait TaskRepository {
         patch: &TaskPatch,
         for_user_id: UserId,
     ) -> Result<UpdateStatus<Box<Task>>, UniversalInboxError>;
+    async fn get_task_for_source_item_id(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        source_item_id: Uuid,
+        user_id: UserId,
+    ) -> Result<Option<Task>, UniversalInboxError>;
 }
 
 #[async_trait]
@@ -1094,6 +1100,80 @@ impl TaskRepository for Repository {
                 result: None,
             })
         }
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            source_item_id = source_item_id.to_string(),
+            user.id = user_id.to_string()
+        ),
+        err
+    )]
+    async fn get_task_for_source_item_id(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        source_item_id: Uuid,
+        user_id: UserId,
+    ) -> Result<Option<Task>, UniversalInboxError> {
+        let row = QueryBuilder::new(
+            r#"
+                SELECT
+                  task.id as task__id,
+                  task.title as task__title,
+                  task.body as task__body,
+                  task.status as task__status,
+                  task.completed_at as task__completed_at,
+                  task.priority as task__priority,
+                  task.due_at as task__due_at,
+                  task.tags as task__tags,
+                  task.parent_id as task__parent_id,
+                  task.project as task__project,
+                  task.is_recurring as task__is_recurring,
+                  task.created_at as task__created_at,
+                  task.updated_at as task__updated_at,
+                  task.kind::TEXT as task__kind,
+                  task.user_id as task__user_id,
+                  source_item.id as task__source_item__id,
+                  source_item.source_id as task__source_item__source_id,
+                  source_item.data as task__source_item__data,
+                  source_item.created_at as task__source_item__created_at,
+                  source_item.updated_at as task__source_item__updated_at,
+                  source_item.user_id as task__source_item__user_id,
+                  source_item.integration_connection_id as task__source_item__integration_connection_id,
+                  sink_item.id as task__sink_item__id,
+                  sink_item.source_id as task__sink_item__source_id,
+                  sink_item.data as task__sink_item__data,
+                  sink_item.created_at as task__sink_item__created_at,
+                  sink_item.updated_at as task__sink_item__updated_at,
+                  sink_item.user_id as task__sink_item__user_id,
+                  sink_item.integration_connection_id as task__sink_item__integration_connection_id
+                FROM task
+                INNER JOIN third_party_item AS source_item
+                  ON task.source_item_id = source_item.id
+                LEFT JOIN third_party_item AS sink_item
+                  ON task.sink_item_id = sink_item.id
+                WHERE task.source_item_id =
+            "#,
+        )
+        .push_bind(source_item_id)
+        .push(" AND task.user_id = ")
+        .push_bind(user_id.0)
+        .build_query_as::<TaskRow>()
+        .fetch_optional(&mut **executor)
+        .await
+        .map_err(|err| {
+            let message = format!(
+                "Failed to fetch task for source_item_id {source_item_id} from storage: {err}"
+            );
+            UniversalInboxError::DatabaseError {
+                source: err,
+                message,
+            }
+        })?;
+
+        row.map(|task_row| task_row.try_into()).transpose()
     }
 }
 
