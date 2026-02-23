@@ -2,6 +2,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::task::{PresetDueDate, ProjectSummary};
 
+fn default_true() -> bool {
+    true
+}
+
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct LinearConfig {
     pub sync_notifications_enabled: bool,
@@ -33,11 +37,24 @@ impl LinearConfig {
     }
 }
 
-#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone, Default)]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct LinearSyncTaskConfig {
     pub enabled: bool,
     pub target_project: Option<ProjectSummary>,
     pub default_due_at: Option<PresetDueDate>,
+    #[serde(default = "default_true")]
+    pub auto_delete_notifications: bool,
+}
+
+impl Default for LinearSyncTaskConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            target_project: None,
+            default_due_at: None,
+            auto_delete_notifications: true,
+        }
+    }
 }
 
 impl LinearSyncTaskConfig {
@@ -46,6 +63,7 @@ impl LinearSyncTaskConfig {
             enabled: true,
             target_project: None,
             default_due_at: None,
+            auto_delete_notifications: true,
         }
     }
 
@@ -54,6 +72,7 @@ impl LinearSyncTaskConfig {
             enabled: false,
             target_project: None,
             default_due_at: None,
+            auto_delete_notifications: false,
         }
     }
 }

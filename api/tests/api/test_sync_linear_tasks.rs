@@ -17,13 +17,14 @@ use universal_inbox::{
         },
         provider::IntegrationProviderKind,
     },
+    notification::NotificationStatus,
     task::{
         DueDate, PresetDueDate, ProjectSummary, TaskCreationConfig, TaskCreationResult,
         TaskPriority, TaskSourceKind, TaskStatus,
     },
     third_party::{
         integrations::{
-            linear::LinearIssue,
+            linear::{LinearIssue, LinearNotification},
             todoist::{TodoistItem, TodoistItemPriority},
         },
         item::{ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemKind},
@@ -33,7 +34,7 @@ use universal_inbox::{
 use universal_inbox_api::{
     configuration::Settings,
     integrations::{
-        linear::graphql::assigned_issues_query,
+        linear::graphql::{assigned_issues_query, notifications_query},
         oauth2::NangoConnection,
         task::ThirdPartyTaskService,
         todoist::{
@@ -50,7 +51,13 @@ use crate::helpers::{
         create_and_mock_integration_connection, get_integration_connection_per_provider,
         nango_linear_connection, nango_todoist_connection,
     },
-    notification::linear::{mock_linear_assigned_issues_query, sync_linear_tasks_response},
+    notification::{
+        linear::{
+            create_notification_from_linear_notification, mock_linear_assigned_issues_query,
+            sync_linear_notifications_response, sync_linear_tasks_response,
+        },
+        list_notifications,
+    },
     settings,
     task::{
         get_task,
@@ -101,6 +108,7 @@ async fn test_sync_tasks_should_create_new_task(
                     source_id: "2222".into(),
                 }),
                 default_due_at: Some(PresetDueDate::Today),
+                ..Default::default()
             },
         }),
         &settings,
@@ -246,6 +254,7 @@ async fn test_sync_tasks_should_not_update_default_values(
                 target_project: Some(project.clone()),
                 // Test will create a task with due date set to Today
                 default_due_at: Some(PresetDueDate::Tomorrow),
+                ..Default::default()
             },
         }),
         &settings,
@@ -357,6 +366,7 @@ async fn test_sync_tasks_should_complete_existing_task(
                 enabled: true,
                 target_project: Some(project.clone()),
                 default_due_at: None,
+                ..Default::default()
             },
         }),
         &settings,
@@ -460,6 +470,7 @@ async fn test_sync_tasks_should_complete_existing_task_and_recreate_sink_task_if
                 enabled: true,
                 target_project: Some(project.clone()),
                 default_due_at: None,
+                ..Default::default()
             },
         }),
         &settings,
@@ -609,6 +620,7 @@ async fn test_sync_tasks_should_create_sink_item_if_missing_when_updating_task(
                 enabled: true,
                 target_project: Some(project.clone()),
                 default_due_at: None,
+                ..Default::default()
             },
         }),
         &settings,
@@ -742,5 +754,239 @@ async fn test_sync_tasks_should_create_sink_item_if_missing_when_updating_task(
     assert_eq!(
         task.sink_item.as_ref().unwrap().source_id,
         new_todoist_item_id
+    );
+}
+
+/// Test Path 1: When syncing a Linear issue as a task, existing Linear notifications
+/// for the same issue should be automatically deleted.
+#[rstest]
+#[tokio::test]
+#[allow(clippy::too_many_arguments)]
+async fn test_sync_tasks_should_auto_delete_existing_linear_notification(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    sync_linear_tasks_response: Response<assigned_issues_query::ResponseData>,
+    sync_linear_notifications_response: Response<notifications_query::ResponseData>,
+    todoist_item: Box<TodoistItem>,
+    sync_todoist_projects_response: TodoistSyncResponse,
+    nango_linear_connection: Box<NangoConnection>,
+    nango_todoist_connection: Box<NangoConnection>,
+) {
+    let app = authenticated_app.await;
+    let _todoist_integration_connection = create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        &settings.oauth2.nango_secret_key,
+        IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
+        &settings,
+        nango_todoist_connection,
+        None,
+        None,
+    )
+    .await;
+    let linear_integration_connection = create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        &settings.oauth2.nango_secret_key,
+        IntegrationConnectionConfig::Linear(LinearConfig {
+            sync_notifications_enabled: true,
+            sync_task_config: LinearSyncTaskConfig {
+                enabled: true,
+                target_project: Some(ProjectSummary {
+                    name: "Project2".to_string(),
+                    source_id: "2222".into(),
+                }),
+                default_due_at: Some(PresetDueDate::Today),
+                ..Default::default()
+            },
+        }),
+        &settings,
+        nango_linear_connection,
+        None,
+        None,
+    )
+    .await;
+
+    // Create a notification from the Linear notification fixture that references the same
+    // issue as the task fixture (index [2] has issue_id matching the task fixture's issue).
+    let sync_linear_notifications: Vec<LinearNotification> = sync_linear_notifications_response
+        .data
+        .clone()
+        .unwrap()
+        .try_into()
+        .unwrap();
+    let issue_notification = &sync_linear_notifications[2];
+    let existing_notification = create_notification_from_linear_notification(
+        &app.app,
+        issue_notification,
+        app.user.id,
+        linear_integration_connection.id,
+    )
+    .await;
+    assert_eq!(existing_notification.status, NotificationStatus::Read);
+
+    // Set up mocks for task sync
+    let sync_linear_issues: Vec<LinearIssue> = sync_linear_tasks_response
+        .data
+        .clone()
+        .unwrap()
+        .try_into()
+        .unwrap();
+    let _linear_assigned_issues_mock =
+        mock_linear_assigned_issues_query(&app.app.linear_mock_server, &sync_linear_tasks_response)
+            .await;
+
+    mock_todoist_sync_resources_service(
+        &app.app.todoist_mock_server,
+        "projects",
+        &sync_todoist_projects_response,
+        None,
+    )
+    .await;
+    let expected_task_title = format!(
+        "[{}]({})",
+        sync_linear_issues[0].title.clone(),
+        sync_linear_issues[0].get_html_url()
+    );
+    let due_at: DueDate = PresetDueDate::Today.into();
+    let _todoist_item_add_mock = mock_todoist_item_add_service(
+        &app.app.todoist_mock_server,
+        &todoist_item.id,
+        expected_task_title.clone(),
+        sync_linear_issues[0].description.clone(),
+        Some("2222".to_string()),
+        Some((&due_at).into()),
+        TodoistItemPriority::P1,
+    )
+    .await;
+    let _todoist_get_item_mock =
+        mock_todoist_get_item_service(&app.app.todoist_mock_server, todoist_item.clone()).await;
+
+    // Trigger task sync — this should auto-delete the notification
+    let task_creation_results: Vec<TaskCreationResult> = sync_tasks(
+        &app.client,
+        &app.app.api_address,
+        Some(TaskSourceKind::Linear),
+        false,
+    )
+    .await;
+
+    assert_eq!(task_creation_results.len(), 1);
+
+    // Verify the notification is now Deleted
+    let notifications = list_notifications(
+        &app.client,
+        &app.app.api_address,
+        vec![
+            NotificationStatus::Read,
+            NotificationStatus::Unread,
+            NotificationStatus::Deleted,
+        ],
+        false,
+        None,
+        None,
+        false,
+    )
+    .await;
+
+    let auto_deleted_notification = notifications
+        .iter()
+        .find(|n| n.id == existing_notification.id)
+        .expect("Notification should still exist in the database");
+    assert_eq!(
+        auto_deleted_notification.status,
+        NotificationStatus::Deleted,
+        "Notification for the synced Linear issue should be auto-deleted"
+    );
+}
+
+/// Test Path 2: When creating a Linear notification for an issue that already has
+/// a synced task, the notification should be immediately marked as Deleted.
+#[rstest]
+#[tokio::test]
+async fn test_create_notification_should_auto_delete_when_task_already_exists(
+    settings: Settings,
+    #[future] authenticated_app: AuthenticatedApp,
+    sync_linear_tasks_response: Response<assigned_issues_query::ResponseData>,
+    sync_linear_notifications_response: Response<notifications_query::ResponseData>,
+    nango_linear_connection: Box<NangoConnection>,
+    nango_todoist_connection: Box<NangoConnection>,
+) {
+    let app = authenticated_app.await;
+    let todoist_integration_connection = create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        &settings.oauth2.nango_secret_key,
+        IntegrationConnectionConfig::Todoist(TodoistConfig::enabled()),
+        &settings,
+        nango_todoist_connection,
+        None,
+        None,
+    )
+    .await;
+    let project = ProjectSummary {
+        name: "Project2".to_string(),
+        source_id: "2222".into(),
+    };
+    let linear_integration_connection = create_and_mock_integration_connection(
+        &app.app,
+        app.user.id,
+        &settings.oauth2.nango_secret_key,
+        IntegrationConnectionConfig::Linear(LinearConfig {
+            sync_notifications_enabled: true,
+            sync_task_config: LinearSyncTaskConfig {
+                enabled: true,
+                target_project: Some(project.clone()),
+                default_due_at: Some(PresetDueDate::Today),
+                ..Default::default()
+            },
+        }),
+        &settings,
+        nango_linear_connection,
+        None,
+        None,
+    )
+    .await;
+
+    // First, create a task from the Linear issue
+    let linear_issues: Vec<LinearIssue> = sync_linear_tasks_response
+        .data
+        .clone()
+        .unwrap()
+        .try_into()
+        .unwrap();
+    let linear_issue: &LinearIssue = &linear_issues[0];
+    let _existing_task = create_linear_task(
+        &app.app,
+        linear_issue,
+        project,
+        app.user.id,
+        linear_integration_connection.id,
+        todoist_integration_connection.id,
+        "todoist_source_id".to_string(),
+    )
+    .await;
+
+    // Now create a notification for the same issue — it should be auto-deleted
+    let sync_linear_notifications: Vec<LinearNotification> = sync_linear_notifications_response
+        .data
+        .clone()
+        .unwrap()
+        .try_into()
+        .unwrap();
+    let issue_notification = &sync_linear_notifications[2];
+    let notification = create_notification_from_linear_notification(
+        &app.app,
+        issue_notification,
+        app.user.id,
+        linear_integration_connection.id,
+    )
+    .await;
+
+    // The returned notification should already be marked as Deleted
+    assert_eq!(
+        notification.status,
+        NotificationStatus::Deleted,
+        "Notification for a Linear issue that already has a synced task should be auto-deleted"
     );
 }
