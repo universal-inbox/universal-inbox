@@ -20,7 +20,7 @@ use crate::{
 #[component]
 pub fn UserProfileCard() -> Element {
     let user_service = use_coroutine_handle::<UserCommand>();
-    let Some(user) = CONNECTED_USER.read().clone() else {
+    let Some(user_context) = CONNECTED_USER.read().clone() else {
         return rsx! {
             div {
                 class: "card w-full bg-base-200",
@@ -34,7 +34,7 @@ pub fn UserProfileCard() -> Element {
     let mut first_name = use_signal(String::new);
     let mut last_name = use_signal(String::new);
     let mut email = use_signal(String::new);
-
+    let user = &user_context.user;
     let user_avatar = if let Some(ref email) = user.email {
         Generator::default()
             .set_image_size(150)

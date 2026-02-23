@@ -14,6 +14,7 @@ use universal_inbox::{
 
 use crate::{
     integrations::slack::SlackService,
+    subscription::service::SubscriptionService,
     universal_inbox::{
         UniversalInboxError, integration_connection::service::IntegrationConnectionService,
         notification::service::NotificationService, task::service::TaskService,
@@ -29,6 +30,7 @@ pub mod sync;
 pub enum UniversalInboxJob {
     SyncNotifications(sync::SyncNotificationsJob),
     SyncTasks(sync::SyncTasksJob),
+    SyncSubscriptions(sync::SyncSubscriptionsJob),
     SlackPushEventCallback(slack::SlackPushEventCallbackJob),
     ProcessNotificationSideEffects {
         notification_id: NotificationId,
@@ -42,12 +44,14 @@ impl UniversalInboxJob {
         match self {
             Self::SyncNotifications(_) => "SyncNotifications",
             Self::SyncTasks(_) => "SyncTasks",
+            Self::SyncSubscriptions(_) => "SyncSubscriptions",
             Self::SlackPushEventCallback(_) => "SlackPushEventCallback",
             Self::ProcessNotificationSideEffects { .. } => "ProcessNotificationSideEffects",
         }
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 #[tracing::instrument(
     level = "debug",
     skip(
@@ -57,7 +61,8 @@ impl UniversalInboxJob {
         task_service,
         integration_connection_service,
         third_party_item_service,
-        slack_service
+        slack_service,
+        subscription_service
     ),
     fields(
         job.id = %task_id.to_string(),
@@ -73,6 +78,7 @@ pub async fn handle_universal_inbox_job(
     integration_connection_service: Data<Arc<RwLock<IntegrationConnectionService>>>,
     third_party_item_service: Data<Arc<RwLock<ThirdPartyItemService>>>,
     slack_service: Data<Arc<SlackService>>,
+    subscription_service: Data<Arc<SubscriptionService>>,
 ) -> Result<(), UniversalInboxError> {
     let current_span = tracing::Span::current();
 
@@ -86,6 +92,9 @@ pub async fn handle_universal_inbox_job(
             sync::handle_sync_notifications(job, notification_service).await
         }
         UniversalInboxJob::SyncTasks(job) => sync::handle_sync_tasks(job, task_service).await,
+        UniversalInboxJob::SyncSubscriptions(job) => {
+            sync::handle_sync_subscriptions(job, subscription_service).await
+        }
         UniversalInboxJob::SlackPushEventCallback(job) => {
             slack::handle_slack_push_event(
                 job,

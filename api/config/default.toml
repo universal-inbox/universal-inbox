@@ -205,3 +205,13 @@ is_enabled = false
 nango_base_url = "http://localhost:3003"
 nango_public_key = "get it from Nango/project-settings page"
 nango_secret_key = "To be generated"
+
+# Stripe configuration for monetization
+# When enabled = true, all other fields are required
+[stripe]
+enabled = false
+# secret_key = "sk_test_..."
+# publishable_key = "pk_test_..."
+# webhook_secret = "whsec_..."
+# price_id_monthly = "price_..."
+# price_id_annual = "price_..."

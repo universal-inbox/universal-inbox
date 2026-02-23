@@ -14,7 +14,7 @@ use universal_inbox::{
     auth::CloseSessionResponse,
     user::{
         Credentials, EmailValidationToken, Password, PasswordResetToken, RegisterUserParameters,
-        User, UserId, UserPatch, Username,
+        UserContext, UserId, UserPatch, Username,
     },
 };
 
@@ -38,12 +38,12 @@ pub enum UserCommand {
     UpdateUser(UserPatch),
 }
 
-pub static CONNECTED_USER: GlobalSignal<Option<User>> = Signal::global(|| None);
+pub static CONNECTED_USER: GlobalSignal<Option<UserContext>> = Signal::global(|| None);
 
 pub async fn user_service(
     mut rx: UnboundedReceiver<UserCommand>,
     api_base_url: Url,
-    mut connected_user: Signal<Option<User>>,
+    mut connected_user: Signal<Option<UserContext>>,
     mut ui_model: Signal<UniversalInboxUIModel>,
 ) {
     loop {
@@ -54,7 +54,7 @@ pub async fn user_service(
             }
 
             Some(UserCommand::RegisterUser(parameters)) => {
-                let result: Result<User> = call_api(
+                let result: Result<UserContext> = call_api(
                     Method::POST,
                     &api_base_url,
                     "users",
@@ -64,8 +64,8 @@ pub async fn user_service(
                 .await;
 
                 match result {
-                    Ok(user) => {
-                        connected_user.write().replace(user);
+                    Ok(user_context) => {
+                        connected_user.write().replace(user_context);
                     }
                     Err(err) => {
                         ui_model.write().error_message = Some(err.to_string());
@@ -75,7 +75,7 @@ pub async fn user_service(
 
             Some(UserCommand::Login(credentials)) => {
                 ui_model.write().error_message = None;
-                let result: Result<User> = call_api(
+                let result: Result<UserContext> = call_api(
                     Method::POST,
                     &api_base_url,
                     "users/me",
@@ -85,8 +85,8 @@ pub async fn user_service(
                 .await;
 
                 match result {
-                    Ok(user) => {
-                        connected_user.write().replace(user);
+                    Ok(user_context) => {
+                        connected_user.write().replace(user_context);
                     }
                     Err(err) => {
                         ui_model.write().error_message = Some(err.to_string());
@@ -198,7 +198,7 @@ pub async fn user_service(
                 start_passkey_registration(username, &api_base_url, connected_user, ui_model).await;
             }
             Some(UserCommand::UpdateUser(patch)) => {
-                let result: Result<User> = call_api(
+                let result: Result<universal_inbox::user::User> = call_api(
                     Method::PATCH,
                     &api_base_url,
                     "users/me",
@@ -209,7 +209,9 @@ pub async fn user_service(
 
                 match result {
                     Ok(user) => {
-                        connected_user.write().replace(user);
+                        if let Some(ref mut user_context) = *connected_user.write() {
+                            user_context.user = user;
+                        }
                     }
                     Err(err) => {
                         ui_model.write().error_message = Some(err.to_string());
@@ -223,10 +225,10 @@ pub async fn user_service(
 
 async fn get_user(
     api_base_url: &Url,
-    mut connected_user: Signal<Option<User>>,
+    mut connected_user: Signal<Option<UserContext>>,
     ui_model: Signal<UniversalInboxUIModel>,
 ) {
-    let result: Result<User> = call_api(
+    let result: Result<UserContext> = call_api(
         Method::GET,
         api_base_url,
         "users/me",
@@ -236,8 +238,8 @@ async fn get_user(
     .await;
 
     match result {
-        Ok(user) => {
-            *connected_user.write() = Some(user);
+        Ok(user_context) => {
+            *connected_user.write() = Some(user_context);
         }
         Err(err) => {
             error!("Failed to get current user: {err}");
@@ -248,7 +250,7 @@ async fn get_user(
 async fn start_passkey_registration(
     username: Username,
     api_base_url: &Url,
-    connected_user: Signal<Option<User>>,
+    connected_user: Signal<Option<UserContext>>,
     ui_model: Signal<UniversalInboxUIModel>,
 ) {
     let result: Result<CreationChallengeResponse> = call_api(
@@ -281,10 +283,10 @@ async fn start_passkey_registration(
 async fn finish_passkey_registration(
     register_credentials: RegisterPublicKeyCredential,
     api_base_url: &Url,
-    mut connected_user: Signal<Option<User>>,
+    mut connected_user: Signal<Option<UserContext>>,
     mut ui_model: Signal<UniversalInboxUIModel>,
 ) {
-    let result: Result<User> = call_api(
+    let result: Result<UserContext> = call_api(
         Method::POST,
         api_base_url,
         "users/passkeys/registration/finish",
@@ -294,8 +296,8 @@ async fn finish_passkey_registration(
     .await;
 
     match result {
-        Ok(user) => {
-            connected_user.write().replace(user);
+        Ok(user_context) => {
+            connected_user.write().replace(user_context);
         }
         Err(err) => {
             ui_model.write().error_message = Some(err.to_string());
@@ -306,7 +308,7 @@ async fn finish_passkey_registration(
 async fn start_passkey_authentication(
     username: Username,
     api_base_url: &Url,
-    connected_user: Signal<Option<User>>,
+    connected_user: Signal<Option<UserContext>>,
     ui_model: Signal<UniversalInboxUIModel>,
 ) {
     let result: Result<RequestChallengeResponse> = call_api(
@@ -339,10 +341,10 @@ async fn start_passkey_authentication(
 async fn finish_passkey_authentication(
     credentials: PublicKeyCredential,
     api_base_url: &Url,
-    mut connected_user: Signal<Option<User>>,
+    mut connected_user: Signal<Option<UserContext>>,
     mut ui_model: Signal<UniversalInboxUIModel>,
 ) {
-    let result: Result<User> = call_api(
+    let result: Result<UserContext> = call_api(
         Method::POST,
         api_base_url,
         "users/passkeys/authentication/finish",
@@ -352,8 +354,8 @@ async fn finish_passkey_authentication(
     .await;
 
     match result {
-        Ok(user) => {
-            connected_user.write().replace(user);
+        Ok(user_context) => {
+            connected_user.write().replace(user_context);
         }
         Err(err) => {
             ui_model.write().error_message = Some(err.to_string());

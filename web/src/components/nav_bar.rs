@@ -7,13 +7,14 @@ use dioxus_free_icons::{
     Icon,
     icons::{
         bs_icons::{
-            BsBell, BsBook, BsBookmarkCheck, BsBoxArrowInLeft, BsGear, BsInbox, BsMoon, BsPerson,
-            BsQuestionLg, BsSun,
+            BsBell, BsBook, BsBookmarkCheck, BsBoxArrowInLeft, BsCreditCard, BsGear, BsHourglass,
+            BsInbox, BsMoon, BsPerson, BsQuestionLg, BsSun,
         },
         go_icons::GoMarkGithub,
     },
 };
 use gravatar_rs::Generator;
+use universal_inbox::subscription::SubscriptionStatus;
 
 use crate::{
     config::APP_CONFIG,
@@ -36,8 +37,8 @@ pub fn NavBar() -> Element {
     let user_avatar = use_memo(|| {
         CONNECTED_USER()
             .as_ref()
-            .map(|user| {
-                if let Some(ref email) = user.email {
+            .map(|user_context| {
+                if let Some(ref email) = user_context.user.email {
                     Generator::default()
                         .set_image_size(150)
                         .set_rating("g")
@@ -73,16 +74,26 @@ pub fn NavBar() -> Element {
             .as_ref()
             .and_then(|config| config.chat_support_website_id.clone())
         {
-            let user_email = CONNECTED_USER()
-                .as_ref()
-                .and_then(|user| user.email.as_ref().map(|email| email.to_string()));
-            let user_email_signature = CONNECTED_USER().as_ref().and_then(|user| {
-                user.chat_support_email_signature
+            let user_email = CONNECTED_USER().as_ref().and_then(|user_context| {
+                user_context
+                    .user
+                    .email
+                    .as_ref()
+                    .map(|email| email.to_string())
+            });
+            let user_email_signature = CONNECTED_USER().as_ref().and_then(|user_context| {
+                user_context
+                    .user
+                    .chat_support_email_signature
                     .as_ref()
                     .map(|signature| signature.to_string())
             });
-            let user_full_name = CONNECTED_USER().as_ref().and_then(|user| user.full_name());
-            let user_id = CONNECTED_USER().as_ref().map(|user| user.id.to_string());
+            let user_full_name = CONNECTED_USER()
+                .as_ref()
+                .and_then(|user_context| user_context.user.full_name());
+            let user_id = CONNECTED_USER()
+                .as_ref()
+                .map(|user_context| user_context.user.id.to_string());
 
             init_crisp(
                 chat_support_website_id,
@@ -145,6 +156,8 @@ pub fn NavBar() -> Element {
             div {
                 class: "sm:navbar-end items-center gap-2",
 
+                SubscriptionStatusBadge {}
+
                 NavBarUtils {
                     class: "max-sm:hidden",
                     show_changelog,
@@ -196,6 +209,14 @@ pub fn NavBar() -> Element {
                                 to: Route::UserProfilePage {},
                                 Icon { class: "w-5 h-5", icon: BsPerson }
                                 p { "Profile" }
+                            }
+                        }
+                        li {
+                            Link {
+                                class: "dropdown-item",
+                                to: Route::SubscriptionSettingsPage {},
+                                Icon { class: "w-5 h-5", icon: BsCreditCard }
+                                p { "Subscription" }
                             }
                         }
                         li {
@@ -290,6 +311,53 @@ fn NavBarUtils(show_changelog: bool, in_menu: bool, class: Option<String>) -> El
                     Icon { class: "w-5 h-5", icon: BsGear }
                     p { "Settings" }
                 }
+            }
+        }
+    }
+}
+
+#[component]
+fn SubscriptionStatusBadge() -> Element {
+    let Some(user_context) = CONNECTED_USER.read().clone() else {
+        return rsx! {};
+    };
+
+    let subscription = &user_context.subscription;
+
+    let (badge_class, badge_text) = match subscription.status {
+        SubscriptionStatus::Trialing => {
+            let days = subscription.days_remaining.unwrap_or(0);
+            (
+                "badge-warning badge-soft".to_string(),
+                format!(
+                    "Trial: {} day{} left",
+                    days,
+                    if days == 1 { "" } else { "s" }
+                ),
+            )
+        }
+        SubscriptionStatus::Active => ("badge-success badge-soft".to_string(), "Pro".to_string()),
+        SubscriptionStatus::PastDue => (
+            "badge-warning badge-soft".to_string(),
+            "Payment Due".to_string(),
+        ),
+        SubscriptionStatus::Canceled | SubscriptionStatus::Expired => {
+            ("badge-error badge-soft".to_string(), "Expired".to_string())
+        }
+        SubscriptionStatus::Unlimited => return rsx! {},
+    };
+
+    rsx! {
+        Link {
+            class: "btn btn-text btn-sm px-0",
+            to: Route::SubscriptionSettingsPage {},
+            title: "Subscription settings",
+            span {
+                class: "badge {badge_class} gap-1",
+                if subscription.status == SubscriptionStatus::Trialing {
+                    Icon { class: "w-3.5 h-3.5", icon: BsHourglass }
+                }
+                span { "{badge_text}" }
             }
         }
     }

@@ -20,7 +20,7 @@ use crate::{
         tasks_list::{TaskListContext, get_task_list_item_action_buttons},
     },
     model::UniversalInboxUIModel,
-    services::task_service::TaskCommand,
+    services::{task_service::TaskCommand, user_service::CONNECTED_USER},
 };
 
 #[component]
@@ -32,8 +32,14 @@ pub fn TaskPreview(
     tasks_count: ReadSignal<usize>,
 ) -> Element {
     let task_service = use_coroutine_handle::<TaskCommand>();
+    let is_read_only = CONNECTED_USER
+        .read()
+        .as_ref()
+        .map(|ctx| ctx.subscription.is_read_only)
+        .unwrap_or(false);
     let context = use_memo(move || TaskListContext {
         is_task_actions_enabled: ui_model.read().is_task_actions_enabled,
+        is_read_only,
         task_service,
     });
     use_context_provider(move || context);
