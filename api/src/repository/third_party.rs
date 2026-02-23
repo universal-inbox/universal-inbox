@@ -327,13 +327,15 @@ impl ThirdPartyItemRepository for Repository {
         kind: ThirdPartyItemKind,
         source_id: &str,
     ) -> Result<bool, UniversalInboxError> {
-        let mut query_builder = QueryBuilder::new("SELECT count(*) FROM third_party_item");
+        let mut query_builder =
+            QueryBuilder::new("SELECT EXISTS(SELECT 1 FROM third_party_item");
         query_builder.push(" WHERE source_id = ");
         query_builder.push_bind(source_id);
         query_builder.push(" AND kind::TEXT = ");
         query_builder.push_bind(kind.to_string());
+        query_builder.push(")");
 
-        let count: Option<i64> = query_builder
+        let exists: Option<bool> = query_builder
             .build_query_scalar()
             .fetch_one(&mut **executor)
             .await
@@ -341,15 +343,12 @@ impl ThirdPartyItemRepository for Repository {
                 let message =
                     format!("Failed to find {kind} third party item from source_id {source_id} from storage: {err}");
                 UniversalInboxError::DatabaseError {
-                source: err,
+                    source: err,
                     message,
                 }
             })?;
 
-        if let Some(1) = count {
-            return Ok(true);
-        }
-        return Ok(false);
+        Ok(exists.unwrap_or(false))
     }
 
     #[tracing::instrument(

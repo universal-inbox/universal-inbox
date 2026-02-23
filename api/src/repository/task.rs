@@ -157,22 +157,21 @@ impl TaskRepository for Repository {
         executor: &mut Transaction<'_, Postgres>,
         id: TaskId,
     ) -> Result<bool, UniversalInboxError> {
-        let count: Option<i64> =
-            sqlx::query_scalar!(r#"SELECT count(*) FROM task WHERE id = $1"#, id.0)
-                .fetch_one(&mut **executor)
-                .await
-                .map_err(|err| {
-                    let message = format!("Failed to check if task {id} exists: {err}");
-                    UniversalInboxError::DatabaseError {
-                        source: err,
-                        message,
-                    }
-                })?;
+        let exists: Option<bool> = sqlx::query_scalar!(
+            r#"SELECT EXISTS(SELECT 1 FROM task WHERE id = $1)"#,
+            id.0
+        )
+        .fetch_one(&mut **executor)
+        .await
+        .map_err(|err| {
+            let message = format!("Failed to check if task {id} exists: {err}");
+            UniversalInboxError::DatabaseError {
+                source: err,
+                message,
+            }
+        })?;
 
-        if let Some(1) = count {
-            return Ok(true);
-        }
-        return Ok(false);
+        Ok(exists.unwrap_or(false))
     }
 
     #[tracing::instrument(level = "debug", skip(self, executor), err)]
