@@ -24,7 +24,7 @@ use universal_inbox::{
     third_party::{
         integrations::slack::{SlackReaction, SlackStar},
         item::{
-            ThirdPartyItem, ThirdPartyItemFromSource, ThirdPartyItemSource,
+            ThirdPartyItem, ThirdPartyItemData, ThirdPartyItemFromSource, ThirdPartyItemSource,
             ThirdPartyItemSourceKind,
         },
     },
@@ -824,6 +824,47 @@ impl TaskService {
                 user_id,
             )
             .await?;
+        }
+
+        // Path 1: Auto-delete Linear notifications when a Linear issue is synced as a task
+        if let ThirdPartyItemData::LinearIssue(ref linear_issue) = third_party_item.data {
+            let integration_connection = self
+                .integration_connection_service
+                .read()
+                .await
+                .get_validated_integration_connection_per_kind(
+                    executor,
+                    IntegrationProviderKind::Linear,
+                    user_id,
+                )
+                .await?;
+
+            if let Some(ref integration_connection) = integration_connection
+                && integration_connection
+                    .provider
+                    .is_auto_delete_notifications_on_task_sync_enabled()
+            {
+                let deleted_notifications = self
+                    .notification_service
+                    .upgrade()
+                    .context("Unable to access notification_service from task_service")?
+                    .read()
+                    .await
+                    .delete_notifications_for_linear_issue(
+                        executor,
+                        &linear_issue.id.to_string(),
+                        user_id,
+                    )
+                    .await?;
+
+                if !deleted_notifications.is_empty() {
+                    debug!(
+                        "Auto-deleted {} Linear notification(s) for issue {} after task sync",
+                        deleted_notifications.len(),
+                        linear_issue.id
+                    );
+                }
+            }
         }
 
         Ok(upsert_task)

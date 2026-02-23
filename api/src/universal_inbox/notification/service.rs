@@ -44,7 +44,10 @@ use crate::{
         third_party::ThirdPartyItemSourceService,
     },
     jobs::UniversalInboxJob,
-    repository::{Repository, notification::NotificationRepository},
+    repository::{
+        Repository, notification::NotificationRepository, task::TaskRepository,
+        third_party::ThirdPartyItemRepository,
+    },
     universal_inbox::{
         UniversalInboxError, UpdateStatus, UpsertStatus,
         integration_connection::service::{
@@ -861,6 +864,26 @@ impl NotificationService {
         level = "debug",
         skip_all,
         fields(
+            linear_issue_id,
+            user.id = user_id.to_string()
+        ),
+        err
+    )]
+    pub async fn delete_notifications_for_linear_issue(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        linear_issue_id: &str,
+        user_id: UserId,
+    ) -> Result<Vec<Notification>, UniversalInboxError> {
+        self.repository
+            .delete_notifications_for_linear_issue_id(executor, linear_issue_id, user_id)
+            .await
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
             status = status.iter().map(|s| s.to_string()).collect::<Vec<String>>().join(","),
             from_sources,
             patch,
@@ -1042,7 +1065,70 @@ impl NotificationService {
             )
             .await?;
 
-        Ok(Some(*upsert_notification.value()))
+        let notification = *upsert_notification.value();
+
+        // Path 2: Auto-delete notification if the Linear issue already has a synced task
+        if let ThirdPartyItemData::LinearNotification(ref linear_notification) =
+            third_party_item.data
+            && let Some(linear_issue_id) = linear_notification.get_issue_id()
+        {
+            let integration_connection = self
+                .integration_connection_service
+                .read()
+                .await
+                .get_validated_integration_connection_per_kind(
+                    executor,
+                    IntegrationProviderKind::Linear,
+                    user_id,
+                )
+                .await?;
+
+            if let Some(ref integration_connection) = integration_connection
+                && integration_connection
+                    .provider
+                    .is_auto_delete_notifications_on_task_sync_enabled()
+            {
+                let linear_issue_items = self
+                    .repository
+                    .find_third_party_items_for_source_id(
+                        executor,
+                        ThirdPartyItemKind::LinearIssue,
+                        &linear_issue_id.to_string(),
+                        Some(user_id),
+                    )
+                    .await?;
+
+                for linear_issue_item in &linear_issue_items {
+                    let task = self
+                        .repository
+                        .get_task_for_source_item_id(executor, linear_issue_item.id.0, user_id)
+                        .await?;
+
+                    if let Some(ref task) = task
+                        && task.status != TaskStatus::Deleted
+                    {
+                        debug!(
+                            "Auto-deleting Linear notification {} as issue {} already has a synced task",
+                            notification.id, linear_issue_id
+                        );
+                        let delete_patch = NotificationPatch {
+                            status: Some(NotificationStatus::Deleted),
+                            ..Default::default()
+                        };
+                        self.repository
+                            .update_notification(executor, notification.id, &delete_patch, user_id)
+                            .await?;
+
+                        return Ok(Some(Notification {
+                            status: NotificationStatus::Deleted,
+                            ..notification
+                        }));
+                    }
+                }
+            }
+        }
+
+        Ok(Some(notification))
     }
 
     async fn sync_third_party_notifications<T, U>(

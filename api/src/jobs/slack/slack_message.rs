@@ -117,6 +117,7 @@ pub async fn handle_slack_message_push_event(
             executor,
             ThirdPartyItemKind::SlackThread,
             thread_ts.as_ref(),
+            None,
         )
         .await?;
 
