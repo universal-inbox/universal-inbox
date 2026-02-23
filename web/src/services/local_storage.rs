@@ -1,9 +1,12 @@
 use log::{debug, warn};
 
-use crate::{settings::UserSettings, utils::get_local_storage};
+use crate::settings::UserSettings;
+#[cfg(feature = "web")]
+use crate::utils::get_local_storage;
 
 pub struct LocalStorageService;
 
+#[cfg(feature = "web")]
 impl LocalStorageService {
     pub fn load_settings() -> UserSettings {
         let Ok(storage) = get_local_storage() else {
@@ -39,6 +42,26 @@ impl LocalStorageService {
         } else {
             warn!("Failed to save settings to localStorage");
         }
+    }
+
+    pub fn update_ui_setting<F>(updater: F)
+    where
+        F: FnOnce(&mut crate::settings::UISettings),
+    {
+        let mut settings = Self::load_settings();
+        updater(&mut settings.ui);
+        Self::save_settings(&settings);
+    }
+}
+
+#[cfg(not(feature = "web"))]
+impl LocalStorageService {
+    pub fn load_settings() -> UserSettings {
+        UserSettings::default()
+    }
+
+    pub fn save_settings(_settings: &UserSettings) {
+        // No-op on mobile
     }
 
     pub fn update_ui_setting<F>(updater: F)

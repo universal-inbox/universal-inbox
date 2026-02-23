@@ -1,5 +1,6 @@
 use dioxus::prelude::dioxus_core::use_drop;
 use dioxus::prelude::*;
+#[cfg(feature = "web")]
 use dioxus::web::WebEventExt;
 use log::error;
 use serde_json::json;
@@ -10,6 +11,10 @@ use universal_inbox::{
     task::{TaskId, TaskSummary},
 };
 
+#[cfg(feature = "web")]
+use crate::services::flyonui::{close_flyonui_modal, forget_flyonui_modal, init_flyonui_modal};
+#[cfg(feature = "web")]
+use crate::utils::focus_element;
 use crate::{
     components::{
         floating_label_inputs::FloatingLabelInputSearchSelect,
@@ -17,8 +22,6 @@ use crate::{
     },
     config::get_api_base_url,
     model::UniversalInboxUIModel,
-    services::flyonui::{close_flyonui_modal, forget_flyonui_modal, init_flyonui_modal},
-    utils::focus_element,
 };
 
 #[component]
@@ -29,9 +32,13 @@ pub fn TaskLinkModal(
     on_task_link: EventHandler<TaskId>,
 ) -> Element {
     let mut selected_task: Signal<Option<TaskSummary>> = use_signal(|| None);
+    #[cfg(feature = "web")]
     let mut mounted_element: Signal<Option<web_sys::Element>> = use_signal(|| None);
+    #[cfg(not(feature = "web"))]
+    let mut mounted_element: Signal<Option<()>> = use_signal(|| None);
 
     use_drop(move || {
+        #[cfg(feature = "web")]
         if let Some(element) = mounted_element() {
             forget_flyonui_modal(&element);
         }
@@ -45,9 +52,12 @@ pub fn TaskLinkModal(
             role: "dialog",
             tabindex: "-1",
             onmounted: move |element| {
-                let web_element = element.as_web_event();
-                init_flyonui_modal(&web_element);
-                mounted_element.set(Some(web_element));
+                #[cfg(feature = "web")]
+                {
+                    let web_element = element.as_web_event();
+                    init_flyonui_modal(&web_element);
+                    mounted_element.set(Some(web_element));
+                }
             },
 
             div {
@@ -74,6 +84,7 @@ pub fn TaskLinkModal(
                             method: "dialog",
                             onsubmit: move |evt| {
                                 evt.prevent_default();
+                                #[cfg(feature = "web")]
                                 close_flyonui_modal("#task-linking-modal");
                                 if let Some(task) = selected_task() {
                                     on_task_link.call(task.id);
@@ -115,6 +126,7 @@ pub fn TaskLinkModal(
                                 }),
                                 on_select: move |task| {
                                     *selected_task.write() = task;
+                                    #[cfg(feature = "web")]
                                     spawn({
                                         async move {
                                             if let Err(error) = focus_element("task-modal-link-submit").await {

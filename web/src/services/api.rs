@@ -26,9 +26,7 @@ pub async fn call_api<R: for<'de> serde::de::Deserialize<'de>, B: serde::Seriali
     body: Option<B>,
     ui_model: Option<Signal<UniversalInboxUIModel>>,
 ) -> Result<R> {
-    let mut request = API_CLIENT
-        .request(method, base_url.join(path)?)
-        .fetch_credentials_include();
+    let mut request = with_credentials(API_CLIENT.request(method, base_url.join(path)?));
 
     if let Some(body) = body {
         request = request
@@ -153,6 +151,7 @@ pub async fn call_api_and_notify<R: for<'de> serde::de::Deserialize<'de>, B: ser
         })
 }
 
+#[cfg(target_arch = "wasm32")]
 lazy_static! {
     pub static ref API_CLIENT: Client = reqwest::ClientBuilder::new()
         .default_headers({
@@ -162,4 +161,27 @@ lazy_static! {
         })
         .build()
         .unwrap();
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+lazy_static! {
+    pub static ref API_CLIENT: Client = reqwest::Client::builder()
+        .cookie_store(true)
+        .default_headers({
+            let mut headers = HeaderMap::new();
+            headers.insert("Accept", HeaderValue::from_static("application/json"));
+            headers
+        })
+        .build()
+        .unwrap();
+}
+
+#[cfg(target_arch = "wasm32")]
+fn with_credentials(builder: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+    builder.fetch_credentials_include()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn with_credentials(builder: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+    builder
 }

@@ -2,8 +2,10 @@
 
 use dioxus::prelude::dioxus_core::use_drop;
 use dioxus::prelude::*;
+#[cfg(feature = "web")]
 use dioxus::web::WebEventExt;
 
+#[cfg(feature = "web")]
 use crate::services::flyonui::{forget_flyonui_collapse_element, init_flyonui_collapse_element};
 
 #[component]
@@ -20,8 +22,12 @@ pub fn Collapse(
             ("", "hidden")
         }
     })();
+    #[cfg(feature = "web")]
     let mut mounted_element: Signal<Option<web_sys::Element>> = use_signal(|| None);
+    #[cfg(not(feature = "web"))]
+    let mut mounted_element: Signal<Option<()>> = use_signal(|| None);
     use_drop(move || {
+        #[cfg(feature = "web")]
         if let Some(element) = mounted_element() {
             forget_flyonui_collapse_element(&element);
         }
@@ -31,9 +37,12 @@ pub fn Collapse(
         button {
             id: "collapse-toggle-{id}",
             onmounted: move |element| {
-                let web_element = element.as_web_event();
-                init_flyonui_collapse_element(&web_element);
-                mounted_element.set(Some(web_element));
+                #[cfg(feature = "web")]
+                {
+                    let web_element = element.as_web_event();
+                    init_flyonui_collapse_element(&web_element);
+                    mounted_element.set(Some(web_element));
+                }
             },
             class: "collapse-toggle flex items-center gap-2 p-2 w-full cursor-pointer {collapse_toggle_style}",
             "data-collapse": "#collapse-content-{id}",

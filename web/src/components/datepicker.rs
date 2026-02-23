@@ -4,14 +4,18 @@ use std::{fmt::Display, marker::PhantomData, str::FromStr};
 
 use dioxus::prelude::*;
 use dioxus_free_icons::{Icon, icons::bs_icons::BsCalendarEvent};
+#[cfg(feature = "web")]
 use log::error;
+#[cfg(feature = "web")]
 use wasm_bindgen::prelude::*;
+#[cfg(feature = "web")]
 use web_sys::HtmlInputElement;
 
-use crate::{
-    components::floating_label_inputs::FloatingLabelInputText, utils::wait_for_element_by_id,
-};
+use crate::components::floating_label_inputs::FloatingLabelInputText;
+#[cfg(feature = "web")]
+use crate::utils::wait_for_element_by_id;
 
+#[cfg(feature = "web")]
 #[wasm_bindgen(module = "/public/js/index.js")]
 extern "C" {
     type Datepicker;
@@ -36,6 +40,7 @@ pub struct DatePickerProps<T: Clone + PartialEq + 'static> {
     phantom: PhantomData<T>,
 }
 
+#[cfg(feature = "web")]
 #[component]
 pub fn DatePicker<T>(props: DatePickerProps<T>) -> Element
 where
@@ -56,6 +61,28 @@ where
         }
     });
 
+    let icon = rsx! { Icon { icon: BsCalendarEvent } };
+
+    rsx! {
+        FloatingLabelInputText::<T> {
+            name: props.name,
+            label: props.label,
+            icon: icon,
+            required: props.required,
+            value: props.value,
+            autofocus: props.autofocus,
+            force_validation: props.force_validation,
+        }
+    }
+}
+
+#[cfg(not(feature = "web"))]
+#[component]
+pub fn DatePicker<T>(props: DatePickerProps<T>) -> Element
+where
+    T: FromStr + Clone + PartialEq,
+    <T as FromStr>::Err: Display,
+{
     let icon = rsx! { Icon { icon: BsCalendarEvent } };
 
     rsx! {

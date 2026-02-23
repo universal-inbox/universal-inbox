@@ -24,3 +24,8 @@ debug = true
 
 [[web.proxy]]
 backend = "http://localhost:8000/api/"
+
+[bundle]
+identifier = "com.universalinbox.app"
+publisher = "Universal Inbox"
+icon = ["images/ui-logo-icon-transparent-bg.svg"]

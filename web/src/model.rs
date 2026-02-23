@@ -123,13 +123,17 @@ pub enum AuthenticationState {
     #[default]
     Unknown,
     NotAuthenticated,
+    #[allow(dead_code)]
     RedirectingToAuthProvider,
+    #[allow(dead_code)]
     FetchingAccessToken,
+    #[allow(dead_code)]
     VerifyingAccessToken,
     Authenticated,
 }
 
 impl AuthenticationState {
+    #[allow(dead_code)]
     pub fn label(&self) -> String {
         match self {
             AuthenticationState::Authenticated => "Authenticated",
