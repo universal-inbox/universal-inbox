@@ -26,7 +26,7 @@ processes:
     namespace: "universal-inbox"
 
   ui-web:
-    command: "just web run"
+    command: "just web run false"
     availability:
       restart: no
     is_tty: true
