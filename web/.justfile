@@ -48,14 +48,16 @@ test-ci: install build-assets
     cargo test
 
 ## Run recipes
-run: clear-dev-assets build-assets
+run interactive="true": clear-dev-assets build-assets
     #!/usr/bin/env bash
 
-    # Update Dioxus.toml proxy to use the correct API port
-    API_URL="http://localhost:${API_PORT:-8000}/api/"
-    sed -i.bak "s|backend = \"http://localhost:[0-9]*/api/\"|backend = \"${API_URL}\"|" Dioxus.toml
+    if [ -n "$API_PORT" ]; then
+        # Update Dioxus.toml proxy to use the correct API port
+        API_URL="http://localhost:${API_PORT:-8000}/api/"
+        sed "s|backend = \"http://localhost:[0-9]*/api/\"|backend = \"${API_URL}\"|" Dioxus.toml
+    fi
 
-    dx serve --port ${DX_SERVE_PORT:-8080} --verbose
+    dx serve --port ${DX_SERVE_PORT:-8080} --verbose --interactive false
 
 run-tailwind output-dir="public":
     cp node_modules/flatpickr/dist/flatpickr.min.css {{ output-dir }}/css/
