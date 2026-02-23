@@ -1103,7 +1103,9 @@ impl NotificationService {
                         .get_task_for_source_item_id(executor, linear_issue_item.id.0, user_id)
                         .await?;
 
-                    if task.is_some() {
+                    if let Some(ref task) = task
+                        && task.status != TaskStatus::Deleted
+                    {
                         debug!(
                             "Auto-deleting Linear notification {} as issue {} already has a synced task",
                             notification.id, linear_issue_id
