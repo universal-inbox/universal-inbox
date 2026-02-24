@@ -1,26 +1,29 @@
-use anyhow::{Context, anyhow};
+use std::collections::HashMap;
+
+use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use email_address::EmailAddress;
 use secrecy::{ExposeSecret, SecretBox};
-use sqlx::{Postgres, QueryBuilder, Transaction, types::Json};
+use sqlx::{types::Json, Postgres, QueryBuilder, Transaction};
 use uuid::Uuid;
 use webauthn_rs::prelude::*;
 
 use universal_inbox::{
     auth::AuthIdToken,
     user::{
-        EmailValidationToken, PasswordHash, PasswordResetToken, User, UserId, UserPatch, Username,
+        EmailValidationToken, PasswordHash, PasswordResetToken, User, UserAuthKind, UserId,
+        UserPatch, Username,
     },
 };
 
 use crate::{
     repository::Repository,
     universal_inbox::{
-        UniversalInboxError, UpdateStatus,
         user::model::{
             AuthUserId, LocalUserAuth, OpenIdConnectUserAuth, PasskeyUserAuth, UserAuth,
         },
+        UniversalInboxError, UpdateStatus,
     },
 };
 
@@ -40,7 +43,7 @@ pub trait UserRepository {
     async fn fetch_all_users_and_auth(
         &self,
         executor: &mut Transaction<'_, Postgres>,
-    ) -> Result<Vec<(User, UserAuth)>, UniversalInboxError>;
+    ) -> Result<Vec<(User, Vec<UserAuth>)>, UniversalInboxError>;
 
     async fn delete_user(
         &self,
@@ -66,6 +69,20 @@ pub trait UserRepository {
         user: User,
         user_auth: UserAuth,
     ) -> Result<User, UniversalInboxError>;
+
+    async fn create_user_auth(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        user_auth: UserAuth,
+    ) -> Result<(), UniversalInboxError>;
+
+    async fn delete_user_auth(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        kind: UserAuthKind,
+    ) -> Result<bool, UniversalInboxError>;
 
     async fn update_user_auth_id_token(
         &self,
@@ -121,7 +138,15 @@ pub trait UserRepository {
         &self,
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
+        kind: UserAuthKind,
     ) -> Result<Option<UserAuth>, UniversalInboxError>;
+
+    async fn get_all_user_auths(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        for_update: bool,
+    ) -> Result<Vec<UserAuth>, UniversalInboxError>;
 
     async fn get_user_auth_by_username(
         &self,
@@ -226,7 +251,7 @@ impl UserRepository for Repository {
     async fn fetch_all_users_and_auth(
         &self,
         executor: &mut Transaction<'_, Postgres>,
-    ) -> Result<Vec<(User, UserAuth)>, UniversalInboxError> {
+    ) -> Result<Vec<(User, Vec<UserAuth>)>, UniversalInboxError> {
         let rows: Vec<UserAndUserAuthRow> = QueryBuilder::new(
             r#"
                 SELECT
@@ -250,6 +275,7 @@ impl UserRepository for Repository {
                   user_auth.user_id
                 FROM "user"
                 INNER JOIN user_auth ON user_auth.user_id = "user".id
+                ORDER BY "user".id
             "#,
         )
         .build_query_as::<UserAndUserAuthRow>()
@@ -263,13 +289,19 @@ impl UserRepository for Repository {
             }
         })?;
 
-        rows.iter()
-            .map(|r| {
-                let user: Result<User, UniversalInboxError> = r.try_into();
-                let user_auth: Result<UserAuth, UniversalInboxError> = r.try_into();
-                user.and_then(|u| user_auth.map(|a| (u, a)))
-            })
-            .collect()
+        // Group rows by user_id, accumulating auth methods per user
+        let mut user_map: HashMap<UserId, (User, Vec<UserAuth>)> = HashMap::new();
+        for row in &rows {
+            let user: User = row.try_into()?;
+            let user_auth: UserAuth = row.try_into()?;
+            user_map
+                .entry(user.id)
+                .or_insert_with(|| (user, Vec::new()))
+                .1
+                .push(user_auth);
+        }
+
+        Ok(user_map.into_values().collect())
     }
 
     #[tracing::instrument(
@@ -431,6 +463,26 @@ impl UserRepository for Repository {
             })?,
         );
 
+        self.create_user_auth(executor, user_id, user_auth).await?;
+
+        Ok(User {
+            id: user_id,
+            ..user
+        })
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = user_id.to_string(), kind = user_auth.to_string()),
+        err
+    )]
+    async fn create_user_auth(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        user_auth: UserAuth,
+    ) -> Result<(), UniversalInboxError> {
         let (auth_user_id, auth_id_token, password_hash, username, passkey) = match user_auth {
             UserAuth::OIDCAuthorizationCodePKCE(ref oidc_user_auth)
             | UserAuth::OIDCGoogleAuthorizationCode(ref oidc_user_auth) => (
@@ -494,17 +546,50 @@ impl UserRepository for Repository {
         .execute(&mut **executor)
         .await
         .map_err(|err| {
-            let message = format!("Failed to user auth paramters for user {user_id}: {err}");
+            let message = format!("Failed to create user auth for user {user_id}: {err}");
             UniversalInboxError::DatabaseError {
                 source: err,
                 message,
             }
         })?;
 
-        Ok(User {
-            id: user_id,
-            ..user
-        })
+        Ok(())
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = user_id.to_string(), kind = kind.to_string()),
+        err
+    )]
+    async fn delete_user_auth(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        kind: UserAuthKind,
+    ) -> Result<bool, UniversalInboxError> {
+        let res = sqlx::query!(
+            r#"
+                DELETE FROM user_auth
+                WHERE user_id = $1
+                  AND kind = $2::user_auth_kind
+            "#,
+            user_id.0,
+            kind.to_string() as _
+        )
+        .execute(&mut **executor)
+        .await
+        .map_err(|err| {
+            let message = format!(
+                "Failed to delete user auth with kind {kind} for user {user_id} from storage: {err}"
+            );
+            UniversalInboxError::DatabaseError {
+                source: err,
+                message,
+            }
+        })?;
+
+        Ok(res.rows_affected() == 1)
     }
 
     #[tracing::instrument(
@@ -627,10 +712,8 @@ impl UserRepository for Repository {
                 .push(" email_validation_token = ")
                 .push_bind_unseparated(email_validation_token.0);
         }
-        query_builder.push(" FROM user_auth WHERE ");
-        let mut separated = query_builder.separated(" AND ");
-        separated
-            .push(r#"user_auth.user_id = "user".id"#)
+        query_builder
+            .push(" WHERE ")
             .push(r#""user".id = "#)
             .push_bind_unseparated(user_id.0);
 
@@ -763,7 +846,8 @@ impl UserRepository for Repository {
         separated
             .push(r#"user_auth.user_id = "user".id"#)
             .push(r#""user".email = "#)
-            .push_bind_unseparated(email_address.as_str());
+            .push_bind_unseparated(email_address.as_str())
+            .push("user_auth.kind = 'Local'::user_auth_kind");
 
         query_builder.push(
             r#"
@@ -787,7 +871,7 @@ impl UserRepository for Repository {
             .await
             .map_err(|err| {
                 let message = format!(
-                    "Failed to update password parameters with for user with email {email_address} from storage: {err}"
+                    "Failed to update password reset parameters for user with email {email_address} from storage: {err}"
                 );
                 UniversalInboxError::DatabaseError { source: err, message }
             })?;
@@ -831,7 +915,8 @@ impl UserRepository for Repository {
         separated
             .push(r#"user_auth.user_id = "user".id"#)
             .push(r#""user".id = "#)
-            .push_bind_unseparated(user_id.0);
+            .push_bind_unseparated(user_id.0)
+            .push("user_auth.kind = 'Local'::user_auth_kind");
 
         // If a password reset token was provided, we need to ensure that it matches the one in the database
         // If no token is provider, it means that the user is changing their password without having requested a reset
@@ -863,6 +948,7 @@ impl UserRepository for Repository {
         query_builder
             .push(" FROM user_auth WHERE user_id = ")
             .push_bind(user_id.0)
+            .push(" AND kind = 'Local'::user_auth_kind")
             .push(r#") as "is_updated""#);
 
         let record: Option<UpdatedUserRow> = query_builder
@@ -905,7 +991,7 @@ impl UserRepository for Repository {
         user_id: UserId,
     ) -> Result<Option<PasswordResetToken>, UniversalInboxError> {
         let row: Option<Option<Uuid>> = sqlx::query_scalar!(
-            "SELECT password_reset_token FROM user_auth WHERE user_id = $1",
+            "SELECT password_reset_token FROM user_auth WHERE user_id = $1 AND kind = 'Local'::user_auth_kind",
             user_id.0
         )
         .fetch_optional(&mut **executor)
@@ -950,6 +1036,7 @@ impl UserRepository for Repository {
                 FROM user_auth
                 JOIN "user" ON user_auth.user_id = "user".id
                 WHERE "user".email = $1
+                  AND user_auth.kind = 'Local'::user_auth_kind
             "#,
             user_email.to_string()
         )
@@ -957,7 +1044,7 @@ impl UserRepository for Repository {
         .await
         .map_err(|err| {
             let message = format!(
-                "Failed to fetch password hash for user with email {user_email} from storage: {err}"
+                "Failed to fetch local user auth for user with email {user_email} from storage: {err}"
             );
             UniversalInboxError::DatabaseError {
                 source: err,
@@ -975,13 +1062,14 @@ impl UserRepository for Repository {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = user_id.to_string()),
+        fields(user.id = user_id.to_string(), kind = kind.to_string()),
         err
     )]
     async fn get_user_auth(
         &self,
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
+        kind: UserAuthKind,
     ) -> Result<Option<UserAuth>, UniversalInboxError> {
         let row = sqlx::query_as!(
             UserAuthRow,
@@ -998,14 +1086,17 @@ impl UserRepository for Repository {
                     user_id
                 FROM user_auth
                 WHERE user_id = $1
+                  AND kind = $2::user_auth_kind
             "#,
-            user_id.0
+            user_id.0,
+            kind.to_string() as _
         )
         .fetch_optional(&mut **executor)
         .await
         .map_err(|err| {
-            let message =
-                format!("Failed to fetch user auth for user {user_id} from storage: {err}");
+            let message = format!(
+                "Failed to fetch user auth for user {user_id} with kind {kind} from storage: {err}"
+            );
             UniversalInboxError::DatabaseError {
                 source: err,
                 message,
@@ -1013,6 +1104,56 @@ impl UserRepository for Repository {
         })?;
 
         row.map(|user_auth| user_auth.try_into()).transpose()
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = user_id.to_string(), for_update),
+        err
+    )]
+    async fn get_all_user_auths(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        for_update: bool,
+    ) -> Result<Vec<UserAuth>, UniversalInboxError> {
+        let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(
+            r#"
+                SELECT
+                    kind,
+                    password_hash,
+                    password_reset_at,
+                    password_reset_sent_at,
+                    auth_user_id,
+                    auth_id_token,
+                    username,
+                    passkey,
+                    user_id
+                FROM user_auth
+                WHERE user_id =
+            "#,
+        );
+        query_builder.push_bind(user_id.0);
+        if for_update {
+            query_builder.push(" FOR UPDATE");
+        }
+
+        let rows: Vec<UserAuthRow> = query_builder
+            .build_query_as::<UserAuthRow>()
+            .fetch_all(&mut **executor)
+            .await
+            .map_err(|err| {
+                let message = format!(
+                    "Failed to fetch all user auths for user {user_id} from storage: {err}"
+                );
+                UniversalInboxError::DatabaseError {
+                    source: err,
+                    message,
+                }
+            })?;
+
+        rows.into_iter().map(|row| row.try_into()).collect()
     }
 
     #[tracing::instrument(
@@ -1085,7 +1226,8 @@ impl UserRepository for Repository {
                     user_auth.user_id = "user".id
                     AND user_auth.user_id = "#,
             )
-            .push_bind(user_id.0);
+            .push_bind(user_id.0)
+            .push(" AND user_auth.kind = 'Passkey'::user_auth_kind");
 
         query_builder
             .push(
@@ -1106,6 +1248,7 @@ impl UserRepository for Repository {
             .push_bind(Json(passkey))
             .push(" FROM user_auth WHERE user_id = ")
             .push_bind(user_id.0)
+            .push(" AND kind = 'Passkey'::user_auth_kind")
             .push(r#") as "is_updated""#);
 
         let record: Option<UpdatedUserRow> = query_builder
@@ -1175,6 +1318,7 @@ impl UserRepository for Repository {
         separated
             .push(" updated_at = ")
             .push_bind_unseparated(Utc::now().naive_utc());
+
         query_builder
             .push(r#" WHERE "user".id = "#)
             .push_bind(user_id.0);

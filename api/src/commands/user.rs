@@ -179,18 +179,25 @@ pub async fn list_users(user_service: Arc<UserService>) -> Result<(), UniversalI
 
     let mut rows: Vec<Vec<String>> = users
         .iter()
-        .map(|(user, user_auth)| {
+        .map(|(user, user_auths)| {
+            let usernames: Vec<String> = user_auths
+                .iter()
+                .filter_map(|ua| match ua {
+                    UserAuth::Passkey(passkey_user_auth) => {
+                        Some(passkey_user_auth.username.to_string())
+                    }
+                    _ => None,
+                })
+                .collect();
+            let auth_kinds: Vec<String> = user_auths.iter().map(|ua| ua.to_string()).collect();
             vec![
                 user.id.to_string(),
                 user.email
                     .as_ref()
                     .map(|email| email.to_string())
                     .unwrap_or_default(),
-                match user_auth {
-                    UserAuth::Passkey(passkey_user_auth) => passkey_user_auth.username.to_string(),
-                    _ => "".to_string(),
-                },
-                user_auth.to_string(),
+                usernames.join(", "),
+                auth_kinds.join(", "),
             ]
         })
         .collect();

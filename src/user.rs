@@ -97,7 +97,7 @@ impl RegisterUserParameters {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Default, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Default, Clone, PartialEq)]
 pub struct UserPatch {
     pub first_name: Option<String>,
     pub last_name: Option<String>,
@@ -268,4 +268,30 @@ impl FromStr for PasswordResetToken {
     fn from_str(uuid: &str) -> Result<Self, Self::Err> {
         Ok(Self(Uuid::parse_str(uuid)?))
     }
+}
+
+macro_attr! {
+    #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash, EnumFromStr!, EnumDisplay!)]
+    pub enum UserAuthKind {
+        Local,
+        OIDCGoogleAuthorizationCode,
+        OIDCAuthorizationCodePKCE,
+        Passkey,
+    }
+}
+
+/// Frontend-safe representation of a user's authentication method (no secrets exposed).
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub struct UserAuthMethod {
+    pub kind: UserAuthKind,
+    pub display_info: UserAuthMethodDisplayInfo,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(tag = "type")]
+pub enum UserAuthMethodDisplayInfo {
+    Local,
+    Passkey { username: String },
+    OIDCGoogleAuthorizationCode,
+    OIDCAuthorizationCodePKCE,
 }
