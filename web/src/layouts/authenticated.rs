@@ -2,7 +2,6 @@
 
 use chrono::Utc;
 use dioxus::prelude::*;
-use gloo_timers::future::TimeoutFuture;
 use log::debug;
 
 use crate::{
@@ -17,6 +16,16 @@ use crate::{
         task_service::TaskCommand,
     },
 };
+
+#[cfg(feature = "web")]
+async fn platform_sleep(ms: u32) {
+    gloo_timers::future::TimeoutFuture::new(ms).await;
+}
+
+#[cfg(not(feature = "web"))]
+async fn platform_sleep(ms: u32) {
+    tokio::time::sleep(std::time::Duration::from_millis(ms as u64)).await;
+}
 
 #[component]
 pub fn AuthenticatedLayout() -> Element {
@@ -50,12 +59,12 @@ pub fn AuthenticatedApp() -> Element {
             notification_service.send(NotificationCommand::Refresh);
             task_service.send(TaskCommand::RefreshSyncedTasks);
             loop {
-                TimeoutFuture::new(10_000).await;
+                platform_sleep(10_000).await;
                 if (Utc::now().timestamp() % 60) < 10 {
                     // Refresh notifications and integration connections every minute
                     notification_service.send(NotificationCommand::Refresh);
                     task_service.send(TaskCommand::RefreshSyncedTasks);
-                    TimeoutFuture::new(200).await;
+                    platform_sleep(200).await;
                     integration_connection_service.send(IntegrationConnectionCommand::Refresh);
                 } else if UI_MODEL.read().is_syncing_notifications
                     || UI_MODEL.read().is_syncing_tasks

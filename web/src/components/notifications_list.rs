@@ -19,6 +19,9 @@ use universal_inbox::{
     third_party::item::ThirdPartyItemData,
 };
 
+#[cfg(feature = "web")]
+use crate::services::flyonui::open_flyonui_modal;
+
 use crate::{
     components::{
         delete_all_confirmation_modal::DeleteAllConfirmationModal,
@@ -45,7 +48,6 @@ use crate::{
     icons::UILogo,
     model::UI_MODEL,
     services::{
-        flyonui::open_flyonui_modal,
         integration_connection_service::TASK_SERVICE_INTEGRATION_CONNECTION,
         notification_service::{
             NotificationCommand, NotificationFilters, NotificationSourceKindFilter,
@@ -123,6 +125,7 @@ pub fn NotificationsList(
                     if !notifications().content.is_empty() {
                         DeleteAllButton {
                             on_click: move |_| {
+                                #[cfg(feature = "web")]
                                 open_flyonui_modal("#delete-all-confirmation-modal");
                             }
                         }

@@ -1,19 +1,22 @@
+#[cfg(feature = "web")]
 use log::debug;
 
-use anyhow::{Context, Result};
+#[cfg(feature = "web")]
+use anyhow::Context;
+use anyhow::Result;
 use dioxus::prelude::*;
+#[cfg(feature = "web")]
 use gloo_utils::errors::JsError;
 
+#[cfg(feature = "web")]
 use crate::utils::get_local_storage;
 
-// Notification state colors
 pub const DRAFT_TEXT_COLOR_CLASS: &str = "text-gray-400";
 pub const BACKLOG_TEXT_COLOR_CLASS: &str = "text-base";
 pub const STARTED_TEXT_COLOR_CLASS: &str = "text-primary";
 pub const COMPLETED_TEXT_COLOR_CLASS: &str = "text-indigo-500";
 pub const CANCELED_TEXT_COLOR_CLASS: &str = "text-gray-400";
 
-// Priorities colors
 pub const PRIORITY_LOW_COLOR_CLASS: &str = "text-primary";
 pub const PRIORITY_NORMAL_COLOR_CLASS: &str = "text-yellow-500";
 pub const PRIORITY_HIGH_COLOR_CLASS: &str = "text-orange-500";
@@ -21,6 +24,7 @@ pub const PRIORITY_URGENT_COLOR_CLASS: &str = "text-red-500";
 
 pub static IS_DARK_MODE: GlobalSignal<bool> = Signal::global(|| false);
 
+#[cfg(feature = "web")]
 pub fn toggle_dark_mode(toggle: bool) -> Result<bool> {
     let window = web_sys::window().context("Unable to get the window object")?;
     let document = window
@@ -67,4 +71,9 @@ pub fn toggle_dark_mode(toggle: bool) -> Result<bool> {
     }
 
     Ok(switch_to_dark_mode)
+}
+
+#[cfg(feature = "mobile")]
+pub fn toggle_dark_mode(_toggle: bool) -> Result<bool> {
+    Ok(false)
 }

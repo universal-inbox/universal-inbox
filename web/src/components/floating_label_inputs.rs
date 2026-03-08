@@ -4,18 +4,19 @@ use std::{fmt::Display, marker::PhantomData, str::FromStr};
 
 use dioxus::prelude::dioxus_core::use_drop;
 use dioxus::prelude::*;
+#[cfg(feature = "web")]
 use dioxus::web::WebEventExt;
 use json_value_merge::Merge;
 use log::error;
 use serde_json::json;
 
-use crate::{
-    services::flyonui::{
-        forget_flyonui_select_element, get_flyonui_selected_remote_value,
-        init_flyonui_select_element,
-    },
-    utils::focus_and_select_input_element,
+#[cfg(feature = "web")]
+use crate::services::flyonui::{
+    forget_flyonui_select_element, get_flyonui_selected_remote_value, init_flyonui_select_element,
 };
+
+#[cfg(feature = "web")]
+use crate::utils::focus_and_select_input_element;
 
 #[derive(Props, Clone, PartialEq)]
 pub struct InputProps<T: Clone + PartialEq + 'static> {
@@ -71,6 +72,7 @@ where
     });
 
     let _resource = use_resource(move || async move {
+        #[cfg(feature = "web")]
         if props.autofocus.unwrap_or_default() {
             let name = (props.name)();
             if let Err(error) = focus_and_select_input_element(&name).await {
@@ -254,7 +256,10 @@ where
     let error_message: Signal<Option<String>> = use_signal(|| None);
     let input_style = use_memo(move || error_message().and(Some("is-invalid")).unwrap_or(""));
     let class = props.class.unwrap_or_default();
+    #[cfg(feature = "web")]
     let mut mounted_element: Signal<Option<web_sys::Element>> = use_signal(|| None);
+    #[cfg(not(feature = "web"))]
+    let mut mounted_element: Signal<Option<()>> = use_signal(|| None);
 
     let data_select = use_memo(move || {
         let mut default_data_select = json!({
@@ -275,9 +280,12 @@ where
     });
 
     use_drop(move || {
-        if let Some(element) = mounted_element() {
-            *mounted_element.write() = None;
-            forget_flyonui_select_element(&element);
+        #[cfg(feature = "web")]
+        {
+            if let Some(element) = mounted_element() {
+                *mounted_element.write() = None;
+                forget_flyonui_select_element(&element);
+            }
         }
     });
 
@@ -289,17 +297,23 @@ where
                 name: "{props.name}",
                 "data-select": "{data_select}",
                 onmounted: move |element| {
-                    let web_element = element.as_web_event();
-                    init_flyonui_select_element(&web_element);
-                    mounted_element.set(Some(web_element));
+                    #[cfg(feature = "web")]
+                    {
+                        let web_element = element.as_web_event();
+                        init_flyonui_select_element(&web_element);
+                        mounted_element.set(Some(web_element));
+                    }
                 },
                 class: "{input_style} hidden",
                 onchange: move |_| {
-                    if let Some(element) = mounted_element()
-                        && let Some(on_select) = &props.on_select
-                            && let Ok(selected_remote_value) = serde_wasm_bindgen::from_value::<T>(get_flyonui_selected_remote_value(&element)) {
-                                on_select.call(Some(selected_remote_value));
-                            }
+                    #[cfg(feature = "web")]
+                    {
+                        if let Some(element) = mounted_element()
+                            && let Some(on_select) = &props.on_select
+                                && let Ok(selected_remote_value) = serde_wasm_bindgen::from_value::<T>(get_flyonui_selected_remote_value(&element)) {
+                                    on_select.call(Some(selected_remote_value));
+                                }
+                    }
                 },
                 disabled: props.disabled.unwrap_or_default(),
             }

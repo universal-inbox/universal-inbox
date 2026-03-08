@@ -1,10 +1,9 @@
-[build]
-target = "wasm32-unknown-unknown"
-rustflags = ["--cfg=web_sys_unstable_apis"]
-
 [target.wasm32-unknown-unknown]
 runner = 'wasm-bindgen-test-runner'
-rustflags = ['--cfg', 'getrandom_backend="wasm_js"']
+rustflags = ['--cfg=web_sys_unstable_apis', '--cfg', 'getrandom_backend="wasm_js"']
+
+# Android linker configuration is handled automatically by Dioxus CLI
+# (discovers NDK via ANDROID_NDK_HOME / NDK_HOME env vars)
 
 [profile.release]
 opt-level = "z"

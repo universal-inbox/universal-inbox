@@ -1,14 +1,33 @@
 #![allow(non_snake_case, clippy::derive_partial_eq_without_eq)]
 
 use dioxus::prelude::*;
-use gloo_timers::future::TimeoutFuture;
-use js_sys::Date;
 use uuid::Uuid;
 
 use crate::{
     components::spinner::Spinner,
     services::toast_service::{TOASTS, ToastCommand},
 };
+
+#[cfg(feature = "web")]
+fn now_millis() -> f64 {
+    js_sys::Date::now()
+}
+#[cfg(not(feature = "web"))]
+fn now_millis() -> f64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as f64
+}
+
+#[cfg(feature = "web")]
+async fn toast_sleep(ms: u32) {
+    gloo_timers::future::TimeoutFuture::new(ms).await;
+}
+#[cfg(not(feature = "web"))]
+async fn toast_sleep(ms: u32) {
+    tokio::time::sleep(std::time::Duration::from_millis(ms as u64)).await;
+}
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct Toast {
@@ -27,7 +46,7 @@ impl Default for Toast {
             message: Default::default(),
             kind: Default::default(),
             timeout: Default::default(),
-            created_at: Date::now(),
+            created_at: now_millis(),
             dismissing: false,
         }
     }
@@ -90,15 +109,15 @@ fn ToastElement(
         // So hardcoding the timeout for now.
         let time = 5000;
         // if let Some(time) = timeout().flatten() {
-        let time_start = Date::now();
+        let time_start = now_millis();
         let time_f = time as f64;
-        while Date::now() - time_start < time_f {
-            TimeoutFuture::new(10).await;
-            let elapsed = Date::now() - time_start;
+        while now_millis() - time_start < time_f {
+            toast_sleep(10).await;
+            let elapsed = now_millis() - time_start;
             *timeout_progress.write() = 100.0 - (elapsed * 100.0 / time_f);
         }
         *dismiss.write() = "notyf__toast--disappear";
-        TimeoutFuture::new(300).await;
+        toast_sleep(300).await;
         on_close.call(());
         // }
     });
@@ -107,7 +126,7 @@ fn ToastElement(
     let _resource = use_resource(move || async move {
         if dismissing() {
             *dismiss.write() = "notyf__toast--disappear";
-            TimeoutFuture::new(300).await;
+            toast_sleep(300).await;
             on_close.call(());
         }
     });
@@ -157,7 +176,7 @@ fn ToastElement(
                             spawn({
                                 async move {
                                     *dismiss.write() = "notyf__toast--disappear";
-                                    TimeoutFuture::new(300).await;
+                                    toast_sleep(300).await;
                                     on_close.call(());
                                 }
                             });

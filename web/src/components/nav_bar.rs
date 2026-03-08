@@ -2,6 +2,7 @@
 
 use dioxus::prelude::dioxus_core::use_drop;
 use dioxus::prelude::*;
+#[cfg(feature = "web")]
 use dioxus::web::WebEventExt;
 use dioxus_free_icons::{
     Icon,
@@ -15,15 +16,19 @@ use dioxus_free_icons::{
 };
 use gravatar_rs::Generator;
 
+#[cfg(feature = "web")]
+use crate::services::crisp::init_crisp;
+#[cfg(feature = "web")]
+use crate::services::flyonui::{forget_flyonui_dropdown_element, init_flyonui_dropdown_element};
+#[cfg(feature = "web")]
+use crate::services::headway::init_headway;
+
 use crate::{
     config::APP_CONFIG,
     icons::UILogo,
     model::{DEFAULT_USER_AVATAR, UI_MODEL, VERSION},
     route::Route,
     services::{
-        crisp::init_crisp,
-        flyonui::{forget_flyonui_dropdown_element, init_flyonui_dropdown_element},
-        headway::init_headway,
         notification_service::NOTIFICATIONS_PAGE,
         task_service::SYNCED_TASKS_PAGE,
         user_service::{CONNECTED_USER, UserCommand},
@@ -56,42 +61,51 @@ pub fn NavBar() -> Element {
         .map(|config| config.show_changelog)
         .unwrap_or_default();
 
+    #[cfg(feature = "web")]
     let mut mounted_element: Signal<Option<web_sys::Element>> = use_signal(|| None);
+    #[cfg(not(feature = "web"))]
+    let mut mounted_element: Signal<Option<()>> = use_signal(|| None);
 
     use_drop(move || {
-        if let Some(element) = mounted_element() {
-            forget_flyonui_dropdown_element(&element);
+        #[cfg(feature = "web")]
+        {
+            if let Some(element) = mounted_element() {
+                forget_flyonui_dropdown_element(&element);
+            }
         }
     });
 
     use_effect(move || {
-        if show_changelog {
-            init_headway();
-        }
-        if let Some(chat_support_website_id) = &APP_CONFIG
-            .read()
-            .as_ref()
-            .and_then(|config| config.chat_support_website_id.clone())
+        #[cfg(feature = "web")]
         {
-            let user_email = CONNECTED_USER()
+            if show_changelog {
+                init_headway();
+            }
+            if let Some(chat_support_website_id) = &APP_CONFIG
+                .read()
                 .as_ref()
-                .and_then(|user| user.email.as_ref().map(|email| email.to_string()));
-            let user_email_signature = CONNECTED_USER().as_ref().and_then(|user| {
-                user.chat_support_email_signature
+                .and_then(|config| config.chat_support_website_id.clone())
+            {
+                let user_email = CONNECTED_USER()
                     .as_ref()
-                    .map(|signature| signature.to_string())
-            });
-            let user_full_name = CONNECTED_USER().as_ref().and_then(|user| user.full_name());
-            let user_id = CONNECTED_USER().as_ref().map(|user| user.id.to_string());
+                    .and_then(|user| user.email.as_ref().map(|email| email.to_string()));
+                let user_email_signature = CONNECTED_USER().as_ref().and_then(|user| {
+                    user.chat_support_email_signature
+                        .as_ref()
+                        .map(|signature| signature.to_string())
+                });
+                let user_full_name = CONNECTED_USER().as_ref().and_then(|user| user.full_name());
+                let user_id = CONNECTED_USER().as_ref().map(|user| user.id.to_string());
 
-            init_crisp(
-                chat_support_website_id,
-                user_email.as_deref(),
-                user_email_signature.as_deref(),
-                user_full_name.as_deref(),
-                Some(&user_avatar()),
-                user_id.as_deref(),
-            );
+                init_crisp(
+                    chat_support_website_id,
+                    user_email.as_deref(),
+                    user_email_signature.as_deref(),
+                    user_full_name.as_deref(),
+                    Some(&user_avatar()),
+                    user_id.as_deref(),
+                );
+            }
         }
     });
 
@@ -154,9 +168,12 @@ pub fn NavBar() -> Element {
                 div {
                     class: "dropdown relative inline-flex",
                     onmounted: move |element| {
-                        let web_element = element.as_web_event();
-                        init_flyonui_dropdown_element(&web_element);
-                        mounted_element.set(Some(web_element));
+                        #[cfg(feature = "web")]
+                        {
+                            let web_element = element.as_web_event();
+                            init_flyonui_dropdown_element(&web_element);
+                            mounted_element.set(Some(web_element));
+                        }
                     },
 
                     button {

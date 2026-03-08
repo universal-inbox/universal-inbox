@@ -1,13 +1,16 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
+#[cfg(feature = "web")]
 use dioxus::web::WebEventExt;
 use dioxus_free_icons::{
     Icon,
     icons::bs_icons::{BsExclamationTriangle, BsTrash},
 };
+#[cfg(feature = "web")]
 use gloo_timers::future::TimeoutFuture;
 
+#[cfg(feature = "web")]
 use crate::services::flyonui::{close_flyonui_modal, init_flyonui_modal};
 
 #[component]
@@ -18,8 +21,11 @@ pub fn DeleteAllConfirmationModal(on_confirm: EventHandler<()>) -> Element {
             class: "overlay modal overlay-open:opacity-100 hidden overlay-open:duration-300",
             role: "dialog",
             onmounted: move |element| {
-                let web_element = element.as_web_event();
-                init_flyonui_modal(&web_element);
+                #[cfg(feature = "web")]
+                {
+                    let web_element = element.as_web_event();
+                    init_flyonui_modal(&web_element);
+                }
             },
 
             div {
@@ -66,6 +72,7 @@ pub fn DeleteAllConfirmationModal(on_confirm: EventHandler<()>) -> Element {
                             class: "btn btn-outline",
                             "data-overlay": "#delete-all-confirmation-modal",
                             onclick: move |_| {
+                                #[cfg(feature = "web")]
                                 close_flyonui_modal("#delete-all-confirmation-modal");
                             },
                             "Cancel"
@@ -75,8 +82,12 @@ pub fn DeleteAllConfirmationModal(on_confirm: EventHandler<()>) -> Element {
                             onclick: move |_| {
                                 spawn({
                                     async move {
+                                        #[cfg(feature = "web")]
                                         close_flyonui_modal("#delete-all-confirmation-modal");
+                                        #[cfg(feature = "web")]
                                         TimeoutFuture::new(1000).await;
+                                        #[cfg(not(feature = "web"))]
+                                        tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
                                         on_confirm.call(());
                                     }
                                 });
