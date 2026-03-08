@@ -7,7 +7,7 @@ use log::debug;
 
 use crate::{
     auth::Authenticated,
-    components::loading::Loading,
+    components::{loading::Loading, subscription_required_modal::SubscriptionRequiredModal},
     config::{APP_CONFIG, get_api_base_url},
     model::{AuthenticationState, UI_MODEL},
     route::Route,
@@ -68,7 +68,10 @@ pub fn AuthenticatedApp() -> Element {
     });
 
     if INTEGRATION_CONNECTIONS.read().as_ref().is_some() {
-        rsx! { Outlet::<Route> {} }
+        rsx! {
+            Outlet::<Route> {}
+            SubscriptionRequiredModal {}
+        }
     } else {
         rsx! { Loading { label: "Loading Universal Inbox..." } }
     }

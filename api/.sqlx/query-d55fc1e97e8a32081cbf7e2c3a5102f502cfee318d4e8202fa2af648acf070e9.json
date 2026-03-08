@@ -1,0 +1,110 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                UPDATE user_subscription\n                SET\n                    stripe_customer_id = $2,\n                    subscription_status = $3::subscription_status,\n                    subscription_id = $4,\n                    trial_started_at = $5,\n                    trial_ends_at = $6,\n                    subscription_ends_at = $7,\n                    billing_interval = $8,\n                    updated_at = $9\n                WHERE id = $1\n                RETURNING\n                    id,\n                    user_id,\n                    stripe_customer_id,\n                    subscription_status as \"subscription_status: _\",\n                    subscription_id,\n                    trial_started_at,\n                    trial_ends_at,\n                    subscription_ends_at,\n                    billing_interval,\n                    created_at,\n                    updated_at,\n                    (SELECT\n                        stripe_customer_id IS DISTINCT FROM $2\n                        OR subscription_status::TEXT IS DISTINCT FROM $3\n                        OR subscription_id IS DISTINCT FROM $4\n                        OR trial_started_at IS DISTINCT FROM $5\n                        OR trial_ends_at IS DISTINCT FROM $6\n                        OR subscription_ends_at IS DISTINCT FROM $7\n                        OR billing_interval IS DISTINCT FROM $8\n                    FROM user_subscription WHERE id = $1) as \"is_updated!\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "stripe_customer_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "subscription_status: _",
+        "type_info": {
+          "Custom": {
+            "name": "subscription_status",
+            "kind": {
+              "Enum": [
+                "Trialing",
+                "Active",
+                "PastDue",
+                "Canceled",
+                "Expired",
+                "Unlimited"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "subscription_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "trial_started_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "trial_ends_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "subscription_ends_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 8,
+        "name": "billing_interval",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 9,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 10,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 11,
+        "name": "is_updated!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Timestamptz",
+        "Timestamptz",
+        "Timestamptz",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "d55fc1e97e8a32081cbf7e2c3a5102f502cfee318d4e8202fa2af648acf070e9"
+}

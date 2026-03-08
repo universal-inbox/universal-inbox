@@ -26,6 +26,8 @@ pub struct Settings {
     pub redis: RedisSettings,
     pub integrations: HashMap<String, IntegrationSettings>,
     pub oauth2: Oauth2Settings,
+    #[serde(default)]
+    pub stripe: StripeConfig,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -235,6 +237,77 @@ pub struct ChatSupportSettings {
     pub identity_verification_secret_key: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct StripeSecretKey(pub String);
+
+impl Zeroize for StripeSecretKey {
+    fn zeroize(&mut self) {
+        self.0.zeroize();
+    }
+}
+
+impl CloneableSecret for StripeSecretKey {}
+
+impl<'de> serde::Deserialize<'de> for StripeSecretKey {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Ok(StripeSecretKey(s))
+    }
+}
+
+/// Configuration for Stripe integration.
+/// When `enabled` is true, all credential fields must be provided.
+#[derive(Deserialize, Clone, Debug, Default)]
+pub struct StripeConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    pub secret_key: Option<SecretBox<StripeSecretKey>>,
+    pub publishable_key: Option<String>,
+    pub webhook_secret: Option<SecretBox<StripeSecretKey>>,
+    pub price_id_monthly: Option<String>,
+    pub price_id_annual: Option<String>,
+}
+
+impl StripeConfig {
+    /// Validates that all required fields are present when Stripe is enabled.
+    /// Returns an error message describing missing fields if validation fails.
+    pub fn validate(&self) -> Result<(), String> {
+        if !self.enabled {
+            return Ok(());
+        }
+
+        let mut missing_fields = Vec::new();
+
+        if self.secret_key.is_none() {
+            missing_fields.push("secret_key");
+        }
+        if self.publishable_key.is_none() {
+            missing_fields.push("publishable_key");
+        }
+        if self.webhook_secret.is_none() {
+            missing_fields.push("webhook_secret");
+        }
+        if self.price_id_monthly.is_none() {
+            missing_fields.push("price_id_monthly");
+        }
+        if self.price_id_annual.is_none() {
+            missing_fields.push("price_id_annual");
+        }
+
+        if missing_fields.is_empty() {
+            Ok(())
+        } else {
+            Err(format!(
+                "Stripe is enabled but missing required fields: {}",
+                missing_fields.join(", ")
+            ))
+        }
+    }
+}
+
 impl ChatSupportSettings {
     pub fn sign_email(&self, email: &str) -> String {
         let key = hmac::Key::new(
@@ -338,7 +411,7 @@ impl Settings {
             eprintln!("Loading {config_path}/local config file");
         }
 
-        serde_path_to_error::deserialize(
+        let settings: Self = serde_path_to_error::deserialize(
             config_builder
                 .add_source(
                     Environment::with_prefix("universal_inbox")
@@ -349,7 +422,10 @@ impl Settings {
                 )
                 .build()?,
         )
-        .map_err(|e| ConfigError::Message(e.to_string()))
+        .map_err(|e| ConfigError::Message(e.to_string()))?;
+
+        settings.validate()?;
+        Ok(settings)
     }
 
     pub fn new() -> Result<Self, ConfigError> {
@@ -390,6 +466,14 @@ impl Settings {
                     .unwrap_or(600), // Default to 600 seconds for workers
             ),
         }
+    }
+
+    pub fn stripe_enabled(&self) -> bool {
+        self.stripe.enabled
+    }
+
+    pub fn validate(&self) -> Result<(), ConfigError> {
+        self.stripe.validate().map_err(ConfigError::Message)
     }
 }
 
@@ -591,6 +675,93 @@ mod tests {
                 signature,
                 "cd7cc422ea97c82d844b2373fdcd6259c9ee6e135af65ab6fe6ca85e3f07abb1"
             );
+        }
+    }
+
+    mod stripe_config {
+        use super::*;
+
+        fn create_full_stripe_config() -> StripeConfig {
+            StripeConfig {
+                enabled: true,
+                secret_key: Some(SecretBox::new(Box::new(StripeSecretKey(
+                    "sk_test_123".to_string(),
+                )))),
+                publishable_key: Some("pk_test_123".to_string()),
+                webhook_secret: Some(SecretBox::new(Box::new(StripeSecretKey(
+                    "whsec_123".to_string(),
+                )))),
+                price_id_monthly: Some("price_monthly".to_string()),
+                price_id_annual: Some("price_annual".to_string()),
+            }
+        }
+
+        #[test]
+        fn test_stripe_disabled_validates_without_credentials() {
+            let config = StripeConfig::default();
+            assert!(!config.enabled);
+            assert!(config.validate().is_ok());
+        }
+
+        #[test]
+        fn test_stripe_enabled_with_all_fields_validates() {
+            let config = create_full_stripe_config();
+            assert!(config.validate().is_ok());
+        }
+
+        #[test]
+        fn test_stripe_enabled_without_secret_key_fails() {
+            let mut config = create_full_stripe_config();
+            config.secret_key = None;
+            let result = config.validate();
+            assert!(result.is_err());
+            assert!(result.unwrap_err().contains("secret_key"));
+        }
+
+        #[test]
+        fn test_stripe_enabled_without_publishable_key_fails() {
+            let mut config = create_full_stripe_config();
+            config.publishable_key = None;
+            let result = config.validate();
+            assert!(result.is_err());
+            assert!(result.unwrap_err().contains("publishable_key"));
+        }
+
+        #[test]
+        fn test_stripe_enabled_without_webhook_secret_fails() {
+            let mut config = create_full_stripe_config();
+            config.webhook_secret = None;
+            let result = config.validate();
+            assert!(result.is_err());
+            assert!(result.unwrap_err().contains("webhook_secret"));
+        }
+
+        #[test]
+        fn test_stripe_enabled_without_price_ids_fails() {
+            let mut config = create_full_stripe_config();
+            config.price_id_monthly = None;
+            config.price_id_annual = None;
+            let result = config.validate();
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert!(err.contains("price_id_monthly"));
+            assert!(err.contains("price_id_annual"));
+        }
+
+        #[test]
+        fn test_stripe_enabled_missing_all_fields_reports_all() {
+            let config = StripeConfig {
+                enabled: true,
+                ..Default::default()
+            };
+            let result = config.validate();
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert!(err.contains("secret_key"));
+            assert!(err.contains("publishable_key"));
+            assert!(err.contains("webhook_secret"));
+            assert!(err.contains("price_id_monthly"));
+            assert!(err.contains("price_id_annual"));
         }
     }
 }

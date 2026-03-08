@@ -18,20 +18,27 @@ use crate::{
     },
     model::UI_MODEL,
     pages::synced_tasks_page::TaskWithOrder,
-    services::task_service::TaskCommand,
+    services::{task_service::TaskCommand, user_service::CONNECTED_USER},
 };
 
 #[derive(Clone, PartialEq)]
 pub struct TaskListContext {
     pub is_task_actions_enabled: bool,
+    pub is_read_only: bool,
     pub task_service: Coroutine<TaskCommand>,
 }
 
 #[component]
 pub fn TasksList(tasks: ReadSignal<SortedGroups<String, TaskWithOrder>>) -> Element {
     let task_service = use_coroutine_handle::<TaskCommand>();
+    let is_read_only = CONNECTED_USER
+        .read()
+        .as_ref()
+        .map(|ctx| ctx.subscription.is_read_only)
+        .unwrap_or(false);
     let context = use_memo(move || TaskListContext {
         is_task_actions_enabled: UI_MODEL.read().is_task_actions_enabled,
+        is_read_only,
         task_service,
     });
     use_context_provider(move || context);
@@ -113,6 +120,19 @@ fn TaskListItem(
     }
 }
 
+fn get_task_action_disabled_label(
+    is_read_only: bool,
+    is_task_actions_enabled: bool,
+) -> Option<Option<String>> {
+    if is_read_only {
+        Some(Some("Subscribe to perform this action".to_string()))
+    } else if !is_task_actions_enabled {
+        Some(Some("No task management service connected".to_string()))
+    } else {
+        None
+    }
+}
+
 pub fn get_task_list_item_action_buttons(
     task: ReadSignal<Task>,
     show_shortcut: bool,
@@ -120,13 +140,14 @@ pub fn get_task_list_item_action_buttons(
     container_class: Option<String>,
 ) -> Vec<Element> {
     let context = use_context::<Memo<TaskListContext>>();
+    let is_read_only = context().is_read_only;
+    let is_task_actions_enabled = context().is_task_actions_enabled;
 
     vec![rsx! {
         ListItemActionButton {
             title: "Complete task",
             shortcut: "c",
-            disabled_label: (!context().is_task_actions_enabled)
-                .then_some("No task management service connected".to_string()),
+            disabled_label: get_task_action_disabled_label(is_read_only, is_task_actions_enabled),
             show_shortcut,
             button_class,
             container_class,
