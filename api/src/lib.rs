@@ -421,7 +421,7 @@ pub async fn build_services(
             IntegrationProviderKind::Linear,
             Arc::new(LinearOAuth2Provider::new(
                 client_id.clone(),
-                client_secret.clone(),
+                SecretBox::new(Box::new(client_secret.clone())),
                 linear_settings.required_oauth_scopes.clone(),
             )),
         );
@@ -435,13 +435,12 @@ pub async fn build_services(
         .transpose()
         .expect("Invalid token encryption key");
 
-    let oauth2_flow_service = if !oauth2_providers.is_empty() {
-        Some(OAuth2FlowService::new().expect("Failed to create OAuth2FlowService"))
-    } else {
-        None
-    };
-
-    let oauth_redirect_uri = settings.oauth2.redirect_uri.clone();
+    let redirect_uri = settings
+        .application
+        .get_oauth_redirect_url()
+        .expect("Failed to compute OAuth redirect URL");
+    let oauth2_flow_service =
+        Some(OAuth2FlowService::new(redirect_uri).expect("Failed to create OAuth2FlowService"));
 
     let integration_connection_service = Arc::new(RwLock::new(IntegrationConnectionService::new(
         repository.clone(),
@@ -451,7 +450,6 @@ pub async fn build_services(
         oauth2_providers,
         oauth2_flow_service,
         token_encryption_key,
-        oauth_redirect_uri,
         user_service.clone(),
         settings
             .application

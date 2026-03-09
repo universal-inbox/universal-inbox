@@ -1,23 +1,42 @@
+use secrecy::SecretBox;
 use serde_json::Value;
 use universal_inbox::integration_connection::provider::{
     IntegrationConnectionContext, IntegrationProviderKind,
 };
 use url::Url;
 
-use crate::{integrations::oauth2::provider::OAuth2Provider, universal_inbox::UniversalInboxError};
+use crate::{
+    integrations::oauth2::{ClientSecret, provider::OAuth2Provider},
+    universal_inbox::UniversalInboxError,
+};
 
-#[derive(Debug)]
 pub struct LinearOAuth2Provider {
     authorize_url: Url,
     token_url: Url,
     migration_url: Url,
     client_id: String,
-    client_secret: String,
+    client_secret: SecretBox<ClientSecret>,
     required_scopes: Vec<String>,
 }
 
+impl std::fmt::Debug for LinearOAuth2Provider {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.debug_struct("LinearOAuth2Provider")
+            .field("authorize_url", &self.authorize_url)
+            .field("token_url", &self.token_url)
+            .field("migration_url", &self.migration_url)
+            .field("client_id", &self.client_id)
+            .field("required_scopes", &self.required_scopes)
+            .finish_non_exhaustive()
+    }
+}
+
 impl LinearOAuth2Provider {
-    pub fn new(client_id: String, client_secret: String, required_scopes: Vec<String>) -> Self {
+    pub fn new(
+        client_id: String,
+        client_secret: SecretBox<ClientSecret>,
+        required_scopes: Vec<String>,
+    ) -> Self {
         Self {
             authorize_url: Url::parse("https://linear.app/oauth/authorize")
                 .expect("Invalid Linear authorize URL"),
@@ -49,7 +68,7 @@ impl OAuth2Provider for LinearOAuth2Provider {
         &self.client_id
     }
 
-    fn client_secret(&self) -> &str {
+    fn client_secret(&self) -> &SecretBox<ClientSecret> {
         &self.client_secret
     }
 
@@ -106,7 +125,7 @@ mod tests {
     fn provider() -> LinearOAuth2Provider {
         LinearOAuth2Provider::new(
             "test-client-id".to_string(),
-            "test-client-secret".to_string(),
+            SecretBox::new(Box::new(ClientSecret("test-client-secret".to_string()))),
             vec!["read".to_string(), "write".to_string()],
         )
     }

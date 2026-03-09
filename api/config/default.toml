@@ -124,6 +124,9 @@ api_max_retry_duration_worker_seconds = 600
 name = "Linear"
 kind = "Linear"
 nango_key = "linear"
+# OAuth client credentials from https://linear.app/settings/api/applications
+# oauth_client_id = ""
+# oauth_client_secret = ""
 required_oauth_scopes = ["read", "write"]
 # Rate limiting configuration
 api_max_retry_duration_http_seconds = 30
@@ -204,4 +207,7 @@ is_enabled = false
 [oauth2]
 nango_base_url = "http://localhost:3003"
 nango_public_key = "get it from Nango/project-settings page"
-nango_secret_key = "To be generated"
+nango_secret_key = "get it from Nango/project-settings page"
+# Generate with: openssl rand -hex 32
+token_encryption_key = "to be generated"
+

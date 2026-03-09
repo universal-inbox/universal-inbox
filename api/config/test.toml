@@ -11,6 +11,7 @@ dependencies_log_level = "debug"
 [oauth2]
 nango_secret_key = "nango_test_key"
 nango_public_key = "nango_public_test_key"
+token_encryption_key = "7c996b56d9fef258ada8da44ad983733dbb0ac8edb4e3bb58b2f2290ff675a9b"
 
 [application.http_session]
 secret_key = "1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF"

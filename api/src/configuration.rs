@@ -3,7 +3,7 @@ use std::{collections::HashMap, env, time::Duration};
 use anyhow::Context;
 use config::{Config, ConfigError, Environment, File};
 use hex;
-use openidconnect::{ClientId, ClientSecret, IntrospectionUrl, IssuerUrl};
+use openidconnect::{ClientId, ClientSecret as OidcClientSecret, IntrospectionUrl, IssuerUrl};
 use ring::hmac;
 use secrecy::{CloneableSecret, ExposeSecret, SecretBox, zeroize::Zeroize};
 use serde::{Deserialize, Deserializer};
@@ -16,6 +16,7 @@ use universal_inbox::integration_connection::{
 
 use crate::{
     ExecutionContext,
+    integrations::oauth2::ClientSecret,
     universal_inbox::{UniversalInboxError, user::model::UserAuthKind},
 };
 
@@ -107,7 +108,7 @@ pub enum AuthenticationSettings {
 pub struct OpenIDConnectSettings {
     pub oidc_issuer_url: IssuerUrl,
     pub oidc_api_client_id: ClientId,
-    pub oidc_api_client_secret: ClientSecret,
+    pub oidc_api_client_secret: OidcClientSecret,
     pub user_profile_url: Url,
     pub oidc_flow_settings: OIDCFlowSettings,
 }
@@ -184,8 +185,6 @@ pub struct Oauth2Settings {
     /// Hex-encoded 32-byte AES-256 key for encrypting OAuth tokens at rest.
     /// Required when any integration uses internal OAuth (not Nango).
     pub token_encryption_key: Option<String>,
-    /// Base URL for the OAuth callback endpoint (e.g. "https://api.example.com/api/oauth/callback")
-    pub redirect_uri: Option<Url>,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -201,10 +200,8 @@ pub struct IntegrationSettings {
     pub is_enabled: bool,
     pub api_max_retry_duration_http_seconds: Option<u64>,
     pub api_max_retry_duration_worker_seconds: Option<u64>,
-    /// OAuth client ID for integrations using internal OAuth (not Nango).
     pub oauth_client_id: Option<String>,
-    /// OAuth client secret for integrations using internal OAuth (not Nango).
-    pub oauth_client_secret: Option<String>,
+    pub oauth_client_secret: Option<ClientSecret>,
 }
 
 #[derive(Debug, Clone)]
@@ -411,6 +408,16 @@ impl ApplicationSettings {
             .context("Failed to parse OIDC redirect URL")?)
     }
 
+    /// This function is used to get the OAuth2 callback redirect URL for internal OAuth flows.
+    pub fn get_oauth_redirect_url(&self) -> Result<Url, UniversalInboxError> {
+        Ok(self
+            .front_base_url
+            .join(&self.api_path)
+            .context("Failed to parse OAuth redirect URL")?
+            .join("oauth/callback")
+            .context("Failed to parse OAuth redirect URL")?)
+    }
+
     /// This function is used to get the OIDC redirect URL for the API client.
     pub fn get_oidc_auth_code_flow_redirect_url(&self) -> Result<Url, UniversalInboxError> {
         Ok(self
@@ -493,7 +500,7 @@ mod tests {
             AuthenticationSettings::OpenIDConnect(Box::new(OpenIDConnectSettings {
                 oidc_issuer_url: IssuerUrl::new("https://example.com".to_string()).unwrap(),
                 oidc_api_client_id: ClientId::new("client_id".to_string()),
-                oidc_api_client_secret: ClientSecret::new("secret".to_string()),
+                oidc_api_client_secret: OidcClientSecret::new("secret".to_string()),
                 user_profile_url: Url::parse("https://example.com/profile").unwrap(),
                 oidc_flow_settings: OIDCFlowSettings::AuthorizationCodePKCEFlow(
                     OIDCAuthorizationCodePKCEFlowSettings {
@@ -526,7 +533,7 @@ mod tests {
             AuthenticationSettings::OpenIDConnect(Box::new(OpenIDConnectSettings {
                 oidc_issuer_url: IssuerUrl::new("https://example.com".to_string()).unwrap(),
                 oidc_api_client_id: ClientId::new("client_id".to_string()),
-                oidc_api_client_secret: ClientSecret::new("secret".to_string()),
+                oidc_api_client_secret: OidcClientSecret::new("secret".to_string()),
                 user_profile_url: Url::parse("https://example.com/profile").unwrap(),
                 oidc_flow_settings: OIDCFlowSettings::GoogleAuthorizationCodeFlow,
             }));
@@ -559,7 +566,7 @@ mod tests {
             AuthenticationSettings::OpenIDConnect(Box::new(OpenIDConnectSettings {
                 oidc_issuer_url: IssuerUrl::new("https://example.com".to_string()).unwrap(),
                 oidc_api_client_id: ClientId::new("client_id".to_string()),
-                oidc_api_client_secret: ClientSecret::new("secret".to_string()),
+                oidc_api_client_secret: OidcClientSecret::new("secret".to_string()),
                 user_profile_url: Url::parse("https://example.com/profile").unwrap(),
                 oidc_flow_settings: OIDCFlowSettings::AuthorizationCodePKCEFlow(
                     OIDCAuthorizationCodePKCEFlowSettings {
