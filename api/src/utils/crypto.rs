@@ -154,8 +154,14 @@ mod tests {
         assert_ne!(encrypted1, encrypted2);
 
         // But both should decrypt to the same value
-        assert_eq!(decrypt_token(&encrypted1, TEST_AAD, &key).unwrap(), plaintext);
-        assert_eq!(decrypt_token(&encrypted2, TEST_AAD, &key).unwrap(), plaintext);
+        assert_eq!(
+            decrypt_token(&encrypted1, TEST_AAD, &key).unwrap(),
+            plaintext
+        );
+        assert_eq!(
+            decrypt_token(&encrypted2, TEST_AAD, &key).unwrap(),
+            plaintext
+        );
     }
 
     #[test]
