@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use anyhow::Context;
 use tokio::sync::RwLock;
 use tracing::{error, info};
 
@@ -28,8 +29,11 @@ pub async fn refresh_oauth_tokens(
     );
 
     let service = integration_connection_service.read().await;
+    let mut transaction = service.begin().await.context(format!(
+        "Failed to create new transaction while refreshing OAuth tokens for {provider_kind_string}"
+    ))?;
     let result = service
-        .refresh_expiring_tokens(minutes_before_expiry, provider_kind)
+        .refresh_expiring_tokens(&mut transaction, minutes_before_expiry, provider_kind)
         .await;
 
     match &result {

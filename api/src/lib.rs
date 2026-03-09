@@ -421,7 +421,7 @@ pub async fn build_services(
             IntegrationProviderKind::Linear,
             Arc::new(LinearOAuth2Provider::new(
                 client_id.clone(),
-                client_secret.clone(),
+                SecretBox::new(Box::new(client_secret.clone())),
                 linear_settings.required_oauth_scopes.clone(),
             )),
         );
