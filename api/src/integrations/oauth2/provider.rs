@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::time::Duration;
 
 use anyhow::Context;
 use chrono::{DateTime, TimeDelta, Utc};
@@ -75,6 +76,8 @@ impl OAuth2FlowService {
     pub fn new() -> Result<OAuth2FlowService, UniversalInboxError> {
         let reqwest_client = reqwest_middleware::reqwest::Client::builder()
             .user_agent(APP_USER_AGENT)
+            .connect_timeout(Duration::from_secs(5))
+            .timeout(Duration::from_secs(30))
             .build()
             .context("Failed to build OAuth2 HTTP client")?;
         let client = ClientBuilder::new(reqwest_client)
