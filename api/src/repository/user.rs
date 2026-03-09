@@ -715,7 +715,7 @@ impl UserRepository for Repository {
         query_builder
             .push(" WHERE ")
             .push(r#""user".id = "#)
-            .push_bind_unseparated(user_id.0);
+            .push_bind(user_id.0);
 
         query_builder.push(
             r#"
