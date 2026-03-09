@@ -294,10 +294,14 @@ async fn handle_callback(
 
     let expires_at = token_response.expires_at();
 
-    // Extract registered scopes from the raw response
-    let raw_response = serde_json::to_value(&token_response)
+    // Extract registered scopes from the raw response, then strip sensitive fields
+    let mut raw_response = serde_json::to_value(&token_response)
         .context("Failed to serialize token response to Value")?;
     let registered_scopes = provider.extract_registered_scopes(&raw_response)?;
+    if let Some(obj) = raw_response.as_object_mut() {
+        obj.remove("access_token");
+        obj.remove("refresh_token");
+    }
 
     // Store credential and update integration connection status
     let mut transaction = service
@@ -305,7 +309,9 @@ async fn handle_callback(
         .await
         .context("Failed to create transaction for storing OAuth credential")?;
 
-    // Get the integration connection to find the user_id
+    // Get the integration connection and verify it is still in Created status.
+    // This prevents a late callback from a duplicate authorize flow from overwriting
+    // credentials stored by an earlier successful callback.
     let integration_connection = service
         .get_integration_connection(&mut transaction, state_data.integration_connection_id)
         .await?
@@ -315,6 +321,14 @@ async fn handle_callback(
                 state_data.integration_connection_id
             ))
         })?;
+
+    if integration_connection.status != IntegrationConnectionStatus::Created {
+        return Err(UniversalInboxError::UnsupportedAction(format!(
+            "Integration connection {} is no longer in Created status (current: {:?}), ignoring stale OAuth callback",
+            state_data.integration_connection_id,
+            integration_connection.status
+        )));
+    }
 
     // Store the OAuth credential
     service

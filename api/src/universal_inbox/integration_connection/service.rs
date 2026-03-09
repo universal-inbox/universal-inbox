@@ -1490,8 +1490,12 @@ impl IntegrationConnectionService {
                     .map(|rt| encrypt_token(rt, aad_context, token_encryption_key))
                     .transpose()?;
 
-                let raw_response =
+                let mut raw_response =
                     serde_json::to_value(&token_response).unwrap_or(serde_json::Value::Null);
+                if let Some(obj) = raw_response.as_object_mut() {
+                    obj.remove("access_token");
+                    obj.remove("refresh_token");
+                }
 
                 match self
                     .repository
@@ -1699,7 +1703,11 @@ impl IntegrationConnectionService {
             };
 
             let expires_at = token_response.expires_at();
-            let raw_response = serde_json::to_value(&token_response).unwrap_or_default();
+            let mut raw_response = serde_json::to_value(&token_response).unwrap_or_default();
+            if let Some(obj) = raw_response.as_object_mut() {
+                obj.remove("access_token");
+                obj.remove("refresh_token");
+            }
 
             let mut tx = match self.repository.begin().await {
                 Ok(tx) => tx,
