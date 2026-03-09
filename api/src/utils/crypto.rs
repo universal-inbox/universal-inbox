@@ -2,6 +2,8 @@ use anyhow::Context;
 use ring::aead::{self, Aad, BoundKey, Nonce, NonceSequence, OpeningKey, SealingKey, UnboundKey};
 use ring::error::Unspecified;
 use ring::rand::{SecureRandom, SystemRandom};
+use secrecy::CloneableSecret;
+use secrecy::zeroize::Zeroize;
 
 use crate::universal_inbox::UniversalInboxError;
 
@@ -22,11 +24,13 @@ pub struct TokenEncryptionKey {
     key_bytes: Vec<u8>,
 }
 
-impl std::fmt::Debug for TokenEncryptionKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "TokenEncryptionKey(***)")
+impl Zeroize for TokenEncryptionKey {
+    fn zeroize(&mut self) {
+        self.key_bytes.zeroize();
     }
 }
+
+impl CloneableSecret for TokenEncryptionKey {}
 
 impl TokenEncryptionKey {
     pub fn from_hex(hex_str: &str) -> Result<Self, UniversalInboxError> {
@@ -49,8 +53,11 @@ impl TokenEncryptionKey {
 }
 
 /// Encrypt a plaintext token. Returns nonce (12 bytes) prepended to ciphertext+tag.
+/// `aad_context` binds the ciphertext to a specific context (e.g. connection ID bytes)
+/// so that it cannot be decrypted in a different context.
 pub fn encrypt_token(
     plaintext: &str,
+    aad_context: &[u8],
     key: &TokenEncryptionKey,
 ) -> Result<Vec<u8>, UniversalInboxError> {
     let rng = SystemRandom::new();
@@ -64,7 +71,7 @@ pub fn encrypt_token(
 
     let mut in_out = plaintext.as_bytes().to_vec();
     sealing_key
-        .seal_in_place_append_tag(Aad::empty(), &mut in_out)
+        .seal_in_place_append_tag(Aad::from(aad_context), &mut in_out)
         .map_err(|_| UniversalInboxError::Unexpected(anyhow::anyhow!("Failed to encrypt token")))?;
 
     let mut result = Vec::with_capacity(NONCE_LEN + in_out.len());
@@ -74,8 +81,10 @@ pub fn encrypt_token(
 }
 
 /// Decrypt a token from nonce (12 bytes) + ciphertext+tag format.
+/// `aad_context` must match the value used during encryption.
 pub fn decrypt_token(
     ciphertext: &[u8],
+    aad_context: &[u8],
     key: &TokenEncryptionKey,
 ) -> Result<String, UniversalInboxError> {
     if ciphertext.len() < NONCE_LEN + aead::AES_256_GCM.tag_len() {
@@ -93,7 +102,7 @@ pub fn decrypt_token(
 
     let mut in_out = encrypted.to_vec();
     let decrypted = opening_key
-        .open_in_place(Aad::empty(), &mut in_out)
+        .open_in_place(Aad::from(aad_context), &mut in_out)
         .map_err(|_| {
             UniversalInboxError::Unexpected(anyhow::anyhow!(
                 "Failed to decrypt token: invalid key or corrupted ciphertext"
@@ -120,13 +129,15 @@ mod tests {
         .unwrap()
     }
 
+    const TEST_AAD: &[u8] = b"test-connection-id";
+
     #[test]
     fn test_encrypt_decrypt_roundtrip() {
         let key = test_key();
         let plaintext = "xoxb-test-access-token-12345";
 
-        let encrypted = encrypt_token(plaintext, &key).unwrap();
-        let decrypted = decrypt_token(&encrypted, &key).unwrap();
+        let encrypted = encrypt_token(plaintext, TEST_AAD, &key).unwrap();
+        let decrypted = decrypt_token(&encrypted, TEST_AAD, &key).unwrap();
 
         assert_eq!(decrypted, plaintext);
     }
@@ -136,15 +147,15 @@ mod tests {
         let key = test_key();
         let plaintext = "same-token";
 
-        let encrypted1 = encrypt_token(plaintext, &key).unwrap();
-        let encrypted2 = encrypt_token(plaintext, &key).unwrap();
+        let encrypted1 = encrypt_token(plaintext, TEST_AAD, &key).unwrap();
+        let encrypted2 = encrypt_token(plaintext, TEST_AAD, &key).unwrap();
 
         // Different nonces should produce different ciphertexts
         assert_ne!(encrypted1, encrypted2);
 
         // But both should decrypt to the same value
-        assert_eq!(decrypt_token(&encrypted1, &key).unwrap(), plaintext);
-        assert_eq!(decrypt_token(&encrypted2, &key).unwrap(), plaintext);
+        assert_eq!(decrypt_token(&encrypted1, TEST_AAD, &key).unwrap(), plaintext);
+        assert_eq!(decrypt_token(&encrypted2, TEST_AAD, &key).unwrap(), plaintext);
     }
 
     #[test]
@@ -153,7 +164,7 @@ mod tests {
         let mut nonces = HashSet::new();
 
         for _ in 0..100 {
-            let encrypted = encrypt_token("token", &key).unwrap();
+            let encrypted = encrypt_token("token", TEST_AAD, &key).unwrap();
             let nonce = &encrypted[..NONCE_LEN];
             nonces.insert(nonce.to_vec());
         }
@@ -169,26 +180,33 @@ mod tests {
         )
         .unwrap();
 
-        let encrypted = encrypt_token("secret-token", &key1).unwrap();
-        assert!(decrypt_token(&encrypted, &key2).is_err());
+        let encrypted = encrypt_token("secret-token", TEST_AAD, &key1).unwrap();
+        assert!(decrypt_token(&encrypted, TEST_AAD, &key2).is_err());
+    }
+
+    #[test]
+    fn test_decrypt_with_wrong_aad_fails() {
+        let key = test_key();
+        let encrypted = encrypt_token("secret-token", b"connection-1", &key).unwrap();
+        assert!(decrypt_token(&encrypted, b"connection-2", &key).is_err());
     }
 
     #[test]
     fn test_decrypt_corrupted_ciphertext_fails() {
         let key = test_key();
-        let mut encrypted = encrypt_token("token", &key).unwrap();
+        let mut encrypted = encrypt_token("token", TEST_AAD, &key).unwrap();
 
         // Corrupt a byte in the ciphertext
         let last = encrypted.len() - 1;
         encrypted[last] ^= 0xFF;
 
-        assert!(decrypt_token(&encrypted, &key).is_err());
+        assert!(decrypt_token(&encrypted, TEST_AAD, &key).is_err());
     }
 
     #[test]
     fn test_decrypt_too_short_fails() {
         let key = test_key();
-        assert!(decrypt_token(&[0u8; 10], &key).is_err());
+        assert!(decrypt_token(&[0u8; 10], TEST_AAD, &key).is_err());
     }
 
     #[test]
@@ -209,8 +227,8 @@ mod tests {
     #[test]
     fn test_encrypt_decrypt_empty_string() {
         let key = test_key();
-        let encrypted = encrypt_token("", &key).unwrap();
-        let decrypted = decrypt_token(&encrypted, &key).unwrap();
+        let encrypted = encrypt_token("", TEST_AAD, &key).unwrap();
+        let decrypted = decrypt_token(&encrypted, TEST_AAD, &key).unwrap();
         assert_eq!(decrypted, "");
     }
 
@@ -218,8 +236,8 @@ mod tests {
     fn test_encrypt_decrypt_unicode() {
         let key = test_key();
         let plaintext = "token-with-émojis-🔑";
-        let encrypted = encrypt_token(plaintext, &key).unwrap();
-        let decrypted = decrypt_token(&encrypted, &key).unwrap();
+        let encrypted = encrypt_token(plaintext, TEST_AAD, &key).unwrap();
+        let decrypted = decrypt_token(&encrypted, TEST_AAD, &key).unwrap();
         assert_eq!(decrypted, plaintext);
     }
 }

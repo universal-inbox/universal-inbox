@@ -282,12 +282,14 @@ async fn handle_callback(
         )
         .await?;
 
-    // Encrypt tokens
-    let encrypted_access_token = encrypt_token(&token_response.access_token, token_encryption_key)?;
+    // Encrypt tokens (bind ciphertext to this specific connection via AAD)
+    let aad_context = state_data.integration_connection_id.0.as_bytes();
+    let encrypted_access_token =
+        encrypt_token(&token_response.access_token, aad_context, token_encryption_key)?;
     let encrypted_refresh_token = token_response
         .refresh_token
         .as_ref()
-        .map(|rt| encrypt_token(rt, token_encryption_key))
+        .map(|rt| encrypt_token(rt, aad_context, token_encryption_key))
         .transpose()?;
 
     let expires_at = token_response.expires_at();

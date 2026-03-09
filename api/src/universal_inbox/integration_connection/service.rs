@@ -6,6 +6,7 @@ use apalis::prelude::*;
 use apalis_redis::RedisStorage;
 use cached::proc_macro::io_cached;
 use chrono::{TimeDelta, Utc};
+use secrecy::{ExposeSecret, SecretBox};
 use sqlx::{Postgres, Transaction};
 use tokio_retry::{
     Retry,
@@ -58,7 +59,7 @@ pub struct IntegrationConnectionService {
     required_oauth_scopes: HashMap<IntegrationProviderKind, Vec<String>>,
     oauth2_providers: HashMap<IntegrationProviderKind, Arc<dyn OAuth2Provider>>,
     oauth2_flow_service: Option<OAuth2FlowService>,
-    token_encryption_key: Option<TokenEncryptionKey>,
+    token_encryption_key: Option<SecretBox<TokenEncryptionKey>>,
     oauth_redirect_uri: Option<Url>,
     user_service: Arc<UserService>,
     min_sync_notifications_interval_in_minutes: i64,
@@ -94,7 +95,7 @@ impl IntegrationConnectionService {
         required_oauth_scopes: HashMap<IntegrationProviderKind, Vec<String>>,
         oauth2_providers: HashMap<IntegrationProviderKind, Arc<dyn OAuth2Provider>>,
         oauth2_flow_service: Option<OAuth2FlowService>,
-        token_encryption_key: Option<TokenEncryptionKey>,
+        token_encryption_key: Option<SecretBox<TokenEncryptionKey>>,
         oauth_redirect_uri: Option<Url>,
         user_service: Arc<UserService>,
         min_sync_notifications_interval_in_minutes: i64,
@@ -141,7 +142,7 @@ impl IntegrationConnectionService {
     }
 
     pub fn get_token_encryption_key(&self) -> Option<&TokenEncryptionKey> {
-        self.token_encryption_key.as_ref()
+        self.token_encryption_key.as_ref().map(|k| k.expose_secret())
     }
 
     pub fn get_oauth_redirect_uri(&self) -> Option<&Url> {
@@ -807,13 +808,15 @@ impl IntegrationConnectionService {
         }
 
         // Decrypt the access token
-        let token_encryption_key = self.token_encryption_key.as_ref().ok_or_else(|| {
+        let token_encryption_key = self.token_encryption_key.as_ref().map(|k| k.expose_secret()).ok_or_else(|| {
             UniversalInboxError::Unexpected(anyhow!(
                 "Token encryption key not configured but required for local OAuth credentials"
             ))
         })?;
 
-        let access_token = decrypt_token(&credential.encrypted_access_token, token_encryption_key)?;
+        let aad_context = integration_connection.id.0.as_bytes();
+        let access_token =
+            decrypt_token(&credential.encrypted_access_token, aad_context, token_encryption_key)?;
 
         Ok(Some((AccessToken(access_token), integration_connection)))
     }
@@ -1332,7 +1335,7 @@ impl IntegrationConnectionService {
         provider_kind: Option<IntegrationProviderKind>,
         dry_run: bool,
     ) -> Result<(usize, usize), UniversalInboxError> {
-        let token_encryption_key = self.token_encryption_key.as_ref().ok_or_else(|| {
+        let token_encryption_key = self.token_encryption_key.as_ref().map(|k| k.expose_secret()).ok_or_else(|| {
             UniversalInboxError::Unexpected(anyhow!(
                 "Token encryption key not configured but required for OAuth token migration"
             ))
@@ -1477,13 +1480,14 @@ impl IntegrationConnectionService {
                     }
                 };
 
-                // Step 3: Encrypt and store
+                // Step 3: Encrypt and store (bind ciphertext to this connection via AAD)
+                let aad_context = integration_connection.id.0.as_bytes();
                 let encrypted_access_token =
-                    encrypt_token(&token_response.access_token, token_encryption_key)?;
+                    encrypt_token(&token_response.access_token, aad_context, token_encryption_key)?;
                 let encrypted_refresh_token = token_response
                     .refresh_token
                     .as_ref()
-                    .map(|rt| encrypt_token(rt, token_encryption_key))
+                    .map(|rt| encrypt_token(rt, aad_context, token_encryption_key))
                     .transpose()?;
 
                 let raw_response =
@@ -1595,7 +1599,7 @@ impl IntegrationConnectionService {
         minutes_before_expiry: i64,
         provider_kind: Option<IntegrationProviderKind>,
     ) -> Result<(usize, usize), UniversalInboxError> {
-        let token_encryption_key = self.token_encryption_key.as_ref().ok_or_else(|| {
+        let token_encryption_key = self.token_encryption_key.as_ref().map(|k| k.expose_secret()).ok_or_else(|| {
             UniversalInboxError::Unexpected(anyhow!(
                 "Token encryption key is not configured, cannot refresh tokens"
             ))
@@ -1643,8 +1647,9 @@ impl IntegrationConnectionService {
                 }
             };
 
+            let aad_context = conn_id.0.as_bytes();
             let refresh_token =
-                match decrypt_token(&credential.encrypted_refresh_token, token_encryption_key) {
+                match decrypt_token(&credential.encrypted_refresh_token, aad_context, token_encryption_key) {
                     Ok(t) => t,
                     Err(err) => {
                         error!("Failed to decrypt refresh token for connection {conn_id}: {err:?}");
@@ -1668,7 +1673,7 @@ impl IntegrationConnectionService {
             };
 
             let encrypted_access_token =
-                match encrypt_token(&token_response.access_token, token_encryption_key) {
+                match encrypt_token(&token_response.access_token, aad_context, token_encryption_key) {
                     Ok(t) => t,
                     Err(err) => {
                         error!(
@@ -1682,7 +1687,7 @@ impl IntegrationConnectionService {
             let encrypted_refresh_token = match token_response
                 .refresh_token
                 .as_ref()
-                .map(|rt| encrypt_token(rt, token_encryption_key))
+                .map(|rt| encrypt_token(rt, aad_context, token_encryption_key))
                 .transpose()
             {
                 Ok(t) => t,

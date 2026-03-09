@@ -86,6 +86,8 @@ use crate::{
     },
 };
 
+use secrecy::SecretBox;
+
 pub mod commands;
 pub mod configuration;
 pub mod integrations;
@@ -429,7 +431,7 @@ pub async fn build_services(
         .oauth2
         .token_encryption_key
         .as_ref()
-        .map(|hex| TokenEncryptionKey::from_hex(hex))
+        .map(|hex| TokenEncryptionKey::from_hex(hex).map(|k| SecretBox::new(Box::new(k))))
         .transpose()
         .expect("Invalid token encryption key");
 
