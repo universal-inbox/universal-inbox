@@ -314,11 +314,9 @@ pub async fn authenticated_session(
             .await
             .context("Failed to commit while linking OIDC auth method")?;
 
-        // Redirect to settings/profile page after linking
-        return Ok(Redirect::to(format!(
-            "{}settings",
-            settings.application.front_base_url
-        )));
+        return Ok(Redirect::to(
+            settings.application.front_base_url.to_string(),
+        ));
     }
 
     // Normal authentication flow

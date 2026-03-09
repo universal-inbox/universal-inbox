@@ -1,10 +1,14 @@
 use email_address::EmailAddress;
 use reqwest::Client;
 use secrecy::SecretBox;
+use webauthn_rs::prelude::RegisterPublicKeyCredential;
 
-use universal_inbox::user::{
-    Credentials, EmailValidationToken, Password, PasswordResetToken, RegisterUserParameters, User,
-    UserAuthKind, UserAuthMethod, UserId, UserPatch,
+use universal_inbox::{
+    auth::SessionAuthValidationParameters,
+    user::{
+        Credentials, EmailValidationToken, Password, PasswordResetToken, RegisterUserParameters,
+        User, UserAuthKind, UserAuthMethod, UserId, UserPatch, Username,
+    },
 };
 
 use universal_inbox_api::{
@@ -204,6 +208,51 @@ pub async fn patch_user_response(
     client
         .patch(format!("{}users/me", app.api_address))
         .json(patch)
+        .send()
+        .await
+        .unwrap()
+}
+
+pub async fn start_add_passkey_registration_response(
+    client: &Client,
+    app: &TestedApp,
+    username: &str,
+) -> reqwest::Response {
+    client
+        .post(format!(
+            "{}users/me/auth-methods/passkey/registration/start",
+            app.api_address
+        ))
+        .json(&Username(username.to_string()))
+        .send()
+        .await
+        .unwrap()
+}
+
+pub async fn finish_add_passkey_registration_response(
+    client: &Client,
+    app: &TestedApp,
+    register_credentials: &RegisterPublicKeyCredential,
+) -> reqwest::Response {
+    client
+        .post(format!(
+            "{}users/me/auth-methods/passkey/registration/finish",
+            app.api_address
+        ))
+        .json(register_credentials)
+        .send()
+        .await
+        .unwrap()
+}
+
+pub async fn link_oidc_pkce_session_response(
+    client: &Client,
+    app: &TestedApp,
+    params: &SessionAuthValidationParameters,
+) -> reqwest::Response {
+    client
+        .post(format!("{}auth/link-oidc/session", app.api_address))
+        .json(params)
         .send()
         .await
         .unwrap()
