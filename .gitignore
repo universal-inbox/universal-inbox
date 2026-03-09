@@ -17,3 +17,7 @@ docs
 # bv (beads viewer) local config and caches
 .bv/
 .playwright-cli
+
+# Dolt database files (added by bd init)
+.dolt/
+*.db
