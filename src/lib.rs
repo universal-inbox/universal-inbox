@@ -36,6 +36,16 @@ pub struct FrontConfig {
     pub version: Option<String>,
 }
 
+/// How an integration authenticates via OAuth.
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Default)]
+pub enum OAuthMethod {
+    /// Legacy: uses the Nango frontend SDK
+    #[default]
+    Nango,
+    /// New: redirects to backend /oauth/authorize endpoint
+    Internal,
+}
+
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
 pub struct IntegrationProviderStaticConfig {
     pub name: String,
@@ -44,6 +54,8 @@ pub struct IntegrationProviderStaticConfig {
     pub is_enabled: bool,
     pub oauth_user_scopes: Vec<String>,
     pub required_oauth_scopes: Vec<String>,
+    #[serde(default)]
+    pub oauth_method: OAuthMethod,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]

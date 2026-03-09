@@ -107,6 +107,7 @@ rustls = { version = "0.23.0" } # Used to initialize lettre
 secrecy = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true, features = ["unbounded_depth"] }
+sha2 = "0.10"
 serde_path_to_error = "0.1.20"
 serde_with = { workspace = true }
 slack-blocks-render = { workspace = true }
@@ -140,6 +141,7 @@ tracing-subscriber = { version = "0.3.0", features = [
 ] }
 universal-inbox = { path = ".." }
 url = { workspace = true, features = ["serde"] }
+urlencoding = "2"
 uuid = { workspace = true, features = ["serde"] }
 validator = { workspace = true }
 tokio-retry = "0.3.0"

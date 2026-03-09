@@ -9,7 +9,7 @@ use anyhow::Context;
 
 use universal_inbox::{
     FrontAuthenticationConfig, FrontConfig, FrontOIDCAuthorizationCodePKCEFlowConfig,
-    FrontOIDCGoogleAuthorizationCodeFlowConfig, IntegrationProviderStaticConfig,
+    FrontOIDCGoogleAuthorizationCodeFlowConfig, IntegrationProviderStaticConfig, OAuthMethod,
 };
 
 use crate::{
@@ -81,6 +81,11 @@ pub async fn front_config(
                 required_oauth_scopes: config.required_oauth_scopes.clone(),
                 warning_message: config.warning_message.clone(),
                 is_enabled: config.is_enabled,
+                oauth_method: if config.oauth_client_id.is_some() {
+                    OAuthMethod::Internal
+                } else {
+                    OAuthMethod::Nango
+                },
             },
         )
     }));

@@ -181,6 +181,11 @@ pub struct Oauth2Settings {
     pub nango_base_url: Url,
     pub nango_secret_key: String,
     pub nango_public_key: NangoPublicKey,
+    /// Hex-encoded 32-byte AES-256 key for encrypting OAuth tokens at rest.
+    /// Required when any integration uses internal OAuth (not Nango).
+    pub token_encryption_key: Option<String>,
+    /// Base URL for the OAuth callback endpoint (e.g. "https://api.example.com/api/oauth/callback")
+    pub redirect_uri: Option<Url>,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -196,6 +201,10 @@ pub struct IntegrationSettings {
     pub is_enabled: bool,
     pub api_max_retry_duration_http_seconds: Option<u64>,
     pub api_max_retry_duration_worker_seconds: Option<u64>,
+    /// OAuth client ID for integrations using internal OAuth (not Nango).
+    pub oauth_client_id: Option<String>,
+    /// OAuth client secret for integrations using internal OAuth (not Nango).
+    pub oauth_client_secret: Option<String>,
 }
 
 #[derive(Debug, Clone)]

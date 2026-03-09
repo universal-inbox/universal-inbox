@@ -7,6 +7,7 @@ extern crate macro_attr;
 extern crate enum_derive;
 
 use std::{
+    collections::HashMap,
     fmt::{Debug, Display},
     net::TcpListener,
     num::NonZeroUsize,
@@ -60,8 +61,15 @@ use webauthn_rs::prelude::*;
 use crate::{
     configuration::Settings,
     integrations::{
-        github::GithubService, google_drive::GoogleDriveService, google_mail::GoogleMailService,
-        linear::LinearService, oauth2::NangoService, todoist::TodoistService,
+        github::GithubService,
+        google_drive::GoogleDriveService,
+        google_mail::GoogleMailService,
+        linear::{LinearService, oauth::LinearOAuth2Provider},
+        oauth2::{
+            NangoService,
+            provider::{OAuth2FlowService, OAuth2Provider},
+        },
+        todoist::TodoistService,
     },
     jobs::handle_universal_inbox_job,
     observability::AuthenticatedRootSpanBuilder,
@@ -72,7 +80,10 @@ use crate::{
         notification::service::NotificationService, task::service::TaskService,
         third_party::service::ThirdPartyItemService, user::service::UserService,
     },
-    utils::jwt::{Claims, JWT_SESSION_KEY, JWTBase64EncodedSigningKeys, JWTSigningKeys},
+    utils::{
+        crypto::TokenEncryptionKey,
+        jwt::{Claims, JWT_SESSION_KEY, JWTBase64EncodedSigningKeys, JWTSigningKeys},
+    },
 };
 
 pub mod commands;
@@ -156,6 +167,7 @@ pub async fn run_server(
         let api_scope = web::scope(api_path.trim_end_matches('/'))
             .service(routes::auth::scope())
             .service(routes::integration_connection::scope())
+            .service(routes::oauth::authorize_scope())
             .service(routes::notification::scope())
             .service(routes::task::scope())
             .service(routes::user::scope())
@@ -248,6 +260,10 @@ pub async fn run_server(
             .route(
                 "/api/front_config",
                 web::get().to(routes::config::front_config),
+            )
+            .route(
+                "/api/oauth/callback",
+                web::get().to(routes::oauth::oauth_callback),
             )
             .service(api_scope)
             .app_data(settings_web_data.clone())
@@ -389,11 +405,51 @@ pub async fn build_services(
         webauthn.clone(),
     ));
 
+    // Build the map of internal OAuth2 providers (integrations not using Nango)
+    use ::universal_inbox::integration_connection::provider::IntegrationProviderKind;
+    let mut oauth2_providers: HashMap<IntegrationProviderKind, Arc<dyn OAuth2Provider>> =
+        HashMap::new();
+    if let Some(linear_settings) = settings.integrations.get("linear")
+        && let (Some(client_id), Some(client_secret)) = (
+            linear_settings.oauth_client_id.as_ref(),
+            linear_settings.oauth_client_secret.as_ref(),
+        )
+    {
+        oauth2_providers.insert(
+            IntegrationProviderKind::Linear,
+            Arc::new(LinearOAuth2Provider::new(
+                client_id.clone(),
+                client_secret.clone(),
+                linear_settings.required_oauth_scopes.clone(),
+            )),
+        );
+    }
+
+    let token_encryption_key = settings
+        .oauth2
+        .token_encryption_key
+        .as_ref()
+        .map(|hex| TokenEncryptionKey::from_hex(hex))
+        .transpose()
+        .expect("Invalid token encryption key");
+
+    let oauth2_flow_service = if !oauth2_providers.is_empty() {
+        Some(OAuth2FlowService::new().expect("Failed to create OAuth2FlowService"))
+    } else {
+        None
+    };
+
+    let oauth_redirect_uri = settings.oauth2.redirect_uri.clone();
+
     let integration_connection_service = Arc::new(RwLock::new(IntegrationConnectionService::new(
         repository.clone(),
         nango_service,
         settings.nango_provider_keys(),
         settings.required_oauth_scopes(),
+        oauth2_providers,
+        oauth2_flow_service,
+        token_encryption_key,
+        oauth_redirect_uri,
         user_service.clone(),
         settings
             .application

@@ -23,6 +23,8 @@ use url::Url;
 
 use crate::{integrations::APP_USER_AGENT, universal_inbox::UniversalInboxError};
 
+pub mod provider;
+
 #[derive(Clone, Debug)]
 pub struct NangoService {
     client: ClientWithMiddleware,
