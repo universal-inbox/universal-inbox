@@ -86,7 +86,7 @@ impl OAuthCredentialRepository for Repository {
                   ($1, $2, $3, $4, $5, $6, $7)
                 ON CONFLICT (integration_connection_id) DO UPDATE SET
                   encrypted_access_token = EXCLUDED.encrypted_access_token,
-                  encrypted_refresh_token = EXCLUDED.encrypted_refresh_token,
+                  encrypted_refresh_token = COALESCE(EXCLUDED.encrypted_refresh_token, oauth_credential.encrypted_refresh_token),
                   access_token_expires_at = EXCLUDED.access_token_expires_at,
                   raw_token_response = EXCLUDED.raw_token_response,
                   updated_at = EXCLUDED.updated_at
