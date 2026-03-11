@@ -6,12 +6,17 @@ use apalis::prelude::*;
 use apalis_redis::RedisStorage;
 use cached::proc_macro::io_cached;
 use chrono::{TimeDelta, Utc};
+use oauth2::{CsrfToken, PkceCodeChallenge};
+use redis::AsyncCommands;
+use secrecy::{ExposeSecret, SecretBox};
+use serde::{Deserialize, Serialize};
 use sqlx::{Postgres, Transaction};
 use tokio_retry::{
     Retry,
     strategy::{ExponentialBackoff, jitter},
 };
 use tracing::{debug, error, info, warn};
+use url::Url;
 
 use universal_inbox::{
     integration_connection::{
@@ -26,7 +31,10 @@ use universal_inbox::{
 };
 
 use crate::{
-    integrations::oauth2::{AccessToken, NangoService},
+    integrations::oauth2::{
+        AccessToken, AuthorizationCode, NangoService, PkceVerifier, RefreshToken,
+        provider::{OAuth2FlowService, OAuth2Provider},
+    },
     jobs::{
         UniversalInboxJob,
         sync::{SyncNotificationsJob, SyncTasksJob},
@@ -38,16 +46,34 @@ use crate::{
             IntegrationConnectionSyncedBeforeFilter,
         },
         notification::NotificationRepository,
+        oauth_credential::OAuthCredentialRepository,
     },
     universal_inbox::{UniversalInboxError, UpdateStatus, user::service::UserService},
-    utils::cache::build_redis_cache,
+    utils::{
+        cache::{Cache, build_redis_cache},
+        crypto::{TokenEncryptionKey, decrypt_token, encrypt_token},
+    },
 };
+
+const OAUTH_STATE_PREFIX: &str = "universal-inbox::oauth-state::";
+const OAUTH_STATE_TTL_SECONDS: u64 = 600;
+
+#[derive(Debug, Serialize, Deserialize)]
+struct OAuthStateData {
+    integration_connection_id: IntegrationConnectionId,
+    pkce_verifier: Option<SecretBox<PkceVerifier>>,
+    provider_kind: IntegrationProviderKind,
+}
 
 pub struct IntegrationConnectionService {
     repository: Arc<Repository>,
     nango_service: NangoService,
     nango_provider_keys: HashMap<IntegrationProviderKind, NangoProviderKey>,
     required_oauth_scopes: HashMap<IntegrationProviderKind, Vec<String>>,
+    oauth2_providers: HashMap<IntegrationProviderKind, Arc<dyn OAuth2Provider>>,
+    oauth2_flow_service: Option<OAuth2FlowService>,
+    token_encryption_key: Option<SecretBox<TokenEncryptionKey>>,
+    oauth_redirect_uri: Option<Url>,
     user_service: Arc<UserService>,
     min_sync_notifications_interval_in_minutes: i64,
     min_sync_tasks_interval_in_minutes: i64,
@@ -80,6 +106,10 @@ impl IntegrationConnectionService {
         nango_service: NangoService,
         nango_provider_keys: HashMap<IntegrationProviderKind, NangoProviderKey>,
         required_oauth_scopes: HashMap<IntegrationProviderKind, Vec<String>>,
+        oauth2_providers: HashMap<IntegrationProviderKind, Arc<dyn OAuth2Provider>>,
+        oauth2_flow_service: Option<OAuth2FlowService>,
+        token_encryption_key: Option<SecretBox<TokenEncryptionKey>>,
+        oauth_redirect_uri: Option<Url>,
         user_service: Arc<UserService>,
         min_sync_notifications_interval_in_minutes: i64,
         min_sync_tasks_interval_in_minutes: i64,
@@ -92,6 +122,10 @@ impl IntegrationConnectionService {
             nango_service,
             nango_provider_keys,
             required_oauth_scopes,
+            oauth2_providers,
+            oauth2_flow_service,
+            token_encryption_key,
+            oauth_redirect_uri,
             user_service,
             min_sync_notifications_interval_in_minutes,
             min_sync_tasks_interval_in_minutes,
@@ -103,6 +137,10 @@ impl IntegrationConnectionService {
 
     pub async fn begin(&self) -> Result<Transaction<'_, Postgres>, UniversalInboxError> {
         self.repository.begin().await
+    }
+
+    fn get_oauth2_provider(&self, kind: &IntegrationProviderKind) -> Option<&dyn OAuth2Provider> {
+        self.oauth2_providers.get(kind).map(|p| p.as_ref())
     }
 
     pub async fn get_integration_connection(
@@ -714,8 +752,74 @@ impl IntegrationConnectionService {
             return Ok(None);
         };
 
-        self.fetch_access_token_from_nango(executor, integration_connection, Some(for_user_id))
-            .await
+        if self
+            .oauth2_providers
+            .contains_key(&integration_provider_kind)
+        {
+            self.fetch_access_token_locally(executor, integration_connection, Some(for_user_id))
+                .await
+        } else {
+            self.fetch_access_token_from_nango(executor, integration_connection, Some(for_user_id))
+                .await
+        }
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(
+            integration_connection.id = integration_connection.id.to_string(),
+        ),
+        err
+    )]
+    async fn fetch_access_token_locally(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        integration_connection: IntegrationConnection,
+        _for_user_id: Option<UserId>,
+    ) -> Result<Option<(AccessToken, IntegrationConnection)>, UniversalInboxError> {
+        let credential = self
+            .repository
+            .get_oauth_credential(executor, integration_connection.id)
+            .await?;
+
+        let Some(credential) = credential else {
+            return Err(UniversalInboxError::Recoverable(anyhow!(
+                "No local OAuth credential found for integration connection {}",
+                integration_connection.id
+            )));
+        };
+
+        // Check if access token is expired
+        if let Some(expires_at) = credential.access_token_expires_at
+            && expires_at < Utc::now()
+        {
+            // Token expired - the eager refresh command should handle this
+            return Err(UniversalInboxError::Recoverable(anyhow!(
+                "Access token expired for integration connection {}. Token refresh should happen via the refresh-oauth-tokens command.",
+                integration_connection.id
+            )));
+        }
+
+        // Decrypt the access token
+        let token_encryption_key = self
+            .token_encryption_key
+            .as_ref()
+            .map(|k| k.expose_secret())
+            .ok_or_else(|| {
+                UniversalInboxError::Unexpected(anyhow!(
+                    "Token encryption key not configured but required for local OAuth credentials"
+                ))
+            })?;
+
+        let aad_context = integration_connection.id.0.as_bytes();
+        let access_token = AccessToken(decrypt_token(
+            &credential.encrypted_access_token,
+            aad_context,
+            token_encryption_key,
+        )?);
+
+        Ok(Some((access_token, integration_connection)))
     }
 
     async fn fetch_access_token_from_nango(
@@ -1213,6 +1317,238 @@ impl IntegrationConnectionService {
         Ok(())
     }
 
+    /// Migrate existing Nango-managed OAuth tokens to locally-managed OAuth credentials.
+    ///
+    /// For each integration connection whose provider has a `migration_url()`, this method:
+    /// 1. Fetches the current access token from Nango
+    /// 2. Calls the provider's migration endpoint to exchange for short-lived + refresh token
+    /// 3. Encrypts and stores the new tokens locally
+    ///
+    /// Returns `(migrated_count, failed_count)`.
+    #[tracing::instrument(
+        level = "info",
+        skip_all,
+        fields(provider_kind = provider_kind.map(|kind| kind.to_string())),
+        err
+    )]
+    pub async fn migrate_nango_tokens(
+        &self,
+        provider_kind: Option<IntegrationProviderKind>,
+        dry_run: bool,
+    ) -> Result<(usize, usize), UniversalInboxError> {
+        let token_encryption_key = self
+            .token_encryption_key
+            .as_ref()
+            .map(|k| k.expose_secret())
+            .ok_or_else(|| {
+                UniversalInboxError::Unexpected(anyhow!(
+                    "Token encryption key not configured but required for OAuth token migration"
+                ))
+            })?;
+
+        let oauth2_flow_service = self.oauth2_flow_service.as_ref().ok_or_else(|| {
+            UniversalInboxError::Unexpected(anyhow!(
+                "OAuth2 flow service not configured but required for OAuth token migration"
+            ))
+        })?;
+
+        // Collect providers that support migration
+        let migratable_providers: Vec<_> = self
+            .oauth2_providers
+            .iter()
+            .filter(|(kind, provider)| {
+                provider.migration_url().is_some() && provider_kind.is_none_or(|pk| pk == **kind)
+            })
+            .collect();
+
+        if migratable_providers.is_empty() {
+            info!("No providers with migration support found");
+            return Ok((0, 0));
+        }
+
+        info!(
+            "Found {} provider(s) supporting token migration: {:?}",
+            migratable_providers.len(),
+            migratable_providers
+                .iter()
+                .map(|(k, _)| k.to_string())
+                .collect::<Vec<_>>()
+        );
+
+        let service = self.user_service.clone();
+        let mut user_transaction = service
+            .begin()
+            .await
+            .context("Failed to create new transaction while listing users for migration")?;
+        let users = service.fetch_all_users(&mut user_transaction).await?;
+        drop(user_transaction);
+
+        let mut migrated_count: usize = 0;
+        let mut failed_count: usize = 0;
+
+        for user in &users {
+            let mut transaction = self.begin().await.context(format!(
+                "Failed to create new transaction while migrating tokens for user {}",
+                user.id
+            ))?;
+
+            let integration_connections = self
+                .fetch_all_integration_connections(
+                    &mut transaction,
+                    user.id,
+                    Some(IntegrationConnectionStatus::Validated),
+                    false,
+                )
+                .await?;
+
+            for integration_connection in integration_connections {
+                let ic_provider_kind = integration_connection.provider.kind();
+
+                // Skip if this provider doesn't support migration
+                let Some(oauth2_provider) = self.oauth2_providers.get(&ic_provider_kind) else {
+                    continue;
+                };
+                if oauth2_provider.migration_url().is_none() {
+                    continue;
+                }
+                // Skip if filtering by provider_kind and this doesn't match
+                if provider_kind.is_some() && provider_kind != Some(ic_provider_kind) {
+                    continue;
+                }
+
+                let nango_provider_key = match self.nango_provider_keys.get(&ic_provider_kind) {
+                    Some(key) => key,
+                    None => {
+                        warn!(
+                            "No Nango provider config key found for {ic_provider_kind}, skipping connection {}",
+                            integration_connection.id
+                        );
+                        failed_count += 1;
+                        continue;
+                    }
+                };
+
+                if dry_run {
+                    info!(
+                        "[DRY RUN] Would migrate {ic_provider_kind} token for connection {} (user {})",
+                        integration_connection.id, user.id
+                    );
+                    migrated_count += 1;
+                    continue;
+                }
+
+                info!(
+                    "Migrating {ic_provider_kind} token for connection {} (user {})",
+                    integration_connection.id, user.id
+                );
+
+                // Step 1: Fetch current access token from Nango
+                let nango_connection = match self
+                    .nango_service
+                    .get_connection(integration_connection.connection_id, nango_provider_key)
+                    .await
+                {
+                    Ok(Some(conn)) => conn,
+                    Ok(None) => {
+                        warn!(
+                            "No Nango connection found for connection {} (user {}), skipping",
+                            integration_connection.id, user.id
+                        );
+                        failed_count += 1;
+                        continue;
+                    }
+                    Err(err) => {
+                        error!(
+                            "Failed to fetch Nango connection for {} (user {}): {err:?}",
+                            integration_connection.id, user.id
+                        );
+                        failed_count += 1;
+                        continue;
+                    }
+                };
+
+                // Step 2: Call migration endpoint
+                let token_response = match oauth2_flow_service
+                    .migrate_old_token(
+                        oauth2_provider.as_ref(),
+                        &nango_connection.credentials.access_token,
+                    )
+                    .await
+                {
+                    Ok(response) => response,
+                    Err(err) => {
+                        error!(
+                            "Failed to migrate token for connection {} (user {}): {err:?}",
+                            integration_connection.id, user.id
+                        );
+                        failed_count += 1;
+                        continue;
+                    }
+                };
+
+                // Step 3: Encrypt and store (bind ciphertext to this connection via AAD)
+                let aad_context = integration_connection.id.0.as_bytes();
+                let encrypted_access_token = encrypt_token(
+                    token_response.access_token.expose_secret().as_str(),
+                    aad_context,
+                    token_encryption_key,
+                )?;
+                let encrypted_refresh_token = token_response
+                    .refresh_token
+                    .as_ref()
+                    .map(|rt| {
+                        encrypt_token(
+                            rt.expose_secret().as_str(),
+                            aad_context,
+                            token_encryption_key,
+                        )
+                    })
+                    .transpose()?;
+
+                let raw_response = serde_json::to_value(token_response.as_safe_token_response())
+                    .unwrap_or(serde_json::Value::Null);
+
+                match self
+                    .repository
+                    .store_oauth_credential(
+                        &mut transaction,
+                        integration_connection.id,
+                        encrypted_access_token,
+                        encrypted_refresh_token,
+                        token_response.expires_at(),
+                        raw_response,
+                    )
+                    .await
+                {
+                    Ok(_) => {
+                        info!(
+                            "Successfully migrated token for {ic_provider_kind} connection {} (user {})",
+                            integration_connection.id, user.id
+                        );
+                        migrated_count += 1;
+                    }
+                    Err(err) => {
+                        error!(
+                            "Failed to store migrated credential for connection {} (user {}): {err:?}",
+                            integration_connection.id, user.id
+                        );
+                        failed_count += 1;
+                    }
+                }
+            }
+
+            if !dry_run {
+                transaction.commit().await.context(format!(
+                    "Failed to commit while migrating tokens for user {}",
+                    user.id
+                ))?;
+            }
+        }
+
+        info!("Token migration summary: {migrated_count} migrated, {failed_count} failed");
+        Ok((migrated_count, failed_count))
+    }
+
     #[tracing::instrument(
         level = "debug",
         skip_all,
@@ -1262,6 +1598,388 @@ impl IntegrationConnectionService {
                 user_id,
             )
             .await
+    }
+
+    /// Refresh all OAuth credentials expiring within `minutes_before_expiry` minutes.
+    /// Optionally filter by `provider_kind`.
+    /// Returns `(refreshed_count, failed_count)`.
+    #[tracing::instrument(
+        level = "info",
+        skip(self, executor),
+        fields(minutes_before_expiry, provider_kind),
+        err
+    )]
+    pub async fn refresh_expiring_tokens(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        minutes_before_expiry: i64,
+        provider_kind: Option<IntegrationProviderKind>,
+    ) -> Result<(usize, usize), UniversalInboxError> {
+        let token_encryption_key = self
+            .token_encryption_key
+            .as_ref()
+            .map(|k| k.expose_secret())
+            .ok_or_else(|| {
+                UniversalInboxError::Unexpected(anyhow!(
+                    "Token encryption key is not configured, cannot refresh tokens"
+                ))
+            })?;
+        let flow_service = self.oauth2_flow_service.as_ref().ok_or_else(|| {
+            UniversalInboxError::Unexpected(anyhow!(
+                "OAuth2 flow service is not configured, cannot refresh tokens"
+            ))
+        })?;
+
+        let expiring_before = Utc::now()
+            + TimeDelta::try_minutes(minutes_before_expiry).ok_or_else(|| {
+                UniversalInboxError::Unexpected(anyhow!(
+                    "Invalid minutes_before_expiry value: {minutes_before_expiry}"
+                ))
+            })?;
+
+        let expiring_credentials = self
+            .repository
+            .list_expiring_credentials(executor, expiring_before, provider_kind)
+            .await?;
+
+        let total = expiring_credentials.len();
+        info!("Found {total} expiring OAuth credential(s) to refresh (before {expiring_before})");
+
+        let mut refreshed = 0usize;
+        let mut failed = 0usize;
+
+        for credential in expiring_credentials {
+            let conn_id = credential.integration_connection_id;
+            let pk = credential.provider_kind;
+
+            let provider = match self.get_oauth2_provider(&pk) {
+                Some(p) => p,
+                None => {
+                    warn!(
+                        "No OAuth2Provider configured for {pk:?}, skipping credential for connection {conn_id}"
+                    );
+                    failed += 1;
+                    continue;
+                }
+            };
+
+            let aad_context = conn_id.0.as_bytes();
+            let refresh_token = match decrypt_token(
+                &credential.encrypted_refresh_token,
+                aad_context,
+                token_encryption_key,
+            ) {
+                Ok(t) => RefreshToken(t),
+                Err(err) => {
+                    error!("Failed to decrypt refresh token for connection {conn_id}: {err:?}");
+                    failed += 1;
+                    continue;
+                }
+            };
+
+            let token_response = match flow_service
+                .refresh_access_token(provider, &refresh_token)
+                .await
+            {
+                Ok(resp) => resp,
+                Err(err) => {
+                    error!(
+                        "Failed to refresh access token for connection {conn_id} ({pk:?}): {err:?}"
+                    );
+                    failed += 1;
+                    continue;
+                }
+            };
+
+            let encrypted_access_token = match encrypt_token(
+                token_response.access_token.expose_secret().as_str(),
+                aad_context,
+                token_encryption_key,
+            ) {
+                Ok(t) => t,
+                Err(err) => {
+                    error!("Failed to encrypt new access token for connection {conn_id}: {err:?}");
+                    failed += 1;
+                    continue;
+                }
+            };
+
+            let encrypted_refresh_token = match token_response
+                .refresh_token
+                .as_ref()
+                .map(|rt| {
+                    encrypt_token(
+                        rt.expose_secret().as_str(),
+                        aad_context,
+                        token_encryption_key,
+                    )
+                })
+                .transpose()
+            {
+                Ok(t) => t,
+                Err(err) => {
+                    error!("Failed to encrypt new refresh token for connection {conn_id}: {err:?}");
+                    failed += 1;
+                    continue;
+                }
+            };
+
+            let expires_at = token_response.expires_at();
+            let raw_response =
+                serde_json::to_value(token_response.as_safe_token_response()).unwrap_or_default();
+
+            match self
+                .repository
+                .store_oauth_credential(
+                    executor,
+                    conn_id,
+                    encrypted_access_token,
+                    encrypted_refresh_token,
+                    expires_at,
+                    raw_response,
+                )
+                .await
+            {
+                Ok(_) => {
+                    info!("Successfully refreshed OAuth token for connection {conn_id} ({pk:?})");
+                    refreshed += 1;
+                }
+                Err(err) => {
+                    error!("Failed to store refreshed token for connection {conn_id}: {err:?}");
+                    failed += 1;
+                }
+            }
+        }
+
+        info!("Token refresh complete: {refreshed} refreshed, {failed} failed out of {total}");
+        Ok((refreshed, failed))
+    }
+
+    pub async fn start_oauth_authorization(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        integration_connection_id: IntegrationConnectionId,
+        user_id: UserId,
+        cache: &Cache,
+    ) -> Result<Url, UniversalInboxError> {
+        // Validate the integration connection exists, belongs to user, has status Created
+        let integration_connection = self
+            .get_integration_connection(executor, integration_connection_id)
+            .await?
+            .ok_or_else(|| {
+                UniversalInboxError::ItemNotFound(format!(
+                    "Integration connection {integration_connection_id} not found"
+                ))
+            })?;
+
+        if integration_connection.user_id != user_id {
+            return Err(UniversalInboxError::Forbidden(format!(
+                "Integration connection {integration_connection_id} does not belong to user {user_id}"
+            )));
+        }
+
+        if integration_connection.status != IntegrationConnectionStatus::Created {
+            return Err(UniversalInboxError::UnsupportedAction(format!(
+                "Integration connection {integration_connection_id} is not in Created status"
+            )));
+        }
+
+        let provider_kind = integration_connection.provider.kind();
+
+        // Look up the OAuth2Provider for this provider kind
+        let provider = self.get_oauth2_provider(&provider_kind).ok_or_else(|| {
+            UniversalInboxError::UnsupportedAction(format!(
+                "No OAuth2 provider configured for {provider_kind:?}"
+            ))
+        })?;
+
+        let redirect_uri = self.oauth_redirect_uri.as_ref().ok_or_else(|| {
+            UniversalInboxError::Unexpected(anyhow::anyhow!("OAuth redirect URI not configured"))
+        })?;
+
+        // Build an OAuth2 client from the provider configuration
+        let client = oauth2::basic::BasicClient::new(oauth2::ClientId::new(
+            provider.client_id().to_string(),
+        ))
+        .set_client_secret(oauth2::ClientSecret::new(
+            provider.client_secret().expose_secret().0.clone(),
+        ))
+        .set_auth_uri(
+            oauth2::AuthUrl::new(provider.authorize_url().to_string())
+                .expect("OAuth2Provider authorize_url is already a valid URL"),
+        )
+        .set_token_uri(
+            oauth2::TokenUrl::new(provider.token_url().to_string())
+                .expect("OAuth2Provider token_url is already a valid URL"),
+        )
+        .set_redirect_uri(
+            oauth2::RedirectUrl::new(redirect_uri.to_string())
+                .expect("oauth_redirect_uri is already a valid URL"),
+        );
+
+        let mut auth_request = client.authorize_url(CsrfToken::new_random);
+
+        // Add scopes as an extra param (some providers use non-standard separators)
+        let scopes = provider.required_scopes();
+        if !scopes.is_empty() {
+            auth_request = auth_request.add_extra_param("scope", scopes.join(","));
+        }
+
+        // Add PKCE if supported
+        let pkce_verifier = if provider.supports_pkce() {
+            let (challenge, verifier) = PkceCodeChallenge::new_random_sha256();
+            auth_request = auth_request.set_pkce_challenge(challenge);
+            Some(SecretBox::new(Box::new(PkceVerifier(
+                verifier.into_secret().to_string(),
+            ))))
+        } else {
+            None
+        };
+
+        let (authorization_url, csrf_state) = auth_request.url();
+
+        let state = csrf_state.into_secret().to_string();
+        let state_data = OAuthStateData {
+            integration_connection_id,
+            pkce_verifier,
+            provider_kind,
+        };
+        let state_json =
+            serde_json::to_string(&state_data).context("Failed to serialize OAuth state data")?;
+
+        let redis_key = format!("{OAUTH_STATE_PREFIX}{state}");
+        let mut conn = cache.connection_manager.clone();
+        conn.set_ex::<_, _, ()>(&redis_key, &state_json, OAUTH_STATE_TTL_SECONDS)
+            .await
+            .context("Failed to store OAuth state in Redis")?;
+
+        Ok(authorization_url)
+    }
+
+    pub async fn complete_oauth_callback(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        authorization_code: &SecretBox<AuthorizationCode>,
+        state: &str,
+        cache: &Cache,
+    ) -> Result<(), UniversalInboxError> {
+        // Look up and delete state from Redis (single-use)
+        let redis_key = format!("{OAUTH_STATE_PREFIX}{state}");
+        let mut conn = cache.connection_manager.clone();
+        let state_json: Option<String> = conn
+            .get_del(&redis_key)
+            .await
+            .context("Failed to retrieve OAuth state from Redis")?;
+
+        let state_json = state_json.ok_or_else(|| {
+            UniversalInboxError::Unauthorized(anyhow::anyhow!("Invalid or expired OAuth state"))
+        })?;
+
+        let state_data: OAuthStateData =
+            serde_json::from_str(&state_json).context("Failed to deserialize OAuth state data")?;
+
+        let provider = self
+            .get_oauth2_provider(&state_data.provider_kind)
+            .ok_or_else(|| {
+                UniversalInboxError::Unexpected(anyhow::anyhow!(
+                    "No OAuth2 provider configured for {:?}",
+                    state_data.provider_kind
+                ))
+            })?;
+
+        let oauth2_flow_service = self.oauth2_flow_service.as_ref().ok_or_else(|| {
+            UniversalInboxError::Unexpected(anyhow::anyhow!("OAuth2 flow service not configured"))
+        })?;
+
+        let redirect_uri = self.oauth_redirect_uri.as_ref().ok_or_else(|| {
+            UniversalInboxError::Unexpected(anyhow::anyhow!("OAuth redirect URI not configured"))
+        })?;
+
+        let token_encryption_key = self
+            .token_encryption_key
+            .as_ref()
+            .map(|k| k.expose_secret())
+            .ok_or_else(|| {
+                UniversalInboxError::Unexpected(anyhow::anyhow!(
+                    "Token encryption key not configured"
+                ))
+            })?;
+
+        let token_response = oauth2_flow_service
+            .exchange_code_for_token(
+                provider,
+                authorization_code,
+                redirect_uri,
+                state_data.pkce_verifier.as_ref(),
+            )
+            .await?;
+
+        // Encrypt tokens (bind ciphertext to this specific connection via AAD)
+        let aad_context = state_data.integration_connection_id.0.as_bytes();
+        let encrypted_access_token = encrypt_token(
+            token_response.access_token.expose_secret().as_str(),
+            aad_context,
+            token_encryption_key,
+        )?;
+        let encrypted_refresh_token = token_response
+            .refresh_token
+            .as_ref()
+            .map(|rt| {
+                encrypt_token(
+                    rt.expose_secret().as_str(),
+                    aad_context,
+                    token_encryption_key,
+                )
+            })
+            .transpose()?;
+
+        let expires_at = token_response.expires_at();
+
+        let raw_response = serde_json::to_value(token_response.as_safe_token_response())
+            .context("Failed to serialize token response to Value")?;
+        let registered_scopes = provider.extract_registered_scopes(&raw_response)?;
+
+        // Get the integration connection and verify it is still in Created status.
+        // This prevents a late callback from a duplicate authorize flow from overwriting
+        // credentials stored by an earlier successful callback.
+        let integration_connection = self
+            .get_integration_connection(executor, state_data.integration_connection_id)
+            .await?
+            .ok_or_else(|| {
+                UniversalInboxError::Unexpected(anyhow::anyhow!(
+                    "Integration connection {} not found",
+                    state_data.integration_connection_id
+                ))
+            })?;
+
+        if integration_connection.status != IntegrationConnectionStatus::Created {
+            return Err(UniversalInboxError::UnsupportedAction(format!(
+                "Integration connection {} is no longer in Created status (current: {:?}), ignoring stale OAuth callback",
+                state_data.integration_connection_id, integration_connection.status
+            )));
+        }
+
+        self.repository
+            .store_oauth_credential(
+                executor,
+                state_data.integration_connection_id,
+                encrypted_access_token,
+                encrypted_refresh_token,
+                expires_at,
+                raw_response,
+            )
+            .await?;
+
+        self.update_integration_connection_status(
+            executor,
+            state_data.integration_connection_id,
+            integration_connection.user_id,
+            IntegrationConnectionStatus::Validated,
+            registered_scopes,
+        )
+        .await?;
+
+        Ok(())
     }
 }
 
