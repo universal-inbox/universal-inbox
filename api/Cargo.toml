@@ -155,6 +155,7 @@ pretty_assertions = { workspace = true }
 rrule = { workspace = true }
 rstest = { workspace = true }
 serde_urlencoded = { workspace = true }
+webauthn-authenticator-rs = { version = "0.5.4", features = ["softpasskey"] }
 
 [[test]]
 name = "browser"

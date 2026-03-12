@@ -3,10 +3,11 @@ use std::fmt;
 use chrono::{DateTime, Utc};
 use secrecy::SecretBox;
 use serde::{Deserialize, Serialize};
-use universal_inbox::{auth::AuthIdToken, user::Username};
+use universal_inbox::{
+    auth::AuthIdToken,
+    user::{PasswordHash, UserAuthKind, UserAuthMethod, UserAuthMethodDisplayInfo, Username},
+};
 use webauthn_rs::prelude::*;
-
-use universal_inbox::user::PasswordHash;
 
 #[derive(Debug, Clone)]
 pub enum UserAuth {
@@ -31,13 +32,33 @@ impl fmt::Display for UserAuth {
     }
 }
 
-macro_attr! {
-    #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, EnumFromStr!, EnumDisplay!)]
-    pub enum UserAuthKind {
-        Local,
-        OIDCGoogleAuthorizationCode,
-        OIDCAuthorizationCodePKCE,
-        Passkey,
+impl UserAuth {
+    pub fn kind(&self) -> UserAuthKind {
+        match self {
+            UserAuth::Local(_) => UserAuthKind::Local,
+            UserAuth::OIDCGoogleAuthorizationCode(_) => UserAuthKind::OIDCGoogleAuthorizationCode,
+            UserAuth::OIDCAuthorizationCodePKCE(_) => UserAuthKind::OIDCAuthorizationCodePKCE,
+            UserAuth::Passkey(_) => UserAuthKind::Passkey,
+        }
+    }
+}
+
+impl From<&UserAuth> for UserAuthMethod {
+    fn from(user_auth: &UserAuth) -> Self {
+        let kind = user_auth.kind();
+        let display_info = match user_auth {
+            UserAuth::Local(_) => UserAuthMethodDisplayInfo::Local,
+            UserAuth::OIDCGoogleAuthorizationCode(_) => {
+                UserAuthMethodDisplayInfo::OIDCGoogleAuthorizationCode
+            }
+            UserAuth::OIDCAuthorizationCodePKCE(_) => {
+                UserAuthMethodDisplayInfo::OIDCAuthorizationCodePKCE
+            }
+            UserAuth::Passkey(passkey_auth) => UserAuthMethodDisplayInfo::Passkey {
+                username: passkey_auth.username.to_string(),
+            },
+        };
+        UserAuthMethod { kind, display_info }
     }
 }
 

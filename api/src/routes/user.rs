@@ -19,7 +19,7 @@ use universal_inbox::{
     auth::auth_token::{AuthenticationToken, TruncatedAuthenticationToken},
     user::{
         Credentials, EmailValidationToken, Password, PasswordResetToken, RegisterUserParameters,
-        User, UserId, UserPatch, Username,
+        User, UserAuthKind, UserAuthMethod, UserId, UserPatch, Username,
     },
 };
 
@@ -30,7 +30,7 @@ use crate::{
         UniversalInboxError, UpdateStatus,
         auth_token::service::AuthenticationTokenService,
         user::{
-            model::{LocalUserAuth, UserAuth, UserAuthKind},
+            model::{LocalUserAuth, UserAuth},
             service::UserService,
         },
     },
@@ -56,12 +56,33 @@ pub fn scope() -> Scope {
                 .service(
                     web::resource("")
                         .route(web::get().to(get_user))
-                        .route(web::post().to(login_user))
-                        .route(web::patch().to(patch_user)),
+                        .route(web::patch().to(patch_user))
+                        .route(web::post().to(login_user)),
                 )
                 .service(
                     web::resource("/email-verification")
                         .route(web::post().to(send_verification_email)),
+                )
+                .service(
+                    web::scope("/auth-methods")
+                        .service(web::resource("").route(web::get().to(list_auth_methods)))
+                        .service(
+                            web::resource("/local").route(web::post().to(add_local_auth_method)),
+                        )
+                        .service(
+                            web::scope("/passkey/registration")
+                                .service(
+                                    web::resource("/start")
+                                        .route(web::post().to(start_add_passkey_registration)),
+                                )
+                                .service(
+                                    web::resource("/finish")
+                                        .route(web::post().to(finish_add_passkey_registration)),
+                                ),
+                        )
+                        .service(
+                            web::resource("/{kind}").route(web::delete().to(remove_auth_method)),
+                        ),
                 )
                 .service(
                     web::resource("/authentication-tokens")
@@ -147,7 +168,7 @@ pub async fn patch_user(
         .await
         .context("Failed to create new transaction while patching user")?;
 
-    let updated_user = service
+    let update_status = service
         .patch_user(&mut transaction, user_id, &patch.into_inner())
         .await?;
 
@@ -156,7 +177,7 @@ pub async fn patch_user(
         .await
         .context("Failed to commit while patching user")?;
 
-    match updated_user {
+    match update_status {
         UpdateStatus {
             updated: true,
             result: Some(user),
@@ -165,17 +186,232 @@ pub async fn patch_user(
             .body(serde_json::to_string(&user).context("Cannot serialize user")?)),
         UpdateStatus {
             updated: false,
-            result: Some(_),
-        } => Ok(HttpResponse::NotModified().finish()),
-        UpdateStatus {
-            updated: _,
-            result: None,
-        } => Ok(HttpResponse::NotFound()
+            result: Some(user),
+        } => Ok(HttpResponse::NotModified()
+            .content_type("application/json")
+            .body(serde_json::to_string(&user).context("Cannot serialize user")?)),
+        UpdateStatus { result: None, .. } => Ok(HttpResponse::NotFound()
             .content_type("application/json")
             .body(BoxBody::new(
-                json!({ "message": format!("Cannot update unknown user {user_id}") }).to_string(),
+                json!({ "message": format!("Cannot find user {user_id}") }).to_string(),
             ))),
     }
+}
+
+pub async fn list_auth_methods(
+    user_service: web::Data<Arc<UserService>>,
+    authenticated: Authenticated<Claims>,
+) -> Result<HttpResponse, UniversalInboxError> {
+    let user_id = authenticated
+        .claims
+        .sub
+        .parse::<UserId>()
+        .context("Wrong user ID format")?;
+    let service = user_service.clone();
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while listing auth methods")?;
+
+    let auth_methods: Vec<UserAuthMethod> = service
+        .list_user_auth_methods(&mut transaction, user_id)
+        .await?;
+
+    Ok(HttpResponse::Ok().content_type("application/json").body(
+        serde_json::to_string(&auth_methods)
+            .context("Cannot serialize auth methods list result")?,
+    ))
+}
+
+const ADD_PASSKEY_REGISTRATION_STATE_SESSION_KEY: &str = "add-passkey-registration-state";
+
+pub async fn add_local_auth_method(
+    user_service: web::Data<Arc<UserService>>,
+    authenticated: Authenticated<Claims>,
+    password: web::Json<SecretBox<Password>>,
+) -> Result<HttpResponse, UniversalInboxError> {
+    let user_id = authenticated
+        .claims
+        .sub
+        .parse::<UserId>()
+        .context("Wrong user ID format")?;
+    let service = user_service.clone();
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while adding local auth method")?;
+
+    let auth_method = service
+        .add_local_auth_method(&mut transaction, user_id, password.into_inner())
+        .await?;
+
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit while adding local auth method")?;
+
+    Ok(HttpResponse::Ok()
+        .content_type("application/json")
+        .body(serde_json::to_string(&auth_method).context("Cannot serialize auth method")?))
+}
+
+#[allow(dependency_on_unit_never_type_fallback)]
+pub async fn start_add_passkey_registration(
+    user_service: web::Data<Arc<UserService>>,
+    authenticated: Authenticated<Claims>,
+    session: Session,
+    cache: web::Data<Cache>,
+    username: web::Json<Username>,
+) -> Result<web::Json<CreationChallengeResponse>, UniversalInboxError> {
+    let user_id = authenticated
+        .claims
+        .sub
+        .parse::<UserId>()
+        .context("Wrong user ID format")?;
+    let service = user_service.clone();
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while starting add Passkey registration")?;
+
+    session.remove(ADD_PASSKEY_REGISTRATION_STATE_SESSION_KEY);
+
+    let username = username.into_inner();
+    let (creation_challenge_response, registration_state) = service
+        .start_add_passkey_auth_method(&mut transaction, user_id, &username)
+        .await?;
+
+    session
+        .insert(
+            ADD_PASSKEY_REGISTRATION_STATE_SESSION_KEY,
+            (username.0.as_str(), user_id),
+        )
+        .context("Failed to insert add Passkey registration state into the session")?;
+    let Ok(registration_state_to_store) = serde_json::to_string(&registration_state) else {
+        return Err(UniversalInboxError::Unexpected(anyhow!(
+            "Failed to serialize add Passkey registration state"
+        )));
+    };
+    cache
+        .connection_manager
+        .clone()
+        .set::<_, _, ()>(
+            format!(
+                "{}::{}",
+                ADD_PASSKEY_REGISTRATION_STATE_SESSION_KEY, user_id
+            ),
+            registration_state_to_store,
+        )
+        .await
+        .context("Failed to store add Passkey registration state in Redis")?;
+
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit while starting add Passkey registration")?;
+
+    Ok(web::Json(creation_challenge_response))
+}
+
+pub async fn finish_add_passkey_registration(
+    user_service: web::Data<Arc<UserService>>,
+    authenticated: Authenticated<Claims>,
+    session: Session,
+    cache: web::Data<Cache>,
+    register_credentials: web::Json<RegisterPublicKeyCredential>,
+) -> Result<HttpResponse, UniversalInboxError> {
+    let user_id = authenticated
+        .claims
+        .sub
+        .parse::<UserId>()
+        .context("Wrong user ID format")?;
+    let service = user_service.clone();
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while finishing add Passkey registration")?;
+
+    let (username, session_user_id): (String, UserId) = session
+        .get(ADD_PASSKEY_REGISTRATION_STATE_SESSION_KEY)
+        .context("Failed to extract add Passkey registration state from the session")?
+        .ok_or_else(|| anyhow!("Unable to find add Passkey registration state in session"))?;
+
+    if session_user_id != user_id {
+        return Err(UniversalInboxError::Unauthorized(anyhow!(
+            "Session user ID does not match authenticated user ID"
+        )));
+    }
+
+    session.remove(ADD_PASSKEY_REGISTRATION_STATE_SESSION_KEY);
+    let str: String = cache
+        .connection_manager
+        .clone()
+        .get_del(format!(
+            "{}::{}",
+            ADD_PASSKEY_REGISTRATION_STATE_SESSION_KEY, user_id
+        ))
+        .await
+        .context("Failed to fetch add Passkey registration state from Redis")?;
+    let Ok(registration_state) = serde_json::from_str(&str) else {
+        return Err(UniversalInboxError::Unexpected(anyhow!(
+            "Failed to parse add Passkey registration state"
+        )));
+    };
+
+    let username = Username(username);
+    let auth_method = service
+        .finish_add_passkey_auth_method(
+            &mut transaction,
+            &username,
+            user_id,
+            register_credentials.into_inner(),
+            registration_state,
+        )
+        .await?;
+
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit while finishing add Passkey registration")?;
+
+    Ok(HttpResponse::Ok()
+        .content_type("application/json")
+        .body(serde_json::to_string(&auth_method).context("Cannot serialize auth method")?))
+}
+
+pub async fn remove_auth_method(
+    user_service: web::Data<Arc<UserService>>,
+    authenticated: Authenticated<Claims>,
+    path_info: web::Path<UserAuthKind>,
+) -> Result<HttpResponse, UniversalInboxError> {
+    let user_id = authenticated
+        .claims
+        .sub
+        .parse::<UserId>()
+        .context("Wrong user ID format")?;
+    let kind = path_info.into_inner();
+    let service = user_service.clone();
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while removing auth method")?;
+
+    service
+        .remove_auth_method(&mut transaction, user_id, kind)
+        .await?;
+
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit while removing auth method")?;
+
+    Ok(HttpResponse::Ok().content_type("application/json").body(
+        serde_json::to_string(&SuccessResponse {
+            success: true,
+            message: format!("Authentication method {kind} successfully removed"),
+        })
+        .context("Cannot serialize response")?,
+    ))
 }
 
 pub async fn register_user(
