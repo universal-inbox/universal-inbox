@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                DELETE FROM oauth_credential\n                WHERE integration_connection_id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f55a4b757a2a401e00971ff5874c3d474a8c18c3824938a6686b32f553971d63"
+}
