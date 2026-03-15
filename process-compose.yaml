@@ -69,3 +69,5 @@ processes:
     availability:
       restart: on_failure
       max_restarts: 5
+    shutdown:
+      command: "caddy stop"

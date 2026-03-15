@@ -4,6 +4,7 @@
 
 ### Added
 
+- Internalize OAuth for Linear integration (replace Nango)
 - Add Universal Inbox documentation website
 - Add notifications and tasks deep linking
 - Display cancelled calendar events
