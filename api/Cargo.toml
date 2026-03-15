@@ -71,6 +71,7 @@ lettre = { version = "0.11.0", default-features = false, features = [
 log = { workspace = true }
 macro-attr = { workspace = true }
 mailgen = "0.4.0"
+oauth2 = "5.0.0"
 once_cell = "1.21.3"
 openidconnect = { workspace = true }
 opentelemetry = { version = "0.31.0", features = ["trace", "logs"] }
@@ -140,6 +141,7 @@ tracing-subscriber = { version = "0.3.0", features = [
 ] }
 universal-inbox = { path = ".." }
 url = { workspace = true, features = ["serde"] }
+urlencoding = "2"
 uuid = { workspace = true, features = ["serde"] }
 validator = { workspace = true }
 tokio-retry = "0.3.0"

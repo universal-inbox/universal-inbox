@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                SELECT\n                  integration_connection_id,\n                  encrypted_access_token,\n                  encrypted_refresh_token,\n                  access_token_expires_at,\n                  raw_token_response,\n                  created_at,\n                  updated_at\n                FROM oauth_credential\n                WHERE integration_connection_id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "integration_connection_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "encrypted_access_token",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 2,
+        "name": "encrypted_refresh_token",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 3,
+        "name": "access_token_expires_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 4,
+        "name": "raw_token_response",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "e31d0d7417f0408abed0dceac6129b9fdf13abe1a6f3b6169c4b4e53619906eb"
+}

@@ -8,10 +8,10 @@
 
 https://dev.universal-inbox.com {
 	log
-	reverse_proxy :8080
+	reverse_proxy :{env.API_PORT}
 }
 
 https://oauth-dev.universal-inbox.com {
 	log
-	reverse_proxy :3003
+	reverse_proxy :{env.NANGO_PORT}
 }

@@ -28,6 +28,8 @@ use crate::{
 
 pub mod anonymize;
 pub mod generate;
+pub mod migrate_oauth;
+pub mod oauth;
 pub mod sync;
 pub mod user;
 
@@ -70,6 +72,26 @@ pub enum Commands {
         user_id: Option<UserId>,
         #[clap(short, long, value_enum, value_parser)]
         provider_kind: Option<IntegrationProviderKind>,
+    },
+
+    /// Refresh expiring OAuth tokens (eager refresh strategy)
+    RefreshOAuthTokens {
+        /// Only refresh tokens for given provider
+        #[clap(short, long, value_enum, value_parser)]
+        provider_kind: Option<IntegrationProviderKind>,
+        /// Refresh tokens expiring within N minutes (default: 10)
+        #[clap(short, long, default_value = "10")]
+        minutes_before_expiry: i64,
+    },
+
+    /// Migrate existing Nango tokens to local OAuth management
+    MigrateOAuthTokens {
+        /// Only migrate tokens for given provider
+        #[clap(short, long, value_enum, value_parser)]
+        provider_kind: Option<IntegrationProviderKind>,
+        /// Dry run - only show what would be migrated
+        #[clap(short, long)]
+        dry_run: bool,
     },
 
     /// Generate a new JWT key pair (to be added to your configuration file)
@@ -221,6 +243,30 @@ impl Cli {
             } => {
                 sync::sync_oauth_scopes(integration_connection_service, *provider_kind, *user_id)
                     .await
+            }
+
+            Commands::RefreshOAuthTokens {
+                provider_kind,
+                minutes_before_expiry,
+            } => {
+                oauth::refresh_oauth_tokens(
+                    integration_connection_service,
+                    *provider_kind,
+                    *minutes_before_expiry,
+                )
+                .await
+            }
+
+            Commands::MigrateOAuthTokens {
+                provider_kind,
+                dry_run,
+            } => {
+                migrate_oauth::migrate_oauth_tokens(
+                    integration_connection_service,
+                    *provider_kind,
+                    *dry_run,
+                )
+                .await
             }
 
             Commands::GenerateJWTKeyPair => {
