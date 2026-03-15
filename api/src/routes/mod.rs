@@ -3,6 +3,7 @@ pub mod config;
 pub mod health_check;
 pub mod integration_connection;
 pub mod notification;
+pub mod oauth;
 pub mod task;
 pub mod third_party;
 pub mod user;

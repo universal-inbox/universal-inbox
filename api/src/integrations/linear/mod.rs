@@ -70,6 +70,7 @@ use crate::{
 };
 
 pub mod graphql;
+pub mod oauth;
 
 #[derive(Clone)]
 pub struct LinearService {

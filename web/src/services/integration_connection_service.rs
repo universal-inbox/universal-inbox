@@ -7,7 +7,7 @@ use reqwest::Method;
 use url::Url;
 
 use universal_inbox::{
-    IntegrationProviderStaticConfig,
+    IntegrationProviderStaticConfig, OAuthMethod,
     integration_connection::{
         IntegrationConnection, IntegrationConnectionCreation, IntegrationConnectionId,
         IntegrationConnectionStatus, NangoPublicKey, config::IntegrationConnectionConfig,
@@ -337,25 +337,44 @@ async fn authenticate_integration_connection(
         "Authenticating integration_connection {} for {provider_kind}",
         integration_connection.id
     );
-    nango_auth(
-        &nango_base_url,
-        &nango_public_key,
-        &provider_config.nango_config_key,
-        &integration_connection.connection_id,
-        provider_config.oauth_user_scopes.clone(),
-    )
-    .await?;
 
-    verify_integration_connection(
-        integration_connection.id,
-        integration_connections,
-        task_service_integration_connection,
-        app_config,
-        ui_model,
-        notification_service,
-        task_service,
-    )
-    .await
+    match provider_config.oauth_method {
+        OAuthMethod::Nango => {
+            nango_auth(
+                &nango_base_url,
+                &nango_public_key,
+                &provider_config.nango_config_key,
+                &integration_connection.connection_id,
+                provider_config.oauth_user_scopes.clone(),
+            )
+            .await?;
+
+            verify_integration_connection(
+                integration_connection.id,
+                integration_connections,
+                task_service_integration_connection,
+                app_config,
+                ui_model,
+                notification_service,
+                task_service,
+            )
+            .await
+        }
+        OAuthMethod::Internal => {
+            let api_base_url = get_api_base_url(app_config)?;
+            let authorize_url = format!(
+                "{api_base_url}oauth/authorize/{}",
+                integration_connection.id
+            );
+            web_sys::window()
+                .ok_or_else(|| anyhow!("No window object"))?
+                .location()
+                .set_href(&authorize_url)
+                .map_err(|_| anyhow!("Failed to redirect to OAuth authorization URL"))?;
+            // Return the connection as-is; the page will navigate away
+            Ok(integration_connection.clone())
+        }
+    }
 }
 
 async fn verify_integration_connection(
