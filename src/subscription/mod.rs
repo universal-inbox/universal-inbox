@@ -45,20 +45,17 @@ impl FromStr for SubscriptionId {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Hash, Display, EnumString)]
+#[derive(
+    Debug, Default, Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Hash, Display, EnumString,
+)]
 pub enum SubscriptionStatus {
+    #[default]
     Trialing,
     Active,
     PastDue,
     Canceled,
     Expired,
     Unlimited,
-}
-
-impl Default for SubscriptionStatus {
-    fn default() -> Self {
-        Self::Trialing
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Hash, Display, EnumString)]
