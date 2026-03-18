@@ -15,13 +15,16 @@ use universal_inbox::{
 
 use crate::{
     components::{
-        resizable_panel::ResizablePanel, task_preview::TaskPreview, tasks_list::TasksList,
-        welcome_hero::WelcomeHero,
+        read_only_banner::ReadOnlyBanner, resizable_panel::ResizablePanel,
+        task_preview::TaskPreview, tasks_list::TasksList, welcome_hero::WelcomeHero,
     },
     keyboard_manager::{KEYBOARD_MANAGER, KeyboardHandler},
     model::UI_MODEL,
     route::Route,
-    services::task_service::{SYNCED_TASKS_PAGE, TaskCommand},
+    services::{
+        task_service::{SYNCED_TASKS_PAGE, TaskCommand},
+        user_service::CONNECTED_USER,
+    },
     settings::PanelPosition,
     utils::{
         get_screen_width, open_link, scroll_element, scroll_element_by_page,
@@ -133,33 +136,39 @@ fn InternalSyncedTaskPage(task_id: ReadSignal<Option<TaskId>>) -> Element {
 
     rsx! {
         div {
-            id: "tasks-page",
-            class: "{layout_class}",
-            onmounted: move |_| {
-                KEYBOARD_MANAGER.write().active_keyboard_handler = Some(&KEYBOARD_HANDLER);
-            },
+            class: "flex flex-col h-full",
 
-            if SORTED_SYNCED_TASKS().is_empty() {
-                WelcomeHero { inbox_zero_message: "Your synchronized tasks will appear here when they arrive." }
-            } else {
-                div {
-                    class: match panel_position {
-                        PanelPosition::Right => "h-full flex-1 max-lg:w-full max-lg:absolute",
-                        PanelPosition::Bottom => "flex-1 max-lg:w-full max-lg:absolute overflow-y-auto",
-                    },
+            ReadOnlyBanner {}
 
-                    TasksList { tasks: SORTED_SYNCED_TASKS.signal() }
-                }
+            div {
+                id: "tasks-page",
+                class: "{layout_class} flex-1",
+                onmounted: move |_| {
+                    KEYBOARD_MANAGER.write().active_keyboard_handler = Some(&KEYBOARD_HANDLER);
+                },
 
-                if let Some(index) = UI_MODEL.read().selected_task_index {
-                    if let Some((_, task)) = SORTED_SYNCED_TASKS().get(index) {
-                        ResizablePanel {
-                            TaskPreview {
-                                task: task.task.clone(),
-                                expand_details: UI_MODEL.read().preview_cards_expanded,
-                                is_help_enabled: UI_MODEL.read().is_help_enabled,
-                                ui_model: UI_MODEL.signal(),
-                                tasks_count: tasks().content.len()
+                if SORTED_SYNCED_TASKS().is_empty() {
+                    WelcomeHero { inbox_zero_message: "Your synchronized tasks will appear here when they arrive." }
+                } else {
+                    div {
+                        class: match panel_position {
+                            PanelPosition::Right => "h-full flex-1 max-lg:w-full max-lg:absolute",
+                            PanelPosition::Bottom => "flex-1 max-lg:w-full max-lg:absolute overflow-y-auto",
+                        },
+
+                        TasksList { tasks: SORTED_SYNCED_TASKS.signal() }
+                    }
+
+                    if let Some(index) = UI_MODEL.read().selected_task_index {
+                        if let Some((_, task)) = SORTED_SYNCED_TASKS().get(index) {
+                            ResizablePanel {
+                                TaskPreview {
+                                    task: task.task.clone(),
+                                    expand_details: UI_MODEL.read().preview_cards_expanded,
+                                    is_help_enabled: UI_MODEL.read().is_help_enabled,
+                                    ui_model: UI_MODEL.signal(),
+                                    tasks_count: tasks().content.len()
+                                }
                             }
                         }
                     }
@@ -179,6 +188,11 @@ impl KeyboardHandler for SyncTasksPageKeyboardHandler {
         let list_length = sorted_tasks.len();
         let selected_task_index = UI_MODEL.peek().selected_task_index;
         let selected_task = selected_task_index.and_then(|index| sorted_tasks.get(index));
+        let is_read_only = CONNECTED_USER
+            .peek()
+            .as_ref()
+            .map(|ctx| ctx.subscription.is_read_only)
+            .unwrap_or(false);
         let mut handled = true;
 
         match (
@@ -210,7 +224,7 @@ impl KeyboardHandler for SyncTasksPageKeyboardHandler {
                     let _ = scroll_element_into_view_by_class("tasks_list", "row-hover", new_index);
                 }
             }
-            ("c", false, false, false, false) => {
+            ("c", false, false, false, false) if !is_read_only => {
                 if let Some((_, TaskWithOrder { task, .. })) = selected_task {
                     task_service.send(TaskCommand::Complete(task.id))
                 }

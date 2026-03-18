@@ -74,6 +74,7 @@ use crate::{
     jobs::handle_universal_inbox_job,
     observability::AuthenticatedRootSpanBuilder,
     repository::Repository,
+    subscription::service::SubscriptionService,
     universal_inbox::{
         UniversalInboxError, auth_token::service::AuthenticationTokenService,
         integration_connection::service::IntegrationConnectionService,
@@ -96,6 +97,7 @@ pub mod mailer;
 pub mod observability;
 pub mod repository;
 pub mod routes;
+pub mod subscription;
 pub mod universal_inbox;
 pub mod utils;
 
@@ -110,6 +112,7 @@ pub async fn run_server(
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     auth_token_service: Arc<RwLock<AuthenticationTokenService>>,
     third_party_item_service: Arc<RwLock<ThirdPartyItemService>>,
+    subscription_service: Arc<SubscriptionService>,
 ) -> Result<Server, UniversalInboxError> {
     let api_path = settings.application.api_path.clone();
     let front_base_url = settings
@@ -168,10 +171,21 @@ pub async fn run_server(
 
         let api_scope = web::scope(api_path.trim_end_matches('/'))
             .service(routes::auth::scope())
-            .service(routes::integration_connection::scope())
+            .service(routes::integration_connection::scope().wrap(
+                routes::WriteAccessMiddleware::new(subscription_service.clone()),
+            ))
             .service(routes::oauth::authorize_scope())
-            .service(routes::notification::scope())
-            .service(routes::task::scope())
+            .service(
+                routes::notification::scope().wrap(routes::WriteAccessMiddleware::new(
+                    subscription_service.clone(),
+                )),
+            )
+            .service(routes::subscription::scope())
+            .service(
+                routes::task::scope().wrap(routes::WriteAccessMiddleware::new(
+                    subscription_service.clone(),
+                )),
+            )
             .service(routes::user::scope())
             .service(routes::webhook::scope())
             .service(routes::third_party::scope())
@@ -179,7 +193,8 @@ pub async fn run_server(
             .app_data(web::Data::new(task_service.clone()))
             .app_data(web::Data::new(user_service.clone()))
             .app_data(web::Data::new(auth_token_service.clone()))
-            .app_data(web::Data::new(third_party_item_service.clone()));
+            .app_data(web::Data::new(third_party_item_service.clone()))
+            .app_data(web::Data::new(subscription_service.clone()));
 
         let cors = Cors::default()
             .allowed_origin(&front_base_url)
@@ -312,6 +327,7 @@ impl<E: Display + Debug> OnFailure<E> for WorkerOnFailure {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn run_worker(
     workers_count: Option<usize>,
     redis_storage: RedisStorage<UniversalInboxJob>,
@@ -320,6 +336,7 @@ pub async fn run_worker(
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     third_party_item_service: Arc<RwLock<ThirdPartyItemService>>,
     slack_service: Arc<SlackService>,
+    subscription_service: Arc<SubscriptionService>,
 ) -> Monitor {
     let count = workers_count.unwrap_or_else(|| {
         thread::available_parallelism()
@@ -342,6 +359,7 @@ pub async fn run_worker(
                 .data(integration_connection_service)
                 .data(third_party_item_service)
                 .data(slack_service)
+                .data(subscription_service)
                 .backend(redis_storage.clone())
                 .build_fn(handle_universal_inbox_job),
         )
@@ -392,8 +410,17 @@ pub async fn build_services(
     Arc<RwLock<AuthenticationTokenService>>,
     Arc<RwLock<ThirdPartyItemService>>,
     Arc<SlackService>,
+    Arc<SubscriptionService>,
 ) {
     let repository = Arc::new(Repository::new(pool.clone()));
+
+    let subscription_repository = Arc::new(
+        subscription::repository::SubscriptionRepositoryImpl::new(pool.clone()),
+    );
+    let subscription_service = Arc::new(
+        SubscriptionService::new(subscription_repository, settings.stripe.clone())
+            .expect("Failed to create SubscriptionService"),
+    );
 
     let auth_token_service = Arc::new(RwLock::new(AuthenticationTokenService::new(
         repository.clone(),
@@ -405,6 +432,7 @@ pub async fn build_services(
         settings.application.clone(),
         mailer.clone(),
         webauthn.clone(),
+        subscription_service.clone(),
     ));
 
     // Build the map of internal OAuth2 providers (integrations not using Nango)
@@ -610,6 +638,7 @@ pub async fn build_services(
         auth_token_service,
         third_party_item_service,
         slack_service,
+        subscription_service,
     )
 }
 

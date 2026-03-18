@@ -1,6 +1,6 @@
 # Universal Inbox Changelog
 
-## [Unreleased]
+## 2026-03-17
 
 ### Added
 

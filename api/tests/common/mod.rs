@@ -16,6 +16,7 @@ use universal_inbox_api::{
     integrations::{oauth2::NangoService, slack::SlackService},
     jobs::UniversalInboxJob,
     observability::{get_subscriber, init_subscriber},
+    subscription::service::SubscriptionService,
     universal_inbox::{
         auth_token::service::AuthenticationTokenService,
         integration_connection::service::IntegrationConnectionService,
@@ -153,6 +154,7 @@ pub struct TestServices {
     pub integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     pub third_party_item_service: Arc<RwLock<ThirdPartyItemService>>,
     pub slack_service: Arc<SlackService>,
+    pub subscription_service: Arc<SubscriptionService>,
 }
 
 pub async fn build_test_services(
@@ -180,6 +182,7 @@ pub async fn build_test_services(
         auth_token_service,
         third_party_item_service,
         slack_service,
+        subscription_service,
     ) = universal_inbox_api::build_services(
         pool,
         settings,
@@ -204,6 +207,7 @@ pub async fn build_test_services(
         integration_connection_service,
         third_party_item_service,
         slack_service,
+        subscription_service,
     };
 
     (services, auth_token_service)
@@ -230,6 +234,7 @@ pub async fn spawn_test_server(
         services.integration_connection_service.clone(),
         auth_token_service,
         services.third_party_item_service.clone(),
+        services.subscription_service.clone(),
     )
     .await
     .expect("Failed to bind address");
@@ -249,6 +254,7 @@ pub async fn spawn_test_worker(
         services.integration_connection_service.clone(),
         services.third_party_item_service.clone(),
         services.slack_service.clone(),
+        services.subscription_service.clone(),
     )
     .await;
 

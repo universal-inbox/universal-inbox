@@ -25,14 +25,14 @@ ensure-db:
 migrate-db:
     sqlx database setup
 
-test test-filter="" $RUST_LOG="info":
+test test-filter="" $RUST_LOG="info" $RUST_MIN_STACK="104857600":
     cargo nextest run -E 'not binary(browser)' --color always {{test-filter}}
 
-test-browser test-filter="" $RUST_LOG="info":
+test-browser test-filter="" $RUST_LOG="info" $RUST_MIN_STACK="104857600":
     #!/usr/bin/env bash
 
     set -euo pipefail
-    
+
     cd ..
     just web build-ci
     cd -

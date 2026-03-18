@@ -9,9 +9,13 @@ default:
 
 ## Build recipes
 build:
+    #!/usr/bin/env bash
+    export PATH="../.devbox/nix/profile/default/bin:$PATH"
     trunk build --features trunk
 
 build-release:
+    #!/usr/bin/env bash
+    export PATH="../.devbox/nix/profile/default/bin:$PATH"
     trunk build --release --features trunk
 
 build-assets: bundle-js build-tailwind bundle-fonts

@@ -85,6 +85,24 @@ pub fn current_origin() -> Result<Url> {
     )?)
 }
 
+pub fn clean_url_query_params() -> Result<()> {
+    let window = web_sys::window().context("Unable to load `window`")?;
+    let history = window
+        .history()
+        .map_err(|err| JsError::try_from(err).unwrap())?;
+    let location = window.location();
+
+    let pathname = location
+        .pathname()
+        .map_err(|err| JsError::try_from(err).unwrap())?;
+
+    history
+        .replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&pathname))
+        .map_err(|err| JsError::try_from(err).unwrap())?;
+
+    Ok(())
+}
+
 pub fn get_local_storage() -> Result<web_sys::Storage> {
     let window = web_sys::window().context("Unable to get the window object")?;
     window

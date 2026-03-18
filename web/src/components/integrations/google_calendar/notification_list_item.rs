@@ -110,8 +110,10 @@ fn get_google_calendar_notification_list_item_action_buttons(
     show_shortcut: bool,
 ) -> Vec<Element> {
     let context = use_context::<Memo<NotificationListContext>>();
+    let is_read_only = context().is_read_only;
+    let read_only_disabled_label =
+        is_read_only.then_some(Some("Subscribe to perform this action".to_string()));
 
-    // Get the Google Calendar event from the notification
     let google_calendar_event_data = use_memo(move || {
         if let universal_inbox::third_party::item::ThirdPartyItemData::GoogleCalendarEvent(event) =
             &notification().source_item.data
@@ -138,6 +140,7 @@ fn get_google_calendar_notification_list_item_action_buttons(
             ListItemActionButton {
                 title: "Accept",
                 shortcut: "y",
+                disabled_label: read_only_disabled_label.clone(),
                 show_shortcut,
                 onclick: move |_| {
                     context()
@@ -151,6 +154,7 @@ fn get_google_calendar_notification_list_item_action_buttons(
             ListItemActionButton {
                 title: "Decline",
                 shortcut: "n",
+                disabled_label: read_only_disabled_label.clone(),
                 show_shortcut,
                 onclick: move |_| {
                     context()
@@ -164,6 +168,7 @@ fn get_google_calendar_notification_list_item_action_buttons(
             ListItemActionButton {
                 title: "Maybe",
                 shortcut: "m",
+                disabled_label: read_only_disabled_label.clone(),
                 show_shortcut,
                 onclick: move |_| {
                     context()

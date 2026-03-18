@@ -15,7 +15,7 @@ check:
     cargo clippy --tests -- -D warnings
 
 ## Test recipes
-test test-filter="" $RUST_LOG="info":
+test test-filter="" $RUST_LOG="info" $RUST_MIN_STACK="104857600":
     cargo nextest run --color always {{test-filter}}
 
 test-ci:
