@@ -15,6 +15,7 @@ use universal_inbox_api::{
     integrations::slack::SlackService,
     jobs::UniversalInboxJob,
     repository::Repository,
+    subscription::service::SubscriptionService,
     universal_inbox::{
         integration_connection::service::IntegrationConnectionService,
         notification::service::NotificationService, task::service::TaskService,
@@ -34,6 +35,7 @@ pub mod integration_connection;
 pub mod mailer;
 pub mod notification;
 pub mod rest;
+pub mod subscription;
 pub mod task;
 pub mod user;
 
@@ -47,6 +49,7 @@ pub struct TestedApp {
     pub integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     pub third_party_item_service: Arc<RwLock<ThirdPartyItemService>>,
     pub slack_service: Arc<SlackService>,
+    pub subscription_service: Arc<SubscriptionService>,
     pub github_mock_server: MockServer,
     pub linear_mock_server: MockServer,
     pub google_calendar_mock_server: MockServer,
@@ -124,6 +127,7 @@ pub async fn tested_app(
         integration_connection_service: services.integration_connection_service,
         third_party_item_service: services.third_party_item_service,
         slack_service: services.slack_service,
+        subscription_service: services.subscription_service,
         github_mock_server: mock_servers.github,
         linear_mock_server: mock_servers.linear,
         google_calendar_mock_server: mock_servers.google_calendar,
@@ -186,6 +190,7 @@ pub async fn tested_app_with_local_auth(
         integration_connection_service: services.integration_connection_service,
         third_party_item_service: services.third_party_item_service,
         slack_service: services.slack_service,
+        subscription_service: services.subscription_service,
         github_mock_server: mock_servers.github,
         linear_mock_server: mock_servers.linear,
         google_calendar_mock_server: mock_servers.google_calendar,
@@ -272,6 +277,7 @@ pub async fn tested_app_with_domain_blacklist(
         integration_connection_service: services.integration_connection_service,
         third_party_item_service: services.third_party_item_service,
         slack_service: services.slack_service,
+        subscription_service: services.subscription_service,
         github_mock_server: mock_servers.github,
         linear_mock_server: mock_servers.linear,
         google_calendar_mock_server: mock_servers.google_calendar,

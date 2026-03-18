@@ -8,7 +8,7 @@ use url::Url;
 
 use universal_inbox::{
     subscription::{BillingInterval, SubscriptionInfo, SubscriptionStatus, UserSubscription},
-    user::UserId,
+    user::{User, UserId},
 };
 
 use crate::{
@@ -50,20 +50,35 @@ impl SubscriptionService {
     #[tracing::instrument(
         level = "debug",
         skip_all,
-        fields(user.id = %user_id),
+        fields(user.id = %user.id),
         err
     )]
     pub async fn start_trial(
         &self,
         executor: &mut Transaction<'_, Postgres>,
-        user_id: UserId,
+        user: &User,
     ) -> Result<UserSubscription, UniversalInboxError> {
-        let subscription = if self.stripe_enabled {
+        let mut subscription = if self.stripe_enabled {
             let trial_ends_at = Utc::now() + Duration::days(TRIAL_DURATION_DAYS);
-            UserSubscription::new_trial(user_id, trial_ends_at)
+            UserSubscription::new_trial(user.id, trial_ends_at)
         } else {
-            UserSubscription::unlimited(user_id)
+            UserSubscription::unlimited(user.id)
         };
+
+        if let Some(stripe_service) = &self.stripe_service {
+            match stripe_service.create_customer(user).await {
+                Ok(customer_id) => {
+                    subscription.stripe_customer_id = Some(customer_id);
+                }
+                Err(e) => {
+                    tracing::error!(
+                        user_id = %user.id,
+                        error = %e,
+                        "Failed to create Stripe customer during trial start"
+                    );
+                }
+            }
+        }
 
         self.repository
             .create_subscription(executor, subscription)
@@ -98,22 +113,6 @@ impl SubscriptionService {
             }
             None => Ok(SubscriptionInfo::unlimited()),
         }
-    }
-
-    #[tracing::instrument(
-        level = "debug",
-        skip_all,
-        fields(user.id = %user_id),
-        err
-    )]
-    pub async fn is_feature_access_allowed(
-        &self,
-        executor: &mut Transaction<'_, Postgres>,
-        user_id: UserId,
-    ) -> Result<bool, UniversalInboxError> {
-        self.get_subscription_status(executor, user_id)
-            .await
-            .map(|info| !info.is_active())
     }
 
     #[tracing::instrument(
