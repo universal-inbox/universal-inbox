@@ -1,5 +1,13 @@
 # Universal Inbox Changelog
 
+## Unreleased
+
+### Security
+
+- Update `quinn-proto` to 0.11.14 to fix RUSTSEC-2026-0037 (DoS via invalid QUIC transport parameters)
+- Replace `typed_id` + `paste` crates with inline implementation to resolve RUSTSEC-2024-0436 (unmaintained `paste` crate)
+- Downgrade `zip` from yanked 7.4.0 to 7.2.0 (resolves GH#133)
+
 ## 2026-03-17
 
 ### Added
