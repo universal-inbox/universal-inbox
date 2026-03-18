@@ -24,6 +24,7 @@ mod test_sync_google_drive_comments;
 mod test_sync_google_mail_threads;
 mod test_sync_linear_notifications;
 mod test_sync_linear_tasks;
+mod test_subscription;
 mod test_sync_todoist_tasks;
 mod test_tasks;
 mod test_todoist_notifications;

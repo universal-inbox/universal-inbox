@@ -401,7 +401,7 @@ impl UserService {
                     .await?;
 
                 self.subscription_service
-                    .start_trial(executor, new_user.id)
+                    .start_trial(executor, &new_user)
                     .await
                     .context("Failed to start trial for new OIDC user")?;
 
@@ -558,7 +558,7 @@ impl UserService {
             .create_user(executor, user, user_auth)
             .await?;
         self.subscription_service
-            .start_trial(executor, new_user.id)
+            .start_trial(executor, &new_user)
             .await
             .context("Failed to start trial for new user")?;
         self.send_verification_email(executor, new_user.id, false)
@@ -920,7 +920,7 @@ impl UserService {
             .await?;
 
         self.subscription_service
-            .start_trial(executor, new_user.id)
+            .start_trial(executor, &new_user)
             .await
             .context("Failed to start trial for new passkey user")?;
 
