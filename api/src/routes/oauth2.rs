@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use actix_jwt_authc::Authenticated;
-use actix_web::{HttpResponse, web};
+use actix_web::{HttpResponse, Scope, web};
 use anyhow::Context;
 use serde::Deserialize;
 
@@ -11,6 +11,13 @@ use crate::{
     universal_inbox::{UniversalInboxError, oauth2::service::OAuth2Service},
     utils::jwt::Claims,
 };
+
+pub fn scope() -> Scope {
+    web::scope("/oauth2")
+        .route("/register", web::post().to(register))
+        .route("/authorize", web::get().to(authorize))
+        .route("/token", web::post().to(token))
+}
 
 #[derive(Debug, Deserialize)]
 pub struct RegisterClientRequest {

@@ -169,21 +169,16 @@ pub async fn run_server(
             auth_middleware_settings.clone(),
         );
 
-        let oauth2_scope = web::scope("/oauth2")
-            .route("/register", web::post().to(routes::oauth2::register))
-            .route("/authorize", web::get().to(routes::oauth2::authorize))
-            .route("/token", web::post().to(routes::oauth2::token));
-
         let api_scope = web::scope(api_path.trim_end_matches('/'))
             .service(routes::auth::scope())
             .service(routes::integration_connection::scope())
             .service(routes::oauth::authorize_scope())
+            .service(routes::oauth2::scope())
             .service(routes::notification::scope())
             .service(routes::task::scope())
             .service(routes::user::scope())
             .service(routes::webhook::scope())
             .service(routes::third_party::scope())
-            .service(oauth2_scope)
             .app_data(web::Data::new(notification_service.clone()))
             .app_data(web::Data::new(task_service.clone()))
             .app_data(web::Data::new(user_service.clone()))
