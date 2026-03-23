@@ -179,6 +179,13 @@ pub async fn run_server(
             .service(routes::user::scope())
             .service(routes::webhook::scope())
             .service(routes::third_party::scope())
+            .service(mcp::scope(
+                notification_service.clone(),
+                task_service.clone(),
+                redis_storage.clone(),
+                vec![front_base_url.clone()],
+                format!("{front_base_url}{api_path}mcp"),
+            ))
             .app_data(web::Data::new(notification_service.clone()))
             .app_data(web::Data::new(task_service.clone()))
             .app_data(web::Data::new(user_service.clone()))
@@ -280,13 +287,6 @@ pub async fn run_server(
                 "/.well-known/oauth-authorization-server",
                 web::get().to(routes::well_known::authorization_server_metadata),
             )
-            .service(mcp::scope(
-                notification_service.clone(),
-                task_service.clone(),
-                redis_storage.clone(),
-                vec![front_base_url.clone()],
-                front_base_url.clone(),
-            ))
             .service(api_scope)
             .app_data(web::Data::new(notification_service.clone()))
             .app_data(web::Data::new(task_service.clone()))
@@ -626,12 +626,13 @@ pub async fn build_services(
         .set_notification_service(Arc::downgrade(&notification_service));
 
     let resource_url = format!(
-        "{}/mcp",
+        "{}{}mcp",
         settings
             .application
             .front_base_url
             .as_str()
-            .trim_end_matches('/')
+            .trim_end_matches('/'),
+        settings.application.api_path
     );
     let oauth2_service = Arc::new(OAuth2Service::new(
         repository,

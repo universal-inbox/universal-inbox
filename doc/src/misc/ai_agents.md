@@ -6,10 +6,10 @@ Universal Inbox MCP is implemented as a standard remote HTTP MCP server. MCP-cap
 
 ## MCP endpoint
 
-Use your Universal Inbox instance URL with the `/mcp` path:
+Use your Universal Inbox instance URL with the `/api/mcp` path:
 
-- Hosted Universal Inbox: `https://app.universal-inbox.com/mcp`
-- Self-hosted Universal Inbox: `https://<your-instance>/mcp`
+- Hosted Universal Inbox: `https://app.universal-inbox.com/api/mcp`
+- Self-hosted Universal Inbox: `https://<your-instance>/api/mcp`
 
 ## Authentication
 
@@ -48,13 +48,13 @@ To create an API key:
 
 ## Claude Desktop and Claude Code
 
-Claude-compatible MCP clients can connect directly to the Universal Inbox remote MCP endpoint. Configure the MCP server URL: `https://<your-instance>/mcp`
+Claude-compatible MCP clients can connect directly to the Universal Inbox remote MCP endpoint. Configure the MCP server URL: `https://<your-instance>/api/mcp`
 
 If your client supports OAuth (MCP spec 2025-11-25), authentication is handled automatically through the OAuth flow.
 
 For clients that do not support OAuth, configure:
 
-- the MCP server URL: `https://<your-instance>/mcp`
+- the MCP server URL: `https://<your-instance>/api/mcp`
 - the `Authorization` header with `Bearer <your-api-key>`
 
 No local bridge or extra service is required.
@@ -75,7 +75,7 @@ ChatGPT support depends on the MCP-capable mode or workspace available in your O
 
 When your ChatGPT environment supports remote MCP servers:
 
-- use the MCP endpoint: `https://<your-instance>/mcp`
+- use the MCP endpoint: `https://<your-instance>/api/mcp`
 - if OAuth is supported, authentication is automatic
 - otherwise, authenticate with an API key using `Authorization: Bearer <your-api-key>`
 

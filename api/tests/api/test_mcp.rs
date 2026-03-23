@@ -66,7 +66,7 @@ async fn mcp_call(
     session_id: Option<&str>,
 ) -> reqwest::Response {
     let mut builder = client
-        .post(format!("{}/mcp", app.app_address))
+        .post(format!("{}mcp", app.api_address))
         .bearer_auth(token)
         .header("Accept", "application/json, text/event-stream");
     if let Some(sid) = session_id {
@@ -88,7 +88,7 @@ async fn mcp_call_with_protocol_version(
     protocol_version: Option<&str>,
 ) -> reqwest::Response {
     let mut builder = client
-        .post(format!("{}/mcp", app.app_address))
+        .post(format!("{}mcp", app.api_address))
         .bearer_auth(token)
         .header("Accept", "application/json, text/event-stream");
     if let Some(sid) = session_id {
@@ -263,7 +263,7 @@ mod protocol {
     async fn rejects_missing_bearer_token(#[future] authenticated_app: AuthenticatedApp) {
         let app = authenticated_app.await;
         let response = reqwest::Client::new()
-            .post(format!("{}/mcp", app.app.app_address))
+            .post(format!("{}mcp", app.app.api_address))
             .json(&json!({
                 "jsonrpc": "2.0",
                 "id": 1,

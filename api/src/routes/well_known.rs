@@ -11,7 +11,8 @@ pub async fn protected_resource_metadata(settings: web::Data<Settings>) -> HttpR
         .front_base_url
         .as_str()
         .trim_end_matches('/');
-    let resource = format!("{base_url}/mcp");
+    let api_path = &settings.application.api_path;
+    let resource = format!("{base_url}{api_path}mcp");
 
     HttpResponse::Ok().json(json!({
         "resource": resource,

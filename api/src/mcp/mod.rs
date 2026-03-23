@@ -61,7 +61,7 @@ pub fn scope(
     task_service: Arc<RwLock<TaskService>>,
     job_storage: RedisStorage<UniversalInboxJob>,
     allowed_origins: Vec<String>,
-    base_url: String,
+    resource_url: String,
 ) -> impl HttpServiceFactory {
     let services = McpServices {
         notification_service,
@@ -73,6 +73,7 @@ pub fn scope(
         NonZeroU32::new(MCP_RATE_LIMIT_PER_MINUTE).expect("rate limit must be non-zero"),
     );
     let rate_limiter = Arc::new(McpRateLimiter::keyed(quota));
+    let base_url = resource_url.trim_end_matches("/mcp");
     let resource_metadata_url = format!("{base_url}/.well-known/oauth-protected-resource");
 
     let http_service = StreamableHttpService::builder()
@@ -93,6 +94,7 @@ pub fn scope(
             allowed_origins,
             rate_limiter,
             resource_metadata_url,
+            resource_url,
         })
         .service(http_service.scope())
 }
@@ -101,6 +103,7 @@ struct RequireAuthenticated {
     allowed_origins: Vec<String>,
     rate_limiter: Arc<McpRateLimiter>,
     resource_metadata_url: String,
+    resource_url: String,
 }
 
 impl<S, B> Transform<S, ServiceRequest> for RequireAuthenticated
@@ -121,6 +124,7 @@ where
             allowed_origins: self.allowed_origins.clone(),
             rate_limiter: self.rate_limiter.clone(),
             resource_metadata_url: self.resource_metadata_url.clone(),
+            resource_url: self.resource_url.clone(),
         }))
     }
 }
@@ -130,6 +134,7 @@ struct RequireAuthenticatedMiddleware<S> {
     allowed_origins: Vec<String>,
     rate_limiter: Arc<McpRateLimiter>,
     resource_metadata_url: String,
+    resource_url: String,
 }
 
 impl<S, B> Service<ServiceRequest> for RequireAuthenticatedMiddleware<S>
@@ -180,10 +185,8 @@ where
 
         // Validate audience for OAuth2 tokens (API key tokens without aud are still allowed)
         if let Some(ref aud) = authenticated.claims.aud {
-            let expected_resource =
-                resource_metadata_url.trim_end_matches("/.well-known/oauth-protected-resource");
-            let expected_aud = format!("{expected_resource}/mcp");
-            if aud != &expected_aud {
+            let expected_aud = &self.resource_url;
+            if aud != expected_aud {
                 let response = req
                     .into_response(HttpResponse::Forbidden().finish())
                     .map_into_right_body();
