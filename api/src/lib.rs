@@ -144,7 +144,14 @@ pub async fn run_server(
             jwt_decoding_key: jwt_signing_keys.decoding_key,
             jwt_session_key: Some(JWTSessionKey(JWT_SESSION_KEY.to_string())),
             jwt_authorization_header_prefixes: Some(vec!["Bearer".to_string()]),
-            jwt_validator: Validation::new(Algorithm::EdDSA),
+            jwt_validator: {
+                let mut validation = Validation::new(Algorithm::EdDSA);
+                // Disable aud validation at the JWT level: OAuth2 tokens carry an
+                // `aud` claim that is validated by the MCP RequireAuthenticated
+                // middleware instead.  Session tokens omit `aud` entirely.
+                validation.validate_aud = false;
+                validation
+            },
         }
     };
 
@@ -157,6 +164,15 @@ pub async fn run_server(
     let settings_web_data = web::Data::new(settings);
 
     info!("Listening on {}", listen_address);
+
+    // Build the MCP service and rate limiter once so they are shared across
+    // all Actix-web worker threads (each worker clones these Arc-backed values).
+    let mcp_http_service = mcp::build_http_service(
+        notification_service.clone(),
+        task_service.clone(),
+        redis_storage.clone(),
+    );
+    let mcp_rate_limiter = mcp::build_rate_limiter();
 
     let server = HttpServer::new(move || {
         info!("Mounting API on {}", api_path);
@@ -180,10 +196,8 @@ pub async fn run_server(
             .service(routes::webhook::scope())
             .service(routes::third_party::scope())
             .service(mcp::scope(
-                notification_service.clone(),
-                task_service.clone(),
-                redis_storage.clone(),
-                vec![front_base_url.clone()],
+                mcp_http_service.clone(),
+                mcp_rate_limiter.clone(),
                 format!("{front_base_url}{api_path}mcp"),
             ))
             .app_data(web::Data::new(notification_service.clone()))
@@ -193,15 +207,33 @@ pub async fn run_server(
             .app_data(web::Data::new(third_party_item_service.clone()))
             .app_data(web::Data::new(oauth2_service.clone()));
 
+        let api_path_for_cors = api_path.clone();
         let cors = Cors::default()
             .allowed_origin(&front_base_url)
+            .allowed_origin_fn(move |_origin, req_head| {
+                // Allow any origin for MCP and OAuth2 endpoints:
+                // these use Bearer token auth (no CSRF risk via cookies).
+                let path = req_head.uri.path();
+                let mcp_prefix = format!("{}/mcp", api_path_for_cors.trim_end_matches('/'));
+                path.starts_with(&mcp_prefix)
+                    || path.starts_with("/.well-known/oauth-")
+                    || path.starts_with(&format!(
+                        "{}/oauth2",
+                        api_path_for_cors.trim_end_matches('/')
+                    ))
+            })
             .allowed_methods(vec!["GET", "POST", "PATCH", "DELETE", "PUT"])
             .allowed_headers(vec![
                 http::header::AUTHORIZATION,
                 http::header::COOKIE,
                 http::header::CONTENT_TYPE,
+                http::header::ACCEPT,
+                http::header::HeaderName::from_static("mcp-session-id"),
             ])
-            .expose_headers(vec!["x-app-version"])
+            .expose_headers(vec![
+                http::header::HeaderName::from_static("x-app-version"),
+                http::header::HeaderName::from_static("mcp-session-id"),
+            ])
             .supports_credentials()
             .max_age(3600);
 
@@ -281,6 +313,10 @@ pub async fn run_server(
             )
             .route(
                 "/.well-known/oauth-protected-resource",
+                web::get().to(routes::well_known::protected_resource_metadata),
+            )
+            .route(
+                "/.well-known/oauth-protected-resource/api/mcp",
                 web::get().to(routes::well_known::protected_resource_metadata),
             )
             .route(

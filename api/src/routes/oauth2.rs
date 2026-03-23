@@ -77,8 +77,10 @@ pub async fn register(
 
 pub async fn authorize(
     oauth2_service: web::Data<Arc<OAuth2Service>>,
-    authenticated: Authenticated<Claims>,
+    authenticated: Option<Authenticated<Claims>>,
     params: web::Query<AuthorizeParams>,
+    req: actix_web::HttpRequest,
+    settings: web::Data<crate::configuration::Settings>,
 ) -> Result<HttpResponse, UniversalInboxError> {
     if params.response_type != "code" {
         return Err(UniversalInboxError::InvalidInputData {
@@ -86,6 +88,22 @@ pub async fn authorize(
             user_error: "Only response_type=code is supported".to_string(),
         });
     }
+
+    // If user is not authenticated, redirect to login with a return URL
+    let authenticated = match authenticated {
+        Some(auth) => auth,
+        None => {
+            let authorize_url = req.uri().to_string();
+            let login_url = format!(
+                "{}login?redirect={}",
+                settings.application.front_base_url,
+                urlencoding::encode(&authorize_url)
+            );
+            return Ok(HttpResponse::Found()
+                .insert_header(("Location", login_url))
+                .finish());
+        }
+    };
 
     let user_id = authenticated
         .claims

@@ -11,7 +11,7 @@ use actix_web::{
     HttpMessage, HttpResponse,
     body::EitherBody,
     dev::{HttpServiceFactory, Service, ServiceRequest, ServiceResponse, Transform},
-    http::header,
+    http::{Method, header},
     web,
 };
 use apalis_redis::RedisStorage;
@@ -52,34 +52,25 @@ pub mod tools;
 const SERVER_NAME: &str = "universal-inbox";
 const SERVER_TITLE: &str = "Universal Inbox";
 const SERVER_INSTRUCTIONS: &str = "Authenticate with a Universal Inbox API key. Universal Inbox aggregates notifications from multiple sources (GitHub, Linear, Slack, Google Mail/Calendar/Drive) and manages tasks synchronized between task management tools (e.g. Todoist, Linear). Tasks accessible here are only those synchronized through Universal Inbox, not all tasks from the underlying providers. Read tools do not trigger synchronization unless trigger_sync is true. Write tools execute immediately.";
-const MCP_RATE_LIMIT_PER_MINUTE: u32 = 60;
+const MCP_RATE_LIMIT_PER_MINUTE: u32 = 120;
 
-type McpRateLimiter = RateLimiter<UserId, DefaultKeyedStateStore<UserId>, DefaultClock>;
+pub type McpRateLimiter = RateLimiter<UserId, DefaultKeyedStateStore<UserId>, DefaultClock>;
 
-pub fn scope(
+/// Build the `StreamableHttpService` once so the `LocalSessionManager` is shared
+/// across all Actix-web worker threads.  Call this **before** `HttpServer::new`
+/// and clone the returned service into each worker via `scope()`.
+pub fn build_http_service(
     notification_service: Arc<RwLock<NotificationService>>,
     task_service: Arc<RwLock<TaskService>>,
     job_storage: RedisStorage<UniversalInboxJob>,
-    allowed_origins: Vec<String>,
-    resource_url: String,
-) -> impl HttpServiceFactory {
+) -> StreamableHttpService<UniversalInboxMcpServer, LocalSessionManager> {
     let services = McpServices {
         notification_service,
         task_service,
         job_storage,
     };
 
-    let quota = Quota::per_minute(
-        NonZeroU32::new(MCP_RATE_LIMIT_PER_MINUTE).expect("rate limit must be non-zero"),
-    );
-    let rate_limiter = Arc::new(McpRateLimiter::keyed(quota));
-    // Well-known URLs are at the server root, not under the API path
-    let origin = url::Url::parse(&resource_url)
-        .map(|u| u.origin().ascii_serialization())
-        .unwrap_or_else(|_| resource_url.clone());
-    let resource_metadata_url = format!("{origin}/.well-known/oauth-protected-resource");
-
-    let http_service = StreamableHttpService::builder()
+    StreamableHttpService::builder()
         .service_factory(Arc::new(move || {
             Ok::<_, std::io::Error>(UniversalInboxMcpServer::new(services.clone()))
         }))
@@ -90,11 +81,29 @@ pub fn scope(
                 extensions.insert(authenticated.clone());
             }
         })
-        .build();
+        .build()
+}
+
+pub fn build_rate_limiter() -> Arc<McpRateLimiter> {
+    let quota = Quota::per_minute(
+        NonZeroU32::new(MCP_RATE_LIMIT_PER_MINUTE).expect("rate limit must be non-zero"),
+    );
+    Arc::new(McpRateLimiter::keyed(quota))
+}
+
+pub fn scope(
+    http_service: StreamableHttpService<UniversalInboxMcpServer, LocalSessionManager>,
+    rate_limiter: Arc<McpRateLimiter>,
+    resource_url: String,
+) -> impl HttpServiceFactory {
+    // Well-known URLs are at the server root, not under the API path
+    let origin = url::Url::parse(&resource_url)
+        .map(|u| u.origin().ascii_serialization())
+        .unwrap_or_else(|_| resource_url.clone());
+    let resource_metadata_url = format!("{origin}/.well-known/oauth-protected-resource");
 
     web::scope("/mcp")
         .wrap(RequireAuthenticated {
-            allowed_origins,
             rate_limiter,
             resource_metadata_url,
             resource_url,
@@ -103,7 +112,6 @@ pub fn scope(
 }
 
 struct RequireAuthenticated {
-    allowed_origins: Vec<String>,
     rate_limiter: Arc<McpRateLimiter>,
     resource_metadata_url: String,
     resource_url: String,
@@ -124,7 +132,6 @@ where
     fn new_transform(&self, service: S) -> Self::Future {
         ready(Ok(RequireAuthenticatedMiddleware {
             service,
-            allowed_origins: self.allowed_origins.clone(),
             rate_limiter: self.rate_limiter.clone(),
             resource_metadata_url: self.resource_metadata_url.clone(),
             resource_url: self.resource_url.clone(),
@@ -134,7 +141,6 @@ where
 
 struct RequireAuthenticatedMiddleware<S> {
     service: S,
-    allowed_origins: Vec<String>,
     rate_limiter: Arc<McpRateLimiter>,
     resource_metadata_url: String,
     resource_url: String,
@@ -155,15 +161,18 @@ where
     }
 
     fn call(&self, mut req: ServiceRequest) -> Self::Future {
-        if let Some(origin_value) = req.headers().get(header::ORIGIN) {
-            let origin_str = origin_value.to_str().unwrap_or("").to_string();
-            let allowed = self.allowed_origins.iter().any(|o| o == &origin_str);
-            if !allowed {
-                let response = req
-                    .into_response(HttpResponse::Forbidden().finish())
-                    .map_into_right_body();
-                return Box::pin(async move { Ok(response) });
-            }
+        // Per the MCP spec, GET without a session ID must return 400 (not 401).
+        // The rmcp library incorrectly returns 401 for this case, which causes
+        // MCP clients (e.g. Claude Code) to misinterpret it as an auth failure
+        // and enter a token-refresh loop instead of proceeding to POST initialize.
+        if req.method() == Method::GET && req.headers().get("mcp-session-id").is_none() {
+            let response = req
+                .into_response(
+                    HttpResponse::BadRequest()
+                        .body("Bad Request: Mcp-Session-Id header is required for GET requests"),
+                )
+                .map_into_right_body();
+            return Box::pin(async move { Ok(response) });
         }
 
         let auth_result = req.extensions().get::<Authenticated<Claims>>().cloned();
@@ -215,7 +224,7 @@ where
 }
 
 #[derive(Clone)]
-struct UniversalInboxMcpServer {
+pub struct UniversalInboxMcpServer {
     services: McpServices,
     tool_router: ToolRouter<Self>,
 }
