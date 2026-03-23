@@ -20,8 +20,9 @@ use crate::{
     universal_inbox::{
         UniversalInboxError, auth_token::service::AuthenticationTokenService,
         integration_connection::service::IntegrationConnectionService,
-        notification::service::NotificationService, task::service::TaskService,
-        third_party::service::ThirdPartyItemService, user::service::UserService,
+        notification::service::NotificationService, oauth2::service::OAuth2Service,
+        task::service::TaskService, third_party::service::ThirdPartyItemService,
+        user::service::UserService,
     },
     utils::{cache::Cache, jwt::JWTBase64EncodedSigningKeys},
 };
@@ -226,6 +227,7 @@ impl Cli {
         auth_token_service: Arc<RwLock<AuthenticationTokenService>>,
         third_party_item_service: Arc<RwLock<ThirdPartyItemService>>,
         slack_service: Arc<SlackService>,
+        oauth2_service: Arc<OAuth2Service>,
     ) -> Result<(), UniversalInboxError> {
         match &self.command {
             Commands::SyncNotifications { source, user_id } => {
@@ -316,6 +318,7 @@ impl Cli {
                     integration_connection_service.clone(),
                     auth_token_service,
                     third_party_item_service.clone(),
+                    oauth2_service,
                 )
                 .await
                 .expect("Failed to start HTTP server");

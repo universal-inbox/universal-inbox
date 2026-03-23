@@ -158,13 +158,10 @@ where
             }
         }
 
-        let auth_result = req
-            .extensions()
-            .get::<Authenticated<Claims>>()
-            .map(|a| a.claims.sub.parse::<UserId>().ok());
+        let auth_result = req.extensions().get::<Authenticated<Claims>>().cloned();
 
         let resource_metadata_url = self.resource_metadata_url.clone();
-        let user_id = match auth_result {
+        let authenticated = match auth_result {
             None => {
                 let response = req
                     .into_response(
@@ -178,8 +175,23 @@ where
                     .map_into_right_body();
                 return Box::pin(async move { Ok(response) });
             }
-            Some(uid) => uid,
+            Some(a) => a,
         };
+
+        // Validate audience for OAuth2 tokens (API key tokens without aud are still allowed)
+        if let Some(ref aud) = authenticated.claims.aud {
+            let expected_resource =
+                resource_metadata_url.trim_end_matches("/.well-known/oauth-protected-resource");
+            let expected_aud = format!("{expected_resource}/mcp");
+            if aud != &expected_aud {
+                let response = req
+                    .into_response(HttpResponse::Forbidden().finish())
+                    .map_into_right_body();
+                return Box::pin(async move { Ok(response) });
+            }
+        }
+
+        let user_id = authenticated.claims.sub.parse::<UserId>().ok();
 
         if let Some(uid) = user_id
             && self.rate_limiter.check_key(&uid).is_err()

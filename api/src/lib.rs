@@ -77,8 +77,9 @@ use crate::{
     universal_inbox::{
         UniversalInboxError, auth_token::service::AuthenticationTokenService,
         integration_connection::service::IntegrationConnectionService,
-        notification::service::NotificationService, task::service::TaskService,
-        third_party::service::ThirdPartyItemService, user::service::UserService,
+        notification::service::NotificationService, oauth2::service::OAuth2Service,
+        task::service::TaskService, third_party::service::ThirdPartyItemService,
+        user::service::UserService,
     },
     utils::{
         crypto::TokenEncryptionKey,
@@ -111,6 +112,7 @@ pub async fn run_server(
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     auth_token_service: Arc<RwLock<AuthenticationTokenService>>,
     third_party_item_service: Arc<RwLock<ThirdPartyItemService>>,
+    oauth2_service: Arc<OAuth2Service>,
 ) -> Result<Server, UniversalInboxError> {
     let api_path = settings.application.api_path.clone();
     let front_base_url = settings
@@ -167,6 +169,11 @@ pub async fn run_server(
             auth_middleware_settings.clone(),
         );
 
+        let oauth2_scope = web::scope("/oauth2")
+            .route("/register", web::post().to(routes::oauth2::register))
+            .route("/authorize", web::get().to(routes::oauth2::authorize))
+            .route("/token", web::post().to(routes::oauth2::token));
+
         let api_scope = web::scope(api_path.trim_end_matches('/'))
             .service(routes::auth::scope())
             .service(routes::integration_connection::scope())
@@ -176,11 +183,13 @@ pub async fn run_server(
             .service(routes::user::scope())
             .service(routes::webhook::scope())
             .service(routes::third_party::scope())
+            .service(oauth2_scope)
             .app_data(web::Data::new(notification_service.clone()))
             .app_data(web::Data::new(task_service.clone()))
             .app_data(web::Data::new(user_service.clone()))
             .app_data(web::Data::new(auth_token_service.clone()))
-            .app_data(web::Data::new(third_party_item_service.clone()));
+            .app_data(web::Data::new(third_party_item_service.clone()))
+            .app_data(web::Data::new(oauth2_service.clone()));
 
         let cors = Cors::default()
             .allowed_origin(&front_base_url)
@@ -410,6 +419,7 @@ pub async fn build_services(
     Arc<RwLock<AuthenticationTokenService>>,
     Arc<RwLock<ThirdPartyItemService>>,
     Arc<SlackService>,
+    Arc<OAuth2Service>,
 ) {
     let repository = Arc::new(Repository::new(pool.clone()));
 
@@ -594,7 +604,7 @@ pub async fn build_services(
         .set_notification_service(Arc::downgrade(&notification_service));
 
     let task_service = Arc::new(RwLock::new(TaskService::new(
-        repository,
+        repository.clone(),
         todoist_service.clone(),
         linear_service.clone(),
         Arc::downgrade(&notification_service),
@@ -620,6 +630,21 @@ pub async fn build_services(
         .await
         .set_notification_service(Arc::downgrade(&notification_service));
 
+    let resource_url = format!(
+        "{}/mcp",
+        settings
+            .application
+            .front_base_url
+            .as_str()
+            .trim_end_matches('/')
+    );
+    let oauth2_service = Arc::new(OAuth2Service::new(
+        repository,
+        settings.application.http_session.jwt_secret_key.clone(),
+        settings.application.http_session.jwt_public_key.clone(),
+        resource_url,
+    ));
+
     (
         notification_service,
         task_service,
@@ -628,6 +653,7 @@ pub async fn build_services(
         auth_token_service,
         third_party_item_service,
         slack_service,
+        oauth2_service,
     )
 }
 
