@@ -73,8 +73,11 @@ pub fn scope(
         NonZeroU32::new(MCP_RATE_LIMIT_PER_MINUTE).expect("rate limit must be non-zero"),
     );
     let rate_limiter = Arc::new(McpRateLimiter::keyed(quota));
-    let base_url = resource_url.trim_end_matches("/mcp");
-    let resource_metadata_url = format!("{base_url}/.well-known/oauth-protected-resource");
+    // Well-known URLs are at the server root, not under the API path
+    let origin = url::Url::parse(&resource_url)
+        .map(|u| u.origin().ascii_serialization())
+        .unwrap_or_else(|_| resource_url.clone());
+    let resource_metadata_url = format!("{origin}/.well-known/oauth-protected-resource");
 
     let http_service = StreamableHttpService::builder()
         .service_factory(Arc::new(move || {
