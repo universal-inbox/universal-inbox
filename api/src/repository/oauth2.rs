@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, Utc};
 use sqlx::{Postgres, QueryBuilder, Transaction};
 use uuid::Uuid;
 
@@ -464,8 +464,8 @@ struct AuthorizedClientRow {
     client_id: String,
     client_name: Option<String>,
     scope: Option<String>,
-    first_authorized_at: NaiveDateTime,
-    last_used_at: NaiveDateTime,
+    first_authorized_at: DateTime<Utc>,
+    last_used_at: DateTime<Utc>,
 }
 
 impl From<AuthorizedClientRow> for AuthorizedOAuth2Client {
@@ -474,8 +474,8 @@ impl From<AuthorizedClientRow> for AuthorizedOAuth2Client {
             client_id: row.client_id,
             client_name: row.client_name,
             scope: row.scope,
-            first_authorized_at: DateTime::from_naive_utc_and_offset(row.first_authorized_at, Utc),
-            last_used_at: DateTime::from_naive_utc_and_offset(row.last_used_at, Utc),
+            first_authorized_at: row.first_authorized_at,
+            last_used_at: row.last_used_at,
         }
     }
 }
@@ -489,8 +489,8 @@ pub struct OAuth2ClientRow {
     pub grant_types: Vec<String>,
     pub response_types: Vec<String>,
     pub token_endpoint_auth_method: String,
-    pub created_at: NaiveDateTime,
-    pub updated_at: NaiveDateTime,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 impl From<OAuth2ClientRow> for OAuth2Client {
@@ -503,8 +503,8 @@ impl From<OAuth2ClientRow> for OAuth2Client {
             grant_types: row.grant_types,
             response_types: row.response_types,
             token_endpoint_auth_method: row.token_endpoint_auth_method,
-            created_at: DateTime::from_naive_utc_and_offset(row.created_at, Utc),
-            updated_at: DateTime::from_naive_utc_and_offset(row.updated_at, Utc),
+            created_at: row.created_at,
+            updated_at: row.updated_at,
         }
     }
 }
@@ -519,8 +519,8 @@ pub struct OAuth2AuthorizationCodeRow {
     pub code_challenge: String,
     pub code_challenge_method: String,
     pub resource: Option<String>,
-    pub expires_at: NaiveDateTime,
-    pub created_at: NaiveDateTime,
+    pub expires_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
 }
 
 impl From<OAuth2AuthorizationCodeRow> for OAuth2AuthorizationCode {
@@ -534,8 +534,8 @@ impl From<OAuth2AuthorizationCodeRow> for OAuth2AuthorizationCode {
             code_challenge: row.code_challenge,
             code_challenge_method: row.code_challenge_method,
             resource: row.resource,
-            expires_at: DateTime::from_naive_utc_and_offset(row.expires_at, Utc),
-            created_at: DateTime::from_naive_utc_and_offset(row.created_at, Utc),
+            expires_at: row.expires_at,
+            created_at: row.created_at,
         }
     }
 }
@@ -548,9 +548,9 @@ pub struct OAuth2RefreshTokenRow {
     pub user_id: Uuid,
     pub scope: Option<String>,
     pub resource: Option<String>,
-    pub expires_at: Option<NaiveDateTime>,
-    pub created_at: NaiveDateTime,
-    pub revoked_at: Option<NaiveDateTime>,
+    pub expires_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub revoked_at: Option<DateTime<Utc>>,
 }
 
 impl From<OAuth2RefreshTokenRow> for OAuth2RefreshToken {
@@ -562,13 +562,9 @@ impl From<OAuth2RefreshTokenRow> for OAuth2RefreshToken {
             user_id: row.user_id.into(),
             scope: row.scope,
             resource: row.resource,
-            expires_at: row
-                .expires_at
-                .map(|t| DateTime::from_naive_utc_and_offset(t, Utc)),
-            created_at: DateTime::from_naive_utc_and_offset(row.created_at, Utc),
-            revoked_at: row
-                .revoked_at
-                .map(|t| DateTime::from_naive_utc_and_offset(t, Utc)),
+            expires_at: row.expires_at,
+            created_at: row.created_at,
+            revoked_at: row.revoked_at,
         }
     }
 }
