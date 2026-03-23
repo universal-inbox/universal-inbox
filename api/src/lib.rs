@@ -93,6 +93,7 @@ pub mod configuration;
 pub mod integrations;
 pub mod jobs;
 pub mod mailer;
+pub mod mcp;
 pub mod observability;
 pub mod repository;
 pub mod routes;
@@ -267,7 +268,15 @@ pub async fn run_server(
                 "/api/oauth/callback",
                 web::get().to(routes::oauth::oauth_callback),
             )
+            .service(mcp::scope(
+                notification_service.clone(),
+                task_service.clone(),
+                redis_storage.clone(),
+                vec![front_base_url.clone()],
+            ))
             .service(api_scope)
+            .app_data(web::Data::new(notification_service.clone()))
+            .app_data(web::Data::new(task_service.clone()))
             .app_data(settings_web_data.clone())
             .app_data(storage_data.clone())
             .app_data(cache_data.clone())

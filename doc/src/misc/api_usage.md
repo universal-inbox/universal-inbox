@@ -4,6 +4,8 @@
 
 Universal Inbox provides a RESTful API that allows third-party tools like Raycast to interact with notifications.
 
+See also: [Universal Inbox with AI Agents](ai_agents.md)
+
 ### Creating an API key
 
 ![User profile screen](images/user-profile.png =750x center)
