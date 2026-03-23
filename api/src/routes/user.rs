@@ -29,6 +29,7 @@ use crate::{
     universal_inbox::{
         UniversalInboxError, UpdateStatus,
         auth_token::service::AuthenticationTokenService,
+        oauth2::service::OAuth2Service,
         user::{
             model::{LocalUserAuth, UserAuth, UserAuthKind},
             service::UserService,
@@ -67,6 +68,14 @@ pub fn scope() -> Scope {
                     web::resource("/authentication-tokens")
                         .route(web::get().to(list_authentication_tokens))
                         .route(web::post().to(create_authentication_token)),
+                )
+                .service(
+                    web::resource("/oauth2-authorized-clients")
+                        .route(web::get().to(list_oauth2_authorized_clients)),
+                )
+                .service(
+                    web::resource("/oauth2-authorized-clients/{client_id}")
+                        .route(web::delete().to(revoke_oauth2_authorized_client)),
                 ),
         )
         .service(
@@ -646,6 +655,60 @@ pub async fn start_passkey_authentication(
         .context("Failed to commit while starting Passkey authentication")?;
 
     Ok(web::Json(request_challenge_response))
+}
+
+pub async fn list_oauth2_authorized_clients(
+    oauth2_service: web::Data<Arc<OAuth2Service>>,
+    authenticated: Authenticated<Claims>,
+) -> Result<HttpResponse, UniversalInboxError> {
+    let user_id = authenticated
+        .claims
+        .sub
+        .parse::<UserId>()
+        .context("Wrong user ID format")?;
+    let service = oauth2_service.clone();
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while listing OAuth2 authorized clients")?;
+
+    let clients = service
+        .list_authorized_clients(&mut transaction, user_id)
+        .await?;
+
+    Ok(HttpResponse::Ok().content_type("application/json").body(
+        serde_json::to_string(&clients)
+            .context("Cannot serialize OAuth2 authorized clients list")?,
+    ))
+}
+
+pub async fn revoke_oauth2_authorized_client(
+    oauth2_service: web::Data<Arc<OAuth2Service>>,
+    authenticated: Authenticated<Claims>,
+    path: web::Path<String>,
+) -> Result<HttpResponse, UniversalInboxError> {
+    let user_id = authenticated
+        .claims
+        .sub
+        .parse::<UserId>()
+        .context("Wrong user ID format")?;
+    let client_id = path.into_inner();
+    let service = oauth2_service.clone();
+    let mut transaction = service
+        .begin()
+        .await
+        .context("Failed to create new transaction while revoking OAuth2 client authorization")?;
+
+    service
+        .revoke_client_authorization(&mut transaction, user_id, &client_id)
+        .await?;
+
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit while revoking OAuth2 client authorization")?;
+
+    Ok(HttpResponse::NoContent().finish())
 }
 
 pub async fn finish_passkey_authentication(

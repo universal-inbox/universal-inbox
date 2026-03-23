@@ -4,7 +4,9 @@ use sqlx::{Postgres, QueryBuilder, Transaction};
 use uuid::Uuid;
 
 use universal_inbox::{
-    auth::oauth2::{OAuth2AuthorizationCode, OAuth2Client, OAuth2RefreshToken},
+    auth::oauth2::{
+        AuthorizedOAuth2Client, OAuth2AuthorizationCode, OAuth2Client, OAuth2RefreshToken,
+    },
     user::UserId,
 };
 
@@ -70,6 +72,19 @@ pub trait OAuth2Repository {
         executor: &mut Transaction<'_, Postgres>,
         token_hash: &str,
     ) -> Result<(), UniversalInboxError>;
+
+    async fn list_authorized_clients(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+    ) -> Result<Vec<AuthorizedOAuth2Client>, UniversalInboxError>;
+
+    async fn revoke_all_refresh_tokens_for_client(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        client_id: &str,
+    ) -> Result<u64, UniversalInboxError>;
 }
 
 #[async_trait]
@@ -352,6 +367,116 @@ impl OAuth2Repository for Repository {
             })?;
 
         Ok(())
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = user_id.to_string()),
+        err
+    )]
+    async fn list_authorized_clients(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+    ) -> Result<Vec<AuthorizedOAuth2Client>, UniversalInboxError> {
+        let mut query_builder = QueryBuilder::new(
+            r#"
+                SELECT
+                  rt.client_id,
+                  c.client_name,
+                  rt.scope,
+                  MIN(rt.created_at) AS first_authorized_at,
+                  MAX(rt.created_at) AS last_used_at
+                FROM oauth2_refresh_token rt
+                JOIN oauth2_client c ON c.client_id = rt.client_id
+                WHERE rt.user_id =
+            "#,
+        );
+        query_builder.push_bind(user_id.0);
+        query_builder.push(
+            r#"
+                AND rt.revoked_at IS NULL
+                AND (rt.expires_at IS NULL OR rt.expires_at > now())
+                GROUP BY rt.client_id, c.client_name, rt.scope
+            "#,
+        );
+
+        let rows = query_builder
+            .build_query_as::<AuthorizedClientRow>()
+            .fetch_all(&mut **executor)
+            .await
+            .map_err(|err| {
+                let message =
+                    format!("Failed to fetch authorized OAuth2 clients from storage: {err}");
+                UniversalInboxError::DatabaseError {
+                    source: err,
+                    message,
+                }
+            })?;
+
+        Ok(rows.into_iter().map(|r| r.into()).collect())
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(client_id, user.id = user_id.to_string()),
+        err
+    )]
+    async fn revoke_all_refresh_tokens_for_client(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        client_id: &str,
+    ) -> Result<u64, UniversalInboxError> {
+        let mut query_builder = QueryBuilder::new(
+            r#"
+                UPDATE oauth2_refresh_token
+                SET revoked_at = now()
+                WHERE user_id =
+            "#,
+        );
+        query_builder.push_bind(user_id.0);
+        query_builder.push(" AND client_id = ");
+        query_builder.push_bind(client_id);
+        query_builder.push(" AND revoked_at IS NULL");
+
+        let result = query_builder
+            .build()
+            .execute(&mut **executor)
+            .await
+            .map_err(|err| {
+                let message =
+                    format!("Failed to revoke OAuth2 refresh tokens for client in storage: {err}");
+                UniversalInboxError::DatabaseError {
+                    source: err,
+                    message,
+                }
+            })?;
+
+        Ok(result.rows_affected())
+    }
+}
+
+#[derive(sqlx::FromRow)]
+struct AuthorizedClientRow {
+    client_id: String,
+    client_name: Option<String>,
+    scope: Option<String>,
+    first_authorized_at: NaiveDateTime,
+    last_used_at: NaiveDateTime,
+}
+
+impl From<AuthorizedClientRow> for AuthorizedOAuth2Client {
+    fn from(row: AuthorizedClientRow) -> Self {
+        AuthorizedOAuth2Client {
+            client_id: row.client_id,
+            client_name: row.client_name,
+            scope: row.scope,
+            first_authorized_at: DateTime::from_naive_utc_and_offset(row.first_authorized_at, Utc),
+            last_used_at: DateTime::from_naive_utc_and_offset(row.last_used_at, Utc),
+        }
     }
 }
 

@@ -52,3 +52,13 @@ pub struct TokenResponse {
     pub refresh_token: String,
     pub scope: String,
 }
+
+/// Summary of an authorized OAuth2 client for display in the user profile
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthorizedOAuth2Client {
+    pub client_id: String,
+    pub client_name: Option<String>,
+    pub scope: Option<String>,
+    pub first_authorized_at: DateTime<Utc>,
+    pub last_used_at: DateTime<Utc>,
+}

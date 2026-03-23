@@ -10,7 +10,7 @@ use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
 use universal_inbox::{
-    auth::oauth2::{OAuth2Client, TokenResponse},
+    auth::oauth2::{AuthorizedOAuth2Client, OAuth2Client, TokenResponse},
     user::UserId,
 };
 
@@ -300,6 +300,39 @@ impl OAuth2Service {
             refresh_token: new_refresh_token_raw,
             scope,
         })
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = user_id.to_string()),
+        err
+    )]
+    pub async fn list_authorized_clients(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+    ) -> Result<Vec<AuthorizedOAuth2Client>, UniversalInboxError> {
+        self.repository
+            .list_authorized_clients(transaction, user_id)
+            .await
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(client_id, user.id = user_id.to_string()),
+        err
+    )]
+    pub async fn revoke_client_authorization(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        client_id: &str,
+    ) -> Result<u64, UniversalInboxError> {
+        self.repository
+            .revoke_all_refresh_tokens_for_client(transaction, user_id, client_id)
+            .await
     }
 
     fn create_access_token(
