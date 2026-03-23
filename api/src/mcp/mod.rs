@@ -61,6 +61,7 @@ pub fn scope(
     task_service: Arc<RwLock<TaskService>>,
     job_storage: RedisStorage<UniversalInboxJob>,
     allowed_origins: Vec<String>,
+    base_url: String,
 ) -> impl HttpServiceFactory {
     let services = McpServices {
         notification_service,
@@ -72,6 +73,7 @@ pub fn scope(
         NonZeroU32::new(MCP_RATE_LIMIT_PER_MINUTE).expect("rate limit must be non-zero"),
     );
     let rate_limiter = Arc::new(McpRateLimiter::keyed(quota));
+    let resource_metadata_url = format!("{base_url}/.well-known/oauth-protected-resource");
 
     let http_service = StreamableHttpService::builder()
         .service_factory(Arc::new(move || {
@@ -90,6 +92,7 @@ pub fn scope(
         .wrap(RequireAuthenticated {
             allowed_origins,
             rate_limiter,
+            resource_metadata_url,
         })
         .service(http_service.scope())
 }
@@ -97,6 +100,7 @@ pub fn scope(
 struct RequireAuthenticated {
     allowed_origins: Vec<String>,
     rate_limiter: Arc<McpRateLimiter>,
+    resource_metadata_url: String,
 }
 
 impl<S, B> Transform<S, ServiceRequest> for RequireAuthenticated
@@ -116,6 +120,7 @@ where
             service,
             allowed_origins: self.allowed_origins.clone(),
             rate_limiter: self.rate_limiter.clone(),
+            resource_metadata_url: self.resource_metadata_url.clone(),
         }))
     }
 }
@@ -124,6 +129,7 @@ struct RequireAuthenticatedMiddleware<S> {
     service: S,
     allowed_origins: Vec<String>,
     rate_limiter: Arc<McpRateLimiter>,
+    resource_metadata_url: String,
 }
 
 impl<S, B> Service<ServiceRequest> for RequireAuthenticatedMiddleware<S>
@@ -157,10 +163,18 @@ where
             .get::<Authenticated<Claims>>()
             .map(|a| a.claims.sub.parse::<UserId>().ok());
 
+        let resource_metadata_url = self.resource_metadata_url.clone();
         let user_id = match auth_result {
             None => {
                 let response = req
-                    .into_response(HttpResponse::Unauthorized().finish())
+                    .into_response(
+                        HttpResponse::Unauthorized()
+                            .insert_header((
+                                header::WWW_AUTHENTICATE,
+                                format!("Bearer resource_metadata=\"{resource_metadata_url}\""),
+                            ))
+                            .finish(),
+                    )
                     .map_into_right_body();
                 return Box::pin(async move { Ok(response) });
             }

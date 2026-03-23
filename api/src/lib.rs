@@ -268,11 +268,20 @@ pub async fn run_server(
                 "/api/oauth/callback",
                 web::get().to(routes::oauth::oauth_callback),
             )
+            .route(
+                "/.well-known/oauth-protected-resource",
+                web::get().to(routes::well_known::protected_resource_metadata),
+            )
+            .route(
+                "/.well-known/oauth-authorization-server",
+                web::get().to(routes::well_known::authorization_server_metadata),
+            )
             .service(mcp::scope(
                 notification_service.clone(),
                 task_service.clone(),
                 redis_storage.clone(),
                 vec![front_base_url.clone()],
+                front_base_url.clone(),
             ))
             .service(api_scope)
             .app_data(web::Data::new(notification_service.clone()))

@@ -8,6 +8,7 @@ pub mod task;
 pub mod third_party;
 pub mod user;
 pub mod webhook;
+pub mod well_known;
 
 use actix_http::{StatusCode, body::BoxBody, header::TryIntoHeaderValue};
 use actix_web::{
