@@ -98,16 +98,19 @@ pub fn scope(
     http_service: StreamableHttpService<UniversalInboxMcpServer, LocalSessionManager>,
     rate_limiter: Arc<McpRateLimiter>,
     resource_url: String,
+    extra_allowed_origins: Vec<String>,
 ) -> impl HttpServiceFactory {
     // Well-known URLs are at the server root, not under the API path
-    let allowed_origin = url::Url::parse(&resource_url)
+    let server_origin = url::Url::parse(&resource_url)
         .map(|u| u.origin().ascii_serialization())
         .unwrap_or_else(|_| resource_url.clone());
-    let resource_metadata_url = format!("{allowed_origin}/.well-known/oauth-protected-resource");
+    let resource_metadata_url = format!("{server_origin}/.well-known/oauth-protected-resource");
+    let mut allowed_origins = vec![server_origin];
+    allowed_origins.extend(extra_allowed_origins);
 
     web::scope("/mcp")
         .wrap(RequireAuthenticated {
-            allowed_origin,
+            allowed_origins,
             rate_limiter,
             resource_metadata_url,
             resource_url,
@@ -116,7 +119,7 @@ pub fn scope(
 }
 
 struct RequireAuthenticated {
-    allowed_origin: String,
+    allowed_origins: Vec<String>,
     rate_limiter: Arc<McpRateLimiter>,
     resource_metadata_url: String,
     resource_url: String,
@@ -137,7 +140,7 @@ where
     fn new_transform(&self, service: S) -> Self::Future {
         ready(Ok(RequireAuthenticatedMiddleware {
             service,
-            allowed_origin: self.allowed_origin.clone(),
+            allowed_origins: self.allowed_origins.clone(),
             rate_limiter: self.rate_limiter.clone(),
             resource_metadata_url: self.resource_metadata_url.clone(),
             resource_url: self.resource_url.clone(),
@@ -147,7 +150,7 @@ where
 
 struct RequireAuthenticatedMiddleware<S> {
     service: S,
-    allowed_origin: String,
+    allowed_origins: Vec<String>,
     rate_limiter: Arc<McpRateLimiter>,
     resource_metadata_url: String,
     resource_url: String,
@@ -174,7 +177,7 @@ where
         // with HTTP 403 Forbidden."
         if let Some(origin_value) = req.headers().get(header::ORIGIN) {
             let origin_str = origin_value.to_str().unwrap_or("");
-            if origin_str != self.allowed_origin {
+            if !self.allowed_origins.iter().any(|o| o == origin_str) {
                 let response = req
                     .into_response(HttpResponse::Forbidden().finish())
                     .map_into_right_body();

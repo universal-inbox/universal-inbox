@@ -95,8 +95,15 @@ pub(crate) struct BulkActNotificationsArgs {
     statuses: Vec<NotificationStatus>,
     #[serde(default)]
     sources: Vec<NotificationSourceKind>,
-    action: NotificationAction,
-    snoozed_until: Option<DateTime<Utc>>,
+    action: BulkNotificationAction,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum BulkNotificationAction {
+    MarkRead,
+    Delete,
+    Unsubscribe,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -213,9 +220,8 @@ pub fn tool_definitions() -> Vec<Value> {
                     "sources": notification_source_array_schema(),
                     "action": {
                         "type": "string",
-                        "enum": ["mark_read", "delete", "unsubscribe", "snooze_until"]
-                    },
-                    "snoozed_until": { "type": "string", "format": "date-time" }
+                        "enum": ["mark_read", "delete", "unsubscribe"]
+                    }
                 },
                 "required": ["action"]
             }
@@ -414,7 +420,7 @@ pub async fn execute_tool(
         }
         "bulk_act_notifications" => {
             let args: BulkActNotificationsArgs = parse_args(arguments)?;
-            let patch = notification_patch_from_action(args.action, args.snoozed_until)?;
+            let patch = bulk_notification_patch(args.action);
             let status_filters = if args.statuses.is_empty() {
                 all_notification_statuses()
             } else {
@@ -619,6 +625,23 @@ fn notification_patch_from_action(
     })
 }
 
+fn bulk_notification_patch(action: BulkNotificationAction) -> NotificationPatch {
+    match action {
+        BulkNotificationAction::MarkRead => NotificationPatch {
+            status: Some(NotificationStatus::Read),
+            ..Default::default()
+        },
+        BulkNotificationAction::Delete => NotificationPatch {
+            status: Some(NotificationStatus::Deleted),
+            ..Default::default()
+        },
+        BulkNotificationAction::Unsubscribe => NotificationPatch {
+            status: Some(NotificationStatus::Unsubscribed),
+            ..Default::default()
+        },
+    }
+}
+
 fn serialize_update_status_notification(
     update_status: UpdateStatus<Box<Notification>>,
     notification_id: NotificationId,
@@ -821,9 +844,8 @@ pub(crate) fn bulk_act_notifications_input_schema() -> JsonObject {
             "sources": notification_source_array_schema(),
             "action": {
                 "type": "string",
-                "enum": ["mark_read", "delete", "unsubscribe", "snooze_until"]
-            },
-            "snoozed_until": { "type": "string", "format": "date-time" }
+                "enum": ["mark_read", "delete", "unsubscribe"]
+            }
         },
         "required": ["action"]
     }))

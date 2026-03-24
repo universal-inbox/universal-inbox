@@ -170,6 +170,11 @@ pub async fn run_server(
             .await
             .expect("Failed to create cache"),
     );
+    let mcp_extra_allowed_origins = settings
+        .application
+        .security
+        .mcp_extra_allowed_origins
+        .clone();
     let settings_web_data = web::Data::new(settings);
 
     info!("Listening on {}", listen_address);
@@ -209,6 +214,7 @@ pub async fn run_server(
                 mcp_http_service.clone(),
                 mcp_rate_limiter.clone(),
                 format!("{front_base_url}{api_path}mcp"),
+                mcp_extra_allowed_origins.clone(),
             ))
             .app_data(web::Data::new(notification_service.clone()))
             .app_data(web::Data::new(task_service.clone()))
@@ -218,9 +224,15 @@ pub async fn run_server(
             .app_data(web::Data::new(oauth2_service.clone()));
 
         let api_path_for_cors = api_path.clone();
+        let mcp_extra_origins_for_cors = mcp_extra_allowed_origins.clone();
         let cors = Cors::default()
             .allowed_origin(&front_base_url)
-            .allowed_origin_fn(move |_origin, req_head| {
+            .allowed_origin_fn(move |origin, req_head| {
+                // Allow configured MCP extra origins (e.g. MCP inspector)
+                let origin_str = origin.to_str().unwrap_or("");
+                if mcp_extra_origins_for_cors.iter().any(|o| o == origin_str) {
+                    return true;
+                }
                 // Allow any origin for MCP and OAuth2 endpoints:
                 // these use Bearer token auth (no CSRF risk via cookies).
                 let path = req_head.uri.path();
@@ -239,6 +251,7 @@ pub async fn run_server(
                 http::header::CONTENT_TYPE,
                 http::header::ACCEPT,
                 http::header::HeaderName::from_static("mcp-session-id"),
+                http::header::HeaderName::from_static("mcp-protocol-version"),
             ])
             .expose_headers(vec![
                 http::header::HeaderName::from_static("x-app-version"),
