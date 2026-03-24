@@ -295,10 +295,9 @@ mod protocol {
             "params": {}
         });
 
-        // Without MCP-Protocol-Version header: the rmcp crate does not validate this header
-        // at the transport layer, so the request succeeds. This documents a gap between the
-        // MCP spec (2025-11-25 §3.4.1) — which requires clients to include the header on all
-        // subsequent requests — and the current rmcp implementation.
+        // Without MCP-Protocol-Version header: the spec requires clients to include
+        // it on all subsequent requests, but many existing clients omit it.
+        // We allow this for backwards compatibility (assume oldest supported version).
         let client1 = mcp_client();
         let (session_id, _) = mcp_initialize(&client1, &app.app, &token).await;
         let without_header = mcp_call_with_protocol_version(
@@ -313,7 +312,7 @@ mod protocol {
         assert_eq!(
             without_header.status(),
             StatusCode::OK,
-            "rmcp does not enforce MCP-Protocol-Version header (spec gap)"
+            "Missing MCP-Protocol-Version header should be tolerated for compatibility"
         );
         let body: Value = mcp_json(without_header).await;
         assert!(
@@ -321,9 +320,7 @@ mod protocol {
             "tools/list should succeed without MCP-Protocol-Version header"
         );
 
-        // With an invalid MCP-Protocol-Version header: rmcp does not validate header values,
-        // so the request also succeeds. The spec mandates a 400 response here, but enforcement
-        // is not implemented in the rmcp transport.
+        // With an invalid MCP-Protocol-Version header: must return 400 per the spec.
         let client2 = mcp_client();
         let (session_id, _) = mcp_initialize(&client2, &app.app, &token).await;
         let with_invalid_version = mcp_call_with_protocol_version(
@@ -337,8 +334,8 @@ mod protocol {
         .await;
         assert_eq!(
             with_invalid_version.status(),
-            StatusCode::OK,
-            "rmcp does not reject invalid MCP-Protocol-Version header values (spec gap)"
+            StatusCode::BAD_REQUEST,
+            "Invalid MCP-Protocol-Version must be rejected with 400"
         );
 
         // With the correct MCP-Protocol-Version header: request succeeds as expected.
@@ -1194,6 +1191,40 @@ mod oauth2 {
                 .unwrap()
                 .starts_with("Bearer resource_metadata="),
             "Should return WWW-Authenticate with resource_metadata"
+        );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn mcp_rejects_invalid_origin(#[future] authenticated_app: AuthenticatedApp) {
+        let app = authenticated_app.await;
+        let api_key = create_api_key(&app).await;
+        let token = api_key.jwt_token.expose_secret().0.clone();
+
+        // Request with a mismatched Origin header must be rejected (DNS rebinding protection)
+        let response = reqwest::Client::new()
+            .post(format!("{}mcp", app.app.api_address))
+            .bearer_auth(&token)
+            .header("Accept", "application/json, text/event-stream")
+            .header("Origin", "https://evil.example.com")
+            .json(&json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-06-18",
+                    "capabilities": {},
+                    "clientInfo": { "name": "test", "version": "1.0" }
+                }
+            }))
+            .send()
+            .await
+            .expect("Failed to execute request");
+
+        assert_eq!(
+            response.status(),
+            StatusCode::FORBIDDEN,
+            "MCP must reject requests with invalid Origin header"
         );
     }
 }

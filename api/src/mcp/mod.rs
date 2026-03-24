@@ -53,6 +53,9 @@ const SERVER_NAME: &str = "universal-inbox";
 const SERVER_TITLE: &str = "Universal Inbox";
 const SERVER_INSTRUCTIONS: &str = "Authenticate with a Universal Inbox API key. Universal Inbox aggregates notifications from multiple sources (GitHub, Linear, Slack, Google Mail/Calendar/Drive) and manages tasks synchronized between task management tools (e.g. Todoist, Linear). Tasks accessible here are only those synchronized through Universal Inbox, not all tasks from the underlying providers. Read tools do not trigger synchronization unless trigger_sync is true. Write tools execute immediately.";
 const MCP_RATE_LIMIT_PER_MINUTE: u32 = 120;
+/// Protocol versions this server can negotiate.
+const SUPPORTED_PROTOCOL_VERSIONS: &[&str] =
+    &["2025-06-18", "2025-03-26", "2024-11-05", "2025-11-25"];
 
 pub type McpRateLimiter = RateLimiter<UserId, DefaultKeyedStateStore<UserId>, DefaultClock>;
 
@@ -97,13 +100,14 @@ pub fn scope(
     resource_url: String,
 ) -> impl HttpServiceFactory {
     // Well-known URLs are at the server root, not under the API path
-    let origin = url::Url::parse(&resource_url)
+    let allowed_origin = url::Url::parse(&resource_url)
         .map(|u| u.origin().ascii_serialization())
         .unwrap_or_else(|_| resource_url.clone());
-    let resource_metadata_url = format!("{origin}/.well-known/oauth-protected-resource");
+    let resource_metadata_url = format!("{allowed_origin}/.well-known/oauth-protected-resource");
 
     web::scope("/mcp")
         .wrap(RequireAuthenticated {
+            allowed_origin,
             rate_limiter,
             resource_metadata_url,
             resource_url,
@@ -112,6 +116,7 @@ pub fn scope(
 }
 
 struct RequireAuthenticated {
+    allowed_origin: String,
     rate_limiter: Arc<McpRateLimiter>,
     resource_metadata_url: String,
     resource_url: String,
@@ -132,6 +137,7 @@ where
     fn new_transform(&self, service: S) -> Self::Future {
         ready(Ok(RequireAuthenticatedMiddleware {
             service,
+            allowed_origin: self.allowed_origin.clone(),
             rate_limiter: self.rate_limiter.clone(),
             resource_metadata_url: self.resource_metadata_url.clone(),
             resource_url: self.resource_url.clone(),
@@ -141,6 +147,7 @@ where
 
 struct RequireAuthenticatedMiddleware<S> {
     service: S,
+    allowed_origin: String,
     rate_limiter: Arc<McpRateLimiter>,
     resource_metadata_url: String,
     resource_url: String,
@@ -161,6 +168,20 @@ where
     }
 
     fn call(&self, mut req: ServiceRequest) -> Self::Future {
+        // MCP spec §Transports: "Servers MUST validate the Origin header on all
+        // incoming requests to prevent DNS rebinding attacks. If the Origin header
+        // is present and does not match the expected origin, servers MUST respond
+        // with HTTP 403 Forbidden."
+        if let Some(origin_value) = req.headers().get(header::ORIGIN) {
+            let origin_str = origin_value.to_str().unwrap_or("");
+            if origin_str != self.allowed_origin {
+                let response = req
+                    .into_response(HttpResponse::Forbidden().finish())
+                    .map_into_right_body();
+                return Box::pin(async move { Ok(response) });
+            }
+        }
+
         // Per the MCP spec, GET without a session ID must return 400 (not 401).
         // The rmcp library incorrectly returns 401 for this case, which causes
         // MCP clients (e.g. Claude Code) to misinterpret it as an auth failure
@@ -171,6 +192,26 @@ where
                     HttpResponse::BadRequest()
                         .body("Bad Request: Mcp-Session-Id header is required for GET requests"),
                 )
+                .map_into_right_body();
+            return Box::pin(async move { Ok(response) });
+        }
+
+        // MCP spec §Transports: "the client MUST include the MCP-Protocol-Version
+        // header on all subsequent requests [...] If the server receives a request
+        // with an invalid or unsupported MCP-Protocol-Version, it MUST respond with
+        // 400 Bad Request." The header is not required on the initialize request
+        // (which has no session ID yet).
+        let unsupported_version = req
+            .headers()
+            .get("mcp-protocol-version")
+            .and_then(|v| v.to_str().ok())
+            .filter(|version| !SUPPORTED_PROTOCOL_VERSIONS.contains(version))
+            .map(|v| v.to_string());
+        if let Some(version) = unsupported_version {
+            let response = req
+                .into_response(HttpResponse::BadRequest().body(format!(
+                    "Bad Request: Unsupported MCP-Protocol-Version: {version}"
+                )))
                 .map_into_right_body();
             return Box::pin(async move { Ok(response) });
         }
