@@ -176,6 +176,7 @@ where
         }
 
         let auth_result = req.extensions().get::<Authenticated<Claims>>().cloned();
+        let has_authorization_header = req.headers().get(header::AUTHORIZATION).is_some();
 
         let resource_metadata_url = self.resource_metadata_url.clone();
         let authenticated = match auth_result {
@@ -194,6 +195,24 @@ where
             }
             Some(a) => a,
         };
+
+        // Reject session-cookie authentication: MCP endpoints only accept Bearer
+        // tokens. If Authenticated<Claims> came from a session cookie (no
+        // Authorization header), reject to prevent CSRF — this makes the
+        // permissive CORS origin policy safe.
+        if !has_authorization_header {
+            let response = req
+                .into_response(
+                    HttpResponse::Unauthorized()
+                        .insert_header((
+                            header::WWW_AUTHENTICATE,
+                            format!("Bearer resource_metadata=\"{resource_metadata_url}\""),
+                        ))
+                        .finish(),
+                )
+                .map_into_right_body();
+            return Box::pin(async move { Ok(response) });
+        }
 
         // Validate audience for OAuth2 tokens (API key tokens without aud are still allowed)
         if let Some(ref aud) = authenticated.claims.aud {

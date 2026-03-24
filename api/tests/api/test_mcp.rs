@@ -1152,4 +1152,48 @@ mod oauth2 {
             );
         }
     }
+
+    #[rstest]
+    #[tokio::test]
+    async fn mcp_rejects_session_cookie_auth(#[future] authenticated_app: AuthenticatedApp) {
+        let app = authenticated_app.await;
+
+        // The authenticated app's client has a valid session cookie.
+        // MCP endpoints must reject session-cookie auth (CSRF safety)
+        // and only accept Bearer tokens.
+        let response = app
+            .client
+            .post(format!("{}mcp", app.app.api_address))
+            .header("Accept", "application/json, text/event-stream")
+            .json(&json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-06-18",
+                    "capabilities": {},
+                    "clientInfo": { "name": "test", "version": "1.0" }
+                }
+            }))
+            .send()
+            .await
+            .expect("Failed to execute request");
+
+        assert_eq!(
+            response.status(),
+            StatusCode::UNAUTHORIZED,
+            "MCP must reject session-cookie auth (no Authorization header)"
+        );
+        let www_auth = response
+            .headers()
+            .get("www-authenticate")
+            .expect("Missing WWW-Authenticate header");
+        assert!(
+            www_auth
+                .to_str()
+                .unwrap()
+                .starts_with("Bearer resource_metadata="),
+            "Should return WWW-Authenticate with resource_metadata"
+        );
+    }
 }

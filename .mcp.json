@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "universal-inbox-dev-mcp": {
-      "type": "http",
-      "url": "https://dev.universal-inbox.com/api/mcp"
-    }
-  }
-}
