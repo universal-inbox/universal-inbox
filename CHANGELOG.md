@@ -5,7 +5,7 @@
 ### Added
 
 - Add MCP (Model Context Protocol) server for AI agent integration
-  - Streamable HTTP transport at `/mcp` endpoint
+  - Streamable HTTP transport at `/api/mcp` endpoint
   - Tools for notification and task management (list, get, act, bulk act, create task, sync)
   - OAuth 2.1 authentication with PKCE (Dynamic Client Registration, authorization code flow, refresh token rotation)
   - OAuth 2.0 Protected Resource Metadata and Authorization Server Metadata discovery endpoints

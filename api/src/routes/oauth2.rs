@@ -1,8 +1,9 @@
-use std::sync::Arc;
+use std::{net::IpAddr, num::NonZeroU32, sync::Arc};
 
 use actix_jwt_authc::Authenticated;
 use actix_web::{HttpResponse, Scope, web};
 use anyhow::Context;
+use governor::{Quota, RateLimiter, clock::DefaultClock, state::keyed::DefaultKeyedStateStore};
 use serde::Deserialize;
 
 use universal_inbox::user::UserId;
@@ -12,8 +13,20 @@ use crate::{
     utils::jwt::Claims,
 };
 
-pub fn scope() -> Scope {
+const OAUTH2_RATE_LIMIT_PER_MINUTE: u32 = 30;
+
+type OAuth2RateLimiter = RateLimiter<IpAddr, DefaultKeyedStateStore<IpAddr>, DefaultClock>;
+
+pub fn build_rate_limiter() -> Arc<OAuth2RateLimiter> {
+    let quota = Quota::per_minute(
+        NonZeroU32::new(OAUTH2_RATE_LIMIT_PER_MINUTE).expect("rate limit must be non-zero"),
+    );
+    Arc::new(OAuth2RateLimiter::keyed(quota))
+}
+
+pub fn scope(rate_limiter: Arc<OAuth2RateLimiter>) -> Scope {
     web::scope("/oauth2")
+        .app_data(web::Data::new(rate_limiter))
         .route("/register", web::post().to(register))
         .route("/authorize", web::get().to(authorize))
         .route("/token", web::post().to(token))
@@ -50,7 +63,12 @@ pub struct TokenParams {
 pub async fn register(
     oauth2_service: web::Data<Arc<OAuth2Service>>,
     body: web::Json<RegisterClientRequest>,
+    req: actix_web::HttpRequest,
+    rate_limiter: web::Data<Arc<OAuth2RateLimiter>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
+    if let Some(response) = check_rate_limit(&req, &rate_limiter) {
+        return Ok(response);
+    }
     let service = oauth2_service.clone();
     let mut transaction = service
         .begin()
@@ -154,7 +172,12 @@ pub async fn authorize(
 pub async fn token(
     oauth2_service: web::Data<Arc<OAuth2Service>>,
     form: web::Form<TokenParams>,
+    req: actix_web::HttpRequest,
+    rate_limiter: web::Data<Arc<OAuth2RateLimiter>>,
 ) -> Result<HttpResponse, UniversalInboxError> {
+    if let Some(response) = check_rate_limit(&req, &rate_limiter) {
+        return Ok(response);
+    }
     let service = oauth2_service.clone();
     let mut transaction = service
         .begin()
@@ -225,4 +248,18 @@ pub async fn token(
     Ok(HttpResponse::Ok()
         .content_type("application/json")
         .body(serde_json::to_string(&token_response).context("Cannot serialize token response")?))
+}
+
+fn check_rate_limit(
+    req: &actix_web::HttpRequest,
+    rate_limiter: &OAuth2RateLimiter,
+) -> Option<HttpResponse> {
+    let ip = req
+        .peer_addr()
+        .map(|addr| addr.ip())
+        .unwrap_or(IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED));
+    if rate_limiter.check_key(&ip).is_err() {
+        return Some(HttpResponse::TooManyRequests().finish());
+    }
+    None
 }

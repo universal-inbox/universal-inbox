@@ -146,9 +146,18 @@ pub async fn run_server(
             jwt_authorization_header_prefixes: Some(vec!["Bearer".to_string()]),
             jwt_validator: {
                 let mut validation = Validation::new(Algorithm::EdDSA);
-                // Disable aud validation at the JWT level: OAuth2 tokens carry an
-                // `aud` claim that is validated by the MCP RequireAuthenticated
-                // middleware instead.  Session tokens omit `aud` entirely.
+                // Disable aud validation at the global JWT level because
+                // OAuth2 tokens carry an `aud` claim that the MCP
+                // RequireAuthenticated middleware validates against the
+                // resource URL — enabling it here (with no expected
+                // audience configured) would reject them before they
+                // reach that middleware.  Session tokens omit `aud`.
+                //
+                // Trade-off: an OAuth2 MCP token could technically be
+                // used on non-MCP API routes.  The MCP middleware's
+                // Bearer-only + audience checks keep MCP routes safe;
+                // a future improvement could add a similar guard on the
+                // API scope to reject tokens that carry an `aud` claim.
                 validation.validate_aud = false;
                 validation
             },
@@ -172,6 +181,7 @@ pub async fn run_server(
         task_service.clone(),
         redis_storage.clone(),
     );
+    let oauth2_rate_limiter = routes::oauth2::build_rate_limiter();
     let mcp_rate_limiter = mcp::build_rate_limiter();
 
     let server = HttpServer::new(move || {
@@ -189,7 +199,7 @@ pub async fn run_server(
             .service(routes::auth::scope())
             .service(routes::integration_connection::scope())
             .service(routes::oauth::authorize_scope())
-            .service(routes::oauth2::scope())
+            .service(routes::oauth2::scope(oauth2_rate_limiter.clone()))
             .service(routes::notification::scope())
             .service(routes::task::scope())
             .service(routes::user::scope())
@@ -316,7 +326,7 @@ pub async fn run_server(
                 web::get().to(routes::well_known::protected_resource_metadata),
             )
             .route(
-                "/.well-known/oauth-protected-resource/api/mcp",
+                &format!("/.well-known/oauth-protected-resource{}mcp", api_path),
                 web::get().to(routes::well_known::protected_resource_metadata),
             )
             .route(
