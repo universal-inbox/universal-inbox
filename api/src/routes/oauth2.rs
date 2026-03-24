@@ -247,6 +247,8 @@ pub async fn token(
 
     Ok(HttpResponse::Ok()
         .content_type("application/json")
+        .insert_header(("Cache-Control", "no-store"))
+        .insert_header(("Pragma", "no-cache"))
         .body(serde_json::to_string(&token_response).context("Cannot serialize token response")?))
 }
 
