@@ -67,7 +67,7 @@ pub fn OAuthClientsCard() -> Element {
                                 tr {
                                     th { "Client name" }
                                     th { "Scope" }
-                                    th { class: "w-32", "First authorized" }
+                                    th { class: "w-36", "First authorized" }
                                     th { class: "w-32", "Last used" }
                                     th { class: "sm:w-32 w-8", "" }
                                 }

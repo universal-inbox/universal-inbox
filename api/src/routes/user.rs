@@ -708,7 +708,10 @@ pub async fn revoke_oauth2_authorized_client(
         .await
         .context("Failed to commit while revoking OAuth2 client authorization")?;
 
-    Ok(HttpResponse::NoContent().finish())
+    Ok(HttpResponse::Ok().json(universal_inbox::SuccessResponse {
+        success: true,
+        message: "OAuth2 client authorization revoked".to_string(),
+    }))
 }
 
 pub async fn finish_passkey_authentication(
