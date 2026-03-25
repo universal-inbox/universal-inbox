@@ -89,6 +89,48 @@ impl fmt::Display for TaskSummary {
 }
 
 #[serde_as]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+pub struct TaskSummaryWithStatus {
+    pub id: TaskId,
+    pub title: String,
+    pub body: String,
+    pub status: TaskStatus,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub priority: TaskPriority,
+    pub due_at: Option<DueDate>,
+    pub tags: Vec<String>,
+    pub parent_id: Option<TaskId>,
+    pub project: String,
+    pub is_recurring: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub kind: TaskSourceKind,
+    pub user_id: UserId,
+}
+
+impl From<Task> for TaskSummaryWithStatus {
+    fn from(t: Task) -> Self {
+        Self {
+            id: t.id,
+            title: t.title,
+            body: t.body,
+            status: t.status,
+            completed_at: t.completed_at,
+            priority: t.priority,
+            due_at: t.due_at,
+            tags: t.tags,
+            parent_id: t.parent_id,
+            project: t.project,
+            is_recurring: t.is_recurring,
+            created_at: t.created_at,
+            updated_at: t.updated_at,
+            kind: t.kind,
+            user_id: t.user_id,
+        }
+    }
+}
+
+#[serde_as]
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq)]
 pub struct ProjectSummary {
     pub source_id: ProjectId,

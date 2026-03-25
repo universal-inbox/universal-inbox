@@ -13,11 +13,11 @@ use universal_inbox::{
     notification::{
         Notification, NotificationId, NotificationListOrder, NotificationSourceKind,
         NotificationStatus, NotificationSyncSourceKind, NotificationWithTask,
-        service::NotificationPatch,
+        NotificationWithTaskSummary, service::NotificationPatch,
     },
     task::{
         Task, TaskCreation, TaskCreationResult, TaskId, TaskStatus, TaskSummary,
-        TaskSyncSourceKind, service::TaskPatch,
+        TaskSummaryWithStatus, TaskSyncSourceKind, service::TaskPatch,
     },
     user::UserId,
 };
@@ -150,7 +150,7 @@ pub fn tool_definitions() -> Vec<Value> {
         json!({
             "name": "list_notifications",
             "title": "List notifications",
-            "description": "List Universal Inbox notifications without implicitly triggering synchronization.",
+            "description": "List Universal Inbox notifications (summaries without third-party details). Use get_notification for full details. Does not trigger synchronization unless trigger_sync is true.",
             "annotations": {
                 "readOnlyHint": true,
                 "idempotentHint": true
@@ -261,7 +261,7 @@ pub fn tool_definitions() -> Vec<Value> {
         json!({
             "name": "list_tasks",
             "title": "List tasks",
-            "description": "List tasks synchronized through Universal Inbox (not all tasks from underlying providers like Todoist). Does not trigger synchronization unless trigger_sync is true.",
+            "description": "List tasks synchronized through Universal Inbox (summaries without third-party details). Use get_task for full details. Does not trigger synchronization unless trigger_sync is true.",
             "annotations": {
                 "readOnlyHint": true,
                 "idempotentHint": true
@@ -374,7 +374,8 @@ pub async fn execute_tool(
                 .commit()
                 .await
                 .map_err(ToolCallError::execution)?;
-            serde_json::to_value(page)
+            let summary_page = page.map(NotificationWithTaskSummary::from);
+            serde_json::to_value(summary_page)
                 .context("Failed to serialize notifications page")
                 .map_err(ToolCallError::execution)
         }
@@ -449,9 +450,13 @@ pub async fn execute_tool(
                 .commit()
                 .await
                 .map_err(ToolCallError::execution)?;
+            let summaries: Vec<NotificationWithTaskSummary> = notifications
+                .into_iter()
+                .map(NotificationWithTaskSummary::from)
+                .collect();
             Ok(json!({
-                "count": notifications.len(),
-                "notifications": notifications
+                "count": summaries.len(),
+                "notifications": summaries
             }))
         }
         "create_task_from_notification" => {
@@ -490,9 +495,13 @@ pub async fn execute_tool(
                     .await
                     .map_err(ToolCallError::execution)?
             };
+            let summaries: Vec<NotificationWithTaskSummary> = notifications
+                .into_iter()
+                .map(NotificationWithTaskSummary::from)
+                .collect();
             Ok(json!({
-                "count": notifications.len(),
-                "notifications": notifications
+                "count": summaries.len(),
+                "notifications": summaries
             }))
         }
         "list_tasks" => {
@@ -515,7 +524,8 @@ pub async fn execute_tool(
                 .commit()
                 .await
                 .map_err(ToolCallError::execution)?;
-            serde_json::to_value(page)
+            let summary_page = page.map(TaskSummaryWithStatus::from);
+            serde_json::to_value(summary_page)
                 .context("Failed to serialize tasks page")
                 .map_err(ToolCallError::execution)
         }
@@ -579,9 +589,13 @@ pub async fn execute_tool(
                     .await
                     .map_err(ToolCallError::execution)?
             };
+            let summaries: Vec<TaskSummaryWithStatus> = results
+                .into_iter()
+                .map(|r| TaskSummaryWithStatus::from(r.task))
+                .collect();
             Ok(json!({
-                "count": results.len(),
-                "results": results
+                "count": summaries.len(),
+                "tasks": summaries
             }))
         }
         _ => Err(ToolCallError::UnknownTool(name.to_string())),

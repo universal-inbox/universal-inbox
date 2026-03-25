@@ -134,6 +134,21 @@ where
             self.total -= 1;
         }
     }
+
+    pub fn map<U, F>(self, f: F) -> Page<U>
+    where
+        U: Serialize + for<'d> Deserialize<'d>,
+        F: FnMut(T) -> U,
+    {
+        Page {
+            per_page: self.per_page,
+            pages_count: self.pages_count,
+            total: self.total,
+            previous_page_token: self.previous_page_token,
+            next_page_token: self.next_page_token,
+            content: self.content.into_iter().map(f).collect(),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Eq, Hash, Display)]
