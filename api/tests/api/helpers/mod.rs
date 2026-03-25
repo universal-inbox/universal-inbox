@@ -8,6 +8,8 @@ use tokio::sync::RwLock;
 use tracing::info;
 use wiremock::MockServer;
 
+use url::Url;
+
 use universal_inbox_api::{
     configuration::{
         AuthenticationSettings, LocalAuthenticationSettings, OIDCFlowSettings, Settings,
@@ -40,6 +42,7 @@ pub mod user;
 pub struct TestedApp {
     pub app_address: String,
     pub api_address: String,
+    pub front_base_url: Url,
     pub repository: Arc<Repository>,
     pub user_service: Arc<UserService>,
     pub task_service: Arc<RwLock<TaskService>>,
@@ -112,11 +115,13 @@ pub async fn tested_app(
 
     let app_address = format!("http://127.0.0.1:{port}");
     let api_address = format!("{app_address}{}", settings.application.api_path);
+    let front_base_url = settings.application.front_base_url.clone();
     let repository = Arc::new(Repository::new(pool.clone()));
 
     TestedApp {
         app_address,
         api_address,
+        front_base_url,
         repository,
         user_service: services.user_service,
         task_service: services.task_service,
@@ -174,11 +179,13 @@ pub async fn tested_app_with_local_auth(
 
     let app_address = format!("http://127.0.0.1:{port}");
     let api_address = format!("{app_address}{}", settings.application.api_path);
+    let front_base_url = settings.application.front_base_url.clone();
     let repository = Arc::new(Repository::new(pool.clone()));
 
     TestedApp {
         app_address,
         api_address,
+        front_base_url,
         repository,
         user_service: services.user_service,
         task_service: services.task_service,
@@ -260,11 +267,13 @@ pub async fn tested_app_with_domain_blacklist(
 
     let app_address = format!("http://127.0.0.1:{port}");
     let api_address = format!("{app_address}{}", settings.application.api_path);
+    let front_base_url = settings.application.front_base_url.clone();
     let repository = Arc::new(Repository::new(pool.clone()));
 
     TestedApp {
         app_address,
         api_address,
+        front_base_url,
         repository,
         user_service: services.user_service,
         task_service: services.task_service,

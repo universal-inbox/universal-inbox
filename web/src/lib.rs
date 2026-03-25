@@ -25,7 +25,7 @@ use services::{
     oauth2_client_service::{OAUTH2_AUTHORIZED_CLIENTS, oauth2_client_service},
     task_service::task_service,
     toast_service::{TOASTS, VIEWPORT_WIDTH, toast_service},
-    user_service::{CONNECTED_USER, user_service},
+    user_service::{AUTH_METHODS, CONNECTED_USER, user_service},
 };
 use theme::{IS_DARK_MODE, toggle_dark_mode};
 use utils::{current_location, get_local_storage};
@@ -88,6 +88,7 @@ pub fn App() -> Element {
             rx,
             api_base_url(),
             CONNECTED_USER.signal(),
+            AUTH_METHODS.signal(),
             UI_MODEL.signal(),
         )
     });
