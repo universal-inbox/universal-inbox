@@ -10,14 +10,13 @@ use serde::{Deserialize, Deserializer};
 use serde_with::{DisplayFromStr, serde_as};
 use url::Url;
 
-use universal_inbox::integration_connection::{
-    NangoProviderKey, NangoPublicKey, provider::IntegrationProviderKind,
+use universal_inbox::{
+    integration_connection::{NangoProviderKey, NangoPublicKey, provider::IntegrationProviderKind},
+    user::UserAuthKind,
 };
 
 use crate::{
-    ExecutionContext,
-    integrations::oauth2::ClientSecret,
-    universal_inbox::{UniversalInboxError, user::model::UserAuthKind},
+    ExecutionContext, integrations::oauth2::ClientSecret, universal_inbox::UniversalInboxError,
 };
 
 #[derive(Deserialize, Clone, Debug)]

@@ -25,7 +25,7 @@ use universal_inbox::{
     auth::openidconnect::OpenidConnectProvider,
     user::{
         Credentials, EmailValidationToken, Password, PasswordHash, PasswordResetToken, User,
-        UserId, UserPatch, Username,
+        UserAuthKind, UserAuthMethod, UserId, UserPatch, Username,
     },
 };
 
@@ -40,7 +40,9 @@ use crate::{
     repository::user::UserRepository,
     universal_inbox::{
         UniversalInboxError, UpdateStatus,
-        user::model::{AuthUserId, OpenIdConnectUserAuth, PasskeyUserAuth, UserAuth, UserAuthKind},
+        user::model::{
+            AuthUserId, LocalUserAuth, OpenIdConnectUserAuth, PasskeyUserAuth, UserAuth,
+        },
     },
 };
 
@@ -114,10 +116,274 @@ impl UserService {
     pub async fn fetch_all_users_and_auth(
         &self,
         executor: &mut Transaction<'_, Postgres>,
-    ) -> Result<Vec<(User, UserAuth)>, UniversalInboxError> {
+    ) -> Result<Vec<(User, Vec<UserAuth>)>, UniversalInboxError> {
         self.repository.fetch_all_users_and_auth(executor).await
     }
 
+    #[tracing::instrument(level = "debug", skip_all, fields(user.id = user_id.to_string()), err)]
+    pub async fn list_user_auth_methods(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+    ) -> Result<Vec<UserAuthMethod>, UniversalInboxError> {
+        let user_auths = self
+            .repository
+            .get_all_user_auths(executor, user_id, false)
+            .await?;
+        Ok(user_auths.iter().map(UserAuthMethod::from).collect())
+    }
+
+    // --- Auth method management (add/remove) ---
+
+    #[tracing::instrument(level = "debug", skip_all, fields(user.id = user_id.to_string()), err)]
+    pub async fn add_local_auth_method(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        password: SecretBox<Password>,
+    ) -> Result<UserAuthMethod, UniversalInboxError> {
+        if self
+            .repository
+            .get_user_auth(executor, user_id, UserAuthKind::Local)
+            .await?
+            .is_some()
+        {
+            return Err(UniversalInboxError::AlreadyExists {
+                source: None,
+                id: user_id.0,
+            });
+        }
+
+        let password_hash = self.get_new_password_hash(password)?;
+        let user_auth = UserAuth::Local(Box::new(LocalUserAuth {
+            password_hash,
+            password_reset_at: None,
+            password_reset_sent_at: None,
+        }));
+
+        let auth_method = UserAuthMethod::from(&user_auth);
+        self.repository
+            .create_user_auth(executor, user_id, user_auth)
+            .await?;
+
+        Ok(auth_method)
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = user_id.to_string(), username = username.to_string()),
+        err
+    )]
+    pub async fn start_add_passkey_auth_method(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        username: &Username,
+    ) -> Result<(CreationChallengeResponse, PasskeyRegistration), UniversalInboxError> {
+        if self
+            .repository
+            .get_user_auth(executor, user_id, UserAuthKind::Passkey)
+            .await?
+            .is_some()
+        {
+            return Err(UniversalInboxError::AlreadyExists {
+                source: None,
+                id: user_id.0,
+            });
+        }
+
+        // Check that username is not already taken by another user
+        if let Some((_, existing_user_id)) = self
+            .repository
+            .get_user_auth_by_username(executor, username)
+            .await?
+            && existing_user_id != user_id
+        {
+            return Err(UniversalInboxError::AlreadyExists {
+                source: None,
+                id: existing_user_id.0,
+            });
+        }
+
+        let (creation_challenge_response, passkey_registration) = self
+            .webauthn
+            .start_passkey_registration(user_id.0, username.0.as_str(), username.0.as_str(), None)
+            .with_context(|| format!("Failed to start Passkey registration for {username}"))?;
+
+        Ok((creation_challenge_response, passkey_registration))
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = user_id.to_string(), username = username.to_string()),
+        err
+    )]
+    pub async fn finish_add_passkey_auth_method(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        username: &Username,
+        user_id: UserId,
+        register_credentials: RegisterPublicKeyCredential,
+        passkey_registration: PasskeyRegistration,
+    ) -> Result<UserAuthMethod, UniversalInboxError> {
+        let passkey = self
+            .webauthn
+            .finish_passkey_registration(&register_credentials, &passkey_registration)
+            .with_context(|| format!("Failed to finish Passkey registration for {username}"))?;
+
+        let user_auth = UserAuth::Passkey(Box::new(PasskeyUserAuth {
+            username: username.clone(),
+            passkey,
+        }));
+
+        let auth_method = UserAuthMethod::from(&user_auth);
+        self.repository
+            .create_user_auth(executor, user_id, user_auth)
+            .await?;
+
+        Ok(auth_method)
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip_all,
+        fields(user.id = user_id.to_string(), kind = kind.to_string()),
+        err
+    )]
+    pub async fn remove_auth_method(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        kind: UserAuthKind,
+    ) -> Result<(), UniversalInboxError> {
+        // Lock the user's auth rows to prevent concurrent removals from
+        // deleting the last authentication method (TOCTOU).
+        let auth_methods = self
+            .repository
+            .get_all_user_auths(executor, user_id, true)
+            .await?;
+
+        if auth_methods.len() <= 1 {
+            return Err(UniversalInboxError::InvalidInputData {
+                source: None,
+                user_error: "Cannot remove the last authentication method".to_string(),
+            });
+        }
+
+        if !auth_methods.iter().any(|auth| auth.kind() == kind) {
+            return Err(UniversalInboxError::ItemNotFound(format!(
+                "No {kind} authentication method found for user {user_id}"
+            )));
+        }
+
+        self.repository
+            .delete_user_auth(executor, user_id, kind)
+            .await?;
+
+        Ok(())
+    }
+
+    #[tracing::instrument(level = "debug", skip_all, fields(user.id = user_id.to_string()), err)]
+    pub async fn link_oidc_auth_method(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        user_auth: UserAuth,
+    ) -> Result<UserAuthMethod, UniversalInboxError> {
+        let kind = user_auth.kind();
+
+        if !matches!(
+            &user_auth,
+            UserAuth::OIDCAuthorizationCodePKCE(_) | UserAuth::OIDCGoogleAuthorizationCode(_)
+        ) {
+            return Err(UniversalInboxError::InvalidInputData {
+                source: None,
+                user_error: format!("Cannot link non-OIDC authentication method {kind}"),
+            });
+        }
+
+        if self
+            .repository
+            .get_user_auth(executor, user_id, kind)
+            .await?
+            .is_some()
+        {
+            return Err(UniversalInboxError::AlreadyExists {
+                source: None,
+                id: user_id.0,
+            });
+        }
+
+        let auth_method = UserAuthMethod::from(&user_auth);
+        self.repository
+            .create_user_auth(executor, user_id, user_auth)
+            .await?;
+
+        Ok(auth_method)
+    }
+
+    /// Link an OIDC auth method to an existing user via the Authorization Code flow (Google).
+    #[tracing::instrument(level = "debug", skip_all, fields(user.id = user_id.to_string()), err)]
+    pub async fn link_for_auth_code_flow(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        openid_connect_settings: &OpenIDConnectSettings,
+        code: AuthorizationCode,
+        nonce: Nonce,
+    ) -> Result<UserAuthMethod, UniversalInboxError> {
+        let (_, id_token) = self
+            .fetch_access_token(openid_connect_settings, code, nonce.clone())
+            .await?;
+
+        let oidc_provider = self
+            .get_openid_connect_provider(openid_connect_settings)
+            .await?;
+        let auth_user_id = oidc_provider
+            .verify_id_token_claims(&id_token, &nonce)?
+            .subject()
+            .to_string()
+            .into();
+
+        let user_auth = UserAuth::OIDCGoogleAuthorizationCode(Box::new(OpenIdConnectUserAuth {
+            auth_user_id,
+            auth_id_token: id_token.to_string().into(),
+        }));
+
+        self.link_oidc_auth_method(executor, user_id, user_auth)
+            .await
+    }
+
+    /// Link an OIDC auth method to an existing user via the PKCE flow.
+    #[tracing::instrument(level = "debug", skip_all, fields(user.id = user_id.to_string()), err)]
+    pub async fn link_for_auth_code_pkce_flow(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        user_id: UserId,
+        openid_connect_settings: &OpenIDConnectSettings,
+        pkce_flow_settings: &OIDCAuthorizationCodePKCEFlowSettings,
+        access_token: AccessToken,
+        id_token: CoreIdToken,
+    ) -> Result<UserAuthMethod, UniversalInboxError> {
+        let mut oidc_provider = self
+            .get_openid_connect_provider(openid_connect_settings)
+            .await?;
+        let auth_user_id: AuthUserId = self
+            .verify_access_token(pkce_flow_settings, &mut oidc_provider, &access_token)
+            .await?;
+
+        let user_auth = UserAuth::OIDCAuthorizationCodePKCE(Box::new(OpenIdConnectUserAuth {
+            auth_user_id,
+            auth_id_token: id_token.to_string().into(),
+        }));
+
+        self.link_oidc_auth_method(executor, user_id, user_auth)
+            .await
+    }
+
+    #[tracing::instrument(level = "debug", skip_all, fields(user.id = user_id.to_string()), err)]
     pub async fn delete_user(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -126,12 +392,7 @@ impl UserService {
         self.repository.delete_user(executor, user_id).await
     }
 
-    #[tracing::instrument(
-        level = "debug",
-        skip_all,
-        fields(user.id = user_id.to_string()),
-        err
-    )]
+    #[tracing::instrument(level = "debug", skip_all, fields(user.id = user_id.to_string()), err)]
     pub async fn patch_user(
         &self,
         executor: &mut Transaction<'_, Postgres>,
@@ -139,7 +400,7 @@ impl UserService {
         patch: &UserPatch,
     ) -> Result<UpdateStatus<User>, UniversalInboxError> {
         // Check email domain blacklist if email is being changed
-        if let Some(ref email) = patch.email {
+        if let Some(email) = &patch.email {
             let domain = email.domain().to_lowercase();
             if let Some(rejection_message) = self
                 .application_settings
@@ -415,9 +676,17 @@ impl UserService {
 
                         let user_auth = self
                             .repository
-                            .get_user_auth(executor, user_id)
+                            .get_user_auth(
+                                executor,
+                                user_id,
+                                UserAuthKind::OIDCAuthorizationCodePKCE,
+                            )
                             .await?
-                            .ok_or_else(|| anyhow!("User with ID {user_id} not found"))?;
+                            .ok_or_else(|| {
+                                anyhow!(
+                                    "User with ID {user_id} does not have OIDCAuthorizationCodePKCE auth parameters"
+                                )
+                            })?;
                         let UserAuth::OIDCAuthorizationCodePKCE(user_auth) = &user_auth else {
                             return Err(anyhow!(
                                 "User with ID {user_id} does not have OIDCAuthorizationCodePKCE auth parameters"
@@ -936,9 +1205,13 @@ impl UserService {
                 format!("Failed to finish Passkey authentication for user {user_id}")
             })?;
 
-        let Some(user_auth) = self.repository.get_user_auth(executor, user_id).await? else {
+        let Some(user_auth) = self
+            .repository
+            .get_user_auth(executor, user_id, UserAuthKind::Passkey)
+            .await?
+        else {
             return Err(UniversalInboxError::ItemNotFound(format!(
-                "No user {user_id} found"
+                "No passkey auth found for user {user_id}"
             )));
         };
         let UserAuth::Passkey(mut passkey_user_auth) = user_auth else {

@@ -6,8 +6,8 @@ If you already have a Universal Inbox account, [log in here](https://app.univers
 
 ![The login page](images/login-page.png =350x center)
 
-```admonish note
-Universal Inbox currently supports only one authentication method per account. Support for multiple authentication methods is planned for future releases.
+```admonish tip
+You can add multiple authentication methods to your account (e.g. password + Google + passkey) from your [user profile page](https://app.universal-inbox.com/profile). See [Managing Authentication Methods](#managing-authentication-methods) for details.
 ```
 
 ## Creating a New Account
@@ -53,6 +53,26 @@ For passwordless authentication with enhanced security:
    - PIN
    - Other biometric methods supported by your device
   
+
+## Managing Authentication Methods
+
+Once your account is created, you can add or remove authentication methods from the **Authentication methods** card on your [user profile page](https://app.universal-inbox.com/profile).
+
+### Adding an Authentication Method
+
+You can add any of the following methods to your existing account:
+
+- **Password**: Click "Add password" and enter a new password (minimum 6 characters)
+- **Google**: Click "Link Google account" to associate your Google account (only available if Google authentication is enabled on the instance)
+- **Passkey**: Click "Add passkey", enter a username, and follow your device's biometric prompt
+
+### Removing an Authentication Method
+
+Each authentication method can be removed by clicking the delete icon next to it.
+
+```admonish warning
+You must always keep at least one authentication method on your account. The delete button is hidden when only one method remains.
+```
 
 ## What's Next?
 

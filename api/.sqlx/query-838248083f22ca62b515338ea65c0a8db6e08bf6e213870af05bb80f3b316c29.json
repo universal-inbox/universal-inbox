@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT\n                    kind as \"kind: _\",\n                    password_hash,\n                    password_reset_at,\n                    password_reset_sent_at,\n                    auth_user_id,\n                    auth_id_token,\n                    username,\n                    passkey as \"passkey: Json<Passkey>\",\n                    user_id\n                FROM user_auth\n                JOIN \"user\" ON user_auth.user_id = \"user\".id\n                WHERE \"user\".email = $1\n            ",
+  "query": "\n                SELECT\n                    kind as \"kind: _\",\n                    password_hash,\n                    password_reset_at,\n                    password_reset_sent_at,\n                    auth_user_id,\n                    auth_id_token,\n                    username,\n                    passkey as \"passkey: Json<Passkey>\",\n                    user_id\n                FROM user_auth\n                JOIN \"user\" ON user_auth.user_id = \"user\".id\n                WHERE \"user\".email = $1\n                  AND user_auth.kind = 'Local'::user_auth_kind\n            ",
   "describe": {
     "columns": [
       {
@@ -78,5 +78,5 @@
       false
     ]
   },
-  "hash": "caa9d5ac87b58a36db03c1707adc2ac222f54107547a4bc4710bf4d4018d5247"
+  "hash": "838248083f22ca62b515338ea65c0a8db6e08bf6e213870af05bb80f3b316c29"
 }

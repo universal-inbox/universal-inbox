@@ -97,11 +97,13 @@ impl TryFrom<FormValues> for UserPatch {
         let first_name = form_values
             .get_text("first_name")
             .filter(|s| !s.is_empty())
-            .map(|s| s.to_string());
+            .map(|s| s.to_owned());
+
         let last_name = form_values
             .get_text("last_name")
             .filter(|s| !s.is_empty())
-            .map(|s| s.to_string());
+            .map(|s| s.to_owned());
+
         let email = form_values
             .get_text("email")
             .filter(|s| !s.is_empty())
