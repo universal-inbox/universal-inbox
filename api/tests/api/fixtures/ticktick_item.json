@@ -10,7 +10,10 @@
   "timeZone": "Europe/Moscow",
   "priority": 0,
   "status": 0,
-  "tags": ["Food", "Shopping"],
+  "tags": [
+    {"name": "Food", "color": "#FF6161"},
+    "Shopping"
+  ],
   "items": [],
   "createdTime": "2019-12-11T22:36:50.000+0000",
   "modifiedTime": "2019-12-11T22:36:50.000+0000"

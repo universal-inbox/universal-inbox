@@ -318,6 +318,7 @@ pub async fn search_projects(
         .begin()
         .await
         .context("Failed to create new transaction while listing tasks")?;
+
     let task_projects: Vec<ProjectSummary> = service
         .search_projects(&mut transaction, matches, user_id, provider_kind)
         .await?;

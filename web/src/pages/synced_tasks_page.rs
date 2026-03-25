@@ -14,15 +14,11 @@ use universal_inbox::{
 };
 
 use crate::{
-    components::{
-        resizable_panel::ResizablePanel, task_preview::TaskPreview, tasks_list::TasksList,
-        welcome_hero::WelcomeHero,
-    },
+    components::{task_preview::TaskPreview, tasks_list::TasksList, welcome_hero::WelcomeHero},
     keyboard_manager::{KEYBOARD_MANAGER, KeyboardHandler},
     model::UI_MODEL,
     route::Route,
     services::task_service::{SYNCED_TASKS_PAGE, TaskCommand},
-    settings::PanelPosition,
     utils::{
         get_screen_width, open_link, scroll_element, scroll_element_by_page,
         scroll_element_into_view_by_class,
@@ -86,6 +82,7 @@ fn InternalSyncedTaskPage(task_id: ReadSignal<Option<TaskId>>) -> Element {
         );
     });
 
+    // URL → state: reconcile the selected index from the URL and the current list.
     use_effect(move || {
         if let Some(task_id) = task_id() {
             if let Some(task_index) = SORTED_SYNCED_TASKS()
@@ -102,9 +99,21 @@ fn InternalSyncedTaskPage(task_id: ReadSignal<Option<TaskId>>) -> Element {
         }
     });
 
+    // state → URL: push the URL when the user explicitly changes the selected index.
+    //
+    // Two safeguards prevent this effect from racing with the URL→state effect above
+    // on list refreshes — which would flip-flop the URL between two tasks and freeze
+    // the app:
+    //
+    // 1. The `use_memo` deduplicates `selected_task_index` changes so this effect does
+    //    NOT re-fire on every `UI_MODEL.write()` (the API layer writes
+    //    `authentication_state` on every request).
+    // 2. `SORTED_SYNCED_TASKS.peek()` reads the list without subscribing, so this
+    //    effect does NOT re-fire on list refreshes/reorders.
+    let selected_index = use_memo(move || UI_MODEL.read().selected_task_index);
     use_effect(move || {
-        if let Some(index) = UI_MODEL.read().selected_task_index {
-            if let Some((_, selected_task)) = SORTED_SYNCED_TASKS().get(index)
+        if let Some(index) = selected_index() {
+            if let Some((_, selected_task)) = SORTED_SYNCED_TASKS.peek().get(index)
                 && *task_id.peek() != Some(selected_task.task.id)
             {
                 let route = Route::SyncedTaskPage {
@@ -121,20 +130,10 @@ fn InternalSyncedTaskPage(task_id: ReadSignal<Option<TaskId>>) -> Element {
         KEYBOARD_MANAGER.write().active_keyboard_handler = None;
     });
 
-    let panel_position = UI_MODEL.read().get_details_panel_position().clone();
-    let layout_class = match panel_position {
-        PanelPosition::Right => {
-            "h-full mx-auto flex flex-row lg:px-4 lg:divide-x divide-base-content/25 relative"
-        }
-        PanelPosition::Bottom => {
-            "h-full mx-auto flex flex-col lg:px-4 lg:divide-y divide-base-content/25 relative"
-        }
-    };
-
     rsx! {
         div {
             id: "tasks-page",
-            class: "{layout_class}",
+            class: "flex h-full",
             onmounted: move |_| {
                 KEYBOARD_MANAGER.write().active_keyboard_handler = Some(&KEYBOARD_HANDLER);
             },
@@ -142,18 +141,16 @@ fn InternalSyncedTaskPage(task_id: ReadSignal<Option<TaskId>>) -> Element {
             if SORTED_SYNCED_TASKS().is_empty() {
                 WelcomeHero { inbox_zero_message: "Your synchronized tasks will appear here when they arrive." }
             } else {
-                div {
-                    class: match panel_position {
-                        PanelPosition::Right => "h-full flex-1 max-lg:w-full max-lg:absolute",
-                        PanelPosition::Bottom => "flex-1 max-lg:w-full max-lg:absolute overflow-y-auto",
-                    },
-
-                    TasksList { tasks: SORTED_SYNCED_TASKS.signal() }
-                }
+                TasksList { tasks: SORTED_SYNCED_TASKS.signal() }
 
                 if let Some(index) = UI_MODEL.read().selected_task_index {
                     if let Some((_, task)) = SORTED_SYNCED_TASKS().get(index) {
-                        ResizablePanel {
+                        div {
+                            // Mirrors `notifications_page.rs`: shell stays in
+                            // CSS, mobile show/hide is driven by Tailwind
+                            // `max-md:` + `[.app-layout.show-detail_&]:` variants
+                            // with `!important` (`!` suffix) to win the cascade.
+                            class: "detail-panel max-md:hidden! max-md:[.app-layout.show-detail_&]:flex! max-md:[.app-layout.show-detail_&]:flex-1!",
                             TaskPreview {
                                 task: task.task.clone(),
                                 expand_details: UI_MODEL.read().preview_cards_expanded,
@@ -252,7 +249,6 @@ impl Eq for TaskWithOrder {}
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
 enum CompareBy {
-    #[allow(dead_code)]
     Priority,
     #[allow(dead_code)]
     DueAt,

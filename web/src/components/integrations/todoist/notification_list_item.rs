@@ -1,20 +1,19 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
-use dioxus_free_icons::{Icon, icons::bs_icons::BsCardChecklist};
 
 use universal_inbox::{
-    HasHtmlUrl,
-    notification::NotificationWithTask,
-    third_party::integrations::todoist::{TodoistItem, TodoistItemPriority},
+    notification::{NotificationStatus, NotificationWithTask},
+    third_party::integrations::todoist::TodoistItem,
 };
 
 use crate::{
     components::{
-        Tag, TagDisplay,
-        integrations::todoist::{icons::Todoist, list_item::TodoistListItemSubtitle},
-        list::{ListContext, ListItem},
-        notifications_list::{TaskHint, get_notification_list_item_action_buttons},
+        integrations::todoist::{
+            icons::Todoist, list_item::TodoistListItemSubtitle, preview::todoist_priority_level,
+        },
+        list::ListItem,
+        priority_field::priority_color_class,
     },
     utils::format_elapsed_time,
 };
@@ -27,45 +26,33 @@ pub fn TodoistNotificationListItem(
     on_select: EventHandler<()>,
 ) -> Element {
     let notification_updated_at = use_memo(move || format_elapsed_time(notification().updated_at));
-    let list_context = use_context::<Memo<ListContext>>();
-    let task_icon_style = match todoist_item().priority {
-        TodoistItemPriority::P1 => "",
-        TodoistItemPriority::P2 => "text-yellow-500",
-        TodoistItemPriority::P3 => "text-orange-500",
-        TodoistItemPriority::P4 => "text-red-500",
+    let is_unread = notification().status == NotificationStatus::Unread;
+    let priority = todoist_item().priority;
+    let meta_icon_color_class = priority_color_class(todoist_priority_level(priority));
+    let meta_icon_class = if todoist_item().checked {
+        "icon-[lucide--check-circle] w-full h-full"
+    } else {
+        "icon-[lucide--circle] w-full h-full"
     };
-    let link = notification().get_html_url();
 
     rsx! {
         ListItem {
             key: "{notification().id}",
+            linked_task: notification().task,
             title: "{notification().title}",
-            subtitle: rsx! { TodoistListItemSubtitle { todoist_item } },
-            link,
+            subtitle: rsx! {
+                TodoistListItemSubtitle { todoist_item }
+            },
+            time: "{notification_updated_at}",
             icon: rsx! {
                 Todoist { class: "h-5 w-5" },
-                TaskHint { task: notification().task }
             },
-            subicon: rsx! {
-                Icon { class: "h-5 w-5 min-w-5 {task_icon_style}", icon: BsCardChecklist }
+            meta_icon: rsx! {
+                span { class: "{meta_icon_class} {meta_icon_color_class}" }
             },
-            action_buttons: get_notification_list_item_action_buttons(
-                notification,
-                list_context().show_shortcut,
-                None,
-                None
-            ),
             is_selected,
+            is_unread,
             on_select,
-
-            for tag in todoist_item()
-                .labels
-                .iter()
-                .map(|label| Into::<Tag>::into(label.clone())) {
-                    TagDisplay { tag }
-                }
-
-            span { class: "text-base-content/50 whitespace-nowrap text-xs font-mono", "{notification_updated_at}" }
         }
     }
 }

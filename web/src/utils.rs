@@ -93,21 +93,6 @@ pub fn get_local_storage() -> Result<web_sys::Storage> {
         .context("No local storage available")
 }
 
-pub fn compute_text_color_from_background_color(color: &str) -> String {
-    let color = color.trim_start_matches('#');
-    let r = u8::from_str_radix(&color[0..2], 16).unwrap();
-    let g = u8::from_str_radix(&color[2..4], 16).unwrap();
-    let b = u8::from_str_radix(&color[4..6], 16).unwrap();
-
-    let luminance = (0.299 * r as f32 + 0.587 * g as f32 + 0.114 * b as f32) / 255.0;
-
-    if luminance > 0.5 {
-        "text-black".to_string()
-    } else {
-        "text-white".to_string()
-    }
-}
-
 pub fn open_link(url: &str) -> Result<Window> {
     let window = web_sys::window().context("Unable to get the window object")?;
     window
@@ -137,6 +122,12 @@ pub fn scroll_element(id: &str, by: f64) -> Result<()> {
     scroll_options.set_behavior(ScrollBehavior::Smooth);
     scroll_options.set_top(by);
     elt.scroll_by_with_scroll_to_options(&scroll_options);
+    Ok(())
+}
+
+pub fn reset_scroll_top(id: &str) -> Result<()> {
+    let elt = get_element_by_id(id)?;
+    elt.set_scroll_top(0);
     Ok(())
 }
 
@@ -217,6 +208,28 @@ pub fn scroll_element_into_view_by_class(
     Ok(())
 }
 
+/// Replace `[label](url)` markdown links with just their label text. The
+/// preview header takes a plain `String` for the title, so when a title
+/// originates from Slack message text (which can contain markdown links)
+/// we need to render only the visible label.
+pub fn strip_markdown_links(text: &str) -> String {
+    static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let re = RE.get_or_init(|| regex::Regex::new(r"\[([^\]]+)\]\([^)]+\)").unwrap());
+    re.replace_all(text, "$1").into_owned()
+}
+
+/// Absolute timestamp like `Sep 16, 2023, 9:00 PM` — used as the `title`
+/// tooltip on the relative-time badge in `ThreadedMessage`.
+pub fn format_absolute_time(dt: DateTime<Utc>) -> String {
+    dt.format("%b %-d, %Y, %-I:%M %p").to_string()
+}
+
+/// Wall-clock time like `9:00 PM` — used by `ThreadedMessageFollowup` to show
+/// the per-message time inline without repeating the date.
+pub fn format_clock_time(dt: DateTime<Utc>) -> String {
+    dt.format("%-I:%M %p").to_string()
+}
+
 pub fn format_elapsed_time(updated_at: DateTime<Utc>) -> String {
     let now = Local::now().with_timezone(&Utc);
     let duration = now.signed_duration_since(updated_at);
@@ -228,46 +241,27 @@ pub fn format_elapsed_time(updated_at: DateTime<Utc>) -> String {
     }
 
     if total_seconds < 60 {
-        if total_seconds == 1 {
-            "1 second ago".to_string()
-        } else {
-            format!("{} seconds ago", total_seconds)
-        }
+        format!("{}s", total_seconds)
     } else if total_seconds < 3600 {
         let minutes = total_seconds / 60;
-        if minutes == 1 {
-            "1 minute ago".to_string()
-        } else {
-            format!("{} minutes ago", minutes)
-        }
+        format!("{}m", minutes)
     } else if total_seconds < 86400 {
         let hours = total_seconds / 3600;
-        if hours == 1 {
-            "1 hour ago".to_string()
-        } else {
-            format!("{} hours ago", hours)
-        }
-    } else if total_seconds < 2592000 {
+        format!("{}h", hours)
+    } else if total_seconds < 172800 {
+        "Yesterday".to_string()
+    } else if total_seconds < 604800 {
         let days = total_seconds / 86400;
-        if days == 1 {
-            "1 day ago".to_string()
-        } else {
-            format!("{} days ago", days)
-        }
+        format!("{}d", days)
+    } else if total_seconds < 2592000 {
+        let weeks = total_seconds / 604800;
+        format!("{}w", weeks)
     } else if total_seconds < 31536000 {
         let months = total_seconds / 2592000;
-        if months == 1 {
-            "1 month ago".to_string()
-        } else {
-            format!("{} months ago", months)
-        }
+        format!("{}mo", months)
     } else {
         let years = total_seconds / 31536000;
-        if years == 1 {
-            "1 year ago".to_string()
-        } else {
-            format!("{} years ago", years)
-        }
+        format!("{}y", years)
     }
 }
 
@@ -282,25 +276,13 @@ mod tests {
         let now = Utc::now();
 
         assert_eq!(format_elapsed_time(now), "now");
-        assert_eq!(
-            format_elapsed_time(now - Duration::seconds(30)),
-            "30 seconds ago"
-        );
-        assert_eq!(
-            format_elapsed_time(now - Duration::seconds(1)),
-            "1 second ago"
-        );
-        assert_eq!(
-            format_elapsed_time(now - Duration::minutes(5)),
-            "5 minutes ago"
-        );
-        assert_eq!(
-            format_elapsed_time(now - Duration::minutes(1)),
-            "1 minute ago"
-        );
-        assert_eq!(format_elapsed_time(now - Duration::hours(2)), "2 hours ago");
-        assert_eq!(format_elapsed_time(now - Duration::hours(1)), "1 hour ago");
-        assert_eq!(format_elapsed_time(now - Duration::days(3)), "3 days ago");
-        assert_eq!(format_elapsed_time(now - Duration::days(1)), "1 day ago");
+        assert_eq!(format_elapsed_time(now - Duration::seconds(30)), "30s");
+        assert_eq!(format_elapsed_time(now - Duration::seconds(1)), "1s");
+        assert_eq!(format_elapsed_time(now - Duration::minutes(5)), "5m");
+        assert_eq!(format_elapsed_time(now - Duration::minutes(1)), "1m");
+        assert_eq!(format_elapsed_time(now - Duration::hours(2)), "2h");
+        assert_eq!(format_elapsed_time(now - Duration::hours(1)), "1h");
+        assert_eq!(format_elapsed_time(now - Duration::days(3)), "3d");
+        assert_eq!(format_elapsed_time(now - Duration::days(1)), "Yesterday");
     }
 }

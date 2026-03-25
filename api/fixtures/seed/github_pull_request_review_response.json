@@ -1,0 +1,102 @@
+{
+  "data": {
+    "repository": {
+      "pullRequest": {
+        "id": "PR_kwAOuni292",
+        "number": 292,
+        "url": "https://github.com/universal-inbox/universal-inbox/pull/292",
+        "titleHTML": "Cache Linear viewer query for 60s to cut sync cost",
+        "bodyHTML": "<h2>Why</h2><p>The Linear viewer query fires on every sync tick (~5/min per user). 92% of those queries return identical data. Adding a small in-memory TTL cache cuts the call volume by ~85% in our staging trace.</p><h2>What</h2><ul><li>New <code>cached_viewer</code> helper using <code>moka</code>, 60s TTL.</li><li>Cache key = user id; cache value = the parsed viewer struct.</li><li>Invalidates on connection re-auth.</li></ul><h2>Risks</h2><blockquote><p>Stale viewer data for up to 60s — acceptable for our use case, but flagging for awareness.</p></blockquote>",
+        "labels": {
+          "nodes": [
+            {
+              "name": "performance",
+              "color": "FBCA04"
+            },
+            {
+              "name": "backend",
+              "color": "5319E7"
+            }
+          ]
+        },
+        "comments": {
+          "totalCount": 1
+        },
+        "commits": {
+          "nodes": [
+            {
+              "commit": {
+                "oid": "a17e92cc",
+                "checkSuites": {
+                  "nodes": [
+                    {
+                      "conclusion": "SUCCESS",
+                      "status": "COMPLETED",
+                      "checkRuns": {
+                        "nodes": []
+                      },
+                      "workflowRun": null,
+                      "app": {
+                        "name": "GitHub Actions",
+                        "url": "https://github.com/features/actions",
+                        "logoUrl": "https://avatars.githubusercontent.com/in/15368?v=4"
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "totalCount": 2
+        },
+        "baseRefName": "main",
+        "baseRepository": {
+          "nameWithOwner": "universal-inbox/universal-inbox",
+          "url": "https://github.com/universal-inbox/universal-inbox"
+        },
+        "headRefName": "perf/cache-linear-viewer",
+        "headRepository": {
+          "nameWithOwner": "universal-inbox/universal-inbox",
+          "url": "https://github.com/universal-inbox/universal-inbox"
+        },
+        "author": {
+          "__typename": "User",
+          "avatarUrl": "https://avatars.githubusercontent.com/u/14256",
+          "login": "danielwong",
+          "name": "Daniel Wong"
+        },
+        "assignees": {
+          "nodes": []
+        },
+        "reviewDecision": "REVIEW_REQUIRED",
+        "reviews": {
+          "nodes": []
+        },
+        "reviewRequests": {
+          "nodes": [
+            {
+              "requestedReviewer": {
+                "__typename": "User",
+                "userAvatarUrl": "https://avatars.githubusercontent.com/u/9821",
+                "userLogin": "sara-park",
+                "userName": "Sara Park"
+              }
+            }
+          ]
+        },
+        "state": "OPEN",
+        "isDraft": false,
+        "closedAt": null,
+        "createdAt": "{{ago_1d}}",
+        "updatedAt": "{{ago_2h}}",
+        "mergeable": "MERGEABLE",
+        "mergedAt": null,
+        "mergeStateStatus": "CLEAN",
+        "mergedBy": null,
+        "deletions": 12,
+        "additions": 87,
+        "changedFiles": 4
+      }
+    }
+  }
+}

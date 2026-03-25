@@ -43,10 +43,10 @@ run *command="serve --embed-async-workers": ensure-db
     cargo run --color always -- {{ command }}
 
 run-api: ensure-db
-    watchexec --stop-timeout 10 --debounce 500 --exts toml,rs --restart --watch src cargo run --color always -- serve
+    exec watchexec --stop-timeout 10 --debounce 500 --exts toml,rs --restart --watch src cargo run --color always -- serve
 
 run-workers: ensure-db
-    watchexec --stop-timeout 10 --debounce 500 --exts toml,rs --restart --watch src cargo run --color always -- start-workers
+    exec watchexec --stop-timeout 10 --debounce 500 --exts toml,rs --restart --watch src cargo run --color always -- start-workers
 
 sync-tasks $RUST_LOG="info":
     cargo run -- sync-tasks
@@ -68,6 +68,20 @@ reset-password user-email:
 
 generate-user:
     cargo run -- test generate-user
+
+generate-empty-user:
+    cargo run -- test generate-empty-user
+
+connect-integration user-id provider:
+    cargo run -- test connect-integration --user-id {{user-id}} --provider {{provider}}
+
+generate-doc-screenshots base-url="http://localhost:8080" output-dir="../doc/src" *flags="":
+    cargo run --features screenshots -- test generate-doc-screenshots \
+        --base-url={{base-url}} --output-dir={{output-dir}} {{flags}}
+
+record-landing-screencast output="./screen.webm" base-url="http://localhost:8080" *flags="":
+    cargo run --features screenshots -- test record-landing-screencast \
+        --base-url={{base-url}} --output={{output}} {{flags}}
 
 anonymize-db:
     cargo run -- test anonymize-db

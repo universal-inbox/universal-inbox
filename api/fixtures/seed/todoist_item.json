@@ -1,0 +1,32 @@
+{
+    "id": "1123",
+    "parent_id": null,
+    "project_id": "1111",
+    "sync_id": "1234567890",
+    "section_id": "7025",
+    "content": "Ship v0.5: notification grouping in inbox",
+    "description": "Cut the release once Daniel's review is in. Don't forget to bump CHANGELOG and tag the build.",
+    "labels": [
+        { "name": "release", "color": "berry_red" },
+        { "name": "engineering", "color": "blue" }
+    ],
+    "child_order": 1,
+    "day_order": -1,
+    "priority": 4,
+    "checked": false,
+    "is_deleted": false,
+    "is_collapsed": false,
+    "completed_at": null,
+    "added_at": "{{ago_2d}}",
+    "due": {
+        "string": "in 3 days",
+        "date": "{{date_in_3d}}",
+        "is_recurring": false,
+        "lang": "en",
+        "timezone": null
+    },
+    "user_id": "2671355",
+    "added_by_uid": "2671355",
+    "assigned_by_uid": "2671355",
+    "responsible_uid": "2671355"
+}

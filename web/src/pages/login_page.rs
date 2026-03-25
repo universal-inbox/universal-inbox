@@ -10,12 +10,13 @@ use universal_inbox::{FrontAuthenticationConfig, user::Password};
 use crate::{
     auth::authenticate_authorization_code_flow,
     components::{
-        floating_label_inputs::FloatingLabelInputText, loading::Loading,
-        universal_inbox_title::UniversalInboxTitle,
+        auth_widgets::{AuthDivider, GoogleBtn, LegalFooter, PasskeyBtn, PrimaryBtn},
+        floating_label_inputs::FloatingLabelInputText,
+        loading::Loading,
+        ui::PageHeader,
     },
     config::{APP_CONFIG, get_api_base_url},
     form::FormValues,
-    icons::{GOOGLE_LOGO, PASSKEY_LOGO},
     route::Route,
     services::user_service::{CONNECTED_USER, UserCommand},
 };
@@ -54,130 +55,112 @@ pub fn LoginPage() -> Element {
         .any(|auth_config| matches!(auth_config, FrontAuthenticationConfig::Passkey));
 
     rsx! {
-        div {
-            class: "flex flex-col items-center justify-center pb-8",
-            h1 {
-                class: "text-lg font-bold",
-                span { "Login to " }
-                UniversalInboxTitle {}
+        PageHeader {
+            title: "Welcome back".to_string(),
+            subtitle: Some("Log in to your inbox.".to_string()),
+        }
+        p { class: "text-sm text-ui-base-muted leading-normal mb-7",
+            "New here? "
+            Link {
+                class: "text-ui-primary font-semibold no-underline hover:text-ui-primary-hover hover:underline",
+                to: Route::SignupPage {},
+                "Create an account"
             }
+            "."
         }
 
-        div {
-            class: "flex flex-col gap-4 pb-8",
+        if is_local_auth_enabled {
+            form {
+                "novalidate": "true",
+                onsubmit: move |evt| {
+                    evt.prevent_default();
+                    match FormValues(evt.values()).try_into() {
+                        Ok(credentials) => {
+                            user_service.send(UserCommand::Login(credentials));
+                        },
+                        Err(err) => {
+                            *force_validation.write() = true;
+                            error!("Failed to parse form values as Credentials: {err}");
+                        }
+                    }
+                },
 
-            if is_local_auth_enabled {
-                form {
-                    class: "flex flex-col justify-center gap-4 px-10",
-                    onsubmit: move |evt| {
-                        evt.prevent_default();
-                        match FormValues(evt.values()).try_into() {
-                            Ok(credentials) => {
-                                user_service.send(UserCommand::Login(credentials));
-                            },
-                            Err(err) => {
-                                *force_validation.write() = true;
-                                error!("Failed to parse form values as Credentials: {err}");
-                            }
+                FloatingLabelInputText::<EmailAddress> {
+                    name: "email".to_string(),
+                    label: Some("Email".to_string()),
+                    required: true,
+                    value: email,
+                    autofocus: true,
+                    force_validation: force_validation(),
+                    r#type: "email".to_string(),
+                    field_icon_class: "icon-[lucide--mail]".to_string(),
+                    placeholder: "you@company.com".to_string(),
+                }
+
+                FloatingLabelInputText::<Password> {
+                    name: "password".to_string(),
+                    label: Some("Password".to_string()),
+                    required: true,
+                    value: password,
+                    force_validation: force_validation(),
+                    r#type: "password".to_string(),
+                    field_icon_class: "icon-[lucide--lock]".to_string(),
+                    placeholder: "Enter your password".to_string(),
+                    aside: rsx! {
+                        Link {
+                            class: "text-xs font-semibold text-ui-primary normal-case tracking-normal hover:text-ui-primary-hover hover:underline",
+                            to: Route::PasswordResetPage {},
+                            tabindex: "-1",
+                            "Forgot?"
                         }
                     },
+                }
 
-                    FloatingLabelInputText::<EmailAddress> {
-                        name: "email".to_string(),
-                        label: Some("Email".to_string()),
-                        required: true,
-                        value: email,
-                        autofocus: true,
-                        force_validation: force_validation(),
-                        r#type: "email".to_string()
-                    }
-
-                    FloatingLabelInputText::<Password> {
-                        name: "password".to_string(),
-                        label: Some("Password".to_string()),
-                        required: true,
-                        value: password,
-                        force_validation: force_validation(),
-                        r#type: "password".to_string()
-                    }
-
-                    div {
-                        class: "flex items-center justify-end",
-                        div {
-                            class: "label",
-                            Link {
-                                class: "link-hover link link-primary label-text-alt",
-                                to: Route::PasswordResetPage {},
-                                "Forgot password?"
-                            }
-                        }
-                    }
-
-                    button {
-                        class: "btn btn-primary",
-                        r#type: "submit",
-                        "Log in"
+                div {
+                    class: "flex justify-between items-center mt-1 mb-5",
+                    label { class: "checkbox-row",
+                        input { r#type: "checkbox", checked: true, tabindex: "-1" }
+                        span { "Keep me signed in" }
                     }
                 }
 
-                if is_google_auth_enabled || is_passkey_auth_enabled {
-                    div { class: "divider px-10", "Or" }
-                }
+                PrimaryBtn { button_type: "submit".to_string(), "Log in" }
+            }
 
+            if is_google_auth_enabled || is_passkey_auth_enabled {
+                AuthDivider { label: "or continue with".to_string() }
+            }
+
+            div { class: "grid grid-cols-1 gap-2.5",
                 if is_google_auth_enabled {
-                    div {
-                        class: "flex flex-col px-10",
-
-                        button {
-                            class: "btn btn-primary w-full relative",
-                            onclick: move |_| {
-                                spawn({
-                                    async move {
-                                        if let Err(auth_error) =
-                                            authenticate_authorization_code_flow(&api_base_url()).await
-                                        {
-                                            error!("An error occured while authenticating: {:?}", auth_error);
-                                        }
+                    GoogleBtn {
+                        onclick: move |_| {
+                            spawn({
+                                async move {
+                                    if let Err(auth_error) =
+                                        authenticate_authorization_code_flow(&api_base_url()).await
+                                    {
+                                        error!("An error occured while authenticating: {:?}", auth_error);
                                     }
-                                });
-                            },
-
-                            img {
-                                class: "h-8 w-8 bg-white rounded-md absolute left-2",
-                                src: "{GOOGLE_LOGO}",
-                            }
-                            "Sign in with Google"
-                        }
+                                }
+                            });
+                        },
+                        "Continue with Google"
                     }
                 }
-
                 if is_passkey_auth_enabled {
-                    div {
-                        class: "flex flex-col px-10",
-
-                        Link {
-                            class: "btn btn-primary w-full relative",
-                            to: Route::PasskeyLoginPage {},
-
-                            img {
-                                class: "h-8 w-8 bg-white rounded-md absolute left-2",
-                                src: "{PASSKEY_LOGO}",
-                            }
-                            "Sign in with a passkey"
-                        }
-                    }
+                    PasskeyBtn { to: Route::PasskeyLoginPage {}, "Sign in with a passkey" }
                 }
             }
 
-            div {
-                class: "text-base px-10",
-                span { "New to " }
-                UniversalInboxTitle {}
-                span { "? " }
+            LegalFooter {}
+        } else {
+            div { class: "mt-auto pt-6 text-center text-xs text-ui-base-muted",
+                "New here? "
                 Link {
-                    class: "link-hover link link-primary",
+                    class: "text-ui-primary font-semibold no-underline hover:text-ui-primary-hover hover:underline",
                     to: Route::SignupPage {},
-                    "Create new account"
+                    "Create an account"
                 }
             }
         }

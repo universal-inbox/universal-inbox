@@ -158,6 +158,13 @@ vec1 = { workspace = true }
 wiremock = "0.6.0"
 webauthn-rs = { workspace = true, features = ["danger-allow-state-serialisation"] }
 reqwest-retry = "0.9.0"
+playwright-rs = { version = "0.8.3", optional = true }
+
+[features]
+default = []
+# Enables the `test generate-doc-screenshots` CLI subcommand used by
+# `just doc update-screenshots` to regenerate documentation screenshots.
+screenshots = ["dep:playwright-rs"]
 
 [dev-dependencies]
 lzma-rust2 = "0.15.7"

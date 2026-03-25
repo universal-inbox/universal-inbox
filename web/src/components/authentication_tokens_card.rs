@@ -4,19 +4,19 @@ use std::ops::Deref;
 
 use chrono::{DateTime, Utc};
 use dioxus::prelude::*;
-use dioxus_free_icons::{
-    Icon,
-    icons::{
-        bs_icons::{BsKey, BsShieldLock, BsTrash},
-        go_icons::GoCopy,
-    },
-};
 
 use secrecy::ExposeSecret;
 use universal_inbox::auth::auth_token::AuthenticationTokenId;
 
 use crate::{
-    components::{loading::Loading, spinner::Spinner},
+    components::{
+        loading::Loading,
+        spinner::Spinner,
+        ui::{
+            Button, ButtonVariant, Card, CardEmptyState, CardHeader, CardMeta, CardRight,
+            CardVariant,
+        },
+    },
     model::LoadState,
     services::authentication_token_service::{
         AUTHENTICATION_TOKENS, AuthenticationTokenCommand, CREATED_AUTHENTICATION_TOKEN,
@@ -38,63 +38,60 @@ pub fn AuthenticationTokensCard() -> Element {
 
     let Some(authentication_tokens) = AUTHENTICATION_TOKENS.read().clone() else {
         return rsx! {
-            div {
-                class: "card w-full bg-base-200",
+            Card { variant: CardVariant::ApiKeys,
                 Loading { label: "Loading API keys..." }
             }
         };
     };
 
     rsx! {
-        div {
-            class: "card w-full bg-base-200",
+        section {
+            role: "region",
+            aria_label: "API keys",
 
-            div {
-                class: "card-body",
-                div {
-                    class: "flex flex-col gap-2",
+            Card { variant: CardVariant::ApiKeys,
+                CardHeader {
+                    span { class: "icon-[lucide--shield-check] size-5" }
+                    CardMeta { name: "Authentication tokens" }
 
-                    div {
-                        class: "flex flex-col sm:flex-row justify-between items-center",
-                        div {
-                            class: "card-title flex flex-row items-center",
-                            figure { class: "p-2", Icon { class: "w-8 h-8", icon: BsShieldLock } }
-                            "API keys"
-                        }
-
+                    CardRight {
                         match CREATED_AUTHENTICATION_TOKEN.read().deref() {
                             LoadState::Loading => rsx! {
-                                div {
-                                    class: "btn btn-primary btn-sm btn-disabled",
+                                Button {
+                                    variant: ButtonVariant::Primary,
+                                    disabled: true,
                                     Spinner { class: "w-4 h-4" }
                                     "Creating new API key..."
                                 }
                             },
-                            _  => rsx! {
-                                button {
-                                    class: "btn btn-primary btn-sm",
+                            _ => rsx! {
+                                Button {
+                                    variant: ButtonVariant::Primary,
+                                    icon_class: "icon-[lucide--key]".to_string(),
                                     onclick: move |_| {
                                         authentication_token_service.send(AuthenticationTokenCommand::CreateAuthenticationToken);
                                     },
-                                    Icon { class: "w-4 h-4", icon: BsKey }
                                     "Create new API key"
                                 }
                             }
                         }
                     }
+                }
 
-                    p {
-                        class: "text-sm text-base-content/70",
-                        "Use API keys with Raycast, Claude Desktop, Claude Code, ChatGPT-compatible MCP setups, and other Universal Inbox integrations."
+                if authentication_tokens.is_empty() && !matches!(CREATED_AUTHENTICATION_TOKEN.read().deref(), LoadState::Loaded(_) | LoadState::Error(_)) {
+                    CardEmptyState {
+                        icon_class: "icon-[lucide--key-round]".to_string(),
+                        title: "No API keys yet".to_string(),
+                        description: "Create one to authenticate with the Universal Inbox API.".to_string(),
                     }
-
+                } else {
                     table {
-                        class: "table table-xs sm:table-sm table-fixed",
+                        class: "api-keys-table max-md:block max-md:overflow-x-auto",
                         thead {
                             tr {
-                                th { class: "w-32", "Expiration date" }
+                                th { style: "width: 25%;", "Expiration date" }
                                 th { "Key" }
-                                th { class: "sm:w-32 w-8", "" }
+                                th { style: "width: 20%;", aria_label: "Actions", "" }
                             }
                         }
                         tbody {
@@ -109,7 +106,7 @@ pub fn AuthenticationTokensCard() -> Element {
                                 },
                                 LoadState::Error(error) => rsx! {
                                     tr {
-                                        td { colspan: "4", "Failed to create a new API key: {error}" }
+                                        td { colspan: "3", "Failed to create a new API key: {error}" }
                                     }
                                 },
                                 _ => rsx! {}
@@ -138,18 +135,11 @@ pub fn AuthenticationToken(
     is_copiable: bool,
 ) -> Element {
     let mut is_copied = use_signal(|| false);
-    let (line_class, td_class) = if is_copiable {
-        (
-            "bg-success/50 text-success-content ring-2 ring-success/50 ring-offset-2 rounded-md",
-            "my-0",
-        )
-    } else {
-        ("", "my-2")
-    };
+    let row_class = if is_copiable { "token-new" } else { "" };
 
     rsx! {
         tr {
-            class: "{line_class}",
+            class: "{row_class}",
 
             if let Some(expire_at) = expire_at {
                 td { r#"{expire_at.date_naive().format("%Y-%m-%d")}"# }
@@ -158,39 +148,37 @@ pub fn AuthenticationToken(
             }
 
             td {
-                p { class: "truncate", "{jwt_token}" }
+                span { class: "block font-mono text-[11px] text-ui-base-muted truncate", "{jwt_token}" }
             }
 
             td {
-                class: "flex gap-2 justify-center items-center h-8 {td_class}",
-
-                if !is_copiable {
-                    button {
-                        class: "btn btn-sm btn-error btn-disabled hidden sm:block",
-                        onclick: move |_| {},
-                        "Revoke"
-                    }
-                    button {
-                        class: "btn btn-sm btn-error btn-disabled sm:hidden",
-                        onclick: move |_| {},
-                        Icon { class: "w-4 h-4", icon: BsTrash }
-                    }
-                } else if is_copied() {
-                    div {
-                        class: "badge badge-outline badge-ghost badge-sm",
-                        "Copied!"
-                    }
-                } else {
-                    button {
-                        class: "btn btn-text btn-sm",
-                        onclick: move |_| {
-                            let jwt_token = jwt_token.clone();
-                            async move {
-                                copy_to_clipboard(&jwt_token).await.unwrap();
-                                *is_copied.write() = true;
-                            }
-                        },
-                        Icon { class: "w-4 h-4", icon: GoCopy }
+                div {
+                    class: "flex items-center justify-end gap-1",
+                    if !is_copiable {
+                        Button {
+                            variant: ButtonVariant::Danger,
+                            disabled: true,
+                            icon_class: "icon-[lucide--trash-2]".to_string(),
+                            "Revoke"
+                        }
+                    } else if is_copied() {
+                        span {
+                            class: "inline-flex items-center gap-1 px-2 py-0.5 rounded-ui-pill text-xs font-medium border border-ui-border text-ui-base-muted",
+                            "Copied!"
+                        }
+                    } else {
+                        Button {
+                            variant: ButtonVariant::Primary,
+                            icon_class: "icon-[lucide--copy]".to_string(),
+                            onclick: move |_| {
+                                let jwt_token = jwt_token.clone();
+                                async move {
+                                    copy_to_clipboard(&jwt_token).await.unwrap();
+                                    *is_copied.write() = true;
+                                }
+                            },
+                            "Copy"
+                        }
                     }
                 }
             }

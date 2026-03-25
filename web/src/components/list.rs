@@ -3,32 +3,21 @@
 use std::fmt::Display;
 
 use dioxus::prelude::*;
-use dioxus_free_icons::{Icon, icons::bs_icons::BsArrowUpRightSquare};
 use serde::{Deserialize, Serialize};
-use url::Url;
 
-use universal_inbox::{Page, PageToken};
+use universal_inbox::{Page, PageToken, task::Task};
 
 use crate::components::{
-    flyonui::tooltip::{Tooltip, TooltipPlacement},
+    integrations::icons::TaskIcon,
     markdown::Markdown,
+    ui::button::{Button, ButtonVariant},
 };
 
-#[derive(Clone, PartialEq)]
-pub struct ListContext {
-    pub show_shortcut: bool,
-}
-
 #[component]
-pub fn List(id: String, show_shortcut: ReadSignal<bool>, children: Element) -> Element {
-    let context = use_memo(move || ListContext {
-        show_shortcut: show_shortcut(),
-    });
-    use_context_provider(move || context);
-
+pub fn List(id: String, children: Element) -> Element {
     rsx! {
-        table {
-            class: "table table-pin-rows w-full h-max-full",
+        div {
+            class: "w-full h-max-full",
 
             { children }
         }
@@ -39,186 +28,73 @@ pub fn List(id: String, show_shortcut: ReadSignal<bool>, children: Element) -> E
 pub fn ListItem(
     title: ReadSignal<String>,
     subtitle: ReadSignal<Element>,
-    link: ReadSignal<Url>,
+    time: ReadSignal<String>,
     icon: Option<Element>,
-    subicon: Option<Element>,
+    meta_icon: Option<Element>,
     is_selected: ReadSignal<bool>,
+    #[props(default = false)] is_unread: bool,
+    #[props(default = None)] linked_task: Option<Task>,
+    #[props(default = None)] provider: Option<&'static str>,
+    #[props(default = None)] data_kind: Option<&'static str>,
     on_select: EventHandler<()>,
-    action_buttons: ReadSignal<Vec<Element>>,
-    children: Element,
 ) -> Element {
-    let style = use_memo(move || if is_selected() { "row-active" } else { "" });
-    let list_context = use_context::<Memo<ListContext>>();
-    let shortcut_visibility_style = use_memo(move || {
-        if is_selected() && list_context().show_shortcut {
-            "visible"
-        } else {
-            "invisible"
-        }
-    });
-    let (button_active_style, details_style, button_style) = use_memo(move || {
-        if is_selected() {
-            ("swap-active", "invisible", "")
-        } else {
-            ("", "", "invisible")
-        }
-    })();
+    let selected_class = use_memo(move || if is_selected() { "selected" } else { "" });
+    let unread_class = if is_unread { "unread" } else { "" };
+    let title_class = if is_unread {
+        "ui-nrow-title b"
+    } else {
+        "ui-nrow-title"
+    };
 
     rsx! {
-        tr {
-            class: "row-hover flex items-center py-1 {style} group snap-start cursor-pointer",
+        div {
+            class: "ui-nrow {selected_class} {unread_class} snap-start max-md:py-2.5 max-md:px-3.5",
+            "data-provider": provider,
+            "data-kind": data_kind,
             onclick: move |_| {
                 if !is_selected() {
                     on_select.call(());
                 }
             },
 
-            td {
-                class: "flex items-center px-2 py-0 rounded-none relative h-12 relative",
-                span {
-                    class: "{shortcut_visibility_style} kbd kbd-xs z-50 absolute bottom-10",
-                    "▲"
-                }
-                span {
-                    class: "{shortcut_visibility_style} kbd kbd-xs z-50 absolute top-10",
-                    "▼"
-                }
-
-                if let Some(icon) = icon {
-                    div {
-                        class: "flex justify-center items-center h-8 w-8",
-                        { icon }
-                    }
-                } else {
-                    div { class: "flex flex-col h-5 w-5 min-w-5" }
-                }
-            }
-
-            td {
-                class: "px-2 py-0 grow whitespace-normal",
-
-                div {
-                    class: "flex items-center gap-2",
-
-                    if let Some(subicon) = subicon {
-                        div {
-                            class: "flex justify-center items-center h-8 w-8",
-                            { subicon }
-                        }
-                    } else {
-                        div { class: "flex flex-col h-5 w-5 min-w-5" }
-                    }
-
-                    div {
-                        class: "flex flex-col grow",
-
-                        div {
-                            class: "flex",
-                            a {
-                                class: "flex items-center max-lg:hidden",
-                                href: "{link}",
-                                target: "_blank",
-                                Markdown { text: "{title}" }
-                                Icon { class: "h-5 w-5 min-w-5 text-base-content/50 p-1", icon: BsArrowUpRightSquare }
-                            }
-                            Markdown { class: "lg:hidden", text: "{title}" }
-                            div { class: "grow" }
-                        }
-
-                        { subtitle() }
-                    }
-                }
-            }
-
-            td {
-                class: "px-2 py-0 rounded-none flex items-center justify-end max-lg:hidden",
-                div {
-                    class: "swap {button_active_style}",
-                    // Buttons
-                    div {
-                        class: "swap-on flex items-center justify-end {button_style}",
-                        for button in action_buttons() {
-                            { button }
-                        }
-                    }
-                    // Details
-                    div {
-                        class: "swap-off text-xs flex gap-2 items-center justify-end {details_style}",
-
-                        { children }
-                    }
-                }
-            }
-        }
-    }
-}
-
-#[derive(Props, Clone, PartialEq)]
-pub struct ListItemActionButtonProps {
-    children: Element,
-    title: ReadSignal<String>,
-    shortcut: ReadSignal<String>,
-    disabled_label: Option<Option<String>>,
-    button_class: Option<String>,
-    container_class: Option<String>,
-    show_shortcut: ReadSignal<bool>,
-    #[props(optional)]
-    data_overlay: Option<String>,
-    #[props(optional)]
-    onclick: Option<EventHandler<MouseEvent>>,
-}
-
-pub fn ListItemActionButton(props: ListItemActionButtonProps) -> Element {
-    let shortcut_visibility_style = use_memo(move || {
-        if (props.show_shortcut)() {
-            "visible"
-        } else {
-            "invisible group-hover/notification-button:visible"
-        }
-    });
-    let data_overlay = props.data_overlay.clone().unwrap_or_default();
-    let button_class = props
-        .button_class
-        .unwrap_or_else(|| "btn btn-text btn-square btn-sm".to_string());
-    let container_class = props.container_class.unwrap_or_default();
-
-    if let Some(Some(label)) = props.disabled_label {
-        rsx! {
-            Tooltip {
-                class: "flex justify-center {container_class}",
-                tooltip_class: "tooltip-warning",
-                text: "{label}",
-                placement: TooltipPlacement::Left,
-
-                button {
-                    class: "{button_class} btn-disabled",
-                    title: "{props.title}",
-
-                    { props.children }
-                }
-            }
-        }
-    } else {
-        rsx! {
             div {
-                class: "relative group/notification-button flex justify-center {container_class}",
+                class: "ui-nrow-source",
+                if let Some(icon) = icon {
+                    { icon }
+                }
+                if let Some(task) = linked_task.as_ref() {
+                    span {
+                        class: "ui-nrow-source-corner",
+                        title: "Linked task",
+                        TaskIcon { class: "h-2 w-2".to_string(), kind: task.kind }
+                    }
+                }
+            }
 
-                span {
-                    class: "{shortcut_visibility_style} kbd kbd-xs z-50 absolute top-5 left-1.5",
-                    "{props.shortcut}"
+            div {
+                class: "ui-nrow-body",
+
+                div {
+                    class: "ui-nrow-title-row",
+                    span {
+                        class: "{title_class} max-md:text-sm",
+                        Markdown { text: "{title}" }
+                    }
+                    span {
+                        class: "flex items-center gap-1 ml-auto flex-shrink-0",
+                        if is_unread {
+                            span { class: "ui-nrow-unread-dot" }
+                        }
+                        span { class: "ui-nrow-time", "{time}" }
+                    }
                 }
 
-                button {
-                    class: "{button_class}",
-                    title: "{props.title}",
-                    "data-overlay": "{data_overlay}",
-                    onclick: move |evt| {
-                        if let Some(handler) = &props.onclick {
-                            handler.call(evt)
-                        }
-                    },
-
-                    { props.children }
+                div {
+                    class: "ui-nrow-meta",
+                    if let Some(meta_icon) = meta_icon {
+                        span { class: "ui-nrow-meta-icon", { meta_icon } }
+                    }
+                    { subtitle() }
                 }
             }
         }
@@ -240,9 +116,7 @@ pub fn ListPaginationButtons<
     let ListPaginationButtonsStyle {
         previous_button_style,
         previous_pages_style,
-        previous_page_style,
         current_page_style,
-        next_page_style,
         next_pages_style,
         last_page_style,
         next_button_style,
@@ -252,19 +126,21 @@ pub fn ListPaginationButtons<
         nav {
             class: "join",
 
-            button {
-                "type": "button",
-                class: "btn btn-text lg:btn-xs max-lg:btn-lg btn-circle join-item {previous_button_style}",
-                "aria-label": "Previous page",
+            Button {
+                variant: ButtonVariant::Icon,
+                disabled: previous_button_style == ButtonStyle::Disabled,
+                aria_label: "Previous page".to_string(),
+                class: "text-ui-base-muted",
                 onclick: move |_| {
                     current_page -= 1;
                     on_select.call(page().previous_page_token.unwrap_or_default());
                 },
-                span { class: "icon-[tabler--chevron-left] size-5 rtl:rotate-180" }
+                icon_class: "icon-[tabler--chevron-left]".to_string(),
             }
+
             button {
                 "type": "button",
-                class: "btn btn-text lg:btn-xs max-lg:btn-lg join-item btn-circle aria-[current='page']:text-bg-soft-primary",
+                class: "btn btn-text btn-xs join-item btn-circle text-ui-base-muted aria-[current='page']:text-bg-soft-primary",
                 "aria-current": if current_page() == 1 { "page" },
                 onclick: move |_| {
                     current_page.set(1);
@@ -275,7 +151,7 @@ pub fn ListPaginationButtons<
 
             button {
                 "type": "button",
-                class: "btn btn-text lg:btn-xs max-lg:btn-lg join-item btn-circle {previous_pages_style}",
+                class: "btn btn-text btn-xs join-item btn-circle text-ui-base-muted {previous_pages_style}",
                 onclick: move |_| {
                     current_page -= 2;
                     on_select.call(PageToken::Offset((current_page() - 1) * page().per_page));
@@ -285,32 +161,14 @@ pub fn ListPaginationButtons<
 
             button {
                 "type": "button",
-                class: "btn btn-text lg:btn-xs max-lg:btn-lg join-item btn-circle {previous_page_style}",
-                onclick: move |_| {
-                    current_page -= 1;
-                    on_select.call(page().previous_page_token.unwrap_or_default());
-                },
-                "{current_page() - 1}"
-            }
-            button {
-                "type": "button",
-                class: "btn btn-text lg:btn-xs max-lg:btn-lg join-item btn-circle aria-[current='page']:text-bg-soft-primary {current_page_style}",
+                class: "btn btn-text btn-xs join-item btn-circle text-ui-base-muted aria-[current='page']:text-bg-soft-primary {current_page_style}",
                 "aria-current": "page",
                 "{current_page()}"
-            }
-            button {
-                "type": "button",
-                class: "btn btn-text lg:btn-xs max-lg:btn-lg join-item btn-circle {next_page_style}",
-                onclick: move |_| {
-                    current_page += 1;
-                    on_select.call(page().next_page_token.unwrap_or_default());
-                },
-                "{current_page() + 1}"
             }
 
             button {
                 "type": "button",
-                class: "btn btn-text lg:btn-xs max-lg:btn-lg join-item btn-circle {next_pages_style}",
+                class: "btn btn-text btn-xs join-item btn-circle text-ui-base-muted {next_pages_style}",
                 onclick: move |_| {
                     current_page += 2;
                     on_select.call(PageToken::Offset((current_page() - 1) * page().per_page));
@@ -320,7 +178,7 @@ pub fn ListPaginationButtons<
 
             button {
                 "type": "button",
-                class: "btn btn-text lg:btn-xs max-lg:btn-lg join-item btn-circle aria-[current='page']:text-bg-soft-primary {last_page_style}",
+                class: "btn btn-text btn-xs join-item btn-circle text-ui-base-muted aria-[current='page']:text-bg-soft-primary {last_page_style}",
                 "aria-current": if current_page() == page().pages_count { "page" },
                 onclick: move |_| {
                     current_page.set(page().pages_count);
@@ -328,15 +186,17 @@ pub fn ListPaginationButtons<
                 },
                 "{page().pages_count}"
             }
-            button {
-                "type": "button",
-                class: "btn btn-text lg:btn-xs max-lg:btn-lg btn-circle join-item {next_button_style}",
-                "aria-label": "Next page",
+
+            Button {
+                variant: ButtonVariant::Icon,
+                disabled: next_button_style == ButtonStyle::Disabled,
+                aria_label: "Next page".to_string(),
+                class: "text-ui-base-muted btn-circle",
                 onclick: move |_| {
                     current_page += 1;
                     on_select.call(page().next_page_token.unwrap_or_default());
                 },
-                span { class: "icon-[tabler--chevron-right] size-5 rtl:rotate-180" }
+                icon_class: "icon-[tabler--chevron-right]".to_string(),
             }
         }
     }
@@ -365,9 +225,7 @@ impl Display for ButtonStyle {
 struct ListPaginationButtonsStyle {
     previous_button_style: ButtonStyle,
     previous_pages_style: ButtonStyle,
-    previous_page_style: ButtonStyle,
     current_page_style: ButtonStyle,
-    next_page_style: ButtonStyle,
     next_pages_style: ButtonStyle,
     last_page_style: ButtonStyle,
     next_button_style: ButtonStyle,
@@ -377,33 +235,35 @@ fn compute_list_pagination_buttons_style(
     current_page: usize,
     pages_count: usize,
 ) -> ListPaginationButtonsStyle {
+    let current_page_visible = current_page >= 2 && current_page < pages_count;
+    let previous_pages_visible = if current_page_visible {
+        current_page >= 3
+    } else {
+        current_page == pages_count && pages_count >= 3
+    };
+    let next_pages_visible = if current_page_visible {
+        current_page + 1 < pages_count
+    } else {
+        current_page == 1 && pages_count >= 3
+    };
+
     ListPaginationButtonsStyle {
         previous_button_style: if current_page == 1 {
             ButtonStyle::Disabled
         } else {
             ButtonStyle::None
         },
-        previous_pages_style: if current_page >= 4 {
+        previous_pages_style: if previous_pages_visible {
             ButtonStyle::Visible
         } else {
             ButtonStyle::Hidden
         },
-        previous_page_style: if current_page >= 3 {
+        current_page_style: if current_page_visible {
             ButtonStyle::Visible
         } else {
             ButtonStyle::Hidden
         },
-        current_page_style: if current_page >= 2 && current_page <= (pages_count - 1) {
-            ButtonStyle::Visible
-        } else {
-            ButtonStyle::Hidden
-        },
-        next_page_style: if pages_count >= 3 && current_page <= (pages_count - 2) {
-            ButtonStyle::Visible
-        } else {
-            ButtonStyle::Hidden
-        },
-        next_pages_style: if pages_count >= 4 && current_page <= (pages_count - 3) {
+        next_pages_style: if next_pages_visible {
             ButtonStyle::Visible
         } else {
             ButtonStyle::Hidden
@@ -432,9 +292,7 @@ mod tests_list_pagination_buttons {
         let style = compute_list_pagination_buttons_style(1, 1);
         assert_eq!(style.previous_button_style, ButtonStyle::Disabled);
         assert_eq!(style.previous_pages_style, ButtonStyle::Hidden);
-        assert_eq!(style.previous_page_style, ButtonStyle::Hidden);
         assert_eq!(style.current_page_style, ButtonStyle::Hidden);
-        assert_eq!(style.next_page_style, ButtonStyle::Hidden);
         assert_eq!(style.next_pages_style, ButtonStyle::Hidden);
         assert_eq!(style.last_page_style, ButtonStyle::Hidden);
         assert_eq!(style.next_button_style, ButtonStyle::Disabled);
@@ -445,9 +303,7 @@ mod tests_list_pagination_buttons {
         let style = compute_list_pagination_buttons_style(1, 2);
         assert_eq!(style.previous_button_style, ButtonStyle::Disabled);
         assert_eq!(style.previous_pages_style, ButtonStyle::Hidden);
-        assert_eq!(style.previous_page_style, ButtonStyle::Hidden);
         assert_eq!(style.current_page_style, ButtonStyle::Hidden);
-        assert_eq!(style.next_page_style, ButtonStyle::Hidden);
         assert_eq!(style.next_pages_style, ButtonStyle::Hidden);
         assert_eq!(style.last_page_style, ButtonStyle::Visible);
         assert_eq!(style.next_button_style, ButtonStyle::None);
@@ -455,9 +311,7 @@ mod tests_list_pagination_buttons {
         let style = compute_list_pagination_buttons_style(2, 2);
         assert_eq!(style.previous_button_style, ButtonStyle::None);
         assert_eq!(style.previous_pages_style, ButtonStyle::Hidden);
-        assert_eq!(style.previous_page_style, ButtonStyle::Hidden);
         assert_eq!(style.current_page_style, ButtonStyle::Hidden);
-        assert_eq!(style.next_page_style, ButtonStyle::Hidden);
         assert_eq!(style.next_pages_style, ButtonStyle::Hidden);
         assert_eq!(style.last_page_style, ButtonStyle::Visible);
         assert_eq!(style.next_button_style, ButtonStyle::Disabled);
@@ -468,29 +322,23 @@ mod tests_list_pagination_buttons {
         let style = compute_list_pagination_buttons_style(1, 3);
         assert_eq!(style.previous_button_style, ButtonStyle::Disabled);
         assert_eq!(style.previous_pages_style, ButtonStyle::Hidden);
-        assert_eq!(style.previous_page_style, ButtonStyle::Hidden);
         assert_eq!(style.current_page_style, ButtonStyle::Hidden);
-        assert_eq!(style.next_page_style, ButtonStyle::Visible);
-        assert_eq!(style.next_pages_style, ButtonStyle::Hidden);
+        assert_eq!(style.next_pages_style, ButtonStyle::Visible);
         assert_eq!(style.last_page_style, ButtonStyle::Visible);
         assert_eq!(style.next_button_style, ButtonStyle::None);
 
         let style = compute_list_pagination_buttons_style(2, 3);
         assert_eq!(style.previous_button_style, ButtonStyle::None);
         assert_eq!(style.previous_pages_style, ButtonStyle::Hidden);
-        assert_eq!(style.previous_page_style, ButtonStyle::Hidden);
         assert_eq!(style.current_page_style, ButtonStyle::Visible);
-        assert_eq!(style.next_page_style, ButtonStyle::Hidden);
         assert_eq!(style.next_pages_style, ButtonStyle::Hidden);
         assert_eq!(style.last_page_style, ButtonStyle::Visible);
         assert_eq!(style.next_button_style, ButtonStyle::None);
 
         let style = compute_list_pagination_buttons_style(3, 3);
         assert_eq!(style.previous_button_style, ButtonStyle::None);
-        assert_eq!(style.previous_pages_style, ButtonStyle::Hidden);
-        assert_eq!(style.previous_page_style, ButtonStyle::Visible);
+        assert_eq!(style.previous_pages_style, ButtonStyle::Visible);
         assert_eq!(style.current_page_style, ButtonStyle::Hidden);
-        assert_eq!(style.next_page_style, ButtonStyle::Hidden);
         assert_eq!(style.next_pages_style, ButtonStyle::Hidden);
         assert_eq!(style.last_page_style, ButtonStyle::Visible);
         assert_eq!(style.next_button_style, ButtonStyle::Disabled);
@@ -501,9 +349,7 @@ mod tests_list_pagination_buttons {
         let style = compute_list_pagination_buttons_style(1, 4);
         assert_eq!(style.previous_button_style, ButtonStyle::Disabled);
         assert_eq!(style.previous_pages_style, ButtonStyle::Hidden);
-        assert_eq!(style.previous_page_style, ButtonStyle::Hidden);
         assert_eq!(style.current_page_style, ButtonStyle::Hidden);
-        assert_eq!(style.next_page_style, ButtonStyle::Visible);
         assert_eq!(style.next_pages_style, ButtonStyle::Visible);
         assert_eq!(style.last_page_style, ButtonStyle::Visible);
         assert_eq!(style.next_button_style, ButtonStyle::None);
@@ -511,19 +357,15 @@ mod tests_list_pagination_buttons {
         let style = compute_list_pagination_buttons_style(2, 4);
         assert_eq!(style.previous_button_style, ButtonStyle::None);
         assert_eq!(style.previous_pages_style, ButtonStyle::Hidden);
-        assert_eq!(style.previous_page_style, ButtonStyle::Hidden);
         assert_eq!(style.current_page_style, ButtonStyle::Visible);
-        assert_eq!(style.next_page_style, ButtonStyle::Visible);
-        assert_eq!(style.next_pages_style, ButtonStyle::Hidden);
+        assert_eq!(style.next_pages_style, ButtonStyle::Visible);
         assert_eq!(style.last_page_style, ButtonStyle::Visible);
         assert_eq!(style.next_button_style, ButtonStyle::None);
 
         let style = compute_list_pagination_buttons_style(3, 4);
         assert_eq!(style.previous_button_style, ButtonStyle::None);
-        assert_eq!(style.previous_pages_style, ButtonStyle::Hidden);
-        assert_eq!(style.previous_page_style, ButtonStyle::Visible);
+        assert_eq!(style.previous_pages_style, ButtonStyle::Visible);
         assert_eq!(style.current_page_style, ButtonStyle::Visible);
-        assert_eq!(style.next_page_style, ButtonStyle::Hidden);
         assert_eq!(style.next_pages_style, ButtonStyle::Hidden);
         assert_eq!(style.last_page_style, ButtonStyle::Visible);
         assert_eq!(style.next_button_style, ButtonStyle::None);
@@ -531,9 +373,7 @@ mod tests_list_pagination_buttons {
         let style = compute_list_pagination_buttons_style(4, 4);
         assert_eq!(style.previous_button_style, ButtonStyle::None);
         assert_eq!(style.previous_pages_style, ButtonStyle::Visible);
-        assert_eq!(style.previous_page_style, ButtonStyle::Visible);
         assert_eq!(style.current_page_style, ButtonStyle::Hidden);
-        assert_eq!(style.next_page_style, ButtonStyle::Hidden);
         assert_eq!(style.next_pages_style, ButtonStyle::Hidden);
         assert_eq!(style.last_page_style, ButtonStyle::Visible);
         assert_eq!(style.next_button_style, ButtonStyle::Disabled);
@@ -544,9 +384,7 @@ mod tests_list_pagination_buttons {
         let style = compute_list_pagination_buttons_style(1, 5);
         assert_eq!(style.previous_button_style, ButtonStyle::Disabled);
         assert_eq!(style.previous_pages_style, ButtonStyle::Hidden);
-        assert_eq!(style.previous_page_style, ButtonStyle::Hidden);
         assert_eq!(style.current_page_style, ButtonStyle::Hidden);
-        assert_eq!(style.next_page_style, ButtonStyle::Visible);
         assert_eq!(style.next_pages_style, ButtonStyle::Visible);
         assert_eq!(style.last_page_style, ButtonStyle::Visible);
         assert_eq!(style.next_button_style, ButtonStyle::None);
@@ -554,29 +392,23 @@ mod tests_list_pagination_buttons {
         let style = compute_list_pagination_buttons_style(2, 5);
         assert_eq!(style.previous_button_style, ButtonStyle::None);
         assert_eq!(style.previous_pages_style, ButtonStyle::Hidden);
-        assert_eq!(style.previous_page_style, ButtonStyle::Hidden);
         assert_eq!(style.current_page_style, ButtonStyle::Visible);
-        assert_eq!(style.next_page_style, ButtonStyle::Visible);
         assert_eq!(style.next_pages_style, ButtonStyle::Visible);
         assert_eq!(style.last_page_style, ButtonStyle::Visible);
         assert_eq!(style.next_button_style, ButtonStyle::None);
 
         let style = compute_list_pagination_buttons_style(3, 5);
         assert_eq!(style.previous_button_style, ButtonStyle::None);
-        assert_eq!(style.previous_pages_style, ButtonStyle::Hidden);
-        assert_eq!(style.previous_page_style, ButtonStyle::Visible);
+        assert_eq!(style.previous_pages_style, ButtonStyle::Visible);
         assert_eq!(style.current_page_style, ButtonStyle::Visible);
-        assert_eq!(style.next_page_style, ButtonStyle::Visible);
-        assert_eq!(style.next_pages_style, ButtonStyle::Hidden);
+        assert_eq!(style.next_pages_style, ButtonStyle::Visible);
         assert_eq!(style.last_page_style, ButtonStyle::Visible);
         assert_eq!(style.next_button_style, ButtonStyle::None);
 
         let style = compute_list_pagination_buttons_style(4, 5);
         assert_eq!(style.previous_button_style, ButtonStyle::None);
         assert_eq!(style.previous_pages_style, ButtonStyle::Visible);
-        assert_eq!(style.previous_page_style, ButtonStyle::Visible);
         assert_eq!(style.current_page_style, ButtonStyle::Visible);
-        assert_eq!(style.next_page_style, ButtonStyle::Hidden);
         assert_eq!(style.next_pages_style, ButtonStyle::Hidden);
         assert_eq!(style.last_page_style, ButtonStyle::Visible);
         assert_eq!(style.next_button_style, ButtonStyle::None);
@@ -584,9 +416,7 @@ mod tests_list_pagination_buttons {
         let style = compute_list_pagination_buttons_style(5, 5);
         assert_eq!(style.previous_button_style, ButtonStyle::None);
         assert_eq!(style.previous_pages_style, ButtonStyle::Visible);
-        assert_eq!(style.previous_page_style, ButtonStyle::Visible);
         assert_eq!(style.current_page_style, ButtonStyle::Hidden);
-        assert_eq!(style.next_page_style, ButtonStyle::Hidden);
         assert_eq!(style.next_pages_style, ButtonStyle::Hidden);
         assert_eq!(style.last_page_style, ButtonStyle::Visible);
         assert_eq!(style.next_button_style, ButtonStyle::Disabled);

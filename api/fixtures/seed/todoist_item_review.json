@@ -1,0 +1,32 @@
+{
+    "id": "1124",
+    "parent_id": null,
+    "project_id": "1111",
+    "sync_id": "1234567891",
+    "section_id": "7025",
+    "content": "Review onboarding copy with design",
+    "description": "Maya shared the new empty-state copy. Pair on it before standup tomorrow.",
+    "labels": [
+        { "name": "design", "color": "violet" },
+        { "name": "review", "color": "yellow" }
+    ],
+    "child_order": 2,
+    "day_order": -1,
+    "priority": 3,
+    "checked": false,
+    "is_deleted": false,
+    "is_collapsed": false,
+    "completed_at": null,
+    "added_at": "{{ago_1d}}",
+    "due": {
+        "string": "tomorrow",
+        "date": "{{date_tomorrow}}",
+        "is_recurring": false,
+        "lang": "en",
+        "timezone": null
+    },
+    "user_id": "2671355",
+    "added_by_uid": "2671355",
+    "assigned_by_uid": "2671355",
+    "responsible_uid": "2671355"
+}

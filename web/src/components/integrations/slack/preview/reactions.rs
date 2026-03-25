@@ -1,8 +1,18 @@
 #![allow(non_snake_case)]
 
+use std::collections::HashMap;
+
 use dioxus::prelude::*;
 use slack_blocks_render::SlackReferences;
 use slack_morphism::prelude::*;
+
+use universal_inbox::third_party::integrations::slack::SlackMessageSenderDetails;
+
+use crate::components::{
+    flyonui::tooltip::{Tooltip, TooltipPlacement},
+    integrations::slack::get_sender_name_and_avatar,
+    ui::reaction_chip::{ReactionChip, ReactionVariant},
+};
 
 #[component]
 pub fn SlackReactions(
@@ -14,20 +24,72 @@ pub fn SlackReactions(
     }
 
     rsx! {
+        // `.th-rxns` shell migrated to utilities: flex wrap + gap + top margin.
         div {
-            class: "flex flex-wrap gap-2 my-2",
+            class: "flex flex-wrap gap-1 mt-1.5",
 
             for reaction in reactions() {
-                div {
-                    class: "flex badge gap-1 bg-secondary text-secondary-content text-sm",
-
-                    SlackEmojiDisplay {
-                        emoji_name: reaction.name.0,
-                        slack_references
+                ReactionChip {
+                    emoji: rsx! {
+                        SlackEmojiDisplay {
+                            emoji_name: reaction.name.0,
+                            slack_references,
+                        }
                     },
-
-                    span { "{reaction.count}" }
+                    count: reaction.count as u32,
                 }
+            }
+        }
+    }
+}
+
+/// Read-only reaction chip used by the Slack thread renderer. No add-reaction
+/// affordance, no click handler — just a tooltip listing reactors.
+#[component]
+pub fn ThreadReactionChip(
+    reaction: ReadSignal<SlackReaction>,
+    slack_references: ReadSignal<SlackReferences>,
+    current_user_id: ReadSignal<Option<String>>,
+    sender_profiles: ReadSignal<HashMap<String, SlackMessageSenderDetails>>,
+) -> Element {
+    let r = reaction();
+    let is_mine = current_user_id()
+        .as_ref()
+        .map(|me| r.users.iter().any(|u| u.to_string() == *me))
+        .unwrap_or(false);
+
+    let profiles = sender_profiles();
+    let names: Vec<String> = r
+        .users
+        .iter()
+        .map(|u| {
+            let id = u.to_string();
+            profiles
+                .get(&id)
+                .map(|p| get_sender_name_and_avatar(p).0)
+                .unwrap_or(id)
+        })
+        .collect();
+    let tooltip = format!("{} reacted with :{}:", names.join(", "), r.name.0);
+    let variant = if is_mine {
+        ReactionVariant::Mine
+    } else {
+        ReactionVariant::Default
+    };
+
+    rsx! {
+        Tooltip {
+            text: tooltip,
+            placement: TooltipPlacement::Top,
+            ReactionChip {
+                emoji: rsx! {
+                    SlackEmojiDisplay {
+                        emoji_name: r.name.0.clone(),
+                        slack_references,
+                    }
+                },
+                count: r.count as u32,
+                variant,
             }
         }
     }

@@ -22,7 +22,8 @@ pub struct TodoistItem {
     pub section_id: Option<String>,
     pub content: String,
     pub description: String,
-    pub labels: Vec<String>,
+    #[serde(deserialize_with = "labels_format::deserialize")]
+    pub labels: Vec<TodoistLabel>,
     pub child_order: i32,
     pub day_order: Option<i32>,
     pub priority: TodoistItemPriority,
@@ -106,6 +107,87 @@ impl From<TaskPriority> for TodoistItemPriority {
     }
 }
 
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct TodoistLabel {
+    pub name: String,
+    #[serde(default)]
+    pub color: TodoistColor,
+}
+
+impl TodoistLabel {
+    pub fn from_name(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            color: TodoistColor::default(),
+        }
+    }
+}
+
+/// Todoist's standard label/project color palette.
+///
+/// See https://developer.todoist.com/api/v1#tag/Colors/Colors for the canonical list.
+/// The `Charcoal` variant is used as the default fallback when a label has not been
+/// hydrated with its color (e.g. items deserialized from older persisted JSON, or
+/// from the Sync API where item labels are returned as bare strings).
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone, Copy, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum TodoistColor {
+    #[serde(alias = "berry_red")]
+    BerryRed,
+    Red,
+    Orange,
+    Yellow,
+    OliveGreen,
+    LimeGreen,
+    Green,
+    MintGreen,
+    Teal,
+    SkyBlue,
+    LightBlue,
+    Blue,
+    Grape,
+    Violet,
+    Lavender,
+    Magenta,
+    Salmon,
+    #[default]
+    Charcoal,
+    Grey,
+    Taupe,
+    /// Fallback for unknown / future colors returned by the Todoist API.
+    #[serde(other)]
+    Unknown,
+}
+
+impl TodoistColor {
+    /// Hex color (no leading `#`) used by Todoist's web client for each label color.
+    pub fn to_hex(&self) -> &'static str {
+        match self {
+            TodoistColor::BerryRed => "b8255f",
+            TodoistColor::Red => "db4035",
+            TodoistColor::Orange => "ff9933",
+            TodoistColor::Yellow => "fad000",
+            TodoistColor::OliveGreen => "afb83b",
+            TodoistColor::LimeGreen => "7ecc49",
+            TodoistColor::Green => "299438",
+            TodoistColor::MintGreen => "6accbc",
+            TodoistColor::Teal => "158fad",
+            TodoistColor::SkyBlue => "14aaf5",
+            TodoistColor::LightBlue => "96c3eb",
+            TodoistColor::Blue => "4073ff",
+            TodoistColor::Grape => "884dff",
+            TodoistColor::Violet => "af38eb",
+            TodoistColor::Lavender => "eb96eb",
+            TodoistColor::Magenta => "e05194",
+            TodoistColor::Salmon => "ff8d85",
+            TodoistColor::Charcoal => "808080",
+            TodoistColor::Grey => "b8b8b8",
+            TodoistColor::Taupe => "ccac93",
+            TodoistColor::Unknown => "808080",
+        }
+    }
+}
+
 impl TryFrom<ThirdPartyItem> for TodoistItem {
     type Error = anyhow::Error;
 
@@ -162,6 +244,63 @@ mod due_date_format {
     }
 }
 
+/// Deserializes a `Vec<TodoistLabel>` from either:
+///   * An array of bare label-name strings (e.g. `["Food", "Shopping"]`) — this is
+///     the shape returned by Todoist's Sync API on items, where labels are referenced
+///     by name only and need to be hydrated separately to obtain their color.
+///   * An array of label objects (e.g. `[{"name": "Food", "color": "red"}]`) — the
+///     hydrated shape we persist in `third_party_item.data` JSONB after enriching
+///     with the labels endpoint.
+///
+/// When a bare string is encountered, the resulting `TodoistLabel` falls back to
+/// [`TodoistColor::default`] (`Charcoal`); the sync code is responsible for filling
+/// in the proper color before persistence.
+mod labels_format {
+    use super::*;
+    use serde::de::{self, SeqAccess, Visitor};
+    use std::fmt;
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<TodoistLabel>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct LabelsVisitor;
+
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum LabelOrName {
+            Name(String),
+            Label(TodoistLabel),
+        }
+
+        impl<'de> Visitor<'de> for LabelsVisitor {
+            type Value = Vec<TodoistLabel>;
+
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str("a sequence of label names or label objects")
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: SeqAccess<'de>,
+            {
+                let mut out = Vec::with_capacity(seq.size_hint().unwrap_or(0));
+                while let Some(value) = seq.next_element::<LabelOrName>()? {
+                    out.push(match value {
+                        LabelOrName::Name(name) => TodoistLabel::from_name(name),
+                        LabelOrName::Label(label) => label,
+                    });
+                }
+                Ok(out)
+            }
+        }
+
+        deserializer
+            .deserialize_seq(LabelsVisitor)
+            .map_err(de::Error::custom)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -182,7 +321,10 @@ mod tests {
                     "section_id": "7025",
                     "content": "Buy Milk",
                     "description": "",
-                    "labels": ["Food", "Shopping"],
+                    "labels": [
+                        { "name": "Food", "color": "red" },
+                        { "name": "Shopping", "color": "blue" },
+                    ],
                     "child_order": 1,
                     "day_order": -1,
                     "priority": 1,
@@ -213,7 +355,16 @@ mod tests {
                 section_id: Some("7025".to_string()),
                 content: "Buy Milk".to_string(),
                 description: "".to_string(),
-                labels: vec!["Food".to_string(), "Shopping".to_string()],
+                labels: vec![
+                    TodoistLabel {
+                        name: "Food".to_string(),
+                        color: TodoistColor::Red,
+                    },
+                    TodoistLabel {
+                        name: "Shopping".to_string(),
+                        color: TodoistColor::Blue,
+                    },
+                ],
                 child_order: 1,
                 day_order: Some(-1),
                 priority: TodoistItemPriority::P1,
@@ -251,7 +402,10 @@ mod tests {
                     "section_id": "7025",
                     "content": "Buy Milk",
                     "description": "",
-                    "labels": ["Food", "Shopping"],
+                    "labels": [
+                        { "name": "Food", "color": "red" },
+                        { "name": "Shopping", "color": "blue" }
+                    ],
                     "child_order": 1,
                     "day_order": -1,
                     "priority": 1,
@@ -283,7 +437,16 @@ mod tests {
                 section_id: Some("7025".to_string()),
                 content: "Buy Milk".to_string(),
                 description: "".to_string(),
-                labels: vec!["Food".to_string(), "Shopping".to_string()],
+                labels: vec![
+                    TodoistLabel {
+                        name: "Food".to_string(),
+                        color: TodoistColor::Red,
+                    },
+                    TodoistLabel {
+                        name: "Shopping".to_string(),
+                        color: TodoistColor::Blue,
+                    },
+                ],
                 child_order: 1,
                 day_order: Some(-1),
                 priority: TodoistItemPriority::P1,
@@ -305,5 +468,70 @@ mod tests {
                 responsible_uid: Some("2671355".to_string()),
             }
         );
+    }
+
+    /// Backwards compatibility: previously-persisted items (and the Todoist Sync
+    /// API on items) represent labels as bare strings. Deserialization must accept
+    /// that shape and fall back to the default color so older rows continue to load.
+    #[rstest]
+    fn test_todoist_item_deserialization_legacy_string_labels() {
+        let item: TodoistItem = serde_json::from_str(
+            r#"
+            {
+                "id": "2995104339",
+                "parent_id": null,
+                "project_id": "2203306141",
+                "sync_id": null,
+                "section_id": null,
+                "content": "Buy Milk",
+                "description": "",
+                "labels": ["Food", "Shopping"],
+                "child_order": 1,
+                "day_order": -1,
+                "priority": 1,
+                "checked": false,
+                "is_deleted": false,
+                "collapsed": false,
+                "completed_at": null,
+                "added_at": "2019-12-11T22:36:50Z",
+                "due": null,
+                "user_id": "2671355",
+                "added_by_uid": null,
+                "assigned_by_uid": null,
+                "responsible_uid": null
+            }
+        "#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            item.labels,
+            vec![
+                TodoistLabel {
+                    name: "Food".to_string(),
+                    color: TodoistColor::Charcoal,
+                },
+                TodoistLabel {
+                    name: "Shopping".to_string(),
+                    color: TodoistColor::Charcoal,
+                },
+            ]
+        );
+    }
+
+    #[rstest]
+    fn test_todoist_color_to_hex() {
+        assert_eq!(TodoistColor::Red.to_hex(), "db4035");
+        assert_eq!(TodoistColor::Blue.to_hex(), "4073ff");
+        assert_eq!(TodoistColor::Charcoal.to_hex(), "808080");
+    }
+
+    #[rstest]
+    fn test_todoist_color_unknown_color_falls_back() {
+        // Future / unknown colors must not break deserialization — they map to `Unknown`.
+        let label: TodoistLabel =
+            serde_json::from_str(r#"{ "name": "ABC", "color": "fuchsia_glow" }"#).unwrap();
+        assert_eq!(label.color, TodoistColor::Unknown);
+        assert_eq!(label.color.to_hex(), "808080");
     }
 }

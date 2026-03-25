@@ -2,6 +2,10 @@
 
 Each connected tool has specific configuration options to customize how it synchronizes with Universal Inbox.
 
+```admonish info
+All integrations authorize Universal Inbox directly through the provider's own OAuth flow. You can review and revoke the apps you have authorized from the [Security & Privacy](../../misc/security.md) page, and from each upstream provider's own security settings.
+```
+
 ## Connection Status
 
 Your integrations will display one of these connection states:
@@ -19,16 +23,9 @@ Your integrations will display one of these connection states:
 
 Once connected, each integration displays its current synchronization state:
 
-- **Not Yet Synchronized**: Initial state before the first synchronization occurs
-  ![not yet synchronized](images/not-yet-synchronized-sync-status.png =x20)
-
-- **Successfully Synchronized**: Data has been synchronized without issues
-  ![successfully synchronized](images/successful-sync-status.png =x20)
-
-- **Synchronization Failed**: An error occurred during synchronization
-  ![synchronization failed](images/failed-sync-status.png =x20)
-  
-  If errors persist, try disconnecting and reconnecting the integration. If problems continue, please contact [support](mailto:support@universal-inbox.com).
+- **Not Yet Synchronized**: Initial state before the first synchronization occurs.
+- **Successfully Synchronized**: Data has been synchronized without issues.
+- **Synchronization Failed**: An error occurred during synchronization. If errors persist, try disconnecting and reconnecting the integration. If problems continue, please contact [support](mailto:support@universal-inbox.com).
 
 ## Tool-Specific Configuration
 
@@ -41,3 +38,4 @@ For detailed setup instructions for each tool, select the appropriate guide:
 - [Google Calendar](gcal.md)
 - [Google Drive](gdrive.md)
 - [Todoist](todoist.md)
+- [TickTick](ticktick.md)

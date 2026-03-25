@@ -2,12 +2,19 @@
 
 use dioxus::prelude::*;
 
-use dioxus_free_icons::{Icon, icons::bs_icons::BsArrowUpRightSquare};
-use universal_inbox::third_party::integrations::github::GithubDiscussion;
+use universal_inbox::{
+    third_party::integrations::github::GithubDiscussion,
+    utils::emoji::replace_emoji_code_with_emoji,
+};
 
-use crate::components::{
-    CollapseCard, SmallCard, TagsInCard,
-    integrations::github::{GithubActorDisplay, icons::GithubDiscussionIcon},
+use crate::{
+    components::{
+        TagList, UserWithAvatar,
+        integrations::github::{GithubActorDisplay, get_github_actor_name_and_url},
+        preview_card_header::PreviewCardHeader,
+        ui::{Card, CardVariant, MetadataGrid, MetadataItem, Tag as UiTag, TagVariant},
+    },
+    utils::format_elapsed_time,
 };
 
 #[component]
@@ -15,103 +22,149 @@ pub fn GithubDiscussionPreview(
     github_discussion: ReadSignal<GithubDiscussion>,
     expand_details: ReadSignal<bool>,
 ) -> Element {
+    let discussion = github_discussion();
+    let is_answered = discussion.answer_chosen_at.is_some();
+
+    let (state_variant, state_label) = if is_answered {
+        (TagVariant::Success, "Answered")
+    } else {
+        (TagVariant::Info, "Open")
+    };
+
+    let created_ago = format_elapsed_time(discussion.created_at);
+
+    let title = discussion.title.clone();
+    let identifier = format!("#{}", discussion.number);
+    let repo_name = discussion.repository.name_with_owner.clone();
+    let repo_url = discussion.repository.url.clone();
+    let discussion_url = discussion.url.clone();
+    let author = discussion.author.clone();
+
     rsx! {
         div {
-            class: "flex flex-col w-full gap-2 h-full",
+            class: "flex flex-col w-full h-full",
 
-            h3 {
-                class: "flex items-center gap-2 text-base",
-
-                GithubDiscussionIcon { class: "h-5 w-5", github_discussion: github_discussion() }
-                a {
-                    href: "{github_discussion().url}",
-                    target: "_blank",
-                    dangerous_inner_html: "{github_discussion().title}"
-                }
-                a {
-                    class: "flex-none",
-                    href: "{github_discussion().url}",
-                    target: "_blank",
-                    Icon { class: "h-5 w-5 min-w-5 text-base-content/50 p-1", icon: BsArrowUpRightSquare }
-                }
-            }
-
-            GithubDiscussionDetails { github_discussion: github_discussion, expand_details }
-        }
-    }
-}
-
-#[component]
-fn GithubDiscussionDetails(
-    github_discussion: ReadSignal<GithubDiscussion>,
-    expand_details: ReadSignal<bool>,
-) -> Element {
-    rsx! {
-        div {
-            id: "notification-preview-details",
-            class: "flex flex-col gap-2 w-full h-full overflow-y-auto scroll-y-auto",
-
-            div {
-                class: "flex gap-2",
-
-                a {
-                    class: "text-xs text-base-content/50",
-                    href: "{github_discussion().repository.url}",
-                    target: "_blank",
-                    "{github_discussion().repository.name_with_owner}"
-                }
-
-                a {
-                    class: "text-xs text-base-content/50",
-                    href: "{github_discussion().url}",
-                    target: "_blank",
-                    "#{github_discussion().number}"
+            PreviewCardHeader {
+                brand_icon: rsx! { span { class: "icon-[lucide--message-square] size-4" } },
+                title,
+                identifier: Some(identifier),
+                subline: rsx! {
+                    if let Some(actor) = author {
+                        span { "Opened by" }
+                        {
+                            let (name, url) = get_github_actor_name_and_url(actor);
+                            rsx! {
+                                UserWithAvatar {
+                                    user_name: name,
+                                    avatar_url: Some(Some(url)),
+                                    display_name: true,
+                                    class: "text-[11px]",
+                                }
+                            }
+                        }
+                        span { class: "sep", "·" }
+                        span { "{created_ago} ago" }
+                    }
                 }
             }
 
             div {
-                class: "flex text-base-content/50 gap-1 text-xs",
+                id: "notification-preview-details",
+                class: "flex flex-col gap-2 w-full h-full overflow-y-auto scroll-y-auto p-3",
 
-                "Created at ",
-                span { class: "text-primary", "{github_discussion().created_at}" }
-            }
+                Card {
+                    variant: CardVariant::Default,
 
-            TagsInCard {
-                tags: github_discussion()
-                    .labels
-                    .iter()
-                    .map(|label| label.clone().into())
-                    .collect()
-            }
+                    MetadataGrid {
+                        MetadataItem {
+                            label: "Repository".to_string(),
+                            value: rsx! {
+                                a {
+                                    href: "{repo_url}",
+                                    target: "_blank",
+                                    rel: "noopener noreferrer",
+                                    "{repo_name}"
+                                }
+                                a {
+                                    href: "{discussion_url}",
+                                    target: "_blank",
+                                    rel: "noopener noreferrer",
+                                    "#{discussion.number}"
+                                }
+                            },
+                        }
 
-            if let Some(actor) = &github_discussion().author {
-                SmallCard {
-                    span { class: "text-base-content/50", "Opened by" }
-                    GithubActorDisplay { actor: actor.clone(), display_name: true }
+                        MetadataItem {
+                            label: "State".to_string(),
+                            value: rsx! {
+                                UiTag { variant: state_variant, "{state_label}" }
+                            },
+                        }
+
+                        if let Some(category) = &discussion.category {
+                            MetadataItem {
+                                label: "Category".to_string(),
+                                value: rsx! {
+                                    if let Some(emoji_glyph) = category.emoji.as_deref().and_then(replace_emoji_code_with_emoji) {
+                                        span { "{emoji_glyph}" }
+                                    }
+                                    span { "{category.name}" }
+                                },
+                            }
+                        }
+
+                        MetadataItem {
+                            label: "Updated".to_string(),
+                            value: rsx! {
+                                span { "{format_elapsed_time(discussion.updated_at)} ago" }
+                            },
+                        }
+                    }
+
+                    if !discussion.labels.is_empty() {
+                        TagList {
+                            tags: discussion
+                                .labels
+                                .iter()
+                                .map(|label| label.clone().into())
+                                .collect()
+                        }
+                    }
                 }
-            }
 
-            if let Some(actor) = &github_discussion().answer_chosen_by {
-                if let Some(answer) = &github_discussion().answer {
-                    CollapseCard {
-                        id: "github-discussion-details",
-                        header: rsx! {
-                            span { class: "text-base-content/50", "Answered by" }
+                Card {
+                    variant: CardVariant::Default,
+                    div {
+                        class: "w-full prose prose-sm dark:prose-invert",
+                        dangerous_inner_html: "{discussion.body}"
+                    }
+                }
+
+                if let (Some(answer), Some(actor)) = (&discussion.answer, &discussion.answer_chosen_by) {
+                    div {
+                        class: "preview-card",
+                        style: "background: var(--ui-success-subtle);",
+
+                        div {
+                            class: "flex items-center gap-2 text-xs mb-2",
+                            span {
+                                class: "icon-[lucide--check-circle] size-4",
+                                style: "color: var(--ui-success);",
+                            }
+                            span {
+                                style: "color: var(--ui-success); font-weight: 600;",
+                                "Accepted answer by"
+                            }
                             GithubActorDisplay { actor: actor.clone(), display_name: true }
-                        },
-                        opened: expand_details(),
-
-                        p {
+                        }
+                        div {
                             class: "w-full prose prose-sm dark:prose-invert",
                             dangerous_inner_html: "{answer.body}"
                         }
                     }
                 }
-            }
 
-            p {
-                class: "w-full prose prose-sm dark:prose-invert",
-                dangerous_inner_html: "{github_discussion().body}"
+                if expand_details() { div { class: "hidden" } }
             }
         }
     }

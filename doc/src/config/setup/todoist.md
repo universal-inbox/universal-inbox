@@ -4,6 +4,10 @@
 
 The Todoist integration is a core component of Universal Inbox, enabling powerful task management capabilities that connect your notifications with your Todoist workflow.
 
+```admonish info
+Universal Inbox supports two task managers: Todoist and [TickTick](ticktick.md). When both are connected, the Slack reaction and Linear configuration screens let you pick which task manager receives newly created tasks.
+```
+
 ## Key Features
 
 Connecting Todoist with Universal Inbox enables you to:

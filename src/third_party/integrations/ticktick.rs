@@ -1,6 +1,6 @@
 use anyhow::anyhow;
 use chrono::{DateTime, Timelike, Utc};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use url::Url;
 use uuid::Uuid;
@@ -58,6 +58,96 @@ pub enum TickTickTaskStatus {
     Completed = 2,
 }
 
+/// A TickTick tag with optional color metadata.
+///
+/// TickTick's V1 task endpoints return tags as bare strings (`["work", "shopping"]`).
+/// Color metadata is fetched separately from the tag listing endpoint and merged in
+/// during sync. We accept both shapes on deserialization so existing JSONB rows
+/// (string-only tags persisted before this change) keep loading without a migration.
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct TickTickTag {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+}
+
+impl TickTickTag {
+    pub fn new<S: Into<String>>(name: S) -> Self {
+        Self {
+            name: name.into(),
+            color: None,
+        }
+    }
+
+    pub fn with_color<S: Into<String>, C: Into<String>>(name: S, color: C) -> Self {
+        Self {
+            name: name.into(),
+            color: Some(color.into()),
+        }
+    }
+}
+
+/// Deserialize a list of tags accepting either bare strings or full
+/// `{ "name": ..., "color": ... }` objects. Older payloads/JSONB rows used
+/// the bare-string form; we keep reading them so no DB migration is required.
+fn deserialize_optional_ticktick_tags<'de, D>(
+    deserializer: D,
+) -> Result<Option<Vec<TickTickTag>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum RawTag {
+        Name(String),
+        Full {
+            name: String,
+            #[serde(default)]
+            color: Option<String>,
+        },
+    }
+
+    let raw: Option<Vec<RawTag>> = Option::deserialize(deserializer)?;
+    Ok(raw.map(|tags| {
+        tags.into_iter()
+            .map(|raw| match raw {
+                RawTag::Name(name) => TickTickTag { name, color: None },
+                RawTag::Full { name, color } => TickTickTag { name, color },
+            })
+            .collect()
+    }))
+}
+
+/// Serialize tags so that a tag without a color is emitted as a bare string.
+/// This keeps outbound API payloads to TickTick (which only accept string tags)
+/// in their expected shape, while still letting us round-trip color metadata
+/// for tags that have it.
+fn serialize_optional_ticktick_tags<S>(
+    tags: &Option<Vec<TickTickTag>>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    use serde::ser::SerializeSeq;
+
+    match tags {
+        None => serializer.serialize_none(),
+        Some(tags) => {
+            let mut seq = serializer.serialize_seq(Some(tags.len()))?;
+            for tag in tags {
+                if tag.color.is_some() {
+                    seq.serialize_element(tag)?;
+                } else {
+                    seq.serialize_element(&tag.name)?;
+                }
+            }
+            seq.end()
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct TickTickChecklistItem {
@@ -97,8 +187,12 @@ pub struct TickTickItem {
     pub sort_order: Option<i64>,
     #[serde(default)]
     pub items: Option<Vec<TickTickChecklistItem>>,
-    #[serde(default)]
-    pub tags: Option<Vec<String>>,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_optional_ticktick_tags",
+        serialize_with = "serialize_optional_ticktick_tags"
+    )]
+    pub tags: Option<Vec<TickTickTag>>,
     #[serde(default)]
     pub created_time: Option<DateTime<Utc>>,
     #[serde(default)]
@@ -127,6 +221,15 @@ impl TickTickItem {
 
     pub fn get_due_date(&self) -> Option<DueDate> {
         self.due_date.map(DueDate::DateTimeWithTz)
+    }
+
+    /// Returns just the tag names, dropping any color metadata.
+    /// Used by downstream task-creation paths that expose tags as `Vec<String>`.
+    pub fn tag_names(&self) -> Vec<String> {
+        self.tags
+            .as_ref()
+            .map(|tags| tags.iter().map(|t| t.name.clone()).collect())
+            .unwrap_or_default()
     }
 }
 
@@ -216,7 +319,73 @@ mod tests {
         assert_eq!(ticktick_item.content, Some("Get milk and eggs".to_string()));
         assert_eq!(ticktick_item.priority, TickTickItemPriority::Medium);
         assert_eq!(ticktick_item.status, TickTickTaskStatus::Normal);
-        assert_eq!(ticktick_item.tags, Some(vec!["shopping".to_string()]));
+        assert_eq!(ticktick_item.tags, Some(vec![TickTickTag::new("shopping")]));
+        assert_eq!(ticktick_item.tag_names(), vec!["shopping".to_string()]);
+    }
+
+    #[rstest]
+    fn test_ticktick_item_deserializes_tags_with_color() {
+        // The /open/v1/tag endpoint returns objects with name + color.
+        // We accept that shape directly so sync code can persist enriched tags
+        // back into the JSONB-stored TickTickItem.
+        let ticktick_item: TickTickItem = serde_json::from_value(json!({
+            "id": "task1",
+            "projectId": "proj1",
+            "title": "Tagged",
+            "priority": 0,
+            "status": 0,
+            "tags": [
+                {"name": "shopping", "color": "FF6161"},
+                "groceries",
+                {"name": "errand"}
+            ],
+        }))
+        .unwrap();
+
+        assert_eq!(
+            ticktick_item.tags,
+            Some(vec![
+                TickTickTag::with_color("shopping", "FF6161"),
+                TickTickTag::new("groceries"),
+                TickTickTag::new("errand"),
+            ])
+        );
+    }
+
+    #[rstest]
+    fn test_ticktick_tag_serialization_preserves_shape() {
+        // Bare-name tags serialize as plain strings (so outbound TickTick API
+        // payloads stay compatible); colored tags serialize as objects so we
+        // can round-trip color through JSONB storage.
+        let item = TickTickItem {
+            id: "x".to_string(),
+            project_id: "p".to_string(),
+            title: "t".to_string(),
+            content: None,
+            desc: None,
+            all_day: None,
+            start_date: None,
+            due_date: None,
+            time_zone: None,
+            reminders: None,
+            repeat: None,
+            priority: TickTickItemPriority::None,
+            status: TickTickTaskStatus::Normal,
+            completed_time: None,
+            sort_order: None,
+            items: None,
+            tags: Some(vec![
+                TickTickTag::new("plain"),
+                TickTickTag::with_color("colored", "FF6161"),
+            ]),
+            created_time: None,
+            modified_time: None,
+        };
+
+        let serialized = serde_json::to_value(&item).unwrap();
+        let tags_value = &serialized["tags"];
+        assert_eq!(tags_value[0], json!("plain"));
+        assert_eq!(tags_value[1], json!({"name": "colored", "color": "FF6161"}));
     }
 
     #[rstest]
@@ -237,6 +406,7 @@ mod tests {
         assert_eq!(ticktick_item.content, None);
         assert_eq!(ticktick_item.due_date, None);
         assert_eq!(ticktick_item.tags, None);
+        assert_eq!(ticktick_item.tag_names(), Vec::<String>::new());
     }
 
     #[rstest]

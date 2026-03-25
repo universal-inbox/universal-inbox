@@ -14,7 +14,7 @@ Universal Inbox provides an OAuth 2.1 authorization server for programmatic acce
 
 API keys provide a simpler authentication method for tools that do not support OAuth.
 
-![User profile screen](images/user-profile.png =750x center)
+![API keys on the Security page](images/api_usage.png =750x center)
 
 From the user profile screen:
 - click on the "Create new API key" button. This will generate a new API key.
@@ -24,4 +24,8 @@ Use the API key as a Bearer token in the `Authorization` header:
 
 ```http
 Authorization: Bearer <your-api-key>
+```
+
+```admonish tip
+The same Security page lists all the API keys you have created and lets you revoke any key you no longer need. See [Security & Privacy](security.md).
 ```

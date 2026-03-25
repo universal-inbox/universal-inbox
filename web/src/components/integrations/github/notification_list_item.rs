@@ -2,25 +2,17 @@
 
 use dioxus::prelude::*;
 
-use dioxus_free_icons::{Icon, icons::bs_icons::BsChatTextFill};
 use universal_inbox::{
-    HasHtmlUrl,
-    notification::NotificationWithTask,
+    notification::{NotificationStatus, NotificationWithTask},
     third_party::integrations::github::{
         GithubDiscussion, GithubNotification, GithubNotificationItem, GithubPullRequest,
-        GithubPullRequestReviewDecision,
     },
 };
 
 use crate::{
     components::{
-        integrations::github::{
-            GithubActorDisplay,
-            icons::{Github, GithubNotificationIcon},
-            preview::pull_request::ChecksGithubPullRequest,
-        },
-        list::{ListContext, ListItem},
-        notifications_list::{TaskHint, get_notification_list_item_action_buttons},
+        integrations::github::icons::{Github, GithubPullRequestIcon},
+        list::ListItem,
     },
     utils::format_elapsed_time,
 };
@@ -76,36 +68,27 @@ pub fn DefaultGithubNotificationListItem(
     on_select: EventHandler<()>,
 ) -> Element {
     let notification_updated_at = use_memo(move || format_elapsed_time(notification().updated_at));
-    let list_context = use_context::<Memo<ListContext>>();
-    let link = notification().get_html_url();
+    let is_unread = notification().status == NotificationStatus::Unread;
 
     rsx! {
         ListItem {
             key: "{notification().id}",
+            linked_task: notification().task,
             title: "{notification().title}",
             subtitle: rsx! { GithubNotificationSubtitle { github_notification } },
-            link,
+            time: "{notification_updated_at}",
             icon: rsx! {
-                Github { class: "h-5 w-5" },
-                TaskHint { task: notification().task }
-            },
-            subicon: rsx! {
-                GithubNotificationIcon {
-                    class: "h-5 w-5 min-w-5",
-                    notif: notification,
-                    github_notification: github_notification
+                div {
+                    class: "w-full h-full flex items-center justify-center rounded-[inherit] bg-[var(--ui-surface)] border border-[var(--ui-border)]",
+                    Github { class: "h-4 w-4" }
                 }
             },
-            action_buttons: get_notification_list_item_action_buttons(
-                notification,
-                list_context().show_shortcut,
-                None,
-                None
-            ),
+            meta_icon: rsx! { span { class: "icon-[lucide--circle-dot] w-full h-full" } },
             is_selected,
+            is_unread,
+            provider: Some("github"),
+            data_kind: Some("issue"),
             on_select,
-
-            span { class: "text-base-content/50 whitespace-nowrap text-xs font-mono", "{notification_updated_at}" }
         }
     }
 }
@@ -119,56 +102,32 @@ pub fn GithubPullRequestNotificationListItem(
     on_select: EventHandler<()>,
 ) -> Element {
     let notification_updated_at = use_memo(move || format_elapsed_time(notification().updated_at));
-    let list_context = use_context::<Memo<ListContext>>();
-    let link = notification().get_html_url();
+    let is_unread = notification().status == NotificationStatus::Unread;
 
     rsx! {
         ListItem {
             key: "{notification().id}",
+            linked_task: notification().task,
             title: "{notification().title}",
             subtitle: rsx! { GithubNotificationSubtitle { github_notification } },
-            link,
+            time: "{notification_updated_at}",
             icon: rsx! {
-                Github { class: "h-5 w-5" },
-                TaskHint { task: notification().task }
-            },
-            subicon: rsx! {
-                GithubNotificationIcon {
-                    class: "h-5 w-5 min-w-5",
-                    notif: notification,
-                    github_notification: github_notification
-                }
-            },
-            action_buttons: get_notification_list_item_action_buttons(
-                notification,
-                list_context().show_shortcut,
-                None,
-                None
-            ),
-            is_selected,
-            on_select,
-
-            ChecksGithubPullRequest {
-                icon_size: "h-5 w-5",
-                latest_commit: github_pull_request().latest_commit,
-                expand_details: false,
-            }
-
-            if github_pull_request().comments_count > 0 {
                 div {
-                    class: "flex gap-1 items-center",
-                    Icon { class: "h-5 w-5 text-info", icon: BsChatTextFill }
-                    span { class: "text-xs text-base-content/50", "{github_pull_request().comments_count}" }
+                    class: "w-full h-full flex items-center justify-center rounded-[inherit] bg-[var(--ui-surface)] border border-[var(--ui-border)]",
+                    Github { class: "h-4 w-4" }
                 }
-            }
-
-            GithubReviewStatus { github_pull_request }
-
-            if let Some(actor) = github_pull_request().author {
-                GithubActorDisplay { actor }
-            }
-
-            span { class: "text-base-content/50 whitespace-nowrap text-xs font-mono", "{notification_updated_at}" }
+            },
+            meta_icon: rsx! {
+                GithubPullRequestIcon {
+                    class: "w-full h-full",
+                    github_pull_request: github_pull_request(),
+                }
+            },
+            is_selected,
+            is_unread,
+            provider: Some("github"),
+            data_kind: Some("pull_request"),
+            on_select,
         }
     }
 }
@@ -182,48 +141,27 @@ pub fn GithubDiscussionNotificationListItem(
     on_select: EventHandler<()>,
 ) -> Element {
     let notification_updated_at = use_memo(move || format_elapsed_time(notification().updated_at));
-    let list_context = use_context::<Memo<ListContext>>();
-    let link = notification().get_html_url();
+    let is_unread = notification().status == NotificationStatus::Unread;
 
     rsx! {
         ListItem {
             key: "{notification().id}",
+            linked_task: notification().task,
             title: "{notification().title}",
             subtitle: rsx! { GithubNotificationSubtitle { github_notification } },
-            link,
+            time: "{notification_updated_at}",
             icon: rsx! {
-                Github { class: "h-5 w-5" },
-                TaskHint { task: notification().task }
-            },
-            subicon: rsx! {
-                GithubNotificationIcon {
-                    class: "h-5 w-5 min-w-5",
-                    notif: notification,
-                    github_notification: github_notification
-                }
-            },
-            action_buttons: get_notification_list_item_action_buttons(
-                notification,
-                list_context().show_shortcut,
-                None,
-                None
-            ),
-            is_selected,
-            on_select,
-
-            if github_discussion().comments_count > 0 {
                 div {
-                    class: "flex gap-1 items-center",
-                    Icon { class: "h-5 w-5 text-info", icon: BsChatTextFill }
-                    span { class: "text-xs text-base-content/50", "{github_discussion().comments_count}" }
+                    class: "w-full h-full flex items-center justify-center rounded-[inherit] bg-[var(--ui-surface)] border border-[var(--ui-border)]",
+                    Github { class: "h-4 w-4" }
                 }
-            }
-
-            if let Some(actor) = github_discussion().author {
-                GithubActorDisplay { actor }
-            }
-
-            span { class: "text-base-content/50 whitespace-nowrap text-xs font-mono", "{notification_updated_at}" }
+            },
+            meta_icon: rsx! { span { class: "icon-[lucide--message-square] w-full h-full" } },
+            is_selected,
+            is_unread,
+            provider: Some("github"),
+            data_kind: Some("discussion"),
+            on_select,
         }
     }
 }
@@ -231,32 +169,12 @@ pub fn GithubDiscussionNotificationListItem(
 #[component]
 fn GithubNotificationSubtitle(github_notification: ReadSignal<GithubNotification>) -> Element {
     rsx! {
-        div {
-            class: "flex gap-2 text-xs text-base-content/50",
-
-            span { "{github_notification().repository.full_name}" }
+        span {
+            class: "ui-nrow-meta-text",
+            "{github_notification().repository.full_name}"
             if let Some(github_notification_id) = github_notification().extract_id() {
-                span { "#{github_notification_id}" }
+                " #{github_notification_id}"
             }
         }
     }
-}
-
-#[component]
-pub fn GithubReviewStatus(github_pull_request: ReadSignal<GithubPullRequest>) -> Element {
-    github_pull_request()
-        .review_decision
-        .as_ref()
-        .map(|review_decision| match review_decision {
-            GithubPullRequestReviewDecision::Approved => {
-                rsx! { div { class: "badge badge-sm p-1 whitespace-nowrap text-xs badge-success", "Approved" } }
-            }
-            GithubPullRequestReviewDecision::ChangesRequested => {
-                rsx! { div { class: "badge badge-sm p-1 whitespace-nowrap text-xs basge-error", "Changes requested" } }
-            }
-            GithubPullRequestReviewDecision::ReviewRequired => {
-                rsx! { div { class: "badge badge-sm p-1 whitespace-nowrap text-xs badge-info", "Review required" } }
-            }
-        })
-        .unwrap_or_else(|| rsx! {})
 }

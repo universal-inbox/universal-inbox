@@ -7,13 +7,13 @@ use web_sys::KeyboardEvent;
 
 use universal_inbox::{
     HasHtmlUrl, Page,
-    notification::{NotificationId, NotificationWithTask},
+    notification::{NotificationId, NotificationStatus, NotificationWithTask},
 };
 
 use crate::{
     components::{
         notification_preview::NotificationPreview, notifications_list::NotificationsList,
-        resizable_panel::ResizablePanel, welcome_hero::WelcomeHero,
+        welcome_hero::WelcomeHero,
     },
     keyboard_manager::{KEYBOARD_MANAGER, KeyboardHandler},
     model::{PreviewPane, UI_MODEL},
@@ -22,7 +22,6 @@ use crate::{
         flyonui::open_flyonui_modal,
         notification_service::{NOTIFICATION_FILTERS, NOTIFICATIONS_PAGE, NotificationCommand},
     },
-    settings::PanelPosition,
     utils::{
         get_screen_width, open_link, scroll_element, scroll_element_by_page,
         scroll_element_into_view_by_class,
@@ -66,6 +65,7 @@ fn InternalNotificationPage(notification_id: ReadSignal<Option<NotificationId>>)
         notification_id()
     );
 
+    // URL → state: reconcile the selected index from the URL and the current list.
     use_effect(move || {
         if let Some(notification_id) = notification_id() {
             if let Some(notification_index) = notifications()
@@ -83,9 +83,26 @@ fn InternalNotificationPage(notification_id: ReadSignal<Option<NotificationId>>)
         }
     });
 
+    // state → URL: push the URL when the user explicitly changes the selected index
+    // (click, keyboard, prev/next).
+    //
+    // Two safeguards prevent this effect from racing with the URL→state effect above
+    // on list refreshes — which would flip-flop the URL between two notifications and
+    // freeze the app:
+    //
+    // 1. The `use_memo` deduplicates `selected_notification_index` changes so this
+    //    effect does NOT re-fire on every `UI_MODEL.write()` (the API layer writes
+    //    `authentication_state` on every request, which would otherwise re-trigger us).
+    // 2. `notifications.peek()` reads the list without subscribing, so this effect
+    //    does NOT re-fire on list refreshes/reorders.
+    //
+    // Together: this effect runs ONLY when the user actually changes the selected
+    // index (or on initial mount).
+    let selected_index = use_memo(move || UI_MODEL.read().selected_notification_index);
     use_effect(move || {
-        if let Some(index) = UI_MODEL.read().selected_notification_index {
-            if let Some(selected_notification) = notifications().content.get(index)
+        let index = selected_index();
+        if let Some(index) = index {
+            if let Some(selected_notification) = notifications.peek().content.get(index)
                 && *notification_id.peek() != Some(selected_notification.id)
             {
                 let route = Route::NotificationPage {
@@ -102,20 +119,10 @@ fn InternalNotificationPage(notification_id: ReadSignal<Option<NotificationId>>)
         KEYBOARD_MANAGER.write().active_keyboard_handler = None;
     });
 
-    let panel_position = UI_MODEL.read().get_details_panel_position().clone();
-    let layout_class = match panel_position {
-        PanelPosition::Right => {
-            "h-full mx-auto flex flex-row lg:px-4 lg:divide-x divide-base-content/25 relative"
-        }
-        PanelPosition::Bottom => {
-            "h-full mx-auto flex flex-col lg:px-4 lg:divide-y divide-base-content/25 relative"
-        }
-    };
-
     rsx! {
         div {
             id: "notifications-page",
-            class: "{layout_class}",
+            class: "flex h-full",
             onmounted: move |_| {
                 KEYBOARD_MANAGER.write().active_keyboard_handler = Some(&KEYBOARD_HANDLER);
             },
@@ -123,21 +130,24 @@ fn InternalNotificationPage(notification_id: ReadSignal<Option<NotificationId>>)
             if NOTIFICATIONS_PAGE.read().content.is_empty() && !NOTIFICATION_FILTERS().is_filtered() {
                 WelcomeHero { inbox_zero_message: "Your notifications will appear here when they arrive." }
             } else {
-                div {
-                    class: match panel_position {
-                        PanelPosition::Right => "h-full flex-1 max-lg:w-full max-lg:absolute",
-                        PanelPosition::Bottom => "flex-1 max-lg:w-full max-lg:absolute overflow-y-auto",
-                    },
-
-                    NotificationsList {
-                        notifications,
-                        notification_filters: NOTIFICATION_FILTERS.signal(),
-                    }
+                NotificationsList {
+                    notifications,
+                    notification_filters: NOTIFICATION_FILTERS.signal(),
                 }
 
                 if let Some(index) = UI_MODEL.read().selected_notification_index {
                     if let Some(notification) = NOTIFICATIONS_PAGE().content.get(index) {
-                        ResizablePanel {
+                        div {
+                            // `.detail-panel` class hook preserved for the
+                            // shell CSS (flex: 1, bg, overflow). Mobile
+                            // visibility is now driven by `max-md:hidden!`
+                            // (default off) + `max-md:[.app-layout.show-detail_&]:flex!`
+                            // (revealed when the parent layout enters
+                            // show-detail at ≤768px). Desktop renders both
+                            // panes side-by-side regardless. `!important`
+                            // (`!` suffix) is required to win against the
+                            // `.detail-panel { display: flex }` cascade.
+                            class: "detail-panel max-md:hidden! max-md:[.app-layout.show-detail_&]:flex! max-md:[.app-layout.show-detail_&]:flex-1!",
                             NotificationPreview {
                                 notification: notification.clone(),
                                 notifications_count: notifications().content.len(),
@@ -179,6 +189,11 @@ impl KeyboardHandler for NotificationsPageKeyboardHandler {
                     let mut ui_model = UI_MODEL.write();
                     ui_model.selected_notification_index = Some(new_index);
                     drop(ui_model);
+                    if let Some(notif) = notifications_page.content.get(new_index)
+                        && notif.status == NotificationStatus::Unread
+                    {
+                        notification_service.send(NotificationCommand::MarkAsRead(notif.id));
+                    }
                     let _ = scroll_element_into_view_by_class(
                         "notifications-list",
                         "row-hover",
@@ -194,6 +209,11 @@ impl KeyboardHandler for NotificationsPageKeyboardHandler {
                     let mut ui_model = UI_MODEL.write();
                     ui_model.selected_notification_index = Some(new_index);
                     drop(ui_model);
+                    if let Some(notif) = notifications_page.content.get(new_index)
+                        && notif.status == NotificationStatus::Unread
+                    {
+                        notification_service.send(NotificationCommand::MarkAsRead(notif.id));
+                    }
                     let _ = scroll_element_into_view_by_class(
                         "notifications-list",
                         "row-hover",

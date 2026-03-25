@@ -32,6 +32,7 @@ impl Default for UISettings {
 impl UserSettings {
     pub const STORAGE_KEY: &'static str = "universal-inbox-settings";
 
+    #[allow(dead_code)]
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string(self)
     }

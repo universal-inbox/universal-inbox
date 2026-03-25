@@ -1,0 +1,43 @@
+{
+  "id": "AAAABUiR-5ub_7yjYZKluDfg8a8AAANM",
+  "file_name": "Universal Inbox v0.5 — Release plan.docx",
+  "file_id": "1AbCdEfGhIjKlMnOpQrStUvWxYz",
+  "file_mime_type": "application/vnd.google-apps.document",
+  "content": "I think we should revisit the rollout sequence. Shipping the desktop app on the same day as the API change feels too aggressive given the support load.",
+  "html_content": "<p>I think we should revisit the rollout sequence. Shipping the desktop app on the same day as the API change feels too <strong>aggressive</strong> given the support load.</p>",
+  "quoted_file_content": "Day-1 milestones: API change + desktop app GA + announcement post",
+  "author": {
+    "display_name": "Maya Rivera",
+    "email_address": "maya@universal-inbox.com",
+    "photo_link": "https://lh3.googleusercontent.com/a/default-user=s64"
+  },
+  "created_time": "{{ago_6h}}",
+  "modified_time": "{{ago_6h}}",
+  "resolved": false,
+  "replies": [
+    {
+      "id": "AAAABUiR-5ub_7yjYZKluDfg8a8AAANT",
+      "content": "Agreed. Could we stagger by 48 hours so support can absorb the API question wave first?",
+      "html_content": "<p>Agreed. Could we stagger by <em>48 hours</em> so support can absorb the API question wave first?</p>",
+      "author": {
+        "display_name": "Alice Chen",
+        "email_address": "alice@universal-inbox.com",
+        "photo_link": "https://lh3.googleusercontent.com/a/default-user=s64"
+      },
+      "created_time": "{{ago_4h}}",
+      "modified_time": "{{ago_4h}}"
+    },
+    {
+      "id": "AAAABUiR-5ub_7yjYZKluDfg8a8AAANU",
+      "content": "+1 — let's pencil in the desktop GA for two days later. I'll update the doc.",
+      "html_content": "<p>+1 — let's pencil in the desktop GA for two days later. I'll update the doc.</p>",
+      "author": {
+        "display_name": "Bob Martinez",
+        "email_address": "bob@universal-inbox.com",
+        "photo_link": null
+      },
+      "created_time": "{{ago_2h}}",
+      "modified_time": "{{ago_2h}}"
+    }
+  ]
+}

@@ -6,7 +6,10 @@
     "section_id": "7025",
     "content": "Release new version of Universal Inbox",
     "description": "",
-    "labels": ["Food", "Shopping"],
+    "labels": [
+        { "name": "Food", "color": "red" },
+        { "name": "Shopping", "color": "blue" }
+    ],
     "child_order": 1,
     "day_order": -1,
     "priority": 1,

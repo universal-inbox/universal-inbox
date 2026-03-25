@@ -44,7 +44,11 @@ To create an API key:
 2. Click **Create new API key**.
 3. Copy the key and store it securely. You will not be able to see it again.
 
-![User profile screen](images/user-profile.png =750x center)
+![Authorized OAuth clients on the Security page](images/ai_agents.png =750x center)
+
+```admonish tip
+You can review every MCP/OAuth client that has been authorized against your account — and revoke any of them — from the [Security & Privacy](security.md) page.
+```
 
 ## Claude Desktop and Claude Code
 

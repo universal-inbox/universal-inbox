@@ -1,17 +1,18 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
-use dioxus_free_icons::{Icon, icons::bs_icons::BsArrowUpRightSquare};
 
-use universal_inbox::{HasHtmlUrl, third_party::integrations::slack::SlackFileDetails};
+use universal_inbox::third_party::integrations::slack::SlackFileDetails;
 
-use crate::components::{integrations::slack::SlackTeamDisplay, markdown::Markdown};
+use crate::{
+    components::{integrations::slack::SlackTeamDisplay, preview_card_header::PreviewCardHeader},
+    utils::strip_markdown_links,
+};
 
 #[component]
 pub fn SlackFilePreview(
     slack_file: ReadSignal<SlackFileDetails>,
     title: ReadSignal<String>,
-    icon: Option<Element>,
 ) -> Element {
     let channel_name = slack_file()
         .channel
@@ -21,31 +22,16 @@ pub fn SlackFilePreview(
 
     rsx! {
         div {
-            class: "flex flex-col w-full gap-2 h-full",
+            class: "flex flex-col w-full h-full",
 
-            h3 {
-                class: "flex items-center gap-2 text-base",
-
-                { icon }
-                a {
-                    class: "flex items-center",
-                    href: "{slack_file().get_html_url()}",
-                    target: "_blank",
-                    Markdown { text: "{title}" }
-                    Icon { class: "h-5 w-5 min-w-5 text-base-content/50 p-1", icon: BsArrowUpRightSquare }
-                }
-            }
-
-            div {
-                class: "flex items-center gap-2",
-
-                SlackTeamDisplay { team: slack_file().team }
-                a {
-                    class: "text-xs text-base-content/50",
-                    href: "{slack_file().get_html_url()}",
-                    target: "_blank",
-                    "#{channel_name}"
-                }
+            PreviewCardHeader {
+                brand_icon: rsx! { span { class: "icon-[lucide--paperclip] size-4" } },
+                title: strip_markdown_links(&title()),
+                subline: rsx! {
+                    SlackTeamDisplay { team: slack_file().team, display_name: true }
+                    span { class: "sep", "·" }
+                    span { "#{channel_name}" }
+                },
             }
         }
     }

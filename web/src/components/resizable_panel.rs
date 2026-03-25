@@ -142,7 +142,7 @@ pub fn ResizablePanel(children: Element) -> Element {
 
                     // Position toggle button
                     button {
-                        class: "absolute top-2 right-2 z-10 btn btn-circle btn-xs btn-ghost hover:btn-primary opacity-50 hover:opacity-100 transition-opacity",
+                        class: "absolute top-2 right-2 z-10 btn btn-circle btn-xs btn-soft text-[var(--ui-base-muted)] hover:text-[var(--ui-primary)] hover:border-[var(--ui-primary)]",
                         title: "Switch to bottom panel",
                         onclick: move |_| {
                             UI_MODEL.write().toggle_details_panel_position();
@@ -195,7 +195,7 @@ pub fn ResizablePanel(children: Element) -> Element {
 
                     // Position toggle button
                     button {
-                        class: "absolute top-2 right-2 z-10 btn btn-circle btn-xs btn-ghost hover:btn-primary opacity-50 hover:opacity-100 transition-opacity",
+                        class: "absolute top-2 right-2 z-10 btn btn-circle btn-xs btn-soft text-[var(--ui-base-muted)] hover:text-[var(--ui-primary)] hover:border-[var(--ui-primary)]",
                         title: "Switch to right panel",
                         onclick: move |_| {
                             UI_MODEL.write().toggle_details_panel_position();

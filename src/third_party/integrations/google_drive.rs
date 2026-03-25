@@ -52,6 +52,8 @@ pub struct GoogleDriveCommentReply {
     pub author: GoogleDriveCommentAuthor,
     pub created_time: DateTime<Utc>,
     pub modified_time: DateTime<Utc>,
+    #[serde(default)]
+    pub action: Option<String>,
 }
 
 impl GoogleDriveComment {
@@ -217,6 +219,7 @@ mod tests {
             author: comment_author,
             created_time: Utc.with_ymd_and_hms(2025, 9, 28, 10, 0, 0).unwrap(),
             modified_time: Utc.with_ymd_and_hms(2025, 9, 28, 10, 5, 0).unwrap(),
+            action: None,
         }
     }
 
@@ -350,6 +353,7 @@ mod tests {
                 },
                 created_time: Utc::now(),
                 modified_time: Utc::now(),
+                action: None,
             }],
             user_email_address: None,
             user_display_name: None,
@@ -433,6 +437,7 @@ mod tests {
                     },
                     created_time: Utc::now(),
                     modified_time: Utc::now(),
+                    action: None,
                 },
                 GoogleDriveCommentReply {
                     id: "reply_123".to_string(),
@@ -449,6 +454,7 @@ mod tests {
                     },
                     created_time: Utc::now(),
                     modified_time: Utc::now(),
+                    action: None,
                 },
             ],
             user_email_address: None,
@@ -534,6 +540,7 @@ mod tests {
                     },
                     created_time: Utc::now(),
                     modified_time: Utc::now(),
+                    action: None,
                 },
                 GoogleDriveCommentReply {
                     id: "reply_123".to_string(),
@@ -546,6 +553,7 @@ mod tests {
                     },
                     created_time: Utc::now(),
                     modified_time: Utc::now(),
+                    action: None,
                 },
             ],
             user_email_address: None,
@@ -594,6 +602,7 @@ mod tests {
                 },
                 created_time: Utc::now(),
                 modified_time: Utc::now(),
+                action: None,
             }],
             user_email_address: None,
             user_display_name: None,
@@ -641,6 +650,7 @@ mod tests {
                 },
                 created_time: Utc::now(),
                 modified_time: Utc::now(),
+                action: None,
             }],
             // No user info stored on comment
             user_email_address: None,
@@ -685,6 +695,7 @@ mod tests {
                 },
                 created_time: Utc::now(),
                 modified_time: Utc::now(),
+                action: None,
             }],
             user_email_address: Some("test@example.com".to_string()),
             user_display_name: Some("Test User".to_string()),
@@ -723,6 +734,7 @@ mod tests {
                     },
                     created_time: Utc::now(),
                     modified_time: Utc::now(),
+                    action: None,
                 },
                 GoogleDriveCommentReply {
                     id: "reply_456".to_string(),
@@ -735,6 +747,7 @@ mod tests {
                     },
                     created_time: Utc::now(),
                     modified_time: Utc::now(),
+                    action: None,
                 },
             ],
             user_email_address: Some("test@example.com".to_string()),

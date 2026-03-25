@@ -20,6 +20,7 @@ use crate::{
         passkey_signup_page::PasskeySignupPage,
         password_reset_page::PasswordResetPage,
         password_update_page::PasswordUpdatePage,
+        security_page::SecurityPage,
         settings_page::SettingsPage,
         signup_page::SignupPage,
         synced_tasks_page::{SyncedTaskPage, SyncedTasksPage},
@@ -62,6 +63,8 @@ pub enum Route {
         SyncedTaskPage { task_id: TaskId },
         #[route("/settings")]
         SettingsPage {},
+        #[route("/security")]
+        SecurityPage {},
         #[route("/profile")]
         UserProfilePage {},
       #[end_layout]

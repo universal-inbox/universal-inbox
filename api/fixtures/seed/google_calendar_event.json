@@ -1,0 +1,88 @@
+{
+  "kind": "calendar#event",
+  "etag": "\"3471714048456000\"",
+  "id": "uni_standup_25",
+  "status": "confirmed",
+  "htmlLink": "https://www.google.com/calendar/event?eid=uni_standup_25",
+  "created": "{{ago_1w}}",
+  "updated": "{{ago_1d}}",
+  "summary": "Universal Inbox standup — Sprint 24-Q3-09",
+  "description": "Quick async standup before deep-work block. Roundtable: yesterday / today / blockers, then review the v0.5 burndown.",
+  "creator": {
+    "email": "alice@universal-inbox.com"
+  },
+  "organizer": {
+    "email": "alice@universal-inbox.com"
+  },
+  "start": {
+    "dateTime": "{{tomorrow_at_09}}",
+    "timeZone": "Europe/Paris"
+  },
+  "end": {
+    "dateTime": "{{tomorrow_at_09_15}}",
+    "timeZone": "Europe/Paris"
+  },
+  "iCalUID": "uni_standup_25@universal-inbox.com",
+  "sequence": 1,
+  "attendees": [
+    {
+      "email": "{{user_email}}",
+      "self": true,
+      "responseStatus": "needsAction"
+    },
+    {
+      "email": "alice@universal-inbox.com",
+      "organizer": true,
+      "responseStatus": "accepted",
+      "displayName": "Alice Chen"
+    },
+    {
+      "email": "daniel@universal-inbox.com",
+      "responseStatus": "accepted",
+      "displayName": "Daniel Wong"
+    },
+    {
+      "email": "sara@universal-inbox.com",
+      "responseStatus": "accepted",
+      "displayName": "Sara Park"
+    }
+  ],
+  "hangoutLink": "https://meet.google.com/abc-def-ghi",
+  "conferenceData": {
+    "entryPoints": [
+      {
+        "entryPointType": "video",
+        "uri": "https://meet.google.com/abc-def-ghi",
+        "label": "meet.google.com/abc-def-ghi"
+      },
+      {
+        "entryPointType": "more",
+        "uri": "https://tel.meet/abc-def-ghi?pin=12345",
+        "pin": "12345"
+      },
+      {
+        "regionCode": "FR",
+        "entryPointType": "phone",
+        "uri": "tel:+33-1-87-40-26-40",
+        "label": "+33 1 87 40 26 40",
+        "pin": "12345"
+      }
+    ],
+    "conferenceSolution": {
+      "key": {
+        "type": "hangoutsMeet"
+      },
+      "name": "Google Meet",
+      "iconUri": "https://fonts.gstatic.com/s/i/productlogos/meet_2020q4/v6/web-512dp/logo_meet_2020q4_color_2x_web_512dp.png"
+    },
+    "conferenceId": "abc-def-ghi"
+  },
+  "guestsCanModify": false,
+  "recurrence": [
+    "RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"
+  ],
+  "reminders": {
+    "useDefault": true
+  },
+  "eventType": "default"
+}

@@ -828,6 +828,19 @@ pub struct GithubDiscussion {
     pub answer_chosen_at: Option<DateTime<Utc>>,
     pub answer_chosen_by: Option<GithubActor>,
     pub answer: Option<GithubDiscussionComment>,
+    /// The discussion category (e.g. Q&A, Ideas, General). Optional so that
+    /// existing items persisted before this field was introduced still
+    /// deserialize cleanly.
+    #[serde(default)]
+    pub category: Option<GithubDiscussionCategory>,
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct GithubDiscussionCategory {
+    pub name: String,
+    pub emoji: Option<String>,
+    pub slug: String,
+    pub is_answerable: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Copy, Clone, Eq)]

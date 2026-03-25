@@ -1,0 +1,108 @@
+{
+  "id": "123",
+  "historyId": "111",
+  "messages": [
+    {
+      "id": "120",
+      "threadId": "123",
+      "labelIds": ["INBOX"],
+      "snippet": "Hey team, Please review the Universal Inbox rollout plan and confirm we can ship by end of week.",
+      "payload": {
+        "mimeType": "text/html",
+        "headers": [
+          {
+            "name": "Date",
+            "value": "Sat, 16 Sep 2023 21:00:00 GMT"
+          },
+          {
+            "name": "Subject",
+            "value": "News from Universal Inbox"
+          },
+          {
+            "name": "From",
+            "value": "Jane Smith <jane@example.com>"
+          },
+          {
+            "name": "To",
+            "value": "test@example.com"
+          }
+        ],
+        "body": {
+          "size": 151,
+          "data": "PGRpdiBkaXI9Imx0ciI-SGV5IHRlYW0sPGJyPjxicj5QbGVhc2UgcmV2aWV3IHRoZSBVbml2ZXJzYWwgSW5ib3ggcm9sbG91dCBwbGFuIGFuZCBjb25maXJtIHdlIGNhbiBzaGlwIGJ5IGVuZCBvZiB3ZWVrLjxicj48YnI-VGhhbmtzITxicj5KYW5lPGJyPjwvZGl2Pg=="
+        }
+      },
+      "sizeEstimate": 1500,
+      "historyId": "111",
+      "internalDate": "1694898000000"
+    },
+    {
+      "id": "121",
+      "threadId": "123",
+      "labelIds": ["INBOX", "SENT"],
+      "snippet": "Hi team, Looks good to me, shipping today!",
+      "payload": {
+        "mimeType": "text/html",
+        "headers": [
+          {
+            "name": "Date",
+            "value": "Sat, 16 Sep 2023 21:11:28 GMT"
+          },
+          {
+            "name": "Subject",
+            "value": "Re: News from Universal Inbox"
+          },
+          {
+            "name": "From",
+            "value": "test@example.com"
+          },
+          {
+            "name": "To",
+            "value": "Jane Smith <jane@example.com>"
+          }
+        ],
+        "body": {
+          "size": 74,
+          "data": "PGRpdiBkaXI9Imx0ciI-SGkgdGVhbSw8YnI-PGJyPkxvb2tzIGdvb2QgdG8gbWUsIHNoaXBwaW5nIHRvZGF5ITxicj48L2Rpdj4="
+        }
+      },
+      "sizeEstimate": 1200,
+      "historyId": "111",
+      "internalDate": "1694898688000"
+    },
+    {
+      "id": "123",
+      "threadId": "123",
+      "labelIds": ["STARRED", "INBOX", "UNREAD"],
+      "snippet": "Great — I will take care of the announcement post.",
+      "payload": {
+        "mimeType": "text/html",
+        "headers": [
+          {
+            "name": "Date",
+            "value": "Sat, 16 Sep 2023 21:16:40 GMT"
+          },
+          {
+            "name": "Subject",
+            "value": "Re: News from Universal Inbox"
+          },
+          {
+            "name": "From",
+            "value": "Bob Martin <bob@example.com>"
+          },
+          {
+            "name": "To",
+            "value": "test@example.com, Jane Smith <jane@example.com>"
+          }
+        ],
+        "body": {
+          "size": 86,
+          "data": "PGRpdiBkaXI9Imx0ciI-R3JlYXQg4oCUIEkgd2lsbCB0YWtlIGNhcmUgb2YgdGhlIGFubm91bmNlbWVudCBwb3N0Ljxicj48YnI-Qm9iPGJyPjwvZGl2Pg=="
+        }
+      },
+      "sizeEstimate": 1300,
+      "historyId": "111",
+      "internalDate": "1694899000000"
+    }
+  ]
+}

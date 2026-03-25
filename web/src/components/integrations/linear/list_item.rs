@@ -11,8 +11,8 @@ pub fn LinearIssueListItemSubtitle(linear_issue: ReadSignal<LinearIssue>) -> Ele
     let team = linear_issue().team;
 
     rsx! {
-        div {
-            class: "flex gap-2 text-xs text-base-content/50",
+        span {
+            class: "ui-nrow-meta-text flex items-center gap-1 min-w-0",
 
             if let Some(team_icon) = team.icon {
                 span { "{team_icon} {team.name}" }
@@ -21,7 +21,7 @@ pub fn LinearIssueListItemSubtitle(linear_issue: ReadSignal<LinearIssue>) -> Ele
             }
 
             if let Some(LinearProject { name, icon, .. }) = linear_issue().project {
-                div {
+                span {
                     class: "flex flex-row items-center gap-1",
                     if let Some(project_icon) = icon {
                         span { "{project_icon}" }

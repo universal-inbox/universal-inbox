@@ -1,10 +1,10 @@
 #![allow(non_snake_case)]
 use dioxus::prelude::*;
-use serde_json::json;
 
 use universal_inbox::{
     integration_connection::{
         config::IntegrationConnectionConfig, integrations::ticktick::TickTickConfig,
+        provider::IntegrationProviderKind,
     },
     task::{
         PresetDueDate, ProjectSummary, TaskPriority, integrations::ticktick::TICKTICK_INBOX_PROJECT,
@@ -12,7 +12,14 @@ use universal_inbox::{
 };
 
 use crate::{
-    components::floating_label_inputs::{FloatingLabelInputSearchSelect, FloatingLabelSelect},
+    components::{
+        project_search_field::ProjectSearchField,
+        settings_controls::SettingRow,
+        ui::{
+            ToggleSize, ToggleSwitch, UISelect, preset_due_date_options, priority_select_renderers,
+            task_priority_options,
+        },
+    },
     config::get_api_base_url,
 };
 
@@ -32,161 +39,100 @@ pub fn TickTickProviderConfiguration(
     });
 
     let api_base_url = get_api_base_url().unwrap();
+    let (priority_render_value, priority_render_option) = priority_select_renderers();
 
     rsx! {
+        SettingRow {
+            label: rsx! { "Synchronize TickTick tasks" },
+            ToggleSwitch {
+                size: ToggleSize::Md,
+                checked: config().sync_tasks_enabled,
+                onchange: move |new_value: bool| {
+                    on_config_change.call(IntegrationConnectionConfig::TickTick(TickTickConfig {
+                        sync_tasks_enabled: new_value,
+                        ..config()
+                    }))
+                },
+            }
+        }
+
+
+        SettingRow {
+            label: rsx! {
+                "Synchronize TickTick tasks from "
+                code { "#{TICKTICK_INBOX_PROJECT}" }
+                " as notifications"
+            },
+            ToggleSwitch {
+                size: ToggleSize::Md,
+                checked: config().create_notification_from_inbox_task,
+                onchange: move |new_value: bool| {
+                    on_config_change.call(IntegrationConnectionConfig::TickTick(TickTickConfig {
+                        create_notification_from_inbox_task: new_value,
+                        ..config()
+                    }))
+                },
+            }
+        }
+
         div {
-            class: "flex flex-col gap-2",
-
+            class: "settings-subsection",
             div {
-                class: "flex items-center",
-                label {
-                    class: "label-text cursor-pointer grow text-sm text-base-content",
-                    "Synchronize TickTick tasks"
-                }
-                div {
-                    class: "relative inline-block",
-                    input {
-                        r#type: "checkbox",
-                        class: "switch switch-primary switch-outline peer",
-                        oninput: move |event| {
-                            on_config_change.call(IntegrationConnectionConfig::TickTick(TickTickConfig {
-                                sync_tasks_enabled: event.value() == "true",
-                                ..config()
-                            }))
-                        },
-                        checked: config().sync_tasks_enabled
-                    }
-                    span {
-                        class: "icon-[tabler--check] text-primary absolute start-1 top-1 hidden size-4 peer-checked:block"
-                    }
-                    span {
-                        class: "icon-[tabler--x] text-neutral absolute end-1 top-1 block size-4 peer-checked:hidden"
-                    }
+                class: "settings-subsection-title",
+                "Default task settings"
+            }
+
+            SettingRow {
+                label: rsx! { "Project to assign new tasks" },
+                ProjectSearchField {
+                    api_base_url: api_base_url.clone(),
+                    selected_project: default_project,
+                    provider_kind: Some(IntegrationProviderKind::TickTick),
+                    on_change: move |default_project: Option<ProjectSummary>| {
+                        on_config_change.call(IntegrationConnectionConfig::TickTick(TickTickConfig {
+                            default_project,
+                            ..config()
+                        }))
+                    },
+                    name: "star-project-search-input".to_string(),
+                    width: "260px".to_string(),
                 }
             }
 
-            div {
-                class: "flex items-center gap-2",
-                label {
-                    class: "label-text cursor-pointer grow text-sm text-base-content",
-                    "Synchronize TickTick tasks from "
-                    code { "#{TICKTICK_INBOX_PROJECT}" }
-                    " as notifications"
-                }
-                div {
-                    class: "relative inline-block",
-                    input {
-                        r#type: "checkbox",
-                        class: "switch switch-primary switch-outline peer",
-                        oninput: move |event| {
-                            on_config_change.call(IntegrationConnectionConfig::TickTick(TickTickConfig {
-                                create_notification_from_inbox_task: event.value() == "true",
-                                ..config()
-                            }))
-                        },
-                        checked: config().create_notification_from_inbox_task
-                    }
-                    span {
-                        class: "icon-[tabler--check] text-primary absolute start-1 top-1 hidden size-4 peer-checked:block"
-                    }
-                    span {
-                        class: "icon-[tabler--x] text-neutral absolute end-1 top-1 block size-4 peer-checked:hidden"
-                    }
+            SettingRow {
+                label: rsx! { "Due date to assign to new tasks" },
+                UISelect::<PresetDueDate> {
+                    value: default_due_at,
+                    options: preset_due_date_options(),
+                    on_change: move |default_due_at| {
+                        on_config_change.call(IntegrationConnectionConfig::TickTick(TickTickConfig {
+                            default_due_at,
+                            ..config()
+                        }));
+                    },
+                    placeholder: "Pick a due date…".to_string(),
+                    allow_clear: true,
+                    width: "260px".to_string(),
+                    name: "task-due-at-input".to_string(),
                 }
             }
 
-            div {
-                class: "card card-xs bg-base-200",
-                div {
-                    class: "card-header",
-                    div {
-                        class: "card-title",
-                        "Default task settings"
-                    }
-                }
-
-                div {
-                    class: "card-body text-sm",
-                    div {
-                        class: "flex items-center gap-2",
-                        label {
-                            class: "label-text cursor-pointer grow text-sm text-base-content",
-                            "Project to assign new tasks"
-                        }
-                        FloatingLabelInputSearchSelect ::<ProjectSummary> {
-                            name: "star-project-search-input".to_string(),
-                            class: "w-full max-w-xs bg-base-100 rounded-sm",
-                            required: true,
-                            data_select: json!({
-                                "value": default_project().map(|p| p.source_id.to_string()),
-                                "apiUrl": format!("{api_base_url}tasks/projects/search"),
-                                "apiSearchQueryKey": "matches",
-                                "apiQuery": { "provider_kind": "TickTick" },
-                                "apiFieldsMap": {
-                                    "id": "source_id",
-                                    "val": "source_id",
-                                    "title": "name"
-                                }
-                            }),
-                            on_select: move |default_project: Option<ProjectSummary>| {
-                                on_config_change.call(IntegrationConnectionConfig::TickTick(TickTickConfig {
-                                    default_project,
-                                    ..config()
-                                }))
-                            }
-                        }
-                    }
-
-                    div {
-                        class: "flex items-center gap-2",
-                        label {
-                            class: "label-text cursor-pointer grow text-sm text-base-content",
-                            "Due date to assign to new tasks"
-                        }
-                        FloatingLabelSelect ::<PresetDueDate> {
-                            label: None,
-                            class: "max-w-xs",
-                            name: "task-due-at-input".to_string(),
-                            default_value: default_due_at().map(|due| due.to_string()).unwrap_or_default(),
-                            on_select: move |default_due_at| {
-                                on_config_change.call(IntegrationConnectionConfig::TickTick(TickTickConfig {
-                                    default_due_at,
-                                    ..config()
-                                }));
-                            },
-
-                            option { selected: default_due_at() == Some(PresetDueDate::Today), "{PresetDueDate::Today}" }
-                            option { selected: default_due_at() == Some(PresetDueDate::Tomorrow), "{PresetDueDate::Tomorrow}" }
-                            option { selected: default_due_at() == Some(PresetDueDate::ThisWeekend), "{PresetDueDate::ThisWeekend}" }
-                            option { selected: default_due_at() == Some(PresetDueDate::NextWeek), "{PresetDueDate::NextWeek}" }
-                        }
-                    }
-
-                    div {
-                        class: "flex items-center gap-2",
-                        label {
-                            class: "label-text cursor-pointer grow text-sm text-base-content",
-                            "Priority to assign to new tasks"
-                        }
-                        FloatingLabelSelect::<TaskPriority> {
-                            label: None,
-                            class: "max-w-xs",
-                            name: "task-priority-input".to_string(),
-                            required: true,
-                            default_value: "{default_priority().unwrap_or_default()}",
-                            on_select: move |default_priority: Option<TaskPriority>| {
-                                on_config_change.call(IntegrationConnectionConfig::TickTick(TickTickConfig {
-                                    default_priority,
-                                    ..config()
-                                }));
-                            },
-
-                            option { selected: default_priority() == Some(TaskPriority::P1), value: "1", "🔴 Priority 1" }
-                            option { selected: default_priority() == Some(TaskPriority::P2), value: "2", "🟠 Priority 2" }
-                            option { selected: default_priority() == Some(TaskPriority::P3), value: "3", "🟡 Priority 3" }
-                            option { selected: default_priority() == Some(TaskPriority::P4), value: "4", "🔵 Priority 4" }
-                        }
-                    }
+            SettingRow {
+                label: rsx! { "Priority to assign to new tasks" },
+                UISelect::<TaskPriority> {
+                    value: default_priority,
+                    options: task_priority_options(),
+                    on_change: move |default_priority: Option<TaskPriority>| {
+                        on_config_change.call(IntegrationConnectionConfig::TickTick(TickTickConfig {
+                            default_priority,
+                            ..config()
+                        }));
+                    },
+                    placeholder: "Pick a priority…".to_string(),
+                    width: "260px".to_string(),
+                    name: "task-priority-input".to_string(),
+                    render_value: priority_render_value,
+                    render_option: priority_render_option,
                 }
             }
         }

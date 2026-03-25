@@ -1,13 +1,12 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
-use dioxus_free_icons::{
-    Icon,
-    icons::bs_icons::{BsPeople, BsTrash},
-};
 
 use crate::{
-    components::loading::Loading,
+    components::{
+        loading::Loading,
+        ui::{Button, ButtonVariant, Card, CardEmptyState, CardHeader, CardMeta, CardVariant},
+    },
     services::oauth2_client_service::{OAUTH2_AUTHORIZED_CLIENTS, OAuth2ClientCommand},
 };
 
@@ -25,62 +24,49 @@ pub fn OAuthClientsCard() -> Element {
 
     let Some(authorized_clients) = OAUTH2_AUTHORIZED_CLIENTS.read().clone() else {
         return rsx! {
-            div {
-                class: "card w-full bg-base-200",
+            Card { variant: CardVariant::ApiKeys,
                 Loading { label: "Loading authorized OAuth2 clients..." }
             }
         };
     };
 
     rsx! {
-        div {
-            class: "card w-full bg-base-200",
+        section {
+            role: "region",
+            aria_label: "Authorized OAuth2 clients",
 
-            div {
-                class: "card-body",
-                div {
-                    class: "flex flex-col gap-2",
+            Card {
+                variant: CardVariant::ApiKeys,
+                CardHeader {
+                    span { class: "icon-[lucide--users] size-5" }
+                    CardMeta { name: "Authorized OAuth2 clients" }
+                }
 
-                    div {
-                        class: "flex flex-col sm:flex-row justify-between items-center",
-                        div {
-                            class: "card-title flex flex-row items-center",
-                            figure { class: "p-2", Icon { class: "w-8 h-8", icon: BsPeople } }
-                            "Authorized OAuth2 clients"
-                        }
+                if authorized_clients.is_empty() {
+                    CardEmptyState {
+                        icon_class: "icon-[lucide--users]".to_string(),
+                        title: "No authorized clients".to_string(),
                     }
-
-                    p {
-                        class: "text-sm text-base-content/70",
-                        "OAuth2 clients authorized to access your Universal Inbox on your behalf."
-                    }
-
-                    if authorized_clients.is_empty() {
-                        p {
-                            class: "text-sm text-base-content/50",
-                            "No authorized clients"
-                        }
-                    } else {
-                        table {
-                            class: "table table-xs sm:table-sm table-fixed",
-                            thead {
-                                tr {
-                                    th { "Client name" }
-                                    th { "Scope" }
-                                    th { class: "w-36", "First authorized" }
-                                    th { class: "w-32", "Last used" }
-                                    th { class: "sm:w-32 w-8", "" }
-                                }
+                } else {
+                    table {
+                        class: "api-keys-table max-md:block max-md:overflow-x-auto",
+                        thead {
+                            tr {
+                                th { style: "width: 140px;", "Client name" }
+                                th { class: "max-md:hidden", style: "width: 70px;", "Scope" }
+                                th { class: "max-md:hidden", style: "width: 100px;", "First authorized" }
+                                th { class: "max-md:hidden", style: "width: 85px;", "Last used" }
+                                th { style: "width: 145px;", aria_label: "Actions", "" }
                             }
-                            tbody {
-                                for client in authorized_clients.into_iter() {
-                                    OAuthClientRow {
-                                        client_id: client.client_id.clone(),
-                                        client_name: client.client_name.clone(),
-                                        scope: client.scope.clone(),
-                                        first_authorized_at: client.first_authorized_at,
-                                        last_used_at: client.last_used_at,
-                                    }
+                        }
+                        tbody {
+                            for client in authorized_clients.into_iter() {
+                                OAuthClientRow {
+                                    client_id: client.client_id.clone(),
+                                    client_name: client.client_name.clone(),
+                                    scope: client.scope.clone(),
+                                    first_authorized_at: client.first_authorized_at,
+                                    last_used_at: client.last_used_at,
                                 }
                             }
                         }
@@ -100,6 +86,7 @@ fn OAuthClientRow(
     last_used_at: chrono::DateTime<chrono::Utc>,
 ) -> Element {
     let oauth2_client_service = use_coroutine_handle::<OAuth2ClientCommand>();
+    let mut confirming = use_signal(|| false);
     let display_name = client_name
         .clone()
         .unwrap_or_else(|| format!("{}...", &client_id[..client_id.len().min(8)]));
@@ -111,31 +98,39 @@ fn OAuthClientRow(
                 p { class: "truncate", "{display_name}" }
             }
             td {
+                class: "max-md:hidden",
                 p { class: "truncate", "{scope_display}" }
             }
-            td { r#"{first_authorized_at.date_naive().format("%Y-%m-%d")}"# }
-            td { r#"{last_used_at.date_naive().format("%Y-%m-%d")}"# }
+            td { class: "max-md:hidden", r#"{first_authorized_at.date_naive().format("%Y-%m-%d")}"# }
+            td { class: "max-md:hidden", r#"{last_used_at.date_naive().format("%Y-%m-%d")}"# }
             td {
-                class: "flex gap-2 justify-center items-center h-8 my-2",
-                button {
-                    class: "btn btn-sm btn-error hidden sm:block",
-                    onclick: {
-                        let client_id = client_id.clone();
-                        move |_| {
-                            oauth2_client_service.send(OAuth2ClientCommand::RevokeClient(client_id.clone()));
+                div {
+                    class: "flex items-center justify-end gap-1",
+                    if confirming() {
+                        Button {
+                            variant: ButtonVariant::Danger,
+                            onclick: {
+                                let client_id = client_id.clone();
+                                move |_| {
+                                    oauth2_client_service.send(OAuth2ClientCommand::RevokeClient(client_id.clone()));
+                                    confirming.set(false);
+                                }
+                            },
+                            "Confirm"
                         }
-                    },
-                    "Revoke"
-                }
-                button {
-                    class: "btn btn-sm btn-error sm:hidden",
-                    onclick: {
-                        let client_id = client_id.clone();
-                        move |_| {
-                            oauth2_client_service.send(OAuth2ClientCommand::RevokeClient(client_id.clone()));
+                        Button {
+                            variant: ButtonVariant::Ghost,
+                            onclick: move |_| confirming.set(false),
+                            "Cancel"
                         }
-                    },
-                    Icon { class: "w-4 h-4", icon: BsTrash }
+                    } else {
+                        Button {
+                            variant: ButtonVariant::Danger,
+                            icon_class: "icon-[lucide--trash-2]".to_string(),
+                            onclick: move |_| confirming.set(true),
+                            span { class: "hidden sm:inline", "Revoke" }
+                        }
+                    }
                 }
             }
         }
