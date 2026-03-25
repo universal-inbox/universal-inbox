@@ -12,7 +12,7 @@ use wiremock::{Mock, ResponseTemplate};
 
 use universal_inbox::{
     auth::{SessionAuthValidationParameters, auth_token::AuthenticationToken},
-    user::{User, UserId},
+    user::{User, UserAuthKind, UserId},
 };
 
 use universal_inbox_api::{
@@ -225,14 +225,25 @@ pub async fn fetch_auth_tokens_for_user(
     auth_tokens
 }
 
-pub async fn get_user_auth(app: &TestedApp, user_id: UserId) -> UserAuth {
+pub async fn get_user_auth(app: &TestedApp, user_id: UserId, kind: UserAuthKind) -> UserAuth {
     let mut transaction = app.repository.begin().await.unwrap();
     let user_auth = app
         .repository
-        .get_user_auth(&mut transaction, user_id)
+        .get_user_auth(&mut transaction, user_id, kind)
         .await
         .unwrap()
         .unwrap();
     transaction.commit().await.unwrap();
     user_auth
+}
+
+pub async fn get_all_user_auths(app: &TestedApp, user_id: UserId) -> Vec<UserAuth> {
+    let mut transaction = app.repository.begin().await.unwrap();
+    let user_auths = app
+        .repository
+        .get_all_user_auths(&mut transaction, user_id, false)
+        .await
+        .unwrap();
+    transaction.commit().await.unwrap();
+    user_auths
 }
