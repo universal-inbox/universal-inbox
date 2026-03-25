@@ -676,6 +676,11 @@ pub async fn list_oauth2_authorized_clients(
         .list_authorized_clients(&mut transaction, user_id)
         .await?;
 
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit while listing OAuth2 authorized clients")?;
+
     Ok(HttpResponse::Ok().content_type("application/json").body(
         serde_json::to_string(&clients)
             .context("Cannot serialize OAuth2 authorized clients list")?,
