@@ -269,7 +269,7 @@ pub async fn register(page: &Page, app_url: &str, email: &str) {
 /// Wait until at least one notification row is visible in the DOM.
 /// After login the notification list may still be loading from the API.
 pub async fn wait_for_notification_rows(page: &Page) {
-    let first_row = page.locator("#notifications-list table tr.row-hover").await;
+    let first_row = page.locator("#notifications-list .ui-nrow").await;
     expect(first_row.first())
         .with_timeout(EXPECT_TIMEOUT)
         .to_be_visible()

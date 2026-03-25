@@ -7,9 +7,8 @@ use universal_inbox::{
     third_party::integrations::slack::{SlackReaction, SlackReactionItem},
 };
 
-use crate::components::integrations::slack::{
-    icons::SlackNotificationIcon,
-    preview::{file::SlackFilePreview, message::SlackMessagePreview},
+use crate::components::integrations::slack::preview::{
+    file::SlackFilePreview, message::SlackMessagePreview,
 };
 
 #[component]
@@ -22,14 +21,12 @@ pub fn SlackReactionTaskPreview(
             SlackFilePreview {
                 slack_file,
                 title: task().title,
-                icon: rsx! { SlackNotificationIcon { class: "h-5 w-5 min-w-5" } },
             }
         },
         SlackReactionItem::SlackMessage(slack_message) => rsx! {
             SlackMessagePreview {
                 slack_message,
                 title: task().title,
-                icon: rsx! { SlackNotificationIcon { class: "h-5 w-5 min-w-5" } },
             }
         },
     }

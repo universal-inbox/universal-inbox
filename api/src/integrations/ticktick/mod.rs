@@ -38,7 +38,9 @@ use universal_inbox::{
         service::TaskPatch,
     },
     third_party::{
-        integrations::ticktick::{TickTickItem, TickTickItemPriority, TickTickTaskStatus},
+        integrations::ticktick::{
+            TickTickItem, TickTickItemPriority, TickTickTag, TickTickTaskStatus,
+        },
         item::{ThirdPartyItem, ThirdPartyItemFromSource, ThirdPartyItemSourceKind},
     },
     user::UserId,
@@ -47,6 +49,7 @@ use universal_inbox::{
 
 use crate::{
     integrations::{
+        mock::MOCK_PROJECT_NAMES,
         notification::ThirdPartyNotificationSourceService,
         oauth2::AccessToken,
         task::{ThirdPartyTaskService, ThirdPartyTaskSourceService},
@@ -102,7 +105,20 @@ pub struct TickTickCreateTaskResponse {
     pub priority: TickTickItemPriority,
     pub status: TickTickTaskStatus,
     #[serde(default)]
-    pub tags: Option<Vec<String>>,
+    pub tags: Option<Vec<TickTickTag>>,
+}
+
+/// Response shape of `GET /open/v1/tag` — TickTick's tag listing endpoint.
+///
+/// The endpoint returns one entry per user-defined tag with its display color
+/// (a hex string like `#FF6161`). Older accounts / accounts without explicit
+/// tag colors may omit the `color` field, hence the optional field.
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct TickTickTagDetail {
+    pub name: String,
+    #[serde(default)]
+    pub color: Option<String>,
 }
 
 /// Request body for creating a task via TickTick API
@@ -149,6 +165,48 @@ pub struct TickTickCompleteTaskRequest {
     pub project_id: String,
 }
 
+/// Merge tag color metadata from `/open/v1/tag` into each task's tag list.
+///
+/// TickTick tag names are case-insensitive on their side but the API returns
+/// them with their canonical casing. We do a case-insensitive lookup and
+/// preserve the casing as it appears on each task. Tags with no matching
+/// entry in the tag listing keep their existing color (typically `None`),
+/// allowing graceful degradation for ad-hoc tags that haven't been registered
+/// in the tag manager yet.
+fn enrich_ticktick_item_tags(tasks: &mut [TickTickItem], tag_details: &[TickTickTagDetail]) {
+    if tag_details.is_empty() {
+        return;
+    }
+
+    use std::collections::HashMap;
+    let color_by_name: HashMap<String, String> = tag_details
+        .iter()
+        .filter_map(|detail| {
+            detail
+                .color
+                .as_ref()
+                .map(|color| (detail.name.to_lowercase(), color.clone()))
+        })
+        .collect();
+
+    if color_by_name.is_empty() {
+        return;
+    }
+
+    for task in tasks {
+        if let Some(tags) = task.tags.as_mut() {
+            for tag in tags {
+                if tag.color.is_some() {
+                    continue;
+                }
+                if let Some(color) = color_by_name.get(&tag.name.to_lowercase()) {
+                    tag.color = Some(color.clone());
+                }
+            }
+        }
+    }
+}
+
 impl TickTickService {
     pub fn new(
         ticktick_base_url: Option<String>,
@@ -176,9 +234,31 @@ impl TickTickService {
 
     pub async fn mock_all(mock_server: &MockServer) {
         // Mock GET /project - list all projects
+        let mock_projects: Vec<TickTickProject> = MOCK_PROJECT_NAMES
+            .iter()
+            .map(|name| TickTickProject {
+                id: (*name).to_string(),
+                name: (*name).to_string(),
+                color: None,
+                group_id: None,
+                sort_order: None,
+                view_mode: None,
+            })
+            .collect();
         Mock::given(method("GET"))
             .and(path("/project"))
-            .respond_with(ResponseTemplate::new(200).set_body_json::<Vec<TickTickProject>>(vec![]))
+            .respond_with(ResponseTemplate::new(200).set_body_json(mock_projects))
+            .mount(mock_server)
+            .await;
+
+        // Mock GET /tag - list user tags with color metadata. Returning an empty
+        // list keeps tests deterministic; tests that care about colors override
+        // this mock explicitly.
+        Mock::given(method("GET"))
+            .and(path("/tag"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json::<Vec<TickTickTagDetail>>(vec![]),
+            )
             .mount(mock_server)
             .await;
 
@@ -246,6 +326,39 @@ impl TickTickService {
             .context("Failed to list TickTick projects")?)
     }
 
+    /// Fetch tag color metadata via `GET /open/v1/tag`.
+    ///
+    /// TickTick exposes the user's tag list with display colors here. Some
+    /// accounts/scopes don't have access (the endpoint may 404 or 401), in
+    /// which case we return an empty list and downstream sync proceeds with
+    /// name-only tags. We never fail a sync just because tag metadata is
+    /// unavailable — colors are decorative, not critical data.
+    pub async fn list_tags(
+        &self,
+        access_token: &AccessToken,
+    ) -> Result<Vec<TickTickTagDetail>, UniversalInboxError> {
+        match self
+            .build_ticktick_client(access_token)?
+            .get::<Vec<TickTickTagDetail>, _>(format!("{}/tag", self.ticktick_base_url))
+            .await
+        {
+            Ok(tags) => Ok(tags),
+            Err(ApiClientError::NetworkError(err))
+                if matches!(
+                    err.status(),
+                    Some(reqwest_middleware::reqwest::StatusCode::NOT_FOUND)
+                        | Some(reqwest_middleware::reqwest::StatusCode::UNAUTHORIZED)
+                        | Some(reqwest_middleware::reqwest::StatusCode::FORBIDDEN)
+                ) =>
+            {
+                Ok(Vec::new())
+            }
+            Err(err) => Err(UniversalInboxError::Unexpected(anyhow!(
+                "Cannot list tags from TickTick API: {err}"
+            ))),
+        }
+    }
+
     /// Fetch all projects with caching
     pub async fn fetch_all_projects(
         &self,
@@ -288,6 +401,11 @@ impl TickTickService {
     /// `GET /open/v1/project` but whose tasks can be fetched via
     /// `GET /open/v1/project/inbox/data`. We pull both so users can see (and
     /// convert to notifications) the tasks they keep in their TickTick inbox.
+    ///
+    /// Task payloads only contain tag names. We additionally fetch the user's
+    /// tag list (with color metadata) and merge each task's tag names against
+    /// it so the persisted `TickTickItem` carries the source-native color used
+    /// by the notification preview pane redesign.
     pub async fn list_all_tasks(
         &self,
         access_token: &AccessToken,
@@ -321,6 +439,14 @@ impl TickTickService {
                     format!("Failed to list tasks for TickTick project {}", project.id)
                 })?;
             all_tasks.extend(project_data.tasks);
+        }
+
+        // Enrich every task's tags with color metadata from the tag listing
+        // endpoint. Best-effort: if /tag is unavailable we fall through and
+        // store name-only tags exactly like before.
+        let tag_details = self.list_tags(access_token).await.unwrap_or_default();
+        if !tag_details.is_empty() {
+            enrich_ticktick_item_tags(&mut all_tasks, &tag_details);
         }
 
         Ok(all_tasks)
@@ -445,7 +571,7 @@ impl TickTickService {
             completed_at: source.completed_time,
             priority: source.priority.into(),
             due_at: DefaultValue::new(None, Some(source.get_due_date())),
-            tags: source.tags.clone().unwrap_or_default(),
+            tags: source.tag_names(),
             parent_id: None,
             project: DefaultValue::new(TICKTICK_INBOX_PROJECT.to_string(), Some(project_name)),
             is_recurring: source.is_recurring(),
@@ -1004,5 +1130,108 @@ impl NotificationSource for TickTickService {
 
     fn is_supporting_snoozed_notifications(&self) -> bool {
         false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pretty_assertions::assert_eq;
+    use rstest::*;
+
+    fn make_item(id: &str, tags: Option<Vec<TickTickTag>>) -> TickTickItem {
+        TickTickItem {
+            id: id.to_string(),
+            project_id: "p".to_string(),
+            title: "t".to_string(),
+            content: None,
+            desc: None,
+            all_day: None,
+            start_date: None,
+            due_date: None,
+            time_zone: None,
+            reminders: None,
+            repeat: None,
+            priority: TickTickItemPriority::None,
+            status: TickTickTaskStatus::Normal,
+            completed_time: None,
+            sort_order: None,
+            items: None,
+            tags,
+            created_time: None,
+            modified_time: None,
+        }
+    }
+
+    #[rstest]
+    fn test_enrich_ticktick_item_tags_populates_color_case_insensitive() {
+        let mut tasks = vec![
+            make_item(
+                "task_a",
+                Some(vec![
+                    TickTickTag::new("Food"),
+                    TickTickTag::new("shopping"),
+                    TickTickTag::new("untracked"),
+                ]),
+            ),
+            make_item("task_b", None),
+        ];
+
+        let tag_details = vec![
+            TickTickTagDetail {
+                name: "food".to_string(),
+                color: Some("#FF6161".to_string()),
+            },
+            TickTickTagDetail {
+                name: "Shopping".to_string(),
+                color: Some("#3B82F6".to_string()),
+            },
+            // No `color` -> ignored.
+            TickTickTagDetail {
+                name: "untracked".to_string(),
+                color: None,
+            },
+        ];
+
+        enrich_ticktick_item_tags(&mut tasks, &tag_details);
+
+        let enriched = tasks[0].tags.as_ref().unwrap();
+        assert_eq!(enriched[0].name, "Food");
+        assert_eq!(enriched[0].color.as_deref(), Some("#FF6161"));
+        assert_eq!(enriched[1].name, "shopping");
+        assert_eq!(enriched[1].color.as_deref(), Some("#3B82F6"));
+        // Tag with no entry in the tag listing keeps its (None) color.
+        assert_eq!(enriched[2].name, "untracked");
+        assert_eq!(enriched[2].color, None);
+        // Tasks without tags are left alone.
+        assert_eq!(tasks[1].tags, None);
+    }
+
+    #[rstest]
+    fn test_enrich_ticktick_item_tags_preserves_existing_color() {
+        // If a tag was already enriched (e.g., loaded from JSONB storage),
+        // a fresh sync should not overwrite the persisted color.
+        let mut tasks = vec![make_item(
+            "task_a",
+            Some(vec![TickTickTag::with_color("Food", "#000000")]),
+        )];
+        let tag_details = vec![TickTickTagDetail {
+            name: "food".to_string(),
+            color: Some("#FF6161".to_string()),
+        }];
+
+        enrich_ticktick_item_tags(&mut tasks, &tag_details);
+
+        assert_eq!(
+            tasks[0].tags.as_ref().unwrap()[0].color.as_deref(),
+            Some("#000000")
+        );
+    }
+
+    #[rstest]
+    fn test_enrich_ticktick_item_tags_no_op_when_listing_empty() {
+        let mut tasks = vec![make_item("task_a", Some(vec![TickTickTag::new("Food")]))];
+        enrich_ticktick_item_tags(&mut tasks, &[]);
+        assert_eq!(tasks[0].tags.as_ref().unwrap()[0].color, None);
     }
 }

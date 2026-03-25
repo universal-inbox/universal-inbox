@@ -11,8 +11,8 @@ processes:
     availability:
       restart: no
     shutdown:
-      signal: 9
-      timeout_seconds: 1
+      signal: 15
+      timeout_seconds: 30
     disabled: true
     namespace: "universal-inbox"
 

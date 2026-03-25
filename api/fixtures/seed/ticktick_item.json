@@ -1,0 +1,20 @@
+{
+  "id": "tt_task_1123",
+  "projectId": "tt_proj_1111",
+  "title": "Plan Q3 OKR review",
+  "content": "",
+  "desc": "Pull metrics from the eng dashboard, draft the narrative section, share with Alice for round 1.",
+  "allDay": false,
+  "startDate": null,
+  "dueDate": "{{tomorrow_at_15}}",
+  "timeZone": "Europe/Paris",
+  "priority": 3,
+  "status": 0,
+  "tags": [
+    {"name": "planning", "color": "#3B82F6"},
+    "leadership"
+  ],
+  "items": [],
+  "createdTime": "{{ago_1d}}",
+  "modifiedTime": "{{ago_4h}}"
+}

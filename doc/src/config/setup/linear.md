@@ -36,6 +36,7 @@ You can customize how Linear issues appear in your task management tool:
 
 - **Project Assignment**: Automatically sort issues into a specific project
 - **Due Date**: Set the default due date for synchronized issues
+- **Task manager**: If both [Todoist](todoist.md) and [TickTick](ticktick.md) are connected, this picker chooses which one receives Linear-assigned issues. With only one task manager connected, the picker is hidden and tasks flow there automatically.
 
 ```admonish tip
 Both project assignment and due date settings are optional. If left unconfigured, tasks will use the default settings from your task management tool.

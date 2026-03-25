@@ -15,23 +15,71 @@
 }
 @import "../node_modules/flyonui/variants.css";
 
+/* Map FlyonUI's theme tokens to the design system's --ui-* tokens so
+   FlyonUI components (tooltips, alerts, badges, btn variants, modals,
+   dropdowns) render with the brand palette and radius scale instead of
+   FlyonUI's stock corporate/dark themes. Light theme uses the slate-tinted
+   muted palette spec'd by the design system; dark theme inverts surfaces
+   and pushes neutrals from oklch-purple to slate. */
 @plugin "flyonui/theme" {
     name: "corporate";
     default: true;
+    --color-base-100: "#FEFEFE";
+    --color-base-200: "#F7F9FC";
+    --color-base-300: "#E1E6EE";
+    --color-base-content: "#0F172A";
     --color-primary: "#388FEF";
+    --color-primary-content: "#FFFFFF";
+    --color-secondary: "#475569";
+    --color-secondary-content: "#F1F5F9";
+    --color-accent: "#F59E0B";
+    --color-accent-content: "#92400E";
+    --color-neutral: "#0F172A";
+    --color-neutral-content: "#FFFFFF";
+    --color-info: "#6BB8D9";
+    --color-info-content: "#FFFFFF";
+    --color-success: "#6BC5A0";
+    --color-success-content: "#FFFFFF";
+    --color-warning: "#E8C46A";
+    --color-warning-content: "#92400E";
+    --color-error: "#E8899A";
+    --color-error-content: "#FFFFFF";
+    --radius-selector: "3px";
+    --radius-field: "6px";
+    --radius-box: "8px";
 }
 
 @plugin "flyonui/theme" {
     name: "dark";
-    --color-primary: "#388FEF";
+    --color-base-100: "#0B1120";
+    --color-base-200: "#111827";
+    --color-base-300: "#1E293B";
+    --color-base-content: "#F1F5F9";
+    --color-primary: "#60A5FA";
+    --color-primary-content: "#0C2D5A";
+    --color-secondary: "#94A3B8";
+    --color-secondary-content: "#0B1120";
+    --color-accent: "#FBBF24";
+    --color-accent-content: "#1C1917";
+    --color-neutral: "#F1F5F9";
+    --color-neutral-content: "#0B1120";
+    --color-info: "#6DC4D4";
+    --color-info-content: "#0B1120";
+    --color-success: "#6ECF97";
+    --color-success-content: "#0B1120";
+    --color-warning: "#E0BD6A";
+    --color-warning-content: "#1C1917";
+    --color-error: "#E08888";
+    --color-error-content: "#0B1120";
+    --radius-selector: "3px";
+    --radius-field: "6px";
+    --radius-box: "8px";
 }
 
 @source "../node_modules/flyonui/dist/dropdown.js";
-@source "../node_modules/flyonui/dist/collapse.js";
 @source "../node_modules/flyonui/dist/tabs.js";
 @source "../node_modules/flyonui/dist/overlay.js";
 @source "../node_modules/flyonui/dist/select.js";
-@source "../node_modules/flyonui/dist/tooltip.js";
 
 @plugin "@iconify/tailwind4";
 
@@ -44,69 +92,788 @@
     @apply w-4! h-4! inline-block;
 }
 
+/* Expose the design system's --ui-* / --brand-* / --ui-avatar-hue-*
+   tokens to Tailwind v4 so utilities (bg-ui-primary, text-ui-error,
+   border-ui-border, rounded-ui-pill, shadow-ui-md, font-ui, etc.)
+   generate against the active token values. `inline` preserves the
+   var() reference so utilities re-resolve under [data-theme="dark"]
+   without needing a duplicate dark block here. */
+@theme inline {
+    /* Sidebar */
+    --color-sidebar-text: var(--ui-sidebar-text);
+    --color-sidebar-text-muted: var(--ui-sidebar-text-muted);
+    --color-sidebar-text-bright: var(--ui-sidebar-text-bright);
+    --color-sidebar-active-text: var(--ui-sidebar-active-text);
+    --color-sidebar-hover-bg: var(--ui-sidebar-hover-bg);
+    --color-sidebar-active-bg: var(--ui-sidebar-active-bg);
+    --color-sidebar-bg: var(--ui-sidebar-bg);
+    --color-sidebar-border: var(--ui-sidebar-border);
+
+    /* Primary */
+    --color-ui-primary: var(--ui-primary);
+    --color-ui-primary-hover: var(--ui-primary-hover);
+    --color-ui-primary-light: var(--ui-primary-light);
+    --color-ui-primary-subtle: var(--ui-primary-subtle);
+    --color-ui-primary-content: var(--ui-primary-content);
+
+    /* Secondary */
+    --color-ui-secondary: var(--ui-secondary);
+    --color-ui-secondary-subtle: var(--ui-secondary-subtle);
+
+    /* Accent */
+    --color-ui-accent: var(--ui-accent);
+    --color-ui-accent-subtle: var(--ui-accent-subtle);
+    --color-ui-accent-content: var(--ui-accent-content);
+    --color-ui-accent-text: var(--ui-accent-text);
+
+    /* Base / surface */
+    --color-ui-base-100: var(--ui-base-100);
+    --color-ui-base-200: var(--ui-base-200);
+    --color-ui-base-300: var(--ui-base-300);
+    --color-ui-base-content: var(--ui-base-content);
+    --color-ui-base-muted: var(--ui-base-muted);
+    --color-ui-surface: var(--ui-surface);
+    --color-ui-surface-hover: var(--ui-surface-hover);
+    --color-ui-surface-alt: var(--ui-surface-alt);
+    --color-ui-border: var(--ui-border);
+    --color-ui-border-light: var(--ui-border-light);
+    --color-ui-divider: var(--ui-divider);
+
+    /* Semantic */
+    --color-ui-success: var(--ui-success);
+    --color-ui-success-subtle: var(--ui-success-subtle);
+    --color-ui-success-text: var(--ui-success-text);
+    --color-ui-warning: var(--ui-warning);
+    --color-ui-warning-subtle: var(--ui-warning-subtle);
+    --color-ui-warning-text: var(--ui-warning-text);
+    --color-ui-error: var(--ui-error);
+    --color-ui-error-hover: var(--ui-error-hover);
+    --color-ui-error-subtle: var(--ui-error-subtle);
+    --color-ui-error-text: var(--ui-error-text);
+    --color-ui-info: var(--ui-info);
+    --color-ui-info-subtle: var(--ui-info-subtle);
+    --color-ui-info-text: var(--ui-info-text);
+    --color-ui-purple: var(--ui-purple);
+    --color-ui-purple-subtle: var(--ui-purple-subtle);
+    --color-ui-on-brand: var(--ui-on-brand);
+
+    /* Integration brand colors */
+    --color-brand-github: var(--brand-github);
+    --color-brand-linear: var(--brand-linear);
+    --color-brand-slack: var(--brand-slack);
+    --color-brand-google: var(--brand-google);
+    --color-brand-gcal: var(--brand-gcal);
+    --color-brand-todoist: var(--brand-todoist);
+    --color-brand-ticktick: var(--brand-ticktick);
+    --color-brand-notion: var(--brand-notion);
+
+    /* Avatar fallback hues (drops `ui-` prefix in the utility, per
+       the documented `bg-avatar-hue-7` shape in CLAUDE.md) */
+    --color-avatar-hue-0: var(--ui-avatar-hue-0);
+    --color-avatar-hue-1: var(--ui-avatar-hue-1);
+    --color-avatar-hue-2: var(--ui-avatar-hue-2);
+    --color-avatar-hue-3: var(--ui-avatar-hue-3);
+    --color-avatar-hue-4: var(--ui-avatar-hue-4);
+    --color-avatar-hue-5: var(--ui-avatar-hue-5);
+    --color-avatar-hue-6: var(--ui-avatar-hue-6);
+    --color-avatar-hue-7: var(--ui-avatar-hue-7);
+    --color-avatar-hue-8: var(--ui-avatar-hue-8);
+    --color-avatar-hue-9: var(--ui-avatar-hue-9);
+    --color-avatar-hue-10: var(--ui-avatar-hue-10);
+    --color-avatar-hue-11: var(--ui-avatar-hue-11);
+
+    /* Radii */
+    --radius-ui-xs: var(--ui-radius-xs);
+    --radius-ui-sm: var(--ui-radius-sm);
+    --radius-ui-md: var(--ui-radius-md);
+    --radius-ui-lg: var(--ui-radius-lg);
+    --radius-ui-pill: var(--ui-radius-pill);
+
+    /* Shadows */
+    --shadow-ui-sm: var(--ui-shadow-sm);
+    --shadow-ui-md: var(--ui-shadow-md);
+    --shadow-ui-lg: var(--ui-shadow-lg);
+
+    /* Fonts */
+    --font-ui: var(--font-ui);
+    --font-mono: var(--font-mono);
+
+    /* Tailwind v4 defaults make `max-md:` / `max-lg:` strict (< 768 / < 1024),
+       so at exactly 768 / 1024 the `md:` / `lg:` variants win. Shifting each
+       breakpoint up by 1px makes the `max-*` variants inclusive — matching the
+       mobile drawer + list-panel width rules that depend on these boundaries. */
+    --breakpoint-md: 48.0625rem;
+    --breakpoint-lg: 64.0625rem;
+
+    /* Animations consumed by the select popover (entrance) and the loading
+       skeleton shimmer. Registered as Tailwind v4 animation tokens so they
+       can be invoked via `animate-ss-pop-in` / `animate-ss-pop-skel`
+       utilities. The `@keyframes` blocks themselves live further down in
+       this file. */
+    --animate-ss-pop-in: ss-pop-in 0.15s var(--ui-ease-out);
+    --animate-ss-pop-skel: ss-pop-skel 1.1s linear infinite;
+
+    /* Inbox-zero hero entrance — consumed via `animate-inbox-zero-pop` (on the
+       outer SVG) and `animate-inbox-zero-draw` (on the inner check path).
+       @keyframes blocks live further down in this file. */
+    --animate-inbox-zero-pop:  inbox-zero-pop  0.45s var(--ui-ease-out) both;
+    --animate-inbox-zero-draw: inbox-zero-draw 0.55s var(--ui-ease-out) 0.25s forwards;
+
+    /* Detail/profile pane fade-up on mount — consumed via `animate-detail-fade`. */
+    --animate-detail-fade: detail-fade 0.25s var(--ui-ease-out);
+}
+
+@utility scrollbar-ss {
+    scrollbar-width: thin;
+    scrollbar-color: var(--ui-base-300) transparent;
+    &::-webkit-scrollbar {
+        width: 6px;
+    }
+    &::-webkit-scrollbar-thumb {
+        background: var(--ui-base-300);
+        border-radius: 3px;
+    }
+}
+
 @layer base {
     @font-face {
-        font-family: "Inter";
+        font-family: "DM Sans";
         font-style: normal;
-        font-weight: 400;
+        font-weight: 100 1000;
         font-display: swap;
-        src: url("../fonts/Inter-Regular.woff2") format("woff2");
+        src: url("../fonts/DMSans-Regular-latin-ext.woff2") format("woff2");
+        unicode-range:
+            U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+            U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF,
+            U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
     }
-    @font-feature-values Inter {
-        @character-variant {
-            cv01: 1;
-            cv02: 2;
-            cv03: 3;
-            cv04: 4;
-            cv05: 5;
-            cv06: 6;
-            cv07: 7;
-            cv08: 8;
-            cv09: 9;
-            cv10: 10;
-            cv11: 11;
-            cv12: 12;
-            cv13: 13;
-            alt-1: 1; /* Alternate one */
-            alt-3: 9; /* Flat-top three */
-            open-4: 2; /* Open four */
-            open-6: 3; /* Open six */
-            open-9: 4; /* Open nine */
-            lc-l-with-tail: 5; /* Lower-case L with tail */
-            simplified-u: 6; /* Simplified u */
-            alt-double-s: 7; /* Alternate German double s */
-            uc-i-with-serif: 8; /* Upper-case i with serif */
-            uc-g-with-spur: 10; /* Capital G with spur */
-            single-story-a: 11; /* Single-story a */
-            compact-lc-f: 12; /* Compact f */
-            compact-lc-t: 13; /* Compact t */
-        }
-        @styleset {
-            ss01: 1;
-            ss02: 2;
-            ss03: 3;
-            ss04: 4;
-            ss05: 5;
-            ss06: 6;
-            ss07: 7;
-            ss08: 8;
-            open-digits: 1; /* Open digits */
-            disambiguation: 2; /* Disambiguation (with zero) */
-            disambiguation-except-zero: 4; /* Disambiguation (no zero) */
-            round-quotes-and-commas: 3; /* Round quotes &amp; commas */
-            square-punctuation: 7; /* Square punctuation */
-            square-quotes: 8; /* Square quotes */
-            circled-characters: 5; /* Circled characters */
-            squared-characters: 6; /* Squared characters */
-        }
+    @font-face {
+        font-family: "DM Sans";
+        font-style: normal;
+        font-weight: 100 1000;
+        font-display: swap;
+        src: url("../fonts/DMSans-Regular.woff2") format("woff2");
+        unicode-range:
+            U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+            U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191,
+            U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
     }
 
     :root {
-        font-family: Inter, sans-serif;
+        font-family: "DM Sans", sans-serif;
         font-feature-settings:
             "liga" 1,
             "calt" 1; /* fix for Chrome */
     }
+}
+
+/* ─── Design token system ─────────────────────────────────────────────────── */
+:root {
+    /* Typography */
+    --font-ui: "DM Sans", sans-serif;
+    --font-mono:
+        "SF Mono", "Fira Code", "Cascadia Code", "JetBrains Mono", monospace;
+    --ui-text-2xs: 9px;
+    --ui-text-xs: 10px;
+    --ui-text-sm: 11px;
+    --ui-text-base: 12.5px;
+    --ui-text-md: 13.5px;
+    --ui-text-lg: 15px;
+    --ui-text-xl: 18px;
+    --ui-text-2xl: 22px;
+    --ui-text-3xl: 28px;
+    --ui-text-4xl: 36px;
+    --ui-leading-normal: 1.45;
+    --ui-tracking-tight: -0.02em;
+    --ui-tracking-normal: 0;
+    --ui-tracking-wide: 0.06em;
+    --ui-tracking-wider: 0.08em;
+    /* Layout */
+    --sidebar-width: 224px;
+    /* Colors — Primary */
+    --ui-primary: #388fef;
+    --ui-primary-hover: #2b7bd6;
+    --ui-primary-light: #60a5fa;
+    --ui-primary-subtle: #eff6ff;
+    --ui-primary-content: #ffffff;
+    /* Colors — Secondary */
+    --ui-secondary: #475569;
+    --ui-secondary-subtle: #f1f5f9;
+    /* Colors — Accent */
+    --ui-accent: #f59e0b;
+    --ui-accent-subtle: #fffbeb;
+    --ui-accent-content: #92400e;
+    --ui-accent-text: #92400e;
+    /* Colors — Base */
+    --ui-base-100: #fefefe;
+    --ui-base-200: #f7f9fc;
+    --ui-base-300: #e1e6ee;
+    --ui-base-content: #0f172a;
+    --ui-base-muted: #64748b;
+    /* Colors — Semantic */
+    --ui-success: #6bc5a0;
+    --ui-success-subtle: #edf9f3;
+    --ui-success-text: #3e9271;
+    --ui-warning: #e8c46a;
+    --ui-warning-subtle: #fdf8ec;
+    --ui-warning-text: #8a6e2d;
+    --ui-error: #e8899a;
+    --ui-error-hover: #dc6b7e;
+    --ui-error-subtle: #fdf0f2;
+    --ui-error-text: #b4495f;
+    --ui-info: #6bb8d9;
+    --ui-info-subtle: #edf6fb;
+    --ui-info-text: #3a92b6;
+    --ui-purple: #8b5cf6;
+    --ui-purple-subtle: #f5f3ff;
+    --ui-on-brand: #ffffff;
+    /* Avatar fallback hue palette — name-hash modulo 12 picks an entry */
+    --ui-avatar-hue-0: #f87171;
+    --ui-avatar-hue-1: #fb923c;
+    --ui-avatar-hue-2: #fbbf24;
+    --ui-avatar-hue-3: #a3e635;
+    --ui-avatar-hue-4: #34d399;
+    --ui-avatar-hue-5: #2dd4bf;
+    --ui-avatar-hue-6: #38bdf8;
+    --ui-avatar-hue-7: #818cf8;
+    --ui-avatar-hue-8: #a78bfa;
+    --ui-avatar-hue-9: #e879f9;
+    --ui-avatar-hue-10: #f472b6;
+    --ui-avatar-hue-11: #94a3b8;
+    /* Colors — Surface & Border */
+    --ui-surface: #ffffff;
+    --ui-surface-hover: #f8fafc;
+    --ui-surface-alt: #f1f5f9;
+    --ui-border: #e2e8f0;
+    --ui-border-light: #f1f5f9;
+    --ui-divider: #e2e8f0;
+    /* Colors — Integration brands */
+    --brand-github: #1b1f23;
+    --brand-linear: #5e6ad2;
+    --brand-slack: #4a154b;
+    --brand-google: #ea4335;
+    --brand-gcal: #4285f4;
+    --brand-todoist: #e44332;
+    --brand-ticktick: #4772fa;
+    --brand-notion: #191919;
+    /* Shadows */
+    --ui-shadow-sm: 0 1px 2px 0 rgba(15, 23, 42, 0.05);
+    --ui-shadow-md:
+        0 4px 6px -1px rgba(15, 23, 42, 0.07),
+        0 2px 4px -2px rgba(15, 23, 42, 0.05);
+    --ui-shadow-lg: 0 20px 40px rgba(15, 23, 42, 0.15);
+    /* Focus */
+    --ui-focus-ring: 0 0 0 2px rgba(56, 143, 239, 0.15);
+    /* Radii */
+    --ui-radius-xs: 3px;
+    --ui-radius-sm: 6px;
+    --ui-radius-md: 8px;
+    --ui-radius-lg: 12px;
+    --ui-radius-pill: 9999px;
+    /* Motion */
+    --ui-ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+    --ui-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ui-dur-fast: 0.12s;
+    --ui-dur-base: 0.2s;
+    --ui-dur-slow: 0.3s;
+    /* Sidebar */
+    --ui-sidebar-bg: #0c1525;
+    --ui-sidebar-text: #cbd5e1;
+    --ui-sidebar-text-bright: #f1f5f9;
+    --ui-sidebar-text-muted: #64748b;
+    --ui-sidebar-active-bg: rgba(56, 143, 239, 0.15);
+    --ui-sidebar-active-text: #60a5fa;
+    --ui-sidebar-hover-bg: rgba(255, 255, 255, 0.05);
+    --ui-sidebar-border: rgba(255, 255, 255, 0.08);
+    /* FlyonUI bridge */
+    --color-primary: var(--ui-primary);
+}
+
+[data-theme="dark"] {
+    --ui-primary: #60a5fa;
+    --ui-primary-hover: #93c5fd;
+    --ui-primary-light: #388fef;
+    --ui-primary-subtle: rgba(56, 143, 239, 0.12);
+    --ui-primary-content: #0c2d5a;
+    --ui-secondary: #94a3b8;
+    --ui-secondary-subtle: rgba(148, 163, 184, 0.1);
+    --ui-accent: #fbbf24;
+    --ui-accent-subtle: rgba(251, 191, 36, 0.1);
+    --ui-accent-content: #1c1917;
+    --ui-accent-text: #fcd34d;
+    --ui-base-100: #0b1120;
+    --ui-base-200: #111827;
+    --ui-base-300: #1e293b;
+    --ui-base-content: #f1f5f9;
+    --ui-base-muted: #94a3b8;
+    --ui-success: #6ecf97;
+    --ui-success-subtle: rgba(110, 207, 151, 0.1);
+    --ui-warning: #e0bd6a;
+    --ui-warning-subtle: rgba(224, 189, 106, 0.1);
+    --ui-warning-text: #fde68a;
+    --ui-error: #e08888;
+    --ui-error-hover: #c96b6b;
+    --ui-error-subtle: rgba(224, 136, 136, 0.1);
+    --ui-info: #6dc4d4;
+    --ui-info-subtle: rgba(109, 196, 212, 0.1);
+    --ui-purple: #a78bfa;
+    --ui-purple-subtle: rgba(167, 139, 250, 0.1);
+    --ui-on-brand: #ffffff;
+    --ui-surface: #111827;
+    --ui-surface-hover: #1e293b;
+    --ui-surface-alt: #0f172a;
+    --ui-border: #1e293b;
+    --ui-border-light: rgba(255, 255, 255, 0.06);
+    --ui-divider: #1e293b;
+    --ui-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+    --ui-shadow-md:
+        0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
+    --ui-shadow-lg: 0 20px 40px rgba(0, 0, 0, 0.35);
+    --ui-focus-ring: 0 0 0 2px rgba(96, 165, 250, 0.2);
+    --brand-github: #30363d;
+    --brand-linear: #7b83eb;
+    --brand-slack: #6b2d6e;
+    --brand-google: #d9453c;
+    --brand-gcal: #5a9bf6;
+    --brand-todoist: #d94a3c;
+    --brand-ticktick: #4772fa;
+    --brand-notion: #2f2f2f;
+    --ui-sidebar-bg: #131b2e;
+    --ui-sidebar-text: #cbd5e1;
+    --ui-sidebar-text-bright: #f1f5f9;
+    --ui-sidebar-text-muted: #6e88a0;
+    --ui-sidebar-active-bg: rgba(96, 165, 250, 0.12);
+    --ui-sidebar-active-text: #60a5fa;
+    --ui-sidebar-hover-bg: rgba(255, 255, 255, 0.04);
+    --ui-sidebar-border: rgba(255, 255, 255, 0.08);
+}
+
+/* ─── Sidebar ─── */
+/* `.sidebar` shell properties (width, bg, flex) live as utilities on the
+   `<aside>` in `web/src/components/sidebar.rs`. `.sidebar` stays as a class
+   hook so the mobile drawer @media block (~line 2895) and the
+   `.sidebar.collapsed .sidebar-brand` cascade still bind to it. */
+/* `.sidebar-brand` shell properties (flex layout, padding, border) live
+   as utilities on the wrapping `<div>` in `sidebar.rs`. The class hook is
+   preserved here only because the `.sidebar.collapsed .sidebar-brand` and
+   `.sidebar.collapsed .sidebar-brand .logo-icon` cascades below need it. */
+.sidebar-brand .logo-icon {
+    width: 28px;
+    height: 34px;
+    flex-shrink: 0;
+}
+.ui-toggle {
+    width: 30px;
+    height: 16px;
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.14);
+    position: relative;
+    transition: background 0.15s var(--ui-ease);
+    flex-shrink: 0;
+}
+.ui-toggle::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform 0.15s var(--ui-ease);
+}
+.ui-toggle.on {
+    background: var(--ui-primary);
+}
+.ui-toggle.on::after {
+    transform: translateX(14px);
+}
+.sidebar::-webkit-scrollbar {
+    width: 4px;
+}
+.sidebar::-webkit-scrollbar-track {
+    background: transparent;
+}
+.sidebar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+}
+.sidebar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}
+
+/* ─── List panel ─── */
+.list-panel {
+    width: 380px;
+    min-width: 320px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--ui-surface);
+    border-right: 1px solid var(--ui-border);
+    overflow: hidden;
+}
+/* `.filter-row` keeps the scrollbar-hide rules below as a class hook.
+   Shell properties (flex, gap, overflow) live as utilities on the div
+   in `notifications_list.rs`. */
+.filter-row {
+    scrollbar-width: none;
+}
+.filter-row::-webkit-scrollbar {
+    display: none;
+}
+/* Source filter (popover) — the popover's shell utilities live inline on
+   the SourceFilter component in web/src/components/notifications_list.rs.
+   The classes below remain because their bespoke styling (`-stack-more`
+   pill, `-clear` icon button, `-list` scroll region, `-check` icon color)
+   isn't worth utility-ifying for a single consumer. */
+.source-filter-stack-more {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 18px;
+    min-width: 18px;
+    padding: 0 4px;
+    margin-left: -4px;
+    background: var(--ui-surface);
+    border: 1px solid var(--ui-border);
+    border-radius: 9px;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--ui-base-muted);
+    font-feature-settings: "tnum";
+}
+.source-filter-clear {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    color: var(--ui-base-muted);
+    margin-left: 2px;
+    cursor: pointer;
+}
+.source-filter-clear:hover {
+    background: rgba(15, 23, 42, 0.08);
+    color: var(--ui-base-content);
+}
+.source-filter-list {
+    max-height: 260px;
+    overflow-y: auto;
+    padding: 2px 0;
+}
+.source-filter-check {
+    color: var(--ui-primary);
+    flex-shrink: 0;
+}
+.notification-list {
+    flex: 1;
+    overflow-y: auto;
+    contain: layout style;
+}
+.notification-list::-webkit-scrollbar {
+    width: 5px;
+}
+.notification-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+.notification-list::-webkit-scrollbar-thumb {
+    background: var(--ui-border);
+    border-radius: 3px;
+}
+.notification-list {
+    scrollbar-width: thin;
+    scrollbar-color: var(--ui-border) transparent;
+}
+.ui-nrow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    cursor: pointer;
+    transition: background 0.12s var(--ui-ease);
+    position: relative;
+    border-bottom: 1px solid var(--ui-border);
+}
+.ui-nrow:hover {
+    background: var(--ui-surface-hover);
+}
+.ui-nrow.selected {
+    background: color-mix(in srgb, var(--ui-primary) 12%, var(--ui-surface));
+    box-shadow: inset 3px 0 0 var(--ui-primary);
+}
+.ui-nrow-source {
+    width: 26px;
+    height: 26px;
+    border-radius: var(--ui-radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 13px;
+    position: relative;
+}
+/* Corner badge clipped to the bottom-right of the source tile when the
+   notification has a linked task. Shows the task source brand icon, or a
+   green check when the task is Done. */
+.ui-nrow-source-corner {
+    position: absolute;
+    bottom: -3px;
+    right: -3px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--ui-surface);
+    border: 1px solid var(--ui-border);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    z-index: 1;
+    box-shadow: var(--ui-shadow-sm);
+}
+.ui-nrow-source-corner > * {
+    width: 8px;
+    height: 8px;
+    font-size: 8px;
+}
+.ui-nrow-body {
+    flex: 1;
+    min-width: 0;
+}
+.ui-nrow-meta-text {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--ui-base-muted);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.ui-nrow-time {
+    font-size: var(--ui-text-sm);
+    color: var(--ui-base-muted);
+    white-space: nowrap;
+}
+.ui-nrow-title {
+    font-size: 12.5px;
+    font-weight: 400;
+    color: var(--ui-base-content);
+    line-height: 1.35;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.ui-nrow-title-row {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    min-width: 0;
+}
+.ui-nrow-title-row .ui-nrow-title {
+    flex: 1;
+    min-width: 0;
+}
+.ui-nrow-title.b {
+    font-weight: 600;
+}
+.ui-nrow-meta-icon {
+    width: 11px;
+    height: 11px;
+    flex-shrink: 0;
+    color: var(--ui-base-muted);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* ─── Detail panel ─── */
+.detail-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--ui-base-200);
+    overflow: hidden;
+    min-width: 0;
+}
+.detail-header {
+    padding: 6px 20px;
+    background: var(--ui-surface);
+    border-bottom: 1px solid var(--ui-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-shrink: 0;
+}
+/* Mobile back button always sits leftmost; the actions group is pushed right
+   so the (back + tabs) cluster stays flushed left. */
+.detail-header .detail-actions {
+    margin-left: auto;
+}
+/* Back button is mobile-only and only shown when the list is hidden (i.e.
+   .app-layout.show-detail is set). On desktop both panes are always visible
+   so the button has no purpose. */
+.detail-back-btn {
+    display: none;
+}
+/* Sticky breadcrumb container: notification pill + link badge + task pill.
+   The link badge is rendered only when the preview can switch between two
+   panes; flanking 1px lines on the badge bridge it to the adjacent pills. */
+.detail-tabs {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.detail-tabs-link {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--ui-surface);
+    border: 1px solid var(--ui-border);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ui-base-muted);
+    flex-shrink: 0;
+    position: relative;
+}
+.detail-tabs-link::before,
+.detail-tabs-link::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    width: 4px;
+    height: 1px;
+    background: var(--ui-border);
+}
+.detail-tabs-link::before {
+    left: -4px;
+}
+.detail-tabs-link::after {
+    right: -4px;
+}
+.detail-tabs-link > * {
+    width: 11px;
+    height: 11px;
+    font-size: 11px;
+}
+.ui-detail-source {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px 3px 4px;
+    border-radius: var(--ui-radius-pill);
+    background: var(--ui-surface);
+    border: 1px solid var(--ui-border);
+    color: var(--ui-base-muted);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+        border-color 0.12s var(--ui-ease),
+        background 0.12s var(--ui-ease),
+        color 0.12s var(--ui-ease);
+    font-family: var(--font-ui);
+}
+.ui-detail-source:hover {
+    border-color: var(--ui-primary);
+    color: var(--ui-base-content);
+}
+.ui-detail-source.active {
+    border-color: var(--ui-primary);
+    background: var(--ui-surface);
+    color: var(--ui-base-content);
+    box-shadow: var(--ui-shadow-sm);
+    cursor: default;
+}
+.ui-detail-source .ui-detail-source-tile {
+    width: 20px;
+    height: 20px;
+    border-radius: var(--ui-radius-sm);
+    background: var(--ui-surface);
+    border: 1px solid var(--ui-border);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.ui-detail-source .ui-detail-source-tile > * {
+    width: 12px;
+    height: 12px;
+    font-size: 12px;
+}
+.ui-detail-source .sub {
+    font-weight: 500;
+    color: var(--ui-base-muted);
+    margin-left: 2px;
+}
+.detail-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+.detail-body {
+    flex: 1;
+    overflow: hidden;
+    padding: 12px 20px;
+    animation: detail-fade 0.2s var(--ui-ease-out);
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+.detail-body > * {
+    flex: 1 1 0;
+    min-height: 0;
+}
+@keyframes detail-fade {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+#notification-preview-details::-webkit-scrollbar,
+#task-preview-details::-webkit-scrollbar {
+    width: 5px;
+}
+#notification-preview-details::-webkit-scrollbar-track,
+#task-preview-details::-webkit-scrollbar-track {
+    background: transparent;
+}
+#notification-preview-details::-webkit-scrollbar-thumb,
+#task-preview-details::-webkit-scrollbar-thumb {
+    background: var(--ui-border);
+    border-radius: 3px;
+}
+#notification-preview-details,
+#task-preview-details {
+    scrollbar-width: thin;
+    scrollbar-color: var(--ui-border) transparent;
+}
+.detail-dock {
+    padding: 6px 20px;
+    background: var(--ui-surface);
+    border-top: 1px solid var(--ui-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+}
+.detail-kbd {
+    font-size: 9px;
+    font-family: var(--font-mono);
+    padding: 1px 4px;
+    border-radius: 3px;
+    background: var(--ui-base-200);
+    border: 1px solid var(--ui-border);
+    color: var(--ui-base-muted);
+    line-height: 1;
 }
 
 @layer components {
@@ -118,69 +885,171 @@
 
 /* Enhanced animations and transitions for Universal Inbox */
 @layer utilities {
-    /* Smooth hover transitions for buttons */
+    /* Crisp, color-only button transitions — no scale, no opacity, no lift. */
     .btn {
-        @apply transition-all duration-300 ease-in-out;
-    }
-
-    .btn:hover {
-        @apply transform -translate-y-0.5 shadow-lg;
+        transition:
+            color var(--ui-dur-fast) var(--ui-ease),
+            background-color var(--ui-dur-fast) var(--ui-ease),
+            border-color var(--ui-dur-fast) var(--ui-ease);
     }
 
     /* Lazy load fade-in effect */
-    .fade-in {
-        animation: fadeIn 0.6s ease-in-out forwards;
-        opacity: 0;
-    }
-
-    .fade-in-delay {
-        animation: fadeIn 0.6s ease-in-out 0.2s forwards;
-        opacity: 0;
-    }
-
-    /* Reduce motion for accessibility */
-    @media (prefers-reduced-motion: reduce) {
-        .fade-in,
-        .fade-in-delay {
-            animation: none;
-            opacity: 1;
-            transform: none;
-        }
-    }
-
-    /* Enhanced mobile responsiveness */
-    @media (max-width: 768px) {
-        .hero-mobile-spacing {
-            @apply px-4 py-8;
-        }
-
-        .mobile-button-stack {
-            @apply flex-col space-y-3;
-        }
-
-        .btn-mobile {
-            @apply min-h-12 px-6;
-        }
-
-        .hero-title-mobile {
-            @apply text-3xl sm:text-4xl;
-        }
-    }
 }
 
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+
+/* ─── Settings page ─── */
+.integration-card {
+    background: var(--ui-surface);
+    border: 1px solid var(--ui-border);
+    border-radius: var(--ui-radius-lg);
+    margin-bottom: 8px;
+    overflow: hidden;
+}
+/* KEEP_CUSTOM: `:has([aria-expanded="true"])` lifts the card's overflow
+   when a descendant select popover is open so it isn't clipped by the
+   rounded card boundary. The `:has()` parent-from-child selector has no
+   Tailwind utility equivalent. */
+.integration-card:has([aria-expanded="true"]) {
+    overflow: visible;
+}
+.integration-alert {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: var(--ui-radius-md);
+    font-size: var(--ui-text-sm);
+}
+.integration-alert.info {
+    background: var(--ui-info-subtle);
+    color: var(--ui-info);
+}
+.integration-alert.warning {
+    background: var(--ui-warning-subtle);
+    color: var(--ui-warning-text);
+}
+.integration-alert.error {
+    background: var(--ui-error-subtle);
+    color: var(--ui-error);
 }
 
-.collapse-arrow > .collapse-title:after {
-    top: 1.2rem;
+/* ─── Auth pages ─── */
+.auth-frame {
+    width: 480px;
+    max-width: 100%;
+    background: var(--ui-surface);
+    border: 1px solid var(--ui-border);
+    border-radius: var(--ui-radius-lg);
+    box-shadow: var(--ui-shadow-md);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+/* Brand hero lockup at the top of every auth screen.
+   `.brand-lockup` itself is a Tailwind utility composition in the Rust
+   component; only the descendant glyph + gradient text rules live here,
+   anchored to the `.brand-lockup` / `.brand-lockup.hero` class hooks. */
+.brand-lockup .brand-mark {
+    width: 28px;
+    height: 34px;
+    flex-shrink: 0;
+    object-fit: contain;
+}
+.brand-lockup .brand-word {
+    font-family: var(--font-ui);
+    font-weight: 800;
+    font-size: 18px;
+    letter-spacing: -0.02em;
+    background: linear-gradient(180deg, #12b1fa 0%, #4481eb 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    white-space: nowrap;
+}
+.brand-lockup.hero .brand-mark {
+    width: 64px;
+    height: 78px;
+    filter: drop-shadow(0 6px 14px rgba(56, 143, 239, 0.22));
+}
+.brand-lockup.hero .brand-word {
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: -0.025em;
+}
+
+/* Divider — "or continue with" */
+.auth-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 18px 0;
+    color: var(--ui-base-muted);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+.auth-divider::before,
+.auth-divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--ui-border);
+}
+
+/* Custom checkbox row ("Keep me signed in") */
+.checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    color: var(--ui-base-content);
+    user-select: none;
+    cursor: pointer;
+}
+.checkbox-row input[type="checkbox"] {
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border: 1px solid var(--ui-border);
+    border-radius: 4px;
+    background: var(--ui-surface);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    position: relative;
+    transition: all var(--ui-dur-fast);
+}
+.checkbox-row input[type="checkbox"]:checked {
+    background: var(--ui-primary);
+    border-color: var(--ui-primary);
+}
+.checkbox-row input[type="checkbox"]:checked::after {
+    content: "";
+    width: 9px;
+    height: 5px;
+    border-left: 2px solid #fff;
+    border-bottom: 2px solid #fff;
+    transform: rotate(-45deg) translate(1px, -1px);
+}
+
+/* KEEP_LEGIT: .tooltip-body — FlyonUI's default tooltip is 14px/1.25rem and too
+   loud for this density. The override below replaces FlyonUI's font-size,
+   font-weight (500 medium), tight 4×8 padding, sm radius and sm shadow. The
+   "inline as `text-xs leading-snug`" plan was attempted and produced a visible
+   regression: width +22px, radius 6→3px, font-weight 500→400, padding 8→12px.
+   Reverted in P9.1 and the class hook is kept. Colors stay on FlyonUI's
+   --tooltip-color / --tooltip-text-color so semantic variants (error,
+   warning, success, …) and dark mode keep working. */
+.tooltip-body {
+    font-size: var(--ui-text-sm);
+    font-weight: 500;
+    line-height: 1.4;
+    padding: 4px 8px;
+    border-radius: var(--ui-radius-sm);
+    box-shadow: var(--ui-shadow-sm);
 }
 
 ol > li::marker {
@@ -199,6 +1068,1160 @@ ol > li::marker {
     left: 28px !important;
 }
 
-#HW_badge.HW_badge.HW_softHidden {
+
+/* Inbox-zero hero — keyframes only. All visual styling is Tailwind v4
+   utilities at the call sites (`web/src/components/welcome_hero.rs` and
+   the `animated_check` branch of `web/src/components/ui/empty_state.rs`).
+   Reduced-motion is handled via Tailwind's `motion-reduce:` variant there,
+   so no extra `@media` block is needed here. */
+@keyframes inbox-zero-pop {
+    0%   { transform: scale(0.5); opacity: 0; }
+    70%  { transform: scale(1.05); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
+}
+@keyframes inbox-zero-draw {
+    to { stroke-dashoffset: 0; }
+}
+
+/* ─── Accessibility ─── */
+.skip-link {
+    position: absolute;
+    left: -9999px;
+    top: auto;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    z-index: 999;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    background: var(--ui-primary);
+    color: var(--ui-primary-content);
+    border-radius: var(--ui-radius-sm);
+    text-decoration: none;
+    font-family: var(--font-ui);
+}
+.skip-link:focus {
+    position: fixed;
+    left: 12px;
+    top: 12px;
+    width: auto;
+    height: auto;
+    outline: 2px solid var(--ui-primary);
+    outline-offset: 2px;
+}
+
+/* `:not(.outline-none)` lets a Tailwind utility opt out — e.g. inputs that
+   live inside a wrapper that already paints its own `focus-within` ring. */
+:focus-visible:not(.outline-none) {
+    outline: 2px solid var(--ui-primary);
+    outline-offset: 2px;
+    border-radius: 2px;
+}
+button:focus-visible:not(.outline-none),
+a:focus-visible:not(.outline-none),
+input:focus-visible:not(.outline-none),
+select:focus-visible:not(.outline-none) {
+    outline: 2px solid var(--ui-primary);
+    outline-offset: 1px;
+}
+.ui-nrow:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 2px var(--ui-primary);
+}
+
+/* Reduced motion: disable decorative animations but keep functional transitions */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+    }
+    /* Preserve short functional transitions for state feedback (selected, hover, focus) */
+    *,
+    *::before,
+    *::after {
+        transition-duration: 0.1s !important;
+    }
+}
+
+/* ─── Notification item enhancements ─── */
+.ui-nrow.unread {
+    background: color-mix(in srgb, var(--ui-primary) 5%, var(--ui-surface));
+}
+.ui-nrow.unread:hover {
+    background: color-mix(
+        in srgb,
+        var(--ui-primary) 9%,
+        var(--ui-surface-hover)
+    );
+}
+.ui-nrow.unread.selected {
+    background: color-mix(in srgb, var(--ui-primary) 14%, var(--ui-surface));
+    box-shadow: inset 3px 0 0 var(--ui-primary);
+}
+.ui-nrow.unread .ui-nrow-meta-text {
+    color: var(--ui-base-content);
+    font-weight: 500;
+}
+.ui-nrow-unread-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--ui-primary);
+    flex-shrink: 0;
+}
+
+/* ─── Notification icon brand colors ─── */
+
+/* ─── Notification tags ─── */
+.ui-nrow-meta {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 1px;
+    min-width: 0;
+}
+.tag {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 10px;
+}
+/* Status-pill scale — 5 semantic levels used across notification previews and list items */
+.tag.error {
+    background: var(--ui-error-subtle);
+    color: var(--ui-error-text);
+}
+.tag.warning {
+    background: var(--ui-warning-subtle);
+    color: var(--ui-warning-text);
+}
+.tag.success {
+    background: var(--ui-success-subtle);
+    color: var(--ui-success-text);
+}
+.tag.info {
+    background: var(--ui-info-subtle);
+    color: var(--ui-info-text);
+}
+.tag.muted {
+    background: var(--ui-base-200);
+    color: var(--ui-base-muted);
+}
+/* Action-required tags — bolder with dot indicator */
+.tag.review {
+    background: var(--ui-accent-subtle);
+    color: var(--ui-accent-text);
+    font-weight: 600;
+}
+.tag.review::before {
+    content: "";
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--ui-accent-text);
+    display: inline-block;
+    margin-right: 3px;
+    vertical-align: middle;
+}
+.tag.urgent {
+    background: var(--ui-error-subtle);
+    color: var(--ui-error);
+    font-weight: 600;
+}
+.tag.urgent::before {
+    content: "";
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--ui-error);
+    display: inline-block;
+    margin-right: 3px;
+    vertical-align: middle;
+}
+.tag.mention {
+    background: var(--ui-info-subtle);
+    color: var(--ui-info);
+    font-weight: 600;
+}
+.tag.mention::before {
+    content: "";
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--ui-info);
+    display: inline-block;
+    margin-right: 3px;
+    vertical-align: middle;
+}
+/* Informational tags — lighter weight */
+.tag.open {
+    background: var(--ui-success-subtle);
+    color: var(--ui-success);
+}
+
+/* ─── Time group headers ─── */
+
+/* ─── List item entrance stagger ─── */
+@keyframes notif-enter {
+    from {
+        opacity: 0;
+        transform: translateX(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+.ui-nrow {
+    animation: notif-enter 0.2s var(--ui-ease-out) backwards;
+}
+
+/* ─── Dismiss animation ─── */
+
+/* ─── Skeleton loading ─── */
+
+/* ─── Filter chips ─── */
+
+/* ─── Bulk selection ─── */
+
+/* ─── List error state ─── */
+
+/* ─── Settings page enhancements ─── */
+
+.settings-status-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    margin-bottom: 18px;
+    border-radius: var(--ui-radius-lg);
+    font-size: 12.5px;
+    font-weight: 500;
+    animation: detail-fade 0.25s var(--ui-ease-out);
+}
+.settings-status-bar.status-ok {
+    background: var(--ui-success-subtle);
+    color: var(--ui-base-content);
+    border: 1px solid color-mix(in srgb, var(--ui-success) 30%, transparent);
+}
+.settings-status-bar.status-warn {
+    background: var(--ui-error-subtle);
+    color: var(--ui-base-content);
+    border: 1px solid color-mix(in srgb, var(--ui-error) 30%, transparent);
+}
+.settings-status-bar.status-info {
+    background: var(--ui-info-subtle);
+    color: var(--ui-base-content);
+    border: 1px solid color-mix(in srgb, var(--ui-info) 30%, transparent);
+}
+
+/* Integration card expandable header */
+.integration-card:hover {
+    border-color: color-mix(
+        in srgb,
+        var(--ui-border) 50%,
+        var(--ui-primary) 50%
+    );
+}
+.integration-card.expanded {
+    border-color: var(--ui-primary);
+    box-shadow: 0 2px 12px color-mix(in srgb, var(--ui-primary) 8%, transparent);
+}
+.integration-card.has-error {
+    border-color: color-mix(in srgb, var(--ui-error) 40%, var(--ui-border));
+    background: var(--ui-error-subtle);
+}
+.integration-card.has-error:hover {
+    border-color: var(--ui-error);
+}
+.integration-card.disconnected-card {
+    border-color: var(--ui-border-light);
+}
+
+.status-leaf {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10.5px;
+    font-weight: 500;
+    padding: 3px 8px;
+    border-radius: 12px;
+    white-space: nowrap;
+}
+.status-leaf .leaf-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.status-leaf.connected {
+    color: var(--ui-success);
+    background: var(--ui-success-subtle);
+}
+.status-leaf.connected .leaf-dot {
+    background: var(--ui-success);
+}
+.status-leaf.error {
+    color: var(--ui-error);
+    background: var(--ui-error-subtle);
+}
+.status-leaf.error .leaf-dot {
+    background: var(--ui-error);
+}
+.status-leaf.disconnected {
+    color: var(--ui-base-muted);
+    background: var(--ui-secondary-subtle);
+}
+.status-leaf.disconnected .leaf-dot {
+    background: var(--ui-base-muted);
+    opacity: 0.5;
+}
+
+/* KEEP_CUSTOM: `.card-body-expandable` is a class hook for the
+   `card-body-in` keyframe + the `.integration-card.expanded` cascade. The
+   keyframe + class binding can't be expressed as utilities without losing
+   the on-expand fade/translate. Emitted by `<CardBody expandable: true>`
+   (web/src/components/ui/card.rs). */
+.integration-card .card-body-expandable {
     display: none;
+    border-top: 1px solid var(--ui-border-light);
+}
+.integration-card.expanded .card-body-expandable {
+    display: block;
+}
+@keyframes card-body-in {
+    from {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+.integration-card.expanded .card-body-expandable {
+    animation: card-body-in 0.2s var(--ui-ease-out);
+}
+
+/* Connection pods */
+.connections-list {
+    padding: 12px 14px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* KEEP_CUSTOM: `.sync-led*` uses `color-mix()` to compute a translucent
+   glow halo from the same hue as the dot. The mix-percentage trick can't
+   be expressed as a Tailwind utility without losing token fidelity. */
+.sync-led {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--ui-success);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ui-success) 25%, transparent);
+}
+.sync-led.error {
+    background: var(--ui-error);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ui-error) 25%, transparent);
+}
+.sync-led.active {
+    background: var(--ui-purple);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ui-purple) 25%, transparent);
+}
+.sync-led.pending {
+    background: var(--ui-accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ui-accent) 25%, transparent);
+}
+
+.pod-config {
+    padding-top: 4px;
+}
+.pod-failure {
+    font-size: var(--ui-text-sm);
+    color: var(--ui-error);
+    padding: 0 4px 4px;
+}
+
+/* Settings alert */
+
+/* KEEP_CUSTOM: `.toggle-switch` and the sibling-cascade
+   `input:checked + .toggle-track + .toggle-thumb` is the contract between
+   the hidden input and the visible track/thumb spans for animating the
+   thumb on toggle. Form-control internals can't be expressed as utilities
+   without losing the `:checked +` sibling selector chain. Emitted by
+   `<ToggleSwitch size: Md>` in `components/ui/toggle.rs`. */
+.toggle-switch {
+    position: relative;
+    width: 34px;
+    height: 18px;
+    flex-shrink: 0;
+    cursor: pointer;
+}
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+}
+.toggle-track {
+    position: absolute;
+    inset: 0;
+    border-radius: 9px;
+    background: var(--ui-base-300);
+    transition: background 0.2s var(--ui-ease);
+}
+.toggle-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--ui-on-brand);
+    box-shadow: var(--ui-shadow-sm);
+    transition: transform 0.2s var(--ui-ease);
+}
+.toggle-switch input:checked + .toggle-track {
+    background: var(--ui-success);
+}
+.toggle-switch input:checked + .toggle-track + .toggle-thumb {
+    transform: translateX(16px);
+}
+.toggle-switch input:focus-visible + .toggle-track {
+    outline: 2px solid var(--ui-primary);
+    outline-offset: 2px;
+}
+
+/* Select dropdown */
+
+/* KEEP_CUSTOM: `.seg` segmented control uses descendant `:hover`, `.active`,
+   `:focus-visible`, and `:disabled` cascades inside `.seg .seg-item`. The
+   combo selector chain (parent + state) can't be expressed cleanly as
+   utilities without duplicating each variant per child. Emitted by
+   `<SegmentedChoice>` in `components/settings_controls.rs`. */
+.seg {
+    display: inline-flex;
+    gap: 2px;
+    padding: 3px;
+    background: var(--ui-base-200);
+    border-radius: var(--ui-radius-md);
+}
+.seg .seg-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    font-family: var(--font-ui);
+    font-size: var(--ui-text-base);
+    font-weight: 500;
+    color: var(--ui-base-muted);
+    background: transparent;
+    border: 0;
+    border-radius: var(--ui-radius-sm);
+    cursor: pointer;
+    transition:
+        background var(--ui-dur-fast) var(--ui-ease),
+        color var(--ui-dur-fast) var(--ui-ease);
+    white-space: nowrap;
+}
+.seg .seg-item:hover {
+    color: var(--ui-base-content);
+}
+.seg .seg-item.active {
+    background: var(--ui-surface);
+    color: var(--ui-base-content);
+    box-shadow: var(--ui-shadow-sm);
+}
+.seg .seg-item:focus-visible {
+    outline: none;
+    box-shadow: var(--ui-focus-ring);
+}
+.seg .seg-item:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.settings-tab-panel.hidden {
+    display: none;
+}
+.settings-tab-panel {
+    padding-top: 12px;
+}
+
+/* Radio group */
+
+/* Subsection */
+.settings-subsection {
+    margin-top: 4px;
+    padding: 8px 10px;
+    border-radius: var(--ui-radius-sm);
+    background: var(--ui-surface);
+    border: 1px solid var(--ui-border-light);
+}
+.settings-subsection-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ui-base-muted);
+    margin-bottom: 4px;
+}
+
+/* Card footer actions */
+
+/* ─── Profile page enhancements ─── */
+
+.profile-avatar {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid var(--ui-primary);
+    box-shadow:
+        0 0 0 3px var(--ui-surface),
+        0 0 0 6px color-mix(in srgb, var(--ui-primary) 20%, transparent);
+    transition: border-color 0.2s var(--ui-ease);
+}
+.profile-name .edit-btn {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 1px solid var(--ui-border);
+    background: var(--ui-surface);
+    color: var(--ui-base-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.12s var(--ui-ease);
+    font-size: 12px;
+    position: relative;
+}
+/* Expand touch target to 44px minimum without changing visual size */
+.profile-name .edit-btn::before {
+    content: "";
+    position: absolute;
+    inset: -10px;
+    border-radius: 50%;
+}
+.profile-name .edit-btn:hover {
+    color: var(--ui-primary);
+    border-color: var(--ui-primary);
+    background: var(--ui-primary-subtle);
+}
+
+/* KEEP_LEGIT: .api-keys-table descendant cascade — 5 internal rules (th/td/tr:last-child td/tr:hover td/.token-new td) cheaper to keep as a single class hook than to migrate per-cell utilities across two consumer tables. */
+.api-keys-table .token-new td {
+    background: var(--ui-success-subtle);
+}
+.api-keys-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    table-layout: fixed;
+}
+.api-keys-table th {
+    text-align: left;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--ui-base-muted);
+    padding: 8px 16px;
+    background: var(--ui-surface-alt);
+    border-bottom: 1px solid var(--ui-border);
+}
+.api-keys-table td {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--ui-border-light);
+    color: var(--ui-base-content);
+    vertical-align: middle;
+}
+.api-keys-table tr:last-child td {
+    border-bottom: none;
+}
+.api-keys-table tr:hover td {
+    background: var(--ui-surface-hover);
+}
+/* ─── Task items ─── */
+
+
+/* ─── Preview enhancements ─── */
+.preview-card {
+    background: var(--ui-surface);
+    border: 1px solid var(--ui-border);
+    border-radius: var(--ui-radius-lg);
+    padding: 12px;
+    margin-bottom: 10px;
+}
+.preview-card-section {
+    border-top: 1px solid var(--ui-border-light);
+    margin: 10px -12px 0;
+    padding: 0 12px;
+}
+/* Unified preview-pane header: brand-icon tile + title + reason-in-subline.
+   Renders the source brand logo (Iconify `logos:*`) on a neutral white tile so
+   per-source colors stay authentic while the layout is consistent. */
+.preview-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px 12px;
+    border-bottom: 1px solid var(--ui-border-light);
+    flex-shrink: 0;
+}
+.preview-head-titles {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+}
+.preview-head-title {
+    font-size: 13.5px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.preview-head-title-text {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.preview-head-title-ext {
+    color: var(--ui-base-muted);
+    font-weight: 500;
+    font-family: var(--font-mono);
+    font-size: 12px;
+}
+.preview-head-sub {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--ui-base-muted);
+    font-weight: 500;
+    flex-wrap: wrap;
+}
+.preview-head-sub .sep {
+    opacity: 0.5;
+}
+.preview-brand-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--ui-surface);
+    border: 1px solid var(--ui-border);
+    border-radius: var(--ui-radius-sm);
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+}
+.preview-brand-icon > span {
+    font-size: 16px;
+    line-height: 1;
+}
+
+/* Progress bar used in the Linear project preview metrics card. */
+.preview-progress {
+    position: relative;
+    flex: 1;
+    height: 6px;
+    background: var(--ui-base-200);
+    border: 1px solid var(--ui-border-light);
+    border-radius: 9999px;
+    overflow: hidden;
+    min-width: 80px;
+}
+.preview-progress-fill {
+    height: 100%;
+    background: var(--ui-primary);
+    border-radius: 9999px;
+    transition: width 0.25s var(--ui-ease, ease);
+}
+.preview-progress-marker {
+    position: absolute;
+    top: -2px;
+    bottom: -2px;
+    width: 2px;
+    background: var(--ui-base-content);
+    border-radius: 1px;
+    transform: translateX(-1px);
+    pointer-events: none;
+}
+.preview-progress-value {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    color: var(--ui-base-content);
+    min-width: 36px;
+    text-align: right;
+}
+.preview-progress-placeholder {
+    color: var(--ui-base-muted);
+}
+
+/* RSVP button row mounted inside .preview-card — flush with the card's bottom edge,
+   separated from the guests section above by a hairline divider. */
+.preview-card .preview-rsvp-inline {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    margin: 10px -12px -12px;
+    border-top: 1px solid var(--ui-border-light);
+    overflow: hidden;
+    border-bottom-left-radius: calc(var(--ui-radius-lg) - 1px);
+    border-bottom-right-radius: calc(var(--ui-radius-lg) - 1px);
+}
+
+/* Action dock — three-button RSVP / triage row.
+   Active button fills with semantic color (success/error/warning). */
+.preview-dock-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 8px;
+    font-size: 12.5px;
+    font-weight: 600;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--ui-base-content);
+    transition: background var(--ui-dur-fast) var(--ui-ease);
+}
+.preview-dock-btn + .preview-dock-btn {
+    border-left: 1px solid var(--ui-border-light);
+}
+.preview-dock-btn:hover {
+    background: var(--ui-surface-hover);
+}
+.preview-dock-btn.is-active.yes {
+    color: var(--ui-success-text);
+    background: var(--ui-success-subtle);
+}
+.preview-dock-btn.is-active.no {
+    color: var(--ui-error-text);
+    background: var(--ui-error-subtle);
+}
+.preview-dock-btn.is-active.maybe {
+    color: var(--ui-warning-text);
+    background: var(--ui-warning-subtle);
+}
+
+/* PR branch line — `feature → main` mono pill. */
+
+/* PR diff stat row. */
+
+/* Mergeability + review checks list. */
+
+/* @mention pill. */
+
+.preview-card p {
+    font-size: 12.5px;
+    color: var(--ui-base-muted);
+    line-height: 1.6;
+    margin-bottom: 8px;
+}
+.preview-card p:last-child {
+    margin-bottom: 0;
+}
+.preview-card code {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    background: var(--ui-base-200);
+    padding: 1px 4px;
+    border-radius: 3px;
+    color: var(--ui-purple);
+}
+
+/* ─── Generic threaded comment list (used by Linear / GitHub / Drive / Gmail previews) ─── */
+.ui-thread {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.ui-thread-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.ui-thread-children {
+    margin-top: 8px;
+    margin-left: 12px;
+    padding-left: 12px;
+    border-left: 2px solid var(--ui-border-light);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+/* Thread divider — pill-and-rule treatment used for both "X hidden replies"
+   and "X new replies". The outer row is a flex container with gradient
+   pseudo-element lines on either side that stretch to fill the available
+   width; the inner `.ui-thread-divider-label` is the primary-blue pill. */
+.ui-thread-divider {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 0;
+}
+.ui-thread-divider::before,
+.ui-thread-divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(
+        to right,
+        transparent,
+        rgba(56, 143, 239, 0.45),
+        transparent
+    );
+}
+.ui-thread-divider-label {
+    padding: 2px 10px;
+    border-radius: var(--ui-radius-pill);
+    background: var(--ui-primary-subtle);
+    color: var(--ui-primary);
+    font-size: var(--ui-text-xs);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+.ui-thread-divider-label a,
+.ui-thread-divider-label button {
+    color: inherit;
+    background: transparent;
+    border: 0;
+    padding: 0;
+    font: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    cursor: pointer;
+}
+.ui-thread-divider-label a:hover,
+.ui-thread-divider-label button:hover {
+    color: var(--ui-primary-hover);
+}
+
+/* ─── Threaded-message row — kept class hooks ─────────────────────────────
+   The rules below are class hooks the `<ThreadedMessage>` component cannot
+   express as utility composition:
+
+   1. `.ui-thread-msg-body :where(...)` margin reset, `.prose` font-size,
+      and `.ui-email-frame-host` sizing all target arbitrary descendant DOM
+      (embedded markdown, sanitised HTML, email iframe) that the component
+      doesn't render directly. Descendant selectors aren't utility-able.
+
+   2. `.ui-thread-msg-grouped > .ui-thread-msg-followup` — 38px child
+      indent (avatar 28 + gap 10) is a child selector cascade.
+
+   3. `.ui-thread-msg-followup-time` opacity + transition + parent
+      `:hover` cascade — fades in the clock-time of follow-up rows on
+      group hover. The trigger is a parent (`.ui-thread-msg-grouped`) or
+      sibling (`.ui-thread-msg-followup`), neither utility-expressible. */
+.ui-thread-msg-body :where(p, ul, ol, pre) {
+    margin: 0;
+}
+.ui-thread-msg-body .prose {
+    font-size: var(--ui-text-base);
+}
+.ui-thread-msg-body .ui-email-frame-host {
+    display: block;
+    width: 100%;
+    min-height: 80px;
+}
+/* KEEP_CUSTOM: `.ui-email-frame` is the class JS sets on the sandboxed
+   `<iframe>` it creates inside `.ui-email-frame-host` (see `web/js/index.js`).
+   Without `width: 100%`, the iframe defaults to the HTML-spec `width: 300px`,
+   which is the white-space-on-the-right bug. `border: 0` strips the default
+   iframe border; `color-scheme` lets the iframe pick up the parent theme so
+   unstyled emails read correctly in both light and dark modes. */
+.ui-thread-msg-body .ui-email-frame {
+    width: 100%;
+    border: 0;
+    display: block;
+    background: transparent;
+    color-scheme: light;
+}
+[data-theme="dark"] .ui-thread-msg-body .ui-email-frame {
+    color-scheme: dark;
+}
+.ui-thread-msg-grouped > .ui-thread-msg-followup {
+    padding-left: 38px;
+}
+.ui-thread-msg-followup-time {
+    opacity: 0;
+    transition: opacity var(--ui-dur-fast) var(--ui-ease);
+}
+.ui-thread-msg-grouped:hover .ui-thread-msg-followup-time,
+.ui-thread-msg-followup:hover .ui-thread-msg-followup-time {
+    opacity: 1;
+}
+
+
+
+
+/* ─── Modal system ─── */
+
+/* Form fields in modals */
+
+/* Task link selection */
+
+/* ─── Help overlay ─── */
+
+/* ─── Onboarding / Welcome panel ─── */
+
+/* ─── App footer bar ─── */
+/* Class hooks preserved for the LED pulse animation only. All layout, sizing,
+   color, and hover styling for the footer integration cluster now lives as
+   Tailwind utilities composed inside `web/src/components/footer.rs`. The
+   `.footer-integration.syncing .footer-status-dot` selector + the
+   `footer-led-pulse` keyframe stay here because a parent-state cascade and a
+   keyframe cannot be expressed as utilities. */
+.footer-integration.syncing .footer-status-dot {
+    animation: footer-led-pulse 1.4s ease-in-out infinite;
+}
+@keyframes footer-led-pulse {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.4;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .footer-integration.syncing .footer-status-dot {
+        animation: none;
+    }
+}
+
+/* ─── Controls ─── */
+
+
+.sidebar-collapse-btn {
+    display: flex;
+    margin-left: auto;
+    width: 28px;
+    height: 28px;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: none;
+    color: var(--ui-sidebar-text);
+    cursor: pointer;
+    border-radius: var(--ui-radius-sm);
+    transition: background 0.12s;
+}
+.sidebar-collapse-btn:hover {
+    background: var(--ui-sidebar-hover-bg);
+}
+
+/* ─── Sidebar collapsed state (toggle-driven, all viewports) ─── */
+/* The `.sidebar.collapsed` collapse state mostly drives its child reveal/hide
+   via Tailwind variants on the elements themselves (`md:[&.collapsed]:w-14`,
+   `md:[.sidebar.collapsed_&]:hidden`, etc. — see `sidebar.rs`). The rules
+   below stay as CSS class hooks because their nested-cascade + size-cascade
+   pattern (sidebar-brand layout reshuffle, logo-icon resize) doesn't compose
+   cleanly as utilities; `.sidebar-collapse-btn` margin reset pairs with the
+   button's class hook. */
+.sidebar.collapsed .sidebar-brand {
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 6px;
+}
+.sidebar.collapsed .sidebar-brand .logo-icon {
+    width: 24px;
+    height: 30px;
+}
+.sidebar.collapsed .sidebar-collapse-btn {
+    margin-left: 0;
+}
+
+/* ─── Responsive: Mobile (<=768px) ─── */
+/* Layout-shell responsive rules live as Tailwind `max-xl:` / `max-lg:` /
+   `max-md:` variants on the originating Rust elements. Compound variants like
+   `max-md:[.app-layout.show-detail_&]:flex` drive the mobile list↔detail
+   toggle. The block below holds the remaining KEEP_CUSTOM mobile rules; a
+   consolidated mobile-typography block lives at the end of this file, and the
+   drawer backdrop fade + reduced-motion override sit in sibling blocks. */
+@media (max-width: 768px) {
+    /* KEEP_CUSTOM: `.sidebar.collapsed .sidebar-brand` cascade reshapes the
+       brand row's flex direction + padding. Expressing this as
+       `max-md:[.sidebar.collapsed_&]:` utilities on the brand element would
+       require a long class string with arbitrary values for non-default
+       padding/gap. Keeping the cascade here is the cleaner trade-off. */
+    .sidebar.collapsed .sidebar-brand {
+        flex-direction: row;
+        justify-content: flex-start;
+        align-items: center;
+        gap: 10px;
+        padding: 14px 14px 10px;
+    }
+    .sidebar.collapsed .sidebar-brand .logo-icon {
+        width: 28px;
+        height: 34px;
+    }
+
+    /* KEEP_CUSTOM: `.sidebar-backdrop.open` overlay — the `animation:
+       backdrop-in` fade-in keyframe and the dark `rgba(15,23,42,0.45)` color
+       are anchored to this class hook. The class hook is preserved alongside
+       a `hidden`/`max-md:block` utility on the element in `nav_bar.rs`. */
+    .sidebar-backdrop.open {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.45);
+        z-index: 999;
+        animation: backdrop-in 0.18s var(--ui-ease-out);
+    }
+}
+
+/* Slack thread renderer — shell properties migrated to <ReactionChip> and
+   <ParticipantStack> Dioxus components. Two rules remain as KEEP_LEGIT
+   class hooks for cascade/color-mix patterns that utilities cannot express. */
+
+/* KEEP_LEGIT: sibling cascade for the -6px avatar overlap in <ParticipantStack>. */
+.th-participant-stack > * + * {
+    margin-left: -6px;
+}
+
+/* KEEP_LEGIT: color-mix() highlight when the current user reacted; emitted by <ReactionChip variant=Mine>. */
+.th-rxn--mine {
+    background: var(--ui-primary-subtle);
+    border-color: color-mix(in oklab, var(--ui-primary) 40%, transparent);
+    color: var(--ui-primary-hover);
+}
+
+/* Keyframe consumed by the `animate-ss-pop-in` utility (see `@theme
+   inline` at the top of the file). All select trigger / popover / row /
+   skeleton / empty / footer styling now lives as Tailwind utilities
+   composed inside `web/src/components/ui/select.rs` sub-components. */
+@keyframes ss-pop-in {
+    from {
+        opacity: 0;
+        transform: translateY(-4px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* Keyframe consumed by the `animate-ss-pop-skel` utility (see
+   `@theme inline` at the top of the file). The corresponding loading
+   skeleton row is now styled via Tailwind utilities composed inside the
+   select sub-components. */
+@keyframes ss-pop-skel {
+    from {
+        background-position: 200% 0;
+    }
+    to {
+        background-position: -200% 0;
+    }
+}
+
+/* PHASE 7: The `@media (min-width: 769px) { .sidebar-backdrop, .mobile-topbar
+   { display: none } }` block dropped — both elements now carry `hidden`
+   utilities by default and reveal themselves with `max-md:block` /
+   `max-md:flex` variants on their elements (`nav_bar.rs`). */
+
+@keyframes backdrop-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sidebar {
+        transition: none;
+    }
+    .sidebar-backdrop.open {
+        animation: none;
+    }
+}
+
+/* ─── Flatpickr — align popover type scale with our denser modal UI ─── */
+/* FlyonUI's flatpickr.css forces 16px on `.flatpickr-current-month` /
+   `.flatpickr-day` (Tailwind `text-base`). That dwarfs our 13.5px modal inputs.
+   Re-base everything off `--ui-text-base` so the calendar reads at the same
+   density as the rest of the form. */
+.flatpickr-calendar {
+    font-size: var(--ui-text-base);
+    line-height: 1.45;
+}
+.flatpickr-day {
+    font-size: var(--ui-text-base);
+}
+/* FlyonUI's `span.flatpickr-weekday` wins on specificity (0,1,1) — match it. */
+span.flatpickr-weekday,
+.flatpickr-weekwrapper .flatpickr-weekday {
+    font-size: var(--ui-text-sm);
+}
+.flatpickr-time input,
+.flatpickr-time .flatpickr-time-separator,
+.flatpickr-time .flatpickr-am-pm {
+    font-size: var(--ui-text-base);
+}
+
+/* ─── Mobile responsive overrides (KEEP_CUSTOM) ─── */
+/* Mobile typography/spacing overrides for class-hooked surfaces (settings,
+   integration, toggle-switch, status-leaf). Migration to per-element
+   max-md: variants didn't pay off — these target multiple shared class
+   hooks at once. */
+@media (max-width: 768px) {
+    .settings-container {
+        padding: 12px 14px 32px;
+    }
+    .status-leaf {
+        font-size: 10px;
+        padding: 3px 7px;
+    }
+    .connections-list {
+        padding: 10px 12px;
+    }
+    .setting-row {
+        padding: 8px 0;
+        gap: 8px;
+    }
+    /* Only stack rows that contain select dropdowns */
+    .setting-row:has([data-ui-select-root]) {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 6px;
+    }
+    .setting-row:has([data-ui-select-root]) [data-ui-select-root] {
+        max-width: none;
+        width: 100%;
+    }
+    .toggle-switch {
+        /* Enlarge touch area without changing visual size */
+        padding: 8px;
+        margin: -8px;
+    }
+    .settings-status-bar {
+        font-size: 12px;
+        padding: 10px 12px;
+        gap: 8px;
+    }
+    .settings-subsection {
+        padding: 10px 12px;
+    }
+    .integration-alert {
+        font-size: 12px;
+        padding: 10px 12px;
+    }
 }

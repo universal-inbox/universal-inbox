@@ -4,30 +4,8 @@ use dioxus::prelude::*;
 
 #[component]
 pub fn GoogleDrive(class: Option<String>) -> Element {
-    rsx! {
-        svg {
-            xmlns: "http://www.w3.org/2000/svg",
-            class: class.unwrap_or_default(),
-            role: "img",
-            fill: "currentColor",
-            "viewBox": "0 0 50 50",
-
-            title { "Google Drive" }
-            path {
-                d: "M45.58 31H32.61L19.73 6h10.754c.726 0 1.394.393 1.747 1.027L45.58 31zM23.37 17.43L9.94 43.2 3.482 33.04c-.395-.622-.417-1.411-.055-2.053L17.48 6 23.37 17.43zM45.54 33l-6.401 10.073C38.772 43.65 38.136 44 37.451 44H11.78l5.73-11H45.54z"
-            }
-        }
-    }
-}
-
-#[component]
-pub fn GoogleDriveFile(mime_type: String, class: Option<String>) -> Element {
-    match mime_type.as_str() {
-        "application/vnd.google-apps.document" => rsx! { GoogleDriveDocument { class } },
-        "application/vnd.google-apps.spreadsheet" => rsx! { GoogleDriveSpreadsheet { class } },
-        "application/vnd.google-apps.presentation" => rsx! { GoogleDrivePresentation { class } },
-        _ => rsx! { GoogleDriveDocument { class } },
-    }
+    let class = class.unwrap_or_default();
+    rsx! { span { class: "icon-[logos--google-drive] {class}" } }
 }
 
 #[component]

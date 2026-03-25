@@ -2,12 +2,9 @@
 
 use dioxus::prelude::*;
 use dioxus::web::WebEventExt;
-use dioxus_free_icons::{
-    Icon,
-    icons::bs_icons::{BsExclamationTriangle, BsTrash},
-};
 use gloo_timers::future::TimeoutFuture;
 
+use crate::components::ui::button::{Button, ButtonVariant};
 use crate::services::flyonui::{close_flyonui_modal, init_flyonui_modal};
 
 #[component]
@@ -30,14 +27,8 @@ pub fn DeleteAllConfirmationModal(on_confirm: EventHandler<()>) -> Element {
                     div {
                         class: "modal-header",
                         h3 {
-                            class: "modal-title flex items-center gap-2",
-                            div {
-                                class: "badge badge-error badge-soft rounded-full size-8 p-2",
-                                Icon {
-                                    class: "w-5 h-5 text-error",
-                                    icon: BsExclamationTriangle
-                                }
-                            }
+                            class: "text-sm font-semibold mb-3 flex items-center gap-2",
+                            span { class: "icon-[lucide--triangle-alert] size-5", style: "color: var(--ui-error);" }
                             "Confirm Delete All"
                         }
                         button {
@@ -51,38 +42,37 @@ pub fn DeleteAllConfirmationModal(on_confirm: EventHandler<()>) -> Element {
 
                     div {
                         class: "modal-body pt-4 pb-6",
-                        div {
-                            class: "flex items-start gap-3",
-                            p {
-                                class: "text-sm text-gray-600 dark:text-gray-400",
-                                "This action will permanently delete all notifications. Are you sure you want to continue?"
-                            }
+                        p {
+                            class: "text-xs text-ui-base-muted leading-normal mb-4",
+                            "This action will permanently delete all notifications. Are you sure you want to continue?"
                         }
                     }
 
                     div {
-                        class: "modal-footer gap-3",
-                        button {
-                            class: "btn btn-outline",
-                            "data-overlay": "#delete-all-confirmation-modal",
-                            onclick: move |_| {
-                                close_flyonui_modal("#delete-all-confirmation-modal");
-                            },
-                            "Cancel"
-                        }
-                        button {
-                            class: "btn btn-error",
-                            onclick: move |_| {
-                                spawn({
-                                    async move {
-                                        close_flyonui_modal("#delete-all-confirmation-modal");
-                                        TimeoutFuture::new(1000).await;
-                                        on_confirm.call(());
-                                    }
-                                });
-                            },
-                            Icon { class: "w-4 h-4", icon: BsTrash }
-                            "Delete All"
+                        class: "modal-footer",
+                        div {
+                            class: "flex gap-2 justify-end",
+                            Button {
+                                variant: ButtonVariant::Ghost,
+                                onclick: move |_| {
+                                    close_flyonui_modal("#delete-all-confirmation-modal");
+                                },
+                                "Cancel"
+                            }
+                            Button {
+                                variant: ButtonVariant::Danger,
+                                icon_class: "icon-[lucide--trash-2]".to_string(),
+                                onclick: move |_| {
+                                    spawn({
+                                        async move {
+                                            close_flyonui_modal("#delete-all-confirmation-modal");
+                                            TimeoutFuture::new(1000).await;
+                                            on_confirm.call(());
+                                        }
+                                    });
+                                },
+                                "Delete all"
+                            }
                         }
                     }
                 }

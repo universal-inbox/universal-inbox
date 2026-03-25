@@ -1,10 +1,6 @@
 #![allow(non_snake_case)]
 
-use dioxus::prelude::dioxus_core::use_drop;
 use dioxus::prelude::*;
-use dioxus::web::WebEventExt;
-
-use crate::services::flyonui::{forget_flyonui_collapse_element, init_flyonui_collapse_element};
 
 #[component]
 pub fn Collapse(
@@ -13,42 +9,39 @@ pub fn Collapse(
     header: Element,
     children: Element,
 ) -> Element {
-    let (collapse_toggle_style, collapse_content_style) = use_memo(move || {
-        if opened().unwrap_or_default() {
-            ("open", "")
-        } else {
-            ("", "hidden")
-        }
-    })();
-    let mut mounted_element: Signal<Option<web_sys::Element>> = use_signal(|| None);
-    use_drop(move || {
-        if let Some(element) = mounted_element() {
-            forget_flyonui_collapse_element(&element);
+    let mut is_open = use_signal(move || opened().unwrap_or(false));
+
+    use_effect(move || {
+        if let Some(val) = opened() {
+            is_open.set(val);
         }
     });
 
     rsx! {
-        button {
-            id: "collapse-toggle-{id}",
-            onmounted: move |element| {
-                let web_element = element.as_web_event();
-                init_flyonui_collapse_element(&web_element);
-                mounted_element.set(Some(web_element));
-            },
-            class: "collapse-toggle flex items-center gap-2 p-2 w-full cursor-pointer {collapse_toggle_style}",
-            "data-collapse": "#collapse-content-{id}",
-            "type": "button",
-
-            { header }
-
-            span { class: "icon-[tabler--chevron-down] collapse-open:rotate-180 ms-2 size-4" }
-        }
-
         div {
-            id: "collapse-content-{id}",
-            class: "collapse w-full overflow-hidden transition-[height] duration-300 p-2 flex flex-col gap-2 text-sm {collapse_content_style}",
+            class: "collapse-panel w-full",
 
-            { children }
+            div {
+                class: "collapse-toggle flex items-center gap-2 p-2 w-full cursor-pointer",
+                onclick: move |_| is_open.toggle(),
+
+                { header }
+
+                span {
+                    class: if is_open() {
+                        "icon-[tabler--chevron-down] rotate-180 ms-2 size-4 transition-transform duration-200"
+                    } else {
+                        "icon-[tabler--chevron-down] ms-2 size-4 transition-transform duration-200"
+                    }
+                }
+            }
+
+            if is_open() {
+                div {
+                    class: "collapse w-full overflow-hidden p-2 flex flex-col gap-2 text-sm",
+                    { children }
+                }
+            }
         }
     }
 }

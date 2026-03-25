@@ -1,0 +1,187 @@
+{
+  "ok": true,
+  "messages": [
+    {
+      "user": "U04",
+      "type": "message",
+      "ts": "{{ts_ago_180m}}",
+      "client_msg_id": "9b71a3c0-1234-4abc-9def-0123456789ab",
+      "text": "Posted the v0.5 grouping prototype here: https://www.figma.com/design/notification-grouping. <@U05XYZ> looking for your feedback on the sticky header behavior in particular — does the fade feel right?",
+      "team": "T05XXX",
+      "thread_ts": "{{ts_ago_180m}}",
+      "reply_count": 3,
+      "reply_users_count": 3,
+      "latest_reply": "{{ts_ago_120m}}",
+      "reply_users": [
+        "U04",
+        "U05YYY",
+        "U02"
+      ],
+      "is_locked": false,
+      "subscribed": true,
+      "last_read": "{{ts_ago_180m}}",
+      "user_profile": {
+        "avatar_hash": "maya04",
+        "first_name": "Maya",
+        "real_name": "Maya Rivera",
+        "display_name": "Maya Rivera",
+        "team": "T05XXX",
+        "name": "maya",
+        "is_restricted": false,
+        "is_ultra_restricted": false
+      },
+      "blocks": [
+        {
+          "type": "rich_text",
+          "block_id": "d111",
+          "elements": [
+            {
+              "type": "rich_text_section",
+              "elements": [
+                {
+                  "type": "text",
+                  "text": "Posted the v0.5 grouping prototype here: "
+                },
+                {
+                  "type": "link",
+                  "url": "https://www.figma.com/design/notification-grouping",
+                  "text": "Figma"
+                },
+                {
+                  "type": "text",
+                  "text": ". "
+                },
+                {
+                  "type": "user",
+                  "user_id": "U05XYZ"
+                },
+                {
+                  "type": "text",
+                  "text": " looking for your feedback on the sticky header behavior in particular — does the fade feel right?"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "user": "U05YYY",
+      "type": "message",
+      "ts": "{{ts_ago_160m}}",
+      "client_msg_id": "12abc456-7890-4def-9012-3456789abcde",
+      "text": "Looks great. Two thoughts: (1) the divider fade is nice, but could we shave 50ms off so it feels even snappier? (2) what happens when a section has zero unread items — collapse by default?",
+      "team": "T05XXX",
+      "user_team": "T05XXX",
+      "source_team": "T05XXX",
+      "thread_ts": "{{ts_ago_180m}}",
+      "parent_user_id": "U04",
+      "user_profile": {
+        "avatar_hash": "gc3dc57da3a0",
+        "first_name": "John",
+        "real_name": "John Doe",
+        "display_name": "john.doe",
+        "team": "T05XXX",
+        "name": "john.doe",
+        "is_restricted": false,
+        "is_ultra_restricted": false
+      },
+      "blocks": [
+        {
+          "type": "rich_text",
+          "block_id": "d222",
+          "elements": [
+            {
+              "type": "rich_text_section",
+              "elements": [
+                {
+                  "type": "text",
+                  "text": "Looks great. Two thoughts: (1) the divider fade is nice, but could we shave 50ms off so it feels even snappier? (2) what happens when a section has zero unread items — collapse by default?"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "user": "U02",
+      "type": "message",
+      "ts": "{{ts_ago_140m}}",
+      "client_msg_id": "ab12cd34-5678-4ef0-9123-456789abcdef",
+      "text": "Collapse-when-empty makes sense to me, but only after we ship the empty-state copy Maya is drafting. Otherwise it'll feel abrupt.",
+      "team": "T05XXX",
+      "user_team": "T05XXX",
+      "source_team": "T05XXX",
+      "thread_ts": "{{ts_ago_180m}}",
+      "parent_user_id": "U04",
+      "user_profile": {
+        "avatar_hash": "bob02",
+        "first_name": "Bob",
+        "real_name": "Bob Martinez",
+        "display_name": "Bob Martinez",
+        "team": "T05XXX",
+        "name": "bob",
+        "is_restricted": false,
+        "is_ultra_restricted": false
+      },
+      "blocks": [
+        {
+          "type": "rich_text",
+          "block_id": "d333",
+          "elements": [
+            {
+              "type": "rich_text_section",
+              "elements": [
+                {
+                  "type": "text",
+                  "text": "Collapse-when-empty makes sense to me, but only after we ship the empty-state copy Maya is drafting. Otherwise it'll feel abrupt."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "user": "U04",
+      "type": "message",
+      "ts": "{{ts_ago_120m}}",
+      "client_msg_id": "ef34ab56-7890-4cde-9123-fedcba987654",
+      "text": "Good call — I'll cut the empty-state copy today and we can revisit the collapse rule once it lands.",
+      "team": "T05XXX",
+      "user_team": "T05XXX",
+      "source_team": "T05XXX",
+      "thread_ts": "{{ts_ago_180m}}",
+      "parent_user_id": "U04",
+      "user_profile": {
+        "avatar_hash": "maya04",
+        "first_name": "Maya",
+        "real_name": "Maya Rivera",
+        "display_name": "Maya Rivera",
+        "team": "T05XXX",
+        "name": "maya",
+        "is_restricted": false,
+        "is_ultra_restricted": false
+      },
+      "blocks": [
+        {
+          "type": "rich_text",
+          "block_id": "d444",
+          "elements": [
+            {
+              "type": "rich_text_section",
+              "elements": [
+                {
+                  "type": "text",
+                  "text": "Good call — I'll cut the empty-state copy today and we can revisit the collapse rule once it lands."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "has_more": false
+}

@@ -36,7 +36,7 @@ async fn test_user_can_login(#[future] browser_tested_app: BrowserTestedApp) {
     wait_for_notification_rows(&page).await;
 
     // Count notification rows — test user has 8 notifications
-    let notification_rows = page.locator("#notifications-list table tr.row-hover").await;
+    let notification_rows = page.locator("#notifications-list .ui-nrow").await;
     let count = notification_rows
         .count()
         .await
@@ -47,9 +47,7 @@ async fn test_user_can_login(#[future] browser_tested_app: BrowserTestedApp) {
     );
 
     // Check that at least one notification row has text content
-    let first_row = page
-        .locator("#notifications-list table tr.row-hover:first-child")
-        .await;
+    let first_row = page.locator("#notifications-list .ui-nrow >> nth=0").await;
     let text = first_row
         .text_content()
         .await
@@ -59,30 +57,32 @@ async fn test_user_can_login(#[future] browser_tested_app: BrowserTestedApp) {
         "Expected first notification row to have text content, but got: {text:?}"
     );
 
-    // Click a notification row and verify it gets the row-active class
+    // Click a notification row and verify it gets the `selected` class
     first_row
         .click(None)
         .await
         .expect("Failed to click first notification row");
-    let active_row = page
-        .locator("#notifications-list table tr.row-active")
-        .await;
+    let active_row = page.locator("#notifications-list .ui-nrow.selected").await;
     expect(active_row)
         .with_timeout(EXPECT_TIMEOUT)
         .to_be_visible()
         .await
-        .expect("Expected a row-active row after clicking a notification");
+        .expect("Expected a selected row after clicking a notification");
 
     // Part B: Navigate to settings page via SPA link (avoids full page reload
-    // which would re-download the ~74 MB debug WASM binary)
-    let settings_link = page.locator("a[href='/settings'].btn.btn-square").await;
+    // which would re-download the ~74 MB debug WASM binary). The Settings nav
+    // row is rendered via `ui::NavItem` which emits Tailwind utilities — no
+    // literal `.nav-item` class — so scope by the sidebar's `<aside>` to
+    // disambiguate from the many sync-success notification rows that also
+    // link to `/settings`.
+    let settings_link = page.locator("aside.sidebar a[href='/settings']").await;
     settings_link
         .click(None)
         .await
         .expect("Failed to click settings link");
 
     // Verify integration cards are visible (use .first() to satisfy strict mode)
-    let integration_cards = page.locator("div.card.bg-base-200").await;
+    let integration_cards = page.locator("div.integration-card").await;
     expect(integration_cards.first())
         .with_timeout(EXPECT_TIMEOUT)
         .to_be_visible()
@@ -105,7 +105,7 @@ async fn test_user_can_login(#[future] browser_tested_app: BrowserTestedApp) {
     let mut all_titles_text = String::new();
     for i in 0..card_count {
         let card = page
-            .locator(&format!("div.card.bg-base-200 >> nth={i}"))
+            .locator(&format!("div.integration-card >> nth={i}"))
             .await;
         if let Ok(Some(text)) = card.text_content().await {
             all_titles_text.push_str(&text);
@@ -158,7 +158,7 @@ async fn test_login_fails_with_wrong_password(#[future] browser_tested_app: Brow
         .expect("Failed to click submit");
 
     // An error alert should appear on the login page
-    let error_alert = page.locator("div.alert.alert-error").await;
+    let error_alert = page.locator("#auth-error").await;
     expect(error_alert.clone())
         .with_timeout(EXPECT_TIMEOUT)
         .to_be_visible()
@@ -218,7 +218,7 @@ async fn test_login_fails_with_nonexistent_user(#[future] browser_tested_app: Br
         .expect("Failed to click submit");
 
     // An error alert should appear on the login page
-    let error_alert = page.locator("div.alert.alert-error").await;
+    let error_alert = page.locator("#auth-error").await;
     expect(error_alert.clone())
         .with_timeout(EXPECT_TIMEOUT)
         .to_be_visible()

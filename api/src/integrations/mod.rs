@@ -24,6 +24,7 @@ pub mod google_drive;
 pub mod google_mail;
 pub mod google_oauth;
 pub mod linear;
+pub mod mock;
 pub mod oauth2;
 pub mod slack;
 pub mod slack_oauth;

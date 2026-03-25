@@ -6,7 +6,13 @@ use log::error;
 use universal_inbox::user::{Password, PasswordResetToken, UserId};
 
 use crate::{
-    components::floating_label_inputs::FloatingLabelInputText, form::FormValues, route::Route,
+    components::{
+        auth_widgets::{Backlink, PrimaryBtn},
+        floating_label_inputs::FloatingLabelInputText,
+        ui::PageHeader,
+    },
+    form::FormValues,
+    route::Route,
     services::user_service::UserCommand,
 };
 
@@ -17,16 +23,14 @@ pub fn PasswordUpdatePage(user_id: UserId, password_reset_token: PasswordResetTo
     let mut force_validation = use_signal(|| false);
 
     rsx! {
-        div {
-            class: "flex flex-col items-center justify-center pb-8",
-            h1 {
-                class: "text-lg font-bold",
-                span { "Reset your password" }
-            }
+        Backlink { to: Route::LoginPage {}, "Back to login" }
+        PageHeader {
+            title: "Reset your password".to_string(),
+            subtitle: Some("Enter your new password below.".to_string()),
         }
 
         form {
-            class: "flex flex-col justify-center gap-4 px-10 pb-8",
+            "novalidate": "true",
             onsubmit: move |evt| {
                 evt.prevent_default();
                 match FormValues(evt.values()).try_into() {
@@ -42,26 +46,26 @@ pub fn PasswordUpdatePage(user_id: UserId, password_reset_token: PasswordResetTo
 
             FloatingLabelInputText::<Password> {
                 name: "password".to_string(),
-                label: Some("Password".to_string()),
+                label: Some("New password".to_string()),
                 required: true,
                 value: password,
+                autofocus: true,
                 force_validation: force_validation(),
-                r#type: "password".to_string()
+                r#type: "password".to_string(),
+                field_icon_class: "icon-[lucide--lock]".to_string(),
+                placeholder: "At least 10 characters".to_string(),
+                help: "Use 10+ characters with a mix of letters, numbers and symbols.".to_string(),
             }
 
-            button {
-                class: "btn btn-primary",
-                r#type: "submit",
-                "Reset password"
-            }
+            PrimaryBtn { button_type: "submit".to_string(), "Reset password" }
+        }
 
-            div {
-                class: "label justify-end",
-                Link {
-                    class: "link-hover link link-primary label-text-alt",
-                    to: Route::LoginPage {},
-                    "Login to existing account"
-                }
+        div { class: "mt-auto pt-6 text-center text-xs text-ui-base-muted",
+            "Remembered it? "
+            Link {
+                class: "text-ui-primary font-semibold no-underline hover:text-ui-primary-hover hover:underline",
+                to: Route::LoginPage {},
+                "Log in"
             }
         }
     }

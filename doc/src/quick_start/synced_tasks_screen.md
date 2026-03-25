@@ -19,22 +19,6 @@ Each task entry includes:
 - **Indicators**: Additional information like author, priority, and other metadata
 - **Timestamp**: When the task was last updated
 
-```admonish tip
-Task priority is indicated by the bookmark icon color:
-
-{:.icon-text}
-![task bookmark](images/task-bookmark-gray.png =x20) Default/Low priority
-
-{:.icon-text}
-![task bookmark](images/task-bookmark-yellow.png =x20) Medium priority
-
-{:.icon-text}
-![task bookmark](images/task-bookmark-orange.png =x20) High priority
-
-{:.icon-text}
-![task bookmark](images/task-bookmark-red.png =x20) Urgent priority
-```
-
 ### Preview Pane (Right Side)
 
 The preview pane displays comprehensive details about the selected task, allowing you to view its content and context without switching applications.

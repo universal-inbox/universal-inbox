@@ -12,7 +12,7 @@ build-release:
 
 ## Dev recipes
 check:
-    cargo clippy --tests -- -D warnings
+    cargo clippy --tests --all-features -- -D warnings
 
 ## Test recipes
 test test-filter="" $RUST_LOG="info":

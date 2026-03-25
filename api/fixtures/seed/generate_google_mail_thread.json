@@ -1,0 +1,108 @@
+{
+  "id": "123",
+  "historyId": "111",
+  "messages": [
+    {
+      "id": "120",
+      "threadId": "123",
+      "labelIds": ["INBOX"],
+      "snippet": "Hey team, please review the v0.5 release plan and confirm we can ship by end of week.",
+      "payload": {
+        "mimeType": "text/html",
+        "headers": [
+          {
+            "name": "Date",
+            "value": "{{rfc2822_ago_5h}}"
+          },
+          {
+            "name": "Subject",
+            "value": "Universal Inbox v0.5 release plan — review needed"
+          },
+          {
+            "name": "From",
+            "value": "Jane Park <jane@universal-inbox.com>"
+          },
+          {
+            "name": "To",
+            "value": "{{user_email}}"
+          }
+        ],
+        "body": {
+          "size": 320,
+          "data": "PGRpdiBkaXI9Imx0ciI-SGV5IHRlYW0sPGJyPjxicj5QbGVhc2UgcmV2aWV3IHRoZSB2MC41IHJlbGVhc2UgcGxhbiBhbmQgY29uZmlybSB3ZSBjYW4gc2hpcCBieSBlbmQgb2Ygd2Vlay4gVGhlIGRvYyBpcyBwaW5uZWQgaW4gI3VuaXZlcnNhbC1pbmJveCAtIGtleSBpdGVtcyBhcmUgdGhlIGNoYW5nZWxvZyBlbnRyeSwgdGhlIGFubm91bmNlbWVudCBwb3N0LCBhbmQgdGhlIHN1cHBvcnQgRkFRIHVwZGF0ZS48YnI-PGJyPlRoYW5rcyE8YnI-SmFuZTxicj48L2Rpdj4="
+        }
+      },
+      "sizeEstimate": 1500,
+      "historyId": "111",
+      "internalDate": "{{epoch_ms_ago_5h}}"
+    },
+    {
+      "id": "121",
+      "threadId": "123",
+      "labelIds": ["INBOX", "SENT"],
+      "snippet": "Plan looks good. I'll handle the changelog entry today and send the FAQ update for review.",
+      "payload": {
+        "mimeType": "text/html",
+        "headers": [
+          {
+            "name": "Date",
+            "value": "{{rfc2822_ago_3h}}"
+          },
+          {
+            "name": "Subject",
+            "value": "Re: Universal Inbox v0.5 release plan — review needed"
+          },
+          {
+            "name": "From",
+            "value": "{{user_email}}"
+          },
+          {
+            "name": "To",
+            "value": "Jane Park <jane@universal-inbox.com>"
+          }
+        ],
+        "body": {
+          "size": 200,
+          "data": "PGRpdiBkaXI9Imx0ciI-SGkgSmFuZSw8YnI-PGJyPlBsYW4gbG9va3MgZ29vZC4gSSdsbCBoYW5kbGUgdGhlIGNoYW5nZWxvZyBlbnRyeSB0b2RheSBhbmQgc2VuZCB0aGUgRkFRIHVwZGF0ZSBmb3IgcmV2aWV3LjxicjwvZGl2Pg=="
+        }
+      },
+      "sizeEstimate": 1200,
+      "historyId": "111",
+      "internalDate": "{{epoch_ms_ago_3h}}"
+    },
+    {
+      "id": "123",
+      "threadId": "123",
+      "labelIds": ["STARRED", "INBOX", "UNREAD"],
+      "snippet": "Great — I'll take care of the announcement post and run it past Maya before publishing.",
+      "payload": {
+        "mimeType": "text/html",
+        "headers": [
+          {
+            "name": "Date",
+            "value": "{{rfc2822_ago_45m}}"
+          },
+          {
+            "name": "Subject",
+            "value": "Re: Universal Inbox v0.5 release plan — review needed"
+          },
+          {
+            "name": "From",
+            "value": "Bob Martinez <bob@universal-inbox.com>"
+          },
+          {
+            "name": "To",
+            "value": "{{user_email}}, Jane Park <jane@universal-inbox.com>"
+          }
+        ],
+        "body": {
+          "size": 220,
+          "data": "PGRpdiBkaXI9Imx0ciI-R3JlYXQg4oCUIEknbGwgdGFrZSBjYXJlIG9mIHRoZSBhbm5vdW5jZW1lbnQgcG9zdCBhbmQgcnVuIGl0IHBhc3QgTWF5YSBiZWZvcmUgcHVibGlzaGluZy48YnI-PGJyPkJvYjxicj48L2Rpdj4="
+        }
+      },
+      "sizeEstimate": 1300,
+      "historyId": "111",
+      "internalDate": "{{epoch_ms_ago_45m}}"
+    }
+  ]
+}

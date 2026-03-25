@@ -1,28 +1,19 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
-use dioxus_free_icons::{
-    Icon,
-    icons::{
-        bs_icons::{
-            BsBellSlash, BsBookmarkCheck, BsCalendar2Check, BsClockHistory, BsLightning,
-            BsLink45deg, BsTrash,
-        },
-        md_action_icons::{MdAddTask, MdCheckCircleOutline},
-    },
-};
+use dioxus::web::WebEventExt;
 
 use universal_inbox::{
-    HasHtmlUrl, Page,
-    notification::{NotificationListOrder, NotificationWithTask},
-    task::{Task, TaskId, TaskPlanning, TaskPriority},
+    Page,
+    notification::{NotificationListOrder, NotificationStatus, NotificationWithTask},
+    task::{TaskId, TaskPlanning},
     third_party::item::ThirdPartyItemData,
 };
 
 use crate::{
     components::{
         delete_all_confirmation_modal::DeleteAllConfirmationModal,
-        flyonui::tooltip::{Tooltip, TooltipPlacement},
+        flyonui::tooltip::Tooltip,
         integrations::{
             api::web_page::notification_list_item::WebPageNotificationListItem,
             github::notification_list_item::GithubNotificationListItem,
@@ -37,9 +28,10 @@ use crate::{
             ticktick::notification_list_item::TickTickNotificationListItem,
             todoist::notification_list_item::TodoistNotificationListItem,
         },
-        list::{List, ListItemActionButton, ListPaginationButtons},
+        list::{List, ListPaginationButtons},
         task_link_modal::TaskLinkModal,
         task_planning_modal::TaskPlanningModal,
+        ui::{Badge, BadgeVariant, Button, ButtonVariant, use_outside_close},
     },
     config::get_api_base_url,
     icons::UILogo,
@@ -93,42 +85,89 @@ pub fn NotificationsList(
     rsx! {
         div {
             id: "notifications-list",
-            class: "flex flex-col h-full",
-            div {
-                class: "flex w-full p-2 gap-2 text-sm text-base-content/50",
+            // `.list-panel` class hook is preserved because the shell properties
+            // (background, border-right, flex column, overflow:hidden) still
+            // live in `web/css/universal-inbox.css`. Responsive width is now
+            // expressed via Tailwind `max-*` variants on this element. The
+            // `!` (`!important` in Tailwind v4) is required to win against the
+            // `.list-panel { width: 380px; ... }` rule declared later in the
+            // cascade with equal specificity.
+            class: "list-panel max-xl:w-[360px]! max-xl:min-w-[300px]! max-lg:w-[320px]! max-lg:min-w-[280px]! max-md:w-full! max-md:min-w-0! max-md:[.app-layout.show-detail_&]:hidden!",
 
+            // ── List header ──
+            div {
+                class: "flex items-center justify-between py-1.5 px-5 border-b border-ui-border bg-ui-surface",
                 div {
-                    class: "flex items-center flex-1 justify-start max-lg:hidden",
-                    ListPaginationButtons {
-                        current_page,
-                        page: notifications,
-                        on_select: move |selected_page_token| {
-                            notification_filters.write().current_page_token = selected_page_token;
-                            notification_service.send(NotificationCommand::Refresh);
+                    class: "flex flex-col flex-1 min-w-0",
+                    div {
+                        class: "flex items-center justify-between gap-2",
+                        h1 {
+                            class: "flex items-center gap-2 text-[15px] font-bold tracking-tight",
+                            "Inbox"
+                            if notifications().total > 0 {
+                                Badge { variant: BadgeVariant::Count, "{notifications().total}" }
+                            }
+                        }
+                        div {
+                            class: "flex items-center gap-1",
+
+                            Button {
+                                variant: ButtonVariant::Ghost,
+                                title: "Refresh notifications".to_string(),
+                                aria_label: "Refresh notifications".to_string(),
+                                onclick: move |_| notification_service.send(NotificationCommand::Refresh),
+                                icon_class: "icon-[lucide--refresh-cw]".to_string(),
+                                enable_tooltip: true
+                            }
+                            if !notifications().content.is_empty() {
+                                Button {
+                                    variant: ButtonVariant::Danger,
+                                    title: "Delete all notifications".to_string(),
+                                    aria_label: "Delete all notifications".to_string(),
+                                    onclick: move |_| open_flyonui_modal("#delete-all-confirmation-modal"),
+                                    icon_class: "icon-[lucide--trash-2]".to_string(),
+                                    enable_tooltip: true
+                                }
+                            }
                         }
                     }
                 }
+            }
 
+            // ── Filter section ──
+            div {
+                class: "py-1.5 px-5 border-b border-ui-border",
+                // `filter-row` stays as a class hook so the `::-webkit-scrollbar`
+                // hide rule keeps applying — it's a last-resort form-control
+                // internal that doesn't have a clean utility equivalent.
                 div {
-                    class: "flex items-center flex-1 justify-center",
-                    NotificationSourceKindFilters {
+                    class: "filter-row flex items-center gap-1 overflow-x-auto overflow-y-hidden",
+                    SourceFilter {
                         notification_source_kind_filters: notification_filters().notification_source_kind_filters,
                         on_select: move |filter| {
                             notification_filters.write().select(filter);
                             notification_service.send(NotificationCommand::Refresh);
                         },
+                        on_clear: move |_| {
+                            notification_filters.write().reset();
+                            notification_service.send(NotificationCommand::Refresh);
+                        },
                     }
-                }
 
-                div {
-                    class: "flex items-center flex-1 justify-end gap-2",
-                    if !notifications().content.is_empty() {
-                        DeleteAllButton {
-                            on_click: move |_| {
-                                open_flyonui_modal("#delete-all-confirmation-modal");
+                    div {
+                        class: "flex-1 flex items-center justify-center min-w-0",
+                        if notifications().pages_count > 1 {
+                            ListPaginationButtons {
+                                current_page,
+                                page: notifications,
+                                on_select: move |selected_page_token| {
+                                    notification_filters.write().current_page_token = selected_page_token;
+                                    notification_service.send(NotificationCommand::Refresh);
+                                }
                             }
                         }
                     }
+
                     NotificationListOrdering {
                         notification_list_order: notification_filters().sort_by,
                         on_change: move |new_order| {
@@ -139,6 +178,7 @@ pub fn NotificationsList(
                 }
             }
 
+            // ── Notification list ──
             if notifications().content.is_empty() && notification_filters().is_filtered() {
                 div {
                     class: "relative w-full h-full flex justify-center items-center",
@@ -156,38 +196,22 @@ pub fn NotificationsList(
                 }
             } else {
                 div {
-                    class: "h-full overflow-y-auto scroll-y-auto px-2 snap-y snap-mandatory",
+                    class: "notification-list snap-y snap-mandatory",
                     List {
                         id: "notifications_list",
-                        show_shortcut: UI_MODEL.read().is_help_enabled,
 
-                        tbody {
-                            for (i, notification) in notifications().content.into_iter().map(Signal::new).enumerate() {
-                                NotificationListItem {
-                                    notification,
-                                    is_selected: Some(i) == UI_MODEL.read().selected_notification_index,
-                                    on_select: move |_| {
-                                        UI_MODEL.write().selected_notification_index = Some(i);
-                                    },
-                                }
+                        for (i, notification) in notifications().content.into_iter().map(Signal::new).enumerate() {
+                            NotificationListItem {
+                                notification,
+                                is_selected: Some(i) == UI_MODEL.read().selected_notification_index,
+                                on_select: move |_| {
+                                    UI_MODEL.write().selected_notification_index = Some(i);
+                                    let notif = notification();
+                                    if notif.status == NotificationStatus::Unread {
+                                        notification_service.send(NotificationCommand::MarkAsRead(notif.id));
+                                    }
+                                },
                             }
-                        }
-                    }
-                }
-            }
-
-            div {
-                class: "flex flex-col w-full pb-2 gap-2 text-base text-base-content/50 lg:hidden",
-
-                hr { class: "text-gray-200" }
-                div {
-                    class: "flex items-center flex-1 justify-center",
-                    ListPaginationButtons {
-                        current_page,
-                        page: notifications,
-                        on_select: move |selected_page_token| {
-                            notification_filters.write().current_page_token = selected_page_token;
-                            notification_service.send(NotificationCommand::Refresh);
                         }
                     }
                 }
@@ -326,279 +350,156 @@ fn NotificationListItem(
     }
 }
 
-pub fn get_notification_list_item_action_buttons(
-    notification: ReadSignal<NotificationWithTask>,
-    show_shortcut: bool,
-    button_class: Option<String>,
-    container_class: Option<String>,
-) -> Vec<Element> {
-    let context = use_context::<Memo<NotificationListContext>>();
-
-    if !notification().is_built_from_task() {
-        let mut buttons = vec![rsx! {
-            ListItemActionButton {
-                title: "Delete notification",
-                shortcut: "d",
-                show_shortcut,
-                button_class: button_class.clone(),
-                container_class: container_class.clone(),
-                onclick: move |_| {
-                    context().notification_service
-                        .send(NotificationCommand::DeleteFromNotification(notification()));
-                },
-                Icon { class: "w-5 h-5", icon: BsTrash }
-            }
-        }];
-
-        if notification().task.is_some() {
-            buttons.push(rsx! {
-                ListItemActionButton {
-                    title: "Complete task",
-                    shortcut: "c",
-                    disabled_label: (!context().is_task_actions_enabled)
-                        .then_some("No task management service connected".to_string()),
-                    show_shortcut,
-                    button_class: button_class.clone(),
-                    container_class: container_class.clone(),
-                    onclick: move |_| {
-                        context().notification_service
-                            .send(NotificationCommand::CompleteTaskFromNotification(notification()));
-                    },
-                    Icon { class: "w-5 h-5", icon: MdCheckCircleOutline }
-                }
-            });
-        }
-
-        buttons.push(rsx! {
-            ListItemActionButton {
-                title: "Unsubscribe from the notification",
-                shortcut: "u",
-                show_shortcut,
-                button_class: button_class.clone(),
-                container_class: container_class.clone(),
-                onclick: move |_| {
-                    context().notification_service.send(NotificationCommand::Unsubscribe(notification().id));
-                },
-                Icon { class: "w-5 h-5", icon: BsBellSlash }
-            }
-        });
-
-        buttons.push(rsx! {
-            ListItemActionButton {
-                title: "Snooze notification",
-                shortcut: "s",
-                show_shortcut,
-                button_class: button_class.clone(),
-                container_class: container_class.clone(),
-                onclick: move |_| {
-                    context().notification_service.send(NotificationCommand::Snooze(notification().id));
-                },
-                Icon { class: "w-5 h-5", icon: BsClockHistory }
-            }
-        });
-
-        if notification().task.is_none() {
-            buttons.push(rsx! {
-                ListItemActionButton {
-                    title: "Create task",
-                    shortcut: "p",
-                    disabled_label: (!context().is_task_actions_enabled)
-                        .then_some("No task management service connected".to_string()),
-                    show_shortcut,
-                    button_class: button_class.clone(),
-                    container_class: container_class.clone(),
-                    data_overlay: "#task-planning-modal",
-                    Icon { class: "w-5 h-5", icon: MdAddTask }
-                }
-            });
-
-            buttons.push(rsx! {
-                ListItemActionButton {
-                    title: "Create task with defaults",
-                    shortcut: "t",
-                    disabled_label: (!context().is_task_actions_enabled)
-                        .then_some("No task management service connected".to_string()),
-                    show_shortcut,
-                    button_class: button_class.clone(),
-                    container_class: container_class.clone(),
-                    onclick: move |_| {
-                        context().notification_service.send(NotificationCommand::CreateTaskWithDetaultsFromNotification(notification()));
-                    },
-                    Icon { class: "w-5 h-5", icon: BsLightning }
-                }
-            });
-
-            buttons.push(rsx! {
-                ListItemActionButton {
-                    title: "Link to task",
-                    shortcut: "l",
-                    disabled_label: (!context().is_task_actions_enabled)
-                        .then_some("No task management service connected".to_string()),
-                    show_shortcut,
-                    button_class: button_class.clone(),
-                    container_class: container_class.clone(),
-                    data_overlay: "#task-linking-modal",
-                    Icon { class: "w-5 h-5", icon: BsLink45deg }
-                }
-            });
-        }
-
-        buttons
-    } else {
-        vec![
-            rsx! {
-                ListItemActionButton {
-                    title: "Delete task",
-                    shortcut: "d",
-                    disabled_label: (!context().is_task_actions_enabled)
-                        .then_some("No task management service connected".to_string()),
-                    show_shortcut,
-                    button_class: button_class.clone(),
-                    container_class: container_class.clone(),
-                    onclick: move |_| {
-                        context().notification_service
-                            .send(NotificationCommand::DeleteFromNotification(notification()));
-                    },
-                    Icon { class: "w-5 h-5", icon: BsTrash }
-                }
-            },
-            rsx! {
-                ListItemActionButton {
-                    title: "Complete task",
-                    shortcut: "c",
-                    disabled_label: (!context().is_task_actions_enabled)
-                        .then_some("No task management service connected".to_string()),
-                    show_shortcut,
-                    button_class: button_class.clone(),
-                    container_class: container_class.clone(),
-                    onclick: move |_| {
-                        context().notification_service
-                            .send(NotificationCommand::CompleteTaskFromNotification(notification()));
-                    },
-                    Icon { class: "w-5 h-5", icon: MdCheckCircleOutline }
-                }
-            },
-            rsx! {
-                ListItemActionButton {
-                    title: "Snooze notification",
-                    shortcut: "s",
-                    show_shortcut,
-                    button_class: button_class.clone(),
-                    container_class: container_class.clone(),
-                    onclick: move |_| {
-                        context().notification_service.send(NotificationCommand::Snooze(notification().id));
-                    },
-                    Icon { class: "w-5 h-5", icon: BsClockHistory }
-                }
-            },
-            rsx! {
-                ListItemActionButton {
-                    title: "Plan task",
-                    shortcut: "p",
-                    disabled_label: (!context().is_task_actions_enabled)
-                        .then_some("No task management service connected".to_string()),
-                    show_shortcut,
-                    button_class: button_class.clone(),
-                    container_class: container_class.clone(),
-                    data_overlay: "#task-planning-modal",
-                    Icon { class: "w-5 h-5", icon: BsCalendar2Check }
-                }
-            },
-            rsx! {
-                ListItemActionButton {
-                    title: "Create task with defaults",
-                    shortcut: "t",
-                    disabled_label: (!context().is_task_actions_enabled)
-                        .then_some("No task management service connected".to_string()),
-                    show_shortcut,
-                    button_class: button_class.clone(),
-                    container_class: container_class.clone(),
-                    onclick: move |_| {
-                        context().notification_service.send(NotificationCommand::CreateTaskWithDetaultsFromNotification(notification()));
-                    },
-                    Icon { class: "w-5 h-5", icon: BsLightning }
-                }
-            },
-        ]
-    }
-}
-
 #[component]
-pub fn TaskHint(task: ReadSignal<Option<Task>>) -> Element {
-    let Some(task) = task() else {
-        return rsx! {};
-    };
-    let html_url = task.get_html_url();
-    let (tooltip_style, content_style) = match task {
-        Task {
-            priority: TaskPriority::P1,
-            ..
-        } => ("tooltip-red-500", "text-red-500"),
-        Task {
-            priority: TaskPriority::P2,
-            ..
-        } => ("tooltip-orange-500", "text-orange-500"),
-        Task {
-            priority: TaskPriority::P3,
-            ..
-        } => ("tooltip-yellow-500", "text-yellow-500"),
-        Task {
-            priority: TaskPriority::P4,
-            ..
-        } => ("tooltip-gray-500", "text-gray-500"),
-    };
-
-    rsx! {
-        Tooltip {
-            class: "absolute top-0 right-0",
-            tooltip_class: "{tooltip_style}",
-            text: "Linked to a {task.kind} task",
-            placement: TooltipPlacement::Right,
-
-            a {
-                class: "{content_style}",
-                href: "{html_url}",
-                target: "_blank",
-                Icon { class: "w-4 h-4", icon: BsBookmarkCheck }
-            }
-        }
-    }
-}
-
-#[component]
-pub fn NotificationSourceKindFilters(
+pub fn SourceFilter(
     notification_source_kind_filters: ReadSignal<Vec<NotificationSourceKindFilter>>,
     on_select: EventHandler<NotificationSourceKindFilter>,
+    on_clear: EventHandler<()>,
 ) -> Element {
-    rsx! {
-        div {
-            class: "flex items-center gap-2",
-            span { "Filters: " }
-            for filter in notification_source_kind_filters() {
-                NotificationSourceKindFilterButton { filter, on_select }
-            }
-        }
-    }
-}
+    let mut is_open = use_signal(|| false);
+    let mut wrapper_el: Signal<Option<web_sys::Element>> = use_signal(|| None);
+    // Initialize popover_style with `position: fixed` (out-of-flow) anchored
+    // far off-screen so the popover does NOT inflate the wrapper's bounding
+    // rect on the first render after open (before `use_effect` computes the
+    // real anchor coords). Without this, the popover would render in flow
+    // inside the `relative inline-flex` wrapper, the wrapper's `rect.bottom`
+    // would include the popover, and the `top` computed below would be wrong.
+    let mut popover_style =
+        use_signal(|| "position: fixed; top: -9999px; left: -9999px;".to_string());
 
-#[component]
-pub fn NotificationSourceKindFilterButton(
-    filter: ReadSignal<NotificationSourceKindFilter>,
-    on_select: EventHandler<NotificationSourceKindFilter>,
-) -> Element {
-    let style = use_memo(move || {
-        if filter().selected {
-            "text-bg-soft-primary btn-active"
-        } else {
-            "btn-disabled pointer-events-auto!"
+    let close = move || {
+        if *is_open.peek() {
+            is_open.set(false);
+        }
+    };
+    use_outside_close(wrapper_el, is_open, close);
+
+    // Position the popover with `position: fixed` anchored to the trigger's
+    // bounding rect. Using `position: absolute` would clip the popover behind
+    // the inbox panel's `overflow: hidden` ancestors (`.list-panel`,
+    // `.main-content`, `.app-layout`); fixed escapes all clipping ancestors.
+    use_effect(move || {
+        if is_open()
+            && let Some(el) = wrapper_el()
+        {
+            let rect = el.get_bounding_client_rect();
+            let top = rect.bottom() + 6.0;
+            let left = rect.left();
+            popover_style.set(format!("position: fixed; top: {top}px; left: {left}px;"));
         }
     });
 
+    let filters = notification_source_kind_filters();
+    let is_filtered = filters.iter().any(|f| !f.selected);
+    let selected: Vec<NotificationSourceKindFilter> = filters
+        .iter()
+        .filter(|f| f.selected && is_filtered)
+        .cloned()
+        .collect();
+    let visible: Vec<NotificationSourceKindFilter> = selected.iter().take(2).cloned().collect();
+    let overflow = selected.len().saturating_sub(2);
+    let button_class = if is_filtered {
+        "border-ui-primary bg-ui-primary-subtle text-ui-base-content hover:text-ui-base-content hover:border-ui-primary-hover hover:bg-ui-primary-subtle"
+    } else {
+        "border-ui-border bg-ui-surface text-ui-base-muted hover:text-ui-base-content hover:border-ui-base-300 hover:bg-ui-surface-hover"
+    };
+
     rsx! {
-        button {
-            class: "btn btn-circle btn-text lg:btn-xs max-lg:btn-lg {style}",
-            onclick: move |_| on_select.call(filter()),
-            IntegrationProviderIcon { class: "w-4 h-4", provider_kind: filter().kind.into() }
+        div {
+            class: "relative inline-flex",
+            onmounted: move |element| {
+                wrapper_el.set(Some(element.as_web_event()));
+            },
+
+            Tooltip {
+                class: "flex justify-center",
+                text: "Filter sources",
+
+                button {
+                    r#type: "button",
+                    class: "btn btn-sm rounded-ui-sm border font-semibold {button_class}",
+                    "aria-haspopup": "menu",
+                    "aria-expanded": is_open(),
+                    "aria-label": "Filter sources",
+                    tabindex: 0,
+                    onclick: move |_| is_open.set(!is_open()),
+
+                    if is_filtered {
+                        span { class: "inline-flex items-center pl-1.5",
+                            for f in visible.iter() {
+                                span {
+                                    class: "w-[18px] h-[18px] rounded-full bg-ui-surface border-[1.5px] border-ui-surface shadow-[0_0_0_1px_var(--ui-border)] inline-flex items-center justify-center [&:not(:first-child)]:-ml-1.5",
+                                    key: "{f.kind}",
+                                    IntegrationProviderIcon { class: "w-3 h-3", provider_kind: f.kind.into() }
+                                }
+                            }
+                            if overflow > 0 {
+                                span { class: "source-filter-stack-more", "+{overflow}" }
+                            }
+                        }
+                        span {
+                            class: "source-filter-clear",
+                            role: "button",
+                            "aria-label": "Clear source filter",
+                            onclick: move |evt: Event<MouseData>| {
+                                evt.stop_propagation();
+                                on_clear.call(());
+                            },
+                            span { class: "icon-[lucide--x] size-3" }
+                        }
+                    } else {
+                        span { class: "icon-[lucide--filter] size-3" }
+                        span { class: "icon-[tabler--chevron-down] size-3 opacity-60" }
+                    }
+                }
+            }
+
+            if is_open() {
+                div {
+                    class: "w-60 z-[80] bg-ui-surface border border-ui-border rounded-ui-md shadow-ui-md p-1.5 flex flex-col",
+                    style: "{popover_style}",
+                    role: "menu",
+                    tabindex: 0,
+
+                    div { class: "source-filter-list",
+                        for f in filters.iter() {
+                            button {
+                                r#type: "button",
+                                key: "{f.kind}",
+                                class: {
+                                    let base = "flex items-center gap-2 w-full px-2 py-1.5 rounded-ui-sm text-[length:var(--ui-text-base)] text-ui-base-content text-left bg-transparent border-0 cursor-pointer hover:bg-ui-surface-hover";
+                                    if f.selected && is_filtered { format!("{base} bg-ui-primary-subtle") } else { base.to_string() }
+                                },
+                                onclick: {
+                                    let f = f.clone();
+                                    move |_| on_select.call(f.clone())
+                                },
+                                span { class: "w-5 h-5 rounded-ui-xs inline-flex items-center justify-center bg-ui-surface border border-ui-border shrink-0",
+                                    IntegrationProviderIcon { class: "w-4 h-4", provider_kind: f.kind.into() }
+                                }
+                                span { class: "flex-1 min-w-0", "{f.kind}" }
+                                if f.selected && is_filtered {
+                                    span { class: "source-filter-check icon-[lucide--check] size-3" }
+                                }
+                            }
+                        }
+                    }
+
+                    if is_filtered {
+                        div { class: "border-t border-ui-border-light mt-1 pt-1 flex",
+                            button {
+                                r#type: "button",
+                                class: "flex-1 px-2 py-1.5 rounded-ui-sm text-[length:var(--ui-text-sm)] font-medium text-ui-base-muted text-left bg-transparent border-0 cursor-pointer hover:bg-ui-surface-hover hover:text-ui-base-content",
+                                onclick: move |_| {
+                                    on_clear.call(());
+                                    is_open.set(false);
+                                },
+                                "Clear ({selected.len()})"
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -608,43 +509,26 @@ pub fn NotificationListOrdering(
     notification_list_order: ReadSignal<NotificationListOrder>,
     on_change: EventHandler<NotificationListOrder>,
 ) -> Element {
+    let icon_class = use_memo(move || match notification_list_order() {
+        NotificationListOrder::UpdatedAtDesc => "icon-[tabler--chevron-down] size-3",
+        NotificationListOrder::UpdatedAtAsc => "icon-[tabler--chevron-up] size-3",
+    });
+
     rsx! {
-        Tooltip {
-            text: "Sort by updated date",
-            placement: TooltipPlacement::Right,
-
-            label {
-                class: "swap swap-flip",
-                input {
-                    "type": "checkbox",
-                    onclick: move |_| {
-                        let new_order = match notification_list_order() {
-                            NotificationListOrder::UpdatedAtAsc => NotificationListOrder::UpdatedAtDesc,
-                            NotificationListOrder::UpdatedAtDesc => NotificationListOrder::UpdatedAtAsc,
-                        };
-                        on_change.call(new_order);
-                    },
-                    checked: "{notification_list_order() == NotificationListOrder::UpdatedAtDesc}",
-                }
-                span { class: "swap-on icon-[tabler--chevron-down] lg:size-5 max-lg:size-6" }
-                span { class: "swap-off icon-[tabler--chevron-up] lg:size-5 max-lg:size-6" }
-            }
-        }
-    }
-}
-
-#[component]
-pub fn DeleteAllButton(on_click: EventHandler<()>) -> Element {
-    rsx! {
-        Tooltip {
-            text: "Delete all notifications",
-            placement: TooltipPlacement::Left,
-
-            button {
-                class: "btn btn-circle btn-error lg:btn-xs max-lg:btn-lg",
-                onclick: move |_| on_click.call(()),
-                Icon { class: "w-4 h-4", icon: BsTrash }
-            }
+        Button {
+            variant: ButtonVariant::Ghost,
+            aria_label: "Sort by updated date".to_string(),
+            title: "Sort by updated date".to_string(),
+            onclick: move |_| {
+                let new_order = match notification_list_order() {
+                    NotificationListOrder::UpdatedAtAsc => NotificationListOrder::UpdatedAtDesc,
+                    NotificationListOrder::UpdatedAtDesc => NotificationListOrder::UpdatedAtAsc,
+                };
+                on_change.call(new_order);
+            },
+            icon_class: "icon-[lucide--calendar] size-3".to_string(),
+            enable_tooltip: true,
+            span { class: "{icon_class}" }
         }
     }
 }

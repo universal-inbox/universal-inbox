@@ -375,7 +375,7 @@ pub async fn run_server(
     .keep_alive(http::KeepAlive::Timeout(
         Duration::seconds(60).try_into().unwrap(),
     ))
-    .shutdown_timeout(60)
+    .shutdown_timeout(10)
     .listen(listener)
     .context(format!("Failed to listen on {listen_address}"))?;
 

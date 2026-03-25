@@ -1,0 +1,240 @@
+{
+  "ok": true,
+  "latest": "{{ts_ago_2h}}",
+  "messages": [
+    {
+      "client_msg_id": "2e6c52e9-7b61-404d-9358-66327f6eaaaa",
+      "type": "message",
+      "text": ":inbox_tray:  *Universal Inbox new release* :inbox_tray:\n\n• list 1\n• list 2\n1. number 1\n2. number 2\n&gt; quote\n```$ echo Hello world```\n_Some_ `formatted` ~text~.\n\nHere is a <https://www.universal-inbox.com|link>",
+      "user": "U05YYY",
+      "ts": "{{ts_ago_2h}}",
+      "blocks": [
+        {
+          "type": "rich_text",
+          "block_id": "Iz0yu",
+          "elements": [
+            {
+              "type": "rich_text_section",
+              "elements": [
+                {
+                  "type": "emoji",
+                  "name": "inbox_tray",
+                  "unicode": "1f534"
+                },
+                {
+                  "type": "text",
+                  "text": "  "
+                },
+                {
+                  "type": "text",
+                  "text": "Universal Inbox new release",
+                  "style": {
+                    "bold": true
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": " "
+                },
+                {
+                  "type": "emoji",
+                  "name": "inbox_tray",
+                  "unicode": "1f534"
+                },
+                {
+                  "type": "text",
+                  "text": "\n\n"
+                }
+              ]
+            },
+            {
+              "type": "rich_text_list",
+              "elements": [
+                {
+                  "type": "rich_text_section",
+                  "elements": [
+                    {
+                      "type": "text",
+                      "text": "list 1"
+                    }
+                  ]
+                },
+                {
+                  "type": "rich_text_section",
+                  "elements": [
+                    {
+                      "type": "text",
+                      "text": "list 2"
+                    }
+                  ]
+                }
+              ],
+              "style": "bullet",
+              "indent": 0,
+              "border": 0
+            },
+            {
+              "type": "rich_text_section",
+              "elements": [
+                {
+                  "type": "text",
+                  "text": "\n"
+                }
+              ]
+            },
+            {
+              "type": "rich_text_list",
+              "elements": [
+                {
+                  "type": "rich_text_section",
+                  "elements": [
+                    {
+                      "type": "text",
+                      "text": "number 1"
+                    }
+                  ]
+                },
+                {
+                  "type": "rich_text_section",
+                  "elements": [
+                    {
+                      "type": "text",
+                      "text": "number 2"
+                    }
+                  ]
+                }
+              ],
+              "style": "ordered",
+              "indent": 0,
+              "border": 0
+            },
+            {
+              "type": "rich_text_section",
+              "elements": [
+                {
+                  "type": "text",
+                  "text": "\n"
+                }
+              ]
+            },
+            {
+              "type": "rich_text_quote",
+              "elements": [
+                {
+                  "type": "text",
+                  "text": "quote"
+                }
+              ]
+            },
+            {
+              "type": "rich_text_section",
+              "elements": [
+                {
+                  "type": "text",
+                  "text": "\n"
+                }
+              ]
+            },
+            {
+              "type": "rich_text_preformatted",
+              "elements": [
+                {
+                  "type": "text",
+                  "text": "$ echo Hello world"
+                }
+              ],
+              "border": 0
+            },
+            {
+              "type": "rich_text_section",
+              "elements": [
+                {
+                  "type": "text",
+                  "text": "\n"
+                },
+                {
+                  "type": "text",
+                  "text": "Some",
+                  "style": {
+                    "italic": true
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": " "
+                },
+                {
+                  "type": "text",
+                  "text": "formatted",
+                  "style": {
+                    "code": true
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": " "
+                },
+                {
+                  "type": "text",
+                  "text": "text",
+                  "style": {
+                    "strike": true
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": ".\n\nHere is a "
+                },
+                {
+                  "type": "link",
+                  "url": "https://www.universal-inbox.com",
+                  "text": "link"
+                },
+                {
+                  "type": "user",
+                  "user_id": "U05YYY"
+                },
+                {
+                  "type": "usergroup",
+                  "usergroup_id": "S05ZZZ"
+                },
+                {
+                  "type": "channel",
+                  "channel_id": "C05XXX"
+                }
+              ]
+            },
+            {
+              "type": "rich_text_section",
+              "elements": [
+                {
+                  "name": "unknown1",
+                  "type": "emoji"
+                },
+                {
+                  "name": "unknown2",
+                  "type": "emoji"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "team": "T05XXX",
+      "attachments": [],
+      "saved": {
+        "is_archived": false,
+        "date_completed": 0,
+        "state": "in_progress"
+      }
+    }
+  ],
+  "has_more": true,
+  "is_limited": false,
+  "pin_count": 0,
+  "channel_actions_ts": null,
+  "channel_actions_count": 0,
+  "response_metadata": {
+    "next_cursor": "bmV4dF90czoxNzA3Njg2MjE2ODI1NzE5"
+  }
+}

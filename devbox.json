@@ -32,7 +32,7 @@
     "wasm-bindgen-cli_0_2_108": "0.2.108",
     "caddy":            "latest",
     "hadolint":         "latest",
-    "dioxus-cli":       "0.7.3",
+    "dioxus-cli":       "0.7.7",
     "mdbook":           "latest",
     "mdbook-admonish":  "latest",
     "mdbook-linkcheck": "latest",
