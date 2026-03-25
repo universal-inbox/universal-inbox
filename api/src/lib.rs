@@ -77,8 +77,9 @@ use crate::{
     universal_inbox::{
         UniversalInboxError, auth_token::service::AuthenticationTokenService,
         integration_connection::service::IntegrationConnectionService,
-        notification::service::NotificationService, task::service::TaskService,
-        third_party::service::ThirdPartyItemService, user::service::UserService,
+        notification::service::NotificationService, oauth2::service::OAuth2Service,
+        task::service::TaskService, third_party::service::ThirdPartyItemService,
+        user::service::UserService,
     },
     utils::{
         crypto::TokenEncryptionKey,
@@ -93,6 +94,7 @@ pub mod configuration;
 pub mod integrations;
 pub mod jobs;
 pub mod mailer;
+pub mod mcp;
 pub mod observability;
 pub mod repository;
 pub mod routes;
@@ -110,6 +112,7 @@ pub async fn run_server(
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     auth_token_service: Arc<RwLock<AuthenticationTokenService>>,
     third_party_item_service: Arc<RwLock<ThirdPartyItemService>>,
+    oauth2_service: Arc<OAuth2Service>,
 ) -> Result<Server, UniversalInboxError> {
     let api_path = settings.application.api_path.clone();
     let front_base_url = settings
@@ -141,7 +144,23 @@ pub async fn run_server(
             jwt_decoding_key: jwt_signing_keys.decoding_key,
             jwt_session_key: Some(JWTSessionKey(JWT_SESSION_KEY.to_string())),
             jwt_authorization_header_prefixes: Some(vec!["Bearer".to_string()]),
-            jwt_validator: Validation::new(Algorithm::EdDSA),
+            jwt_validator: {
+                let mut validation = Validation::new(Algorithm::EdDSA);
+                // Disable aud validation at the global JWT level because
+                // OAuth2 tokens carry an `aud` claim that the MCP
+                // RequireAuthenticated middleware validates against the
+                // resource URL — enabling it here (with no expected
+                // audience configured) would reject them before they
+                // reach that middleware.  Session tokens omit `aud`.
+                //
+                // Trade-off: an OAuth2 MCP token could technically be
+                // used on non-MCP API routes.  The MCP middleware's
+                // Bearer-only + audience checks keep MCP routes safe;
+                // a future improvement could add a similar guard on the
+                // API scope to reject tokens that carry an `aud` claim.
+                validation.validate_aud = false;
+                validation
+            },
         }
     };
 
@@ -151,9 +170,24 @@ pub async fn run_server(
             .await
             .expect("Failed to create cache"),
     );
+    let mcp_extra_allowed_origins = settings
+        .application
+        .security
+        .mcp_extra_allowed_origins
+        .clone();
     let settings_web_data = web::Data::new(settings);
 
     info!("Listening on {}", listen_address);
+
+    // Build the MCP service and rate limiter once so they are shared across
+    // all Actix-web worker threads (each worker clones these Arc-backed values).
+    let mcp_http_service = mcp::build_http_service(
+        notification_service.clone(),
+        task_service.clone(),
+        redis_storage.clone(),
+    );
+    let oauth2_rate_limiter = routes::oauth2::build_rate_limiter();
+    let mcp_rate_limiter = mcp::build_rate_limiter();
 
     let server = HttpServer::new(move || {
         info!("Mounting API on {}", api_path);
@@ -170,26 +204,59 @@ pub async fn run_server(
             .service(routes::auth::scope())
             .service(routes::integration_connection::scope())
             .service(routes::oauth::authorize_scope())
+            .service(routes::oauth2::scope(oauth2_rate_limiter.clone()))
             .service(routes::notification::scope())
             .service(routes::task::scope())
             .service(routes::user::scope())
             .service(routes::webhook::scope())
             .service(routes::third_party::scope())
+            .service(mcp::scope(
+                mcp_http_service.clone(),
+                mcp_rate_limiter.clone(),
+                format!("{front_base_url}{api_path}mcp"),
+                mcp_extra_allowed_origins.clone(),
+            ))
             .app_data(web::Data::new(notification_service.clone()))
             .app_data(web::Data::new(task_service.clone()))
             .app_data(web::Data::new(user_service.clone()))
             .app_data(web::Data::new(auth_token_service.clone()))
-            .app_data(web::Data::new(third_party_item_service.clone()));
+            .app_data(web::Data::new(third_party_item_service.clone()))
+            .app_data(web::Data::new(oauth2_service.clone()));
 
+        let api_path_for_cors = api_path.clone();
+        let mcp_extra_origins_for_cors = mcp_extra_allowed_origins.clone();
         let cors = Cors::default()
             .allowed_origin(&front_base_url)
+            .allowed_origin_fn(move |origin, req_head| {
+                // Allow configured MCP extra origins (e.g. MCP inspector)
+                let origin_str = origin.to_str().unwrap_or("");
+                if mcp_extra_origins_for_cors.iter().any(|o| o == origin_str) {
+                    return true;
+                }
+                // Allow any origin for MCP and OAuth2 endpoints:
+                // these use Bearer token auth (no CSRF risk via cookies).
+                let path = req_head.uri.path();
+                let mcp_prefix = format!("{}/mcp", api_path_for_cors.trim_end_matches('/'));
+                path.starts_with(&mcp_prefix)
+                    || path.starts_with("/.well-known/oauth-")
+                    || path.starts_with(&format!(
+                        "{}/oauth2",
+                        api_path_for_cors.trim_end_matches('/')
+                    ))
+            })
             .allowed_methods(vec!["GET", "POST", "PATCH", "DELETE", "PUT"])
             .allowed_headers(vec![
                 http::header::AUTHORIZATION,
                 http::header::COOKIE,
                 http::header::CONTENT_TYPE,
+                http::header::ACCEPT,
+                http::header::HeaderName::from_static("mcp-session-id"),
+                http::header::HeaderName::from_static("mcp-protocol-version"),
             ])
-            .expose_headers(vec!["x-app-version"])
+            .expose_headers(vec![
+                http::header::HeaderName::from_static("x-app-version"),
+                http::header::HeaderName::from_static("mcp-session-id"),
+            ])
             .supports_credentials()
             .max_age(3600);
 
@@ -267,7 +334,21 @@ pub async fn run_server(
                 "/api/oauth/callback",
                 web::get().to(routes::oauth::oauth_callback),
             )
+            .route(
+                "/.well-known/oauth-protected-resource",
+                web::get().to(routes::well_known::protected_resource_metadata),
+            )
+            .route(
+                &format!("/.well-known/oauth-protected-resource{}mcp", api_path),
+                web::get().to(routes::well_known::protected_resource_metadata),
+            )
+            .route(
+                "/.well-known/oauth-authorization-server",
+                web::get().to(routes::well_known::authorization_server_metadata),
+            )
             .service(api_scope)
+            .app_data(web::Data::new(notification_service.clone()))
+            .app_data(web::Data::new(task_service.clone()))
             .app_data(settings_web_data.clone())
             .app_data(storage_data.clone())
             .app_data(cache_data.clone())
@@ -392,6 +473,7 @@ pub async fn build_services(
     Arc<RwLock<AuthenticationTokenService>>,
     Arc<RwLock<ThirdPartyItemService>>,
     Arc<SlackService>,
+    Arc<OAuth2Service>,
 ) {
     let repository = Arc::new(Repository::new(pool.clone()));
 
@@ -576,7 +658,7 @@ pub async fn build_services(
         .set_notification_service(Arc::downgrade(&notification_service));
 
     let task_service = Arc::new(RwLock::new(TaskService::new(
-        repository,
+        repository.clone(),
         todoist_service.clone(),
         linear_service.clone(),
         Arc::downgrade(&notification_service),
@@ -602,6 +684,22 @@ pub async fn build_services(
         .await
         .set_notification_service(Arc::downgrade(&notification_service));
 
+    let resource_url = format!(
+        "{}{}mcp",
+        settings
+            .application
+            .front_base_url
+            .as_str()
+            .trim_end_matches('/'),
+        settings.application.api_path
+    );
+    let oauth2_service = Arc::new(OAuth2Service::new(
+        repository,
+        settings.application.http_session.jwt_secret_key.clone(),
+        settings.application.http_session.jwt_public_key.clone(),
+        resource_url,
+    ));
+
     (
         notification_service,
         task_service,
@@ -610,6 +708,7 @@ pub async fn build_services(
         auth_token_service,
         third_party_item_service,
         slack_service,
+        oauth2_service,
     )
 }
 

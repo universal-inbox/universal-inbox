@@ -1,10 +1,10 @@
+use crate::typed_id::TypedId;
 use anyhow::anyhow;
 use chrono::{DateTime, NaiveDate, Timelike, Utc};
 use rrule::{RRuleSet, Tz};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_with::serde_as;
 use std::str::FromStr;
-use typed_id::TypedId;
 use url::Url;
 use uuid::Uuid;
 

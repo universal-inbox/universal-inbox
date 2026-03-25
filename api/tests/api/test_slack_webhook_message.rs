@@ -239,12 +239,20 @@ mod webhook {
     }
 
     async fn assert_message_processed(app: &mut TestedApp) {
-        assert!(
-            !app.redis_storage
+        // The job is pushed to Redis during the webhook handler, but there can
+        // be a small delay before it becomes visible to `is_empty()` in CI.
+        for _ in 0..10 {
+            if !app
+                .redis_storage
                 .is_empty()
                 .await
                 .expect("Failed to get jobs count")
-        );
+            {
+                return;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        panic!("Expected a job to be enqueued in Redis, but storage is empty after retries");
     }
 }
 

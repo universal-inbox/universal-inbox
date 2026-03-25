@@ -1152,29 +1152,21 @@ impl NotificationRepository for Repository {
                   nested_source_item.updated_at as notification__source_item__si__updated_at,
                   nested_source_item.user_id as notification__source_item__si__user_id,
                   nested_source_item.integration_connection_id as notification__source_item__si__integration_connection_id,
-                  (SELECT"#,
+                 "#,
         );
 
+        query_builder.push("(");
         let mut separated = query_builder.separated(" OR ");
         if let Some(status) = patch.status {
             separated
-                .push(" status::TEXT != ")
+                .push(" n.status::TEXT != ")
                 .push_bind_unseparated(status.to_string());
         }
         if let Some(snoozed_until) = patch.snoozed_until {
             separated
-                .push(" (snoozed_until is NULL OR snoozed_until != ")
+                .push(" (n.snoozed_until is NULL OR n.snoozed_until != ")
                 .push_bind_unseparated(snoozed_until.naive_utc())
                 .push_unseparated(")");
-        }
-
-        query_builder
-            .push(" FROM notification WHERE task_id = ")
-            .push_bind(task_id.0);
-        if let Some(kind) = notification_kind {
-            query_builder
-                .push(" AND kind::TEXT = ")
-                .push_bind(kind.to_string());
         }
         query_builder.push(r#") as "is_updated""#);
 

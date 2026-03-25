@@ -83,6 +83,11 @@ pub fn AuthenticationTokensCard() -> Element {
                         }
                     }
 
+                    p {
+                        class: "text-sm text-base-content/70",
+                        "Use API keys with Raycast, Claude Desktop, Claude Code, ChatGPT-compatible MCP setups, and other Universal Inbox integrations."
+                    }
+
                     table {
                         class: "table table-xs sm:table-sm table-fixed",
                         thead {

@@ -73,6 +73,9 @@ impl AuthenticationTokenService {
             exp: expire_at.timestamp() as usize,
             sub: user_id.to_string(),
             jti: Uuid::new_v4().to_string(),
+            aud: None,
+            scope: None,
+            client_id: None,
         };
 
         let jwt_token = SecretBox::new(Box::new(JWTToken(
