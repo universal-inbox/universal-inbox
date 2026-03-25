@@ -1,7 +1,7 @@
+use crate::typed_id::TypedId;
 use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use typed_id::TypedId;
 use url::Url;
 use uuid::Uuid;
 

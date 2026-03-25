@@ -20,6 +20,7 @@ pub mod integration_connection;
 pub mod notification;
 pub mod task;
 pub mod third_party;
+pub mod typed_id;
 pub mod user;
 pub mod utils;
 
