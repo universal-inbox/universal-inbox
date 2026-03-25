@@ -12,7 +12,7 @@ use uuid::Uuid;
 use crate::{
     HasHtmlUrl,
     integration_connection::provider::{IntegrationProviderKind, IntegrationProviderSource},
-    task::{Task, TaskId},
+    task::{Task, TaskId, TaskSummaryWithStatus},
     third_party::item::{ThirdPartyItem, ThirdPartyItemSourceKind},
     user::UserId,
 };
@@ -90,6 +90,55 @@ impl HasHtmlUrl for NotificationWithTask {
                 ..
             } => task.get_html_url(),
             _ => Notification::from(self.clone()).get_html_url(),
+        }
+    }
+}
+
+#[serde_as]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct NotificationWithTaskSummary {
+    pub id: NotificationId,
+    pub title: String,
+    pub status: NotificationStatus,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub last_read_at: Option<DateTime<Utc>>,
+    pub snoozed_until: Option<DateTime<Utc>>,
+    pub user_id: UserId,
+    pub task: Option<TaskSummaryWithStatus>,
+    pub kind: NotificationSourceKind,
+}
+
+impl From<NotificationWithTask> for NotificationWithTaskSummary {
+    fn from(n: NotificationWithTask) -> Self {
+        Self {
+            id: n.id,
+            title: n.title,
+            status: n.status,
+            created_at: n.created_at,
+            updated_at: n.updated_at,
+            last_read_at: n.last_read_at,
+            snoozed_until: n.snoozed_until,
+            user_id: n.user_id,
+            task: n.task.map(TaskSummaryWithStatus::from),
+            kind: n.kind,
+        }
+    }
+}
+
+impl From<Notification> for NotificationWithTaskSummary {
+    fn from(n: Notification) -> Self {
+        Self {
+            id: n.id,
+            title: n.title,
+            status: n.status,
+            created_at: n.created_at,
+            updated_at: n.updated_at,
+            last_read_at: n.last_read_at,
+            snoozed_until: n.snoozed_until,
+            user_id: n.user_id,
+            task: None,
+            kind: n.kind,
         }
     }
 }

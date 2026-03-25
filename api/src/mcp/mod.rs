@@ -348,7 +348,7 @@ impl UniversalInboxMcpServer {
     #[tool(
         name = "list_notifications",
         title = "List notifications",
-        description = "List Universal Inbox notifications without implicitly triggering synchronization.",
+        description = "List Universal Inbox notifications (summaries without third-party details). Use get_notification for full details. Does not trigger synchronization unless trigger_sync is true.",
         input_schema = list_notifications_input_schema(),
         annotations(read_only_hint = true, idempotent_hint = true)
     )]
@@ -444,7 +444,7 @@ impl UniversalInboxMcpServer {
     #[tool(
         name = "list_tasks",
         title = "List tasks",
-        description = "List tasks synchronized through Universal Inbox (not all tasks from underlying providers like Todoist). Does not trigger synchronization unless trigger_sync is true.",
+        description = "List tasks synchronized through Universal Inbox (summaries without third-party details). Use get_task for full details. Does not trigger synchronization unless trigger_sync is true.",
         input_schema = list_tasks_input_schema(),
         annotations(read_only_hint = true, idempotent_hint = true)
     )]
