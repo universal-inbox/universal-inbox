@@ -22,6 +22,7 @@ use services::{
     },
     integration_connection_service::{INTEGRATION_CONNECTIONS, integration_connnection_service},
     notification_service::{NOTIFICATION_FILTERS, NOTIFICATIONS_PAGE, notification_service},
+    oauth2_client_service::{OAUTH2_AUTHORIZED_CLIENTS, oauth2_client_service},
     task_service::task_service,
     toast_service::{TOASTS, VIEWPORT_WIDTH, toast_service},
     user_service::{CONNECTED_USER, user_service},
@@ -109,6 +110,16 @@ pub fn App() -> Element {
             api_base_url(),
             AUTHENTICATION_TOKENS.signal(),
             CREATED_AUTHENTICATION_TOKEN.signal(),
+            UI_MODEL.signal(),
+            toast_service_handle,
+        )
+    });
+
+    let _oauth2_client_service_handle = use_coroutine(move |rx| {
+        oauth2_client_service(
+            rx,
+            api_base_url(),
+            OAUTH2_AUTHORIZED_CLIENTS.signal(),
             UI_MODEL.signal(),
             toast_service_handle,
         )

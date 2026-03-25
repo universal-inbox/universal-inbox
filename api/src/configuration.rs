@@ -57,6 +57,10 @@ pub struct ApplicationSettings {
 #[derive(Deserialize, Clone, Debug)]
 pub struct SecuritySettings {
     pub csp_extra_connect_src: Vec<String>,
+    /// Extra origins allowed to access the MCP endpoint (e.g. MCP inspector URL).
+    /// The server's own origin is always allowed.
+    #[serde(default)]
+    pub mcp_extra_allowed_origins: Vec<String>,
     pub authentication: Vec<AuthenticationSettings>,
     /// Map of email domains to rejection messages.
     /// If a user tries to register/authenticate with an email from a blacklisted domain,
@@ -481,6 +485,7 @@ mod tests {
         });
         let security_settings = SecuritySettings {
             csp_extra_connect_src: vec![],
+            mcp_extra_allowed_origins: vec![],
             authentication: vec![local_auth_settings],
             email_domain_blacklist: HashMap::new(),
         };
@@ -514,6 +519,7 @@ mod tests {
             }));
         let security_settings = SecuritySettings {
             csp_extra_connect_src: vec![],
+            mcp_extra_allowed_origins: vec![],
             authentication: vec![oidc_auth_settings],
             email_domain_blacklist: HashMap::new(),
         };
@@ -539,6 +545,7 @@ mod tests {
             }));
         let security_settings = SecuritySettings {
             csp_extra_connect_src: vec![],
+            mcp_extra_allowed_origins: vec![],
             authentication: vec![oidc_auth_settings],
             email_domain_blacklist: HashMap::new(),
         };
@@ -580,6 +587,7 @@ mod tests {
             }));
         let security_settings = SecuritySettings {
             csp_extra_connect_src: vec![],
+            mcp_extra_allowed_origins: vec![],
             authentication: vec![local_auth_settings, oidc_auth_settings],
             email_domain_blacklist: HashMap::new(),
         };

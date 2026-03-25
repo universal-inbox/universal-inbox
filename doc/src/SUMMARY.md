@@ -35,6 +35,7 @@
 
 # Misc
 
+- [AI agents and MCP](misc/ai_agents.md)
 - [Keyboard shortcuts](misc/keyboard_shortcuts.md)
 - [API usage](misc/api_usage.md)
 - [Raycast extension](misc/raycast.md)

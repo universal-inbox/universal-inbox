@@ -19,8 +19,9 @@ use universal_inbox_api::{
     universal_inbox::{
         auth_token::service::AuthenticationTokenService,
         integration_connection::service::IntegrationConnectionService,
-        notification::service::NotificationService, task::service::TaskService,
-        third_party::service::ThirdPartyItemService, user::service::UserService,
+        notification::service::NotificationService, oauth2::service::OAuth2Service,
+        task::service::TaskService, third_party::service::ThirdPartyItemService,
+        user::service::UserService,
     },
     utils::{cache::Cache, passkey::build_webauthn},
 };
@@ -153,6 +154,7 @@ pub struct TestServices {
     pub integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
     pub third_party_item_service: Arc<RwLock<ThirdPartyItemService>>,
     pub slack_service: Arc<SlackService>,
+    pub oauth2_service: Arc<OAuth2Service>,
 }
 
 pub async fn build_test_services(
@@ -180,6 +182,7 @@ pub async fn build_test_services(
         auth_token_service,
         third_party_item_service,
         slack_service,
+        oauth2_service,
     ) = universal_inbox_api::build_services(
         pool,
         settings,
@@ -204,6 +207,7 @@ pub async fn build_test_services(
         integration_connection_service,
         third_party_item_service,
         slack_service,
+        oauth2_service,
     };
 
     (services, auth_token_service)
@@ -230,6 +234,7 @@ pub async fn spawn_test_server(
         services.integration_connection_service.clone(),
         auth_token_service,
         services.third_party_item_service.clone(),
+        services.oauth2_service.clone(),
     )
     .await
     .expect("Failed to bind address");

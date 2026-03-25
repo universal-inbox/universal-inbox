@@ -52,6 +52,7 @@ format_serde_error = { version = "0.3.0", default-features = false, features = [
   "graphemes_support",
 ] }
 futures = "0.3.0"
+governor = "0.10"
 graphql_client = "0.16.0"
 hex = "0.4.3"
 http = { workspace = true }
@@ -104,6 +105,13 @@ reqwest = { workspace = true, features = ["rustls-tls", "gzip"] }
 reqwest_v013 = { package = "reqwest", version = "0.13", default-features = false, features = ["rustls", "json", "cookies", "gzip"] }
 reqwest-middleware = { version = "0.5.0", features = ["json", "form"] }
 reqwest-tracing = { version = "0.7.0", features = ["opentelemetry_0_31"] }
+rmcp = { version = "1.2.0", features = [
+  "transport-streamable-http-server",
+  "transport-streamable-http-server-session",
+] }
+rmcp-actix-web = { version = "0.12.3", default-features = false, features = [
+  "transport-streamable-http",
+] }
 rustls = { version = "0.23.0" } # Used to initialize lettre
 secrecy = { workspace = true }
 serde = { workspace = true }

@@ -64,4 +64,11 @@ pub struct Claims {
     pub iat: usize,
     pub sub: String,
     pub jti: String,
+    // OAuth2 fields (None for legacy API key tokens)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub aud: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client_id: Option<String>,
 }

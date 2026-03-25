@@ -12,6 +12,7 @@ mod test_health_check;
 mod test_integration_connections;
 mod test_linear_notifications;
 mod test_linear_tasks;
+mod test_mcp;
 mod test_misc;
 mod test_notifications;
 mod test_slack_notifications;
