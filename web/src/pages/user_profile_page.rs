@@ -4,8 +4,8 @@ use dioxus::prelude::*;
 use log::debug;
 
 use crate::components::{
-    authentication_tokens_card::AuthenticationTokensCard, oauth_clients_card::OAuthClientsCard,
-    user_profile_card::UserProfileCard,
+    auth_methods_card::AuthMethodsCard, authentication_tokens_card::AuthenticationTokensCard,
+    oauth_clients_card::OAuthClientsCard, user_profile_card::UserProfileCard,
 };
 
 pub fn UserProfilePage() -> Element {
@@ -19,6 +19,7 @@ pub fn UserProfilePage() -> Element {
                 class: "flex flex-col h-full w-full overflow-y-auto scroll-y-auto gap-4 p-8",
 
                 UserProfileCard {}
+                AuthMethodsCard {}
                 AuthenticationTokensCard {}
                 OAuthClientsCard {}
             }

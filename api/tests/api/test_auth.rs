@@ -5,7 +5,7 @@ use rstest::*;
 
 use universal_inbox::{
     auth::{CloseSessionResponse, SessionAuthValidationParameters},
-    user::User,
+    user::{User, UserAuthKind},
 };
 
 use universal_inbox_api::{configuration::Settings, universal_inbox::user::model::UserAuth};
@@ -64,7 +64,7 @@ mod authenticate_session {
 
         assert_eq!(user.first_name, Some("John".to_string()));
         assert_eq!(user.last_name, Some("Doe".to_string()));
-        let user_auth = get_user_auth(&app, user.id).await;
+        let user_auth = get_user_auth(&app, user.id, UserAuthKind::OIDCAuthorizationCodePKCE).await;
         let UserAuth::OIDCAuthorizationCodePKCE(user_auth) = &user_auth else {
             panic!("User auth is not OIDCAuthorizationCodePKCE");
         };
@@ -95,7 +95,7 @@ mod authenticate_session {
             .await
             .unwrap();
 
-        let user_auth = get_user_auth(&app, user.id).await;
+        let user_auth = get_user_auth(&app, user.id, UserAuthKind::OIDCAuthorizationCodePKCE).await;
         let UserAuth::OIDCAuthorizationCodePKCE(user_auth) = &user_auth else {
             panic!("User auth is not OIDCAuthorizationCodePKCE");
         };
@@ -147,7 +147,12 @@ mod close_session {
 
         let close_session_response: CloseSessionResponse = response.json().await.unwrap();
 
-        let user_auth = get_user_auth(&app.app, app.user.id).await;
+        let user_auth = get_user_auth(
+            &app.app,
+            app.user.id,
+            UserAuthKind::OIDCAuthorizationCodePKCE,
+        )
+        .await;
         let UserAuth::OIDCAuthorizationCodePKCE(user_auth) = user_auth else {
             panic!("User auth is not OIDCAuthorizationCodePKCE");
         };

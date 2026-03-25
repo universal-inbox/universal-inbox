@@ -4,6 +4,7 @@ mod common;
 mod helpers;
 mod test_api_notification;
 mod test_auth;
+mod test_auth_methods;
 mod test_github_notifications;
 mod test_google_calendar_notifications;
 mod test_google_drive_notifications;
