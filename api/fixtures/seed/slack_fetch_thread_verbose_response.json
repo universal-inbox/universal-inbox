@@ -1,0 +1,276 @@
+{
+  "ok": true,
+  "messages": [
+    {
+      "user": "U01",
+      "type": "message",
+      "ts": "{{ts_ago_300m}}",
+      "client_msg_id": "c40b82f3-b953-41c4-9221-409603e2111",
+      "text": "Quick question — how do you all handle morning notification overload? I'm drowning in unread items every Monday.",
+      "team": "T01",
+      "thread_ts": "{{ts_ago_300m}}",
+      "reply_count": 5,
+      "reply_users_count": 3,
+      "latest_reply": "{{ts_ago_250m}}",
+      "reply_users": [
+        "U01",
+        "U02",
+        "U03"
+      ],
+      "is_locked": false,
+      "subscribed": true,
+      "last_read": "{{ts_ago_300m}}",
+      "user_profile": {
+        "avatar_hash": "alice01",
+        "first_name": "Alice",
+        "real_name": "Alice Chen",
+        "display_name": "Alice Chen",
+        "team": "T01",
+        "name": "alice",
+        "is_restricted": false,
+        "is_ultra_restricted": false
+      },
+      "blocks": [
+        {
+          "type": "rich_text",
+          "block_id": "1111",
+          "elements": [
+            {
+              "type": "rich_text_section",
+              "elements": [
+                {
+                  "type": "text",
+                  "text": "Quick question — how do you all handle morning notification overload? I'm drowning in unread items every Monday."
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "reactions": [
+        {
+          "name": "raising_hand",
+          "users": [
+            "U02",
+            "U03"
+          ],
+          "count": 2
+        }
+      ]
+    },
+    {
+      "user": "U02",
+      "type": "message",
+      "ts": "{{ts_ago_290m}}",
+      "client_msg_id": "5f2ab051-ee1a-4097-97ae-c58647b2a4a7",
+      "text": "I do a 15-min triage before standup. Anything not actionable gets archived, urgent stuff gets a calendar block.",
+      "team": "T01",
+      "user_team": "T01",
+      "source_team": "T01",
+      "thread_ts": "{{ts_ago_300m}}",
+      "parent_user_id": "U01",
+      "user_profile": {
+        "avatar_hash": "bob02",
+        "first_name": "Bob",
+        "real_name": "Bob Martinez",
+        "display_name": "Bob Martinez",
+        "team": "T01",
+        "name": "bob",
+        "is_restricted": false,
+        "is_ultra_restricted": false
+      },
+      "blocks": [
+        {
+          "type": "rich_text",
+          "block_id": "2222",
+          "elements": [
+            {
+              "type": "rich_text_section",
+              "elements": [
+                {
+                  "type": "text",
+                  "text": "I do a 15-min triage before standup. Anything not actionable gets archived, urgent stuff gets a calendar block."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "user": "U03",
+      "type": "message",
+      "ts": "{{ts_ago_280m}}",
+      "client_msg_id": "a93cc11b-6e2f-4c99-9d2c-1dab4f4ebbcd",
+      "text": "I bulk-archive everything older than a week. If it was important, someone would have followed up.",
+      "team": "T01",
+      "user_team": "T01",
+      "source_team": "T01",
+      "thread_ts": "{{ts_ago_300m}}",
+      "parent_user_id": "U01",
+      "user_profile": {
+        "avatar_hash": "sam03",
+        "first_name": "Sam",
+        "real_name": "Sam Kim",
+        "display_name": "Sam Kim",
+        "team": "T01",
+        "name": "sam",
+        "is_restricted": false,
+        "is_ultra_restricted": false
+      },
+      "blocks": [
+        {
+          "type": "rich_text",
+          "block_id": "3333",
+          "elements": [
+            {
+              "type": "rich_text_section",
+              "elements": [
+                {
+                  "type": "text",
+                  "text": "I bulk-archive everything older than a week. If it was important, someone would have followed up."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "user": "U02",
+      "type": "message",
+      "ts": "{{ts_ago_270m}}",
+      "client_msg_id": "8b4c8d7e-1234-4abc-8def-9876543210ef",
+      "text": "<@U03> that's brave 😅 I'm too anxious to delete without reading.",
+      "team": "T01",
+      "user_team": "T01",
+      "source_team": "T01",
+      "thread_ts": "{{ts_ago_300m}}",
+      "parent_user_id": "U01",
+      "user_profile": {
+        "avatar_hash": "bob02",
+        "first_name": "Bob",
+        "real_name": "Bob Martinez",
+        "display_name": "Bob Martinez",
+        "team": "T01",
+        "name": "bob",
+        "is_restricted": false,
+        "is_ultra_restricted": false
+      },
+      "blocks": [
+        {
+          "type": "rich_text",
+          "block_id": "4444",
+          "elements": [
+            {
+              "type": "rich_text_section",
+              "elements": [
+                {
+                  "type": "user",
+                  "user_id": "U03"
+                },
+                {
+                  "type": "text",
+                  "text": " that's brave 😅 I'm too anxious to delete without reading."
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "reactions": [
+        {
+          "name": "joy",
+          "users": [
+            "U03"
+          ],
+          "count": 1
+        }
+      ]
+    },
+    {
+      "user": "U01",
+      "type": "message",
+      "ts": "{{ts_ago_260m}}",
+      "client_msg_id": "fe5d39a2-8765-4321-abcd-efabcdef0123",
+      "text": "Thanks both! I'll try the timeboxed triage approach this week and see how it goes.",
+      "team": "T01",
+      "user_team": "T01",
+      "source_team": "T01",
+      "thread_ts": "{{ts_ago_300m}}",
+      "parent_user_id": "U01",
+      "user_profile": {
+        "avatar_hash": "alice01",
+        "first_name": "Alice",
+        "real_name": "Alice Chen",
+        "display_name": "Alice Chen",
+        "team": "T01",
+        "name": "alice",
+        "is_restricted": false,
+        "is_ultra_restricted": false
+      },
+      "blocks": [
+        {
+          "type": "rich_text",
+          "block_id": "5555",
+          "elements": [
+            {
+              "type": "rich_text_section",
+              "elements": [
+                {
+                  "type": "text",
+                  "text": "Thanks both! I'll try the timeboxed triage approach this week and see how it goes."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "user": "U03",
+      "type": "message",
+      "ts": "{{ts_ago_250m}}",
+      "client_msg_id": "0abc1234-5678-9def-0123-abcdef012345",
+      "text": "Report back next Monday :pray:",
+      "team": "T01",
+      "user_team": "T01",
+      "source_team": "T01",
+      "thread_ts": "{{ts_ago_300m}}",
+      "parent_user_id": "U01",
+      "user_profile": {
+        "avatar_hash": "sam03",
+        "first_name": "Sam",
+        "real_name": "Sam Kim",
+        "display_name": "Sam Kim",
+        "team": "T01",
+        "name": "sam",
+        "is_restricted": false,
+        "is_ultra_restricted": false
+      },
+      "blocks": [
+        {
+          "type": "rich_text",
+          "block_id": "6666",
+          "elements": [
+            {
+              "type": "rich_text_section",
+              "elements": [
+                {
+                  "type": "text",
+                  "text": "Report back next Monday "
+                },
+                {
+                  "type": "emoji",
+                  "name": "pray",
+                  "unicode": "1f64f"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "has_more": false
+}

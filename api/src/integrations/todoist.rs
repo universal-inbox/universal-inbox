@@ -40,7 +40,7 @@ use universal_inbox::{
         service::TaskPatch,
     },
     third_party::{
-        integrations::todoist::{TodoistItem, TodoistItemDue, TodoistItemPriority},
+        integrations::todoist::{TodoistColor, TodoistItem, TodoistItemDue, TodoistItemPriority},
         item::{ThirdPartyItem, ThirdPartyItemFromSource, ThirdPartyItemSourceKind},
     },
     user::UserId,
@@ -49,6 +49,7 @@ use universal_inbox::{
 
 use crate::{
     integrations::{
+        mock::MOCK_PROJECT_NAMES,
         notification::ThirdPartyNotificationSourceService,
         oauth2::AccessToken,
         task::{ThirdPartyTaskService, ThirdPartyTaskSourceService},
@@ -165,9 +166,29 @@ pub struct TodoistSyncCommandProjectAddArgs {
 pub struct TodoistSyncResponse {
     pub items: Option<Vec<TodoistItem>>,
     pub projects: Option<Vec<TodoistProject>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub labels: Option<Vec<TodoistLabelDefinition>>,
     pub full_sync: bool,
     pub temp_id_mapping: HashMap<String, String>,
     pub sync_token: SyncToken,
+}
+
+/// Personal label definition as returned by Todoist's Sync API
+/// (`POST /sync` with `resource_types: ["labels"]`). The Sync API on items only
+/// returns label *names*, so we have to fetch this collection separately and
+/// match on `name` to recover each label's color.
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub struct TodoistLabelDefinition {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub color: TodoistColor,
+    #[serde(default)]
+    pub item_order: Option<i32>,
+    #[serde(default)]
+    pub is_deleted: bool,
+    #[serde(default)]
+    pub is_favorite: bool,
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
@@ -218,6 +239,40 @@ impl TodoistService {
                 ResponseTemplate::new(200).set_body_json(&TodoistSyncResponse {
                     items: Some(vec![]),
                     projects: None,
+                    labels: None,
+                    full_sync: false,
+                    temp_id_mapping: HashMap::new(),
+                    sync_token: SyncToken("abcd".to_string()),
+                }),
+            )
+            .mount(mock_server)
+            .await;
+
+        let mock_projects: Vec<TodoistProject> = MOCK_PROJECT_NAMES
+            .iter()
+            .map(|name| TodoistProject {
+                id: (*name).to_string(),
+                name: (*name).to_string(),
+                color: "grey".to_string(),
+                parent_id: None,
+                child_order: 0,
+                collapsed: false,
+                is_shared: false,
+                sync_id: None,
+                is_deleted: false,
+                is_archived: false,
+                is_favorite: false,
+                view_style: "list".to_string(),
+            })
+            .collect();
+        Mock::given(method("POST"))
+            .and(path("/sync"))
+            .and(body_partial_json(json!({ "resource_types": ["projects"] })))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(&TodoistSyncResponse {
+                    items: None,
+                    projects: Some(mock_projects),
+                    labels: None,
                     full_sync: false,
                     temp_id_mapping: HashMap::new(),
                     sync_token: SyncToken("abcd".to_string()),
@@ -228,11 +283,12 @@ impl TodoistService {
 
         Mock::given(method("POST"))
             .and(path("/sync"))
-            .and(body_partial_json(json!({ "resource_types": ["projects"] })))
+            .and(body_partial_json(json!({ "resource_types": ["labels"] })))
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(&TodoistSyncResponse {
                     items: None,
-                    projects: Some(vec![]),
+                    projects: None,
+                    labels: Some(vec![]),
                     full_sync: false,
                     temp_id_mapping: HashMap::new(),
                     sync_token: SyncToken("abcd".to_string()),
@@ -308,6 +364,20 @@ impl TodoistService {
         sync_token: Option<SyncToken>,
     ) -> Result<TodoistSyncResponse, UniversalInboxError> {
         self.sync_resources("items", access_token, sync_token).await
+    }
+
+    /// Fetches the user's personal label definitions (name + color + ordering).
+    ///
+    /// The Sync API on items only returns label *names*, so this is needed to
+    /// recover the per-label color displayed in Todoist's UI. We always pass
+    /// `sync_token = "*"` (full sync) here because the volume of personal labels
+    /// is tiny and we want a stable name → color map on every items sync.
+    pub async fn sync_labels(
+        &self,
+        access_token: &AccessToken,
+    ) -> Result<Vec<TodoistLabelDefinition>, UniversalInboxError> {
+        let response = self.sync_resources("labels", access_token, None).await?;
+        Ok(response.labels.unwrap_or_default())
     }
 
     pub async fn get_item(
@@ -418,7 +488,11 @@ impl TodoistService {
             completed_at: source.completed_at,
             priority: source.priority.into(),
             due_at: DefaultValue::new(None, Some(source.due.as_ref().map(|due| due.into()))),
-            tags: source.labels.clone(),
+            tags: source
+                .labels
+                .iter()
+                .map(|label| label.name.clone())
+                .collect(),
             parent_id: None, // Unsupported for now
             project: DefaultValue::new(TODOIST_INBOX_PROJECT.to_string(), Some(project_name)),
             is_recurring: source
@@ -457,6 +531,29 @@ async fn cached_fetch_all_projects(
     sync_response.projects.ok_or_else(|| {
         UniversalInboxError::Unexpected(anyhow!("Todoist response should include `projects`"))
     })
+}
+
+/// Builds a `name -> color` map from a list of personal label definitions.
+/// Used to hydrate items' bare label-name strings with their color before
+/// the items are persisted as third-party items.
+fn build_label_color_index(labels: &[TodoistLabelDefinition]) -> HashMap<String, TodoistColor> {
+    labels
+        .iter()
+        .filter(|label| !label.is_deleted)
+        .map(|label| (label.name.clone(), label.color))
+        .collect()
+}
+
+/// In-place hydrates a `TodoistItem`'s labels with the colors from `index`.
+/// Labels not present in the index keep whatever color they were deserialized
+/// with (the [`TodoistColor::default`] / `Charcoal` for items coming straight
+/// off the Sync API).
+fn hydrate_item_label_colors(item: &mut TodoistItem, index: &HashMap<String, TodoistColor>) {
+    for label in item.labels.iter_mut() {
+        if let Some(color) = index.get(&label.name) {
+            label.color = *color;
+        }
+    }
 }
 
 #[async_trait]
@@ -509,6 +606,22 @@ impl ThirdPartyItemSourceService<TodoistItem> for TodoistService {
                 )
             })?;
 
+        // Fetch the user's personal label definitions so we can hydrate each
+        // item's bare label-name strings with their actual color. The Sync API
+        // for items only returns names — colors live on the `labels` resource.
+        // Hydration is best-effort: if it fails we keep going with the default
+        // (Charcoal) color so a labels endpoint outage cannot block task sync.
+        let label_color_index = match self.sync_labels(&access_token).await {
+            Ok(labels) => build_label_color_index(&labels),
+            Err(err) => {
+                tracing::warn!(
+                    error = %err,
+                    "Failed to fetch Todoist label definitions, falling back to default label color"
+                );
+                HashMap::new()
+            }
+        };
+
         sync_response
             .items
             .ok_or_else(|| {
@@ -517,7 +630,10 @@ impl ThirdPartyItemSourceService<TodoistItem> for TodoistService {
             .map(|items| {
                 items
                     .into_iter()
-                    .map(|item| item.into_third_party_item(user_id, integration_connection.id))
+                    .map(|mut item| {
+                        hydrate_item_label_colors(&mut item, &label_color_index);
+                        item.into_third_party_item(user_id, integration_connection.id)
+                    })
                     .collect()
             })
     }
@@ -1051,11 +1167,12 @@ impl NotificationSource for TodoistService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::NaiveDate;
+    use chrono::{NaiveDate, TimeZone};
     use pretty_assertions::assert_eq;
     use rstest::*;
 
     use universal_inbox::task::DueDate;
+    use universal_inbox::third_party::integrations::todoist::TodoistLabel;
     use uuid::uuid;
 
     #[rstest]
@@ -1138,5 +1255,115 @@ mod tests {
             })
             .to_string()
         );
+    }
+
+    fn make_item_with_label_names(names: &[&str]) -> TodoistItem {
+        TodoistItem {
+            id: "1".to_string(),
+            parent_id: None,
+            project_id: "p".to_string(),
+            sync_id: None,
+            section_id: None,
+            content: "task".to_string(),
+            description: "".to_string(),
+            labels: names.iter().map(|n| TodoistLabel::from_name(*n)).collect(),
+            child_order: 0,
+            day_order: None,
+            priority: TodoistItemPriority::P1,
+            checked: false,
+            is_deleted: false,
+            collapsed: false,
+            completed_at: None,
+            added_at: chrono::Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
+            due: None,
+            user_id: "u".to_string(),
+            added_by_uid: None,
+            assigned_by_uid: None,
+            responsible_uid: None,
+        }
+    }
+
+    fn label_def(
+        id: &str,
+        name: &str,
+        color: TodoistColor,
+        is_deleted: bool,
+    ) -> TodoistLabelDefinition {
+        TodoistLabelDefinition {
+            id: id.to_string(),
+            name: name.to_string(),
+            color,
+            item_order: None,
+            is_deleted,
+            is_favorite: false,
+        }
+    }
+
+    #[rstest]
+    fn test_build_label_color_index_skips_deleted_labels() {
+        let labels = vec![
+            label_def("1", "Food", TodoistColor::Red, false),
+            label_def("2", "Stale", TodoistColor::Blue, true),
+            label_def("3", "Urgent", TodoistColor::Orange, false),
+        ];
+
+        let index = build_label_color_index(&labels);
+        assert_eq!(index.get("Food"), Some(&TodoistColor::Red));
+        assert_eq!(index.get("Urgent"), Some(&TodoistColor::Orange));
+        assert!(!index.contains_key("Stale"));
+    }
+
+    #[rstest]
+    fn test_hydrate_item_label_colors_applies_known_colors() {
+        let mut item = make_item_with_label_names(&["Food", "Urgent", "Unknown"]);
+        let index = HashMap::from([
+            ("Food".to_string(), TodoistColor::Red),
+            ("Urgent".to_string(), TodoistColor::Orange),
+        ]);
+
+        hydrate_item_label_colors(&mut item, &index);
+
+        assert_eq!(item.labels[0].name, "Food");
+        assert_eq!(item.labels[0].color, TodoistColor::Red);
+        assert_eq!(item.labels[1].name, "Urgent");
+        assert_eq!(item.labels[1].color, TodoistColor::Orange);
+        // Labels missing from the index keep the default color (Charcoal).
+        assert_eq!(item.labels[2].name, "Unknown");
+        assert_eq!(item.labels[2].color, TodoistColor::Charcoal);
+    }
+
+    #[rstest]
+    fn test_hydrate_item_label_colors_with_empty_index_keeps_defaults() {
+        let mut item = make_item_with_label_names(&["Anything"]);
+        let index = HashMap::new();
+
+        hydrate_item_label_colors(&mut item, &index);
+
+        assert_eq!(item.labels[0].color, TodoistColor::Charcoal);
+    }
+
+    #[rstest]
+    fn test_parse_todoist_sync_response_with_labels_resource() {
+        let response: TodoistSyncResponse = serde_json::from_str(
+            r#"
+            {
+                "labels": [
+                    { "id": "1", "name": "Food", "color": "red", "is_deleted": false, "is_favorite": false },
+                    { "id": "2", "name": "Urgent", "color": "violet", "is_deleted": false, "is_favorite": true }
+                ],
+                "full_sync": true,
+                "temp_id_mapping": {},
+                "sync_token": "abcd"
+            }
+            "#,
+        )
+        .unwrap();
+
+        let labels = response.labels.expect("labels resource missing");
+        assert_eq!(labels.len(), 2);
+        assert_eq!(labels[0].name, "Food");
+        assert_eq!(labels[0].color, TodoistColor::Red);
+        assert_eq!(labels[1].name, "Urgent");
+        assert_eq!(labels[1].color, TodoistColor::Violet);
     }
 }

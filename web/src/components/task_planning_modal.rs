@@ -1,11 +1,11 @@
 #![allow(non_snake_case)]
 
-use chrono::{NaiveDate, Utc};
+use chrono::Utc;
 use dioxus::prelude::dioxus_core::use_drop;
 use dioxus::prelude::*;
 use dioxus::web::WebEventExt;
-use log::error;
-use serde_json::json;
+use wasm_bindgen::JsCast;
+use web_sys::HtmlInputElement;
 
 use universal_inbox::{
     integration_connection::{
@@ -16,7 +16,7 @@ use universal_inbox::{
     },
     notification::{NotificationId, NotificationWithTask},
     task::{
-        DueDate, ProjectSummary, TaskCreation, TaskId, TaskPlanning, TaskPriority,
+        DueDate, ProjectId, ProjectSummary, TaskCreation, TaskId, TaskPlanning, TaskPriority,
         integrations::todoist::TODOIST_INBOX_PROJECT,
     },
     third_party::integrations::ticktick::TICKTICK_INBOX_PROJECT,
@@ -25,17 +25,20 @@ use url::Url;
 
 use crate::{
     components::{
-        datepicker::DatePicker,
-        floating_label_inputs::{
-            FloatingLabelInputSearchSelect, FloatingLabelInputText, FloatingLabelSelect,
-        },
-        task_manager_picker::{
-            TaskManagerPicker, default_task_manager_kind, user_default_task_manager_kind,
+        datepicker::flatpickr,
+        integrations::icons::NotificationIcon,
+        project_search_field::ProjectSearchField,
+        task_manager_picker::{default_task_manager_kind, user_default_task_manager_kind},
+        ui::{
+            ModalFooter, ModalHeader, ModalSourceRow, PriorityOption, PriorityValue,
+            TaskAppTileSelect, UISelect, UISelectOption,
+            button::{Button, ButtonSize, ButtonVariant},
+            kbd::Kbd,
+            task_priority_color, task_priority_options,
         },
     },
     model::{LoadState, UniversalInboxUIModel},
     services::flyonui::{close_flyonui_modal, forget_flyonui_modal, init_flyonui_modal},
-    utils::focus_element,
 };
 
 #[component]
@@ -150,11 +153,37 @@ pub fn TaskPlanningModal(
         }
     });
 
+    let task_app_options = use_memo(move || match task_service_integration_connections() {
+        LoadState::Loaded(connections) => connections
+            .iter()
+            .map(|c| {
+                let kind = c.provider.kind();
+                UISelectOption::new(kind, kind.to_string())
+            })
+            .collect::<Vec<_>>(),
+        _ => Vec::new(),
+    });
+
+    // Submit-CTA validity. In plan-existing-task mode the title is read-only —
+    // only the project is required. In create mode both title and project are.
+    let invalid = use_memo(move || {
+        if task_to_plan.read().is_some() {
+            project.read().is_none()
+        } else {
+            task_title.read().trim().is_empty() || project.read().is_none()
+        }
+    });
+
+    let kind_for_selection = notification_to_plan().kind;
+    let notification_title = notification_to_plan().title;
+
     rsx! {
         div {
             id: "task-planning-modal",
             class: "overlay modal overlay-open:opacity-100 hidden overlay-open:duration-300",
             role: "dialog",
+            "aria-modal": "true",
+            "aria-labelledby": "plan-task-title",
             tabindex: "-1",
             onmounted: move |element| {
                 let web_element = element.as_web_event();
@@ -165,150 +194,202 @@ pub fn TaskPlanningModal(
             div {
                 class: "modal-dialog overlay-open:opacity-100 overlay-open:duration-300",
                 div {
-                    class: "modal-content",
-                    div {
-                        class: "modal-header",
-                        h3 { class: "modal-title", "Plan task" }
-                        button {
-                            r#type: "button",
-                            class: "btn btn-text btn-circle btn-sm absolute end-3 top-3",
-                            "aria-label": "Close",
-                            "data-overlay": "#task-planning-modal",
-                            span { class: "icon-[tabler--x] size-4" }
-                        }
+                    class: "modal-content w-[460px] max-w-[calc(100vw-32px)] p-0 border border-ui-border shadow-ui-lg bg-ui-surface",
+
+                    ModalHeader {
+                        eyebrow: "From notification".to_string(),
+                        title: "Plan a task".to_string(),
+                        title_id: "plan-task-title".to_string(),
+                        overlay_id: "#task-planning-modal".to_string(),
+                    }
+
+                    ModalSourceRow {
+                        eyebrow: "Notification".to_string(),
+                        title: notification_title.clone(),
+                        tile: rsx! { NotificationIcon { kind: kind_for_selection } },
                     }
 
                     form {
-                        class: "flex flex-col",
                         method: "dialog",
                         onsubmit: move |evt| {
                             evt.prevent_default();
+                            if invalid() {
+                                *force_validation.write() = true;
+                                return;
+                            }
                             if let Some(task) = task_to_plan() {
-                                if let Some(task_planning_parameters) = validate_planning_form(
-                                    &evt.data.values(), project()
+                                if let Some(params) = build_planning(
+                                    project(), &due_at.read(), priority(),
                                 ) {
-                                    on_task_planning.call((task_planning_parameters, task.id));
+                                    on_task_planning.call((params, task.id));
                                     close_flyonui_modal("#task-planning-modal");
                                 } else {
                                     *force_validation.write() = true;
                                 }
-                            } else if let Some(task_creation_parameters) = validate_creation_form(
-                                &evt.data.values(), project(), selected_task_provider_kind()
+                            } else if let Some(params) = build_creation(
+                                &task_title.read(), project(), &due_at.read(),
+                                priority(), selected_task_provider_kind(),
                             ) {
-                                on_task_creation.call(task_creation_parameters);
+                                on_task_creation.call(params);
                                 close_flyonui_modal("#task-planning-modal");
                             } else {
                                 *force_validation.write() = true;
                             }
                         },
 
-                        div {
-                            class: "modal-body overflow-visible pt-2 space-y-4",
+                        div { class: "flex flex-col gap-3 px-4 pt-3.5 pb-1",
 
-                            div {
-                                class: "flex flex-none items-center gap-2 w-full",
-
-                                TaskManagerPicker {
-                                    task_service_integration_connections,
-                                    selected_task_provider_kind,
-                                    on_select: move |kind: IntegrationProviderKind| {
-                                        *selected_task_provider_kind.write() = Some(kind);
-                                        // Reset project when switching task manager
-                                        *project.write() = None;
-                                    },
+                            div { class: "grid grid-cols-[44px_1fr] gap-2.5 items-end",
+                                div { class: "flex flex-col gap-1.5",
+                                    span { class: "text-[11px] font-semibold text-ui-base-muted tracking-[0.01em] inline-flex items-center gap-1", "App" }
+                                    TaskAppTileSelect {
+                                        value: selected_task_provider_kind,
+                                        options: task_app_options(),
+                                        on_change: move |kind: Option<IntegrationProviderKind>| {
+                                            selected_task_provider_kind.set(kind);
+                                            // Reset project when switching task manager.
+                                            project.set(None);
+                                        },
+                                    }
                                 }
 
-                                if task_to_plan().is_some() {
-                                    span { class: "grow", "{task_title}" }
-                                } else {
-                                    div {
-                                        class: "grow",
-                                        FloatingLabelInputText::<String> {
-                                            name: "task-title-input".to_string(),
-                                            label: Some("Task's title".to_string()),
-                                            required: true,
-                                            value: task_title,
-                                            autofocus: true,
-                                            force_validation: force_validation(),
+                                div { class: "flex flex-col gap-1.5",
+                                    label {
+                                        r#for: "task-title-input",
+                                        class: "text-[11px] font-semibold text-ui-base-muted tracking-[0.01em] inline-flex items-center gap-1",
+                                        "Task title"
+                                        span { class: "text-ui-error-hover ml-0.5", "aria-hidden": "true", "*" }
+                                    }
+                                    if task_to_plan().is_some() {
+                                        div {
+                                            id: "task-title-input",
+                                            class: "flex items-center gap-2 h-[34px] px-2.5 border border-ui-border bg-ui-surface-alt rounded-ui-sm text-[13.5px] text-ui-base-content cursor-default",
+                                            "{task_title}"
+                                        }
+                                    } else {
+                                        div { class: "flex items-center gap-2 h-[34px] px-2.5 border border-ui-border bg-ui-surface-alt rounded-ui-sm text-[13.5px] text-ui-base-content focus-within:border-ui-primary focus-within:bg-ui-surface focus-within:shadow-[var(--ui-focus-ring)] transition-colors",
+                                            input {
+                                                id: "task-title-input",
+                                                name: "task-title-input",
+                                                r#type: "text",
+                                                "aria-required": "true",
+                                                autofocus: true,
+                                                class: "flex-1 min-w-0 h-full bg-transparent border-none p-0 outline-none focus:outline-none focus-visible:outline-none placeholder:text-ui-base-muted",
+                                                value: "{task_title}",
+                                                oninput: move |evt| {
+                                                    task_title.write().clone_from(&evt.value());
+                                                },
+                                            }
                                         }
                                     }
                                 }
                             }
 
-                            {
-                                let kind = selected_task_provider_kind();
-                                let api_query = kind
-                                    .map(|k| json!({ "provider_kind": k.to_string() }))
-                                    .unwrap_or_else(|| json!({}));
-                                let key = kind
-                                    .map(|k| k.to_string())
-                                    .unwrap_or_else(|| "none".to_string());
-                                rsx! {
-                                    FloatingLabelInputSearchSelect::<ProjectSummary> {
-                                        key: "project-search-{key}",
-                                        name: "project-search-input".to_string(),
-                                        label: "Project",
-                                        required: true,
-                                        data_select: json!({
-                                            "value": project(),
-                                            "apiUrl": format!("{api_base_url}tasks/projects/search"),
-                                            "apiSearchQueryKey": "matches",
-                                            "apiQuery": api_query,
-                                            "apiFieldsMap": {
-                                                "id": "source_id",
-                                                "val": "name",
-                                                "title": "name"
-                                            }
-                                        }),
-                                        on_select: move |selected_project: Option<ProjectSummary>| {
-                                            *project.write() = selected_project.map(|p| p.name);
-                                            spawn({
-                                                async move {
-                                                    if let Err(error) = focus_element("task-planning-modal-submit").await {
-                                                        error!("Error focusing element task-planning-modal-submit: {error:?}");
-                                                    }
-                                                }
-                                            });
-                                        },
-                                    }
+                            div { class: "flex flex-col gap-1.5",
+                                span { class: "text-[11px] font-semibold text-ui-base-muted tracking-[0.01em] inline-flex items-center gap-1",
+                                    "Project"
+                                    span { class: "text-ui-error-hover ml-0.5", "aria-hidden": "true", "*" }
+                                }
+                                ModalProjectField {
+                                    api_base_url: api_base_url.clone(),
+                                    project,
+                                    provider_kind: selected_task_provider_kind,
                                 }
                             }
 
-                            DatePicker::<NaiveDate> {
-                                name: "task-due_at-input".to_string(),
-                                label: "Due at",
-                                required: false,
-                                value: due_at,
-                                force_validation: force_validation(),
-                            }
+                            div { class: "grid grid-cols-2 gap-2.5",
+                                div { class: "flex flex-col gap-1.5",
+                                    label {
+                                        r#for: "task-due_at-input",
+                                        class: "text-[11px] font-semibold text-ui-base-muted tracking-[0.01em] inline-flex items-center gap-1",
+                                        "Due date"
+                                        span { class: "font-medium normal-case tracking-normal", "(optional)" }
+                                    }
+                                    div { class: "flex items-center gap-2 h-[34px] px-2.5 border border-ui-border bg-ui-surface-alt rounded-ui-sm text-[13.5px] text-ui-base-content focus-within:border-ui-primary focus-within:bg-ui-surface focus-within:shadow-[var(--ui-focus-ring)] transition-colors",
+                                        span {
+                                            class: "inline-flex items-center justify-center size-[18px] text-ui-base-muted shrink-0 icon-[lucide--calendar]",
+                                            "aria-hidden": "true",
+                                        }
+                                        input {
+                                            id: "task-due_at-input",
+                                            name: "task-due_at-input",
+                                            r#type: "text",
+                                            placeholder: "Pick a date…",
+                                            class: "flex-1 min-w-0 h-full bg-transparent border-none p-0 outline-none focus:outline-none focus-visible:outline-none placeholder:text-ui-base-muted",
+                                            value: "{due_at}",
+                                            oninput: move |evt| {
+                                                due_at.write().clone_from(&evt.value());
+                                            },
+                                            onchange: move |evt| {
+                                                due_at.write().clone_from(&evt.value());
+                                            },
+                                            onmounted: move |evt| {
+                                                let element = evt.as_web_event();
+                                                if let Ok(input) = element.dyn_into::<HtmlInputElement>() {
+                                                    flatpickr(input);
+                                                }
+                                            },
+                                        }
+                                    }
+                                }
 
-                            FloatingLabelSelect::<TaskPriority> {
-                                name: "task-priority-input".to_string(),
-                                label: Some("Priority".to_string()),
-                                required: false,
-                                force_validation: force_validation(),
-                                default_value: "{priority().unwrap_or_default()}",
-                                on_select: move |selected_priority| {
-                                    *priority.write() = selected_priority;
-                                },
-
-                                option { selected: priority() == Some(TaskPriority::P1), value: "1", "🔴 Priority 1" }
-                                option { selected: priority() == Some(TaskPriority::P2), value: "2", "🟠 Priority 2" }
-                                option { selected: priority() == Some(TaskPriority::P3), value: "3", "🟡 Priority 3" }
-                                option { selected: priority() == Some(TaskPriority::P4), value: "4", "🔵 Priority 4" }
+                                div { class: "flex flex-col gap-1.5",
+                                    span { class: "text-[11px] font-semibold text-ui-base-muted tracking-[0.01em] inline-flex items-center gap-1",
+                                        "Priority"
+                                        span { class: "font-medium normal-case tracking-normal", "(optional)" }
+                                    }
+                                    UISelect::<TaskPriority> {
+                                        value: priority,
+                                        options: task_priority_options(),
+                                        on_change: move |p: Option<TaskPriority>| {
+                                            *priority.write() = p;
+                                        },
+                                        placeholder: "Pick a priority…".to_string(),
+                                        name: "task-priority-input".to_string(),
+                                        width: "100%".to_string(),
+                                        render_value: use_callback(move |opt: UISelectOption<TaskPriority>| {
+                                            rsx! {
+                                                PriorityValue {
+                                                    color: task_priority_color(opt.value).to_string(),
+                                                    label: opt.label,
+                                                }
+                                            }
+                                        }),
+                                        render_option: use_callback(move |opt: UISelectOption<TaskPriority>| {
+                                            rsx! {
+                                                PriorityOption {
+                                                    color: task_priority_color(opt.value).to_string(),
+                                                    label: opt.label,
+                                                    meta: opt.meta,
+                                                }
+                                            }
+                                        }),
+                                    }
+                                }
                             }
                         }
 
-                        div {
-                            class: "modal-footer",
-
-                            button {
-                                id: "task-planning-modal-submit",
-                                tabindex: 0,
-                                "type": "submit",
-                                class: "btn btn-primary w-full",
-                                //"data-overlay": "#task-planning-modal",
-                                "Plan"
+                        ModalFooter {
+                            hint: rsx! {
+                                Kbd { label: "Tab".to_string() } span { "to move" }
+                                span { class: "opacity-60", "·" }
+                                Kbd { label: "Esc".to_string() } span { "cancel" }
+                            },
+                            Button {
+                                variant: ButtonVariant::Ghost,
+                                size: ButtonSize::Sm,
+                                button_type: "button".to_string(),
+                                data_overlay: "#task-planning-modal".to_string(),
+                                onclick: move |_| close_flyonui_modal("#task-planning-modal"),
+                                "Cancel"
+                            }
+                            Button {
+                                variant: ButtonVariant::Primary,
+                                size: ButtonSize::Sm,
+                                button_type: "submit".to_string(),
+                                disabled: invalid(),
+                                "Plan task"
+                                Kbd { label: "↵".to_string() }
                             }
                         }
                     }
@@ -318,37 +399,55 @@ pub fn TaskPlanningModal(
     }
 }
 
-fn get_form_text<'a>(values: &'a [(String, FormValue)], name: &str) -> Option<&'a str> {
-    values.iter().find_map(|(k, v)| {
-        if k == name {
-            match v {
-                FormValue::Text(s) => Some(s.as_str()),
-                _ => None,
-            }
-        } else {
-            None
-        }
-    })
-}
+/// Bridges the modal's legacy `Signal<Option<String>>` (project name only) with
+/// the new `ProjectSearchField` which works in `Option<ProjectSummary>`.
+/// External writes to `project` (e.g. inbox-project defaults) are mirrored
+/// onto an internal summary signal so the search-select trigger stays in sync.
+#[component]
+fn ModalProjectField(
+    api_base_url: ReadSignal<Url>,
+    project: Signal<Option<String>>,
+    provider_kind: ReadSignal<Option<IntegrationProviderKind>>,
+) -> Element {
+    let mut selected_project: Signal<Option<ProjectSummary>> = use_signal(|| None);
 
-fn validate_planning_form(
-    values: &[(String, FormValue)],
-    selected_project: Option<String>,
-) -> Option<TaskPlanning> {
-    let due_at = get_form_text(values, "task-due_at-input").map_or(Ok(None), |value| {
-        if value.is_empty() {
-            Ok(None)
-        } else {
-            value.parse::<DueDate>().map(Some)
+    use_effect(move || {
+        let current_name = project();
+        let selected_name = selected_project.peek().as_ref().map(|p| p.name.clone());
+        if current_name != selected_name {
+            selected_project.set(current_name.map(|name| ProjectSummary {
+                source_id: ProjectId::from(name.clone()),
+                name,
+            }));
         }
     });
-    let priority = get_form_text(values, "task-priority-input").map_or(
-        Err("Task priority value is required".to_string()),
-        |value| value.parse::<TaskPriority>(),
-    );
 
-    // Buggy because of https://github.com/themeselection/flyonui/issues/86
-    // workaround:
+    rsx! {
+        ProjectSearchField {
+            api_base_url,
+            selected_project,
+            provider_kind,
+            on_change: move |selected: Option<ProjectSummary>| {
+                project.set(selected.map(|p| p.name));
+            },
+            name: "project-search-input".to_string(),
+            placeholder: "Pick a project…".to_string(),
+            width: "100%".to_string(),
+        }
+    }
+}
+
+fn build_planning(
+    selected_project: Option<String>,
+    due_at_str: &str,
+    priority: Option<TaskPriority>,
+) -> Option<TaskPlanning> {
+    let due_at = if due_at_str.is_empty() {
+        Ok(None)
+    } else {
+        due_at_str.parse::<DueDate>().map(Some)
+    };
+    let priority = priority.ok_or("Task priority is required");
     let project_name = selected_project.ok_or("Task project is required");
 
     if let (Ok(project_name), Ok(due_at), Ok(priority)) = (project_name, due_at, priority) {
@@ -362,34 +461,26 @@ fn validate_planning_form(
     None
 }
 
-fn validate_creation_form(
-    values: &[(String, FormValue)],
+fn build_creation(
+    title: &str,
     selected_project: Option<String>,
+    due_at_str: &str,
+    priority: Option<TaskPriority>,
     task_provider_kind: Option<IntegrationProviderKind>,
 ) -> Option<TaskCreation> {
-    let title = get_form_text(values, "task-title-input")
-        .ok_or_else(|| "Task title is required".to_string());
-
-    let due_at = get_form_text(values, "task-due_at-input").map_or(Ok(None), |value| {
-        if value.is_empty() {
-            Ok(None)
-        } else {
-            value.parse::<DueDate>().map(Some)
-        }
-    });
-
-    let priority = get_form_text(values, "task-priority-input").map_or(
-        Err("Task priority value is required".to_string()),
-        |value| value.parse::<TaskPriority>(),
-    );
-
-    // Buggy because of https://github.com/themeselection/flyonui/issues/86
-    // workaround:
+    let title = title.trim();
+    if title.is_empty() {
+        return None;
+    }
+    let due_at = if due_at_str.is_empty() {
+        Ok(None)
+    } else {
+        due_at_str.parse::<DueDate>().map(Some)
+    };
+    let priority = priority.ok_or("Task priority is required");
     let project_name = selected_project.ok_or("Task project is required");
 
-    if let (Ok(title), Ok(project_name), Ok(due_at), Ok(priority)) =
-        (title, project_name, due_at, priority)
-    {
+    if let (Ok(project_name), Ok(due_at), Ok(priority)) = (project_name, due_at, priority) {
         return Some(TaskCreation {
             title: title.to_string(),
             body: None,

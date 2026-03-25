@@ -7,12 +7,13 @@ use universal_inbox::FrontAuthenticationConfig;
 
 use crate::{
     components::{
-        floating_label_inputs::FloatingLabelInputText, loading::Loading,
-        universal_inbox_title::UniversalInboxTitle,
+        auth_widgets::{Backlink, PrimaryBtn},
+        floating_label_inputs::FloatingLabelInputText,
+        loading::Loading,
+        ui::PageHeader,
     },
     config::APP_CONFIG,
     form::FormValues,
-    icons::PASSKEY_LOGO,
     route::Route,
     services::user_service::{CONNECTED_USER, UserCommand},
 };
@@ -43,60 +44,51 @@ pub fn PasskeyLoginPage() -> Element {
     }
 
     rsx! {
-        div {
-            class: "flex flex-col items-center justify-center pb-8",
-            h1 {
-                class: "text-lg font-bold",
-                span { "Login to " }
-                UniversalInboxTitle {}
-            }
+        Backlink { to: Route::LoginPage {}, "Other ways to sign in" }
+        PageHeader {
+            title: "Sign in with a passkey".to_string(),
+            subtitle: Some("No password needed, your device unlocks your inbox.".to_string()),
         }
 
         form {
-            class: "flex flex-col justify-center gap-4 px-10 pb-8",
-                onsubmit: move |evt| {
-                    evt.prevent_default();
-                    match FormValues(evt.values()).try_into() {
-                        Ok(username) => {
-                            user_service.send(UserCommand::LoginPasskey(username));
-                        },
-                        Err(err) => {
-                            *force_validation.write() = true;
-                            error!("Failed to parse form values as Username: {err}");
-                        }
+            "novalidate": "true",
+            onsubmit: move |evt| {
+                evt.prevent_default();
+                match FormValues(evt.values()).try_into() {
+                    Ok(username) => {
+                        user_service.send(UserCommand::LoginPasskey(username));
+                    },
+                    Err(err) => {
+                        *force_validation.write() = true;
+                        error!("Failed to parse form values as Username: {err}");
                     }
-                },
+                }
+            },
 
             FloatingLabelInputText::<String> {
                 name: "username".to_string(),
-                label: Some("Username".to_string()),
+                label: Some("Username or email".to_string()),
                 required: true,
                 value: username,
                 autofocus: true,
                 force_validation: force_validation(),
+                field_icon_class: "icon-[lucide--user]".to_string(),
+                placeholder: "username".to_string(),
             }
 
-            button {
-                class: "btn btn-primary relative",
-                r#type: "submit",
-
-                img {
-                    class: "h-8 w-8 bg-white rounded-md absolute left-2",
-                    src: "{PASSKEY_LOGO}",
-                }
-                "Log in with a passkey"
+            PrimaryBtn {
+                button_type: "submit".to_string(),
+                icon_class: "icon-[lucide--fingerprint]".to_string(),
+                "Continue with passkey"
             }
         }
 
-        div {
-            class: "text-base px-10",
-            span { "New to " }
-            UniversalInboxTitle {}
-            span { "? " }
+        div { class: "mt-auto pt-6 text-center text-xs text-ui-base-muted",
+            "New to Universal Inbox? "
             Link {
-                class: "link-hover link link-primary",
+                class: "text-ui-primary font-semibold no-underline hover:text-ui-primary-hover hover:underline",
                 to: Route::SignupPage {},
-                "Create new account"
+                "Create account"
             }
         }
     }

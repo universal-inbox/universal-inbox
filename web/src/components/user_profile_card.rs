@@ -1,18 +1,17 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
-use dioxus_free_icons::{
-    Icon,
-    icons::bs_icons::{BsCheck, BsExclamationTriangle, BsPencil},
-};
-use email_address::EmailAddress;
 use gravatar_rs::Generator;
-use log::error;
+
+use universal_inbox::user::UserPatch;
 
 use universal_inbox::user::UserAuthKind;
 
 use crate::{
-    components::{floating_label_inputs::FloatingLabelInputText, loading::Loading},
+    components::{
+        loading::Loading,
+        ui::{Badge, BadgeTone, BadgeVariant, Button, ButtonVariant},
+    },
     form::FormValues,
     model::DEFAULT_USER_AVATAR,
     services::user_service::{AUTH_METHODS, CONNECTED_USER, UserCommand},
@@ -25,19 +24,18 @@ pub fn UserProfileCard() -> Element {
     let Some(user) = CONNECTED_USER.read().clone() else {
         return rsx! {
             div {
-                class: "card w-full bg-base-200",
+                class: "flex items-center gap-5 p-5 bg-ui-surface border border-ui-border rounded-ui-lg shadow-ui-sm",
                 Loading { label: "Loading user profile..." }
             }
         };
     };
 
     let mut is_editing = use_signal(|| false);
-    let mut force_validation = use_signal(|| false);
     let mut first_name = use_signal(String::new);
     let mut last_name = use_signal(String::new);
     let mut email = use_signal(String::new);
 
-    let has_oidc = AUTH_METHODS
+    let _has_oidc = AUTH_METHODS
         .read()
         .as_ref()
         .map(|methods| {
@@ -68,151 +66,135 @@ pub fn UserProfileCard() -> Element {
 
     rsx! {
         div {
-            class: "card w-full bg-base-200",
+            class: "flex items-center gap-5 p-5 bg-ui-surface border border-ui-border rounded-ui-lg shadow-ui-sm",
+            role: "region",
+            aria_label: "User profile",
 
             div {
-                class: "card-body",
-                div {
-                    class: "flex flex-col sm:flex-row gap-4",
+                class: "relative shrink-0",
+                img { class: "profile-avatar max-md:w-16 max-md:h-16", src: "{user_avatar}", alt: "{user_name}" }
+            }
 
-                    div {
-                        class: "avatar justify-center self-start",
+            div {
+                class: "flex-1 min-w-0",
+
+                if is_editing() {
+                    form {
+                        class: "flex flex-col gap-4",
+                        onsubmit: move |evt| {
+                            let form_values = FormValues(evt.values().into_iter().collect());
+                            if let Ok(patch) = UserPatch::try_from(form_values) {
+                                user_service.send(UserCommand::UpdateUser(patch));
+                                is_editing.set(false);
+                            }
+                        },
 
                         div {
-                            class: "w-24 shrink-0 rounded-full ring-3 ring-primary ring-offset-base-100 ring-offset-2",
-                            img { src: "{user_avatar}", alt: "{user_name}" }
+                            class: "flex gap-3",
+                            div {
+                                class: "flex-1",
+                                label { class: "block text-xs font-semibold uppercase tracking-wider text-ui-base-muted mb-1", r#for: "profFirstName", "First name" }
+                                input {
+                                    class: "w-full px-2.5 py-1.5 text-[var(--ui-text-base)] font-ui bg-ui-base-200 text-ui-base-content border border-ui-border rounded-ui-sm outline-none transition-[border-color,box-shadow] duration-150 ease-[var(--ui-ease)] focus:border-ui-primary focus:shadow-[var(--ui-focus-ring)] focus:outline-none",
+                                    id: "profFirstName",
+                                    name: "first_name",
+                                    r#type: "text",
+                                    value: "{first_name}",
+                                    oninput: move |evt| first_name.set(evt.value()),
+                                }
+                            }
+                            div {
+                                class: "flex-1",
+                                label { class: "block text-xs font-semibold uppercase tracking-wider text-ui-base-muted mb-1", r#for: "profLastName", "Last name" }
+                                input {
+                                    class: "w-full px-2.5 py-1.5 text-[var(--ui-text-base)] font-ui bg-ui-base-200 text-ui-base-content border border-ui-border rounded-ui-sm outline-none transition-[border-color,box-shadow] duration-150 ease-[var(--ui-ease)] focus:border-ui-primary focus:shadow-[var(--ui-focus-ring)] focus:outline-none",
+                                    id: "profLastName",
+                                    name: "last_name",
+                                    r#type: "text",
+                                    value: "{last_name}",
+                                    oninput: move |evt| last_name.set(evt.value()),
+                                }
+                            }
+                        }
+
+                        div {
+                            class: "flex-1",
+                            label { class: "block text-xs font-semibold uppercase tracking-wider text-ui-base-muted mb-1", r#for: "profEmail", "Email" }
+                            input {
+                                class: "w-full px-2.5 py-1.5 text-[var(--ui-text-base)] font-ui bg-ui-base-200 text-ui-base-content border border-ui-border rounded-ui-sm outline-none transition-[border-color,box-shadow] duration-150 ease-[var(--ui-ease)] focus:border-ui-primary focus:shadow-[var(--ui-focus-ring)] focus:outline-none",
+                                id: "profEmail",
+                                name: "email",
+                                r#type: "email",
+                                value: "{email}",
+                                oninput: move |evt| email.set(evt.value()),
+                            }
+                        }
+
+                        div {
+                            class: "flex gap-2 mt-1",
+                            Button {
+                                variant: ButtonVariant::Primary,
+                                button_type: "submit".to_string(),
+                                "Save changes"
+                            }
+                            Button {
+                                variant: ButtonVariant::Ghost,
+                                onclick: move |_| {
+                                    is_editing.set(false);
+                                },
+                                "Cancel"
+                            }
+                        }
+                    }
+                } else {
+                    div {
+                        class: "profile-name text-lg font-bold text-ui-base-content tracking-tight flex gap-2 max-md:justify-center",
+                        "{user_name}"
+                        button {
+                            class: "edit-btn max-md:w-9 max-md:h-9",
+                            aria_label: "Edit profile",
+                            onclick: {
+                                let user = user.clone();
+                                move |_| {
+                                    first_name.set(user.first_name.clone().unwrap_or_default());
+                                    last_name.set(user.last_name.clone().unwrap_or_default());
+                                    email.set(user.email.as_ref().map(|e| e.to_string()).unwrap_or_default());
+                                    is_editing.set(true);
+                                }
+                            },
+                            span { class: "icon-[lucide--square-pen] size-3" }
                         }
                     }
 
-                    if is_editing() {
-                        form {
-                            class: "flex flex-col gap-2 grow",
-                            onsubmit: move |evt| {
-                                evt.prevent_default();
-                                match FormValues(evt.values()).try_into() {
-                                    Ok(user_patch) => {
-                                        user_service.send(UserCommand::UpdateUser(user_patch));
-                                        is_editing.set(false);
-                                        force_validation.set(false);
-                                    }
-                                    Err(err) => {
-                                        force_validation.set(true);
-                                        error!("Failed to parse form values as UserPatch: {err}");
-                                    }
+                    if let Some(ref email) = user.email {
+                        div {
+                            class: "text-sm text-ui-base-muted mt-0.5 gap-2 flex",
+                            "{email}"
+                            if user.is_email_validated() {
+                                Badge {
+                                    variant: BadgeVariant::Email,
+                                    tone: BadgeTone::Success,
+                                    span { class: "icon-[lucide--check] size-3" }
+                                    "Verified"
                                 }
-                            },
-
-                            FloatingLabelInputText::<String> {
-                                name: "first_name".to_string(),
-                                label: Some("First name".to_string()),
-                                required: false,
-                                value: first_name,
-                                force_validation: force_validation(),
-                                r#type: "text".to_string(),
-                            }
-
-                            FloatingLabelInputText::<String> {
-                                name: "last_name".to_string(),
-                                label: Some("Last name".to_string()),
-                                required: false,
-                                value: last_name,
-                                force_validation: force_validation(),
-                                r#type: "text".to_string(),
-                            }
-
-                            FloatingLabelInputText::<EmailAddress> {
-                                name: "email".to_string(),
-                                label: Some("Email".to_string()),
-                                required: false,
-                                value: email,
-                                force_validation: force_validation(),
-                                r#type: "email".to_string(),
-                                disabled: has_oidc,
-                            }
-
-                            if has_oidc {
-                                p {
-                                    class: "text-xs text-base-content/60",
-                                    "Email is managed by your linked OIDC account"
-                                }
-                            }
-
-                            div {
-                                class: "flex gap-2 mt-2",
-                                button {
-                                    class: "btn btn-primary btn-sm",
-                                    r#type: "submit",
-                                    "Save"
-                                }
-                                button {
-                                    class: "btn btn-ghost btn-sm",
-                                    r#type: "button",
-                                    onclick: move |_| {
-                                        is_editing.set(false);
-                                        force_validation.set(false);
-                                    },
-                                    "Cancel"
+                            } else {
+                                Badge {
+                                    variant: BadgeVariant::Email,
+                                    tone: BadgeTone::Warning,
+                                    span { class: "icon-[lucide--triangle-alert] size-3" }
+                                    "Not verified"
                                 }
                             }
                         }
-                    } else {
-                        div {
-                            class: "flex flex-col gap-2 justify-center grow",
-
+                        if !user.is_email_validated() {
                             div {
-                                class: "flex items-center gap-2",
-                                div {
-                                    class: "text-lg font-bold",
-                                    "{user_name}"
-                                }
-                                button {
-                                class: "btn btn-ghost btn-sm btn-circle",
-                                onclick: move |_| {
-                                    first_name.set(
-                                        user.first_name.clone().unwrap_or_default()
-                                    );
-                                    last_name.set(
-                                        user.last_name.clone().unwrap_or_default()
-                                    );
-                                    email.set(
-                                        user.email.as_ref().map(|e| e.to_string()).unwrap_or_default()
-                                    );
-                                    is_editing.set(true);
-                                },
-                                Icon { class: "w-4 h-4", icon: BsPencil }
-                                }
-                            }
-
-                            if let Some(ref email) = user.email {
-                                div {
-                                    class: "flex flex-col gap-1",
-                                    div {
-                                        class: "text-lg font-semibold",
-                                        "{email}"
-                                    }
-                                    div {
-                                        class: "flex items-center gap-2",
-                                        if user.is_email_validated() {
-                                            span {
-                                                class: "badge badge-success badge-success gap-1",
-                                                Icon { class: "min-w-5 h-5", icon: BsCheck }
-                                                span { "Email verified" }
-                                            }
-                                        } else {
-                                            span {
-                                                class: "badge badge-warning badge-soft gap-1",
-                                                Icon { class: "min-w-5 h-5", icon: BsExclamationTriangle }
-                                                span { "Email not verified" }
-                                            }
-                                            button {
-                                                class: "btn btn-sm btn-primary ml-2",
-                                                onclick: move |_| {
-                                                    user_service.send(UserCommand::ResendVerificationEmail);
-                                                },
-                                                "Resend Verification"
-                                            }
-                                        }
-                                    }
+                                class: "mt-1.5",
+                                Button {
+                                    variant: ButtonVariant::Primary,
+                                    onclick: move |_| {
+                                        user_service.send(UserCommand::ResendVerificationEmail);
+                                    },
+                                    "Resend verification"
                                 }
                             }
                         }

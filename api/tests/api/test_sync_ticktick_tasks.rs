@@ -14,7 +14,7 @@ use universal_inbox::{
     notification::{Notification, NotificationStatus},
     task::{Task, TaskCreationResult, TaskSourceKind},
     third_party::{
-        integrations::ticktick::TickTickItem,
+        integrations::ticktick::{TickTickItem, TickTickTag},
         item::{ThirdPartyItem, ThirdPartyItemCreationResult, ThirdPartyItemData},
     },
 };
@@ -87,7 +87,7 @@ async fn test_sync_ticktick_tasks_should_add_new_task_and_update_existing_one(
                     title: "old task 1".to_string(),
                     content: Some("more details".to_string()),
                     priority: universal_inbox::third_party::integrations::ticktick::TickTickItemPriority::High,
-                    tags: Some(vec!["tag1".to_string()]),
+                    tags: Some(vec![TickTickTag::new("tag1")]),
                     project_id: "tt_proj_1111".to_string(), // ie. "Inbox"
                     ..ticktick_items[1].clone()
                 })),

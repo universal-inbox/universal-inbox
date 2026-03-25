@@ -24,6 +24,7 @@ impl LocalStorageService {
         settings
     }
 
+    #[allow(dead_code)]
     pub fn save_settings(settings: &UserSettings) {
         let Ok(storage) = get_local_storage() else {
             warn!("Unable to access localStorage. Settings not saved.");
@@ -41,6 +42,7 @@ impl LocalStorageService {
         }
     }
 
+    #[allow(dead_code)]
     pub fn update_ui_setting<F>(updater: F)
     where
         F: FnOnce(&mut crate::settings::UISettings),

@@ -1,0 +1,102 @@
+{
+  "data": {
+    "repository": {
+      "pullRequest": {
+        "id": "PR_kwAOuni287",
+        "number": 287,
+        "url": "https://github.com/universal-inbox/universal-inbox/pull/287",
+        "titleHTML": "Add multi-source notification grouping with sticky headers",
+        "bodyHTML": "<h2>Summary</h2><p>Groups notifications by source in the inbox view, with sticky section headers that follow the scroll. Solves the &quot;wall of items&quot; problem we keep hitting on Mondays.</p><h2>Changes</h2><ul><li>New <code>NotificationGroup</code> component with collapsible sections per integration.</li><li>Sticky header behavior using <code>position: sticky</code> and a small intersection observer to fade the divider.</li><li>Persisted collapse state per source in <code>localStorage</code>.</li></ul><h2>Notes for reviewers</h2><blockquote><p>Pay attention to the focus order when sections collapse — I think it's right but a fresh pair of eyes would help.</p></blockquote>",
+        "labels": {
+          "nodes": [
+            {
+              "name": "feature",
+              "color": "0E8A16"
+            },
+            {
+              "name": "frontend",
+              "color": "1D76DB"
+            }
+          ]
+        },
+        "comments": {
+          "totalCount": 3
+        },
+        "commits": {
+          "nodes": [
+            {
+              "commit": {
+                "oid": "8f3a2c19",
+                "checkSuites": {
+                  "nodes": [
+                    {
+                      "conclusion": "SUCCESS",
+                      "status": "COMPLETED",
+                      "checkRuns": {
+                        "nodes": []
+                      },
+                      "workflowRun": null,
+                      "app": {
+                        "name": "Cloudflare Pages",
+                        "url": "https://pages.cloudflare.com",
+                        "logoUrl": "https://avatars.githubusercontent.com/in/85455?u=b286429105730c609e6561bb49f94a912de38b5b&v=4"
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "totalCount": 4
+        },
+        "baseRefName": "main",
+        "baseRepository": {
+          "nameWithOwner": "universal-inbox/universal-inbox",
+          "url": "https://github.com/universal-inbox/universal-inbox"
+        },
+        "headRefName": "feat/notification-grouping",
+        "headRepository": {
+          "nameWithOwner": "universal-inbox/universal-inbox",
+          "url": "https://github.com/universal-inbox/universal-inbox"
+        },
+        "author": {
+          "__typename": "User",
+          "avatarUrl": "https://avatars.githubusercontent.com/u/9821",
+          "login": "sara-park",
+          "name": "Sara Park"
+        },
+        "assignees": {
+          "nodes": []
+        },
+        "reviewDecision": "REVIEW_REQUIRED",
+        "reviews": {
+          "nodes": []
+        },
+        "reviewRequests": {
+          "nodes": [
+            {
+              "requestedReviewer": {
+                "__typename": "User",
+                "userAvatarUrl": "https://avatars.githubusercontent.com/u/14256",
+                "userLogin": "danielwong",
+                "userName": "Daniel Wong"
+              }
+            }
+          ]
+        },
+        "state": "OPEN",
+        "isDraft": false,
+        "closedAt": null,
+        "createdAt": "{{ago_8h}}",
+        "updatedAt": "{{ago_15m}}",
+        "mergeable": "MERGEABLE",
+        "mergedAt": null,
+        "mergeStateStatus": "CLEAN",
+        "mergedBy": null,
+        "deletions": 47,
+        "additions": 312,
+        "changedFiles": 8
+      }
+    }
+  }
+}

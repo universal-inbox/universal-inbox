@@ -1,30 +1,35 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
-use dioxus_free_icons::{
-    Icon,
-    icons::bs_icons::{BsArrowUpRightSquare, BsCalendar2Check, BsFlag},
-};
 
 use universal_inbox::third_party::integrations::linear::{
-    LinearComment, LinearIssue, LinearIssuePriority, LinearNotification, LinearProject,
+    LinearComment, LinearIssue, LinearIssuePriority, LinearNotification,
 };
 
 use crate::{
     components::{
-        CollapseCard, MessageHeader, SmallCard, Tag, TagDisplay, TagsInCard, UserWithAvatar,
-        integrations::linear::{
-            get_notification_type_label,
-            icons::{LinearIssueIcon, LinearProjectIcon, LinearProjectMilestoneIcon},
-            preview::project::LinearProjectDetails,
-        },
+        Tag, TagDisplay, UserWithAvatar,
+        integrations::linear::icons::{LinearIssueIcon, LinearProjectMilestoneIcon},
         markdown::Markdown,
+        preview_card_header::PreviewCardHeader,
+        priority_field::{PriorityField, PriorityLevel},
+        thread::{Thread, ThreadChildren, ThreadItem},
+        threaded_message::ThreadedMessage,
+        ui::{Card, CardVariant, MetadataGrid, MetadataItem},
     },
-    theme::{
-        PRIORITY_HIGH_COLOR_CLASS, PRIORITY_LOW_COLOR_CLASS, PRIORITY_NORMAL_COLOR_CLASS,
-        PRIORITY_URGENT_COLOR_CLASS,
-    },
+    utils::format_elapsed_time,
 };
+
+fn linear_priority(issue: &LinearIssue) -> Option<(String, PriorityLevel)> {
+    let level = match issue.priority {
+        LinearIssuePriority::Urgent => PriorityLevel::Urgent,
+        LinearIssuePriority::High => PriorityLevel::High,
+        LinearIssuePriority::Normal => PriorityLevel::Normal,
+        LinearIssuePriority::Low => PriorityLevel::Low,
+        LinearIssuePriority::NoPriority => return None,
+    };
+    Some((issue.priority.to_string(), level))
+}
 
 #[component]
 pub fn LinearIssuePreview(
@@ -32,24 +37,38 @@ pub fn LinearIssuePreview(
     linear_notification: ReadSignal<Option<LinearNotification>>,
     expand_details: ReadSignal<bool>,
 ) -> Element {
+    let _ = expand_details;
+    let issue = linear_issue();
+    let identifier = format!("#{}", issue.identifier);
+    let created_ago = format_elapsed_time(issue.created_at);
+    let creator = issue.creator.clone();
+
     rsx! {
         div {
-            class: "flex flex-col gap-2 w-full h-full",
+            class: "flex flex-col w-full h-full",
 
-            h3 {
-                class: "flex items-center gap-2 text-base",
-
-                LinearIssueIcon { class: "h-5 w-5", linear_issue: linear_issue }
-                a {
-                    class: "flex items-center",
-                    href: "{linear_issue().url}",
-                    target: "_blank",
-                    Markdown { text: linear_issue().title.clone() }
-                    Icon { class: "h-5 w-5 min-w-5 text-base-content/50 p-1", icon: BsArrowUpRightSquare }
+            PreviewCardHeader {
+                brand_icon: rsx! { LinearIssueIcon { linear_issue, class: "size-4" } },
+                title: linear_issue().title.clone(),
+                identifier: Some(identifier),
+                subline: rsx! {
+                    if let Some(creator) = creator {
+                        span { "Opened by" }
+                        UserWithAvatar {
+                            user_name: creator.name.clone(),
+                            avatar_url: creator.avatar_url.clone(),
+                            display_name: true,
+                            class: "text-[11px]",
+                        }
+                        span { class: "sep", "·" }
+                        span { "{created_ago} ago" }
+                    } else {
+                        span { "Opened {created_ago} ago" }
+                    }
                 }
             }
 
-            LinearIssueDetails { linear_issue, linear_notification, expand_details }
+            LinearIssueDetails { linear_issue, linear_notification }
         }
     }
 }
@@ -58,55 +77,106 @@ pub fn LinearIssuePreview(
 fn LinearIssueDetails(
     linear_issue: ReadSignal<LinearIssue>,
     linear_notification: ReadSignal<Option<LinearNotification>>,
-    expand_details: ReadSignal<bool>,
 ) -> Element {
-    let issue_priority_style = match linear_issue().priority {
-        LinearIssuePriority::Low => PRIORITY_LOW_COLOR_CLASS,
-        LinearIssuePriority::Normal => PRIORITY_NORMAL_COLOR_CLASS,
-        LinearIssuePriority::High => PRIORITY_HIGH_COLOR_CLASS,
-        LinearIssuePriority::Urgent => PRIORITY_URGENT_COLOR_CLASS,
-        _ => "",
-    };
+    // status_color is `LinearWorkflowState.color` — already a hex string; strip any leading
+    // '#' so we can inject it deterministically.
+    let status_color = linear_issue()
+        .state
+        .color
+        .trim_start_matches('#')
+        .to_string();
+    let status_pill_style = format!("background-color: #{status_color}; color: white;");
 
     rsx! {
         div {
             id: "notification-preview-details",
-            class: "flex flex-col gap-2 w-full h-full overflow-y-auto scroll-y-auto",
+            class: "flex flex-col gap-2 w-full h-full overflow-y-auto scroll-y-auto p-3",
 
-            div {
-                class: "flex gap-2",
+            Card {
+                variant: CardVariant::Default,
 
-                if let Some(linear_notification) = linear_notification() {
-                    a {
-                        class: "text-xs text-base-content/50",
-                        href: "{linear_issue().team.get_url(linear_notification.get_organization())}",
-                        target: "_blank",
-                        "{linear_issue().team.name}"
+                MetadataGrid {
+                    MetadataItem {
+                        label: "Status".to_string(),
+                        value: rsx! {
+                            LinearIssueIcon { linear_issue, class: "size-4" }
+                            span {
+                                class: "tag",
+                                style: "{status_pill_style}",
+                                "{linear_issue().state.name}"
+                            }
+                        },
                     }
-                } else {
-                    span { class: "text-xs text-base-content/50", "{linear_issue().team.name}" }
+
+                    if let Some((label, level)) = linear_priority(&linear_issue()) {
+                        PriorityField { label, level }
+                    }
+
+                    if let Some(assignee) = linear_issue().assignee {
+                        MetadataItem {
+                            label: "Assigned to".to_string(),
+                            value: rsx! {
+                                UserWithAvatar {
+                                    user_name: assignee.name.clone(),
+                                    avatar_url: assignee.avatar_url.clone(),
+                                    display_name: true,
+                                }
+                            },
+                        }
+                    }
+
+                    if let Some(due_date) = linear_issue().due_date {
+                        MetadataItem {
+                            label: "Due date".to_string(),
+                            value: rsx! {
+                                span { class: "icon-[lucide--calendar-check] size-4" }
+                                span { "{due_date}" }
+                            },
+                        }
+                    }
+
+                    if let Some(project_milestone) = linear_issue().project_milestone {
+                        MetadataItem {
+                            label: "Milestone".to_string(),
+                            value: rsx! {
+                                LinearProjectMilestoneIcon { class: "h-4 w-4" }
+                                span { "{project_milestone.name}" }
+                            },
+                        }
+                    }
+
+                    if let Some(linear_project) = linear_issue().project {
+                        MetadataItem {
+                            label: "Project".to_string(),
+                            value: rsx! {
+                                if let Some(icon) = linear_project.icon.clone() {
+                                    span { "{icon}" }
+                                }
+                                a {
+                                    href: "{linear_project.url}",
+                                    target: "_blank",
+                                    "{linear_project.name}"
+                                }
+                            },
+                        }
+                    }
+
+                    if !linear_issue().labels.is_empty() {
+                        MetadataItem {
+                            label: "Labels".to_string(),
+                            value: rsx! {
+                                for label in linear_issue().labels {
+                                    TagDisplay { tag: Into::<Tag>::into(label) }
+                                }
+                            },
+                        }
+                    }
                 }
-
-                a {
-                    class: "text-xs text-base-content/50",
-                    href: "{linear_issue().url}",
-                    target: "_blank",
-                    "#{linear_issue().identifier} "
-                }
-            }
-
-            div {
-                class: "flex text-base-content/50 gap-1 text-xs",
-
-                "Created at ",
-                span { class: "text-primary", "{linear_issue().created_at}" }
             }
 
             if let Some(description) = linear_issue().description {
-                CollapseCard {
-                    id: "linear-issue-details",
-                    header: rsx! { span { class: "text-base-content/50", "Description" } },
-                    opened: expand_details(),
+                Card {
+                    variant: CardVariant::Default,
                     Markdown {
                         class: "prose prose-sm w-full max-w-full",
                         text: description.clone()
@@ -114,84 +184,12 @@ fn LinearIssueDetails(
                 }
             }
 
-            if let Some(linear_notification) = linear_notification() {
-                SmallCard {
-                    span { class: "text-base-content/50", "Reason:" }
-                    TagDisplay {
-                        tag: Into::<Tag>::into(get_notification_type_label(&linear_notification.get_type()))
-                    }
-                }
-            }
-
-            if let Some(creator) = linear_issue().creator {
-                SmallCard {
-                    span { class: "text-base-content/50", "Created by" }
-                    UserWithAvatar {
-                        user_name: creator.name.clone(),
-                        avatar_url: creator.avatar_url.clone(),
-                        display_name: true
-                    }
-                }
-            }
-
-            if let Some(assignee) = linear_issue().assignee {
-                SmallCard {
-                    span { class: "text-base-content/50", "Assigned to" }
-                    UserWithAvatar {
-                        user_name: assignee.name.clone(),
-                        avatar_url: assignee.avatar_url.clone(),
-                        display_name: true
-                    }
-                }
-            }
-
-            SmallCard {
-                LinearIssueIcon { class: "h-5 w-5", linear_issue: linear_issue }
-                span { "{linear_issue().state.name}" }
-            }
-
-            TagsInCard {
-                tags: linear_issue()
-                    .labels
-                    .iter()
-                    .map(|label| label.clone().into())
-                    .collect()
-            }
-
-            if let Some(due_date) = linear_issue().due_date {
-                SmallCard {
-                    Icon { class: "h-5 w-5", icon: BsCalendar2Check }
-                    span { class: "text-base-content/50", "Due date:" }
-                    "{due_date}"
-                }
-            }
-
-            if linear_issue().priority != LinearIssuePriority::NoPriority {
-                SmallCard {
-                    Icon { class: "h-5 w-5 {issue_priority_style}", icon: BsFlag }
-                    span { class: "text-base-content/50", "Priority:" }
-                    "{linear_issue().priority}"
-                }
-            }
-
-            if let Some(linear_project) = linear_issue().project {
-                LinearProjectCard { linear_project, linear_notification, expand_details }
-            }
-
-            if let Some(project_milestone) = linear_issue().project_milestone {
-                SmallCard {
-                    LinearProjectMilestoneIcon { class: "h-5 w-5" }
-                    span { class: "text-base-content/50", "Milestone:" }
-                    "{project_milestone.name}"
-                }
-            }
-
             if let Some(LinearNotification::IssueNotification { comment: Some(linear_comment), .. }) = linear_notification() {
-                div {
-                    class: "card w-full bg-base-200",
-                    div {
-                        class: "card-body flex flex-col gap-2 p-2",
-                        LinearCommentDisplay { linear_comment }
+                Card {
+                    variant: CardVariant::Default,
+
+                    Thread {
+                        LinearCommentThread { linear_comment }
                     }
                 }
             }
@@ -199,92 +197,36 @@ fn LinearIssueDetails(
     }
 }
 
+/// One row of the Linear comment thread. Renders the author header, the body,
+/// and (when present) a [`ThreadChildren`] block recursing into each child.
 #[component]
-pub fn LinearProjectCard(
-    linear_project: ReadSignal<LinearProject>,
-    linear_notification: ReadSignal<Option<LinearNotification>>,
-    expand_details: ReadSignal<bool>,
-) -> Element {
+fn LinearCommentThread(linear_comment: ReadSignal<LinearComment>) -> Element {
+    let comment = linear_comment();
+    let (author_name, author_avatar_url) = match comment.user.clone() {
+        Some(user) => (user.name, user.avatar_url),
+        None => ("Unknown".to_string(), None),
+    };
+    let body_text = comment.body.clone();
+
     rsx! {
-        CollapseCard {
-            id: "linear-project",
-            header: rsx! {
-                div {
-                    style: "color: {linear_project().color}",
-                    LinearProjectIcon { class: "h-5 w-5", linear_project }
+        ThreadItem {
+            ThreadedMessage {
+                author_name,
+                author_avatar_url,
+                sent_at: Some(comment.updated_at),
+                body: rsx! {
+                    Markdown {
+                        class: "prose prose-sm w-full max-w-full",
+                        text: body_text
+                    }
                 },
-                span { class: "text-base-content/50", "Project:" }
-
-                if let Some(icon) = linear_project().icon {
-                    span { "{icon}" }
-                }
-                a {
-                    href: "{linear_project().url}",
-                    target: "_blank",
-                    "{linear_project().name}"
-                }
-                a {
-                    class: "flex-none",
-                    href: "{linear_project().url}",
-                    target: "_blank",
-                    Icon { class: "h-5 w-5 min-w-5 text-base-content/50 p-1", icon: BsArrowUpRightSquare }
-                }
-            },
-            opened: expand_details(),
-
-            LinearProjectDetails {
-                linear_project,
-                linear_notification,
-                expand_details,
-                dark_bg: true
             }
-        }
-    }
-}
 
-#[component]
-fn LinearCommentDisplay(
-    linear_comment: ReadSignal<LinearComment>,
-    class: Option<String>,
-) -> Element {
-    let class = class.unwrap_or_default();
-
-    rsx! {
-        div {
-            class: "flex flex-col gap-2 {class}",
-
-            if let Some(user) = linear_comment().user {
-                SmallCard {
-                    class: "flex flex-row items-center gap-2",
-                    card_class: "bg-neutral text-neutral-content text-xs",
-
-                    MessageHeader {
-                        user_name: user.name.clone(),
-                        avatar_url: user.avatar_url.clone(),
-                        display_name: true,
-                        sent_at: Some(linear_comment().updated_at)
+            if !comment.children.is_empty() {
+                ThreadChildren {
+                    for child_comment in comment.children.clone().into_iter() {
+                        LinearCommentThread { linear_comment: child_comment }
                     }
-                    // span { class: "text-neutral-content/75", "From" }
-                    // UserWithAvatar {
-                    //     class: "text-xs",
-                    //     user_name: user.name.clone(),
-                    //     avatar_url: user.avatar_url.clone(),
-                    //     display_name: true
-                    // }
-                }
-                // span { class: "text-neutral-content/75", "at" }
-                // span { " {updated_at}" }
-            }
-
-            Markdown {
-                class: "prose prose-sm w-full max-w-full",
-                text: linear_comment().body.clone()
-            }
-
-            for child_comment in linear_comment().children.into_iter() {
-                LinearCommentDisplay {
-                    class: "pl-2",
-                    linear_comment: child_comment
                 }
             }
         }

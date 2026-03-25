@@ -18,6 +18,7 @@
   - [Slack](config/setup/slack.md)
   - [Browser Extension](config/setup/browser-extension.md)
   - [Todoist](config/setup/todoist.md)
+  - [TickTick](config/setup/ticktick.md)
   - [Google Calendar](config/setup/gcal.md)
   - [Google Drive](config/setup/gdrive.md)
 
@@ -31,11 +32,13 @@
   - [Linear](how/actions/linear.md)
   - [Slack](how/actions/slack.md)
   - [Todoist](how/actions/todoist.md)
+  - [TickTick](how/actions/ticktick.md)
   - [Google Calendar](how/actions/gcal.md)
   - [Google Drive](how/actions/gdrive.md)
 
 # Misc
 
+- [Security & Privacy](misc/security.md)
 - [AI agents and MCP](misc/ai_agents.md)
 - [Keyboard shortcuts](misc/keyboard_shortcuts.md)
 - [API usage](misc/api_usage.md)

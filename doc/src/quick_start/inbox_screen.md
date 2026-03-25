@@ -16,19 +16,7 @@ Each notification entry includes:
 - **Timestamp**: When the notification was last updated
 
 ```admonish tip
-The bookmark icon shows when a notification is linked to a task. The color indicates priority level:
-
-{:.icon-text}
-![task bookmark](images/task-bookmark-gray.png =x20) Default/Low priority
-
-{:.icon-text}
-![task bookmark](images/task-bookmark-yellow.png =x20) Medium priority
-
-{:.icon-text}
-![task bookmark](images/task-bookmark-orange.png =x20) High priority
-
-{:.icon-text}
-![task bookmark](images/task-bookmark-red.png =x20) Urgent priority
+When a notification is already linked to a task, a small badge appears in the corner of the notification's source icon showing which task manager the task lives in (Todoist, Linear, TickTick, etc.). Hover the icon to confirm — the tooltip reads "Linked task".
 ```
 
 ### Preview Pane (Right Side)

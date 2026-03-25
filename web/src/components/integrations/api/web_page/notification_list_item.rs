@@ -1,20 +1,13 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
-use dioxus_free_icons::{Icon, icons::bs_icons::BsLink45deg};
 
 use universal_inbox::{
-    HasHtmlUrl, notification::NotificationWithTask, third_party::integrations::api::WebPage,
+    notification::{NotificationStatus, NotificationWithTask},
+    third_party::integrations::api::WebPage,
 };
 
-use crate::{
-    components::{
-        list::{ListContext, ListItem},
-        notifications_list::get_notification_list_item_action_buttons,
-    },
-    icons::UniversalInbox,
-    utils::format_elapsed_time,
-};
+use crate::{components::list::ListItem, icons::UILogo, utils::format_elapsed_time};
 
 #[component]
 pub fn WebPageNotificationListItem(
@@ -24,38 +17,31 @@ pub fn WebPageNotificationListItem(
     on_select: EventHandler<()>,
 ) -> Element {
     let notification_updated_at = use_memo(move || format_elapsed_time(notification().updated_at));
-    let list_context = use_context::<Memo<ListContext>>();
-    let link = notification().get_html_url();
-    let subicon = if web_page().favicon.is_some() {
+    let is_unread = notification().status == NotificationStatus::Unread;
+    let meta_icon = if let Some(favicon) = web_page().favicon.as_ref() {
         rsx! {
             img {
-                class: "h-5 w-5 min-w-5",
-                src: "{web_page().favicon.as_ref().unwrap()}",
-                alt: "Favicon"
+                class: "w-full h-full",
+                src: "{favicon}",
+                alt: ""
             }
         }
     } else {
-        rsx! { Icon { class: "h-5 w-5 min-w-5", icon: BsLink45deg } }
+        rsx! { span { class: "icon-[lucide--globe] w-full h-full" } }
     };
 
     rsx! {
         ListItem {
             key: "{notification().id}",
+            linked_task: notification().task,
             title: "{notification().title}",
             subtitle: rsx! { WebPageListItemSubtitle { web_page } },
-            link,
-            icon: rsx! { UniversalInbox { class: "h-5 w-5" } },
-            subicon,
-            action_buttons: get_notification_list_item_action_buttons(
-                notification,
-                list_context().show_shortcut,
-                None,
-                None
-            ),
+            time: "{notification_updated_at}",
+            icon: rsx! { UILogo { class: "h-5 w-5".to_string() } },
+            meta_icon,
             is_selected,
+            is_unread,
             on_select,
-
-            span { class: "text-base-content/50 whitespace-nowrap text-xs font-mono", "{notification_updated_at}" }
         }
     }
 }
@@ -63,9 +49,9 @@ pub fn WebPageNotificationListItem(
 #[component]
 pub fn WebPageListItemSubtitle(web_page: ReadSignal<WebPage>) -> Element {
     rsx! {
-        div {
-            class: "flex items-center text-xs text-base-content/50 gap-1",
-            span { "{web_page().url}" }
+        span {
+            class: "ui-nrow-meta-text",
+            "{web_page().url}"
         }
     }
 }

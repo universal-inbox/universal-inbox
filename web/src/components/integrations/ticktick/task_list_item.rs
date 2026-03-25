@@ -1,20 +1,20 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
-use dioxus_free_icons::{Icon, icons::bs_icons::BsCardChecklist};
 
 use universal_inbox::{
-    HasHtmlUrl,
     task::Task,
-    third_party::integrations::ticktick::{TickTickItem, TickTickItemPriority},
+    third_party::integrations::ticktick::{TickTickItem, TickTickTaskStatus},
 };
 
 use crate::{
     components::{
-        Tag, TagDisplay,
-        integrations::{icons::TickTick, ticktick::list_item::TickTickListItemSubtitle},
-        list::{ListContext, ListItem},
-        tasks_list::get_task_list_item_action_buttons,
+        integrations::{
+            icons::TickTick,
+            ticktick::{list_item::TickTickListItemSubtitle, preview::ticktick_priority_level},
+        },
+        list::ListItem,
+        priority_field::priority_color_class,
     },
     utils::format_elapsed_time,
 };
@@ -27,43 +27,30 @@ pub fn TickTickTaskListItem(
     on_select: EventHandler<()>,
 ) -> Element {
     let task_updated_at = use_memo(move || format_elapsed_time(task().updated_at));
-    let list_context = use_context::<Memo<ListContext>>();
-    let task_icon_style = match ticktick_item().priority {
-        TickTickItemPriority::High => "",
-        TickTickItemPriority::Medium => "text-yellow-500",
-        TickTickItemPriority::Low => "text-orange-500",
-        TickTickItemPriority::None => "",
+    let priority = ticktick_item().priority;
+    let meta_icon_color_class = ticktick_priority_level(priority)
+        .map(priority_color_class)
+        .unwrap_or("");
+    let meta_icon_class = if ticktick_item().status == TickTickTaskStatus::Completed {
+        "icon-[lucide--check-circle] w-full h-full"
+    } else {
+        "icon-[lucide--circle] w-full h-full"
     };
-    let link = task().get_html_url();
 
     rsx! {
         ListItem {
             key: "{task().id}",
             title: "{task().title}",
-            subtitle: rsx! { TickTickListItemSubtitle { ticktick_item } },
-            link,
-            icon: rsx! { TickTick { class: "h-5 w-5" } },
-            subicon: rsx! {
-                Icon { class: "h-5 w-5 min-w-5 {task_icon_style}", icon: BsCardChecklist }
+            subtitle: rsx! {
+                TickTickListItemSubtitle { ticktick_item }
             },
-            action_buttons: get_task_list_item_action_buttons(
-                task,
-                list_context().show_shortcut,
-                None,
-                None
-            ),
+            time: "{task_updated_at}",
+            icon: rsx! { TickTick { class: "h-5 w-5" } },
+            meta_icon: rsx! {
+                span { class: "{meta_icon_class} {meta_icon_color_class}" }
+            },
             is_selected,
             on_select,
-
-            for tag in ticktick_item()
-                .tags
-                .unwrap_or_default()
-                .into_iter()
-                .map(Into::<Tag>::into) {
-                    TagDisplay { tag }
-                }
-
-            span { class: "text-base-content/50 whitespace-nowrap text-xs font-mono", "{task_updated_at}" }
         }
     }
 }

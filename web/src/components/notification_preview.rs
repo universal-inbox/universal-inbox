@@ -3,7 +3,8 @@
 use dioxus::prelude::*;
 
 use universal_inbox::{
-    notification::{NotificationId, NotificationWithTask},
+    HasHtmlUrl,
+    notification::{NotificationId, NotificationSourceKind, NotificationWithTask},
     third_party::{
         integrations::{github::GithubNotificationItem, slack::SlackReactionItem},
         item::ThirdPartyItemData,
@@ -27,11 +28,13 @@ use crate::{
                 file::SlackFilePreview, message::SlackMessagePreview, thread::SlackThreadPreview,
             },
         },
-        notifications_list::{NotificationListContext, get_notification_list_item_action_buttons},
-        task_preview::TaskDetailsPreview,
+        notifications_list::NotificationListContext,
+        task_preview::{TaskDetailsPreview, task_source_display_name, task_sub_type},
+        ui::{ActionButton, Button, ButtonVariant},
     },
     model::{PreviewPane, UniversalInboxUIModel},
     services::notification_service::NotificationCommand,
+    utils::reset_scroll_top,
 };
 
 #[component]
@@ -58,7 +61,7 @@ pub fn NotificationPreview(
 
     let mut latest_shown_notification_id = use_signal(|| None::<NotificationId>);
     use_effect(move || {
-        // reset selected_preview_pane and preview_cards_expanded when showing another notification
+        // reset selected_preview_pane, preview_cards_expanded and scroll position when showing another notification
         let mut latest_shown_notification_id = latest_shown_notification_id.write();
         if *latest_shown_notification_id != Some(notification().id) {
             let mut ui_model = ui_model.write();
@@ -69,6 +72,7 @@ pub fn NotificationPreview(
             };
             ui_model.preview_cards_expanded = false;
             *latest_shown_notification_id = Some(notification().id);
+            let _ = reset_scroll_top("notification-preview-details");
         }
     });
 
@@ -78,7 +82,7 @@ pub fn NotificationPreview(
         .unwrap_or_default()
         == 0
     {
-        "btn-disabled"
+        "disabled"
     } else {
         ""
     };
@@ -88,7 +92,7 @@ pub fn NotificationPreview(
         .unwrap_or_default()
         == notifications_count() - 1
     {
-        "btn-disabled"
+        "disabled"
     } else {
         ""
     };
@@ -101,145 +105,170 @@ pub fn NotificationPreview(
         };
 
     rsx! {
+        // Detail header: back button (mobile) + tabs on the left, actions on the right
         div {
-            class: "flex flex-col w-full h-full",
+            class: "detail-header",
 
-            div {
-                class: "relative w-full",
-
-                span {
-                    class: "{shortcut_visibility_style} kbd kbd-xs z-50 absolute left-0",
-                    "▼ j"
+                // Back button for mobile — first on the left, only visible
+                // on mobile in detail view (md:hidden hides it on desktop;
+                // on mobile the host detail panel only renders when the list
+                // is hidden, so the button only appears in that state).
+                Button {
+                    variant: ButtonVariant::Ghost,
+                    // `.detail-back-btn` keeps `display: none` in CSS so the
+                    // button stays hidden everywhere except mobile detail
+                    // view. The `max-md:[.app-layout.show-detail_&]:inline-flex!`
+                    // variant reveals it when the parent layout enters
+                    // show-detail at ≤768px. The `!` (`!important` in
+                    // Tailwind v4) is required to win against the cascade-
+                    // ordered `.detail-back-btn { display: none }` rule.
+                    class: "detail-back-btn max-md:[.app-layout.show-detail_&]:inline-flex!".to_string(),
+                    aria_label: "Back to list".to_string(),
+                    title: "Back to list".to_string(),
+                    onclick: move |_| ui_model.write().selected_notification_index = None,
+                    icon_class: "icon-[tabler--arrow-left]".to_string(),
                 }
-                span {
-                    class: "{shortcut_visibility_style} kbd kbd-xs z-50 absolute right-0",
-                    "▲ k"
-                }
 
-                nav {
-                    class: "tabs tabs-bordered w-full pb-2",
-                    role: "tablist",
+                div {
+                    class: "detail-tabs",
 
                     if has_notification_details_preview {
                         button {
-                            class: "tab active-tab:tab-active {notification_tab_style} w-full",
-                            "data-tab": "#notification-tab",
+                            class: "ui-detail-source {notification_tab_style}",
                             role: "tab",
+                            "aria-label": "Show notification preview",
+                            "aria-pressed": "{notification_tab_style == \"active\"}",
                             onclick: move |_| { ui_model.write().selected_preview_pane = PreviewPane::Notification },
-                            div {
-                                class: "flex gap-2 items-center text-base-content",
+                            span { class: "ui-detail-source-tile",
                                 NotificationIcon { kind: notification().kind }
-                                "Notification"
                             }
+                            span { "{source_display_name(notification().kind)}" }
+                            if let Some(sub) = notification_sub_type(&notification().source_item.data) {
+                                span { class: "sub", "· {sub}" }
+                            }
+                        }
+                    }
+                    if has_notification_details_preview && has_task_details_preview {
+                        span {
+                            class: "detail-tabs-link",
+                            "aria-hidden": "true",
+                            title: "Linked task",
+                            span { class: "icon-[lucide--link-2]" }
                         }
                     }
                     if has_task_details_preview {
-                        button {
-                            class: "tab active-tab:tab-active {task_tab_style} w-full",
-                            "data-tab": "#task-tab",
-                            role: "tab",
-                            onclick: move |_| { ui_model.write().selected_preview_pane = PreviewPane::Task },
-                            div {
-                                class: "flex gap-2 text-base-content",
-                                if let Some(task) = notification().task {
-                                    TaskIcon { class: "h-5 w-5", kind: task.kind }
+                        if let Some(task) = notification().task {
+                            button {
+                                class: "ui-detail-source {task_tab_style}",
+                                role: "tab",
+                                "aria-label": "Show linked task preview",
+                                "aria-pressed": "{task_tab_style == \"active\"}",
+                                onclick: move |_| { ui_model.write().selected_preview_pane = PreviewPane::Task },
+                                span { class: "ui-detail-source-tile",
+                                    TaskIcon { class: "h-3 w-3".to_string(), kind: task.kind }
                                 }
-                                "Task"
+                                span { "{task_source_display_name(task.kind)}" }
+                                span { class: "sub", "· {task_sub_type(&task)}" }
                             }
                         }
                     }
                 }
-            }
 
-            button {
-                class: "btn btn-text absolute left-0 lg:hidden",
-                onclick: move |_| ui_model.write().selected_notification_index = None,
-                span { class: "icon-[tabler--arrow-left] size-8" }
-            }
+                div {
+                    class: "detail-actions",
 
-            if shortcut_visibility_style == "visible" {
-                span {
-                    class: "{shortcut_visibility_style} kbd kbd-xs z-50",
-                    "e: expand/collapse"
-                }
-                if has_task_details_preview {
-                    span {
-                        class: "{shortcut_visibility_style} kbd kbd-xs z-50",
-                        "tab: switch between tabs"
-                    }
-                }
-            }
-
-            match ui_model.read().selected_preview_pane {
-                PreviewPane::Notification => rsx! {
-                    div {
-                        id: "notification-tab",
-                        class: "flex-1 overflow-hidden",
-                        NotificationDetailsPreview {
-                            notification,
-                            expand_details: ui_model.read().preview_cards_expanded
-                        }
-                    }
-                },
-                PreviewPane::Task => rsx! {
-                    if let Some(task) = notification().task {
-                        div {
-                            id: "task-tab",
-                            class: "flex-1 overflow-hidden",
-                            TaskDetailsPreview {
-                                task,
-                                expand_details: ui_model.read().preview_cards_expanded
+                    if shortcut_visibility_style == "visible" {
+                        if has_task_details_preview {
+                            span {
+                                class: "detail-kbd",
+                                "tab"
                             }
                         }
+                        span {
+                            class: "detail-kbd",
+                            "e"
+                        }
                     }
-                },
+
+                    // Open in source button — common to every preview kind
+                    Button {
+                        variant: ButtonVariant::Ghost,
+                        href: notification().get_html_url().to_string(),
+                        aria_label: format!("Open in {}", source_display_name(notification().kind)),
+                        title: format!("Open in {}", source_display_name(notification().kind)),
+                        icon_class: "icon-[lucide--external-link]".to_string(),
+                        enable_tooltip: true,
+                    }
+                }
             }
 
             div {
-                class: "flex flex-col w-full gap-2 lg:hidden",
+                class: "detail-body",
 
-                hr { class: "text-gray-200" }
-                div {
-                    class: "flex w-full justify-center text-sm text-base-content/50",
-
-                    span { "{ui_model.read().selected_notification_index.unwrap_or_default() + 1} of {notifications_count()}" }
+                match ui_model.read().selected_preview_pane {
+                    PreviewPane::Notification => rsx! {
+                        div {
+                            id: "notification-tab",
+                            NotificationDetailsPreview {
+                                notification,
+                                expand_details: ui_model.read().preview_cards_expanded
+                            }
+                        }
+                    },
+                    PreviewPane::Task => rsx! {
+                        if let Some(task) = notification().task {
+                            div {
+                                id: "task-tab",
+                                TaskDetailsPreview {
+                                    task,
+                                    expand_details: ui_model.read().preview_cards_expanded
+                                }
+                            }
+                        }
+                    },
                 }
+            }
+
+            // Detail dock: bottom action bar
+            div {
+                class: "detail-dock",
 
                 div {
-                    class: "flex w-full",
-                    button {
-                        "type": "button",
-                        class: "btn btn-text btn-square btn-lg {previous_button_style}",
-                        "aria-label": "Previous notification",
+                    class: "inline-flex items-center gap-1 text-ui-base-muted",
+                    Button {
+                        variant: ButtonVariant::Icon,
+                        disabled: previous_button_style == "disabled",
+                        aria_label: "Previous notification".to_string(),
                         onclick: move |_| {
                             let mut model = ui_model.write();
                             model.selected_notification_index = Some(model.selected_notification_index.unwrap_or_default() - 1);
                         },
-                        span { class: "icon-[tabler--chevron-left] size-5" }
+                        icon_class: "icon-[tabler--chevron-left]".to_string(),
                     }
 
-                    for btn in get_notification_list_item_action_buttons(
-                        notification,
-                        false,
-                        Some("btn btn-square btn-primary btn-lg".to_string()),
-                        Some("flex-1".to_string())) {
-                        { btn }
-                    }
+                    span { class: "text-[11px] font-medium text-ui-base-muted tabular-nums", "{ui_model.read().selected_notification_index.unwrap_or_default() + 1} / {notifications_count()}" }
 
-                    button {
-                        "type": "button",
-                        class: "btn btn-text btn-square btn-lg {next_button_style}",
-                        "aria-label": "Next notification",
+                    Button {
+                        variant: ButtonVariant::Icon,
+                        disabled: next_button_style == "disabled",
+                        aria_label: "Next notification".to_string(),
                         onclick: move |_| {
                             let mut model = ui_model.write();
                             model.selected_notification_index = Some(model.selected_notification_index.unwrap_or_default() + 1);
                         },
-                        span { class: "icon-[tabler--chevron-right] size-5" }
+                        icon_class: "icon-[tabler--chevron-right]".to_string(),
                     }
                 }
 
+                div {
+                    class: "flex items-center gap-1.5 min-w-0",
+                    for btn in get_notification_action_buttons(
+                        notification,
+                        shortcut_visibility_style == "visible") {
+                        { btn }
+                    }
+                }
             }
-        }
     }
 }
 
@@ -313,5 +342,210 @@ fn NotificationDetailsPreview(
         ThirdPartyItemData::LinearIssue(_)
         | ThirdPartyItemData::TodoistItem(_)
         | ThirdPartyItemData::TickTickItem(_) => rsx! {},
+    }
+}
+
+fn source_display_name(kind: NotificationSourceKind) -> &'static str {
+    // tag: New notification integration
+    match kind {
+        NotificationSourceKind::Github => "GitHub",
+        NotificationSourceKind::Linear => "Linear",
+        NotificationSourceKind::GoogleMail => "Gmail",
+        NotificationSourceKind::GoogleCalendar => "Google Calendar",
+        NotificationSourceKind::GoogleDrive => "Google Drive",
+        NotificationSourceKind::Slack => "Slack",
+        NotificationSourceKind::Todoist => "Todoist",
+        NotificationSourceKind::TickTick => "TickTick",
+        NotificationSourceKind::API => "Universal Inbox",
+    }
+}
+
+fn notification_sub_type(data: &ThirdPartyItemData) -> Option<&'static str> {
+    match data {
+        ThirdPartyItemData::GithubNotification(n) => match &n.item {
+            Some(GithubNotificationItem::GithubPullRequest(_)) => Some("Pull request"),
+            Some(GithubNotificationItem::GithubDiscussion(_)) => Some("Discussion"),
+            _ => Some("Notification"),
+        },
+        ThirdPartyItemData::LinearNotification(_) => Some("Notification"),
+        ThirdPartyItemData::GoogleMailThread(_) => Some("Email"),
+        ThirdPartyItemData::GoogleCalendarEvent(_) => Some("Event"),
+        ThirdPartyItemData::GoogleDriveComment(_) => Some("Comment"),
+        ThirdPartyItemData::SlackReaction(_) => Some("Reaction"),
+        ThirdPartyItemData::SlackThread(_) => Some("Thread"),
+        ThirdPartyItemData::TodoistItem(_) | ThirdPartyItemData::TickTickItem(_) => Some("Task"),
+        ThirdPartyItemData::WebPage(_) => Some("Web page"),
+        ThirdPartyItemData::LinearIssue(_) => None,
+    }
+}
+
+pub fn get_notification_action_buttons(
+    notification: ReadSignal<NotificationWithTask>,
+    show_shortcut: bool,
+) -> Vec<Element> {
+    let context = use_context::<Memo<NotificationListContext>>();
+
+    if !notification().is_built_from_task() {
+        let mut buttons = vec![rsx! {
+            ActionButton {
+                title: "Delete notification",
+                shortcut: "d",
+                show_shortcut,
+                onclick: move |_| {
+                    context().notification_service
+                        .send(NotificationCommand::DeleteFromNotification(notification()));
+                },
+                icon_class: "icon-[lucide--trash-2]",
+            }
+        }];
+
+        if notification().task.is_some() {
+            buttons.push(rsx! {
+                ActionButton {
+                    title: "Complete task",
+                    shortcut: "c",
+                    disabled_label: (!context().is_task_actions_enabled)
+                        .then_some("No task management service connected".to_string()),
+                    show_shortcut,
+                    onclick: move |_| {
+                        context().notification_service
+                            .send(NotificationCommand::CompleteTaskFromNotification(notification()));
+                    },
+                    icon_class: "icon-[lucide--check-circle]"
+                }
+            });
+        }
+
+        buttons.push(rsx! {
+            ActionButton {
+                title: "Unsubscribe from the notification",
+                shortcut: "u",
+                show_shortcut,
+                onclick: move |_| {
+                    context().notification_service.send(NotificationCommand::Unsubscribe(notification().id));
+                },
+                icon_class: "icon-[lucide--bell-off]"
+            }
+        });
+
+        buttons.push(rsx! {
+            ActionButton {
+                title: "Snooze notification",
+                shortcut: "s",
+                show_shortcut,
+                onclick: move |_| {
+                    context().notification_service.send(NotificationCommand::Snooze(notification().id));
+                },
+                icon_class: "icon-[lucide--clock]"
+            }
+        });
+
+        if notification().task.is_none() {
+            buttons.push(rsx! {
+                ActionButton {
+                    title: "Create task",
+                    shortcut: "p",
+                    disabled_label: (!context().is_task_actions_enabled)
+                        .then_some("No task management service connected".to_string()),
+                    show_shortcut,
+                    data_overlay: "#task-planning-modal",
+                    icon_class: "icon-[lucide--list-plus]"
+                }
+            });
+
+            buttons.push(rsx! {
+                ActionButton {
+                    title: "Create task with defaults",
+                    shortcut: "t",
+                    disabled_label: (!context().is_task_actions_enabled)
+                        .then_some("No task management service connected".to_string()),
+                    show_shortcut,
+                    onclick: move |_| {
+                        context().notification_service.send(NotificationCommand::CreateTaskWithDetaultsFromNotification(notification()));
+                    },
+                    icon_class: "icon-[lucide--zap]"
+                }
+            });
+
+            buttons.push(rsx! {
+                ActionButton {
+                    title: "Link to task",
+                    shortcut: "l",
+                    disabled_label: (!context().is_task_actions_enabled)
+                        .then_some("No task management service connected".to_string()),
+                    show_shortcut,
+                    data_overlay: "#task-linking-modal",
+                    icon_class: "icon-[lucide--link]"
+                }
+            });
+        }
+
+        buttons
+    } else {
+        vec![
+            rsx! {
+                ActionButton {
+                    title: "Delete task",
+                    shortcut: "d",
+                    disabled_label: (!context().is_task_actions_enabled)
+                        .then_some("No task management service connected".to_string()),
+                    show_shortcut,
+                    onclick: move |_| {
+                        context().notification_service
+                            .send(NotificationCommand::DeleteFromNotification(notification()));
+                    },
+                    icon_class: "icon-[lucide--trash-2]"
+                }
+            },
+            rsx! {
+                ActionButton {
+                    title: "Complete task",
+                    shortcut: "c",
+                    disabled_label: (!context().is_task_actions_enabled)
+                        .then_some("No task management service connected".to_string()),
+                    show_shortcut,
+                    onclick: move |_| {
+                        context().notification_service
+                            .send(NotificationCommand::CompleteTaskFromNotification(notification()));
+                    },
+                    icon_class: "icon-[lucide--check-circle]"
+                }
+            },
+            rsx! {
+                ActionButton {
+                    title: "Snooze notification",
+                    shortcut: "s",
+                    show_shortcut,
+                    onclick: move |_| {
+                        context().notification_service.send(NotificationCommand::Snooze(notification().id));
+                    },
+                    icon_class: "icon-[lucide--clock]"
+                }
+            },
+            rsx! {
+                ActionButton {
+                    title: "Plan task",
+                    shortcut: "p",
+                    disabled_label: (!context().is_task_actions_enabled)
+                        .then_some("No task management service connected".to_string()),
+                    show_shortcut,
+                    data_overlay: "#task-planning-modal",
+                    icon_class: "icon-[lucide--calendar-check]"
+                }
+            },
+            rsx! {
+                ActionButton {
+                    title: "Create task with defaults",
+                    shortcut: "t",
+                    disabled_label: (!context().is_task_actions_enabled)
+                        .then_some("No task management service connected".to_string()),
+                    show_shortcut,
+                    onclick: move |_| {
+                        context().notification_service.send(NotificationCommand::CreateTaskWithDetaultsFromNotification(notification()));
+                    },
+                    icon_class: "icon-[lucide--zap]"
+                }
+            },
+        ]
     }
 }

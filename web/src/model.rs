@@ -26,8 +26,11 @@ pub struct UniversalInboxUIModel {
     pub is_syncing_notifications: bool,
     pub is_syncing_tasks: bool,
     pub preview_cards_expanded: bool,
+    #[allow(dead_code)]
     details_panel_width: f64,
+    #[allow(dead_code)]
     details_panel_height: f64,
+    #[allow(dead_code)]
     details_panel_position: PanelPosition,
 }
 
@@ -66,6 +69,7 @@ impl UniversalInboxUIModel {
         self.preview_cards_expanded = !self.preview_cards_expanded;
     }
 
+    #[allow(dead_code)]
     pub fn set_details_panel_width(&mut self, width: f64) {
         let clamped_width = width.clamp(20.0, 60.0);
         self.details_panel_width = clamped_width;
@@ -76,10 +80,12 @@ impl UniversalInboxUIModel {
         });
     }
 
+    #[allow(dead_code)]
     pub fn get_details_panel_width(&self) -> f64 {
         self.details_panel_width
     }
 
+    #[allow(dead_code)]
     pub fn set_details_panel_height(&mut self, height: f64) {
         let clamped_height = height.clamp(20.0, 80.0);
         self.details_panel_height = clamped_height;
@@ -90,10 +96,12 @@ impl UniversalInboxUIModel {
         });
     }
 
+    #[allow(dead_code)]
     pub fn get_details_panel_height(&self) -> f64 {
         self.details_panel_height
     }
 
+    #[allow(dead_code)]
     pub fn set_details_panel_position(&mut self, position: PanelPosition) {
         self.details_panel_position = position.clone();
 
@@ -103,10 +111,12 @@ impl UniversalInboxUIModel {
         });
     }
 
+    #[allow(dead_code)]
     pub fn get_details_panel_position(&self) -> &PanelPosition {
         &self.details_panel_position
     }
 
+    #[allow(dead_code)]
     pub fn toggle_details_panel_position(&mut self) {
         let new_position = match self.details_panel_position {
             PanelPosition::Right => PanelPosition::Bottom,

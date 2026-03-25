@@ -9,7 +9,6 @@ use universal_inbox::third_party::integrations::slack::SlackMessageSenderDetails
 use crate::components::UserWithAvatar;
 
 pub mod config;
-pub mod icons;
 pub mod notification_list_item;
 pub mod preview;
 pub mod task_list_item;
@@ -35,10 +34,14 @@ pub fn SlackUserDisplay(user: ReadSignal<SlackUserProfile>, display_name: Option
 }
 
 #[component]
-pub fn SlackTeamDisplay(team: ReadSignal<SlackTeamInfo>) -> Element {
+pub fn SlackTeamDisplay(
+    team: ReadSignal<SlackTeamInfo>,
+    display_name: Option<bool>,
+    class: Option<String>,
+) -> Element {
     let (team_name, avatar_url) = get_team_name_and_avatar(&team());
 
-    rsx! { UserWithAvatar { user_name: team_name, avatar_url } }
+    rsx! { UserWithAvatar { user_name: team_name, avatar_url, display_name, class } }
 }
 
 fn get_team_name_and_avatar(team: &SlackTeamInfo) -> (String, Option<Url>) {

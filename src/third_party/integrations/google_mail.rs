@@ -276,7 +276,7 @@ impl GoogleMailMessagePayload {
                     None
                 }
             }
-            "multipart/mixed" | "multipart/alternative" => {
+            "multipart/mixed" | "multipart/alternative" | "multipart/related" => {
                 self.render_multipart_body_as_html(filter_mime_type)
             }
             _ => None,
@@ -605,6 +605,64 @@ mod tests {
                                     size: 20,
                                     // "<p>test message body<p>\n" base64 encoded
                                     data: Some("PHA+dGVzdCBtZXNzYWdlIGJvZHk8L3A+Cg==".to_string()),
+                                    ..GoogleMailMessageBody::default()
+                                }),
+                                ..GoogleMailMessagePayload::default()
+                            },
+                        ]),
+                        ..GoogleMailMessagePayload::default()
+                    },
+                    ..google_mail_message
+                }
+                .render_content_as_html();
+
+                assert_eq!(content, "<p>test message body</p>\n");
+            }
+
+            #[rstest]
+            fn test_render_google_mail_message_with_multipart_related_html_with_inline_image(
+                google_mail_message: GoogleMailMessage,
+            ) {
+                let content = GoogleMailMessage {
+                    snippet: "message snippet".to_string(),
+                    payload: GoogleMailMessagePayload {
+                        mime_type: "multipart/related".to_string(),
+                        body: Some(GoogleMailMessageBody::default()),
+                        parts: Some(vec![
+                            GoogleMailMessagePayload {
+                                mime_type: "multipart/alternative".to_string(),
+                                body: Some(GoogleMailMessageBody::default()),
+                                parts: Some(vec![
+                                    GoogleMailMessagePayload {
+                                        mime_type: "text/plain".to_string(),
+                                        body: Some(GoogleMailMessageBody {
+                                            size: 20,
+                                            // "test message body\n" base64 encoded
+                                            data: Some("dGVzdCBtZXNzYWdlIGJvZHkK".to_string()),
+                                            ..GoogleMailMessageBody::default()
+                                        }),
+                                        ..GoogleMailMessagePayload::default()
+                                    },
+                                    GoogleMailMessagePayload {
+                                        mime_type: "text/html".to_string(),
+                                        body: Some(GoogleMailMessageBody {
+                                            size: 20,
+                                            // "<p>test message body</p>\n" base64 encoded
+                                            data: Some(
+                                                "PHA+dGVzdCBtZXNzYWdlIGJvZHk8L3A+Cg==".to_string(),
+                                            ),
+                                            ..GoogleMailMessageBody::default()
+                                        }),
+                                        ..GoogleMailMessagePayload::default()
+                                    },
+                                ]),
+                                ..GoogleMailMessagePayload::default()
+                            },
+                            GoogleMailMessagePayload {
+                                mime_type: "image/png".to_string(),
+                                body: Some(GoogleMailMessageBody {
+                                    size: 20,
+                                    attachment_id: Some("inline_image_id".to_string().into()),
                                     ..GoogleMailMessageBody::default()
                                 }),
                                 ..GoogleMailMessagePayload::default()

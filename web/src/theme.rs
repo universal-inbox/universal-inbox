@@ -20,7 +20,35 @@ pub const PRIORITY_HIGH_COLOR_CLASS: &str = "text-orange-500";
 pub const PRIORITY_URGENT_COLOR_CLASS: &str = "text-red-500";
 
 pub static IS_DARK_MODE: GlobalSignal<bool> = Signal::global(|| false);
+pub static IS_SIDEBAR_COLLAPSED: GlobalSignal<bool> = Signal::global(|| false);
+pub static IS_SIDEBAR_DRAWER_OPEN: GlobalSignal<bool> = Signal::global(|| false);
 
+const SIDEBAR_COLLAPSED_STORAGE_KEY: &str = "sidebar-collapsed";
+const SIDEBAR_COLLAPSED_BREAKPOINT_PX: f64 = 1024.0;
+
+pub fn init_sidebar_collapsed(viewport_width: f64) -> Result<bool> {
+    let local_storage = get_local_storage()?;
+    if let Ok(Some(value)) = local_storage.get_item(SIDEBAR_COLLAPSED_STORAGE_KEY) {
+        return Ok(value == "true");
+    }
+    Ok(viewport_width > 0.0 && viewport_width <= SIDEBAR_COLLAPSED_BREAKPOINT_PX)
+}
+
+pub fn toggle_sidebar_collapsed(current: bool) -> Result<bool> {
+    let next = !current;
+    get_local_storage()?
+        .set_item(
+            SIDEBAR_COLLAPSED_STORAGE_KEY,
+            if next { "true" } else { "false" },
+        )
+        .map_err(|err| JsError::try_from(err).unwrap())?;
+    Ok(next)
+}
+
+// Theme bridge: FlyonUI uses data-theme="corporate" (light) and data-theme="dark" (dark).
+// The --ui-* design tokens use :root for light values and [data-theme="dark"] for dark overrides.
+// Because both systems key off data-theme="dark", the token overrides activate automatically
+// whenever FlyonUI switches to dark mode — no extra coordination needed.
 pub fn toggle_dark_mode(toggle: bool) -> Result<bool> {
     let window = web_sys::window().context("Unable to get the window object")?;
     let document = window

@@ -22,13 +22,7 @@ comrak = { version = "0.50.0", default-features = false, features = [
 ] }
 console_error_panic_hook = "0.1"
 console_log = { version = "1.0", features = ["color"], optional = true }
-dioxus = { version = "0.7", features = ["document", "web", "router"] }
-dioxus-free-icons = { version = "0.10", features = [
-  "bootstrap",
-  "material-design-icons-action",
-  "material-design-icons-communication",
-  "octicons",
-] }
+dioxus = { version = "=0.7.7", features = ["document", "web", "router"] }
 email_address = { workspace = true }
 emojis = { workspace = true }
 futures-util = "0.3"
@@ -68,21 +62,27 @@ features = [
   "CredentialsContainer",
   "CustomEvent",
   "Document",
+  "DomRect",
   "DomTokenList",
   "Element",
   "EventListener",
   "EventTarget",
   "Headers",
+  "HtmlElement",
   "HtmlInputElement",
   "InputEvent",
   "InputEventInit",
+  "KeyboardEvent",
   "MediaQueryList",
   "MouseEvent",
   "Navigator",
+  "Node",
   "Request",
   "RequestInit",
   "RequestMode",
   "Response",
+  "ScrollIntoViewOptions",
+  "ScrollLogicalPosition",
   "ScrollToOptions",
   "Storage",
   "Window",

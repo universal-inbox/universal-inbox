@@ -1,0 +1,92 @@
+{
+  "data": {
+    "issues": {
+      "nodes": [
+        {
+          "id": "c8805a87-5a65-47d6-a385-64945ce3b036",
+          "createdAt": "{{ago_2d}}",
+          "updatedAt": "{{ago_3h}}",
+          "completedAt": null,
+          "cancelledAt": null,
+          "dueDate": "{{date_in_3d}}",
+          "identifier": "UNI-138",
+          "title": "Add keyboard shortcuts to scroll the preview pane",
+          "url": "https://linear.app/universal-inbox/issue/UNI-138/add-keyboard-shortcuts-preview-pane",
+          "priority": 2,
+          "project": {
+            "id": "c1b0f0f8-9e16-4335-a540-bda09cc491df",
+            "name": "Notification Triage Workflow",
+            "url": "https://linear.app/universal-inbox/project/notification-triage-workflow",
+            "description": "Cross-functional initiative to make weekly inbox triage feel effortless: grouping, keyboard shortcuts, and snooze.",
+            "icon": "Inbox",
+            "color": "#5E6AD2",
+            "status": { "type": "started" },
+            "progress": 0.62,
+            "startDate": "{{date_ago_1w}}",
+            "targetDate": "{{date_in_3w}}",
+            "lead": {
+              "displayName": "Alice Chen",
+              "avatarUrl": "https://avatars.githubusercontent.com/u/1062408?v=4",
+              "url": "https://linear.app/universal-inbox/profiles/alice-chen"
+            }
+          },
+          "projectMilestone": {
+            "name": "Sprint 24-Q3-09",
+            "description": "Mid-quarter sprint focused on keyboard ergonomics."
+          },
+          "creator": {
+            "displayName": "Alice Chen",
+            "avatarUrl": "https://avatars.githubusercontent.com/u/1062408?v=4",
+            "url": "https://linear.app/universal-inbox/profiles/alice-chen"
+          },
+          "assignee": {
+            "displayName": "Alex Morgan",
+            "avatarUrl": null,
+            "url": "https://linear.app/universal-inbox/profiles/alex-morgan"
+          },
+          "state": {
+            "name": "In progress",
+            "color": "#FABD00",
+            "description": "This issue is being actively worked on",
+            "type": "started",
+            "id": "6F2231C6-8525-4FB7-A2B1-AC470FDF709D",
+            "team": {
+              "states": {
+                "nodes": [
+                  {
+                    "type": "unstarted",
+                    "id": "DE8D2E6E-5613-4DEE-9221-60083E1C273C"
+                  },
+                  {
+                    "type": "completed",
+                    "id": "C66F6CD6-F8F5-4378-A1D5-22247F537CFC"
+                  },
+                  {
+                    "type": "canceled",
+                    "id": "5A83DD71-D640-45E4-8B76-2457CEB307B4"
+                  }
+                ]
+              }
+            }
+          },
+          "labels": {
+            "nodes": [
+              {
+                "name": "ergonomics",
+                "description": "Keyboard, focus, and motion-related work",
+                "color": "#5E6AD2"
+              }
+            ]
+          },
+          "description": "Acceptance criteria: j/k scrolls within preview when focus is in the preview pane; arrow keys still navigate the list; esc returns focus to the list. Add a unit test for the shortcut handler.",
+          "team": {
+            "id": "ee20be3f-6558-4586-b610-6c44738e362f",
+            "key": "UNI",
+            "name": "Universal Inbox",
+            "icon": "Inbox"
+          }
+        }
+      ]
+    }
+  }
+}

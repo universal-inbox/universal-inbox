@@ -2,8 +2,9 @@ use anyhow::Context;
 use url::Url;
 
 use universal_inbox::third_party::integrations::github::{
-    GithubActor, GithubBotSummary, GithubDiscussion, GithubDiscussionComment,
-    GithubDiscussionStateReason, GithubLabel, GithubRepositorySummary, GithubUserSummary,
+    GithubActor, GithubBotSummary, GithubDiscussion, GithubDiscussionCategory,
+    GithubDiscussionComment, GithubDiscussionStateReason, GithubLabel, GithubRepositorySummary,
+    GithubUserSummary,
 };
 
 use crate::{
@@ -126,6 +127,24 @@ impl TryFrom<discussion_query::DiscussionQueryRepositoryDiscussionAnswerChosenBy
     }
 }
 
+impl From<discussion_query::DiscussionQueryRepositoryDiscussionCategory>
+    for GithubDiscussionCategory
+{
+    fn from(value: discussion_query::DiscussionQueryRepositoryDiscussionCategory) -> Self {
+        let emoji = if value.emoji.is_empty() {
+            None
+        } else {
+            Some(value.emoji)
+        };
+        GithubDiscussionCategory {
+            name: value.name,
+            emoji,
+            slug: value.slug,
+            is_answerable: value.is_answerable,
+        }
+    }
+}
+
 impl From<discussion_query::DiscussionStateReason> for GithubDiscussionStateReason {
     fn from(value: discussion_query::DiscussionStateReason) -> Self {
         match value {
@@ -237,6 +256,7 @@ impl TryFrom<discussion_query::ResponseData> for GithubDiscussion {
                 .author
                 .map(|author| author.try_into())
                 .transpose()?,
+            category: Some(discussion.category.into()),
         })
     }
 }

@@ -1,8 +1,6 @@
 #![allow(non_snake_case)]
 
-use dioxus::prelude::dioxus_core::use_drop;
 use dioxus::prelude::*;
-use dioxus::web::WebEventExt;
 
 use universal_inbox::integration_connection::{
     IntegrationConnection, provider::IntegrationProviderKind,
@@ -10,91 +8,8 @@ use universal_inbox::integration_connection::{
 
 use crate::{
     components::integrations::{icons::TickTick, todoist::icons::Todoist},
-    model::LoadState,
-    services::{
-        flyonui::{forget_flyonui_dropdown_element, init_flyonui_dropdown_element},
-        user_preferences_service::USER_PREFERENCES,
-    },
+    services::user_preferences_service::USER_PREFERENCES,
 };
-
-#[component]
-pub fn TaskManagerPicker(
-    task_service_integration_connections: Signal<LoadState<Vec<IntegrationConnection>>>,
-    selected_task_provider_kind: Signal<Option<IntegrationProviderKind>>,
-    on_select: EventHandler<IntegrationProviderKind>,
-) -> Element {
-    let mut mounted_element: Signal<Option<web_sys::Element>> = use_signal(|| None);
-
-    use_drop(move || {
-        if let Some(element) = mounted_element() {
-            forget_flyonui_dropdown_element(&element);
-        }
-    });
-
-    let LoadState::Loaded(connections) = task_service_integration_connections() else {
-        return rsx! {
-            div { class: "size-5 shrink-0" }
-        };
-    };
-
-    let current_icon = rsx! {
-        ProviderIcon { kind: selected_task_provider_kind() }
-    };
-
-    if connections.len() < 2 {
-        return rsx! {
-            div { class: "size-5 shrink-0", { current_icon } }
-        };
-    }
-
-    rsx! {
-        div {
-            class: "dropdown relative inline-flex",
-            onmounted: move |element| {
-                let web_element = element.as_web_event();
-                init_flyonui_dropdown_element(&web_element);
-                mounted_element.set(Some(web_element));
-            },
-
-            button {
-                r#type: "button",
-                class: "dropdown-toggle flex items-center gap-1 rounded-sm p-1 hover:bg-base-200 focus:outline-none",
-                "aria-haspopup": "menu",
-                "aria-expanded": "false",
-                "aria-label": "Select task manager",
-                tabindex: 0,
-                title: "Change task manager",
-
-                div { class: "size-5 shrink-0", { current_icon } }
-                span { class: "icon-[tabler--chevron-down] size-3 text-base-content/60" }
-            }
-
-            ul {
-                class: "dropdown-menu dropdown-open:opacity-100 hidden rounded-box shadow-sm z-80 p-1 min-w-40",
-                role: "menu",
-                "aria-orientation": "vertical",
-                tabindex: 0,
-
-                for connection in connections.iter() {
-                    {
-                        let kind = connection.provider.kind();
-                        rsx! {
-                            li { key: "{kind}",
-                                button {
-                                    r#type: "button",
-                                    class: "dropdown-item flex items-center gap-2 w-full",
-                                    onclick: move |_| on_select.call(kind),
-                                    div { class: "size-5 shrink-0", ProviderIcon { kind: Some(kind) } }
-                                    span { "{kind}" }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
 
 #[component]
 pub fn ProviderIcon(kind: Option<IntegrationProviderKind>) -> Element {

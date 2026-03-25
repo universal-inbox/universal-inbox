@@ -9,6 +9,12 @@
         "number": 1,
         "url": "https://github.com/octocat/universal-inbox/discussions/1",
         "stateReason": null,
+        "category": {
+          "name": "Q&A",
+          "emoji": ":pray:",
+          "slug": "q-a",
+          "isAnswerable": true
+        },
         "repository": {
           "nameWithOwner": "octocat/universal-inbox",
           "url": "https://github.com/octocat/universal-inbox"

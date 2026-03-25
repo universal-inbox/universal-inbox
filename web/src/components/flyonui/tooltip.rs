@@ -17,33 +17,38 @@ pub fn Tooltip(
     disabled: ReadSignal<Option<bool>>,
     children: Element,
 ) -> Element {
-    let placement_class = placement.unwrap_or(TooltipPlacement::Left).to_string();
+    if disabled().unwrap_or_default() {
+        return rsx! { { children } };
+    }
+
+    let placement_attr = placement.unwrap_or(TooltipPlacement::Left).to_data_attr();
     let mut mounted_element: Signal<Option<web_sys::Element>> = use_signal(|| None);
+
     use_drop(move || {
         if let Some(element) = mounted_element() {
             forget_flyonui_tooltip_element(&element);
         }
     });
 
-    if disabled().unwrap_or_default() {
-        return rsx! { { children } };
-    }
-
     rsx! {
-        div {
-            class: "tooltip {placement_class} {class().unwrap_or_default()}",
+        span {
+            class: "tooltip {tooltip_class().unwrap_or_default()} {class().unwrap_or_default()}",
+            style: "--placement: {placement_attr};",
             onmounted: move |element| {
                 let web_element = element.as_web_event();
                 init_flyonui_tooltip_element(&web_element);
                 mounted_element.set(Some(web_element));
             },
 
-            { children }
+            span {
+                class: "tooltip-toggle",
+                { children }
+            }
 
             span {
-                class: "tooltip-content tooltip-shown:opacity-100 tooltip-shown:visible",
+                class: "tooltip-content tooltip-shown:opacity-100 tooltip-shown:visible hidden",
                 role: "tooltip",
-                span { class: "tooltip-body text-xs {tooltip_class().unwrap_or_default()}", "{text}" }
+                span { class: "tooltip-body", "{text}" }
             }
         }
     }
@@ -66,22 +71,27 @@ pub enum TooltipPlacement {
     RightEnd,
 }
 
+impl TooltipPlacement {
+    pub fn to_data_attr(&self) -> &'static str {
+        match self {
+            TooltipPlacement::Top => "top",
+            TooltipPlacement::TopStart => "top-start",
+            TooltipPlacement::TopEnd => "top-end",
+            TooltipPlacement::Bottom => "bottom",
+            TooltipPlacement::BottomStart => "bottom-start",
+            TooltipPlacement::BottomEnd => "bottom-end",
+            TooltipPlacement::Left => "left",
+            TooltipPlacement::LeftStart => "left-start",
+            TooltipPlacement::LeftEnd => "left-end",
+            TooltipPlacement::Right => "right",
+            TooltipPlacement::RightStart => "right-start",
+            TooltipPlacement::RightEnd => "right-end",
+        }
+    }
+}
+
 impl fmt::Display for TooltipPlacement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let placement = match self {
-            TooltipPlacement::Top => "[--placement:top]",
-            TooltipPlacement::TopStart => "[--placement:top-start]",
-            TooltipPlacement::TopEnd => "[--placement:top-end]",
-            TooltipPlacement::Bottom => "[--placement:bottom]",
-            TooltipPlacement::BottomStart => "[--placement:bottom-start]",
-            TooltipPlacement::BottomEnd => "[--placement:bottom-end]",
-            TooltipPlacement::Left => "[--placement:left]",
-            TooltipPlacement::LeftStart => "[--placement:left-start]",
-            TooltipPlacement::LeftEnd => "[--placement:left-end]",
-            TooltipPlacement::Right => "[--placement:right]",
-            TooltipPlacement::RightStart => "[--placement:right-start]",
-            TooltipPlacement::RightEnd => "[--placement:right-end]",
-        };
-        write!(f, "{}", placement)
+        write!(f, "{}", self.to_data_attr())
     }
 }

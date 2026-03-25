@@ -434,6 +434,78 @@ impl IntegrationConnectionService {
 
         Ok(updated_integration_connection_config)
     }
+
+    /// Null out every sync timestamp on the given integration connection so the
+    /// UI's sync_summary falls through to the "pending" arm (renders the
+    /// `.sync-led.pending` LED). Used only by the documentation screenshot
+    /// generator.
+    #[cfg(feature = "screenshots")]
+    #[tracing::instrument(level = "info", skip(self), err)]
+    pub async fn force_clear_sync_state(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        integration_connection_id: IntegrationConnectionId,
+    ) -> Result<(), UniversalInboxError> {
+        sqlx::query(
+            r#"
+                UPDATE integration_connection
+                SET last_notifications_sync_scheduled_at = NULL,
+                    last_notifications_sync_started_at = NULL,
+                    last_notifications_sync_completed_at = NULL,
+                    last_notifications_sync_failed_at = NULL,
+                    last_notifications_sync_failure_message = NULL,
+                    notifications_sync_failures = 0,
+                    first_notifications_sync_failed_at = NULL,
+                    last_tasks_sync_scheduled_at = NULL,
+                    last_tasks_sync_started_at = NULL,
+                    last_tasks_sync_completed_at = NULL,
+                    last_tasks_sync_failed_at = NULL,
+                    last_tasks_sync_failure_message = NULL,
+                    tasks_sync_failures = 0,
+                    first_tasks_sync_failed_at = NULL
+                WHERE id = $1
+            "#,
+        )
+        .bind(integration_connection_id.0)
+        .execute(&mut **executor)
+        .await
+        .map_err(|err| UniversalInboxError::DatabaseError {
+            source: err,
+            message: format!(
+                "Failed to clear sync state on integration connection {integration_connection_id}"
+            ),
+        })?;
+        Ok(())
+    }
+
+    /// Force-set an integration connection's status and registered OAuth scopes.
+    ///
+    /// Only used by the documentation screenshot generator (`cargo run --features
+    /// screenshots -- test generate-doc-screenshots`) to reproduce error/edge-state
+    /// UIs against a throwaway test user. Not exposed via HTTP routes.
+    #[cfg(feature = "screenshots")]
+    #[tracing::instrument(level = "info", skip(self), err)]
+    pub async fn force_set_integration_connection_state(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        integration_connection_id: IntegrationConnectionId,
+        status: IntegrationConnectionStatus,
+        failure_message: Option<String>,
+        registered_oauth_scopes: Option<Vec<String>>,
+        for_user_id: UserId,
+    ) -> Result<UpdateStatus<Box<IntegrationConnection>>, UniversalInboxError> {
+        self.repository
+            .update_integration_connection_status(
+                executor,
+                integration_connection_id,
+                status,
+                failure_message,
+                registered_oauth_scopes,
+                for_user_id,
+            )
+            .await
+    }
+
     #[tracing::instrument(
         level = "debug",
         skip_all,
