@@ -22,6 +22,6 @@ From the user profile screen:
 
 Use the API key as a Bearer token in the `Authorization` header:
 
-```
+```http
 Authorization: Bearer <your-api-key>
 ```
