@@ -4,7 +4,6 @@ use std::collections::HashMap;
 
 use chrono::{Local, SecondsFormat};
 use dioxus::prelude::*;
-use dioxus_free_icons::{Icon, icons::bs_icons::BsPlug};
 
 use universal_inbox::{
     IntegrationProviderStaticConfig,
@@ -18,6 +17,7 @@ use crate::{
     components::{
         flyonui::tooltip::{Tooltip, TooltipPlacement},
         integrations::icons::IntegrationProviderIcon,
+        ui::KeyboardHint,
     },
     config::APP_CONFIG,
     route::Route,
@@ -25,27 +25,25 @@ use crate::{
 };
 
 pub fn Footer() -> Element {
-    let (message, message_style, container_style) = use_memo(move || {
+    let (message, message_class) = use_memo(move || {
         let Some(integration_connections) = INTEGRATION_CONNECTIONS() else {
-            return (None, "", "max-sm:hidden");
+            return (None, "");
         };
         let Some(app_config) = APP_CONFIG() else {
-            return (None, "", "max-sm:hidden");
+            return (None, "");
         };
         let has_connection_issue = integration_connections.iter().any(|c| c.is_failing());
         if has_connection_issue {
             return (
                 Some("Some integrations have issues, please reconnect them."),
-                "bg-error text-error-content",
-                "",
+                "error",
             );
         };
         let has_degraded_sync = integration_connections.iter().any(|c| c.is_sync_degraded());
         if has_degraded_sync {
             return (
                 Some("Some integrations are experiencing sync issues. Retrying automatically."),
-                "bg-warning text-warning-content",
-                "",
+                "warning",
             );
         };
         let has_missing_permission = integration_connections.iter().any(|c| {
@@ -59,8 +57,7 @@ pub fn Footer() -> Element {
         if has_missing_permission {
             return (
                 Some("Some integrations are missing permissions, please reconnect them."),
-                "bg-warning text-warning-content",
-                "",
+                "warning",
             );
         }
         let has_slack_extension_enabled = integration_connections.iter().any(|c| {
@@ -90,51 +87,42 @@ pub fn Footer() -> Element {
             if extension_not_detected {
                 return (
                     Some("Slack browser extension not detected. Install or check it is running."),
-                    "bg-warning text-warning-content",
-                    "",
+                    "warning",
                 );
             }
         }
-        (None, "", "max-sm:hidden")
+        (None, "")
     })();
 
     rsx! {
         footer {
-            class: "w-full max-h-20",
+            class: "h-7 shrink-0 flex items-center justify-between px-3 bg-ui-surface border-t border-ui-border text-xs text-ui-base-muted z-50",
 
-            hr { class: "text-gray-200" }
-            div {
-                class: "w-full flex max-sm:flex-col gap-2 p-1 justify-end items-center",
-
-                div {
-                    class: "text-xs text-base-content/50 pointer-coarse:hidden",
-                    "Press "
-                    kbd { class: "kbd kbd-xs", "?" }
-                    " to display keyboard shortcuts"
-                }
-
-                div {
-                    class: "grow {container_style}",
-
-                    if let Some(message) = message {
-                        div {
-                            class: "{message_style} w-full rounded-sm p-1.5 flex justify-center text-xs",
-                            Link {
-                                to: Route::SettingsPage {},
-                                span { "{message}" }
-                            }
-                        }
+            if let Some(integration_connections) = INTEGRATION_CONNECTIONS().as_ref() {
+                if let Some(app_config) = APP_CONFIG().as_ref() {
+                    IntegrationConnectionsStatus {
+                        integration_connections: integration_connections.clone(),
+                        integration_providers: app_config.integration_providers.clone()
                     }
                 }
+            }
 
-                if let Some(integration_connections) = INTEGRATION_CONNECTIONS().as_ref() {
-                    if let Some(app_config) = APP_CONFIG().as_ref() {
-                        IntegrationConnectionsStatus {
-                            integration_connections: integration_connections.clone(),
-                            integration_providers: app_config.integration_providers.clone()
-                        }
+            if let Some(message) = message {
+                Link {
+                    to: Route::SettingsPage {},
+                    class: "max-md:hidden",
+                    div { class: "footer-alert {message_class}",
+                        span { "{message}" }
                     }
                 }
+            }
+
+            div { class: "flex items-center gap-2.5 max-md:hidden",
+                KeyboardHint { keys: vec!["↑↓".to_string()], label: "navigate".to_string() }
+                KeyboardHint { keys: vec!["d".to_string()], label: "delete".to_string() }
+                KeyboardHint { keys: vec!["s".to_string()], label: "snooze".to_string() }
+                KeyboardHint { keys: vec!["t".to_string()], label: "task".to_string() }
+                KeyboardHint { keys: vec!["?".to_string()], label: "help".to_string() }
             }
         }
     }
@@ -145,113 +133,57 @@ pub fn IntegrationConnectionsStatus(
     integration_connections: Vec<IntegrationConnection>,
     integration_providers: HashMap<IntegrationProviderKind, IntegrationProviderStaticConfig>,
 ) -> Element {
-    let connection_issue_tooltip = if !integration_connections.iter().any(|c| c.is_connected()) {
-        Some("No integration connected")
-    } else if !integration_connections
-        .iter()
-        .any(|c| c.is_connected_task_service())
-    {
-        Some("No task management integration connected")
-    } else {
-        None
+    let collect_group = |predicate: fn(IntegrationProviderKind) -> bool| {
+        let mut group: Vec<(IntegrationConnection, IntegrationProviderStaticConfig)> =
+            integration_connections
+                .iter()
+                .filter(|c| predicate(c.provider.kind()))
+                .filter_map(|c| {
+                    integration_providers
+                        .get(&c.provider.kind())
+                        .filter(|cfg| cfg.is_enabled)
+                        .map(|cfg| (c.clone(), cfg.clone()))
+                })
+                .collect();
+        group.sort_by(|(a, _), (b, _)| {
+            a.provider
+                .kind()
+                .to_string()
+                .cmp(&b.provider.kind().to_string())
+        });
+        group
     };
-    let mut sorted_notification_connections = integration_connections
-        .iter()
-        .filter(|c| c.provider.kind().is_notification_service())
-        .collect::<Vec<&IntegrationConnection>>();
-    sorted_notification_connections.sort_by(|a, b| {
-        a.provider
-            .kind()
-            .to_string()
-            .cmp(&b.provider.kind().to_string())
-    });
 
-    let mut sorted_task_connections = integration_connections
-        .iter()
-        .filter(|c| c.provider.kind().is_task_service())
-        .collect::<Vec<&IntegrationConnection>>();
-    sorted_task_connections.sort_by(|a, b| {
-        a.provider
-            .kind()
-            .to_string()
-            .cmp(&b.provider.kind().to_string())
-    });
+    let notification_group = collect_group(|k| k.is_notification_service());
+    let task_group = collect_group(|k| k.is_task_service());
+    let utility_group = collect_group(|k| !k.is_notification_service() && !k.is_task_service());
 
-    let mut sorted_utils_connections = integration_connections
-        .iter()
-        .filter(|c| {
-            !c.provider.kind().is_notification_service() && !c.provider.kind().is_task_service()
-        })
-        .collect::<Vec<&IntegrationConnection>>();
-    sorted_utils_connections.sort_by(|a, b| {
-        a.provider
-            .kind()
-            .to_string()
-            .cmp(&b.provider.kind().to_string())
-    });
+    let need_divider_after_notifications =
+        !notification_group.is_empty() && (!task_group.is_empty() || !utility_group.is_empty());
+    let need_divider_after_tasks = !task_group.is_empty() && !utility_group.is_empty();
 
     rsx! {
-        div {
-            class: "flex divide-x divide-base-content/25 items-center",
-
-            if let Some(tooltip) = connection_issue_tooltip {
-                div {
-                    class: "px-2",
-                    Tooltip {
-                        tooltip_class: "tooltip-error",
-                        text: "{tooltip}",
-                        placement: TooltipPlacement::Left,
-
-                        Link {
-                            class: "tooltip-toggle text-error",
-                            to: Route::SettingsPage {},
-                            Icon { class: "w-5 h-5", icon: BsPlug }
-                        }
-                    }
+        div { class: "flex items-center gap-1.5",
+            for (connection, config) in notification_group {
+                IntegrationConnectionStatus { connection, config }
+            }
+            if need_divider_after_notifications {
+                span {
+                    class: "inline-block w-px h-3.5 bg-ui-border mx-1 shrink-0",
+                    aria_hidden: "true"
                 }
             }
-
-            div {
-                class: "px-2",
-                for integration_connection in sorted_notification_connections {
-                    if let Some(provider_config) = integration_providers.get(&integration_connection.provider.kind()) {
-                        if provider_config.is_enabled {
-                            IntegrationConnectionStatus {
-                                connection: integration_connection.clone(),
-                                config: provider_config.clone(),
-                            }
-                        }
-                    }
+            for (connection, config) in task_group {
+                IntegrationConnectionStatus { connection, config }
+            }
+            if need_divider_after_tasks {
+                span {
+                    class: "inline-block w-px h-3.5 bg-ui-border mx-1 shrink-0",
+                    aria_hidden: "true"
                 }
             }
-
-            div {
-                class: "px-2",
-                for integration_connection in sorted_task_connections {
-                    if let Some(provider_config) = integration_providers.get(&integration_connection.provider.kind()) {
-                        if provider_config.is_enabled {
-                            IntegrationConnectionStatus {
-                                connection: integration_connection.clone(),
-                                config: provider_config.clone(),
-                            }
-                        }
-                    }
-                }
-            }
-
-            div {
-                class: "px-2",
-                for integration_connection in sorted_utils_connections {
-                    if let Some(provider_config) = integration_providers.get(&integration_connection.provider.kind()) {
-                        if provider_config.is_enabled {
-                            IntegrationConnectionStatus {
-                                connection: integration_connection.clone(),
-                                config: provider_config.clone(),
-                                icon_class: "w-6 h-6",
-                            }
-                        }
-                    }
-                }
+            for (connection, config) in utility_group {
+                IntegrationConnectionStatus { connection, config }
             }
         }
     }
@@ -259,14 +191,20 @@ pub fn IntegrationConnectionsStatus(
 
 #[component]
 pub fn IntegrationConnectionStatus(
-    connection: ReadSignal<IntegrationConnection>,
-    config: ReadSignal<IntegrationProviderStaticConfig>,
-    icon_class: Option<&'static str>,
+    connection: IntegrationConnection,
+    config: IntegrationProviderStaticConfig,
 ) -> Element {
-    let icon_style = icon_class.unwrap_or("w-4 h-4");
-    let provider_kind = connection().provider.kind();
-    let connection_is_syncing = connection().is_syncing();
-    let (connection_style, tooltip_style, tooltip) = use_memo(move || match connection() {
+    let provider_kind = connection.provider.kind();
+    let connection_is_syncing = connection.is_syncing();
+    // Returns (legacy class hook, dot-color utility, optional opacity utility, tooltip).
+    // The legacy `.footer-integration.syncing` class is load-bearing: it is the
+    // selector that triggers `@keyframes footer-led-pulse` on the child
+    // `.footer-status-dot` (see `web/css/universal-inbox.css`). All other
+    // status modifiers (`connected`, `error`, `disconnected`) are kept as
+    // semantic hooks and to preserve `data-*`-style debuggability, but their
+    // visual effect (dot fill color, opacity) is now driven by the per-status
+    // utility classes below.
+    let (status_class, dot_color_class, dim_class, tooltip) = use_memo(move || match &connection {
         IntegrationConnection {
             status: ConnectionStatus::Validated,
             last_notifications_sync_started_at: notifs_started_at,
@@ -275,7 +213,7 @@ pub fn IntegrationConnectionStatus(
             last_tasks_sync_failure_message: None,
             ..
         } => {
-            if connection().has_oauth_scopes(&config().required_oauth_scopes) {
+            if connection.has_oauth_scopes(&config.required_oauth_scopes) {
                 let started_at = match (notifs_started_at, tasks_started_at) {
                     (Some(notifs_started_at), Some(tasks_started_at)) => {
                         Some(notifs_started_at.max(tasks_started_at))
@@ -284,9 +222,15 @@ pub fn IntegrationConnectionStatus(
                     (None, Some(tasks_started_at)) => Some(tasks_started_at),
                     _ => None,
                 };
+                let (status, dot_color) = if connection_is_syncing {
+                    ("syncing", "bg-ui-warning")
+                } else {
+                    ("connected", "bg-ui-success")
+                };
                 (
-                    "text-success",
-                    "tooltip-success",
+                    status,
+                    dot_color,
+                    "",
                     started_at
                         .map(|started_at| {
                             format!(
@@ -300,8 +244,9 @@ pub fn IntegrationConnectionStatus(
                 )
             } else {
                 (
-                    "text-warning",
-                    "tooltip-warning",
+                    "error",
+                    "bg-ui-error",
+                    "",
                     format!(
                         "{provider_kind} connection is missing some permissions, please reconnect."
                     ),
@@ -313,8 +258,9 @@ pub fn IntegrationConnectionStatus(
             failure_message: message,
             ..
         } => (
-            "text-error",
-            "tooltip-error",
+            "error",
+            "bg-ui-error",
+            "",
             message
                 .as_ref()
                 .map(|message| format!("{provider_kind} connection failed: {message}"))
@@ -330,31 +276,41 @@ pub fn IntegrationConnectionStatus(
             last_tasks_sync_failure_message: Some(message),
             ..
         } => (
-            "text-warning",
-            "tooltip-warning",
+            "error",
+            "bg-ui-error",
+            "",
             format!("{provider_kind} sync is degraded: {message}"),
         ),
         IntegrationConnection { .. } => (
-            "",
-            "",
+            "disconnected",
+            "bg-ui-base-muted",
+            "opacity-[0.55]",
             format!("{provider_kind} connection is not connected."),
         ),
     })();
 
     rsx! {
-        Tooltip {
-            tooltip_class: "{tooltip_style}",
-            text: "{tooltip}",
-            placement: TooltipPlacement::Left,
-
+        Link {
+            to: Route::SettingsPage {},
             div {
-                class: "relative flex items-center justify-center w-6 h-6 tooltip-toggle",
-                if connection_is_syncing {
-                    span { class: "absolute top-0 left-0 w-6 h-6 loading loading-spinner loading-xs {connection_style} opacity-50" }
-                }
-                Link {
-                    to: Route::SettingsPage {},
-                    IntegrationProviderIcon { class: "{icon_style} rounded-full {connection_style}", provider_kind: provider_kind },
+                // `.footer-integration` + `.syncing` are load-bearing class hooks
+                // for the `footer-led-pulse` keyframe (see
+                // `web/css/universal-inbox.css`). Do not remove. Everything else
+                // is utility-driven.
+                class: "footer-integration {status_class} flex items-center relative px-1.5 py-0.5 rounded-ui-sm transition-colors duration-150 hover:bg-ui-surface-hover cursor-default {dim_class}",
+                Tooltip {
+                    text: tooltip,
+                    placement: TooltipPlacement::Top,
+                    span {
+                        class: "relative inline-flex items-center justify-center w-4 h-4",
+                        IntegrationProviderIcon { class: "w-4 h-4".to_string(), provider_kind }
+                        // `.footer-status-dot` is the load-bearing target of the
+                        // pulse keyframe under `.footer-integration.syncing`. The
+                        // dot's fill color is utility-driven via `{dot_color_class}`.
+                        span {
+                            class: "footer-status-dot absolute -bottom-[3px] -right-[4px] w-[7px] h-[7px] rounded-full border-[1.5px] border-ui-surface shrink-0 {dot_color_class}"
+                        }
+                    }
                 }
             }
         }

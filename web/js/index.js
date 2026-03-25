@@ -1,33 +1,145 @@
 import { Crisp } from "crisp-sdk-web";
 
-import "flyonui/dist/dropdown";
 import "flyonui/dist/collapse";
 import "flyonui/dist/tabs";
 import "flyonui/dist/overlay";
-import "flyonui/dist/select";
 import "flyonui/dist/tooltip";
 import flatpickr from "flatpickr";
 export { flatpickr };
 
-// Flyonui dropdown component hooks
-export function init_flyonui_dropdown_element(element) {
-    if (typeof window.$hsDropdownCollection === "object") {
-        if (
-            element &&
-            !window.$hsDropdownCollection.find(
-                (el) => el?.element?.el === element,
-            )
-        ) {
-            new HSDropdown(element);
-        }
-    }
+// Mount sandboxed email-body iframes (.ui-email-frame-host) entirely from JS.
+// Dioxus only renders a `<div class="ui-email-frame-host" data-html="…">`
+// placeholder; this code creates the actual `<iframe>` and sets its srcdoc /
+// sandbox / load handler. Keeping the heavy srcdoc string off the Dioxus VDOM
+// avoids a `Dropped(ValueDroppedError)` panic in long Gmail threads (20+
+// messages) where re-rendering many large `srcdoc` attributes raced with
+// Dioxus' Callback machinery.
+// Font defaults inside the iframe match the rest of the app (DM Sans). They're
+// applied at the lowest cascade specificity (`html, body` selectors with no
+// !important) so any email that specifies its own font — via inline `style`
+// attributes on tables/cells, `<font face=…>`, or its own `<style>` block —
+// overrides them. The default text color tracks the parent app theme so
+// unstyled emails stay readable in both light and dark modes; emails that
+// declare their own color win via the same low-specificity cascade.
+const EMAIL_FRAME_FOOT = "</body></html>";
+
+function isDarkTheme() {
+    return document.documentElement.getAttribute("data-theme") === "dark";
 }
 
-export function forget_flyonui_dropdown_element(element) {
-    if (typeof window.$hsDropdownCollection === "object") {
-        window.$hsDropdownCollection = window.$hsDropdownCollection.filter(
-            (el) => el?.element?.el !== element,
+function buildEmailFrameHead(dark) {
+    const textColor = dark ? "#e2e8f0" : "#0f172a";
+    const colorScheme = dark ? "dark" : "light";
+    return (
+        '<!doctype html><html><head><meta charset="utf-8">' +
+        '<base target="_blank">' +
+        "<style>" +
+        "@font-face{font-family:'DM Sans';font-style:normal;font-weight:100 1000;" +
+        "font-display:swap;src:url('/fonts/DMSans-Regular.woff2') format('woff2');}" +
+        "html{color-scheme:" + colorScheme + ";}" +
+        "html,body{margin:0;padding:0;background:transparent;color:" + textColor + ";" +
+        "font-family:'DM Sans',system-ui,-apple-system,'Segoe UI',Roboto," +
+        "'Helvetica Neue',Arial,sans-serif;font-size:13px;line-height:1.55;" +
+        "-webkit-font-smoothing:antialiased;}" +
+        "body{overflow:hidden;}img{max-width:100%;height:auto;}" +
+        "</style>" +
+        "</head><body>"
+    );
+}
+
+function buildEmailIframe(host) {
+    const html = host.dataset.html || "";
+    const srcdoc = buildEmailFrameHead(isDarkTheme()) + html + EMAIL_FRAME_FOOT;
+
+    // Re-render path: when Dioxus reuses the host div for a new notification,
+    // it just rewrites `data-html`. Keep the existing iframe and swap its
+    // srcdoc so we don't lose the load handler or flash a fresh reflow.
+    const existing = host.querySelector(":scope > iframe.ui-email-frame");
+    if (existing) {
+        if (existing.srcdoc !== srcdoc) {
+            existing.srcdoc = srcdoc;
+        }
+        return;
+    }
+
+    host.dataset.uiEmailFrameMounted = "true";
+    const iframe = document.createElement("iframe");
+    iframe.className = "ui-email-frame";
+    iframe.setAttribute(
+        "sandbox",
+        "allow-same-origin allow-popups allow-popups-to-escape-sandbox",
+    );
+    iframe.setAttribute("referrerpolicy", "no-referrer");
+    iframe.setAttribute("loading", "lazy");
+    iframe.srcdoc = srcdoc;
+
+    const resize = () => {
+        try {
+            const doc = iframe.contentDocument;
+            const root = doc?.documentElement;
+            if (root) {
+                iframe.style.height = root.scrollHeight + "px";
+            }
+        } catch (_) {
+            // Cross-origin frames or detached iframes — ignore.
+        }
+    };
+    iframe.addEventListener("load", resize);
+
+    host.appendChild(iframe);
+    // Initial measurement in case the load event already fired.
+    resize();
+}
+
+if (typeof window !== "undefined" && typeof MutationObserver !== "undefined") {
+    const scan = (root) => {
+        if (!root || !root.querySelectorAll) return;
+        if (root.matches?.(".ui-email-frame-host")) {
+            buildEmailIframe(root);
+        }
+        root.querySelectorAll?.(".ui-email-frame-host").forEach(
+            buildEmailIframe,
         );
+    };
+    const observer = new MutationObserver((records) => {
+        for (const r of records) {
+            if (r.type === "attributes") {
+                if (
+                    r.target.nodeType === 1 &&
+                    r.target.matches?.(".ui-email-frame-host")
+                ) {
+                    buildEmailIframe(r.target);
+                }
+            } else {
+                r.addedNodes?.forEach((n) => {
+                    if (n.nodeType === 1) scan(n);
+                });
+            }
+        }
+    });
+    const refreshAllIframes = () => {
+        document
+            .querySelectorAll(".ui-email-frame-host")
+            .forEach(buildEmailIframe);
+    };
+    const themeObserver = new MutationObserver(refreshAllIframes);
+    const start = () => {
+        scan(document.body);
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ["data-html"],
+        });
+        themeObserver.observe(document.documentElement, {
+            attributes: true,
+            attributeFilter: ["data-theme"],
+        });
+    };
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", start);
+    } else {
+        start();
     }
 }
 
@@ -116,62 +228,30 @@ export function has_flyonui_modal_opened() {
     }
 }
 
-// Flyonui select component hooks
-export function init_flyonui_select_element(element) {
-    if (typeof window.$hsSelectCollection === "object") {
-        if (
-            element &&
-            !window.$hsSelectCollection.find(
-                (el) => el?.element?.el === element,
-            )
-        ) {
-            new HSSelect(element);
-        }
-    }
-}
-
-export function forget_flyonui_select_element(element) {
-    if (typeof window.$hsSelectCollection === "object") {
-        window.$hsSelectCollection = window.$hsSelectCollection.filter(
-            (el) => el?.element?.el !== element,
-        );
-    }
-}
-
-export function destroy_flyonui_select_element(element) {
-    const select_element = HSSelect.getInstance(element);
-    if (select_element) {
-        select_element.destroy();
-    }
-}
-
-export function get_flyonui_selected_remote_value(element) {
-    const select_element = HSSelect.getInstance(element);
-    if (select_element) {
-        const val_field = select_element.apiFieldsMap.val;
-        const selected_value = select_element.value;
-        return select_element.remoteOptions.find(
-            (opt) => opt[val_field] == selected_value,
-        );
-    }
-}
-
 // Flyonui tooltip component hooks
 export function init_flyonui_tooltip_element(element) {
-    if (typeof window.$hsTooltipCollection === "object") {
-        if (
-            element &&
-            !window.$hsTooltipCollection.find(
-                (el) => el?.element?.el === element,
-            )
-        ) {
-            new HSTooltip(element);
-        }
+    if (!element) return;
+    // HSTooltip.autoInit() seeds $hsTooltipCollection on window.load. If a
+    // Dioxus component mounts before that fires, the array is undefined and
+    // HSTooltip's constructor would crash. Seed it ourselves to be safe.
+    if (!Array.isArray(window.$hsTooltipCollection)) {
+        window.$hsTooltipCollection = [];
+    }
+    if (
+        !window.$hsTooltipCollection.find((el) => el?.element?.el === element)
+    ) {
+        new HSTooltip(element);
     }
 }
 
 export function forget_flyonui_tooltip_element(element) {
-    if (typeof window.$hsTooltipCollection === "object") {
+    if (!element || !Array.isArray(window.$hsTooltipCollection)) return;
+    const entry = window.$hsTooltipCollection.find(
+        (el) => el?.element?.el === element,
+    );
+    if (entry?.element?.destroy) {
+        entry.element.destroy();
+    } else {
         window.$hsTooltipCollection = window.$hsTooltipCollection.filter(
             (el) => el?.element?.el !== element,
         );

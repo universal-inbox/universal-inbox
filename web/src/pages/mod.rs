@@ -6,6 +6,7 @@ pub mod passkey_login_page;
 pub mod passkey_signup_page;
 pub mod password_reset_page;
 pub mod password_update_page;
+pub mod security_page;
 pub mod settings_page;
 pub mod signup_page;
 pub mod synced_tasks_page;

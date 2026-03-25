@@ -38,10 +38,15 @@ pub fn SettingsPage() -> Element {
     {
         return rsx! {
             div {
-                class: "h-full mx-auto flex flex-row px-4",
+                class: "flex-1 overflow-y-auto bg-ui-base-200",
 
                 div {
-                    class: "h-full w-full overflow-y-auto scroll-y-auto px-2",
+                    // Settings shell: 16/20/40 padding, 740px max width, fade-up
+                    // on mount. The `animate-detail-fade` utility maps to the
+                    // `detail-fade` keyframe via the `--animate-detail-fade`
+                    // @theme entry; same animation timing as the legacy
+                    // `.settings-container` rule.
+                    class: "px-5 pt-4 pb-10 max-w-[740px] mx-auto animate-detail-fade",
 
                     IntegrationsPanel {
                         ui_model: UI_MODEL.signal(),

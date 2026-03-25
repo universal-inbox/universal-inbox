@@ -3,7 +3,6 @@
 use std::{fmt::Display, marker::PhantomData, str::FromStr};
 
 use dioxus::prelude::*;
-use dioxus_free_icons::{Icon, icons::bs_icons::BsCalendarEvent};
 use log::error;
 use wasm_bindgen::prelude::*;
 use web_sys::HtmlInputElement;
@@ -19,7 +18,7 @@ extern "C" {
     #[wasm_bindgen(constructor)]
     fn new(datepicker: web_sys::HtmlInputElement, options: JsValue) -> Datepicker;
 
-    fn flatpickr(flatpickr: web_sys::HtmlInputElement);
+    pub fn flatpickr(flatpickr: web_sys::HtmlInputElement);
 }
 
 #[derive(Props, Clone, PartialEq)]
@@ -56,7 +55,7 @@ where
         }
     });
 
-    let icon = rsx! { Icon { icon: BsCalendarEvent } };
+    let icon = rsx! { span { class: "icon-[lucide--calendar]" } };
 
     rsx! {
         FloatingLabelInputText::<T> {

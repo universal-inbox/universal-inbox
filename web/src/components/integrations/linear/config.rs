@@ -1,6 +1,5 @@
 #![allow(non_snake_case)]
 use dioxus::prelude::*;
-use serde_json::json;
 
 use universal_inbox::{
     integration_connection::{
@@ -13,9 +12,14 @@ use universal_inbox::{
 
 use crate::{
     components::{
-        floating_label_inputs::{FloatingLabelInputSearchSelect, FloatingLabelSelect},
         flyonui::tooltip::{Tooltip, TooltipPlacement},
-        task_manager_picker::resolve_task_manager_kind,
+        project_search_field::ProjectSearchField,
+        settings_controls::SettingRow,
+        task_manager_picker::{ProviderIcon, resolve_task_manager_kind},
+        ui::{
+            TaskMgrOption, TaskMgrValue, ToggleSize, ToggleSwitch, UISelect, UISelectOption,
+            preset_due_date_options,
+        },
     },
     config::get_api_base_url,
     model::{LoadState, UniversalInboxUIModel},
@@ -61,182 +65,127 @@ pub fn LinearProviderConfiguration(
     let as_tasks_disabled = !ui_model.read().is_task_actions_enabled;
 
     rsx! {
-        div {
-            class: "flex flex-col gap-2",
+        SettingRow {
+            label: rsx! { "Synchronize Linear notifications" },
+            ToggleSwitch {
+                size: ToggleSize::Md,
+                checked: config().sync_notifications_enabled,
+                onchange: move |new_value: bool| {
+                    on_config_change.call(IntegrationConnectionConfig::Linear(LinearConfig {
+                        sync_notifications_enabled: new_value,
+                        ..config()
+                    }))
+                },
+            }
+        }
 
-            div {
-                class: "flex items-center gap-2",
-                label {
-                    class: "label-text cursor-pointer grow text-sm text-base-content",
-                    "Synchronize Linear notifications"
+        Tooltip {
+            placement: TooltipPlacement::Bottom,
+            disabled: !as_tasks_disabled,
+            tooltip_class: "tooltip-error",
+            text: "A task management service must be connected to enable this feature",
+
+            SettingRow {
+                label: rsx! { "Synchronize Linear assigned issues as tasks" },
+                ToggleSwitch {
+                    size: ToggleSize::Md,
+                    checked: config().sync_task_config.enabled,
+                    disabled: as_tasks_disabled,
+                    onchange: move |new_value: bool| {
+                        on_config_change.call(IntegrationConnectionConfig::Linear(LinearConfig {
+                            sync_task_config: LinearSyncTaskConfig {
+                                enabled: new_value,
+                                ..config().sync_task_config
+                            },
+                            ..config()
+                        }))
+                    },
                 }
-                div {
-                    class: "relative inline-block",
-                    input {
-                        r#type: "checkbox",
-                        class: "switch switch-primary switch-outline peer",
-                        oninput: move |event| {
-                            on_config_change.call(IntegrationConnectionConfig::Linear(LinearConfig {
-                                sync_notifications_enabled: event.value() == "true",
-                                ..config()
-                            }))
-                        },
-                        checked: config().sync_notifications_enabled
-                    }
-                    span {
-                        class: "icon-[tabler--check] text-primary absolute start-1 top-1 hidden size-4 peer-checked:block"
-                    }
-                    span {
-                        class: "icon-[tabler--x] text-neutral absolute end-1 top-1 block size-4 peer-checked:hidden"
-                    }
+            }
+        }
+
+        div {
+            class: "collapse transition-[height] duration-300 {collapse_style} pb-0 pr-0",
+
+            SettingRow {
+                label: rsx! { "Project to assign synchronized tasks to" },
+                ProjectSearchField {
+                    api_base_url: api_base_url.clone(),
+                    selected_project: default_project,
+                    provider_kind: Some(resolve_task_manager_kind(default_task_manager_provider_kind())),
+                    on_change: move |project: Option<ProjectSummary>| {
+                        on_config_change.call(IntegrationConnectionConfig::Linear(LinearConfig {
+                            sync_task_config: LinearSyncTaskConfig {
+                                target_project: project.clone(),
+                                ..config().sync_task_config
+                            },
+                            ..config()
+                        }))
+                    },
+                    name: "linear-project-search-input".to_string(),
+                    disabled: !ui_model.read().is_task_actions_enabled,
+                    width: "260px".to_string(),
                 }
             }
 
-            div {
-                class: "flex flex-col gap-2 overflow-visible",
-
-                Tooltip {
-                    placement: TooltipPlacement::Bottom,
-                    disabled: !as_tasks_disabled,
-                    tooltip_class: "tooltip-error",
-                    text: "A task management service must be connected to enable this feature",
-
-                    div {
-                        class: "flex items-center gap-2",
-                        label {
-                            class: "label-text cursor-pointer grow text-sm text-base-content text-start",
-                            "for": "linear-issues-as-tasks",
-                            "Synchronize Linear assigned issues as tasks"
-                        }
-                        div {
-                            class: "relative inline-block",
-                            input {
-                                r#type: "checkbox",
-                                class: "switch switch-primary switch-outline peer",
-                                disabled: as_tasks_disabled,
-                                oninput: move |event| {
-                                    on_config_change.call(IntegrationConnectionConfig::Linear(LinearConfig {
-                                        sync_task_config: LinearSyncTaskConfig {
-                                            enabled: event.value() == "true",
-                                            ..config().sync_task_config
-                                        },
-                                        ..config()
-                                    }))
-                                },
-                                checked: config().sync_task_config.enabled
-                            }
-                            span {
-                                class: "icon-[tabler--check] text-primary absolute start-1 top-1 hidden size-4 peer-checked:block"
-                            }
-                            span {
-                                class: "icon-[tabler--x] text-neutral absolute end-1 top-1 block size-4 peer-checked:hidden"
-                            }
-                        }
-                    }
-                }
-
-                div {
-                    class: "collapse transition-[height] duration-300 {collapse_style} pb-0 pr-0 flex flex-col gap-2",
-
-                    div {
-                        class: "flex items-center gap-2",
-                        label {
-                            class: "label-text cursor-pointer grow text-sm text-base-content",
-                            "Project to assign synchronized tasks to"
-                        }
-                        {
-                            let kind = resolve_task_manager_kind(default_task_manager_provider_kind());
-                            rsx! {
-                                FloatingLabelInputSearchSelect::<ProjectSummary> {
-                                    key: "linear-project-search-{kind}",
-                                    name: "linear-project-search-input".to_string(),
-                                    class: "w-full max-w-xs bg-base-100 rounded-sm",
-                                    required: true,
-                                    disabled: !ui_model.read().is_task_actions_enabled,
-                                    data_select: json!({
-                                        "value": default_project().map(|p| p.source_id.to_string()),
-                                        "apiUrl": format!("{api_base_url}tasks/projects/search"),
-                                        "apiSearchQueryKey": "matches",
-                                        "apiQuery": { "provider_kind": kind.to_string() },
-                                        "apiFieldsMap": {
-                                            "id": "source_id",
-                                            "val": "source_id",
-                                            "title": "name"
-                                        }
-                                    }),
-                                    on_select: move |project: Option<ProjectSummary>| {
-                                        on_config_change.call(IntegrationConnectionConfig::Linear(LinearConfig {
-                                            sync_task_config: LinearSyncTaskConfig {
-                                                target_project: project.clone(),
-                                                ..config().sync_task_config
-                                            },
-                                            ..config()
-                                        }))
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    div {
-                        class: "flex items-center gap-2",
-                        label {
-                            class: "label-text cursor-pointer grow text-sm text-base-content",
-                            "Due date to assign to synchronized tasks"
-                        }
-
-                        FloatingLabelSelect::<PresetDueDate> {
-                            label: None,
-                            class: "max-w-xs",
-                            name: "task-due-at-input".to_string(),
-                            disabled: !ui_model.read().is_task_actions_enabled,
-                            default_value: default_due_at().map(|due| due.to_string()).unwrap_or_default(),
-                            on_select: move |default_due_at| {
-                                on_config_change.call(IntegrationConnectionConfig::Linear(LinearConfig {
-                                    sync_task_config: LinearSyncTaskConfig {
-                                        default_due_at,
-                                        ..config().sync_task_config
-                                    },
-                                    ..config()
-                                }));
+            SettingRow {
+                label: rsx! { "Due date to assign to synchronized tasks" },
+                UISelect::<PresetDueDate> {
+                    value: default_due_at,
+                    options: preset_due_date_options(),
+                    on_change: move |default_due_at| {
+                        on_config_change.call(IntegrationConnectionConfig::Linear(LinearConfig {
+                            sync_task_config: LinearSyncTaskConfig {
+                                default_due_at,
+                                ..config().sync_task_config
                             },
+                            ..config()
+                        }));
+                    },
+                    placeholder: "Pick a due date…".to_string(),
+                    allow_clear: true,
+                    disabled: !ui_model.read().is_task_actions_enabled,
+                    width: "260px".to_string(),
+                    name: "task-due-at-input".to_string(),
+                }
+            }
 
-                            option { selected: default_due_at() == Some(PresetDueDate::Today), "{PresetDueDate::Today}" }
-                            option { selected: default_due_at() == Some(PresetDueDate::Tomorrow), "{PresetDueDate::Tomorrow}" }
-                            option { selected: default_due_at() == Some(PresetDueDate::ThisWeekend), "{PresetDueDate::ThisWeekend}" }
-                            option { selected: default_due_at() == Some(PresetDueDate::NextWeek), "{PresetDueDate::NextWeek}" }
-                        }
-                    }
-
-                    if show_task_manager_select {
-                        div {
-                            class: "flex items-center gap-2",
-                            label {
-                                class: "label-text cursor-pointer grow text-sm text-base-content",
-                                "Task manager to sync with"
-                            }
-                            FloatingLabelSelect::<IntegrationProviderKind> {
-                                label: None,
-                                class: "max-w-xs",
-                                name: "linear-task-manager-input".to_string(),
-                                disabled: !ui_model.read().is_task_actions_enabled,
-                                default_value: default_task_manager_provider_kind().map(|p| p.to_string()).unwrap_or_default(),
-                                on_select: move |task_manager_provider_kind| {
-                                    *default_project.write() = None;
-                                    on_config_change.call(IntegrationConnectionConfig::Linear(LinearConfig {
-                                        sync_task_config: LinearSyncTaskConfig {
-                                            task_manager_provider_kind,
-                                            target_project: None,
-                                            ..config().sync_task_config
-                                        },
-                                        ..config()
-                                    }));
+            if show_task_manager_select {
+                SettingRow {
+                    label: rsx! { "Task manager to sync with" },
+                    UISelect::<IntegrationProviderKind> {
+                        value: default_task_manager_provider_kind,
+                        options: vec![
+                            UISelectOption::new(IntegrationProviderKind::Todoist, "Todoist"),
+                            UISelectOption::new(IntegrationProviderKind::TickTick, "TickTick"),
+                        ],
+                        on_change: move |task_manager_provider_kind| {
+                            *default_project.write() = None;
+                            on_config_change.call(IntegrationConnectionConfig::Linear(LinearConfig {
+                                sync_task_config: LinearSyncTaskConfig {
+                                    task_manager_provider_kind,
+                                    target_project: None,
+                                    ..config().sync_task_config
                                 },
-
-                                option { selected: default_task_manager_provider_kind() == Some(IntegrationProviderKind::Todoist), value: "Todoist", "Todoist" }
-                                option { selected: default_task_manager_provider_kind() == Some(IntegrationProviderKind::TickTick), value: "TickTick", "TickTick" }
-                            }
-                        }
+                                ..config()
+                            }));
+                        },
+                        placeholder: "Pick a task manager…".to_string(),
+                        disabled: !ui_model.read().is_task_actions_enabled,
+                        width: "260px".to_string(),
+                        name: "linear-task-manager-input".to_string(),
+                        render_value: use_callback(move |opt: UISelectOption<IntegrationProviderKind>| {
+                            rsx! { TaskMgrValue {
+                                logo: rsx! { ProviderIcon { kind: Some(opt.value) } },
+                                label: opt.label,
+                            } }
+                        }),
+                        render_option: use_callback(move |opt: UISelectOption<IntegrationProviderKind>| {
+                            rsx! { TaskMgrOption {
+                                logo: rsx! { ProviderIcon { kind: Some(opt.value) } },
+                                label: opt.label,
+                            } }
+                        }),
                     }
                 }
             }

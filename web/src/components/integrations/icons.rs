@@ -1,8 +1,6 @@
 #![allow(non_snake_case)]
 
-use cfg_if::cfg_if;
 use dioxus::prelude::*;
-use dioxus_free_icons::{Icon, icons::bs_icons::BsSlack};
 
 use universal_inbox::{
     integration_connection::provider::IntegrationProviderKind,
@@ -15,25 +13,13 @@ use crate::{
         google_drive::icons::GoogleDrive, google_mail::icons::GoogleMail, linear::icons::Linear,
         todoist::icons::Todoist,
     },
-    icons::UniversalInbox,
+    icons::UILogo,
 };
-
-cfg_if! {
-    if #[cfg(feature = "trunk")] {
-        const NOTION_LOGO: &str = "/images/notion-logo.svg";
-    } else {
-        const NOTION_LOGO: Asset = asset!("/images/notion-logo.svg");
-    }
-}
 
 #[component]
 pub fn Notion(class: Option<String>) -> Element {
-    rsx! {
-        img {
-            class: class.unwrap_or_default(),
-            src: "{NOTION_LOGO}",
-        }
-    }
+    let class = class.unwrap_or_default();
+    rsx! { span { class: "icon-[logos--notion-icon] {class}" } }
 }
 
 #[component]
@@ -76,10 +62,12 @@ pub fn IntegrationProviderIcon(class: String, provider_kind: IntegrationProvider
         IntegrationProviderKind::GoogleMail => rsx! { GoogleMail { class } },
         IntegrationProviderKind::GoogleDrive => rsx! { GoogleDrive { class } },
         IntegrationProviderKind::Notion => rsx! { Notion { class } },
-        IntegrationProviderKind::Slack => rsx! { Icon { class, icon: BsSlack } },
+        IntegrationProviderKind::Slack => {
+            rsx! { span { class: "icon-[logos--slack-icon] {class}" } }
+        }
         IntegrationProviderKind::Todoist => rsx! { Todoist { class } },
         IntegrationProviderKind::TickTick => rsx! { TickTick { class } },
-        IntegrationProviderKind::API => rsx! { UniversalInbox { class } },
+        IntegrationProviderKind::API => rsx! { UILogo { class } },
     }
 }
 
@@ -94,8 +82,8 @@ pub fn NotificationIcon(kind: NotificationSourceKind) -> Element {
         NotificationSourceKind::GoogleMail => rsx! { GoogleMail { class: "h-5 w-5" } },
         NotificationSourceKind::Todoist => rsx! { Todoist { class: "h-5 w-5" } },
         NotificationSourceKind::TickTick => rsx! { TickTick { class: "h-5 w-5" } },
-        NotificationSourceKind::Slack => rsx! { Icon { class: "h-5 w-5", icon: BsSlack } },
-        NotificationSourceKind::API => rsx! { UniversalInbox { class: "h-5 w-5" } },
+        NotificationSourceKind::Slack => rsx! { span { class: "icon-[logos--slack-icon] size-5" } },
+        NotificationSourceKind::API => rsx! { UILogo { class: "h-5 w-5".to_string() } },
     }
 }
 
@@ -106,6 +94,6 @@ pub fn TaskIcon(class: String, kind: TaskSourceKind) -> Element {
         TaskSourceKind::Todoist => rsx! { Todoist { class } },
         TaskSourceKind::TickTick => rsx! { TickTick { class } },
         TaskSourceKind::Linear => rsx! { Linear { class } },
-        TaskSourceKind::Slack => rsx! { Icon { class, icon: BsSlack } },
+        TaskSourceKind::Slack => rsx! { span { class: "icon-[logos--slack-icon]" } },
     }
 }

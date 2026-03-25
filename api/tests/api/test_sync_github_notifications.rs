@@ -791,6 +791,14 @@ async fn test_sync_discussion_notification_with_details(
                             .parse()
                             .unwrap()
                     );
+                    let category = discussion
+                        .category
+                        .as_ref()
+                        .expect("Discussion should have a category");
+                    assert_eq!(category.name, "Q&A");
+                    assert_eq!(category.emoji.as_deref(), Some(":pray:"));
+                    assert_eq!(category.slug, "q-a");
+                    assert!(category.is_answerable);
                 }
                 _ => unreachable!("Expected a GithubDiscussion notification"),
             }

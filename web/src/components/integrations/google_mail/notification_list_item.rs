@@ -3,24 +3,13 @@
 use std::collections::HashSet;
 
 use dioxus::prelude::*;
-use dioxus_free_icons::{
-    Icon,
-    icons::bs_icons::{BsExclamationCircle, BsStar},
-};
 use universal_inbox::{
-    HasHtmlUrl,
-    notification::NotificationWithTask,
-    third_party::integrations::google_mail::{
-        GOOGLE_MAIL_IMPORTANT_LABEL, GOOGLE_MAIL_STARRED_LABEL, GoogleMailThread, MessageSelection,
-    },
+    notification::{NotificationStatus, NotificationWithTask},
+    third_party::integrations::google_mail::{GoogleMailThread, MessageSelection},
 };
 
 use crate::{
-    components::{
-        integrations::google_mail::icons::{GoogleMail, Mail},
-        list::{ListContext, ListItem},
-        notifications_list::{TaskHint, get_notification_list_item_action_buttons},
-    },
+    components::{integrations::google_mail::icons::GoogleMail, list::ListItem},
     utils::format_elapsed_time,
 };
 
@@ -32,44 +21,24 @@ pub fn GoogleMailThreadListItem(
     on_select: EventHandler<()>,
 ) -> Element {
     let notification_updated_at = use_memo(move || format_elapsed_time(notification().updated_at));
-    let list_context = use_context::<Memo<ListContext>>();
-    let is_starred = google_mail_thread().is_tagged_with(GOOGLE_MAIL_STARRED_LABEL, None);
-    let is_important = google_mail_thread().is_tagged_with(GOOGLE_MAIL_IMPORTANT_LABEL, None);
-    let mail_icon_style = match (is_starred, is_important) {
-        (_, true) => "text-red-500",
-        (true, false) => "text-yellow-500",
-        _ => "",
-    };
-    let link = notification().get_html_url();
+    let is_unread = notification().status == NotificationStatus::Unread;
 
     rsx! {
         ListItem {
             key: "{notification().id}",
+            linked_task: notification().task,
             title: "{notification().title}",
-            link,
-            subtitle: rsx! { GoogleMailThreadSubtitle { google_mail_thread } },
+            subtitle: rsx! {
+                GoogleMailThreadSubtitle { google_mail_thread }
+            },
+            time: "{notification_updated_at}",
             icon: rsx! {
                 GoogleMail { class: "h-5 w-5" },
-                TaskHint { task: notification().task }
             },
-            subicon: rsx! { Mail { class: "h-5 w-5 min-w-5 {mail_icon_style}" } },
-            action_buttons: get_notification_list_item_action_buttons(
-                notification,
-                list_context().show_shortcut,
-                None,
-                None
-            ),
+            meta_icon: rsx! { span { class: "icon-[lucide--mail] w-full h-full" } },
             is_selected,
+            is_unread,
             on_select,
-
-            if is_starred {
-                Icon { class: "mx-0.5 h-5 w-5 text-yellow-500", icon: BsStar }
-            }
-            if is_important {
-                Icon { class: "mx-0.5 h-5 w-5 text-red-500", icon: BsExclamationCircle }
-            }
-
-            span { class: "text-base-content/50 whitespace-nowrap text-xs font-mono", "{notification_updated_at}" }
         }
     }
 }
@@ -89,13 +58,13 @@ fn GoogleMailThreadSubtitle(google_mail_thread: ReadSignal<GoogleMailThread>) ->
         .len();
 
     rsx! {
-        div {
-            class: "flex gap-2 text-xs text-base-content/50",
-
+        span {
+            class: "ui-nrow-meta-text",
             if let Some(from_address) = from_address {
-                span { "{from_address}" }
+                "{from_address} ({interlocutors_count})"
+            } else {
+                "({interlocutors_count})"
             }
-            span { "({interlocutors_count})" }
         }
     }
 }

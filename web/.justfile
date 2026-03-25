@@ -51,7 +51,7 @@ test-ci: install build-assets
 run interactive="true": clear-dev-assets build-assets
     #!/usr/bin/env bash
 
-    dx serve --port ${DX_SERVE_PORT:-8080} --verbose --interactive false
+    dx serve --port ${DX_SERVE_PORT:-8080} --verbose --interactive {{ interactive }}
 
 run-tailwind output-dir="public":
     cp node_modules/flatpickr/dist/flatpickr.min.css {{ output-dir }}/css/
@@ -62,3 +62,7 @@ run-bundle-js:
 
 run-trunk:
     trunk serve --features trunk
+
+# Audit CSS to identify unused classes; writes Plans/css-audit-<date>.md
+audit-css *ARGS:
+    python3 scripts/audit_css.py {{ ARGS }}

@@ -98,7 +98,7 @@ async fn test_sync_tasks_should_add_new_task_and_update_existing_one(
                     completed_at: None,
                     priority: todoist::TodoistItemPriority::P4,
                     due: None,
-                    labels: vec!["tag1".to_string()],
+                    labels: vec![todoist::TodoistLabel::from_name("tag1")],
                     parent_id: None,
                     project_id: "1111".to_string(), // ie. "Inbox"
                     //added_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),
@@ -382,6 +382,7 @@ async fn test_sync_tasks_should_add_new_empty_task(
                 responsible_uid: None,
             }]),
             projects: None,
+            labels: None,
             full_sync: true,
             temp_id_mapping: HashMap::new(),
             sync_token: SyncToken("sync_token".to_string()),
@@ -395,6 +396,7 @@ async fn test_sync_tasks_should_add_new_empty_task(
         &TodoistSyncResponse {
             items: None,
             projects: Some(vec![]),
+            labels: None,
             full_sync: true,
             temp_id_mapping: HashMap::new(),
             sync_token: SyncToken("project_sync_token".to_string()),
@@ -462,6 +464,7 @@ async fn test_sync_tasks_should_reuse_existing_sync_token(
     let sync_todoist_items_response = TodoistSyncResponse {
         items: Some(vec![]),
         projects: None,
+        labels: None,
         full_sync: false,
         temp_id_mapping: HashMap::new(),
         sync_token: SyncToken("new_sync_token".to_string()),
@@ -862,7 +865,7 @@ async fn test_sync_all_tasks_asynchronously(
                     completed_at: None,
                     priority: todoist::TodoistItemPriority::P4,
                     due: None,
-                    labels: vec!["tag1".to_string()],
+                    labels: vec![todoist::TodoistLabel::from_name("tag1")],
                     parent_id: None,
                     project_id: "1111".to_string(), // ie. "Inbox"
                     //added_at: Utc.with_ymd_and_hms(2022, 1, 1, 0, 0, 0).unwrap(),

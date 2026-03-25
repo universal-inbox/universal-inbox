@@ -28,7 +28,7 @@ use services::{
     user_preferences_service::{USER_PREFERENCES, user_preferences_service},
     user_service::{AUTH_METHODS, CONNECTED_USER, user_service},
 };
-use theme::{IS_DARK_MODE, toggle_dark_mode};
+use theme::{IS_DARK_MODE, IS_SIDEBAR_COLLAPSED, init_sidebar_collapsed, toggle_dark_mode};
 use utils::{current_location, get_local_storage};
 
 use crate::{
@@ -171,6 +171,8 @@ pub fn App() -> Element {
 
     use_future(move || async move {
         *IS_DARK_MODE.write() = toggle_dark_mode(false).expect("Failed to initialize the theme");
+        *IS_SIDEBAR_COLLAPSED.write() = init_sidebar_collapsed(*VIEWPORT_WIDTH.read())
+            .expect("Failed to initialize the sidebar state");
 
         setup_key_bindings(KEYBOARD_MANAGER.signal().into());
 

@@ -29,7 +29,7 @@ Each integration uses a secure OAuth authorization flow, ensuring your credentia
 After connecting a tool, Universal Inbox automatically fetches notifications and displays them on your [Inbox screen](inbox_screen.md).
 
 ```admonish tip
-Connecting a task management tool (like Todoist) is highly recommended as it enables core features:
+Connecting a task management tool ([Todoist](../config/setup/todoist.md) or [TickTick](../config/setup/ticktick.md)) is highly recommended as it enables core features:
 
 - Converting notifications into tasks
 - Synchronizing tasks across all your connected tools

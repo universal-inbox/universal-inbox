@@ -30,8 +30,22 @@ use crate::{
 pub mod anonymize;
 pub mod generate;
 pub mod oauth;
+#[cfg(feature = "screenshots")]
+pub mod screenshots;
 pub mod sync;
 pub mod user;
+
+async fn shutdown_signal() -> std::io::Result<()> {
+    use tokio::signal::unix::{SignalKind, signal};
+
+    let mut sigterm = signal(SignalKind::terminate())?;
+    let mut sigint = signal(SignalKind::interrupt())?;
+    tokio::select! {
+        _ = sigterm.recv() => {},
+        _ = sigint.recv() => {},
+    }
+    Ok(())
+}
 
 /// Universal Inbox API server and associated commands
 #[derive(Parser)]
@@ -128,8 +142,56 @@ pub enum CacheCommands {
 pub enum TestCommands {
     /// Generate testing user
     GenerateUser,
+    /// Generate an empty user (no integrations, no notifications, no tasks)
+    GenerateEmptyUser,
+    /// Mark a single integration as Validated for an existing user (simulates a completed OAuth2 flow)
+    ConnectIntegration {
+        #[arg(short, long)]
+        user_id: UserId,
+        #[arg(short, long, value_enum, value_parser)]
+        provider: IntegrationProviderKind,
+    },
+    /// Generate sample notifications (one per known integration) for an existing user
+    GenerateNotifications {
+        #[arg(short, long)]
+        user_id: UserId,
+    },
     /// Anonymize database (user emails, names, passwords) after restoring a production backup
     AnonymizeDb,
+    /// Regenerate the documentation screenshots by driving a headless browser
+    /// against the locally running Universal Inbox. Requires building with the
+    /// `screenshots` cargo feature; called by `just doc update-screenshots`.
+    #[cfg(feature = "screenshots")]
+    GenerateDocScreenshots {
+        /// Base URL of the running web frontend (e.g. http://localhost:8080)
+        #[arg(long)]
+        base_url: String,
+        /// Path to the mdBook src directory that contains the image folders
+        #[arg(long, default_value = "../doc/src")]
+        output_dir: std::path::PathBuf,
+        /// Comma-separated list of screenshot names to regenerate (default: all)
+        #[arg(long, value_delimiter = ',')]
+        only: Option<Vec<String>>,
+        /// Skip deleting the generated test user at the end of the run.
+        #[arg(long, default_value_t = false)]
+        keep_user: bool,
+    },
+    /// Record the landing-page screencast to a `.webm` file (silent).
+    /// Drives the browser through the demo scenario at deterministic timings.
+    /// Voiceover + avatar PiP are layered on top in a separate post-production pass
+    /// (see `web/screencasts/landing-page.md`).
+    #[cfg(feature = "screenshots")]
+    RecordLandingScreencast {
+        /// Base URL of the running web frontend (e.g. http://localhost:8080)
+        #[arg(long, default_value = "http://localhost:8080")]
+        base_url: String,
+        /// Output path for the recorded `.webm` (overwritten if it exists).
+        #[arg(long, default_value = "./screen.webm")]
+        output: std::path::PathBuf,
+        /// Skip deleting the recording user at the end of the run.
+        #[arg(long, default_value_t = false)]
+        keep_user: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -300,7 +362,7 @@ impl Cli {
                     )
                     .await;
 
-                    future::try_join(server, worker.run_with_signal(tokio::signal::ctrl_c()))
+                    future::try_join(server, worker.run_with_signal(shutdown_signal()))
                         .await
                         .expect("Failed to wait for Server and asynchronous Workers");
                 } else {
@@ -335,7 +397,7 @@ impl Cli {
                 .await;
 
                 worker
-                    .run_with_signal(tokio::signal::ctrl_c())
+                    .run_with_signal(shutdown_signal())
                     .await
                     .expect("Failed to run asynchronous Workers");
 
@@ -365,7 +427,73 @@ impl Cli {
                     .await?;
                     Ok(())
                 }
+                TestCommands::GenerateEmptyUser => {
+                    let _email = generate::generate_empty_user(user_service).await?;
+                    Ok(())
+                }
+                TestCommands::ConnectIntegration { user_id, provider } => {
+                    generate::connect_integration_for_user(
+                        user_service,
+                        integration_connection_service,
+                        settings,
+                        *user_id,
+                        *provider,
+                    )
+                    .await
+                }
+                TestCommands::GenerateNotifications { user_id } => {
+                    generate::generate_notifications_for_user(
+                        user_service,
+                        integration_connection_service,
+                        notification_service,
+                        task_service,
+                        third_party_item_service,
+                        settings,
+                        *user_id,
+                    )
+                    .await
+                }
                 TestCommands::AnonymizeDb => anonymize::anonymize_database(user_service).await,
+                #[cfg(feature = "screenshots")]
+                TestCommands::GenerateDocScreenshots {
+                    base_url,
+                    output_dir,
+                    only,
+                    keep_user,
+                } => {
+                    screenshots::generate_doc_screenshots(
+                        user_service,
+                        integration_connection_service,
+                        notification_service,
+                        task_service,
+                        third_party_item_service,
+                        settings,
+                        base_url.clone(),
+                        output_dir.clone(),
+                        only.clone(),
+                        *keep_user,
+                    )
+                    .await
+                }
+                #[cfg(feature = "screenshots")]
+                TestCommands::RecordLandingScreencast {
+                    base_url,
+                    output,
+                    keep_user,
+                } => {
+                    screenshots::screencast::record_landing_screencast(
+                        user_service,
+                        integration_connection_service,
+                        notification_service,
+                        task_service,
+                        third_party_item_service,
+                        settings,
+                        base_url.clone(),
+                        output.clone(),
+                        *keep_user,
+                    )
+                    .await
+                }
             },
 
             Commands::User { command } => match command {

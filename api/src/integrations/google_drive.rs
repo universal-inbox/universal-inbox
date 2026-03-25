@@ -136,6 +136,8 @@ pub struct RawGoogleDriveCommentReply {
     pub created_time: DateTime<Utc>,
     #[serde(rename = "modifiedTime")]
     pub modified_time: DateTime<Utc>,
+    #[serde(default)]
+    pub action: Option<String>,
 }
 
 impl RawGoogleDriveCommentReply {
@@ -151,6 +153,7 @@ impl RawGoogleDriveCommentReply {
             },
             created_time: self.created_time,
             modified_time: self.modified_time,
+            action: self.action,
         }
     }
 }
@@ -555,7 +558,10 @@ impl ThirdPartyNotificationSourceService<GoogleDriveComment> for GoogleDriveServ
         source_third_party_item: &ThirdPartyItem,
         user_id: UserId,
     ) -> Result<Box<Notification>, UniversalInboxError> {
-        let title = format!("Comment on {}", source.file_name);
+        let title = format!(
+            "Comment by {} on {}",
+            source.author.display_name, source.file_name
+        );
 
         // If the user sent the last reply, mark as Deleted (user already responded)
         let status = if source.is_last_reply_from_user() {
@@ -719,6 +725,7 @@ mod tests {
                 },
                 created_time: Utc.with_ymd_and_hms(2025, 9, 28, 10, 0, 0).unwrap(),
                 modified_time: Utc.with_ymd_and_hms(2025, 9, 28, 10, 5, 0).unwrap(),
+                action: None,
             }]),
         };
 
@@ -763,6 +770,7 @@ mod tests {
                 },
                 created_time: Utc.with_ymd_and_hms(2025, 9, 28, 10, 0, 0).unwrap(),
                 modified_time: Utc.with_ymd_and_hms(2025, 9, 28, 10, 5, 0).unwrap(),
+                action: None,
             }
         }
 
@@ -795,7 +803,10 @@ mod tests {
         ) -> Notification {
             Notification {
                 id: NotificationId(Uuid::new_v4()),
-                title: format!("Comment on {}", google_drive_comment.file_name),
+                title: format!(
+                    "Comment by {} on {}",
+                    google_drive_comment.author.display_name, google_drive_comment.file_name
+                ),
                 status: NotificationStatus::Unread,
                 created_at: Utc::now(),
                 updated_at: Utc::now(),

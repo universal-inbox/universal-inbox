@@ -36,7 +36,7 @@ async fn test_user_can_register(#[future] browser_tested_app: BrowserTestedApp) 
     navigate_and_assert(&page, "/synced-tasks", "#tasks-page").await;
 
     // Verify settings page loads via SPA navigation (integration cards container)
-    navigate_and_assert(&page, "/settings", "div.card").await;
+    navigate_and_assert(&page, "/settings", "div.integration-card").await;
 }
 
 /// Test that registration fails with an invalid email.
@@ -77,7 +77,7 @@ async fn test_registration_fails_with_invalid_email(
         .expect("Failed to click submit");
 
     // An inline validation error should appear for the email field
-    let error_message = page.locator("span.helper-text").await;
+    let error_message = page.locator("#email-error").await;
     expect(error_message.clone())
         .with_timeout(EXPECT_TIMEOUT)
         .to_be_visible()
@@ -140,7 +140,7 @@ async fn test_registration_fails_with_short_password(
         .expect("Failed to click submit");
 
     // An inline validation error should appear for the password field
-    let error_message = page.locator("span.helper-text").await;
+    let error_message = page.locator("#password-error").await;
     expect(error_message.clone())
         .with_timeout(EXPECT_TIMEOUT)
         .to_be_visible()

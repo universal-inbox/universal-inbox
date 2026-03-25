@@ -10,12 +10,13 @@ use universal_inbox::{FrontAuthenticationConfig, user::Password};
 use crate::{
     auth::authenticate_authorization_code_flow,
     components::{
-        floating_label_inputs::FloatingLabelInputText, loading::Loading,
-        universal_inbox_title::UniversalInboxTitle,
+        auth_widgets::{AuthDivider, GoogleBtn, LegalFooter, PasskeyBtn, PrimaryBtn},
+        floating_label_inputs::FloatingLabelInputText,
+        loading::Loading,
+        ui::PageHeader,
     },
     config::{APP_CONFIG, get_api_base_url},
     form::FormValues,
-    icons::{GOOGLE_LOGO, PASSKEY_LOGO},
     route::Route,
     services::user_service::{CONNECTED_USER, UserCommand},
 };
@@ -54,114 +55,96 @@ pub fn SignupPage() -> Element {
         .any(|auth_config| matches!(auth_config, FrontAuthenticationConfig::Passkey));
 
     rsx! {
-        div {
-            class: "flex flex-col items-center justify-center pb-8",
-            h1 {
-                class: "text-lg font-bold",
-                span { "Create a new " }
-                UniversalInboxTitle {}
-                span { " account" }
+        PageHeader {
+            title: "Create your inbox".to_string(),
+            subtitle: Some("Get triage-ready in under a minute.".to_string()),
+        }
+        p { class: "text-sm text-ui-base-muted leading-normal mb-7",
+            "Already have an account? "
+            Link {
+                class: "text-ui-primary font-semibold no-underline hover:text-ui-primary-hover hover:underline",
+                to: Route::LoginPage {},
+                "Log in"
             }
+            "."
         }
 
-        div {
-            class: "flex flex-col gap-4 pb-8",
-
-            if is_local_auth_enabled {
-                form {
-                    class: "flex flex-col justify-center gap-4 px-10",
-                    onsubmit: move |evt| {
-                        evt.prevent_default();
-                        match FormValues(evt.values()).try_into() {
-                            Ok(params) => {
-                                user_service.send(UserCommand::RegisterUser(params));
-                            },
-                            Err(err) => {
-                                *force_validation.write() = true;
-                                error!("Failed to parse form values as RegisterUserParameters: {err}");
-                            }
+        if is_local_auth_enabled {
+            form {
+                "novalidate": "true",
+                onsubmit: move |evt| {
+                    evt.prevent_default();
+                    match FormValues(evt.values()).try_into() {
+                        Ok(params) => {
+                            user_service.send(UserCommand::RegisterUser(params));
+                        },
+                        Err(err) => {
+                            *force_validation.write() = true;
+                            error!("Failed to parse form values as RegisterUserParameters: {err}");
                         }
-                    },
-
-                    FloatingLabelInputText::<EmailAddress> {
-                        name: "email".to_string(),
-                        label: Some("Email".to_string()),
-                        required: true,
-                        value: email,
-                        force_validation: force_validation(),
-                        r#type: "email".to_string()
                     }
+                },
 
-                    FloatingLabelInputText::<Password> {
-                        name: "password".to_string(),
-                        label: Some("Password".to_string()),
-                        required: true,
-                        value: password,
-                        force_validation: force_validation(),
-                        r#type: "password".to_string()
-                    }
-
-                    button {
-                        class: "btn btn-primary mt-2",
-                        r#type: "submit",
-                        "Sign up"
-                    }
+                FloatingLabelInputText::<EmailAddress> {
+                    name: "email".to_string(),
+                    label: Some("Work email".to_string()),
+                    required: true,
+                    value: email,
+                    force_validation: force_validation(),
+                    r#type: "email".to_string(),
+                    field_icon_class: "icon-[lucide--mail]".to_string(),
+                    placeholder: "you@company.com".to_string(),
                 }
 
-                if is_google_auth_enabled || is_passkey_auth_enabled {
-                    div { class: "divider px-10", "Or" }
+                FloatingLabelInputText::<Password> {
+                    name: "password".to_string(),
+                    label: Some("Password".to_string()),
+                    required: true,
+                    value: password,
+                    force_validation: force_validation(),
+                    r#type: "password".to_string(),
+                    field_icon_class: "icon-[lucide--lock]".to_string(),
+                    placeholder: "At least 10 characters".to_string(),
+                    help: "Use 10+ characters with a mix of letters, numbers and symbols.".to_string(),
                 }
 
+                div { class: "h-1.5" }
+
+                PrimaryBtn { button_type: "submit".to_string(), "Create account" }
+            }
+
+            if is_google_auth_enabled || is_passkey_auth_enabled {
+                AuthDivider { label: "or sign up with".to_string() }
+            }
+
+            div { class: "grid grid-cols-1 gap-2.5",
                 if is_google_auth_enabled {
-                    div {
-                        class: "flex flex-col px-10",
-
-                        button {
-                            class: "btn btn-primary w-full relative",
-                            onclick: move |_| {
-                                spawn({
-                                    async move {
-                                        if let Err(auth_error) =
-                                            authenticate_authorization_code_flow(&api_base_url()).await
-                                        {
-                                            error!("An error occured while authenticating: {:?}", auth_error);
-                                        }
+                    GoogleBtn {
+                        onclick: move |_| {
+                            spawn({
+                                async move {
+                                    if let Err(auth_error) =
+                                        authenticate_authorization_code_flow(&api_base_url()).await
+                                    {
+                                        error!("An error occured while authenticating: {:?}", auth_error);
                                     }
-                                });
-                            },
-
-                            img {
-                                class: "h-8 w-8 bg-white rounded-md absolute left-2",
-                                src: "{GOOGLE_LOGO}",
-                            }
-                            "Sign up with Google"
-                        }
+                                }
+                            });
+                        },
+                        "Sign up with Google"
                     }
                 }
-
                 if is_passkey_auth_enabled {
-                    div {
-                        class: "flex flex-col px-10",
-
-                        Link {
-                            class: "btn btn-primary w-full relative",
-                            to: Route::PasskeySignupPage {},
-
-                            img {
-                                class: "h-8 w-8 bg-white rounded-md absolute left-2",
-                                src: "{PASSKEY_LOGO}",
-                            }
-                            "Sign up with a passkey"
-                        }
-                    }
+                    PasskeyBtn { to: Route::PasskeySignupPage {}, "Sign up with a passkey" }
                 }
             }
 
-            div {
-                class: "text-base px-10",
-                span { "Already have an account? " }
+            LegalFooter {}
+        } else {
+            div { class: "mt-auto pt-6 text-center text-xs text-ui-base-muted",
+                "Already have an account? "
                 Link {
-                    class: "link-hover link link-primary",
+                    class: "text-ui-primary font-semibold no-underline hover:text-ui-primary-hover hover:underline",
                     to: Route::LoginPage {},
                     "Log in"
                 }

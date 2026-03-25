@@ -1,0 +1,52 @@
+{
+  "ok": true,
+  "messages": [
+    {
+      "user": "U02",
+      "type": "message",
+      "ts": "{{ts_ago_45m}}",
+      "client_msg_id": "8a0d6f0e-1234-4abc-8def-9876543210ab",
+      "text": "Hey <@U05XYZ> can you take another pass on PR #287 when you have a moment? I think it's ready, but the focus order changes are subtle.",
+      "team": "T01",
+      "thread_ts": "{{ts_ago_45m}}",
+      "is_locked": false,
+      "subscribed": false,
+      "user_profile": {
+        "avatar_hash": "bob02",
+        "first_name": "Bob",
+        "real_name": "Bob Martinez",
+        "display_name": "Bob Martinez",
+        "team": "T01",
+        "name": "bob",
+        "is_restricted": false,
+        "is_ultra_restricted": false
+      },
+      "blocks": [
+        {
+          "type": "rich_text",
+          "block_id": "3333",
+          "elements": [
+            {
+              "type": "rich_text_section",
+              "elements": [
+                {
+                  "type": "text",
+                  "text": "Hey "
+                },
+                {
+                  "type": "user",
+                  "user_id": "U05XYZ"
+                },
+                {
+                  "type": "text",
+                  "text": " can you take another pass on PR #287 when you have a moment? I think it's ready, but the focus order changes are subtle."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "has_more": false
+}

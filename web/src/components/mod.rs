@@ -2,18 +2,19 @@
 
 use chrono::{DateTime, Utc};
 use dioxus::prelude::*;
-use dioxus_free_icons::{Icon, icons::bs_icons::BsPersonCircle};
 use url::Url;
 
-use crate::{
-    components::flyonui::collapse::Collapse,
-    utils::{compute_text_color_from_background_color, format_elapsed_time},
-};
+use universal_inbox::third_party::integrations::todoist::TodoistLabel;
+
+use crate::utils::format_elapsed_time;
 
 pub mod auth_methods_card;
+pub mod auth_widgets;
 pub mod authentication_tokens_card;
 pub mod datepicker;
 pub mod delete_all_confirmation_modal;
+pub mod emoji_search_field;
+pub mod field_grid;
 pub mod floating_label_inputs;
 pub mod flyonui;
 pub mod footer;
@@ -22,98 +23,46 @@ pub mod integrations_panel;
 pub mod list;
 pub mod loading;
 pub mod markdown;
-pub mod nav_bar;
 pub mod notification_preview;
 pub mod notifications_list;
 pub mod oauth_clients_card;
+pub mod preview_card_header;
+pub mod priority_field;
+pub mod project_search_field;
 pub mod resizable_panel;
+pub mod settings_controls;
+pub mod sidebar;
 pub mod spinner;
 pub mod task_link_modal;
 pub mod task_manager_picker;
 pub mod task_planning_modal;
 pub mod task_preview;
 pub mod tasks_list;
+pub mod thread;
+pub mod threaded_message;
 pub mod toast_zone;
+pub mod ui;
 pub mod universal_inbox_title;
 pub mod user_profile_card;
 pub mod welcome_hero;
 
-#[component]
-fn CollapseCardWithIcon(
-    id: String,
-    icon: Element,
-    title: ReadSignal<String>,
-    opened: ReadSignal<Option<bool>>,
-    children: Element,
-) -> Element {
-    rsx! {
-        CollapseCard {
-            id,
-            header: rsx! { { icon }, span { "{title}" } },
-            opened,
-            children
-        }
-    }
-}
-
-#[component]
-fn CollapseCard(
-    id: ReadSignal<String>,
-    header: Element,
-    children: Element,
-    class: Option<String>,
-    opened: ReadSignal<Option<bool>>,
-) -> Element {
-    let card_style = class.unwrap_or("bg-base-200".to_string());
-
-    rsx! {
-        div {
-            class: "card w-full {card_style}",
-
-            div {
-                class: "card-body p-0",
-
-                Collapse {
-                    id,
-                    opened,
-                    header: rsx! {
-                        div { class: "flex items-center gap-2 grow text-sm", { header } }
-                    },
-
-                    { children }
-                }
-            }
-        }
-    }
-}
-
-#[component]
-fn SmallCard(card_class: Option<String>, class: Option<String>, children: Element) -> Element {
-    let card_class = card_class
-        .and_then(|card_class| (!card_class.is_empty()).then_some(card_class))
-        .unwrap_or("bg-base-200 text-base-content text-sm".to_string());
-    let class = class.unwrap_or_default();
-
-    rsx! {
-        div {
-            class: "card w-full {card_class}",
-            div {
-                class: "card-body py-1 px-2",
-                div {
-                    class: "flex items-center gap-2 {class}",
-                    { children }
-                }
-            }
-        }
-    }
-}
-
-fn get_initials_from_name(name: &str) -> String {
+pub fn get_initials_from_name(name: &str) -> String {
     name.split_whitespace()
         .take(2)
         .map(|word| word.chars().next().unwrap_or_default())
         .collect::<String>()
         .to_ascii_uppercase()
+}
+
+/// FNV-1a 32-bit hash of the name modulo 12, used to pick a stable avatar hue
+/// from the `--ui-avatar-hue-{0..11}` palette in `universal-inbox.css`.
+pub fn avatar_hue_index(name: &str) -> u8 {
+    let mut hash: u32 = 0x811c9dc5;
+    for byte in name.as_bytes() {
+        hash ^= *byte as u32;
+        hash = hash.wrapping_mul(0x01000193);
+    }
+    (hash % 12) as u8
 }
 
 #[component]
@@ -125,6 +74,8 @@ pub fn UserWithAvatar(
 ) -> Element {
     let display_name = display_name.unwrap_or_default();
     let initials = user_name.as_ref().map(|name| get_initials_from_name(name));
+    let hue_index = user_name.as_deref().map(avatar_hue_index).unwrap_or(11);
+    let avatar_style = format!("background-color: var(--ui-avatar-hue-{hue_index}); color: white;");
     let class = class.unwrap_or("text-sm".to_string());
 
     rsx! {
@@ -147,7 +98,8 @@ pub fn UserWithAvatar(
                             div {
                                 class: "avatar avatar-placeholder",
                                 div {
-                                    class: "w-5 rounded-full bg-primary text-primary-content",
+                                    class: "w-5 rounded-full",
+                                    style: "{avatar_style}",
                                     span { class: "text-xs", "{initials}" }
                                 }
                             }
@@ -157,8 +109,9 @@ pub fn UserWithAvatar(
                             div {
                                 class: "avatar avatar-placeholder",
                                 div {
-                                    class: "w-5 rounded-full bg-primary text-primary-content",
-                                    Icon { class: "h-5 w-5", icon: BsPersonCircle }
+                                    class: "w-5 rounded-full",
+                                    style: "{avatar_style}",
+                                    span { class: "icon-[lucide--user-circle] size-5" }
                                 }
                             }
                         }
@@ -189,28 +142,16 @@ impl From<String> for Tag {
     }
 }
 
+impl From<TodoistLabel> for Tag {
+    fn from(label: TodoistLabel) -> Self {
+        Tag::Colored {
+            name: label.name,
+            color: label.color.to_hex().to_string(),
+        }
+    }
+}
+
 impl Tag {
-    pub fn get_text_class_color(&self, default: &str) -> String {
-        match self {
-            Tag::Colored { color, .. } => compute_text_color_from_background_color(color),
-            _ => default.to_string(),
-        }
-    }
-
-    pub fn get_style(&self) -> Option<String> {
-        match self {
-            Tag::Colored { color, .. } => Some(format!("background-color: #{color}")),
-            _ => None,
-        }
-    }
-
-    pub fn get_class(&self) -> Option<String> {
-        match self {
-            Tag::Stylized { class, .. } => Some(class.clone()),
-            _ => None,
-        }
-    }
-
     pub fn get_name(&self) -> String {
         match self {
             Tag::Default { name, .. } => name.clone(),
@@ -220,15 +161,18 @@ impl Tag {
     }
 }
 
+/// Inline row of label chips. Renders tags as a flex-wrap row with no
+/// surrounding card or background — chips alone provide enough visual
+/// structure when stacked.
 #[component]
-pub fn TagsInCard(tags: Vec<Tag>) -> Element {
+pub fn TagList(tags: Vec<Tag>) -> Element {
     if tags.is_empty() {
         return rsx! {};
     }
 
     rsx! {
-        SmallCard {
-            class: "flex-wrap",
+        div {
+            class: "flex flex-wrap items-center gap-1.5",
             for tag in tags {
                 TagDisplay { tag: tag.clone() }
             }
@@ -238,51 +182,43 @@ pub fn TagsInCard(tags: Vec<Tag>) -> Element {
 
 #[component]
 pub fn TagDisplay(tag: Tag, class: Option<String>) -> Element {
-    let badge_text_class = tag.get_text_class_color("text-white");
-    let badge_class = tag.get_class().unwrap_or_default();
-    let badge_style = tag.get_style().unwrap_or_else(|| {
-        if badge_class.is_empty() {
-            "background-color: #6b7280".to_string()
-        } else {
-            "".to_string()
-        }
-    });
-    let class = class.unwrap_or_default();
+    let extra_class = class.unwrap_or_default();
 
-    rsx! {
-        div {
-            class: "badge badge-sm {badge_text_class} {badge_class} text-xs text-light {class} whitespace-nowrap",
-            style: "{badge_style}",
-            "{tag.get_name()}"
-        }
-    }
-}
-
-#[component]
-pub fn CardWithHeaders(
-    headers: Vec<Element>,
-    children: Element,
-    card_class: Option<String>,
-) -> Element {
-    let card_class = card_class.unwrap_or("bg-neutral text-neutral-content".to_string());
-
-    rsx! {
-        div {
-            class: "card w-full bg-base-200",
-            div {
-                class: "card-body flex flex-col gap-2 p-2",
-
-                for header in headers {
-                    SmallCard {
-                        card_class: "{card_class}",
-
-                        { header }
+    match tag {
+        // Brand-colored labels render as a muted pill with a colored dot —
+        // matches the Todoist label treatment so multiple chips don't compete
+        // visually with each other or with surrounding UI chrome.
+        Tag::Colored { name, color } => {
+            let dot_style = format!("background-color: #{color};");
+            rsx! {
+                span {
+                    class: "inline-flex items-center gap-[5px] pt-px pr-2 pb-px pl-1.5 rounded-ui-pill text-[11px] font-medium bg-ui-base-200 text-ui-base-content border border-ui-border-light whitespace-nowrap {extra_class}",
+                    span {
+                        class: "w-1.5 h-1.5 rounded-full shrink-0 inline-block",
+                        style: "{dot_style}",
                     }
+                    "{name}"
                 }
-
-                { children }
             }
         }
+        // Semantic chips (warning / info / success / error / muted) keep the
+        // class supplied by the caller so they render with their semantic tint.
+        Tag::Stylized {
+            name,
+            class: tag_class,
+        } => rsx! {
+            span {
+                class: "{tag_class} whitespace-nowrap {extra_class}",
+                "{name}"
+            }
+        },
+        // Plain labels render as a muted neutral pill (no dot).
+        Tag::Default { name } => rsx! {
+            span {
+                class: "inline-flex items-center gap-[5px] pt-px pr-2 pb-px pl-1.5 rounded-ui-pill text-[11px] font-medium bg-ui-base-200 text-ui-base-content border border-ui-border-light whitespace-nowrap {extra_class}",
+                "{name}"
+            }
+        },
     }
 }
 

@@ -567,6 +567,119 @@ The login test is successful when:
 - **Crate docs**: https://docs.rs/
 - **Universal Inbox docs**: https://doc.universal-inbox.com
 
+## Design Context
+
+### Users
+Developers and knowledge workers who juggle notifications from 5-7+ sources (GitHub, Linear, Slack, Google Mail, Google Calendar, Todoist). They open Universal Inbox to triage their notifications quickly — deciding what needs action, what can wait, and what can be dismissed. The primary job-to-be-done is **regaining control over notification overload** so they can focus on deep work.
+
+### Brand Personality
+**Friendly, Clean, Effortless** — Universal Inbox should feel like a calm, well-organized space that handles complexity behind the scenes. It's approachable without being playful, polished without being flashy.
+
+### Emotional Goals
+- **Relief & control** — "Everything is handled, I'm on top of it" — reduces notification anxiety
+- **Clarity & calm** — "I can see exactly what needs attention" — quiet confidence, no overwhelm
+
+### Aesthetic Direction
+- **Visual tone**: Clean, light-first (with full dark mode support), generous whitespace, subtle depth through shadows and borders rather than heavy color blocks
+- **Reference**: Superhuman — speed-obsessed, keyboard-driven, minimal chrome, split-pane layout, polished transitions that feel fast
+- **Anti-references**: Cluttered dashboards, heavy enterprise UIs with too many borders and icons, anything that feels slow or heavy
+- **Theme**: Light mode as default (`data-theme="light"`), dark mode fully supported (`data-theme="dark"`)
+- **Typography**: DM Sans as the primary UI font (`--font-ui`), with a cross-platform monospace stack for code/tokens (`--font-mono`)
+- **Icons**: Lucide (primary) + MDI (integration brand icons) via Iconify
+
+### Design Principles
+
+1. **Triage speed above all** — Every interaction should be optimizable to a single keystroke. The UI should never make the user wait, think, or click twice for common actions. Keyboard shortcuts are first-class.
+
+2. **Calm information density** — Show enough context to make decisions without opening each item, but never overwhelm. Use progressive disclosure (collapsed cards, detail panel, overflow menus) to layer complexity.
+
+3. **Consistent visual language** — Every color, radius, shadow, and spacing value comes from a design token. Components share a common shape language. No one-off styles that break the system.
+
+4. **Accessible by default** — 44px minimum touch targets, WCAG AA contrast ratios, `prefers-reduced-motion` support, focus-visible indicators, ARIA roles, and keyboard navigation built into every component.
+
+5. **Theme-aware everything** — Every UI element must render correctly in both light and dark themes using CSS custom properties. No hardcoded colors outside token definitions.
+
+### Design Token System
+The design system is defined in `design-proposal-notifications-page.html` with the `--ui-*` prefix convention:
+- **Colors**: `--ui-primary`, `--ui-success`, `--ui-error`, `--ui-warning`, `--ui-info`, `--ui-purple`, plus surface/border/muted variants
+- **Brand colors**: `--brand-github`, `--brand-linear`, `--brand-slack`, `--brand-google`, `--brand-gcal`, `--brand-todoist`, `--brand-notion`
+- **Typography**: `--font-ui` (DM Sans), `--font-mono`, scale from `--ui-text-2xs` (9px) to `--ui-text-2xl` (22px)
+- **Radii**: `--ui-radius-xs` (3px) through `--ui-radius-pill` (9999px)
+- **Shadows**: `--ui-shadow-sm`, `--ui-shadow-md`, `--ui-shadow-lg`
+- **Focus**: `--ui-focus-ring` (consistent focus indicator)
+- **Motion**: `--ui-ease` (standard), `--ui-ease-out` (expressive)
+
+## Frontend Styling & Component Rules
+
+The web frontend uses **TailwindCSS v4 + FlyonUI + Dioxus components** as the styling stack. Custom CSS in `web/css/universal-inbox.css` is the layer of last resort — only for things the other three cannot express.
+
+**Default to TailwindCSS v4 and FlyonUI utilities for everything; fall back to a custom CSS class only when the styling is genuinely too complex to express as a utility composition** (pseudo-elements, keyframes, parent/sibling cascades, scrollbar internals, form-control internals, etc. — see the "last resort" list below).
+
+### Decision order (apply top-down)
+
+When you need to style something, evaluate options in this order and stop at the first that fits:
+
+1. **Tailwind v4 utility classes** backed by the project's `@theme` tokens.
+   - Colors: `bg-ui-primary`, `text-ui-error`, `border-ui-border`, `bg-sidebar-active-bg`, `text-brand-github`, `bg-avatar-hue-7`
+   - Radii: `rounded-ui-xs`, `rounded-ui-sm`, `rounded-ui-md`, `rounded-ui-lg`, `rounded-ui-pill`
+   - Shadows: `shadow-ui-sm`, `shadow-ui-md`, `shadow-ui-lg`
+   - Fonts: `font-ui`, `font-mono`
+   - Dark mode: handled automatically by the `@custom-variant dark` rule and `[data-theme="dark"]` token overrides — utilities reactively re-resolve. Never duplicate values for dark mode.
+   - **Never** hardcode hex colors, pixel radii, shadow definitions, or font stacks in component code. If you find yourself writing `bg-[#388fef]`, the right answer is `bg-ui-primary`. If the token doesn't exist yet, add it to the `@theme inline` block at the top of `web/css/universal-inbox.css` rather than inlining the literal.
+2. **FlyonUI native components** (`btn`, `badge`, `alert`, `modal`, `dropdown`, `toggle`, `tabs`, `accordion`, `tooltip`, `input`) when they're a faithful match. The FlyonUI theme plugin already maps the brand palette to FlyonUI's `--color-*` tokens, so its components inherit the design language for free.
+3. **A Dioxus component from `web/src/components/ui/`** — see the inventory below. If a pattern is repeated 3+ times across the app, it belongs in a component, not as a duplicated class string.
+4. **A new Dioxus component in `web/src/components/ui/`** if the pattern is reusable but missing. Add a doc-comment with usage examples and register it in `web/src/components/ui/mod.rs`.
+5. **Custom CSS in `web/css/universal-inbox.css`** — only as a last resort, and only for one of these:
+   - Pseudo-element decorations (`::before` / `::after`) that can't be expressed as utilities
+   - `@keyframes` animations + the classes that bind to them
+   - Complex sibling/child/parent-state selectors (`.parent.expanded > .child`, `:checked + .track + .thumb`)
+   - Scrollbar styling (`::-webkit-scrollbar*`, `scrollbar-color`)
+   - Form-control internals that require `appearance: none` + custom decoration
+   - Responsive overrides that can't fit in `sm:` / `md:` / `lg:` Tailwind variants
+
+### Components available in `web/src/components/ui/`
+
+Always check this list before styling something from scratch. Each component is variant-driven and token-aware:
+
+| Component | Variants / sizes | Replaces |
+|---|---|---|
+| `Button` | `Primary`, `Secondary`, `Ghost`, `Danger`, `Warning`, `Passkey`, `Connect`, `Icon`, `Seed` × `Sm` / `Md` / `Lg` | All variants emit FlyonUI `btn` + modifiers (`btn-primary`, `btn-soft`, `btn-text`, `btn-error`, etc.) — no custom CSS. Legacy: `.profile-btn`, `.detail-btn`, `.dock-btn`, `.api-key-btn`, `.task-complete-btn`, `.edit-btn` |
+| `Badge` | `Primary`, `Muted`, `Count`, `Email`, `Method` × optional `BadgeTone::{Success, Warning, Error, Info, Primary, Purple}` | `.nav-badge.*`, `.count-badge`, `.profile-badge`, `.profile-email-badge`, `.auth-method-badge` |
+| `Tag` | `Open`, `Review`, `Error`, `Warning`, `Info`, `Muted`, `Urgent`, `Mention`, `Success` | `.tag.{open,review,error,warning,info,muted,urgent,mention,success}` |
+| `StatusLeaf` | `Connected`, `Disconnected`, `Error`, `Syncing` | `.status-leaf.*` + `.leaf-dot` |
+| `Card` family — `Card`, `CardHeader`, `CardMeta`, `CardBody`, `CardRight`, `CardEmptyState` | `CardVariant::{Default, ApiKeys, Integration}` | `.preview-card`, `.api-keys-card`, `.integration-card` (with `.expanded`), `.card-header`, `.card-meta`, `.card-name`, `.card-desc`, `.card-right`, `.card-body-expandable`, `.api-keys-empty-state` |
+| `MetadataGrid` + `MetadataItem` | — | `.preview-meta-grid` + `.preview-meta-label` + `.preview-meta-value` pairs |
+| `Kbd` + `KeyboardHint` | `KbdSize::{Xs, Sm}` | `.kbd`, `.kbd-xs`, `.ui-kbd`, `.hint`, `.keyboard-hints` |
+| `BrandTile` | `BrandTileSize::{Sm, Md, Lg}`, `provider: IntegrationProviderKind` | `.brand-tile` + `.brand-glyph` |
+| `NavItem` + `NavSection` | — | `.nav-item` + `.nav-icon` + `.nav-section` + `.nav-section-label` |
+| `ToggleSwitch` | `ToggleSize::{Sm, Md}` | `.toggle-switch` + `.toggle-track` + `.toggle-thumb`, `.ui-toggle` |
+| `EmptyState` | optional `animated_check: bool` | `.page-empty*`, `.inbox-zero-check` |
+| `PageHeader` + `Overline` | — | `.page-header` + `.page-subtitle`, `.settings-section-overline` |
+
+If you need a variant or size that doesn't exist, **extend the existing component** (add an enum variant with a class mapping). Don't fork a parallel component.
+
+### The "CSS class hook" hybrid pattern
+
+Some components — `Tag`, `StatusLeaf`, `Card` (Integration variant), `EmptyState` (animated_check), the notification row (`.ui-nrow*`) — emit *legacy CSS class names* alongside their utility composition. This is **deliberate**: pseudo-element decorations (`.tag.review::before` colored dot), keyframe animations (`card-body-in`, `notif-enter`, `notif-dismiss-*`, `inbox-zero-pop`), and `:checked +` sibling cascades are anchored to those class names. Removing the class hook breaks the visual.
+
+When extending or building components like this:
+- Document the load-bearing class names in the module-level doc-comment.
+- Don't replace the class string with utility-only styling — the decoration would silently disappear.
+- The class string is the contract between the Dioxus component and the CSS layer. Keep it intact.
+
+### What NOT to do
+
+- ❌ **Don't introduce new `.foo-bar` custom CSS classes** unless one of the "last resort" criteria above applies. Adding a class for spacing, color, or a one-off layout is almost always wrong; reach for utilities or a component.
+- ❌ **Don't write `class: "bg-[var(--ui-primary)]"` (arbitrary value syntax)** for tokens that have a `@theme` mapping. Use `bg-ui-primary`.
+- ❌ **Don't hardcode hex colors, font stacks, pixel radii, or shadows** in Rust strings. They belong in the token layer.
+- ❌ **Don't duplicate dark-mode rules** — utilities and tokens already react to `[data-theme="dark"]`.
+- ❌ **Don't use `style="..."` inline overrides** except when a value is genuinely dynamic (e.g., a CSS custom property `style="--source-accent: {color}"` set per-row). Static values go through utilities or tokens.
+- ❌ **Don't add new modules to `web/src/components/ui/mod.rs` without a corresponding `pub use`** — components are flat-imported via `use crate::components::ui::*;` and depend on the re-export.
+
+### When in doubt: utilities + components first, custom CSS last
+
+The migration that produced these rules collapsed ~437 custom CSS classes into ~10 reusable Dioxus components consuming `@theme` tokens. The intent is that **adding a feature should rarely require touching `web/css/universal-inbox.css`**. If you find yourself opening that file to add styles, pause and ask whether a token, utility, or component would handle it instead.
+
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
 ## Beads Issue Tracker
 

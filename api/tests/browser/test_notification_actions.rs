@@ -21,7 +21,7 @@ async fn test_notifications_are_displayed(#[future] browser_tested_app: BrowserT
 
     // After login, we should be on the notifications page with items visible.
     // The generated test user has 9 notifications.
-    let notification_rows = page.locator("#notifications-list table tr.row-hover").await;
+    let notification_rows = page.locator("#notifications-list .ui-nrow").await;
     let count = notification_rows
         .count()
         .await
@@ -44,7 +44,7 @@ async fn test_delete_notification_with_keyboard(#[future] browser_tested_app: Br
     wait_for_notification_rows(&page).await;
 
     // Count initial notifications
-    let notification_rows = page.locator("#notifications-list table tr.row-hover").await;
+    let notification_rows = page.locator("#notifications-list .ui-nrow").await;
     let initial_count = notification_rows
         .count()
         .await
@@ -55,23 +55,19 @@ async fn test_delete_notification_with_keyboard(#[future] browser_tested_app: Br
     );
 
     // Click on the first notification row to select it
-    let first_row = page
-        .locator("#notifications-list table tr.row-hover:first-child")
-        .await;
+    let first_row = page.locator("#notifications-list .ui-nrow >> nth=0").await;
     first_row
         .click(None)
         .await
         .expect("Failed to click first notification row");
 
-    // Verify the row gets the row-active class (selected state)
-    let active_row = page
-        .locator("#notifications-list table tr.row-active")
-        .await;
+    // Verify the row gets the `selected` class (selected state)
+    let active_row = page.locator("#notifications-list .ui-nrow.selected").await;
     expect(active_row)
         .with_timeout(EXPECT_TIMEOUT)
         .to_be_visible()
         .await
-        .expect("Expected row-active class after clicking notification");
+        .expect("Expected selected class after clicking notification");
 
     // Press 'd' to delete the selected notification
     page.keyboard()
@@ -81,9 +77,10 @@ async fn test_delete_notification_with_keyboard(#[future] browser_tested_app: Br
 
     // Wait for the row to be removed from the DOM
     let expected_count = initial_count - 1;
+    let expected_count_index = expected_count - 1;
     let remaining_rows = page
         .locator(&format!(
-            "#notifications-list table tr.row-hover:nth-child({expected_count})"
+            "#notifications-list .ui-nrow >> nth={expected_count_index}"
         ))
         .await;
     expect(remaining_rows)
@@ -92,7 +89,7 @@ async fn test_delete_notification_with_keyboard(#[future] browser_tested_app: Br
         .await
         .expect("Expected remaining rows to be visible after deletion");
 
-    let notification_rows_after = page.locator("#notifications-list table tr.row-hover").await;
+    let notification_rows_after = page.locator("#notifications-list .ui-nrow").await;
     let count_after = notification_rows_after
         .count()
         .await
@@ -117,7 +114,7 @@ async fn test_unsubscribe_notification_with_keyboard(
     wait_for_notification_rows(&page).await;
 
     // Count initial notifications
-    let notification_rows = page.locator("#notifications-list table tr.row-hover").await;
+    let notification_rows = page.locator("#notifications-list .ui-nrow").await;
     let initial_count = notification_rows
         .count()
         .await
@@ -128,23 +125,19 @@ async fn test_unsubscribe_notification_with_keyboard(
     );
 
     // Click on the first notification row to select it
-    let first_row = page
-        .locator("#notifications-list table tr.row-hover:first-child")
-        .await;
+    let first_row = page.locator("#notifications-list .ui-nrow >> nth=0").await;
     first_row
         .click(None)
         .await
         .expect("Failed to click first notification row");
 
-    // Verify the row gets the row-active class (selected state)
-    let active_row = page
-        .locator("#notifications-list table tr.row-active")
-        .await;
+    // Verify the row gets the `selected` class (selected state)
+    let active_row = page.locator("#notifications-list .ui-nrow.selected").await;
     expect(active_row)
         .with_timeout(EXPECT_TIMEOUT)
         .to_be_visible()
         .await
-        .expect("Expected row-active class after clicking notification");
+        .expect("Expected selected class after clicking notification");
 
     // Press 'u' to unsubscribe from the selected notification
     page.keyboard()
@@ -154,9 +147,10 @@ async fn test_unsubscribe_notification_with_keyboard(
 
     // Wait for the row to be removed from the DOM
     let expected_count = initial_count - 1;
+    let expected_count_index = expected_count - 1;
     let remaining_rows = page
         .locator(&format!(
-            "#notifications-list table tr.row-hover:nth-child({expected_count})"
+            "#notifications-list .ui-nrow >> nth={expected_count_index}"
         ))
         .await;
     expect(remaining_rows)
@@ -165,7 +159,7 @@ async fn test_unsubscribe_notification_with_keyboard(
         .await
         .expect("Expected remaining rows to be visible after unsubscribe");
 
-    let notification_rows_after = page.locator("#notifications-list table tr.row-hover").await;
+    let notification_rows_after = page.locator("#notifications-list .ui-nrow").await;
     let count_after = notification_rows_after
         .count()
         .await
@@ -188,7 +182,7 @@ async fn test_snooze_notification_with_keyboard(#[future] browser_tested_app: Br
     wait_for_notification_rows(&page).await;
 
     // Count initial notifications
-    let notification_rows = page.locator("#notifications-list table tr.row-hover").await;
+    let notification_rows = page.locator("#notifications-list .ui-nrow").await;
     let initial_count = notification_rows
         .count()
         .await
@@ -199,23 +193,19 @@ async fn test_snooze_notification_with_keyboard(#[future] browser_tested_app: Br
     );
 
     // Click on the first notification row to select it
-    let first_row = page
-        .locator("#notifications-list table tr.row-hover:first-child")
-        .await;
+    let first_row = page.locator("#notifications-list .ui-nrow >> nth=0").await;
     first_row
         .click(None)
         .await
         .expect("Failed to click first notification row");
 
-    // Verify the row gets the row-active class (selected state)
-    let active_row = page
-        .locator("#notifications-list table tr.row-active")
-        .await;
+    // Verify the row gets the `selected` class (selected state)
+    let active_row = page.locator("#notifications-list .ui-nrow.selected").await;
     expect(active_row)
         .with_timeout(EXPECT_TIMEOUT)
         .to_be_visible()
         .await
-        .expect("Expected row-active class after clicking notification");
+        .expect("Expected selected class after clicking notification");
 
     // Press 's' to snooze the selected notification
     page.keyboard()
@@ -225,9 +215,10 @@ async fn test_snooze_notification_with_keyboard(#[future] browser_tested_app: Br
 
     // Wait for the row to be removed from the DOM
     let expected_count = initial_count - 1;
+    let expected_count_index = expected_count - 1;
     let remaining_rows = page
         .locator(&format!(
-            "#notifications-list table tr.row-hover:nth-child({expected_count})"
+            "#notifications-list .ui-nrow >> nth={expected_count_index}"
         ))
         .await;
     expect(remaining_rows)
@@ -236,7 +227,7 @@ async fn test_snooze_notification_with_keyboard(#[future] browser_tested_app: Br
         .await
         .expect("Expected remaining rows to be visible after snooze");
 
-    let notification_rows_after = page.locator("#notifications-list table tr.row-hover").await;
+    let notification_rows_after = page.locator("#notifications-list .ui-nrow").await;
     let count_after = notification_rows_after
         .count()
         .await

@@ -37,6 +37,7 @@ pub enum NotificationCommand {
     DeleteAll,
     Unsubscribe(NotificationId),
     Snooze(NotificationId),
+    MarkAsRead(NotificationId),
     CompleteTaskFromNotification(NotificationWithTask),
     PlanTask(NotificationWithTask, TaskId, TaskPlanning),
     CreateTaskWithDetaultsFromNotification(NotificationWithTask),
@@ -175,6 +176,26 @@ pub async fn notification_service(
                     "Successfully snoozed notification",
                 )
                 .await;
+            }
+            Some(NotificationCommand::MarkAsRead(notification_id)) => {
+                let result: Result<Option<Notification>> = call_api(
+                    Method::PATCH,
+                    &api_base_url,
+                    &format!("notifications/{notification_id}"),
+                    Some(NotificationPatch {
+                        status: Some(NotificationStatus::Read),
+                        ..Default::default()
+                    }),
+                    Some(ui_model),
+                )
+                .await;
+                if result.is_ok() {
+                    let mut page = notifications_page.write();
+                    if let Some(notif) = page.content.iter_mut().find(|n| n.id == notification_id) {
+                        notif.status = NotificationStatus::Read;
+                        notif.last_read_at = Some(Utc::now());
+                    }
+                }
             }
             Some(NotificationCommand::CompleteTaskFromNotification(ref notification)) => {
                 if let Some(ref task) = notification.task
@@ -515,6 +536,12 @@ impl NotificationFilters {
         self.notification_source_kind_filters
             .iter()
             .any(|f| !f.selected)
+    }
+
+    pub fn reset(&mut self) {
+        for f in &mut self.notification_source_kind_filters {
+            f.selected = true;
+        }
     }
 
     pub fn selected(&self) -> Vec<NotificationSourceKind> {

@@ -3,7 +3,8 @@
 use dioxus::prelude::*;
 
 use universal_inbox::{
-    task::Task,
+    HasHtmlUrl,
+    task::{Task, TaskId, TaskSourceKind},
     third_party::item::{ThirdPartyItemData, ThirdPartyItemKind},
 };
 
@@ -14,10 +15,12 @@ use crate::{
             slack::preview::slack_reaction::SlackReactionTaskPreview,
             ticktick::preview::TickTickTaskPreview, todoist::preview::TodoistTaskPreview,
         },
-        tasks_list::{TaskListContext, get_task_list_item_action_buttons},
+        tasks_list::TaskListContext,
+        ui::{ActionButton, Button, ButtonVariant},
     },
     model::UniversalInboxUIModel,
     services::task_service::TaskCommand,
+    utils::reset_scroll_top,
 };
 
 #[component]
@@ -41,123 +44,119 @@ pub fn TaskPreview(
             "invisible"
         }
     });
-    let previous_button_style = if ui_model.read().selected_task_index.unwrap_or_default() == 0 {
-        "btn-disabled"
-    } else {
-        ""
-    };
-    let next_button_style =
-        if ui_model.read().selected_task_index.unwrap_or_default() == tasks_count() - 1 {
-            "btn-disabled"
-        } else {
-            ""
-        };
-    let task_type = match task().source_item.kind() {
-        ThirdPartyItemKind::TickTickItem => "Task",
-        ThirdPartyItemKind::TodoistItem => "Task",
-        ThirdPartyItemKind::SlackReaction => "Reaction",
-        ThirdPartyItemKind::LinearIssue => "Issue",
-        ThirdPartyItemKind::SlackThread
-        | ThirdPartyItemKind::LinearNotification
-        | ThirdPartyItemKind::GithubNotification
-        | ThirdPartyItemKind::GoogleMailThread
-        | ThirdPartyItemKind::GoogleCalendarEvent
-        | ThirdPartyItemKind::GoogleDriveComment
-        | ThirdPartyItemKind::WebPage => "Task",
-    };
+    let is_first = ui_model.read().selected_task_index.unwrap_or_default() == 0;
+    let is_last = ui_model.read().selected_task_index.unwrap_or_default() == tasks_count() - 1;
+    let task_type = task_sub_type(&task());
+
+    let mut latest_shown_task_id = use_signal(|| None::<TaskId>);
+    use_effect(move || {
+        // reset scroll position when showing another task
+        let mut latest = latest_shown_task_id.write();
+        if *latest != Some(task().id) {
+            *latest = Some(task().id);
+            let _ = reset_scroll_top("task-preview-details");
+        }
+    });
 
     rsx! {
+        // Detail header: back button (mobile) + tab on the left, actions on the right
         div {
-            class: "flex flex-col w-full h-full",
+            class: "detail-header",
 
-            div {
-                class: "relative w-full",
-
-                span {
-                    class: "{shortcut_visibility_style} kbd kbd-xs z-50 absolute left-0",
-                    "▼ j"
-                }
-                span {
-                    class: "{shortcut_visibility_style} kbd kbd-xs z-50 absolute right-0",
-                    "▲ k"
-                }
-
-                nav {
-                    class: "tabs tabs-bordered w-full pb-2",
-                    role: "tablist",
-
-                    button {
-                        class: "tab active-tab:tab-active active w-full",
-                        "data-tab": "#source-task-tab",
-                        role: "tab",
-                        div {
-                            class: "flex gap-2 items-center text-base-content",
-                            TaskIcon { class: "h-5 w-5", kind: task().kind }
-                            "{task_type}"
-                        }
-                    }
-                }
-            }
-
-            button {
-                class: "btn btn-text absolute left-0 lg:hidden",
+            // Back button for mobile — first on the left, only visible
+            // on mobile in detail view (md:hidden hides it on desktop;
+            // on mobile the host detail panel only renders when the list
+            // is hidden, so the button only appears in that state).
+            Button {
+                variant: ButtonVariant::Ghost,
+                // Mirrors `notification_preview.rs` — `.detail-back-btn` stays
+                // `display: none` baseline; `max-md:[.app-layout.show-detail_&]:`
+                // reveals it on the mobile detail pane. `!important` (via the
+                // trailing `!`) is needed to win against the cascade.
+                class: "detail-back-btn max-md:[.app-layout.show-detail_&]:inline-flex!".to_string(),
+                aria_label: "Back to list".to_string(),
+                title: "Back to list".to_string(),
                 onclick: move |_| ui_model.write().selected_task_index = None,
-                span { class: "icon-[tabler--arrow-left] size-8" }
+                icon_class: "icon-[tabler--arrow-left]".to_string(),
             }
-
-            if shortcut_visibility_style == "visible" {
-                span {
-                    class: "{shortcut_visibility_style} kbd kbd-xs z-50",
-                    "e: expand/collapse"
-                }
-            }
-
-            TaskDetailsPreview { task, expand_details }
 
             div {
-                class: "flex flex-col w-full gap-2 lg:hidden",
-
-                hr { class: "text-gray-200" }
-                div {
-                    class: "flex w-full justify-center text-sm text-base-content/50",
-
-                    span { "{ui_model.read().selected_task_index.unwrap_or_default() + 1} of {tasks_count()}" }
-                }
-
-                div {
-                    class: "flex w-full",
-                    button {
-                        "type": "button",
-                        class: "btn btn-text btn-square btn-lg {previous_button_style}",
-                        "aria-label": "Previous notification",
-                        onclick: move |_| {
-                            let mut model = ui_model.write();
-                            model.selected_task_index = Some(model.selected_task_index.unwrap_or_default() - 1);
-                        },
-                        span { class: "icon-[tabler--chevron-left] size-5 rtl:rotate-180" }
+                class: "detail-tabs",
+                button {
+                    class: "ui-detail-source active",
+                    role: "tab",
+                    "aria-pressed": "true",
+                    span { class: "ui-detail-source-tile",
+                        TaskIcon { class: "h-3 w-3".to_string(), kind: task().kind }
                     }
-
-                    for btn in get_task_list_item_action_buttons(
-                        task,
-                        false,
-                        Some("btn btn-square btn-primary btn-lg".to_string()),
-                        Some("flex-1".to_string())) {
-                        { btn }
-                    }
-
-                    button {
-                        "type": "button",
-                        class: "btn btn-text btn-square btn-lg {next_button_style}",
-                        "aria-label": "Next notification",
-                        onclick: move |_| {
-                            let mut model = ui_model.write();
-                            model.selected_task_index = Some(model.selected_task_index.unwrap_or_default() + 1);
-                        },
-                        span { class: "icon-[tabler--chevron-right] size-5 rtl:rotate-180" }
-                    }
+                    span { "{task_source_display_name(task().kind)}" }
+                    span { class: "sub", "· {task_type}" }
                 }
             }
 
+            div {
+                class: "detail-actions",
+
+                if shortcut_visibility_style == "visible" {
+                    span { class: "detail-kbd", "e" }
+                }
+
+                // Open in source button — common to every task kind
+                Button {
+                    variant: ButtonVariant::Ghost,
+                    href: task().get_html_url().to_string(),
+                    aria_label: format!("Open in {}", task_source_display_name(task().kind)),
+                    title: format!("Open in {}", task_source_display_name(task().kind)),
+                    icon_class: "icon-[lucide--external-link]".to_string(),
+                    enable_tooltip: true,
+                }
+            }
+        }
+
+        div {
+            class: "detail-body",
+            TaskDetailsPreview { task, expand_details }
+        }
+
+        // Detail dock: bottom action bar
+        div {
+            class: "detail-dock",
+
+            div {
+                class: "inline-flex items-center gap-1 text-ui-base-muted",
+                Button {
+                    variant: ButtonVariant::Icon,
+                    disabled: is_first,
+                    aria_label: "Previous task".to_string(),
+                    onclick: move |_| {
+                        let mut model = ui_model.write();
+                        model.selected_task_index = Some(model.selected_task_index.unwrap_or_default() - 1);
+                    },
+                    icon_class: "icon-[tabler--chevron-left]".to_string(),
+                }
+
+                span { class: "text-[11px] font-medium text-ui-base-muted tabular-nums", "{ui_model.read().selected_task_index.unwrap_or_default() + 1} / {tasks_count()}" }
+
+                Button {
+                    variant: ButtonVariant::Icon,
+                    disabled: is_last,
+                    aria_label: "Next task".to_string(),
+                    onclick: move |_| {
+                        let mut model = ui_model.write();
+                        model.selected_task_index = Some(model.selected_task_index.unwrap_or_default() + 1);
+                    },
+                    icon_class: "icon-[tabler--chevron-right]".to_string(),
+                }
+            }
+
+            div {
+                class: "flex items-center gap-1.5 min-w-0",
+                for btn in get_task_action_buttons(
+                    task,
+                    shortcut_visibility_style == "visible") {
+                    { btn }
+                }
+            }
         }
     }
 }
@@ -189,4 +188,48 @@ pub fn TaskDetailsPreview(task: ReadSignal<Task>, expand_details: ReadSignal<boo
         | ThirdPartyItemData::GoogleDriveComment(_)
         | ThirdPartyItemData::WebPage(_) => rsx! {},
     }
+}
+
+pub fn task_source_display_name(kind: TaskSourceKind) -> &'static str {
+    match kind {
+        TaskSourceKind::Todoist => "Todoist",
+        TaskSourceKind::TickTick => "TickTick",
+        TaskSourceKind::Slack => "Slack",
+        TaskSourceKind::Linear => "Linear",
+    }
+}
+
+pub fn task_sub_type(task: &Task) -> &'static str {
+    match task.source_item.kind() {
+        ThirdPartyItemKind::SlackReaction => "Reaction",
+        ThirdPartyItemKind::LinearIssue => "Issue",
+        ThirdPartyItemKind::TickTickItem
+        | ThirdPartyItemKind::TodoistItem
+        | ThirdPartyItemKind::SlackThread
+        | ThirdPartyItemKind::LinearNotification
+        | ThirdPartyItemKind::GithubNotification
+        | ThirdPartyItemKind::GoogleMailThread
+        | ThirdPartyItemKind::GoogleCalendarEvent
+        | ThirdPartyItemKind::GoogleDriveComment
+        | ThirdPartyItemKind::WebPage => "Task",
+    }
+}
+
+pub fn get_task_action_buttons(task: ReadSignal<Task>, show_shortcut: bool) -> Vec<Element> {
+    let context = use_context::<Memo<TaskListContext>>();
+
+    vec![rsx! {
+        ActionButton {
+            title: "Complete task",
+            shortcut: "c",
+            disabled_label: (!context().is_task_actions_enabled)
+                .then_some("No task management service connected".to_string()),
+            show_shortcut,
+            onclick: move |_| {
+                context().task_service
+                    .send(TaskCommand::Complete(task().id));
+            },
+            icon_class: "icon-[lucide--check-circle]"
+        }
+    }]
 }

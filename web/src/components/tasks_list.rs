@@ -3,7 +3,6 @@
 use sorted_groups::SortedGroups;
 
 use dioxus::prelude::*;
-use dioxus_free_icons::{Icon, icons::md_action_icons::MdCheckCircleOutline};
 
 use universal_inbox::{task::Task, third_party::item::ThirdPartyItemData};
 
@@ -15,7 +14,7 @@ use crate::{
             ticktick::task_list_item::TickTickTaskListItem,
             todoist::task_list_item::TodoistTaskListItem,
         },
-        list::{List, ListItemActionButton},
+        list::List,
     },
     model::UI_MODEL,
     pages::synced_tasks_page::TaskWithOrder,
@@ -40,25 +39,46 @@ pub fn TasksList(tasks: ReadSignal<SortedGroups<String, TaskWithOrder>>) -> Elem
 
     rsx! {
         div {
-            class: "h-full overflow-y-auto scroll-y-auto px-2 snap-y snap-mandatory",
-            List {
-                id: "tasks-list",
-                show_shortcut: UI_MODEL.read().is_help_enabled,
+            id: "tasks-list",
+            // Mirrors `notifications_list.rs`: shell properties stay in CSS,
+            // responsive width sits on the element via `max-*` variants with
+            // `!` (`!important`) to win against the `.list-panel` rule.
+            class: "list-panel max-xl:w-[360px]! max-xl:min-w-[300px]! max-lg:w-[320px]! max-lg:min-w-[280px]! max-md:w-full! max-md:min-w-0! max-md:[.app-layout.show-detail_&]:hidden!",
 
-                for (i, (group, task)) in tasks.read().iter().enumerate() {
-                    if current_group != Some(group) {
-                        thead {
-                            tr {
-                                th {
-                                    class: "flex flex-col px-0 pb-1 text-base-content/50 text-sm border-b snap-start",
-                                    span { "{group}" }
-                                }
-                            }
+            div {
+                class: "flex items-center justify-between py-1.5 px-5 border-b border-ui-border bg-ui-surface",
+                h1 {
+                    class: "flex items-center gap-2 text-[15px] font-bold tracking-tight",
+                    "Tasks"
+                    if !tasks.read().is_empty() {
+                        span {
+                            class: "text-xs font-medium text-ui-base-muted px-0.5",
+                            "{tasks.read().len()}"
                         }
-                        { current_group = Some(group); }
                     }
+                }
+            }
 
-                    tbody {
+            div {
+                class: "notification-list",
+                List {
+                    id: "tasks-list-inner",
+
+                    for (i, (group, task)) in tasks.read().iter().enumerate() {
+                        // Group header. Mirrors the notification list shell: a plain `<div>`
+                        // so the row sits in a normal block-flow container instead of an
+                        // anonymous table created by orphan `<thead>/<tr>/<th>` elements.
+                        // Anonymous tables shrink-wrap to max-content, which let long task
+                        // titles push past the panel width (no truncation despite the
+                        // `.ui-nrow-title` ellipsis rule).
+                        if current_group != Some(group) {
+                            div {
+                                class: "flex flex-col px-2 pb-1 text-base-content/50 text-sm border-b snap-start pt-2",
+                                span { "{group}" }
+                            }
+                            { current_group = Some(group); }
+                        }
+
                         TaskListItem {
                             task: Signal::new(task.task.clone()),
                             is_selected: Some(i) == UI_MODEL.read().selected_task_index,
@@ -118,30 +138,4 @@ fn TaskListItem(
         | ThirdPartyItemData::GoogleDriveComment(_)
         | ThirdPartyItemData::WebPage(_) => rsx! {},
     }
-}
-
-pub fn get_task_list_item_action_buttons(
-    task: ReadSignal<Task>,
-    show_shortcut: bool,
-    button_class: Option<String>,
-    container_class: Option<String>,
-) -> Vec<Element> {
-    let context = use_context::<Memo<TaskListContext>>();
-
-    vec![rsx! {
-        ListItemActionButton {
-            title: "Complete task",
-            shortcut: "c",
-            disabled_label: (!context().is_task_actions_enabled)
-                .then_some("No task management service connected".to_string()),
-            show_shortcut,
-            button_class,
-            container_class,
-            onclick: move |_| {
-                context().task_service
-                    .send(TaskCommand::Complete(task().id));
-            },
-            Icon { class: "w-5 h-5", icon: MdCheckCircleOutline }
-        }
-    }]
 }

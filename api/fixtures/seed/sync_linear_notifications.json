@@ -1,0 +1,420 @@
+{
+  "data": {
+    "notifications": {
+      "nodes": [
+        {
+          "__typename": "ProjectNotification",
+          "id": "df45c8cf-c717-4db7-abb9-5c5b73b50cc9",
+          "type": "projectAddedAsMember",
+          "readAt": null,
+          "updatedAt": "{{ago_1d}}",
+          "snoozedUntilAt": null,
+          "project": {
+            "id": "c1b0f0f8-9e16-4335-a540-bda09cc491df",
+            "name": "Notification Triage Workflow",
+            "url": "https://linear.app/universal-inbox/project/notification-triage-workflow",
+            "description": "Cross-functional initiative to make weekly inbox triage feel effortless: grouping, keyboard shortcuts, and snooze.",
+            "icon": "Inbox",
+            "color": "#5E6AD2",
+            "status": { "type": "started" },
+            "progress": 0.62,
+            "startDate": "{{date_ago_1w}}",
+            "targetDate": "{{date_in_3w}}",
+            "lead": {
+              "displayName": "Alice Chen",
+              "avatarUrl": "https://avatars.githubusercontent.com/u/1062408?v=4",
+              "url": "https://linear.app/universal-inbox/profiles/alice-chen"
+            }
+          },
+          "projectUpdate": {
+            "updatedAt": "{{ago_1d}}",
+            "body": "Sara's notification grouping PR is up for review. Targeting Friday for the v0.5 cut.",
+            "health": "onTrack",
+            "user": {
+              "displayName": "Alice Chen",
+              "avatarUrl": "https://avatars.githubusercontent.com/u/1062408?v=4",
+              "url": "https://linear.app/universal-inbox/profiles/alice-chen"
+            },
+            "url": "https://linear.app/universal-inbox/project/notification-triage-workflow#projectUpdate-0d3d3a0d"
+          }
+        },
+        {
+          "__typename": "ProjectNotification",
+          "id": "0f21b535-142f-4f1c-ba8a-ec71fb965888",
+          "type": "projectAddedAsLead",
+          "readAt": null,
+          "updatedAt": "{{ago_2d}}",
+          "snoozedUntilAt": null,
+          "project": {
+            "id": "c1b0f0f8-9e16-4335-a540-bda09cc491df",
+            "name": "Notification Triage Workflow",
+            "url": "https://linear.app/universal-inbox/project/notification-triage-workflow",
+            "description": "Cross-functional initiative to make weekly inbox triage feel effortless: grouping, keyboard shortcuts, and snooze.",
+            "icon": "Inbox",
+            "color": "#5E6AD2",
+            "status": { "type": "started" },
+            "progress": 0.62,
+            "startDate": "{{date_ago_1w}}",
+            "targetDate": "{{date_in_3w}}",
+            "lead": {
+              "displayName": "Alice Chen",
+              "avatarUrl": "https://avatars.githubusercontent.com/u/1062408?v=4",
+              "url": "https://linear.app/universal-inbox/profiles/alice-chen"
+            }
+          }
+        },
+        {
+          "__typename": "IssueNotification",
+          "id": "0c28d222-c599-43bb-af99-fcd3e99daff0",
+          "type": "issueAssignedToYou",
+          "readAt": null,
+          "updatedAt": "{{ago_3h}}",
+          "snoozedUntilAt": null,
+          "issue": {
+            "id": "c8805a87-5a65-47d6-a385-64945ce3b036",
+            "createdAt": "{{ago_2d}}",
+            "updatedAt": "{{ago_3h}}",
+            "completedAt": null,
+            "cancelledAt": null,
+            "dueDate": "{{date_in_3d}}",
+            "identifier": "UNI-138",
+            "title": "Add keyboard shortcuts to scroll the preview pane",
+            "url": "https://linear.app/universal-inbox/issue/UNI-138/add-keyboard-shortcuts-preview-pane",
+            "priority": 2,
+            "project": {
+              "id": "c1b0f0f8-9e16-4335-a540-bda09cc491df",
+              "name": "Notification Triage Workflow",
+              "url": "https://linear.app/universal-inbox/project/notification-triage-workflow",
+              "description": "Cross-functional initiative to make weekly inbox triage feel effortless: grouping, keyboard shortcuts, and snooze.",
+              "icon": "Inbox",
+              "color": "#5E6AD2",
+              "status": { "type": "started" },
+              "progress": 0.62,
+              "startDate": "{{date_ago_1w}}",
+              "targetDate": "{{date_in_3w}}",
+              "lead": {
+                "displayName": "Alice Chen",
+                "avatarUrl": "https://avatars.githubusercontent.com/u/1062408?v=4",
+                "url": "https://linear.app/universal-inbox/profiles/alice-chen"
+              }
+            },
+            "projectMilestone": {
+              "name": "Sprint 24-Q3-09",
+              "description": "Mid-quarter sprint focused on keyboard ergonomics."
+            },
+            "creator": {
+              "displayName": "Alice Chen",
+              "avatarUrl": "https://avatars.githubusercontent.com/u/1062408?v=4",
+              "url": "https://linear.app/universal-inbox/profiles/alice-chen"
+            },
+            "assignee": {
+              "displayName": "Alex Morgan",
+              "avatarUrl": null,
+              "url": "https://linear.app/universal-inbox/profiles/alex-morgan"
+            },
+            "state": {
+              "name": "In progress",
+              "color": "#FABD00",
+              "description": "This issue is being actively worked on",
+              "type": "started",
+              "id": "6F2231C6-8525-4FB7-A2B1-AC470FDF709D",
+              "team": {
+                "states": {
+                  "nodes": [
+                    {
+                      "type": "unstarted",
+                      "id": "DE8D2E6E-5613-4DEE-9221-60083E1C273C"
+                    },
+                    {
+                      "type": "completed",
+                      "id": "C66F6CD6-F8F5-4378-A1D5-22247F537CFC"
+                    },
+                    {
+                      "type": "canceled",
+                      "id": "5A83DD71-D640-45E4-8B76-2457CEB307B4"
+                    }
+                  ]
+                }
+              }
+            },
+            "labels": {
+              "nodes": [
+                {
+                  "name": "ergonomics",
+                  "description": "Keyboard, focus, and motion-related work",
+                  "color": "#5E6AD2"
+                }
+              ]
+            },
+            "description": "Acceptance criteria: j/k scrolls within preview when focus is in the preview pane; arrow keys still navigate the list; esc returns focus to the list. Add a unit test for the shortcut handler.",
+            "team": {
+              "id": "ee20be3f-6558-4586-b610-6c44738e362f",
+              "key": "UNI",
+              "name": "Universal Inbox",
+              "icon": "Inbox"
+            }
+          },
+          "comment": {
+            "updatedAt": "{{ago_3h}}",
+            "body": "Pushed a draft impl, but I'm not sure how to handle focus when the preview is empty. Thoughts?",
+            "parent": {
+              "updatedAt": "{{ago_5h}}",
+              "body": "Let's pair on this Friday morning if you're stuck — Maya already drafted the focus states.",
+              "user": {
+                "displayName": "Daniel Wong",
+                "avatarUrl": null,
+                "url": "https://linear.app/universal-inbox/profiles/daniel-wong"
+              },
+              "url": "https://linear.app/universal-inbox/issue/UNI-138/add-keyboard-shortcuts-preview-pane#comment-0c00f34aa",
+              "children": {
+                "nodes": [
+                  {
+                    "updatedAt": "{{ago_3h}}",
+                    "body": "Sounds good — I'll send a calendar invite.",
+                    "user": {
+                      "displayName": "Daniel Wong",
+                      "avatarUrl": null,
+                      "url": "https://linear.app/universal-inbox/profiles/daniel-wong"
+                    },
+                    "url": "https://linear.app/universal-inbox/issue/UNI-138/add-keyboard-shortcuts-preview-pane#comment-0c00f34bb"
+                  },
+                  {
+                    "updatedAt": "{{ago_3h}}",
+                    "body": "Pushed a draft impl, but I'm not sure how to handle focus when the preview is empty. Thoughts?",
+                    "user": {
+                      "displayName": "Alex Morgan",
+                      "avatarUrl": null,
+                      "url": "https://linear.app/universal-inbox/profiles/alex-morgan"
+                    },
+                    "url": "https://linear.app/universal-inbox/issue/UNI-138/add-keyboard-shortcuts-preview-pane#comment-0c00f34fd"
+                  }
+                ]
+              }
+            },
+            "children": {
+              "nodes": []
+            },
+            "user": {
+              "displayName": "Alex Morgan",
+              "avatarUrl": null,
+              "url": "https://linear.app/universal-inbox/profiles/alex-morgan"
+            },
+            "url": "https://linear.app/universal-inbox/issue/UNI-138/add-keyboard-shortcuts-preview-pane#comment-0c00f34fd"
+          }
+        },
+        {
+          "__typename": "IssueNotification",
+          "id": "ee045ad5-cbd7-4f5e-9683-b858304343b2",
+          "type": "issueAssignedToYou",
+          "readAt": null,
+          "updatedAt": "{{ago_8h}}",
+          "snoozedUntilAt": null,
+          "issue": {
+            "id": "7b2eb301-4e49-40b1-9524-fd0c33e4c02e",
+            "createdAt": "{{ago_2d}}",
+            "updatedAt": "{{ago_8h}}",
+            "completedAt": null,
+            "cancelledAt": null,
+            "dueDate": null,
+            "identifier": "UNI-141",
+            "title": "Investigate occasional sync stall on Slack reactions",
+            "url": "https://linear.app/universal-inbox/issue/UNI-141/investigate-sync-stall-slack-reactions",
+            "priority": 1,
+            "project": {
+              "id": "c1b0f0f8-9e16-4335-a540-bda09cc491df",
+              "name": "Notification Triage Workflow",
+              "url": "https://linear.app/universal-inbox/project/notification-triage-workflow",
+              "description": "Cross-functional initiative to make weekly inbox triage feel effortless: grouping, keyboard shortcuts, and snooze.",
+              "icon": "Inbox",
+              "color": "#5E6AD2",
+              "status": { "type": "started" },
+              "progress": 0.62,
+              "startDate": "{{date_ago_1w}}",
+              "targetDate": "{{date_in_3w}}",
+              "lead": {
+                "displayName": "Alice Chen",
+                "avatarUrl": "https://avatars.githubusercontent.com/u/1062408?v=4",
+                "url": "https://linear.app/universal-inbox/profiles/alice-chen"
+              }
+            },
+            "projectMilestone": {
+              "name": "Sprint 24-Q3-09",
+              "description": "Mid-quarter sprint focused on keyboard ergonomics."
+            },
+            "creator": {
+              "displayName": "Alice Chen",
+              "avatarUrl": "https://avatars.githubusercontent.com/u/1062408?v=4",
+              "url": "https://linear.app/universal-inbox/profiles/alice-chen"
+            },
+            "assignee": {
+              "displayName": "Alex Morgan",
+              "avatarUrl": null,
+              "url": "https://linear.app/universal-inbox/profiles/alex-morgan"
+            },
+            "state": {
+              "name": "Triage",
+              "color": "#FABD00",
+              "description": null,
+              "type": "triage",
+              "id": "702C66A4-F67C-4B8F-A778-51E14C6C31C8",
+              "team": {
+                "states": {
+                  "nodes": [
+                    {
+                      "type": "unstarted",
+                      "id": "DE8D2E6E-5613-4DEE-9221-60083E1C273C"
+                    },
+                    {
+                      "type": "completed",
+                      "id": "C66F6CD6-F8F5-4378-A1D5-22247F537CFC"
+                    },
+                    {
+                      "type": "canceled",
+                      "id": "5A83DD71-D640-45E4-8B76-2457CEB307B4"
+                    }
+                  ]
+                }
+              }
+            },
+            "labels": {
+              "nodes": [
+                {
+                  "name": "bug",
+                  "description": "Confirmed defect",
+                  "color": "#EB5757"
+                },
+                {
+                  "name": "sync",
+                  "description": "Background sync workers",
+                  "color": "#0E8A16"
+                }
+              ]
+            },
+            "description": "Two reports this week of Slack reaction-as-task syncs stalling for 5+ minutes. Likely the rate-limit backoff on the reactions.list endpoint, but worth confirming with prod traces.",
+            "team": {
+              "id": "ee20be3f-6558-4586-b610-6c44738e362f",
+              "key": "UNI",
+              "name": "Universal Inbox",
+              "icon": "Inbox"
+            }
+          },
+          "comment": {
+            "updatedAt": "{{ago_8h}}",
+            "body": "Could you take a look this week? Bob saw it again on staging.",
+            "user": {
+              "displayName": "Alice Chen",
+              "avatarUrl": "https://avatars.githubusercontent.com/u/1062408?v=4",
+              "url": "https://linear.app/universal-inbox/profiles/alice-chen"
+            },
+            "url": "https://linear.app/universal-inbox/issue/UNI-141/investigate-sync-stall-slack-reactions#comment-1100f34aa",
+            "children": {
+              "nodes": []
+            }
+          }
+        },
+        {
+          "__typename": "IssueNotification",
+          "id": "9f88ccfd-eaf5-4f8a-a73f-1fd35348dba5",
+          "type": "issueAssignedToYou",
+          "readAt": null,
+          "updatedAt": "{{ago_2d}}",
+          "snoozedUntilAt": null,
+          "issue": {
+            "id": "4dda960e-f498-4c6e-9477-a8e0ff441ff5",
+            "createdAt": "{{ago_3d}}",
+            "updatedAt": "{{ago_2d}}",
+            "completedAt": null,
+            "cancelledAt": null,
+            "dueDate": "{{date_in_1w}}",
+            "identifier": "UNI-129",
+            "title": "Audit on-call playbook for paging thresholds",
+            "url": "https://linear.app/universal-inbox/issue/UNI-129/audit-on-call-playbook-paging-thresholds",
+            "priority": 3,
+            "project": {
+              "id": "c1b0f0f8-9e16-4335-a540-bda09cc491df",
+              "name": "Notification Triage Workflow",
+              "url": "https://linear.app/universal-inbox/project/notification-triage-workflow",
+              "description": "Cross-functional initiative to make weekly inbox triage feel effortless: grouping, keyboard shortcuts, and snooze.",
+              "icon": "Inbox",
+              "color": "#5E6AD2",
+              "status": { "type": "started" },
+              "progress": 0.62,
+              "startDate": "{{date_ago_1w}}",
+              "targetDate": "{{date_in_3w}}",
+              "lead": {
+                "displayName": "Alice Chen",
+                "avatarUrl": "https://avatars.githubusercontent.com/u/1062408?v=4",
+                "url": "https://linear.app/universal-inbox/profiles/alice-chen"
+              }
+            },
+            "projectMilestone": null,
+            "creator": {
+              "displayName": "Alice Chen",
+              "avatarUrl": "https://avatars.githubusercontent.com/u/1062408?v=4",
+              "url": "https://linear.app/universal-inbox/profiles/alice-chen"
+            },
+            "assignee": {
+              "displayName": "Alex Morgan",
+              "avatarUrl": null,
+              "url": "https://linear.app/universal-inbox/profiles/alex-morgan"
+            },
+            "state": {
+              "name": "Backlog",
+              "color": "#94A2B3",
+              "description": null,
+              "type": "backlog",
+              "id": "702C66A4-F67C-4B8F-A778-51E14C6C31C9",
+              "team": {
+                "states": {
+                  "nodes": [
+                    {
+                      "type": "unstarted",
+                      "id": "DE8D2E6E-5613-4DEE-9221-60083E1C273C"
+                    },
+                    {
+                      "type": "completed",
+                      "id": "C66F6CD6-F8F5-4378-A1D5-22247F537CFC"
+                    },
+                    {
+                      "type": "canceled",
+                      "id": "5A83DD71-D640-45E4-8B76-2457CEB307B4"
+                    }
+                  ]
+                }
+              }
+            },
+            "labels": {
+              "nodes": [
+                {
+                  "name": "ops",
+                  "description": "Operational hygiene",
+                  "color": "#94A2B3"
+                }
+              ]
+            },
+            "description": "Half of the alerts that paged us last quarter were stale playbook entries. Walk through every alert, confirm the runbook still maps to the right owner, and downgrade non-actionable ones.",
+            "team": {
+              "id": "ee20be3f-6558-4586-b610-6c44738e362f",
+              "key": "UNI",
+              "name": "Universal Inbox",
+              "icon": "Inbox"
+            }
+          }
+        },
+        {
+          "__typename": "PostNotification",
+          "id": "ba8f7b58-94ab-4bdf-82c3-65af8ddc262d",
+          "type": "feedSummaryGenerated",
+          "readAt": null,
+          "updatedAt": "{{ago_1d}}",
+          "snoozedUntilAt": null
+        }
+      ]
+    },
+    "organization": {
+      "name": "Universal Inbox",
+      "urlKey": "universal-inbox",
+      "logoUrl": "https://linear.app/images/linear-icon.png"
+    }
+  }
+}

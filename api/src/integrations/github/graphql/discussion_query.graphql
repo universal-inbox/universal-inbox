@@ -12,6 +12,14 @@ query DiscussionQuery($owner: String!, $repository: String!, $discussion_number:
       createdAt
       updatedAt
       answerChosenAt
+
+      category {
+        name
+        emoji
+        slug
+        isAnswerable
+      }
+
       answerChosenBy {
         __typename
         avatarUrl

@@ -400,51 +400,51 @@
         }
       }
     },
-    "dioxus-cli@0.7.3": {
-      "last_modified": "2026-01-30T02:32:49Z",
-      "resolved": "github:NixOS/nixpkgs/6308c3b21396534d8aaeac46179c14c439a89b8a#dioxus-cli",
+    "dioxus-cli@0.7.7": {
+      "last_modified": "2026-05-03T08:31:49Z",
+      "resolved": "github:NixOS/nixpkgs/90c100cb48d61a0316b9479bb03f1be36d34b92a#dioxus-cli",
       "source": "devbox-search",
-      "version": "0.7.3",
+      "version": "0.7.7",
       "systems": {
         "aarch64-darwin": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/slxzgnv6s5ldz8g0r1bwsx12frqamsx9-dioxus-cli-0.7.3",
+              "path": "/nix/store/gmnxch4338mckyhpjs79q58cixb0z2x1-dioxus-cli-0.7.7",
               "default": true
             }
           ],
-          "store_path": "/nix/store/slxzgnv6s5ldz8g0r1bwsx12frqamsx9-dioxus-cli-0.7.3"
+          "store_path": "/nix/store/gmnxch4338mckyhpjs79q58cixb0z2x1-dioxus-cli-0.7.7"
         },
         "aarch64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/dknw74f4jqz06wldrypx2dszj4mfnfr9-dioxus-cli-0.7.3",
+              "path": "/nix/store/0f2yn80wrrfphb18kcjcyfxkyxvvw5pi-dioxus-cli-0.7.7",
               "default": true
             }
           ],
-          "store_path": "/nix/store/dknw74f4jqz06wldrypx2dszj4mfnfr9-dioxus-cli-0.7.3"
+          "store_path": "/nix/store/0f2yn80wrrfphb18kcjcyfxkyxvvw5pi-dioxus-cli-0.7.7"
         },
         "x86_64-darwin": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/hj9q6wlqap3wd69rn5wj37mbpzyn1s0g-dioxus-cli-0.7.3",
+              "path": "/nix/store/x7cr1mrp5bw84a157byf43b7b9wzr5cc-dioxus-cli-0.7.7",
               "default": true
             }
           ],
-          "store_path": "/nix/store/hj9q6wlqap3wd69rn5wj37mbpzyn1s0g-dioxus-cli-0.7.3"
+          "store_path": "/nix/store/x7cr1mrp5bw84a157byf43b7b9wzr5cc-dioxus-cli-0.7.7"
         },
         "x86_64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/py79xv22ipf2ycg4qks55wwai9g4w2qg-dioxus-cli-0.7.3",
+              "path": "/nix/store/si9l1m0kpz2ay1d3x9ispsyfjfn6pjc6-dioxus-cli-0.7.7",
               "default": true
             }
           ],
-          "store_path": "/nix/store/py79xv22ipf2ycg4qks55wwai9g4w2qg-dioxus-cli-0.7.3"
+          "store_path": "/nix/store/si9l1m0kpz2ay1d3x9ispsyfjfn6pjc6-dioxus-cli-0.7.7"
         }
       }
     },

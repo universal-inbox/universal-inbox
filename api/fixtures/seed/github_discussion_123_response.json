@@ -1,0 +1,58 @@
+{
+  "data": {
+    "repository": {
+      "discussion": {
+        "__typename": "Discussion",
+        "id": "D_disc_42",
+        "title": "RFC: Keyboard-only triage flow for the inbox",
+        "bodyHTML": "<p>Power users have been asking for a way to triage without ever leaving the keyboard. I'd like to lock down the shortcut surface before we ship v0.5.</p><p>Proposed bindings:</p><ul><li><code>j</code> / <code>k</code> — move selection</li><li><code>e</code> — archive</li><li><code>s</code> — snooze (opens picker)</li><li><code>t</code> — convert to task</li><li><code>?</code> — show shortcut overlay</li></ul><p>Open questions: do we model snooze with relative durations only (1h, 4h, tomorrow) or also let users pick a date? And should <code>e</code> follow Gmail (archive) or Linear (delete)? Vote in comments 👇</p>",
+        "number": 42,
+        "url": "https://github.com/universal-inbox/universal-inbox/discussions/42",
+        "stateReason": null,
+        "category": {
+          "name": "RFC",
+          "emoji": ":memo:",
+          "slug": "rfc",
+          "isAnswerable": true
+        },
+        "repository": {
+          "nameWithOwner": "universal-inbox/universal-inbox",
+          "url": "https://github.com/universal-inbox/universal-inbox"
+        },
+        "closedAt": null,
+        "createdAt": "{{ago_3d}}",
+        "updatedAt": "{{ago_4h}}",
+        "answerChosenAt": "{{ago_4h}}",
+        "answerChosenBy": {
+          "__typename": "User",
+          "avatarUrl": "https://avatars.githubusercontent.com/u/77231?v=4",
+          "login": "ravipatel",
+          "name": "Ravi Patel"
+        },
+        "comments": {
+          "totalCount": 16
+        },
+        "labels": {
+          "nodes": []
+        },
+        "author": {
+          "__typename": "User",
+          "avatarUrl": "https://avatars.githubusercontent.com/u/77231?v=4",
+          "login": "ravipatel",
+          "name": "Ravi Patel"
+        },
+        "answer": {
+          "bodyHTML": "<p>After reading the thread I think we should:</p><ol><li>Match Gmail's <code>e</code> for archive (people switching from Gmail will thank us).</li><li>Offer both relative durations <em>and</em> a date picker, defaulting to the relative menu.</li><li>Keep <code>?</code> as the global shortcut help overlay.</li></ol><p>Happy to draft the spec PR if there are no objections by Friday.</p>",
+          "url": "https://github.com/universal-inbox/universal-inbox/discussions/42#discussioncomment-42",
+          "createdAt": "{{ago_4h}}",
+          "author": {
+            "__typename": "User",
+            "avatarUrl": "https://avatars.githubusercontent.com/u/77231?v=4",
+            "login": "ravipatel",
+            "name": "Ravi Patel"
+          }
+        }
+      }
+    }
+  }
+}

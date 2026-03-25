@@ -2,18 +2,12 @@
 
 use dioxus::prelude::*;
 
-use universal_inbox::{HasHtmlUrl, task::Task, third_party::integrations::linear::LinearIssue};
+use universal_inbox::{task::Task, third_party::integrations::linear::LinearIssue};
 
 use crate::{
     components::{
-        UserWithAvatar,
-        integrations::linear::{
-            icons::{Linear, LinearIssueIcon},
-            list_item::LinearIssueListItemSubtitle,
-        },
-        list::{ListContext, ListItem},
-        notifications_list::TaskHint,
-        tasks_list::get_task_list_item_action_buttons,
+        integrations::linear::{icons::Linear, list_item::LinearIssueListItemSubtitle},
+        list::ListItem,
     },
     utils::format_elapsed_time,
 };
@@ -26,36 +20,21 @@ pub fn LinearTaskListItem(
     on_select: EventHandler<()>,
 ) -> Element {
     let task_updated_at = use_memo(move || format_elapsed_time(task().updated_at));
-    let list_context = use_context::<Memo<ListContext>>();
-    let link = task().get_html_url();
 
     rsx! {
         ListItem {
             key: "{task().id}",
             title: "{linear_issue().title}",
-            subtitle: rsx! { LinearIssueListItemSubtitle { linear_issue }},
-            link,
+            subtitle: rsx! {
+                LinearIssueListItemSubtitle { linear_issue }
+            },
+            time: "{task_updated_at}",
             icon: rsx! {
                 Linear { class: "h-5 w-5" }
-                TaskHint { task: Some(task()) }
             },
-            subicon: rsx! { LinearIssueIcon { class: "h-5 w-5 min-w-5", linear_issue } },
-            action_buttons: get_task_list_item_action_buttons(
-                task,
-                list_context().show_shortcut,
-                None,
-                None,
-            ),
+            meta_icon: rsx! { span { class: "icon-[lucide--circle-dot] w-full h-full" } },
             is_selected,
             on_select,
-
-            if let Some(assignee) = linear_issue().assignee {
-                UserWithAvatar { avatar_url: assignee.avatar_url.clone(), user_name: assignee.name.clone() }
-            } else {
-                UserWithAvatar {}
-            }
-
-            span { class: "text-base-content/50 whitespace-nowrap text-xs font-mono", "{task_updated_at}" }
         }
     }
 }

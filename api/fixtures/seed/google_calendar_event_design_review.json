@@ -1,0 +1,73 @@
+{
+  "kind": "calendar#event",
+  "etag": "\"3471714048458000\"",
+  "id": "uni_design_review_v05",
+  "status": "confirmed",
+  "htmlLink": "https://www.google.com/calendar/event?eid=uni_design_review_v05",
+  "created": "{{ago_2d}}",
+  "updated": "{{ago_4h}}",
+  "summary": "Design review: notification grouping prototype",
+  "description": "Walk through Maya's v0.5 prototype, lock in the sticky header behavior and empty-state copy. Bring open questions from the #design-reviews thread.",
+  "creator": {
+    "email": "maya@universal-inbox.com"
+  },
+  "organizer": {
+    "email": "maya@universal-inbox.com"
+  },
+  "start": {
+    "dateTime": "{{tomorrow_at_14}}",
+    "timeZone": "Europe/Paris"
+  },
+  "end": {
+    "dateTime": "{{tomorrow_at_14_45}}",
+    "timeZone": "Europe/Paris"
+  },
+  "iCalUID": "uni_design_review_v05@universal-inbox.com",
+  "sequence": 1,
+  "attendees": [
+    {
+      "email": "{{user_email}}",
+      "self": true,
+      "responseStatus": "needsAction"
+    },
+    {
+      "email": "maya@universal-inbox.com",
+      "organizer": true,
+      "responseStatus": "accepted",
+      "displayName": "Maya Rivera"
+    },
+    {
+      "email": "sara@universal-inbox.com",
+      "responseStatus": "accepted",
+      "displayName": "Sara Park"
+    },
+    {
+      "email": "alice@universal-inbox.com",
+      "responseStatus": "tentative",
+      "displayName": "Alice Chen"
+    }
+  ],
+  "hangoutLink": "https://meet.google.com/xyz-design-rev",
+  "conferenceData": {
+    "entryPoints": [
+      {
+        "entryPointType": "video",
+        "uri": "https://meet.google.com/xyz-design-rev",
+        "label": "meet.google.com/xyz-design-rev"
+      }
+    ],
+    "conferenceSolution": {
+      "key": {
+        "type": "hangoutsMeet"
+      },
+      "name": "Google Meet",
+      "iconUri": "https://fonts.gstatic.com/s/i/productlogos/meet_2020q4/v6/web-512dp/logo_meet_2020q4_color_2x_web_512dp.png"
+    },
+    "conferenceId": "xyz-design-rev"
+  },
+  "guestsCanModify": false,
+  "reminders": {
+    "useDefault": true
+  },
+  "eventType": "default"
+}

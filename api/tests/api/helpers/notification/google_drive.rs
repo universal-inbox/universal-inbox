@@ -196,7 +196,7 @@ pub fn assert_sync_notifications(
             "1AbCdEfGhIjKlMnOpQrStUvWxYz#AAAABUiR-5ub_7yjYZKluDfg8a8AAANM" => {
                 assert_eq!(
                     notification.title,
-                    "Comment on Project Proposal - Q4 2025.docx".to_string()
+                    "Comment by Jane Doe on Project Proposal - Q4 2025.docx".to_string()
                 );
                 assert_eq!(notification.kind, NotificationSourceKind::GoogleDrive);
                 assert_eq!(notification.status, NotificationStatus::Unread);
@@ -222,7 +222,7 @@ pub fn assert_sync_notifications(
             "1AbCdEfGhIjKlMnOpQrStUvWxYz#AAAABUiR-5ub_7yjYZKluDfg8a8AAANV" => {
                 assert_eq!(
                     notification.title,
-                    "Comment on Project Proposal - Q4 2025.docx".to_string()
+                    "Comment by John Doe on Project Proposal - Q4 2025.docx".to_string()
                 );
                 assert_eq!(notification.kind, NotificationSourceKind::GoogleDrive);
                 assert_eq!(notification.status, NotificationStatus::Deleted);

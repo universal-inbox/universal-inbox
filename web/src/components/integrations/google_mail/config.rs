@@ -7,7 +7,10 @@ use universal_inbox::integration_connection::{
     integrations::google_mail::{GoogleMailConfig, GoogleMailContext},
 };
 
-use crate::components::floating_label_inputs::FloatingLabelSelect;
+use crate::components::{
+    settings_controls::SettingRow,
+    ui::{ToggleSize, ToggleSwitch, UISelect, UISelectOption},
+};
 
 #[component]
 pub fn GoogleMailProviderConfiguration(
@@ -21,53 +24,49 @@ pub fn GoogleMailProviderConfiguration(
     });
 
     rsx! {
-        div {
-            class: "flex flex-col gap-2",
-
-            div {
-                class: "flex items-center gap-2",
-                label {
-                    class: "label-text cursor-pointer grow text-sm text-base-content",
-                    "Synchronize Google Mail threads as notification"
-                }
-                div {
-                    class: "relative inline-block",
-                    input {
-                        r#type: "checkbox",
-                        class: "switch switch-primary switch-outline peer",
-                        oninput: move |event| {
-                            on_config_change.call(IntegrationConnectionConfig::GoogleMail(GoogleMailConfig {
-                                sync_notifications_enabled: event.value() == "true",
-                                ..config()
-                            }))
-                        },
-                        checked: config().sync_notifications_enabled
-                    }
-                    span {
-                        class: "icon-[tabler--check] text-primary absolute start-1 top-1 hidden size-4 peer-checked:block"
-                    }
-                    span {
-                        class: "icon-[tabler--x] text-neutral absolute end-1 top-1 block size-4 peer-checked:hidden"
-                    }
-                }
+        SettingRow {
+            label: rsx! { "Synchronize Google Mail threads as notification" },
+            ToggleSwitch {
+                size: ToggleSize::Md,
+                checked: config().sync_notifications_enabled,
+                onchange: move |new_value: bool| {
+                    on_config_change.call(IntegrationConnectionConfig::GoogleMail(GoogleMailConfig {
+                        sync_notifications_enabled: new_value,
+                        ..config()
+                    }))
+                },
             }
+        }
 
-            div {
-                class: "flex items-center gap-2",
-                label {
-                    class: "label-text cursor-pointer grow text-sm text-base-content",
-                    "Google Mail label to synchronize"
-                }
+        SettingRow {
+            label: rsx! { "Google Mail label to synchronize" },
 
-                FloatingLabelSelect::<String> {
-                    label: None,
-                    class: "max-w-xs",
-                    name: "google-mail-label".to_string(),
-                    required: true,
-                    default_value: selected_label_id(),
-                    on_select: move |label_id| {
-                        if let Some(Some(context)) = context()
-                            && let Some(label_id) = label_id {
+            {
+                let (options, context_loaded): (Vec<UISelectOption<String>>, bool) = match context() {
+                    Some(Some(context)) => (
+                        context
+                            .labels
+                            .iter()
+                            .map(|label| UISelectOption::new(label.id.clone(), label.name.clone()))
+                            .collect(),
+                        true,
+                    ),
+                    _ => (
+                        vec![UISelectOption::new(
+                            config().synced_label.id.clone(),
+                            config().synced_label.name.clone(),
+                        )],
+                        false,
+                    ),
+                };
+                rsx! {
+                    UISelect::<String> {
+                        value: selected_label_id,
+                        options,
+                        on_change: move |label_id: Option<String>| {
+                            if let Some(Some(context)) = context()
+                                && let Some(label_id) = label_id
+                            {
                                 let label = context
                                     .labels
                                     .iter()
@@ -79,14 +78,11 @@ pub fn GoogleMailProviderConfiguration(
                                     }));
                                 }
                             }
-                    },
-
-                    if let Some(Some(context)) = context() {
-                        for label in &context.labels {
-                            option { selected: selected_label_id() == Some(label.id.clone()), value: "{label.id}", "{label.name}" }
-                        }
-                    } else {
-                        option { selected: true, "{config().synced_label.name}" }
+                        },
+                        placeholder: "Pick a label…".to_string(),
+                        disabled: !context_loaded,
+                        width: "260px".to_string(),
+                        name: "google-mail-label".to_string(),
                     }
                 }
             }

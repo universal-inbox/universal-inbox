@@ -3,21 +3,17 @@
 use dioxus::prelude::*;
 
 use universal_inbox::{
-    HasHtmlUrl,
-    notification::NotificationWithTask,
+    notification::{NotificationStatus, NotificationWithTask},
     third_party::integrations::linear::{LinearIssue, LinearNotification, LinearProject},
 };
 
 use crate::{
     components::{
-        Tag, TagDisplay, UserWithAvatar,
         integrations::linear::{
-            get_notification_type_label,
             icons::{Linear, LinearIssueIcon, LinearProjectIcon},
             list_item::LinearIssueListItemSubtitle,
         },
-        list::{ListContext, ListItem},
-        notifications_list::{TaskHint, get_notification_list_item_action_buttons},
+        list::ListItem,
     },
     utils::format_elapsed_time,
 };
@@ -62,43 +58,27 @@ pub fn LinearIssueNotificationListItem(
     on_select: EventHandler<()>,
 ) -> Element {
     let notification_updated_at = use_memo(move || format_elapsed_time(notification().updated_at));
-    let list_context = use_context::<Memo<ListContext>>();
-    let link = notification().get_html_url();
+    let is_unread = notification().status == NotificationStatus::Unread;
 
     rsx! {
         ListItem {
             key: "{notification().id}",
+            linked_task: notification().task,
             title: "{notification().title}",
-            subtitle: rsx! { LinearIssueListItemSubtitle { linear_issue }},
-            link,
-            icon: rsx! {
-                Linear { class: "h-5 w-5" },
-                TaskHint { task: notification().task }
+            subtitle: rsx! {
+                LinearIssueListItemSubtitle { linear_issue }
             },
-            subicon: rsx! { LinearIssueIcon { class: "h-5 w-5 min-w-5", linear_issue } },
-            action_buttons: get_notification_list_item_action_buttons(
-                notification,
-                list_context().show_shortcut,
-                None,
-                None
-            ),
-            is_selected,
-            on_select,
-
-            div {
-                class: "flex flex-wrap items-center gap-1",
-                TagDisplay {
-                    tag: Into::<Tag>::into(get_notification_type_label(&notification_type))
+            time: "{notification_updated_at}",
+            icon: rsx! {
+                div {
+                    class: "w-full h-full flex items-center justify-center rounded-[inherit] bg-[var(--ui-surface)] border border-[var(--ui-border)]",
+                    Linear { class: "h-4 w-4" }
                 }
-            }
-
-            if let Some(assignee) = linear_issue().assignee {
-                UserWithAvatar { avatar_url: assignee.avatar_url.clone(), user_name: assignee.name.clone() }
-            } else {
-                UserWithAvatar {}
-            }
-
-            span { class: "text-base-content/50 whitespace-nowrap text-xs font-mono", "{notification_updated_at}" }
+            },
+            meta_icon: rsx! { LinearIssueIcon { linear_issue, class: "w-full h-full" } },
+            is_selected,
+            is_unread,
+            on_select,
         }
     }
 }
@@ -112,46 +92,30 @@ pub fn LinearProjectNotificationListItem(
     on_select: EventHandler<()>,
 ) -> Element {
     let notification_updated_at = use_memo(move || format_elapsed_time(notification().updated_at));
-    let list_context = use_context::<Memo<ListContext>>();
-    let link = notification().get_html_url();
+    let is_unread = notification().status == NotificationStatus::Unread;
+    let project_name = linear_project().name.clone();
+    let title = match linear_project().icon {
+        Some(icon) => format!("{icon} {}", notification().title),
+        None => notification().title.clone(),
+    };
 
     rsx! {
         ListItem {
             key: "{notification().id}",
-            title: "{notification().title}",
-            subtitle: rsx! { },
-            link,
+            linked_task: notification().task,
+            title: "{title}",
+            subtitle: rsx! { span { class: "ui-nrow-meta-text", "{project_name}" } },
+            time: "{notification_updated_at}",
             icon: rsx! {
-                Linear { class: "h-5 w-5" },
-                TaskHint { task: notification().task }
-            },
-            subicon: rsx! {
-                LinearProjectIcon {
-                    class: "h-5 w-5 min-w-5",
-                    linear_project: linear_project
+                div {
+                    class: "w-full h-full flex items-center justify-center rounded-[inherit] bg-[var(--ui-surface)] border border-[var(--ui-border)]",
+                    Linear { class: "h-4 w-4" }
                 }
             },
-            action_buttons: get_notification_list_item_action_buttons(
-                notification,
-                list_context().show_shortcut,
-                None,
-                None
-            ),
+            meta_icon: rsx! { LinearProjectIcon { linear_project, class: "w-full h-full" } },
             is_selected,
+            is_unread,
             on_select,
-
-            div {
-                class: "flex flex-wrap items-center gap-1",
-                TagDisplay {
-                    tag: Into::<Tag>::into(get_notification_type_label(&notification_type))
-                }
-            }
-
-            if let Some(lead) = linear_project().lead {
-                UserWithAvatar { avatar_url: lead.avatar_url.clone(), user_name: lead.name.clone() }
-            }
-
-            span { class: "text-base-content/50 whitespace-nowrap text-xs font-mono", "{notification_updated_at}" }
         }
     }
 }

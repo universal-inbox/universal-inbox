@@ -1,31 +1,25 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
-use dioxus_free_icons::{
-    Icon,
-    icons::bs_icons::{BsChatText, BsSlack},
-};
 use slack_morphism::SlackChannelInfo;
 
 use universal_inbox::{
-    HasHtmlUrl,
-    notification::NotificationWithTask,
+    notification::{NotificationStatus, NotificationWithTask},
     third_party::{
         integrations::slack::{
-            SlackChannelDetails, SlackFileCommentDetails, SlackFileDetails, SlackGroupDetails,
-            SlackImDetails, SlackMessageDetails, SlackMessageRender, SlackReaction,
+            SlackFileDetails, SlackMessageDetails, SlackMessageRender, SlackReaction,
             SlackReactionItem, SlackThread,
         },
         item::ThirdPartyItemData,
     },
-    utils::emoji::replace_emoji_code_with_emoji,
 };
+
+use universal_inbox::utils::emoji::replace_emoji_code_with_emoji;
 
 use crate::{
     components::{
         integrations::slack::{SlackMessageActorDisplay, SlackTeamDisplay, SlackUserDisplay},
-        list::{ListContext, ListItem},
-        notifications_list::{TaskHint, get_notification_list_item_action_buttons},
+        list::ListItem,
     },
     utils::format_elapsed_time,
 };
@@ -42,7 +36,7 @@ pub fn SlackReactionNotificationListItem(
     rsx! {
         SlackNotificationListItem {
             notification,
-            subicon: rsx! { span { class: "h-5 w-5 min-w-5", "{emoji}" } },
+            state_tag: rsx! { span { class: "tag", "{emoji}" } },
             is_selected,
             on_select,
         }
@@ -58,7 +52,7 @@ pub fn SlackThreadNotificationListItem(
     rsx! {
         SlackNotificationListItem {
             notification,
-            subicon: rsx! { Icon { class: "h-5 w-5 min-w-5", icon: BsChatText } },
+            state_tag: rsx! {},
             is_selected,
             on_select,
         }
@@ -68,37 +62,34 @@ pub fn SlackThreadNotificationListItem(
 #[component]
 pub fn SlackNotificationListItem(
     notification: ReadSignal<NotificationWithTask>,
-    subicon: Option<Element>,
+    state_tag: Element,
     is_selected: ReadSignal<bool>,
     on_select: EventHandler<()>,
 ) -> Element {
     let notification_updated_at = use_memo(move || format_elapsed_time(notification().updated_at));
-    let list_context = use_context::<Memo<ListContext>>();
-    let link = notification().get_html_url();
+    let is_unread = notification().status == NotificationStatus::Unread;
 
     rsx! {
         ListItem {
             key: "{notification().id}",
+            linked_task: notification().task,
             title: "{notification().title}",
-            subtitle: rsx! { SlackNotificationSubtitle { notification } },
-            link,
-            icon: rsx! {
-                Icon { class: "h-5 w-5", icon: BsSlack },
-                TaskHint { task: notification().task }
+            subtitle: rsx! {
+                SlackNotificationSubtitle { notification }
+                { state_tag }
             },
-            subicon,
-            action_buttons: get_notification_list_item_action_buttons(
-                notification,
-                list_context().show_shortcut,
-                None,
-                None,
-            ),
+            time: "{notification_updated_at}",
+            icon: rsx! {
+                div {
+                    class: "w-full h-full flex items-center justify-center rounded-[inherit] bg-[var(--ui-surface)] border border-[var(--ui-border)]",
+                    span { class: "icon-[logos--slack-icon] size-4" }
+                }
+            },
+            meta_icon: rsx! { span { class: "icon-[lucide--hash] w-full h-full" } },
             is_selected,
+            is_unread,
+            provider: Some("slack"),
             on_select,
-
-            SlackNotificationListItemDetails { notification }
-
-            span { class: "text-base-content/50 whitespace-nowrap text-xs font-mono", "{notification_updated_at}" }
         }
     }
 }
@@ -119,15 +110,7 @@ pub fn SlackNotificationSubtitle(notification: ReadSignal<NotificationWithTask>)
         },
         ThirdPartyItemData::SlackThread(slack_thread) => {
             if slack_thread.messages.len() > 1 {
-                let first_message_text = slack_thread
-                    .messages
-                    .first()
-                    .render_title(slack_thread.references.clone());
-                format!(
-                    "Replied to `{}` in {}",
-                    first_message_text,
-                    channel_str(&slack_thread.channel)
-                )
+                format!("Replied in {}", channel_str(&slack_thread.channel))
             } else {
                 format!("in {}", channel_str(&slack_thread.channel))
             }
@@ -137,7 +120,7 @@ pub fn SlackNotificationSubtitle(notification: ReadSignal<NotificationWithTask>)
 
     rsx! {
         span {
-            class: "flex gap-2 text-xs text-base-content/50",
+            class: "ui-nrow-meta-text",
             "{subtitle}"
         }
     }
@@ -190,38 +173,5 @@ pub fn SlackFileListItemDetails(slack_file: ReadSignal<SlackFileDetails>) -> Ele
         if let Some(user) = slack_file().sender {
             SlackUserDisplay { user }
         }
-    }
-}
-
-#[component]
-pub fn SlackFileCommentListItemDetails(
-    slack_file_comment: ReadSignal<SlackFileCommentDetails>,
-) -> Element {
-    rsx! {
-        SlackTeamDisplay { team: slack_file_comment().team }
-        if let Some(user) = slack_file_comment().sender {
-            SlackUserDisplay { user }
-        }
-    }
-}
-
-#[component]
-pub fn SlackChannelListItemDetails(slack_channel: ReadSignal<SlackChannelDetails>) -> Element {
-    rsx! {
-        SlackTeamDisplay { team: slack_channel().team }
-    }
-}
-
-#[component]
-pub fn SlackImListItemDetails(slack_im: ReadSignal<SlackImDetails>) -> Element {
-    rsx! {
-        SlackTeamDisplay { team: slack_im().team }
-    }
-}
-
-#[component]
-pub fn SlackGroupListItemDetails(slack_group: ReadSignal<SlackGroupDetails>) -> Element {
-    rsx! {
-        SlackTeamDisplay { team: slack_group().team }
     }
 }
