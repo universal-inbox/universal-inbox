@@ -1,6 +1,24 @@
 # Universal Inbox Changelog
 
-## [Unreleased]
+## Unreleased
+
+### Added
+
+- Add MCP (Model Context Protocol) server for AI agent integration
+  - Streamable HTTP transport at `/api/mcp` endpoint
+  - Tools for notification and task management (list, get, act, bulk act, create task, sync)
+  - OAuth 2.1 authentication with PKCE (Dynamic Client Registration, authorization code flow, refresh token rotation)
+  - OAuth 2.0 Protected Resource Metadata and Authorization Server Metadata discovery endpoints
+  - Origin header validation, per-user rate limiting, and token audience validation
+  - Backward-compatible with existing API key authentication
+
+### Security
+
+- Update `quinn-proto` to 0.11.14 to fix RUSTSEC-2026-0037 (DoS via invalid QUIC transport parameters)
+- Replace `typed_id` + `paste` crates with inline implementation to resolve RUSTSEC-2024-0436 (unmaintained `paste` crate)
+- Downgrade `zip` from yanked 7.4.0 to 7.2.0 (resolves GH#133)
+
+## 2026-03-17
 
 ### Added
 

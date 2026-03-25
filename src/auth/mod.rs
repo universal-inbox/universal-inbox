@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 pub mod auth_token;
+pub mod oauth2;
 pub mod openidconnect;
 
 // Simplify the ID token type to a string. This avoid to embed all the openidconnect
