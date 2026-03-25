@@ -8,13 +8,16 @@ use dioxus_free_icons::{
 use log::error;
 use secrecy::SecretBox;
 
-use universal_inbox::user::{
-    Password, UserAuthKind, UserAuthMethod, UserAuthMethodDisplayInfo, Username,
+use universal_inbox::{
+    FrontAuthenticationConfig,
+    user::{Password, UserAuthKind, UserAuthMethod, UserAuthMethodDisplayInfo, Username},
 };
 
 use crate::{
     components::{floating_label_inputs::FloatingLabelInputText, loading::Loading},
+    config::APP_CONFIG,
     form::FormValues,
+    icons::GOOGLE_LOGO,
     services::user_service::{AUTH_METHODS, UserCommand},
 };
 
@@ -48,6 +51,21 @@ pub fn AuthMethodsCard() -> Element {
     let method_count = auth_methods.len();
     let has_local = auth_methods.iter().any(|m| m.kind == UserAuthKind::Local);
     let has_passkey = auth_methods.iter().any(|m| m.kind == UserAuthKind::Passkey);
+    let has_google = auth_methods
+        .iter()
+        .any(|m| m.kind == UserAuthKind::OIDCGoogleAuthorizationCode);
+    let is_google_auth_enabled = APP_CONFIG
+        .read()
+        .as_ref()
+        .map(|config| {
+            config.authentication_configs.iter().any(|auth_config| {
+                matches!(
+                    auth_config,
+                    FrontAuthenticationConfig::OIDCGoogleAuthorizationCodeFlow(_)
+                )
+            })
+        })
+        .unwrap_or(false);
 
     rsx! {
         div {
@@ -137,6 +155,20 @@ pub fn AuthMethodsCard() -> Element {
                                     onclick: move |_| show_add_password.set(true),
                                     "Add password"
                                 }
+                            }
+                        }
+
+                        if is_google_auth_enabled && !has_google {
+                            button {
+                                class: "btn btn-outline btn-sm w-fit relative pl-10",
+                                onclick: move |_| {
+                                    user_service.send(UserCommand::LinkOIDCAuth);
+                                },
+                                img {
+                                    class: "h-6 w-6 bg-white rounded-md absolute left-2",
+                                    src: "{GOOGLE_LOGO}",
+                                }
+                                "Link Google account"
                             }
                         }
 

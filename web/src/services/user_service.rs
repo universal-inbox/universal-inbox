@@ -11,7 +11,7 @@ use webauthn_rs_proto::*;
 
 use universal_inbox::{
     SuccessResponse,
-    auth::CloseSessionResponse,
+    auth::{AuthorizeSessionResponse, CloseSessionResponse},
     user::{
         Credentials, EmailValidationToken, Password, PasswordResetToken, RegisterUserParameters,
         User, UserAuthKind, UserAuthMethod, UserId, UserPatch, Username,
@@ -39,6 +39,7 @@ pub enum UserCommand {
     ListAuthMethods,
     AddLocalAuth(SecretBox<Password>),
     AddPasskeyAuthMethod(Username),
+    LinkOIDCAuth,
     RemoveAuthMethod(UserAuthKind),
 }
 
@@ -204,7 +205,7 @@ pub async fn user_service(
                 start_passkey_registration(username, &api_base_url, connected_user, ui_model).await;
             }
             Some(UserCommand::UpdateUser(user_patch)) => {
-                let result: Result<User> = call_api(
+                let result: Result<Option<User>> = call_api(
                     Method::PATCH,
                     &api_base_url,
                     "users/me",
@@ -215,7 +216,9 @@ pub async fn user_service(
 
                 match result {
                     Ok(user) => {
-                        connected_user.write().replace(user);
+                        if let Some(user) = user {
+                            connected_user.write().replace(user);
+                        }
                         ui_model.write().confirmation_message =
                             Some("Profile updated successfully".to_string());
                     }
@@ -267,6 +270,27 @@ pub async fn user_service(
             Some(UserCommand::AddPasskeyAuthMethod(username)) => {
                 start_add_passkey_auth_method(username, &api_base_url, auth_methods, ui_model)
                     .await;
+            }
+            Some(UserCommand::LinkOIDCAuth) => {
+                let result: Result<AuthorizeSessionResponse> = call_api(
+                    Method::GET,
+                    &api_base_url,
+                    "auth/link-oidc/authorize",
+                    None::<i32>,
+                    Some(ui_model),
+                )
+                .await;
+
+                match result {
+                    Ok(response) => {
+                        if let Err(err) = redirect_to(response.authorization_url.as_str()) {
+                            ui_model.write().error_message = Some(err.to_string());
+                        }
+                    }
+                    Err(err) => {
+                        ui_model.write().error_message = Some(err.to_string());
+                    }
+                };
             }
             Some(UserCommand::RemoveAuthMethod(kind)) => {
                 let result: Result<SuccessResponse> = call_api(

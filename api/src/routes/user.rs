@@ -195,10 +195,8 @@ pub async fn patch_user(
             .body(serde_json::to_string(&user).context("Cannot serialize user")?)),
         UpdateStatus {
             updated: false,
-            result: Some(user),
-        } => Ok(HttpResponse::NotModified()
-            .content_type("application/json")
-            .body(serde_json::to_string(&user).context("Cannot serialize user")?)),
+            result: Some(_),
+        } => Ok(HttpResponse::NotModified().finish()),
         UpdateStatus { result: None, .. } => Ok(HttpResponse::NotFound()
             .content_type("application/json")
             .body(BoxBody::new(

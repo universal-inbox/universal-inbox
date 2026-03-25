@@ -197,6 +197,9 @@ pub async fn authorize_session(
     session: Session,
     settings: web::Data<Settings>,
 ) -> Result<HttpResponse, UniversalInboxError> {
+    // Clear any stale linking user ID from a previously abandoned link flow,
+    // so a normal login cannot be accidentally treated as a linking flow.
+    let _ = session.remove(LINKING_USER_ID_SESSION_KEY);
     build_oidc_authorization_response(&user_service, &session, &settings).await
 }
 
@@ -217,6 +220,10 @@ pub async fn authorize_link_oidc(
     session
         .insert(LINKING_USER_ID_SESSION_KEY, user_id)
         .context("Failed to insert linking user ID into the session")?;
+
+    // Clear any cached OIDC authorization URL so a fresh one is always generated
+    // for the linking flow.
+    session.remove(OIDC_AUTHORIZATION_URL_SESSION_KEY);
 
     build_oidc_authorization_response(&user_service, &session, &settings).await
 }
