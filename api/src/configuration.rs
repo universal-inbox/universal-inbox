@@ -16,9 +16,7 @@ use universal_inbox::{
 };
 
 use crate::{
-    ExecutionContext,
-    integrations::oauth2::ClientSecret,
-    universal_inbox::{UniversalInboxError, user::model::UserAuthKind},
+    ExecutionContext, integrations::oauth2::ClientSecret, universal_inbox::UniversalInboxError,
 };
 
 #[derive(Deserialize, Clone, Debug)]

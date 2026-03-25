@@ -4,6 +4,11 @@
 
 ### Added
 
+- Support multiple authentication methods per user account
+  - Users can now add password, passkey, or Google authentication to an existing account
+  - New "Authentication methods" card on the user profile page to manage auth methods
+  - "Link Google account" button to associate a Google account with an existing user
+  - Auth methods can be removed as long as at least one method remains
 - Add MCP (Model Context Protocol) server for AI agent integration
   - Streamable HTTP transport at `/api/mcp` endpoint
   - Tools for notification and task management (list, get, act, bulk act, create task, sync)
