@@ -28,6 +28,7 @@ use rmcp::{
 };
 use rmcp_actix_web::transport::StreamableHttpService;
 use tokio::sync::RwLock;
+use tracing::{debug, warn};
 
 use universal_inbox::user::UserId;
 
@@ -178,6 +179,11 @@ where
         if let Some(origin_value) = req.headers().get(header::ORIGIN) {
             let origin_str = origin_value.to_str().unwrap_or("");
             if !self.allowed_origins.iter().any(|o| o == origin_str) {
+                warn!(
+                    origin = origin_str,
+                    allowed_origins = ?self.allowed_origins,
+                    "MCP auth rejected: Origin not in allowed list"
+                );
                 let response = req
                     .into_response(HttpResponse::Forbidden().finish())
                     .map_into_right_body();
@@ -190,6 +196,7 @@ where
         // MCP clients (e.g. Claude Code) to misinterpret it as an auth failure
         // and enter a token-refresh loop instead of proceeding to POST initialize.
         if req.method() == Method::GET && req.headers().get("mcp-session-id").is_none() {
+            debug!("MCP auth rejected: GET request without Mcp-Session-Id header");
             let response = req
                 .into_response(
                     HttpResponse::BadRequest()
@@ -211,6 +218,11 @@ where
             .filter(|version| !SUPPORTED_PROTOCOL_VERSIONS.contains(version))
             .map(|v| v.to_string());
         if let Some(version) = unsupported_version {
+            warn!(
+                version,
+                supported = ?SUPPORTED_PROTOCOL_VERSIONS,
+                "MCP auth rejected: unsupported protocol version"
+            );
             let response = req
                 .into_response(HttpResponse::BadRequest().body(format!(
                     "Bad Request: Unsupported MCP-Protocol-Version: {version}"
@@ -225,6 +237,14 @@ where
         let resource_metadata_url = self.resource_metadata_url.clone();
         let authenticated = match auth_result {
             None => {
+                warn!(
+                    has_authorization_header,
+                    method = %req.method(),
+                    path = %req.path(),
+                    "MCP auth rejected: no Authenticated<Claims> in request extensions \
+                     (JWT validation likely failed upstream — check for token expiry or \
+                     signature errors)"
+                );
                 let response = req
                     .into_response(
                         HttpResponse::Unauthorized()
@@ -245,6 +265,11 @@ where
         // Authorization header), reject to prevent CSRF — this makes the
         // permissive CORS origin policy safe.
         if !has_authorization_header {
+            warn!(
+                sub = %authenticated.claims.sub,
+                "MCP auth rejected: Authenticated<Claims> present but no Authorization header \
+                 (session-cookie authentication is not allowed for MCP)"
+            );
             let response = req
                 .into_response(
                     HttpResponse::Unauthorized()
@@ -262,6 +287,12 @@ where
         if let Some(ref aud) = authenticated.claims.aud {
             let expected_aud = &self.resource_url;
             if aud != expected_aud {
+                warn!(
+                    sub = %authenticated.claims.sub,
+                    aud,
+                    expected_aud,
+                    "MCP auth rejected: audience mismatch"
+                );
                 let response = req
                     .into_response(HttpResponse::Forbidden().finish())
                     .map_into_right_body();
@@ -274,11 +305,26 @@ where
         if let Some(uid) = user_id
             && self.rate_limiter.check_key(&uid).is_err()
         {
+            warn!(
+                user_id = %uid,
+                "MCP auth rejected: rate limit exceeded ({MCP_RATE_LIMIT_PER_MINUTE} req/min)"
+            );
             let response = req
                 .into_response(HttpResponse::TooManyRequests().finish())
                 .map_into_right_body();
             return Box::pin(async move { Ok(response) });
         }
+
+        debug!(
+            sub = %authenticated.claims.sub,
+            exp = authenticated.claims.exp,
+            iat = authenticated.claims.iat,
+            aud = ?authenticated.claims.aud,
+            client_id = ?authenticated.claims.client_id,
+            method = %req.method(),
+            path = %req.path(),
+            "MCP auth accepted"
+        );
 
         req.headers_mut().remove(header::AUTHORIZATION);
         let future = self.service.call(req);
