@@ -736,6 +736,9 @@ fn build_csp_header(settings: &Settings) -> String {
     for url in settings.application.security.csp_extra_connect_src.iter() {
         connect_srcs.push_borrowed(Source::Host(url));
     }
+    connect_srcs = connect_srcs
+        .push(Source::Host("https://client.crisp.chat"))
+        .push(Source::Host("wss://client.relay.crisp.chat"));
 
     CSP::new()
         .push(Directive::DefaultSrc(Sources::new_with(Source::Self_)))
@@ -744,10 +747,13 @@ fn build_csp_header(settings: &Settings) -> String {
                 .push(Source::WasmUnsafeEval)
                 .push(Source::UnsafeInline)
                 .push(Source::UnsafeEval)
+                .push(Source::Host("https://client.crisp.chat"))
                 .push(Source::Host("https://cdn.headwayapp.co")),
         ))
         .push(Directive::StyleSrc(
-            Sources::new_with(Source::Self_).push(Source::UnsafeInline),
+            Sources::new_with(Source::Self_)
+                .push(Source::UnsafeInline)
+                .push(Source::Host("https://client.crisp.chat")),
         ))
         .push(Directive::ObjectSrc(Sources::new()))
         .push(Directive::ConnectSrc(connect_srcs))
@@ -755,6 +761,10 @@ fn build_csp_header(settings: &Settings) -> String {
             Sources::new_with(Source::Host("*"))
                 .push(Source::Self_)
                 .push(Source::Scheme("data")),
+        ))
+        .push(Directive::FontSrc(
+            Sources::new_with(Source::Self_)
+                .push(Source::Host("https://client.crisp.chat")),
         ))
         .push(Directive::WorkerSrc(Sources::new()))
         .push(Directive::FrameSrc(
