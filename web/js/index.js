@@ -216,37 +216,50 @@ export function init_crisp(
     user_avatar,
     user_id,
 ) {
-    Crisp.configure(website_id, {
-        autoload: false,
-        sessionMerge: true,
-    });
-    if (!!user_id) {
-        Crisp.setTokenId(user_id);
-    }
-    if (!!user_email) {
-        Crisp.user.setEmail(user_email, user_email_signature);
-    }
-    if (!!user_nickname) {
-        Crisp.user.setNickname(user_nickname);
-    }
-    if (!!user_avatar) {
-        Crisp.user.setAvatar(user_avatar);
-    }
-
-    Crisp.load();
-
-    if (!!user_id) {
-        Crisp.session.setData({
-            user_id: user_id,
+    try {
+        Crisp.configure(website_id, {
+            autoload: false,
+            sessionMerge: true,
         });
+        if (!!user_id) {
+            Crisp.setTokenId(user_id);
+        }
+        if (!!user_email) {
+            Crisp.user.setEmail(user_email, user_email_signature);
+        }
+        if (!!user_nickname) {
+            Crisp.user.setNickname(user_nickname);
+        }
+        if (!!user_avatar) {
+            Crisp.user.setAvatar(user_avatar);
+        }
+
+        Crisp.load();
+
+        if (!!user_id) {
+            Crisp.session.setData({
+                user_id: user_id,
+            });
+        }
+    } catch (e) {
+        console.warn("Failed to initialize Crisp chat:", e);
     }
 }
 
 export function unload_crisp() {
-    Crisp.setTokenId();
-    Crisp.session.reset();
+    try {
+        Crisp.setTokenId();
+        Crisp.session.reset();
+    } catch (e) {
+        console.warn("Failed to unload Crisp chat:", e);
+    }
 }
 
 export function is_crisp_chat_opened() {
-    return Crisp.chat.isChatOpened();
+    try {
+        return Crisp.chat.isChatOpened();
+    } catch (e) {
+        console.warn("Failed to check Crisp chat state:", e);
+        return false;
+    }
 }
