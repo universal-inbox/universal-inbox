@@ -337,6 +337,16 @@ impl UserService {
             }
             None => {
                 // User has no email yet, set it from the OIDC provider
+                // Check if the email domain is blacklisted
+                let domain = oidc_email.domain().to_lowercase();
+                if let Some(rejection_message) = self
+                    .application_settings
+                    .security
+                    .email_domain_blacklist
+                    .get(&domain)
+                {
+                    return Err(UniversalInboxError::Forbidden(rejection_message.clone()));
+                }
                 self.repository
                     .update_user_profile(
                         executor,
@@ -446,14 +456,16 @@ impl UserService {
         if patch.email.is_some() {
             let has_oidc = self
                 .repository
-                .get_user_auth(executor, user_id, UserAuthKind::OIDCGoogleAuthorizationCode)
+                .get_all_user_auths(executor, user_id, false)
                 .await?
-                .is_some()
-                || self
-                    .repository
-                    .get_user_auth(executor, user_id, UserAuthKind::OIDCAuthorizationCodePKCE)
-                    .await?
-                    .is_some();
+                .iter()
+                .any(|auth| {
+                    matches!(
+                        auth.kind(),
+                        UserAuthKind::OIDCGoogleAuthorizationCode
+                            | UserAuthKind::OIDCAuthorizationCodePKCE
+                    )
+                });
 
             if has_oidc {
                 return Err(UniversalInboxError::InvalidInputData {
