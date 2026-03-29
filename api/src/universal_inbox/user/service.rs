@@ -331,7 +331,7 @@ impl UserService {
                 return Err(UniversalInboxError::InvalidInputData {
                     source: None,
                     user_error: format!(
-                        "The email from the Google account ({oidc_email}) does not match your current email ({current_email})"
+                        "The email from the OIDC account ({oidc_email}) does not match your current email ({current_email})"
                     ),
                 });
             }
