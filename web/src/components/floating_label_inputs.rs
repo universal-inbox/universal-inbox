@@ -29,6 +29,8 @@ pub struct InputProps<T: Clone + PartialEq + 'static> {
     #[props(default)]
     force_validation: Option<bool>,
     #[props(default)]
+    disabled: Option<bool>,
+    #[props(default)]
     r#type: Option<String>,
     #[props(default)]
     icon: Option<Element>,
@@ -114,6 +116,7 @@ where
                         }
                     },
                     autofocus: props.autofocus.unwrap_or_default(),
+                    disabled: props.disabled.unwrap_or_default(),
                 }
 
                 if let Some(label) = (props.label)() {
