@@ -763,8 +763,7 @@ fn build_csp_header(settings: &Settings) -> String {
                 .push(Source::Scheme("data")),
         ))
         .push(Directive::FontSrc(
-            Sources::new_with(Source::Self_)
-                .push(Source::Host("https://client.crisp.chat")),
+            Sources::new_with(Source::Self_).push(Source::Host("https://client.crisp.chat")),
         ))
         .push(Directive::WorkerSrc(Sources::new()))
         .push(Directive::FrameSrc(

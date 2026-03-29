@@ -9,11 +9,13 @@ use email_address::EmailAddress;
 use gravatar_rs::Generator;
 use log::error;
 
+use universal_inbox::user::UserAuthKind;
+
 use crate::{
     components::{floating_label_inputs::FloatingLabelInputText, loading::Loading},
     form::FormValues,
     model::DEFAULT_USER_AVATAR,
-    services::user_service::{CONNECTED_USER, UserCommand},
+    services::user_service::{AUTH_METHODS, CONNECTED_USER, UserCommand},
 };
 
 #[component]
@@ -34,6 +36,20 @@ pub fn UserProfileCard() -> Element {
     let mut first_name = use_signal(String::new);
     let mut last_name = use_signal(String::new);
     let mut email = use_signal(String::new);
+
+    let has_oidc = AUTH_METHODS
+        .read()
+        .as_ref()
+        .map(|methods| {
+            methods.iter().any(|m| {
+                matches!(
+                    m.kind,
+                    UserAuthKind::OIDCGoogleAuthorizationCode
+                        | UserAuthKind::OIDCAuthorizationCodePKCE
+                )
+            })
+        })
+        .unwrap_or(false);
 
     let user_avatar = if let Some(ref email) = user.email {
         Generator::default()
@@ -111,6 +127,14 @@ pub fn UserProfileCard() -> Element {
                                 value: email,
                                 force_validation: force_validation(),
                                 r#type: "email".to_string(),
+                                disabled: has_oidc,
+                            }
+
+                            if has_oidc {
+                                p {
+                                    class: "text-xs text-base-content/60",
+                                    "Email is managed by your linked OIDC account"
+                                }
                             }
 
                             div {
