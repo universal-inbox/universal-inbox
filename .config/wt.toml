@@ -1,7 +1,6 @@
 [post-create]
 copy = "wt step copy-ignored"
 clean_data = "rm -rf .devbox/virtenv/redis .devbox/virtenv/postgresql_17/data"
-init_db = "just init-db"
 fix_permissions = "chmod -R og-rwx .devbox/virtenv/postgresql_17"
 env = """
 cat >> .local_envrc << EOF
