@@ -431,6 +431,7 @@ mod add_google_auth_method {
                     auth_user_id: AuthUserId("google-user-12345".to_string()),
                     auth_id_token: "google-fake-id-token".to_string().into(),
                 })),
+                "john@doe.name".parse().unwrap(),
             )
             .await
             .unwrap();
@@ -480,6 +481,7 @@ mod add_google_auth_method {
                     auth_user_id: AuthUserId("google-user-12345".to_string()),
                     auth_id_token: "google-fake-id-token".to_string().into(),
                 })),
+                "john@doe.name".parse().unwrap(),
             )
             .await
             .unwrap();
@@ -496,6 +498,7 @@ mod add_google_auth_method {
                     auth_user_id: AuthUserId("google-user-67890".to_string()),
                     auth_id_token: "google-fake-id-token-2".to_string().into(),
                 })),
+                "john@doe.name".parse().unwrap(),
             )
             .await;
         transaction.commit().await.unwrap();
