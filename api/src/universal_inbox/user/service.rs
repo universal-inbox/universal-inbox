@@ -291,6 +291,7 @@ impl UserService {
         executor: &mut Transaction<'_, Postgres>,
         user_id: UserId,
         user_auth: UserAuth,
+        oidc_email: EmailAddress,
     ) -> Result<UserAuthMethod, UniversalInboxError> {
         let kind = user_auth.kind();
 
@@ -316,6 +317,40 @@ impl UserService {
             });
         }
 
+        // Validate OIDC email against user's current email
+        let user = self
+            .repository
+            .get_user(executor, user_id)
+            .await?
+            .ok_or_else(|| {
+                UniversalInboxError::ItemNotFound(format!("User {user_id} not found"))
+            })?;
+
+        match &user.email {
+            Some(current_email) if *current_email != oidc_email => {
+                return Err(UniversalInboxError::InvalidInputData {
+                    source: None,
+                    user_error: format!(
+                        "The email from the Google account ({oidc_email}) does not match your current email ({current_email})"
+                    ),
+                });
+            }
+            None => {
+                // User has no email yet, set it from the OIDC provider
+                self.repository
+                    .update_user_profile(
+                        executor,
+                        user_id,
+                        &UserPatch {
+                            email: Some(oidc_email),
+                            ..Default::default()
+                        },
+                    )
+                    .await?;
+            }
+            _ => {} // Emails match, proceed
+        }
+
         let auth_method = UserAuthMethod::from(&user_auth);
         self.repository
             .create_user_auth(executor, user_id, user_auth)
@@ -334,25 +369,29 @@ impl UserService {
         code: AuthorizationCode,
         nonce: Nonce,
     ) -> Result<UserAuthMethod, UniversalInboxError> {
-        let (_, id_token) = self
+        let (access_token, id_token) = self
             .fetch_access_token(openid_connect_settings, code, nonce.clone())
             .await?;
 
         let oidc_provider = self
             .get_openid_connect_provider(openid_connect_settings)
             .await?;
-        let auth_user_id = oidc_provider
+        let auth_user_id: AuthUserId = oidc_provider
             .verify_id_token_claims(&id_token, &nonce)?
             .subject()
             .to_string()
             .into();
+
+        let oidc_email = self
+            .fetch_oidc_user_email(&oidc_provider, access_token, &auth_user_id)
+            .await?;
 
         let user_auth = UserAuth::OIDCGoogleAuthorizationCode(Box::new(OpenIdConnectUserAuth {
             auth_user_id,
             auth_id_token: id_token.to_string().into(),
         }));
 
-        self.link_oidc_auth_method(executor, user_id, user_auth)
+        self.link_oidc_auth_method(executor, user_id, user_auth, oidc_email)
             .await
     }
 
@@ -374,12 +413,16 @@ impl UserService {
             .verify_access_token(pkce_flow_settings, &mut oidc_provider, &access_token)
             .await?;
 
+        let oidc_email = self
+            .fetch_oidc_user_email(&oidc_provider, access_token, &auth_user_id)
+            .await?;
+
         let user_auth = UserAuth::OIDCAuthorizationCodePKCE(Box::new(OpenIdConnectUserAuth {
             auth_user_id,
             auth_id_token: id_token.to_string().into(),
         }));
 
-        self.link_oidc_auth_method(executor, user_id, user_auth)
+        self.link_oidc_auth_method(executor, user_id, user_auth, oidc_email)
             .await
     }
 
@@ -399,6 +442,29 @@ impl UserService {
         user_id: UserId,
         patch: &UserPatch,
     ) -> Result<UpdateStatus<User>, UniversalInboxError> {
+        // Block email changes when an OIDC authentication method is linked
+        if patch.email.is_some() {
+            let has_oidc = self
+                .repository
+                .get_user_auth(executor, user_id, UserAuthKind::OIDCGoogleAuthorizationCode)
+                .await?
+                .is_some()
+                || self
+                    .repository
+                    .get_user_auth(executor, user_id, UserAuthKind::OIDCAuthorizationCodePKCE)
+                    .await?
+                    .is_some();
+
+            if has_oidc {
+                return Err(UniversalInboxError::InvalidInputData {
+                    source: None,
+                    user_error:
+                        "Email cannot be changed while an OIDC authentication method is linked"
+                            .to_string(),
+                });
+            }
+        }
+
         // Check email domain blacklist if email is being changed
         if let Some(email) = &patch.email {
             let domain = email.domain().to_lowercase();
@@ -630,6 +696,34 @@ impl UserService {
                     .await
             }
         }
+    }
+
+    /// Fetch the email address from the OIDC provider's user info endpoint.
+    #[tracing::instrument(level = "debug", skip_all, err)]
+    async fn fetch_oidc_user_email(
+        &self,
+        oidc_provider: &OpenidConnectProvider,
+        access_token: AccessToken,
+        auth_user_id: &AuthUserId,
+    ) -> Result<EmailAddress, UniversalInboxError> {
+        let user_infos: CoreUserInfoClaims = oidc_provider
+            .client
+            .user_info(
+                access_token,
+                Some(SubjectIdentifier::new(auth_user_id.to_string())),
+            )
+            .context("UserInfo configuration error")?
+            .request_async(&oidc_provider.http_client)
+            .await
+            .context("UserInfo request error")?;
+
+        let email: EmailAddress = user_infos
+            .email()
+            .context("No email found in OIDC user info")?
+            .parse()
+            .context("Invalid email address from OIDC provider")?;
+
+        Ok(email)
     }
 
     #[tracing::instrument(level = "debug", skip_all, fields(user.id = user_id.to_string()), err)]
