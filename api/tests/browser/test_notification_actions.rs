@@ -27,8 +27,8 @@ async fn test_notifications_are_displayed(#[future] browser_tested_app: BrowserT
         .await
         .expect("Failed to count notification rows");
     assert!(
-        count >= 9,
-        "Expected at least 9 notification rows, but found {count}"
+        count >= 8,
+        "Expected at least 8 notification rows, but found {count}"
     );
 }
 

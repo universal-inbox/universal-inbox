@@ -243,8 +243,6 @@ mod verify_integration_connections {
                 "mpim:read".to_string(),
                 "reactions:read".to_string(),
                 "reactions:write".to_string(),
-                "stars:read".to_string(),
-                "stars:write".to_string(),
                 "team:read".to_string(),
                 "usergroups:read".to_string(),
                 "users:read".to_string()

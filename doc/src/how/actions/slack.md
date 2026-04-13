@@ -4,7 +4,6 @@
 
 Universal Inbox collects specific types of Slack messages based on your configuration:
 
-- **Saved for Later Messages**: Messages you've saved for later in Slack
 - **Emoji-Reacted Messages**: Messages you've reacted to with specific emoji (configurable)
 - **Direct Mentions**: Messages where you're explicitly mentioned
 
@@ -29,7 +28,7 @@ This action lets you view the full message context in Slack, where you can respo
 
 - **Keyboard Shortcut**: `d`
 - **Effect in Universal Inbox**: Removes the notification from your inbox until the next reply in the thread
-- **Effect in Slack**: Remove the "saved for later" status from the message or remove the reaction. It does not mark the message as read.
+- **Effect in Slack**: Remove the reaction from the message. It does not mark the message as read.
 
 Use this action when you want to clear a notification from your Universal Inbox. The notification will reappear if there's a new reply in the thread for notifications from a Slack mention.
 
@@ -41,7 +40,7 @@ Due to Slack API limitations, the read status of a message cannot be changed in 
 
 - **Keyboard Shortcut**: `u`
 - **Effect in Universal Inbox**: Removes the notification from your inbox
-- **Effect in Slack**: Remove the "saved for later" status from the message or remove the reaction. It does not mark the message as read, nor unsubscribe the Slack thread for notifications from Slack mentions.
+- **Effect in Slack**: Remove the reaction from the message. It does not mark the message as read, nor unsubscribe the Slack thread for notifications from Slack mentions.
 
 ```admonish note
 Due to Slack API limitations, the read and subscription status of a message/thread cannot be changed in Slack. The "Unsubscribe" action will only update the status in Universal Inbox.
@@ -60,7 +59,7 @@ Use this when you need to defer handling a message until later.
 - **Keyboard Shortcut**: `p`
 - **Keyboard Shortcut (with default task parameters)**: `t`
 - **Effect in Universal Inbox**: Links notification to a newly created task and remove the notification from your inbox
-- **Effect in Slack**: Remove the "saved for later" status from the message or remove the reaction. It does not mark the message as read.
+- **Effect in Slack**: Remove the reaction from the message. It does not mark the message as read.
 - **Effect in Task Manager**: Creates a new task with a link to the Slack message
 
 Ideal for converting a Slack message into an actionable task in your task management tool.
@@ -69,7 +68,7 @@ Ideal for converting a Slack message into an actionable task in your task manage
 
 - **Keyboard Shortcut**: `l`
 - **Effect in Universal Inbox**: Links notification to an existing task and remove the notification from your inbox
-- **Effect in Slack**: Remove the "saved for later" status from the message or remove the reaction. It does not mark the message as read.
+- **Effect in Slack**: Remove the reaction from the message. It does not mark the message as read.
 - **Effect in Task Manager**: Add a link to the Slack message in the task description
 
 Use this when you already have a task related to this Slack message.

@@ -43,9 +43,8 @@ Unlike other integrations, Slack uses a real-time webhook system that delivers e
 
 When synchronizing with Slack:
 
-- Messages marked as "saved for later" appear as tasks in your task manager
 - Messages with specific reactions appear as tasks in your task manager
-- Completing a task in your task manager removes the saved status or reaction in Slack
+- Completing a task in your task manager removes the reaction in Slack
 
 ```admonish tip
 Specify which emoji reactions should trigger task creation in the [Slack integration settings](../config/setup/slack.md)

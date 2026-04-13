@@ -12,8 +12,7 @@ use crate::{
             google_mail::{GoogleMailConfig, GoogleMailContext},
             linear::LinearConfig,
             slack::{
-                SlackConfig, SlackContext, SlackReactionConfig, SlackStarConfig,
-                SlackSyncTaskConfig, SlackSyncType,
+                SlackConfig, SlackContext, SlackReactionConfig, SlackSyncTaskConfig, SlackSyncType,
             },
             todoist::{TodoistConfig, TodoistContext},
         },
@@ -232,30 +231,6 @@ impl IntegrationProvider {
         let (target_project, default_due_at, default_priority) = match self {
             IntegrationProvider::Slack { config, .. } => {
                 match third_party_item.get_third_party_item_source_kind() {
-                    ThirdPartyItemSourceKind::SlackStar => {
-                        let SlackConfig {
-                            star_config:
-                                SlackStarConfig {
-                                    sync_type:
-                                        SlackSyncType::AsTasks(SlackSyncTaskConfig {
-                                            target_project,
-                                            default_due_at,
-                                            default_priority,
-                                        }),
-                                    ..
-                                },
-                            ..
-                        } = config
-                        else {
-                            return None;
-                        };
-
-                        (
-                            target_project.as_ref(),
-                            default_due_at.as_ref(),
-                            default_priority,
-                        )
-                    }
                     ThirdPartyItemSourceKind::SlackReaction => {
                         let SlackConfig {
                             reaction_config:
