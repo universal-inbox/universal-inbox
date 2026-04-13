@@ -43,6 +43,7 @@ use crate::{
     },
     universal_inbox::{
         UniversalInboxError, integration_connection::service::IntegrationConnectionService,
+        slack_bridge::service::SlackBridgeService,
     },
     utils::cache::build_redis_cache,
 };
@@ -53,20 +54,77 @@ static SLACK_BASE_URL: &str = "https://api.slack.com/api";
 pub struct SlackService {
     slack_base_url: String,
     integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
+    slack_bridge_service: Arc<SlackBridgeService>,
 }
 
 impl SlackService {
     pub fn new(
         slack_base_url: Option<String>,
         integration_connection_service: Arc<RwLock<IntegrationConnectionService>>,
+        slack_bridge_service: Arc<SlackBridgeService>,
     ) -> Self {
         Self {
             slack_base_url: slack_base_url.unwrap_or_else(|| SLACK_BASE_URL.to_string()),
             integration_connection_service,
+            slack_bridge_service,
         }
     }
 
     pub async fn mock_all(_mock_server: &MockServer) {}
+
+    async fn create_bridge_pending_action_if_enabled(
+        &self,
+        executor: &mut Transaction<'_, Postgres>,
+        source_item: &ThirdPartyItem,
+        user_id: UserId,
+        action_type: universal_inbox::slack_bridge::SlackBridgeActionType,
+    ) -> Result<(), UniversalInboxError> {
+        let ThirdPartyItemData::SlackThread(slack_thread) = &source_item.data else {
+            return Ok(()); // Not a SlackThread — no-op
+        };
+
+        // Check if extension bridge is enabled for this user
+        let integration_connection_service = self.integration_connection_service.read().await;
+        let (_, integration_connection) = match integration_connection_service
+            .find_access_token(executor, IntegrationProviderKind::Slack, user_id)
+            .await?
+        {
+            Some(result) => result,
+            None => return Ok(()), // No Slack connection
+        };
+
+        let extension_enabled = match &integration_connection.provider {
+            universal_inbox::integration_connection::provider::IntegrationProvider::Slack {
+                config,
+                ..
+            } => config.message_config.extension_enabled,
+            _ => false,
+        };
+
+        if !extension_enabled {
+            return Ok(());
+        }
+
+        let team_id = slack_thread.team.id.clone();
+        let channel_id = slack_thread.channel.id.clone();
+        let thread_ts = slack_thread.messages.first().origin.ts.clone();
+        let last_message_ts = slack_thread.messages.last().origin.ts.clone();
+
+        self.slack_bridge_service
+            .create_pending_action(
+                executor,
+                user_id,
+                None,
+                action_type,
+                team_id,
+                channel_id,
+                thread_ts,
+                last_message_ts,
+            )
+            .await?;
+
+        Ok(())
+    }
 
     pub fn build_slack_client(
         &self,
@@ -1235,21 +1293,25 @@ impl ThirdPartyNotificationSourceService<SlackThread> for SlackService {
         skip_all,
         fields(
             third_party_item_id = source_item.id.to_string(),
-            user.id = _user_id.to_string()
+            user.id = user_id.to_string()
         ),
         err
     )]
     async fn delete_notification_from_source(
         &self,
-        _executor: &mut Transaction<'_, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         source_item: &ThirdPartyItem,
-        _user_id: UserId,
+        user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
-        // There is no way to mark a Slack thread as read with public API
-        // For message in the channel, the read mark can be updated but will mark as
-        // read all messages before the given timestamp.
-        // This might not be what we want for now, perhaps later with an option
-        Ok(())
+        // Slack's public API cannot mark threads as read.
+        // When extension bridge is enabled, queue a pending action for the extension to execute.
+        self.create_bridge_pending_action_if_enabled(
+            executor,
+            source_item,
+            user_id,
+            universal_inbox::slack_bridge::SlackBridgeActionType::MarkAsRead,
+        )
+        .await
     }
 
     #[allow(clippy::blocks_in_conditions)]
@@ -1258,18 +1320,25 @@ impl ThirdPartyNotificationSourceService<SlackThread> for SlackService {
         skip_all,
         fields(
             third_party_item_id = source_item.id.to_string(),
-            user.id = _user_id.to_string()
+            user.id = user_id.to_string()
         ),
         err
     )]
     async fn unsubscribe_notification_from_source(
         &self,
-        _executor: &mut Transaction<'_, Postgres>,
+        executor: &mut Transaction<'_, Postgres>,
         source_item: &ThirdPartyItem,
-        _user_id: UserId,
+        user_id: UserId,
     ) -> Result<(), UniversalInboxError> {
-        // The is no way to unsubscribe from a Slack thread with the public API
-        Ok(())
+        // Slack's public API cannot unsubscribe from threads.
+        // When extension bridge is enabled, queue a pending action for the extension to execute.
+        self.create_bridge_pending_action_if_enabled(
+            executor,
+            source_item,
+            user_id,
+            universal_inbox::slack_bridge::SlackBridgeActionType::Unsubscribe,
+        )
+        .await
     }
 
     async fn snooze_notification_from_source(

@@ -6,12 +6,12 @@
 	grace_period 2s
 }
 
-https://dev.universal-inbox.com {
+http://dev.universal-inbox.com {
 	log
 	reverse_proxy :{env.API_PORT}
 }
 
-https://oauth-dev.universal-inbox.com {
+http://oauth-dev.universal-inbox.com {
 	log
 	reverse_proxy :{env.NANGO_PORT}
 }

@@ -55,6 +55,8 @@ pub async fn handle_slack_message_push_event(
                     executor,
                     IntegrationConnectionContext::Slack(SlackContext {
                         team_id: team_id.clone(),
+                        extension_credentials: vec![],
+                        last_extension_heartbeat_at: None,
                     }),
                 )
                 .await?
@@ -166,6 +168,7 @@ async fn handle_slack_message_push_event_if_enabled(
             SlackMessageConfig {
                 sync_enabled: true,
                 is_2way_sync,
+                ..
             },
         ..
     } = slack_config
