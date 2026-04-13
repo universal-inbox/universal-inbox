@@ -77,6 +77,8 @@ impl NangoConnection {
         match self.provider_config_key.0.as_str() {
             "slack" => Some(IntegrationConnectionContext::Slack(SlackContext {
                 team_id: SlackTeamId(self.credentials.raw["team"]["id"].as_str()?.to_string()),
+                extension_credentials: vec![],
+                last_extension_heartbeat_at: None,
             })),
             _ => None,
         }

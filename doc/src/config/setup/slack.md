@@ -56,3 +56,7 @@ With the Slack integration, you can:
 - View reactions and mentions in one place
 - Convert these items into tasks with proper due dates
 - Complete tasks directly from Universal Inbox
+
+## Browser Extension Bridge
+
+For Slack thread notifications (from mentions), you can enable the [browser extension bridge](browser-extension.md) to propagate delete and unsubscribe actions back to Slack. This enables 2-way sync between Universal Inbox and Slack threads, which isn't possible through Slack's public API alone.
